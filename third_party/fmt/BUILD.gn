@@ -13,10 +13,7 @@ source_set("fmt") {
 
     # "src/src/os.cc",
   ]
-  defines = [
-    "FMT_OS=0",
-    "FMT_USE_EXCEPTIONS=0",
-  ]
+  defines = [ "FMT_OS=0" ]
   include_dirs = [ "src/include" ]
   public_configs = [ ":fmt_config" ]
 }
