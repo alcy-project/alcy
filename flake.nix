@@ -10,7 +10,7 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        llvmPkgs = pkgs.llvmPackages_22;
+        llvmPkgs = pkgs.llvmPackages_23;
 
         stdenv = llvmPkgs.libcxxStdenv;
 
@@ -26,6 +26,7 @@
             pkgs.pkg-config
             pkgs.uv
             llvmPkgs.lld
+            llvmPkgs.llvm
           ];
 
           buildInputs = [];
