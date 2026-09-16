@@ -16,6 +16,7 @@ uv run ./build/scripts/build.py --target=default --mode=debug
 uv run ./build/scripts/run.py --target=tests --mode=debug
 uv run ./build/scripts/lint.py
 uv run ./build/scripts/format.py --dry-run
+
 ```
 
 Use `./build/scripts/format.py` (without `--dry-run`) to apply formatting.
@@ -25,16 +26,22 @@ before requesting a review.
 
 ## Conventions
 
-- Follow [ARCHITECTURE.md](ARCHITECTURE.md) for module responsibilities.
-  New compiler code belongs in the module that owns its stage; shared code
-  goes in `core`, `base`, or `third_party` wrappers.
-- C++20, no exceptions, no RTTI in code interacting with LLVM APIs.
-- Style is enforced, not debated: `.clang-format`, `.clang-tidy`,
-  `CPPLINT.cfg`, `stylua.toml`, and `typos.toml` are authoritative.
-  New source files must carry the license header (checked by `format.py`).
-- One decision, one record: significant technical decisions get an ADR in
-  `docs/adr/` (copy `docs/adr/0000-template.md`). Small, obvious changes do
-  not need one.
+- Follow [ARCHITECTURE.md](ARCHITECTURE.md) for module responsibilities and core design principles
+  (separation of concerns, YAGNI/DRY/KISS, zero vtables, and zero-allocation hot paths).
+- Standard: C++20 up to Google C++ Style Guide limits. No exceptions (`-fno-exceptions`).
+  Code must not rely on RTTI or EH.
+- Naming & Types: `PascalCase` for classes/structs/enums, `kPascalCase` for constants,
+  `snake_case_with_trailing_underscore_` for class fields, and `snake_case` otherwise. Use numeric types
+  from `"fpag/base/numeric.h"` (`i32`, `usize`, `f64`, etc.) instead of primitive C++ types.
+- Code style: Use `#pragma once` for include guards and relative includes from project root.
+  Prefer `std::string_view` over `std::string` unless ownership retention is required.
+  Avoid magic numbers and prefer designated constructors.
+- Comments: English only. Write comments sparingly—only for design rationale,
+  invariants/safety explanations, non-obvious code, or `TODO`s.
+- Tooling is authoritative: `.clang-format`, `.clang-tidy`, `CPPLINT.cfg` (all checks must pass),
+  and `typos.toml` enforce style. New source files must carry the license header.
+- One decision, one record: significant technical decisions get an ADR in `docs/adr/`
+  (copy `docs/adr/0000-template.md`). Small, obvious changes do not need one.
 
 ## Commit scope
 

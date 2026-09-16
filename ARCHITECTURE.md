@@ -5,6 +5,23 @@ MVP: a working compiler that translates alcy source code into executables.
 Implementation details may differ while the project is under development;
 this document is updated only when the design itself changes.
 
+## Core design principles
+
+When implementing or modifying any component in alcy, adhere strictly to the following principles:
+
+- Separation of Concerns & Module Boundaries: Keep responsibilities sharply divided.
+  Split files generously whenever a component takes on multiple concerns.
+- Zero Performance Overhead: Design abstractions that compile away. Architectural elegance
+  must never come at the cost of runtime performance.
+- Zero-Allocation Hot Paths: The core compilation loop (lexing, parsing, IR transformation, analysis)
+  must avoid heap allocations on hot paths.
+- Pragmatic Simplicity (YAGNI, DRY, KISS): Do not build infrastructure for
+  speculative future needs. Keep implementations clear, concise, and unified.
+- Production-Ready Quality: Do not commit prototype-quality code to the core
+  pipeline. Write production-grade, fully robust C++20 from day one.
+- No Dynamic Dispatch: `vtable` usage is strictly forbidden across the
+  codebase to guarantee zero-overhead abstraction.
+
 ## Overview
 
 alcy is a statically-typed programming language with ownership-based memory
@@ -13,8 +30,7 @@ source code to LLVM IR, relying on LLVM for optimization and object code
 generation.
 
 The MVP scope is a single-threaded batch compiler: given source files, it
-produces an executable. Performance work, parallelism, and language
-extensions are explicitly out of scope (see Future work).
+produces an executable.
 
 ## Repository layout
 
