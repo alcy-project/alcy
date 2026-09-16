@@ -11,8 +11,15 @@ action("setup_llvm") {
     "--download-dir=" + rebase_path(download_dir),
     "--install-dir=" + rebase_path(install_dir),
     "--tag-cache-file=" + rebase_path(tag_cache_file),
-    "--libcxx",
   ]
+
+  # The prebuilt LLVM for Windows (see src/.github/workflows/alcy-release.yaml)
+  # is built with LLVM_ENABLE_LIBCXX=OFF, and the Windows build does not use
+  # the libcxx config (see //build/config/BUILDCONFIG.gn), so only request a
+  # libc++-based LLVM build where the consumer actually uses libc++.
+  if (!is_win) {
+    args += [ "--libcxx" ]
+  }
 
   if (!download_llvm) {
     args += [ "--disable-download-llvm" ]
