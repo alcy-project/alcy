@@ -2,7 +2,10 @@
 // This source code is licensed under the Apache License, Version 2.0 with LLVM
 // Exceptions which can be found in the LICENSE file.
 
+#include <cstddef>
+
 #include "doctest/doctest.h"
+#include "fpag/base/numeric.h"
 #include "ir/block.h"
 #include "ir/block_param.h"
 #include "ir/common.h"
@@ -33,6 +36,8 @@ TEST_CASE("Static assertion for IR elements") {
   static_assert(sizeof(InstructionFlags) == 1);
   static_assert(sizeof(Opcode) == 1);
   static_assert(sizeof(Operand) == 8);
+  static_assert(alignof(Operand) == alignof(u32));
+  static_assert(offsetof(Operand, data) == 0);
   static_assert(sizeof(Register) == 8);
   static_assert(sizeof(Type) == 1);
 

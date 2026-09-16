@@ -47,16 +47,10 @@ ir::Storage hello_world_ir(str::StringInterner* interner) {
   });
 
   // reg 0 := 1 - 1 = 0
-  const ir::OperandIdx lhs = builder.operand({
-      .tag = ir::OperandTag::Immutable,
-      .type = ir::Type::I32,
-      .data = {.immutable_idx = imm_1},
-  });
-  const ir::OperandIdx rhs = builder.operand({
-      .tag = ir::OperandTag::Immutable,
-      .type = ir::Type::I32,
-      .data = {.immutable_idx = imm_1},
-  });
+  const ir::OperandIdx lhs =
+      builder.operand(ir::Operand::from_immutable(imm_1, ir::Type::I32));
+  const ir::OperandIdx rhs =
+      builder.operand(ir::Operand::from_immutable(imm_1, ir::Type::I32));
   const ir::InstructionIdx inst_sub = builder.instr({
       .op = ir::Opcode::IntSub,
       .flags = {},
@@ -65,23 +59,14 @@ ir::Storage hello_world_ir(str::StringInterner* interner) {
   });
   builder.reg({.type = ir::Type::I32, .def_idx = inst_sub});
 
-  const ir::OperandIdx puts_op = builder.operand({
-      .tag = ir::OperandTag::ExternalFunction,
-      .type = ir::Type::Function,
-      .data = {.external_function_idx = func_puts},
-  });
-  const ir::OperandIdx arg_str_op = builder.operand({
-      .tag = ir::OperandTag::Immutable,
-      .type = ir::Type::Str,
-      .data = {.immutable_idx = imm_hello},
-  });
+  const ir::OperandIdx puts_op = builder.operand(
+      ir::Operand::from_external_function(func_puts, ir::Type::Function));
+  const ir::OperandIdx arg_str_op =
+      builder.operand(ir::Operand::from_immutable(imm_hello, ir::Type::Str));
 
   const ir::RegisterIdx ret_register(0);
-  const ir::OperandIdx reg_op = builder.operand({
-      .tag = ir::OperandTag::Register,
-      .type = ir::Type::I32,
-      .data = {.register_idx = ret_register},
-  });
+  const ir::OperandIdx reg_op =
+      builder.operand(ir::Operand::from_register(ret_register, ir::Type::I32));
   /* const ir::InstructionId inst_call = */ builder.instr({
       .op = ir::Opcode::Call,
       .flags = {},

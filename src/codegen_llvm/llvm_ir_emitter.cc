@@ -302,7 +302,7 @@ void LlvmIrEmitter::emit_instruction(const ir::Instruction& instr) {
       // operands[0] = Target block
       // operands[1..N] = parameters
       const ir::Operand& target_op = storage_.operands()[ops.head()];
-      const ir::BlockIdx target_block_idx = target_op.data.block_idx;
+      const ir::BlockIdx target_block_idx = target_op.as_block();
       llvm::BasicBlock* target_llvm_block = blocks_[target_block_idx];
       llvm::BasicBlock* current_llvm_block = builder_->GetInsertBlock();
 
@@ -410,9 +410,9 @@ llvm::Function* LlvmIrEmitter::create_function(
 
 llvm::Value* LlvmIrEmitter::resolve_operand_value(const ir::Operand& op) const {
   switch (op.tag) {
-    case ir::OperandTag::Register: return registers_[op.data.register_idx];
-    case ir::OperandTag::Block: return blocks_[op.data.block_idx];
-    case ir::OperandTag::Immutable: return immutables_[op.data.immutable_idx];
+    case ir::OperandTag::Register: return registers_[op.as_register()];
+    case ir::OperandTag::Block: return blocks_[op.as_block()];
+    case ir::OperandTag::Immutable: return immutables_[op.as_immutable()];
 
     default:
       DLOG("Unknown operand tag found while resolving operand value.");
@@ -423,9 +423,9 @@ llvm::Value* LlvmIrEmitter::resolve_operand_value(const ir::Operand& op) const {
 llvm::Function* LlvmIrEmitter::resolve_operand_function(
     const ir::Operand& op) const {
   switch (op.tag) {
-    case ir::OperandTag::Function: return functions_[(op.data.function_idx)];
+    case ir::OperandTag::Function: return functions_[(op.as_function())];
     case ir::OperandTag::ExternalFunction:
-      return external_functions_[(op.data.external_function_idx)];
+      return external_functions_[(op.as_external_function())];
     default:
       DLOG("Unknown operand tag found while resolving operand function.");
       UNREACHABLE();
