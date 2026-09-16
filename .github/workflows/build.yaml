@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        llvm_version: [22.1.8]
+        llvm_version: [23.1.1]
         nix: [false, true]
         os: [ubuntu-24.04, macos-26, windows-2025-vs2026]
         include:
@@ -54,7 +54,7 @@ jobs:
 
       - name: Setup build environment (Standard)
         if: "!matrix.nix"
-        uses: pug523/actions/cxx-gn-setup@d146feb314a2b253e6ccda6aba929c435d5dea1f
+        uses: pug523/actions/cxx-gn-setup@e4abb74456e529372bb1b7ebb71db1b647be3fd1
         with:
           os: ${{ runner.os }}
           llvm_version: ${{ matrix.llvm_version }}
