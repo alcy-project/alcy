@@ -14,6 +14,7 @@
 #include "debug/dlog.h"
 #include "debug/fatal.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"
 #include "ir/block.h"
 #include "ir/common.h"
@@ -23,9 +24,9 @@
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/storage.h"
-#include "ir/type.h"
 #include "ir/type_util.h"
 #include "ir/verifier.h"
+#include "llvm/IR/DerivedTypes.h"
 
 #if BUILD_FLAG(IS_DEBUG)
 #include "ir/formatter.h"  // IWYU pragma: keep
@@ -62,10 +63,12 @@ inline void LlvmIrEmitter::check_state() {
   DCHECK_MSG(interner_, "String Interner is null");
 }
 
-inline llvm::Type* LlvmIrEmitter::type(ir::Type type) const {
-  using T = ir::Type;
+inline llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
+  const ir::TypeNode& node = storage_.types()[idx];
+  const ir::TypeTag tag = node.tag;
+  using T = ir::TypeTag;
 
-  switch (type) {
+  switch (tag) {
     case T::Void: return builder_->getVoidTy();
     case T::I1: return builder_->getInt1Ty();
     case T::I8: return builder_->getInt8Ty();
@@ -78,8 +81,24 @@ inline llvm::Type* LlvmIrEmitter::type(ir::Type type) const {
     case T::Ptr: return builder_->getPtrTy();
     case T::Ref: return builder_->getPtrTy();
     case T::MutRef: return builder_->getPtrTy();
+    case T::Struct: {
+      const ir::StructType& struct_type =
+          storage_.struct_types()[node.data.get<ir::StructTypeIdx>()];
+      llvm::SmallVector<llvm::Type*, kFunctionArgsSooSize> field_types;
+      field_types.reserve(struct_type.fields.size());
+      for (const ir::TypeIdx field : struct_type.fields) {
+        field_types.emplace_back(type(field));
+      }
+      // Anonymous structural type; LLVM deduplicates identical shapes.
+      return llvm::StructType::get(module_->getContext(), field_types);
+    }
+    case T::Array: {
+      const ir::ArrayType& array_type =
+          storage_.array_types()[node.data.get<ir::ArrayTypeIdx>()];
+      return llvm::ArrayType::get(type(array_type.element), array_type.count);
+    }
     default: {
-      DLOG("unsupported type: {}", type);
+      DLOG("unsupported type: {}", tag);
       DCHECK(false);
       UNREACHABLE();
     }
@@ -398,7 +417,7 @@ llvm::Function* LlvmIrEmitter::create_function(
   //      interner_->get(function_meta.name), function_meta.param_types.size());
 
   for (const ir::TypeIdx id : function_meta.param_types) {
-    parameter_types.emplace_back(type(storage_.types()[id]));
+    parameter_types.emplace_back(type(id));
   }
 
   llvm::FunctionType* func_type = llvm::FunctionType::get(
@@ -416,10 +435,12 @@ llvm::Function* LlvmIrEmitter::create_function(
 }
 
 llvm::Value* LlvmIrEmitter::resolve_operand_value(const ir::Operand& op) const {
-  switch (op.tag) {
-    case ir::OperandTag::Register: return registers_[op.as_register()];
-    case ir::OperandTag::Block: return blocks_[op.as_block()];
-    case ir::OperandTag::Immutable: return immutables_[op.as_immutable()];
+  using Payload = ir::Operand::Payload;
+  switch (op.tag()) {
+    case Payload::TagOf<ir::RegisterIdx>: return registers_[op.as_register()];
+    case Payload::TagOf<ir::BlockIdx>: return blocks_[op.as_block()];
+    case Payload::TagOf<ir::ImmutableIdx>:
+      return immutables_[op.as_immutable()];
 
     default:
       DLOG("Unknown operand tag found while resolving operand value.");
@@ -429,9 +450,10 @@ llvm::Value* LlvmIrEmitter::resolve_operand_value(const ir::Operand& op) const {
 
 llvm::Function* LlvmIrEmitter::resolve_operand_function(
     const ir::Operand& op) const {
-  switch (op.tag) {
-    case ir::OperandTag::Function: return functions_[(op.as_function())];
-    case ir::OperandTag::ExternalFunction:
+  using Payload = ir::Operand::Payload;
+  switch (op.tag()) {
+    case Payload::TagOf<ir::FunctionIdx>: return functions_[(op.as_function())];
+    case Payload::TagOf<ir::ExternalFunctionIdx>:
       return external_functions_[(op.as_external_function())];
     default:
       DLOG("Unknown operand tag found while resolving operand function.");
@@ -469,22 +491,24 @@ void LlvmIrEmitter::setup_immutables() {
        storage_.immutables().idx_range()) {
     const ir::Immutable& immutable = storage_.immutables()[immutable_idx];
 
-    if (ir::is_integer_type(immutable.type)) {
+    const ir::TypeTag tag = storage_.types()[immutable.type.idx].tag;
+
+    if (ir::is_integer_type(tag)) {
       // TODO: Add i128, u128, i256, u256, and arbitrary bit support with
       // llvm::APInt
       llvm::Constant* c = llvm::ConstantInt::get(
-          type(immutable.type), immutable.as_u64_integer(),
-          ir::is_signed_integer_type(immutable.type));
+          type(immutable.type), immutable.as_u64_integer(tag),
+          ir::is_signed_integer_type(tag));
       DCHECK_MSG(c, "Failed to get integer constant from LLVM");
 
       add_immutable(immutable_idx, c);
-    } else if (ir::is_float_type(immutable.type)) {
+    } else if (ir::is_float_type(tag)) {
       llvm::Constant* c =
-          llvm::ConstantFP::get(type(immutable.type), immutable.as_f64_fp());
+          llvm::ConstantFP::get(type(immutable.type), immutable.as_f64_fp(tag));
       DCHECK_MSG(c, "Failed to get fp constant from LLVM");
 
       add_immutable(immutable_idx, c);
-    } else if (immutable.type == ir::Type::Str) {
+    } else if (tag == ir::TypeTag::Str) {
       const std::string_view str_val =
           interner_->get(immutable.data.str_id_value);
       DLOG("str_val: {}", str_val);

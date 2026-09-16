@@ -6,11 +6,13 @@
 
 #include "debug/fatal.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/union.h"
+#include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 
 namespace ir {
 
-enum class Type : u8 {
+enum class TypeTag : u8 {
   Void,  // For function return type
   I1,    // bool
   I8,
@@ -34,22 +36,46 @@ enum class Type : u8 {
   MutRef,  // Mutable reference  (exclusive, region tracked)
 
   Struct,
+  Array,
   Function,
 };
 
-struct StructTypeMetaData {
-  TypeIdx fields_head;
-  u32 field_count;
+// Number of primitive tags below Struct. StorageBuilder pre-interns them in
+// TypeTag order so that TypeIdx(static_cast<u32>(tag)) resolves without a
+// table lookup. The Function tag is pre-interned right after them; Struct
+// and Array nodes are only created via their factories.
+constexpr u32 kPrimitiveTypeCount = static_cast<u32>(TypeTag::Struct);
+
+// Resolves a pre-interned primitive tag to its table index without a lookup.
+// StorageBuilder pre-interns these in TypeTag order (plus Function right
+// after), so this mapping must stay in sync with intern_primitives().
+constexpr TypeIdx primitive_idx(TypeTag tag) {
+  if (tag == TypeTag::Function) {
+    return TypeIdx(kPrimitiveTypeCount);
+  }
+  return TypeIdx(static_cast<u32>(tag));
+}
+
+struct StructType {
+  str::StringPoolId name;
+  // Field types in declaration order.
+  TypeIdxRange fields;
 };
 
-struct ArrayTypeMetaData {
-  Type element_type;
-  u64 element_count;
+struct ArrayType {
+  TypeIdx element;
+  u64 count;
 };
 
-constexpr const char* type_to_str(Type type) {
-  using T = Type;
-  switch (type) {
+struct TypeNode {
+  TypeTag tag;
+  // Meaningful only for Struct/Array tags.
+  base::Union<StructTypeIdx, ArrayTypeIdx> data;
+};
+
+constexpr const char* type_to_str(TypeTag tag) {
+  using T = TypeTag;
+  switch (tag) {
     case T::Void: return "void";
     case T::I1: return "i1";
     case T::I8: return "i8";
@@ -72,6 +98,7 @@ constexpr const char* type_to_str(Type type) {
     case T::MutRef: return "mut_ref";
 
     case T::Struct: return "struct";
+    case T::Array: return "array";
     case T::Function: return "function";
     default: UNREACHABLE();
   }

@@ -7,6 +7,10 @@
 #include <vector>
 
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
+#include "ir/block.h"
+#include "ir/common.h"
+#include "ir/function.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/storage.h"
@@ -35,6 +39,44 @@ VerifyResult err(const VerifyErrorKind kind, const u32 index) {
 }  // namespace
 
 VerifyResult verify_storage(const Storage& storage) {
+  // Type table and composite metadata.
+  for (TypeIdx tidx(0); tidx.idx < storage.types().size(); ++tidx) {
+    const TypeNode& node = storage.types()[tidx];
+    if (node.tag == TypeTag::Struct) {
+      const StructTypeIdx sidx = node.data.get<StructTypeIdx>();
+      if (sidx.idx >= storage.struct_types().size()) {
+        return err(VerifyErrorKind::TypeMetadataOutOfRange, tidx.idx);
+      }
+      const StructType& struct_type = storage.struct_types()[sidx];
+      if (!range_in_bounds(struct_type.fields.head(), struct_type.fields.size(),
+                           storage.types().size())) {
+        return err(VerifyErrorKind::StructFieldsOutOfRange, sidx.idx);
+      }
+    } else if (node.tag == TypeTag::Array) {
+      const ArrayTypeIdx aidx = node.data.get<ArrayTypeIdx>();
+      if (aidx.idx >= storage.array_types().size()) {
+        return err(VerifyErrorKind::TypeMetadataOutOfRange, tidx.idx);
+      }
+      if (storage.array_types()[aidx].element.idx >= storage.types().size()) {
+        return err(VerifyErrorKind::TypeIdxOutOfRange,
+                   storage.array_types()[aidx].element.idx);
+      }
+    }
+  }
+
+  // Registers carry types.
+  for (RegisterIdx ridx(0); ridx.idx < storage.registers().size(); ++ridx) {
+    if (storage.registers()[ridx].type.idx >= storage.types().size()) {
+      return err(VerifyErrorKind::TypeIdxOutOfRange, ridx.idx);
+    }
+  }
+
+  for (ImmutableIdx iidx(0); iidx.idx < storage.immutables().size(); ++iidx) {
+    if (storage.immutables()[iidx].type.idx >= storage.types().size()) {
+      return err(VerifyErrorKind::TypeIdxOutOfRange, iidx.idx);
+    }
+  }
+
   // Function-level ranges.
   for (FunctionIdx fidx(0); fidx.idx < storage.functions().size(); ++fidx) {
     const Function& func = storage.functions()[fidx];
@@ -42,8 +84,14 @@ VerifyResult verify_storage(const Storage& storage) {
                          storage.blocks().size())) {
       return err(VerifyErrorKind::FunctionBlocksOutOfRange, fidx.idx);
     }
-    // TODO: check func.meta.param_types against storage.types() once composite
-    // type metadata is connected.
+    if (func.meta.return_type.idx >= storage.types().size()) {
+      return err(VerifyErrorKind::TypeIdxOutOfRange, fidx.idx);
+    }
+    for (const TypeIdx tidx : func.meta.param_types) {
+      if (tidx.idx >= storage.types().size()) {
+        return err(VerifyErrorKind::TypeIdxOutOfRange, tidx.idx);
+      }
+    }
   }
 
   // Register definitions: bound by block params or defined by instructions.
@@ -59,7 +107,11 @@ VerifyResult verify_storage(const Storage& storage) {
       return err(VerifyErrorKind::BlockParamsOutOfRange, bidx.idx);
     }
     for (const BlockParamIdx pidx : block.block_params) {
-      const RegisterIdx reg = storage.block_params()[pidx].reg;
+      const BlockParam& param = storage.block_params()[pidx];
+      if (param.type.idx >= storage.types().size()) {
+        return err(VerifyErrorKind::TypeIdxOutOfRange, pidx.idx);
+      }
+      const RegisterIdx reg = param.reg;
       if (reg.idx >= storage.registers().size()) {
         return err(VerifyErrorKind::BlockParamRegOutOfRange, reg.idx);
       }
@@ -103,8 +155,11 @@ VerifyResult verify_storage(const Storage& storage) {
       }
       for (const OperandIdx oidx : instr.operands) {
         const Operand& operand = storage.operands()[oidx];
-        switch (operand.tag) {
-          case OperandTag::Register:
+        if (operand.type.idx >= storage.types().size()) {
+          return err(VerifyErrorKind::TypeIdxOutOfRange, oidx.idx);
+        }
+        switch (operand.tag()) {
+          case Operand::TagOf<RegisterIdx>:
             if (operand.as_register().idx >= storage.registers().size()) {
               return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
@@ -113,28 +168,28 @@ VerifyResult verify_storage(const Storage& storage) {
                          operand.as_register().idx);
             }
             break;
-          case OperandTag::Function:
+          case Operand::TagOf<FunctionIdx>:
             if (operand.as_function().idx >= storage.functions().size()) {
               return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
             break;
-          case OperandTag::Block:
+          case Operand::TagOf<BlockIdx>:
             if (operand.as_block().idx >= storage.blocks().size()) {
               return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
             break;
-          case OperandTag::Immutable:
+          case Operand::TagOf<ImmutableIdx>:
             if (operand.as_immutable().idx >= storage.immutables().size()) {
               return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
             break;
-          case OperandTag::ExternalFunction:
+          case Operand::TagOf<ExternalFunctionIdx>:
             if (operand.as_external_function().idx >=
                 storage.external_functions().size()) {
               return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
             break;
-          case OperandTag::Unknown:
+          case Operand::TagOf<void>:
             return err(VerifyErrorKind::UnknownOperandTag, oidx.idx);
         }
       }
@@ -142,10 +197,8 @@ VerifyResult verify_storage(const Storage& storage) {
         if (instr.operands.empty()) {
           return err(VerifyErrorKind::InvalidCallee, iidx.idx);
         }
-        const OperandTag head_tag =
-            storage.operands()[instr.operands.head()].tag;
-        if (head_tag != OperandTag::Function &&
-            head_tag != OperandTag::ExternalFunction) {
+        const Operand& head = storage.operands()[instr.operands.head()];
+        if (!head.is<FunctionIdx>() && !head.is<ExternalFunctionIdx>()) {
           return err(VerifyErrorKind::InvalidCallee, iidx.idx);
         }
       }
@@ -153,8 +206,7 @@ VerifyResult verify_storage(const Storage& storage) {
         if (instr.operands.empty()) {
           return err(VerifyErrorKind::InvalidBranchTarget, iidx.idx);
         }
-        if (storage.operands()[instr.operands.head()].tag !=
-            OperandTag::Block) {
+        if (!storage.operands()[instr.operands.head()].is<BlockIdx>()) {
           return err(VerifyErrorKind::InvalidBranchTarget, iidx.idx);
         }
       }

@@ -40,7 +40,7 @@ class LlvmIrEmitter {
 
   void check_state();
 
-  llvm::Type* type(ir::Type type) const;
+  llvm::Type* type(ir::TypeIdx idx) const;
 
   void emit_function(llvm::Function* llvm_function, const ir::Function& func);
   void emit_block(const ir::Block& block);

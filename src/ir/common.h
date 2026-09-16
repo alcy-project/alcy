@@ -46,8 +46,15 @@ struct Operand;
 using OperandIdx = base::Idx<Operand, IdBaseType>;
 using OperandIdxRange = base::IdxRange<OperandIdx>;
 
-enum class Type : u8;
-using TypeIdx = base::Idx<Type, IdBaseType>;
+enum class TypeTag : u8;
+struct TypeNode;
+using TypeIdx = base::Idx<TypeNode, IdBaseType>;
 using TypeIdxRange = base::IdxRange<TypeIdx>;
+
+struct StructType;
+using StructTypeIdx = base::Idx<StructType, IdBaseType>;
+
+struct ArrayType;
+using ArrayTypeIdx = base::Idx<ArrayType, IdBaseType>;
 
 }  // namespace ir

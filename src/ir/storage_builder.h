@@ -7,6 +7,9 @@
 #include <memory>
 #include <utility>
 
+#include "debug/dcheck.h"
+#include "fpag/base/numeric.h"
+#include "fpag/str/string_pool_id.h"
 #include "ir/block.h"
 #include "ir/block_param.h"
 #include "ir/common.h"
@@ -23,7 +26,7 @@ namespace ir {
 
 class StorageBuilder {
  public:
-  StorageBuilder() = default;
+  StorageBuilder() { intern_primitives(); }
   explicit StorageBuilder(StorageState&& state) : state_(std::move(state)) {}
 
   ~StorageBuilder() = default;
@@ -92,7 +95,41 @@ class StorageBuilder {
   OperandIdx operand(Operand operand) {
     return state_.operands.emplace_back(operand);
   }
-  TypeIdx type(Type type) { return state_.types.emplace_back(type); }
+  TypeIdx type(TypeTag tag) {
+    DCHECK(tag != TypeTag::Struct && tag != TypeTag::Array);
+    return primitive(tag);
+  }
+
+  // Returns the pre-interned node for a non-composite tag. O(1), no
+  // allocation. Struct and Array nodes are created via struct_type() and
+  // array_type() instead.
+  TypeIdx primitive(TypeTag tag) const {
+    DCHECK(tag != TypeTag::Struct && tag != TypeTag::Array);
+    return primitive_idx(tag);
+  }
+
+  TypeIdx struct_type(str::StringPoolId name, TypeIdxRange fields) {
+    TypeNode node{};
+    node.tag = TypeTag::Struct;
+    node.data.set(state_.struct_types.emplace_back(
+        StructType{.name = name, .fields = fields}));
+    return state_.types.emplace_back(node);
+  }
+
+  TypeIdx array_type(TypeIdx element, u64 count) {
+    TypeNode node{};
+    node.tag = TypeTag::Array;
+    node.data.set(state_.array_types.emplace_back(
+        ArrayType{.element = element, .count = count}));
+    return state_.types.emplace_back(node);
+  }
+
+  // Appends a copy of an existing type entry and returns the new index.
+  // Useful for building field lists that reference the same type twice.
+  TypeIdx ref_type(TypeIdx idx) {
+    DCHECK(idx.idx < state_.types.size());
+    return state_.types.emplace_back(state_.types[idx]);
+  }
 
   Storage build() && { return Storage(std::move(state_)); }
 
@@ -101,6 +138,20 @@ class StorageBuilder {
   }
 
  private:
+  // Pre-interns every non-composite tag so primitive() resolves without a
+  // table lookup. Only the default constructor does this; a builder created
+  // from an existing state assumes its table is already populated.
+  void intern_primitives() {
+    for (u32 i = 0; i < kPrimitiveTypeCount; ++i) {
+      TypeNode node{};
+      node.tag = static_cast<TypeTag>(i);
+      state_.types.emplace_back(node);
+    }
+    TypeNode func{};
+    func.tag = TypeTag::Function;
+    state_.types.emplace_back(func);
+  }
+
   StorageState state_;
 };
 

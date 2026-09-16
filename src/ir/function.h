@@ -6,12 +6,11 @@
 
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
-#include "ir/type.h"
 
 namespace ir {
 
 struct FunctionMeta {
-  Type return_type;
+  TypeIdx return_type;
   TypeIdxRange param_types;
 
   str::StringPoolId name;

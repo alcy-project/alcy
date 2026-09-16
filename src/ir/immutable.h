@@ -8,13 +8,14 @@
 #include "debug/fatal.h"
 #include "fpag/base/numeric.h"
 #include "fpag/str/string_pool_id.h"
+#include "ir/common.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
 
 namespace ir {
 
 struct Immutable {
-  Type type;
+  TypeIdx type;
   union {
     bool i1_value;
     i8 i8_value;
@@ -36,29 +37,29 @@ struct Immutable {
     u64 mutref;
   } data;
 
-  inline u64 as_u64_integer() const {
-    DCHECK_MSG(is_integer_type(type),
+  constexpr u64 as_u64_integer(TypeTag tag) const {
+    DCHECK_MSG(is_integer_type(tag),
                "called as_u64_integer with not integer type");
-    switch (type) {
-      case Type::I1: return static_cast<u64>(data.i1_value);
-      case Type::I8: return static_cast<u64>(data.i8_value);
-      case Type::I16: return static_cast<u64>(data.i16_value);
-      case Type::I32: return static_cast<u64>(data.i32_value);
-      case Type::I64: return static_cast<u64>(data.i64_value);
-      case Type::U8: return static_cast<u64>(data.u8_value);
-      case Type::U16: return static_cast<u64>(data.u16_value);
-      case Type::U32: return static_cast<u64>(data.u32_value);
-      case Type::U64: return static_cast<u64>(data.u64_value);
+    switch (tag) {
+      case TypeTag::I1: return static_cast<u64>(data.i1_value);
+      case TypeTag::I8: return static_cast<u64>(data.i8_value);
+      case TypeTag::I16: return static_cast<u64>(data.i16_value);
+      case TypeTag::I32: return static_cast<u64>(data.i32_value);
+      case TypeTag::I64: return static_cast<u64>(data.i64_value);
+      case TypeTag::U8: return static_cast<u64>(data.u8_value);
+      case TypeTag::U16: return static_cast<u64>(data.u16_value);
+      case TypeTag::U32: return static_cast<u64>(data.u32_value);
+      case TypeTag::U64: return static_cast<u64>(data.u64_value);
       default: UNREACHABLE();
     }
   }
 
-  inline f64 as_f64_fp() const {
-    DCHECK_MSG(is_float_type(type),
+  constexpr f64 as_f64_fp(TypeTag tag) const {
+    DCHECK_MSG(is_float_type(tag),
                "called as_f64_fp with not floating point type");
-    switch (type) {
-      case Type::F32: return static_cast<f64>(data.f32_value);
-      case Type::F64: return static_cast<f64>(data.f64_value);
+    switch (tag) {
+      case TypeTag::F32: return static_cast<f64>(data.f32_value);
+      case TypeTag::F64: return static_cast<f64>(data.f64_value);
       default: UNREACHABLE();
     }
   }

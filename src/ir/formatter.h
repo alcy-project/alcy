@@ -15,7 +15,7 @@ constexpr std::string_view format_as(const Opcode c) {
   return std::string_view{opcode_to_str(c)};
 }
 
-constexpr std::string_view format_as(const Type t) {
+constexpr std::string_view format_as(const TypeTag t) {
   return std::string_view{type_to_str(t)};
 }
 

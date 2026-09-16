@@ -17,9 +17,9 @@
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/register.h"
+#include "ir/seq_builder.h"
 // #include "ir/storage.h"
 // #include "ir/storage_builder.h"
-#include "ir/type.h"
 
 namespace ir {
 
@@ -35,15 +35,35 @@ TEST_CASE("Static assertion for IR elements") {
   static_assert(sizeof(Instruction) == 16);
   static_assert(sizeof(InstructionFlags) == 1);
   static_assert(sizeof(Opcode) == 1);
-  static_assert(sizeof(Operand) == 8);
+  static_assert(sizeof(Operand) == 12);
   static_assert(alignof(Operand) == alignof(u32));
   static_assert(offsetof(Operand, data) == 0);
   static_assert(sizeof(Register) == 8);
-  static_assert(sizeof(Type) == 1);
+  static_assert(sizeof(TypeTag) == 1);
+  static_assert(sizeof(TypeNode) == 8);
+  static_assert(sizeof(StructType) == 24);
 
   // static_assert(sizeof(StorageState) == 216);
   // static_assert(sizeof(Storage) == 216);
   // static_assert(sizeof(StorageBuilder) == 216);
+}
+
+TEST_CASE("SeqBuilder accumulates consecutive indexes") {
+  OperandSeq operands;
+  CHECK(operands.empty());
+  CHECK(operands.size() == 0);
+
+  operands.push(OperandIdx(4));
+  operands.push(OperandIdx(5));
+  CHECK(operands.size() == 2);
+
+  const OperandIdxRange range = operands.finish();
+  CHECK(range.head() == OperandIdx(4));
+  CHECK(range.size() == 2);
+
+  const BlockIdxRange empty = BlockSeq().finish();
+  CHECK(empty.head() == BlockIdx(0));
+  CHECK(empty.size() == 0);
 }
 
 }  // namespace ir

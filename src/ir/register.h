@@ -5,13 +5,12 @@
 #pragma once
 
 #include "ir/common.h"
-#include "ir/type.h"
 
 namespace ir {
 
 // Single static assignment register
 struct Register {
-  Type type;
+  TypeIdx type;
   InstructionIdx def_idx;
 };
 

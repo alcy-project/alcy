@@ -34,7 +34,9 @@ struct StorageState {
   using ExternalFunctions =
       base::Vec<ExternalFunction, ExternalFunctionIdx, Alloc<ExternalFunction>>;
   using Operands = base::Vec<Operand, OperandIdx, Alloc<Operand>>;
-  using Types = base::Vec<Type, TypeIdx, Alloc<Type>>;
+  using Types = base::Vec<TypeNode, TypeIdx, Alloc<TypeNode>>;
+  using StructTypes = base::Vec<StructType, StructTypeIdx, Alloc<StructType>>;
+  using ArrayTypes = base::Vec<ArrayType, ArrayTypeIdx, Alloc<ArrayType>>;
 
   Functions functions;
   Blocks blocks;
@@ -45,6 +47,8 @@ struct StorageState {
   ExternalFunctions external_functions;
   Operands operands;
   Types types;
+  StructTypes struct_types;
+  ArrayTypes array_types;
 };
 
 class Storage {
@@ -75,6 +79,12 @@ class Storage {
   }
   const StorageState::Operands& operands() const { return state_.operands; }
   const StorageState::Types& types() const { return state_.types; }
+  const StorageState::StructTypes& struct_types() const {
+    return state_.struct_types;
+  }
+  const StorageState::ArrayTypes& array_types() const {
+    return state_.array_types;
+  }
 
  private:
   StorageState state_;

@@ -23,6 +23,9 @@ enum class VerifyErrorKind : u8 {
   InstrDstOutOfRange,
   UnknownOperandTag,
   OperandIdxOutOfRange,
+  TypeIdxOutOfRange,
+  StructFieldsOutOfRange,
+  TypeMetadataOutOfRange,
   UndefinedRegister,
   RedefinedRegister,
   UnterminatedBlock,
@@ -50,6 +53,9 @@ constexpr std::string_view format_as(const VerifyErrorKind kind) {
     case K::InstrDstOutOfRange: return "InstrDstOutOfRange";
     case K::UnknownOperandTag: return "UnknownOperandTag";
     case K::OperandIdxOutOfRange: return "OperandIdxOutOfRange";
+    case K::TypeIdxOutOfRange: return "TypeIdxOutOfRange";
+    case K::StructFieldsOutOfRange: return "StructFieldsOutOfRange";
+    case K::TypeMetadataOutOfRange: return "TypeMetadataOutOfRange";
     case K::UndefinedRegister: return "UndefinedRegister";
     case K::RedefinedRegister: return "RedefinedRegister";
     case K::UnterminatedBlock: return "UnterminatedBlock";

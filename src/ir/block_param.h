@@ -5,12 +5,11 @@
 #pragma once
 
 #include "ir/common.h"
-#include "ir/type.h"
 
 namespace ir {
 
 struct BlockParam {
-  Type type;
+  TypeIdx type;
   RegisterIdx reg;
 };
 

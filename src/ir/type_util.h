@@ -8,9 +8,9 @@
 
 namespace ir {
 
-inline constexpr bool is_integer_type(Type type) {
-  using T = Type;
-  switch (type) {
+inline constexpr bool is_integer_type(TypeTag tag) {
+  using T = TypeTag;
+  switch (tag) {
     case T::I1:
     case T::I8:
     case T::I16:
@@ -27,9 +27,9 @@ inline constexpr bool is_integer_type(Type type) {
   }
 }
 
-inline constexpr bool is_signed_integer_type(Type type) {
-  using T = Type;
-  switch (type) {
+inline constexpr bool is_signed_integer_type(TypeTag tag) {
+  using T = TypeTag;
+  switch (tag) {
     // Currently not containing I1 as a signed integer
     // case T::I1:
     case T::I8:
@@ -40,9 +40,9 @@ inline constexpr bool is_signed_integer_type(Type type) {
   }
 }
 
-inline constexpr bool is_float_type(Type type) {
-  using T = Type;
-  switch (type) {
+inline constexpr bool is_float_type(TypeTag tag) {
+  using T = TypeTag;
+  switch (tag) {
     case T::F32:
     case T::F64: return true;
     default: return false;

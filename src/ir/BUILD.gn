@@ -12,6 +12,7 @@ source_set("ir") {
     "opcode.h",
     "operand.h",
     "register.h",
+    "seq_builder.h",
     "storage.cc",
     "storage.h",
     "storage_builder.cc",
