@@ -19,7 +19,19 @@ uv run ./build/scripts/format.py --dry-run
 
 ```
 
-Use `./build/scripts/format.py` (without `--dry-run`) to apply formatting.
+To automatically fix code style and lint issues:
+
+```bash
+# Apply code formatting
+uv run ./build/scripts/format.py
+
+# Fix lint issues (clang-tidy, clang-include-cleaner, etc.)
+uv run ./build/scripts/lint.py --fix
+# Or to also apply fixes that might require manual verification
+uv run ./build/scripts/lint.py --fix-errors
+
+```
+
 CI runs the same steps for debug and release on Linux, macOS, and Windows,
 plus a spell check (`spelling.yaml`), so please make sure all of them pass
 before requesting a review.
@@ -39,7 +51,8 @@ before requesting a review.
 - Comments: English only. Write comments sparingly—only for design rationale,
   invariants/safety explanations, non-obvious code, or `TODO`s.
 - Tooling is authoritative: `.clang-format`, `.clang-tidy`, `CPPLINT.cfg` (all checks must pass),
-  and `typos.toml` enforce style. New source files must carry the license header.
+  and `typos.toml` enforce style. Use `format.py` and `lint.py --fix` to fix most issues automatically. 
+  New source files must carry the license header.
 - One decision, one record: significant technical decisions get an ADR in `docs/adr/`
   (copy `docs/adr/0000-template.md`). Small, obvious changes do not need one.
 
