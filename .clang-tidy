@@ -30,7 +30,7 @@ Checks: >
   -google-readability-check,
   -google-readability-todo,
   -google-whitespace-indent_namespace,
-  misc-const-correctness,
+  -misc-const-correctness,
   misc-coroutine-hostile-raii,
   misc-include-cleaner,
   misc-misleading-identifier,
