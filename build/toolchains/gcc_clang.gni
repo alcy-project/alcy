@@ -281,7 +281,8 @@ template("gcc_clang") {
       default_output_extension = default_executable_extension
       default_output_dir = "{{root_out_dir}}"
 
-      if (defined(invoker.strip)) {
+      use_strip = defined(invoker.strip) && current_os != "win"
+      if (use_strip) {
         outfile_with_symbols = "{{root_out_dir}}/exe.unstripped/$exename"
       } else {
         outfile_with_symbols = outfile
@@ -298,7 +299,7 @@ template("gcc_clang") {
         link_command += "$start_group_flag @\"$rspfile\" $end_group_flag {{solibs}} {{libs}} $start_group_flag {{rlibs}} $end_group_flag"
       }
 
-      if (defined(invoker.strip)) {
+      if (use_strip) {
         strip_command = "${invoker.strip} -o \"$outfile\" \"$main_outfile\""
         command = "$link_command && $strip_command"
       } else {
