@@ -1,0 +1,5 @@
+source_set("ast") {
+  sources = [ "lib.cc" ]
+  deps = [ "//src:base_modules" ]
+  configs += [ "//src:alcy_config" ]
+}

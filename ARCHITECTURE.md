@@ -61,7 +61,8 @@ stages beyond the data explicitly passed along.
 |---|---|---|
 | `app` | Driver: argument parsing, initialization, and pipeline orchestration. | Standard allocation (CLI parsing, file discovery only). |
 | `lexer` | Tokenizes source files into a token stream. | Zero heap allocations; fixed-width, contiguous token slices. |
-| `parser` | Builds IR directly from the token stream. | Arena-only; emits IR nodes into the module's per-file arena. |
+| `parser` | Builds a typed abstract syntax tree (AST) from the token stream. | Arena-only; emits AST nodes into the module's per-file arena. |
+| `ast` | Abstract syntax tree node definitions shared by the parser and later stages. | Arena-allocated nodes; no heap allocation outside the arena. |
 | `ir` | The core intermediate representation: functions, blocks, instructions, operands, and types, plus the storage that owns them. | Flat, arena-backed storage. |
 | `analyzer` | Name resolution, type checking, and ownership checking on the IR. | Zero heap allocations; operates over immutable IR slices. |
 | `pipeline` | Connects the stages above into a single compilation flow. | Arena reset at per-file phase boundaries. |
@@ -142,7 +143,7 @@ Source bytes
 [ Lexer ]      → token buffer (contiguous, fixed-width slices)
    │
    ▼
-[ Parser ]     → IR (built directly, arena-allocated)
+[ Parser ]     → AST (typed syntax tree, arena-allocated)
    │
    ▼
 [ Analyzer ]   → validated, ownership-checked IR
@@ -156,9 +157,8 @@ Source bytes
 1. **Lexing** — `lexer` reads a raw source view and produces a flat token
    buffer; tokens store fixed-width source offsets rather than
    line/column strings.
-2. **Parsing** — `parser` consumes the token buffer and emits IR
-   instructions directly into the module's arena; there is no separate
-   untyped AST stage.
+2. **Parsing** — `parser` consumes the token buffer and emits a typed AST
+   into the module's arena; IR construction happens in a later stage.
 3. **Semantic analysis** — `analyzer` performs, in place, over the IR:
    - *Name resolution*: mapping interned `SymbolId`s to scope declarations.
    - *Type checking*: computing and verifying type signatures.

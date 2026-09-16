@@ -22,6 +22,7 @@ group("modules") {
   public_deps = [
     ":base_modules",
     "analyzer",
+    "ast",
     "codegen",
     "codegen_llvm",
     "core",
