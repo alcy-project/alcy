@@ -12,10 +12,15 @@
 Build, test, and check from the repository root:
 
 ```bash
+typos
 uv run ./build/scripts/build.py --target=default --mode=debug
 uv run ./build/scripts/run.py --target=tests --mode=debug
 uv run ./build/scripts/lint.py
 uv run ./build/scripts/format.py --dry-run
+uv run ./build/scripts/verify_static_linkage.py
+
+# Or to run all of the above command:
+./build/scripts/check.sh
 
 ```
 

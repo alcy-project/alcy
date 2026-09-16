@@ -14,7 +14,6 @@ jobs:
     uses: ./.github/workflows/build.yaml
     with:
       build_type: release
-      is_release: true
 
   publish:
     needs: build-release

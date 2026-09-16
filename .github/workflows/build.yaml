@@ -6,10 +6,6 @@ on:
       build_type:
         required: true
         type: string
-      is_release:
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   build:
@@ -102,7 +98,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: build/scripts/llvm/.llvm_tag_cache
-          key: ${{ runner.os }}-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ matrix.nix }}-llvm_tag_cache
+          key: ${{ runner.os }}-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ matrix.nix }}-${{ matrix.llvm_version }}-llvm_tag_cache
 
       - name: Install uv
         if: "!matrix.nix"
@@ -116,6 +112,12 @@ jobs:
           uv python install
           uv sync --frozen
           echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+
+      - name: Cache third_party dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: out/build/third_party
+          key: ${{ runner.os }}-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ matrix.nix }}-${{ matrix.llvm_version }}-third_party_dependencies
 
       - name: Build (Nix)
         if: matrix.nix
@@ -148,11 +150,28 @@ jobs:
         shell: bash
         run: rm -rf out/build/third_party
 
-      - name: Cache build outputs
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: out/build
-          key: ${{ runner.os }}-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ matrix.nix }}-build_outputs
+
+      - name: Verify static linkage (Nix)
+        if: matrix.nix
+        shell: bash
+        run: |
+          nix develop .#default --command bash -c '
+            set -euo pipefail
+            command -v llvm-readobj
+            llvm-readobj --version
+            uv run python ./build/scripts/verify_static_linkage.py \
+              --build-dir=out/build
+          '
+
+      - name: Verify static linkage (Standard)
+        if: "!matrix.nix"
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v llvm-readobj
+          llvm-readobj --version
+          uv run python ./build/scripts/verify_static_linkage.py \
+            --build-dir=out/build
 
       - name: Package & Generate Checksum
         shell: bash
