@@ -7,8 +7,8 @@
 #include <memory>
 
 #include "codegen_llvm/declaration.h"
+#include "codegen_llvm/llvm_ir_storage.h"
 #include "fpag/base/numeric.h"
-#include "fpag/base/vec.h"
 #include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/function.h"
@@ -20,7 +20,6 @@ class LlvmIrEmitter {
  public:
   using IRBuilder =
       llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>;
-  // using ValueIdx = base::Idx<llvm::Value, base::IdxBaseType>;
 
   LlvmIrEmitter(llvm::Module* module,
                 ir::Storage&& storage,
@@ -36,8 +35,6 @@ class LlvmIrEmitter {
   void emit() && noexcept;
 
  private:
-  void init_value_map();
-
   void check_state();
 
   llvm::Type* type(ir::TypeIdx idx) const;
@@ -46,16 +43,16 @@ class LlvmIrEmitter {
   void emit_block(const ir::Block& block);
   void emit_instruction(const ir::Instruction& instr);
 
+  // Per-category instruction emission (see llvm_ir_emitter_compute.cc and
+  // llvm_ir_emitter_memory.cc).
+  void emit_compute(const ir::Instruction& instr);
+  void emit_memory(const ir::Instruction& instr);
+  void emit_control(const ir::Instruction& instr);
+
   llvm::Function* create_function(const ir::FunctionMeta& function_meta) const;
 
   llvm::Value* resolve_operand_value(const ir::Operand& operand) const;
   llvm::Function* resolve_operand_function(const ir::Operand& operand) const;
-  void add_function(ir::FunctionIdx id, llvm::Function* function);
-  void add_register(ir::RegisterIdx id, llvm::Value* value);
-  void add_block(ir::BlockIdx id, llvm::BasicBlock* block);
-  void add_immutable(ir::ImmutableIdx id, llvm::Constant* immutable);
-  void add_external_function(ir::ExternalFunctionIdx id,
-                             llvm::Function* ex_function);
 
   void setup_immutables();
   void setup_external_functions();
@@ -64,19 +61,7 @@ class LlvmIrEmitter {
   ir::Storage storage_;
   std::unique_ptr<IRBuilder> builder_;
   str::StringInterner* interner_;
-
-  // TODO: Move these fields to LlvmIrStorage.
-  template <typename T>
-  using Alloc = std::allocator<T>;
-
-  base::Vec<llvm::Function*, ir::FunctionIdx, Alloc<llvm::Function*>>
-      functions_;
-  base::Vec<llvm::Value*, ir::RegisterIdx, Alloc<llvm::Value*>> registers_;
-  base::Vec<llvm::BasicBlock*, ir::BlockIdx, Alloc<llvm::BasicBlock*>> blocks_;
-  base::Vec<llvm::Constant*, ir::ImmutableIdx, Alloc<llvm::Constant*>>
-      immutables_;
-  base::Vec<llvm::Function*, ir::ExternalFunctionIdx, Alloc<llvm::Function*>>
-      external_functions_;
+  LlvmIrStorage values_;
 
   static constexpr usize kFunctionArgsSooSize = 8;
 };

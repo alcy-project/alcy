@@ -26,7 +26,6 @@
 #include "ir/storage.h"
 #include "ir/type_util.h"
 #include "ir/verifier.h"
-#include "llvm/IR/DerivedTypes.h"
 
 #if BUILD_FLAG(IS_DEBUG)
 #include "ir/formatter.h"  // IWYU pragma: keep
@@ -42,28 +41,14 @@ LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
       builder_(std::make_unique<IRBuilder>(module_->getContext())),
       interner_(interner) {}
 
-inline void LlvmIrEmitter::init_value_map() {
-  functions_.resize(storage_.functions().size(), nullptr);
-  registers_.resize(storage_.registers().size(), nullptr);
-  blocks_.resize(storage_.blocks().size(), nullptr);
-  immutables_.resize(storage_.immutables().size(), nullptr);
-  external_functions_.resize(storage_.external_functions().size(), nullptr);
-
-  DCHECK_EQ(functions_.size(), storage_.functions().size());
-  DCHECK_EQ(registers_.size(), storage_.registers().size());
-  DCHECK_EQ(blocks_.size(), storage_.blocks().size());
-  DCHECK_EQ(immutables_.size(), storage_.immutables().size());
-  DCHECK_EQ(external_functions_.size(), storage_.external_functions().size());
-}
-
-inline void LlvmIrEmitter::check_state() {
+void LlvmIrEmitter::check_state() {
   // DCHECK_MSG(storage_, "IR Storage is null");
   DCHECK_MSG(module_, "LLVM Module is null");
   DCHECK_MSG(builder_, "LLVM IR Builder is null");
   DCHECK_MSG(interner_, "String Interner is null");
 }
 
-inline llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
+llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
   const ir::TypeNode& node = storage_.types()[idx];
   const ir::TypeTag tag = node.tag;
   using T = ir::TypeTag;
@@ -83,7 +68,7 @@ inline llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
     case T::MutRef: return builder_->getPtrTy();
     case T::Struct: {
       const ir::StructType& struct_type =
-          storage_.struct_types()[node.data.get<ir::StructTypeIdx>()];
+          storage_.struct_types()[node.as_struct()];
       llvm::SmallVector<llvm::Type*, kFunctionArgsSooSize> field_types;
       field_types.reserve(struct_type.fields.size());
       for (const ir::TypeIdx field : struct_type.fields) {
@@ -93,8 +78,7 @@ inline llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
       return llvm::StructType::get(module_->getContext(), field_types);
     }
     case T::Array: {
-      const ir::ArrayType& array_type =
-          storage_.array_types()[node.data.get<ir::ArrayTypeIdx>()];
+      const ir::ArrayType& array_type = storage_.array_types()[node.as_array()];
       return llvm::ArrayType::get(type(array_type.element), array_type.count);
     }
     default: {
@@ -108,7 +92,13 @@ inline llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
 void LlvmIrEmitter::emit() && noexcept {
   check_state();
 
-  init_value_map();
+  values_.resize_functions(storage_.functions().size());
+  values_.resize_registers(storage_.registers().size());
+  values_.resize_blocks(storage_.blocks().size());
+  values_.resize_immutables(storage_.immutables().size());
+  values_.resize_external_functions(storage_.external_functions().size());
+  values_.resize_alloca_types(storage_.registers().size());
+
   setup_immutables();
   setup_external_functions();
 
@@ -117,7 +107,7 @@ void LlvmIrEmitter::emit() && noexcept {
     const ir::Function& function = storage_.functions()[function_idx];
 
     llvm::Function* llvm_function = create_function(function.meta);
-    add_function(function_idx, llvm_function);
+    values_.add_function(function_idx, llvm_function);
     emit_function(llvm_function, function);
   }
 
@@ -142,27 +132,27 @@ void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
 
   // 3-pass block emission(block declare -> generate phi nodes -> block define)
   for (const ir::BlockIdx block_idx : function.blocks) {
-    add_block(block_idx, llvm::BasicBlock::Create(module_->getContext(), "",
-                                                  llvm_function));
+    values_.add_block(block_idx, llvm::BasicBlock::Create(module_->getContext(),
+                                                          "", llvm_function));
   }
 
   // Pre-generate phi nodes
   for (const ir::BlockIdx block_idx : function.blocks) {
     const ir::Block& block = storage_.blocks()[block_idx];
-    llvm::BasicBlock* llvm_block = blocks_[block_idx];
+    llvm::BasicBlock* llvm_block = values_.block(block_idx);
 
     builder_->SetInsertPoint(llvm_block);
     for (const ir::BlockParamIdx param_id : block.block_params) {
       const ir::BlockParam& param = storage_.block_params()[param_id];
 
       llvm::PHINode* phi = builder_->CreatePHI(type(param.type), 0);
-      add_register(param.reg, phi);
+      values_.add_register(param.reg, phi);
     }
   }
 
   for (const ir::BlockIdx block_idx : function.blocks) {
     const ir::Block& block = storage_.blocks()[block_idx];
-    builder_->SetInsertPoint(blocks_[block_idx]);
+    builder_->SetInsertPoint(values_.block(block_idx));
     emit_block(block);
   }
 
@@ -188,148 +178,79 @@ void LlvmIrEmitter::emit_block(const ir::Block& block) {
 void LlvmIrEmitter::emit_instruction(const ir::Instruction& instr) {
   check_state();
 
+  using Op = ir::Opcode;
+
+  switch (instr.op) {
+    case Op::Noop: break;
+
+    case Op::IntAdd:
+    case Op::IntSub:
+    case Op::IntMul:
+    case Op::IntDiv:
+    case Op::UintDiv:
+    case Op::IntRem:
+    case Op::UintRem:
+    case Op::And:
+    case Op::Or:
+    case Op::Xor:
+    case Op::ShiftLeft:
+    case Op::ArithmeticShiftRight:
+    case Op::LogicalShiftRight:
+    case Op::Not:
+    case Op::BitReverse:
+    case Op::Eq:
+    case Op::Ne:
+    case Op::Le:
+    case Op::Lt:
+    case Op::Ge:
+    case Op::Gt:
+    case Op::TypeCast:
+    case Op::Select:
+    case Op::Move:
+    case Op::Drop: emit_compute(instr); break;
+
+    case Op::Alloca:
+    case Op::Load:
+    case Op::Store:
+    case Op::GetElementPtr:
+    case Op::ExtractValue:
+    case Op::InsertValue:
+    case Op::AtomicLoad:
+    case Op::AtomicStore:
+    case Op::AtomicRmw:
+    case Op::AtomicCompareExchange:
+    case Op::Fence: emit_memory(instr); break;
+
+    case Op::Br:
+    case Op::CondBr:
+    case Op::Switch:
+    case Op::Call:
+    case Op::Ret:
+    case Op::Unreachable: emit_control(instr); break;
+
+    default: {
+      DLOG("Unknown opcode found: {}", instr.op);
+      UNREACHABLE();
+    }
+  }
+}
+
+void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
+  check_state();
+
   const ir::Instruction& i = instr;
   const ir::OperandIdxRange& ops = i.operands;
 
   using Op = ir::Opcode;
 
   switch (i.op) {
-    case Op::Noop: {
-      // no-operation
-      break;
-    }
-    case Op::Alloca: {
-      DCHECK(ops.size() == 1);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      add_register(i.dst, builder_->CreateAlloca(type(lhs.type),
-                                                 resolve_operand_value(lhs)));
-      break;
-    }
-    case Op::Load: {
-      DCHECK(ops.size() == 1);
-      const ir::Operand& ptr_op = storage_.operands()[ops.head()];
-
-      const ir::Register& dst_reg = storage_.registers()[i.dst];
-      llvm::Type* load_ty = type(dst_reg.type);
-
-      add_register(
-          i.dst, builder_->CreateLoad(load_ty, resolve_operand_value(ptr_op)));
-      break;
-    }
-    case Op::Store: {
-      DCHECK(ops.size() == 2);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      const ir::Operand& rhs = storage_.operands()[ops.head() + 1];
-      add_register(i.dst, builder_->CreateStore(resolve_operand_value(lhs),
-                                                resolve_operand_value(rhs)));
-      break;
-    }
-      // GetElementPtr
-      // ExtractValue,
-      // InsertValue,
-
-    case Op::IntAdd: {
-      DCHECK(ops.size() == 2);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      const ir::Operand& rhs = storage_.operands()[ops.head() + 1];
-      add_register(i.dst, builder_->CreateAdd(resolve_operand_value(lhs),
-                                              resolve_operand_value(rhs)));
-      break;
-    }
-    case Op::IntSub: {
-      DCHECK(ops.size() == 2);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      const ir::Operand& rhs = storage_.operands()[ops.head() + 1];
-      add_register(i.dst, builder_->CreateSub(resolve_operand_value(lhs),
-                                              resolve_operand_value(rhs)));
-      break;
-    }
-    case Op::IntMul: {
-      DCHECK(ops.size() == 2);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      const ir::Operand& rhs = storage_.operands()[ops.head() + 1];
-      add_register(i.dst, builder_->CreateMul(resolve_operand_value(lhs),
-                                              resolve_operand_value(rhs)));
-      break;
-    }
-      // IntDiv,   // Signed division
-      // UintDiv,  // Unsigned division
-      // IntRem,   // Signed remainder
-      // UintRem,  // Unsigned remainder
-
-    case Op::And: {
-      DCHECK(ops.size() == 2);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      const ir::Operand& rhs = storage_.operands()[ops.head() + 1];
-      add_register(i.dst, builder_->CreateAnd(resolve_operand_value(lhs),
-                                              resolve_operand_value(rhs)));
-      break;
-    }
-    case Op::Or: {
-      DCHECK(ops.size() == 2);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      const ir::Operand& rhs = storage_.operands()[ops.head() + 1];
-      add_register(i.dst, builder_->CreateOr(resolve_operand_value(lhs),
-                                             resolve_operand_value(rhs)));
-      break;
-    }
-    case Op::Xor: {
-      DCHECK(ops.size() == 2);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      const ir::Operand& rhs = storage_.operands()[ops.head() + 1];
-      add_register(i.dst, builder_->CreateXor(resolve_operand_value(lhs),
-                                              resolve_operand_value(rhs)));
-      break;
-    }
-    case Op::ShiftLeft: {
-      DCHECK(ops.size() == 2);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      const ir::Operand& rhs = storage_.operands()[ops.head() + 1];
-      add_register(i.dst, builder_->CreateShl(resolve_operand_value(lhs),
-                                              resolve_operand_value(rhs)));
-      break;
-    }
-    case Op::ArithmeticShiftRight: {
-      DCHECK(ops.size() == 2);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      const ir::Operand& rhs = storage_.operands()[ops.head() + 1];
-      add_register(i.dst, builder_->CreateAShr(resolve_operand_value(lhs),
-                                               resolve_operand_value(rhs)));
-      break;
-    }
-    case Op::LogicalShiftRight: {
-      DCHECK(ops.size() == 2);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      const ir::Operand& rhs = storage_.operands()[ops.head() + 1];
-      add_register(i.dst, builder_->CreateLShr(resolve_operand_value(lhs),
-                                               resolve_operand_value(rhs)));
-      break;
-    }
-    case Op::Not: {
-      DCHECK(ops.size() == 1);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      add_register(i.dst, builder_->CreateNot(resolve_operand_value(lhs)));
-      break;
-    }
-      // BitReverse,
-
-      // Eq,
-      // Ne,
-      // Le,
-      // Lt,
-      // Ge,
-      // Gt,
-
-      // TypeCast,
-
-      // Select,
-
     case Op::Br: {
       // operands[0] = Target block
       // operands[1..N] = parameters
+      DCHECK(!ops.empty());
       const ir::Operand& target_op = storage_.operands()[ops.head()];
       const ir::BlockIdx target_block_idx = target_op.as_block();
-      llvm::BasicBlock* target_llvm_block = blocks_[target_block_idx];
+      llvm::BasicBlock* target_llvm_block = values_.block(target_block_idx);
       llvm::BasicBlock* current_llvm_block = builder_->GetInsertBlock();
 
       builder_->CreateBr(target_llvm_block);
@@ -339,7 +260,8 @@ void LlvmIrEmitter::emit_instruction(const ir::Instruction& instr) {
       for (const ir::BlockParamIdx param_idx : target_block.block_params) {
         const ir::BlockParam& param = storage_.block_params()[param_idx];
 
-        auto* phi = llvm::cast<llvm::PHINode>(registers_[param.reg]);
+        auto* phi =
+            llvm::cast<llvm::PHINode>(values_.register_value(param.reg));
 
         const ir::Operand& arg_op =
             storage_.operands()[ops.head() + 1 + param_idx.idx];
@@ -349,8 +271,38 @@ void LlvmIrEmitter::emit_instruction(const ir::Instruction& instr) {
       }
       break;
     }
-    // CondBr,
-    // Switch,
+    case Op::CondBr: {
+      // operands = [cond, true_block, false_block]. Targets must not take
+      // block parameters in MVP.
+      DCHECK(ops.size() == 3);
+      llvm::Value* cond =
+          resolve_operand_value(storage_.operands()[ops.head()]);
+      llvm::BasicBlock* true_block =
+          values_.block(storage_.operands()[ops.head() + 1].as_block());
+      llvm::BasicBlock* false_block =
+          values_.block(storage_.operands()[ops.head() + 2].as_block());
+      builder_->CreateCondBr(cond, true_block, false_block);
+      break;
+    }
+    case Op::Switch: {
+      // operands = [value, default_block, (case_imm, case_block)...].
+      // Targets must not take block parameters in MVP.
+      DCHECK(ops.size() >= 2);
+      llvm::Value* value =
+          resolve_operand_value(storage_.operands()[ops.head()]);
+      llvm::BasicBlock* default_block =
+          values_.block(storage_.operands()[ops.head() + 1].as_block());
+      llvm::SwitchInst* switch_inst =
+          builder_->CreateSwitch(value, default_block);
+      for (u32 idx = 2; idx + 1 < ops.size(); idx += 2) {
+        auto* case_value = llvm::cast<llvm::ConstantInt>(
+            resolve_operand_value(storage_.operands()[ops.head() + idx]));
+        llvm::BasicBlock* case_block =
+            values_.block(storage_.operands()[ops.head() + idx + 1].as_block());
+        switch_inst->addCase(case_value, case_block);
+      }
+      break;
+    }
     case Op::Call: {
       DCHECK(ops.size() >= 1);
 
@@ -370,14 +322,18 @@ void LlvmIrEmitter::emit_instruction(const ir::Instruction& instr) {
       llvm::CallInst* call_inst = builder_->CreateCall(callee_func, args);
 
       if (i.dst.is_valid()) {
-        add_register(i.dst, call_inst);
+        values_.add_register(i.dst, call_inst);
       }
       break;
     }
     case Op::Ret: {
-      DCHECK(ops.size() == 1);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      builder_->CreateRet(resolve_operand_value(lhs));
+      DCHECK(ops.size() <= 1);
+      if (ops.empty()) {
+        builder_->CreateRetVoid();
+      } else {
+        const ir::Operand& lhs = storage_.operands()[ops.head()];
+        builder_->CreateRet(resolve_operand_value(lhs));
+      }
       break;
     }
     case Op::Unreachable: {
@@ -385,26 +341,9 @@ void LlvmIrEmitter::emit_instruction(const ir::Instruction& instr) {
       builder_->CreateUnreachable();
       break;
     }
-
-    // AtomicLoad,
-    // AtomicStore,
-    // AtomicRmw,
-    // AtomicCompareExchange,
-    // Fence,
-
-    // Move,
-    // Drop,
-    // BorrowBegin,
-    // BorrowEnd,
-
-    // VecSplat,
-    // VecExtract,
-    // VecInsert,
-    // VecReduce,
     default: {
-      DLOG("Unknown opcode found: {}", i.op);
+      DLOG("Unknown control opcode found: {}", i.op);
       UNREACHABLE();
-      break;
     }
   }
 }
@@ -437,10 +376,11 @@ llvm::Function* LlvmIrEmitter::create_function(
 llvm::Value* LlvmIrEmitter::resolve_operand_value(const ir::Operand& op) const {
   using Payload = ir::Operand::Payload;
   switch (op.tag()) {
-    case Payload::TagOf<ir::RegisterIdx>: return registers_[op.as_register()];
-    case Payload::TagOf<ir::BlockIdx>: return blocks_[op.as_block()];
+    case Payload::TagOf<ir::RegisterIdx>:
+      return values_.register_value(op.as_register());
+    case Payload::TagOf<ir::BlockIdx>: return values_.block(op.as_block());
     case Payload::TagOf<ir::ImmutableIdx>:
-      return immutables_[op.as_immutable()];
+      return values_.immutable(op.as_immutable());
 
     default:
       DLOG("Unknown operand tag found while resolving operand value.");
@@ -452,38 +392,14 @@ llvm::Function* LlvmIrEmitter::resolve_operand_function(
     const ir::Operand& op) const {
   using Payload = ir::Operand::Payload;
   switch (op.tag()) {
-    case Payload::TagOf<ir::FunctionIdx>: return functions_[(op.as_function())];
+    case Payload::TagOf<ir::FunctionIdx>:
+      return values_.function(op.as_function());
     case Payload::TagOf<ir::ExternalFunctionIdx>:
-      return external_functions_[(op.as_external_function())];
+      return values_.external_function(op.as_external_function());
     default:
       DLOG("Unknown operand tag found while resolving operand function.");
       UNREACHABLE();
   }
-}
-
-inline void LlvmIrEmitter::add_function(ir::FunctionIdx id,
-                                        llvm::Function* function) {
-  DCHECK_MSG(function, "Function is null");
-  functions_[id] = function;
-}
-inline void LlvmIrEmitter::add_register(ir::RegisterIdx id,
-                                        llvm::Value* value) {
-  DCHECK_MSG(value, "Value is null");
-  registers_[id] = value;
-}
-inline void LlvmIrEmitter::add_block(ir::BlockIdx id, llvm::BasicBlock* block) {
-  DCHECK_MSG(block, "Block is null");
-  blocks_[id] = block;
-}
-inline void LlvmIrEmitter::add_immutable(ir::ImmutableIdx id,
-                                         llvm::Constant* immutable) {
-  DCHECK_MSG(immutable, "Immutable is null");
-  immutables_[id] = immutable;
-}
-inline void LlvmIrEmitter::add_external_function(ir::ExternalFunctionIdx id,
-                                                 llvm::Function* ex_function) {
-  DCHECK_MSG(ex_function, "External function is null");
-  external_functions_[id] = ex_function;
 }
 
 void LlvmIrEmitter::setup_immutables() {
@@ -501,20 +417,20 @@ void LlvmIrEmitter::setup_immutables() {
           ir::is_signed_integer_type(tag));
       DCHECK_MSG(c, "Failed to get integer constant from LLVM");
 
-      add_immutable(immutable_idx, c);
+      values_.add_immutable(immutable_idx, c);
     } else if (ir::is_float_type(tag)) {
       llvm::Constant* c =
           llvm::ConstantFP::get(type(immutable.type), immutable.as_f64_fp(tag));
       DCHECK_MSG(c, "Failed to get fp constant from LLVM");
 
-      add_immutable(immutable_idx, c);
+      values_.add_immutable(immutable_idx, c);
     } else if (tag == ir::TypeTag::Str) {
       const std::string_view str_val =
           interner_->get(immutable.data.str_id_value);
       DLOG("str_val: {}", str_val);
       llvm::Constant* str_const = builder_->CreateGlobalString(
           llvm::StringRef(str_val), "", 0, module_);
-      add_immutable(immutable_idx, str_const);
+      values_.add_immutable(immutable_idx, str_const);
     } else {
       DCHECK_MSG(false, "Currently unsupported type found");
       UNREACHABLE();
@@ -529,7 +445,7 @@ void LlvmIrEmitter::setup_external_functions() {
     const ir::ExternalFunction& function =
         storage_.external_functions()[function_idx];
 
-    add_external_function(function_idx, create_function(function.meta));
+    values_.add_external_function(function_idx, create_function(function.meta));
   }
 }
 

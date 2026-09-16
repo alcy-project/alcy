@@ -5,6 +5,9 @@ source_set("codegen_llvm") {
     "declaration.h",
     "llvm_ir_emitter.cc",
     "llvm_ir_emitter.h",
+    "llvm_ir_emitter_compute.cc",
+    "llvm_ir_emitter_memory.cc",
+    "llvm_ir_storage.h",
   ]
   deps = [ "//src:base_modules" ]
   public_deps = [

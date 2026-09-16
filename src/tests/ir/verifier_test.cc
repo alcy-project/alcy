@@ -10,6 +10,7 @@
 #include "fpag/base/idx.h"
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
+#include "ir/external_function.h"
 #include "ir/function.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
@@ -434,6 +435,309 @@ TEST_CASE("Verify struct and array types") {
     Storage storage = std::move(builder).build();
     CHECK(check(std::move(storage)) == VerifyErrorKind::TypeMetadataOutOfRange);
   }
+}
+
+TEST_CASE("Verify CondBr shapes") {
+  // CondBr with a non-i1 condition reports InvalidCondBr.
+  {
+    StorageBuilder builder;
+    const TypeIdx i32 = builder.primitive(TypeTag::I32);
+
+    auto ret_block = [&](ImmutableIdx value) {
+      OperandSeq args;
+      args.push(builder.operand(Operand::from_immutable(value, i32)));
+      const InstructionIdx inst =
+          builder.instr({.op = Opcode::Ret,
+                         .flags = {},
+                         .dst = RegisterIdx(base::kInvalidIdx),
+                         .operands = args.finish()});
+      InstrSeq instrs;
+      instrs.push(inst);
+      return builder.block({.instrs = instrs.finish(), .block_params = {}});
+    };
+
+    const ImmutableIdx zero =
+        builder.immutable({.type = i32, .data = {.i32_value = 0}});
+    builder.reg({.type = i32, .def_idx = InstructionIdx(base::kInvalidIdx)});
+    const BlockParamIdx param =
+        builder.block_param({.type = i32, .reg = RegisterIdx(0)});
+    const BlockIdx entry = builder.block({{}, {}});
+    const BlockIdx then_block = ret_block(zero);
+    const BlockIdx else_block = ret_block(zero);
+
+    OperandSeq args;
+    args.push(builder.operand(Operand::from_register(RegisterIdx(0), i32)));
+    args.push(builder.operand(Operand::from_block(then_block, i32)));
+    args.push(builder.operand(Operand::from_block(else_block, i32)));
+    const InstructionIdx inst =
+        builder.instr({.op = Opcode::CondBr,
+                       .flags = {},
+                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .operands = args.finish()});
+    InstrSeq instrs;
+    instrs.push(inst);
+    builder.set_block_instrs(entry, instrs.finish());
+    BlockParamSeq entry_params;
+    entry_params.push(param);
+    builder.set_block_params(entry, entry_params.finish());
+
+    BlockSeq blocks;
+    blocks.push(entry);
+    blocks.push(then_block);
+    blocks.push(else_block);
+    builder.function({
+        .meta = {.return_type = i32,
+                 .param_types = {},
+                 .name = str::kEmptyStringId},
+        .blocks = blocks.finish(),
+    });
+    CHECK(check(std::move(builder).build()) == VerifyErrorKind::InvalidCondBr);
+  }
+  // CondBr with two operands (missing a target) reports InvalidCondBr.
+  {
+    StorageBuilder builder;
+    const TypeIdx i1 = builder.primitive(TypeTag::I1);
+    builder.reg({.type = i1, .def_idx = InstructionIdx(base::kInvalidIdx)});
+    const BlockParamIdx param =
+        builder.block_param({.type = i1, .reg = RegisterIdx(0)});
+    const BlockIdx entry = builder.block({{}, {}});
+    OperandSeq args;
+    args.push(builder.operand(Operand::from_register(RegisterIdx(0), i1)));
+    args.push(builder.operand(Operand::from_block(entry, i1)));
+    const InstructionIdx inst =
+        builder.instr({.op = Opcode::CondBr,
+                       .flags = {},
+                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .operands = args.finish()});
+    InstrSeq instrs;
+    instrs.push(inst);
+    builder.set_block_instrs(entry, instrs.finish());
+    BlockParamSeq entry_params;
+    entry_params.push(param);
+    builder.set_block_params(entry, entry_params.finish());
+    builder.function({
+        .meta = {.return_type = i1,
+                 .param_types = {},
+                 .name = str::kEmptyStringId},
+        .blocks = {entry, 1},
+    });
+    CHECK(check(std::move(builder).build()) == VerifyErrorKind::InvalidCondBr);
+  }
+}
+
+TEST_CASE("Verify Switch shapes") {
+  // Switch with an odd operand count reports InvalidSwitch.
+  {
+    StorageBuilder builder;
+    const TypeIdx i32 = builder.primitive(TypeTag::I32);
+    builder.reg({.type = i32, .def_idx = InstructionIdx(base::kInvalidIdx)});
+    const BlockParamIdx param =
+        builder.block_param({.type = i32, .reg = RegisterIdx(0)});
+    const BlockIdx entry = builder.block({{}, {}});
+    const ImmutableIdx zero =
+        builder.immutable({.type = i32, .data = {.i32_value = 0}});
+    OperandSeq ret_args;
+    ret_args.push(builder.operand(Operand::from_immutable(zero, i32)));
+    const InstructionIdx inst_ret =
+        builder.instr({.op = Opcode::Ret,
+                       .flags = {},
+                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .operands = ret_args.finish()});
+    InstrSeq ret_instrs;
+    ret_instrs.push(inst_ret);
+    const BlockIdx target =
+        builder.block({.instrs = ret_instrs.finish(), .block_params = {}});
+    OperandSeq args;
+    args.push(builder.operand(Operand::from_register(RegisterIdx(0), i32)));
+    args.push(builder.operand(Operand::from_block(target, i32)));
+    const ImmutableIdx one =
+        builder.immutable({.type = i32, .data = {.i32_value = 1}});
+    args.push(builder.operand(Operand::from_immutable(one, i32)));
+    const InstructionIdx inst =
+        builder.instr({.op = Opcode::Switch,
+                       .flags = {},
+                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .operands = args.finish()});
+    InstrSeq instrs;
+    instrs.push(inst);
+    builder.set_block_instrs(entry, instrs.finish());
+    BlockParamSeq entry_params;
+    entry_params.push(param);
+    builder.set_block_params(entry, entry_params.finish());
+    builder.function({
+        .meta = {.return_type = i32,
+                 .param_types = {},
+                 .name = str::kEmptyStringId},
+        .blocks = {entry, 1},
+    });
+    CHECK(check(std::move(builder).build()) == VerifyErrorKind::InvalidSwitch);
+  }
+  // Switch with a non-immediate case value reports InvalidSwitch.
+  {
+    StorageBuilder builder;
+    const TypeIdx i32 = builder.primitive(TypeTag::I32);
+    const ImmutableIdx one =
+        builder.immutable({.type = i32, .data = {.i32_value = 1}});
+    const OperandIdx size = builder.operand(Operand::from_immutable(one, i32));
+    const InstructionIdx inst_alloc0 = builder.instr({.op = Opcode::Alloca,
+                                                      .flags = {},
+                                                      .dst = RegisterIdx(0),
+                                                      .operands = {size, 1}});
+    builder.reg({.type = i32, .def_idx = inst_alloc0});
+    const InstructionIdx inst_alloc1 = builder.instr({.op = Opcode::Alloca,
+                                                      .flags = {},
+                                                      .dst = RegisterIdx(1),
+                                                      .operands = {size, 1}});
+    builder.reg({.type = i32, .def_idx = inst_alloc1});
+    const BlockIdx entry = builder.block({{}, {}});
+    OperandSeq args;
+    args.push(builder.operand(Operand::from_register(RegisterIdx(0), i32)));
+    args.push(builder.operand(Operand::from_block(entry, i32)));
+    args.push(builder.operand(Operand::from_register(RegisterIdx(1), i32)));
+    args.push(builder.operand(Operand::from_block(entry, i32)));
+    const InstructionIdx inst =
+        builder.instr({.op = Opcode::Switch,
+                       .flags = {},
+                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .operands = args.finish()});
+    InstrSeq instrs;
+    instrs.push(inst_alloc0);
+    instrs.push(inst_alloc1);
+    instrs.push(inst);
+    builder.set_block_instrs(entry, instrs.finish());
+    builder.function({
+        .meta = {.return_type = i32,
+                 .param_types = {},
+                 .name = str::kEmptyStringId},
+        .blocks = {entry, 1},
+    });
+    CHECK(check(std::move(builder).build()) == VerifyErrorKind::InvalidSwitch);
+  }
+}
+
+TEST_CASE("Verify memory shapes") {
+  // GetElementPtr without indexes reports InvalidGetElementPtr.
+  {
+    StorageBuilder builder;
+    const TypeIdx i32 = builder.primitive(TypeTag::I32);
+    const ImmutableIdx one =
+        builder.immutable({.type = i32, .data = {.i32_value = 1}});
+    const OperandIdx size = builder.operand(Operand::from_immutable(one, i32));
+    const InstructionIdx inst_alloc = builder.instr({.op = Opcode::Alloca,
+                                                     .flags = {},
+                                                     .dst = RegisterIdx(0),
+                                                     .operands = {size, 1}});
+    builder.reg({.type = i32, .def_idx = inst_alloc});
+    const BlockIdx entry = builder.block({{}, {}});
+    OperandSeq args;
+    args.push(builder.operand(Operand::from_register(RegisterIdx(0), i32)));
+    const InstructionIdx inst =
+        builder.instr({.op = Opcode::GetElementPtr,
+                       .flags = {},
+                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .operands = args.finish()});
+    const OperandIdx gep_ret_arg =
+        builder.operand(Operand::from_immutable(one, i32));
+    const InstructionIdx inst_gep_ret =
+        builder.instr({.op = Opcode::Ret,
+                       .flags = {},
+                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .operands = {gep_ret_arg, 1}});
+    InstrSeq instrs;
+    instrs.push(inst_alloc);
+    instrs.push(inst);
+    instrs.push(inst_gep_ret);
+    builder.set_block_instrs(entry, instrs.finish());
+    builder.function({
+        .meta = {.return_type = i32,
+                 .param_types = {},
+                 .name = str::kEmptyStringId},
+        .blocks = {entry, 1},
+    });
+    CHECK(check(std::move(builder).build()) ==
+          VerifyErrorKind::InvalidGetElementPtr);
+  }
+  // ExtractValue without indexes reports InvalidExtractInsert.
+  {
+    StorageBuilder builder;
+    const TypeIdx i32 = builder.primitive(TypeTag::I32);
+    const ImmutableIdx one =
+        builder.immutable({.type = i32, .data = {.i32_value = 1}});
+    const OperandIdx size = builder.operand(Operand::from_immutable(one, i32));
+    const InstructionIdx inst_alloc = builder.instr({.op = Opcode::Alloca,
+                                                     .flags = {},
+                                                     .dst = RegisterIdx(0),
+                                                     .operands = {size, 1}});
+    builder.reg({.type = i32, .def_idx = inst_alloc});
+    const BlockIdx entry = builder.block({{}, {}});
+    OperandSeq args;
+    args.push(builder.operand(Operand::from_register(RegisterIdx(0), i32)));
+    const InstructionIdx inst = builder.instr({.op = Opcode::ExtractValue,
+                                               .flags = {},
+                                               .dst = RegisterIdx(1),
+                                               .operands = args.finish()});
+    builder.reg({.type = i32, .def_idx = inst});
+    const OperandIdx ext_ret_arg =
+        builder.operand(Operand::from_immutable(one, i32));
+    const InstructionIdx inst_ext_ret =
+        builder.instr({.op = Opcode::Ret,
+                       .flags = {},
+                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .operands = {ext_ret_arg, 1}});
+    InstrSeq instrs;
+    instrs.push(inst_alloc);
+    instrs.push(inst);
+    instrs.push(inst_ext_ret);
+    builder.set_block_instrs(entry, instrs.finish());
+    builder.function({
+        .meta = {.return_type = i32,
+                 .param_types = {},
+                 .name = str::kEmptyStringId},
+        .blocks = {entry, 1},
+    });
+    CHECK(check(std::move(builder).build()) ==
+          VerifyErrorKind::InvalidExtractInsert);
+  }
+}
+
+TEST_CASE("Verify call arity") {
+  StorageBuilder builder;
+  const TypeIdx i32 = builder.primitive(TypeTag::I32);
+  const TypeIdx p0 = builder.ref_type(i32);
+  const ExternalFunctionIdx callee =
+      builder.external_function({.meta = {.return_type = i32,
+                                          .param_types = {p0, 1},
+                                          .name = str::kEmptyStringId},
+                                 .calling_conv = CallingConvention::C});
+  const OperandIdx head = builder.operand(Operand::from_external_function(
+      callee, primitive_idx(TypeTag::Function)));
+  const InstructionIdx inst =
+      builder.instr({.op = Opcode::Call,
+                     .flags = {},
+                     .dst = RegisterIdx(base::kInvalidIdx),
+                     .operands = {head, 1}});
+  const ImmutableIdx zero =
+      builder.immutable({.type = i32, .data = {.i32_value = 0}});
+  const OperandIdx ret_arg =
+      builder.operand(Operand::from_immutable(zero, i32));
+  const InstructionIdx inst_ret =
+      builder.instr({.op = Opcode::Ret,
+                     .flags = {},
+                     .dst = RegisterIdx(base::kInvalidIdx),
+                     .operands = {ret_arg, 1}});
+  const BlockIdx entry = builder.block({{}, {}});
+  InstrSeq instrs;
+  instrs.push(inst);
+  instrs.push(inst_ret);
+  builder.set_block_instrs(entry, instrs.finish());
+  builder.function({
+      .meta = {.return_type = i32,
+               .param_types = {},
+               .name = str::kEmptyStringId},
+      .blocks = {entry, 1},
+  });
+  // One declared parameter but zero call arguments.
+  CHECK(check(std::move(builder).build()) == VerifyErrorKind::InvalidCallee);
 }
 
 }  // namespace ir

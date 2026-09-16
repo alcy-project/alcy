@@ -32,6 +32,10 @@ enum class VerifyErrorKind : u8 {
   MisplacedTerminator,
   InvalidCallee,
   InvalidBranchTarget,
+  InvalidCondBr,
+  InvalidSwitch,
+  InvalidGetElementPtr,
+  InvalidExtractInsert,
 };
 
 struct VerifyError {
@@ -62,6 +66,10 @@ constexpr std::string_view format_as(const VerifyErrorKind kind) {
     case K::MisplacedTerminator: return "MisplacedTerminator";
     case K::InvalidCallee: return "InvalidCallee";
     case K::InvalidBranchTarget: return "InvalidBranchTarget";
+    case K::InvalidCondBr: return "InvalidCondBr";
+    case K::InvalidSwitch: return "InvalidSwitch";
+    case K::InvalidGetElementPtr: return "InvalidGetElementPtr";
+    case K::InvalidExtractInsert: return "InvalidExtractInsert";
   }
 }
 

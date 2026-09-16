@@ -6,9 +6,19 @@
 
 namespace ir {
 
+enum class AtomicRmwOp : u8 {
+  Add,
+  Sub,
+  And,
+  Or,
+  Xor,
+  Exchange,
+};
+
 // Bit packed 1 B struct for instruction.
 struct InstructionFlags {
-  // TODO
+  // Meaningful only for AtomicRmw.
+  AtomicRmwOp rmw_op : 3 = AtomicRmwOp::Add;
   bool some_flag : 1 = false;
 };
 

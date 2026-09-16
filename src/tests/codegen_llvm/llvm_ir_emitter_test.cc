@@ -16,6 +16,7 @@
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 #include "ir/external_function.h"
+#include "ir/instruction_flags.h"
 #include "ir/opcode.h"
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
@@ -231,6 +232,502 @@ TEST_CASE("Emit struct and array calls") {
 
   CHECK(ir_str.find("{ i32, i32 }") != std::string::npos);
   CHECK(ir_str.find("[4 x i32]") != std::string::npos);
+
+  tests::logger.debug("LLVM IR dump:\n{}", ir_str);
+}
+
+TEST_CASE("Emit compute instructions") {
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("compute_test", context);
+
+  str::StringInterner interner(mem::page_size());
+  ir::StorageBuilder builder;
+
+  const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
+  const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
+
+  // @arith(i32 %a, i32 %b) -> i32, entry block takes both as parameters.
+  ir::TypeSeq params;
+  params.push(builder.ref_type(i32));
+  params.push(builder.ref_type(i32));
+
+  builder.reg({.type = i32, .def_idx = ir::InstructionIdx(base::kInvalidIdx)});
+  builder.reg({.type = i32, .def_idx = ir::InstructionIdx(base::kInvalidIdx)});
+  ir::BlockParamSeq block_params;
+  block_params.push(
+      builder.block_param({.type = i32, .reg = ir::RegisterIdx(0)}));
+  block_params.push(
+      builder.block_param({.type = i32, .reg = ir::RegisterIdx(1)}));
+
+  ir::InstrSeq instrs;
+  // Helper appending a binary instruction; dst registers are numbered
+  // sequentially (r2 and up) matching reg() calls below.
+  auto binary = [&](ir::Opcode op, ir::RegisterIdx lhs, ir::RegisterIdx rhs,
+                    ir::TypeIdx operand_ty, ir::RegisterIdx dst) {
+    ir::OperandSeq args;
+    args.push(builder.operand(ir::Operand::from_register(lhs, operand_ty)));
+    args.push(builder.operand(ir::Operand::from_register(rhs, operand_ty)));
+    const ir::InstructionIdx inst = builder.instr(
+        {.op = op, .flags = {}, .dst = dst, .operands = args.finish()});
+    instrs.push(inst);
+    return inst;
+  };
+
+  // div = a / b (signed); rem = a % b (unsigned)
+  const ir::InstructionIdx inst_div =
+      binary(ir::Opcode::IntDiv, ir::RegisterIdx(0), ir::RegisterIdx(1), i32,
+             ir::RegisterIdx(2));
+  builder.reg({.type = i32, .def_idx = inst_div});
+  const ir::InstructionIdx inst_rem =
+      binary(ir::Opcode::UintRem, ir::RegisterIdx(0), ir::RegisterIdx(1), i32,
+             ir::RegisterIdx(3));
+  builder.reg({.type = i32, .def_idx = inst_rem});
+  // cmp = div < rem (signed); ext = (i32)cmp; sel = cmp ? div : rem
+  const ir::InstructionIdx inst_cmp =
+      binary(ir::Opcode::Lt, ir::RegisterIdx(2), ir::RegisterIdx(3), i32,
+             ir::RegisterIdx(4));
+  builder.reg({.type = i1, .def_idx = inst_cmp});
+  const ir::OperandIdx cast_arg =
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(4), i1));
+  const ir::InstructionIdx inst_cast =
+      builder.instr({.op = ir::Opcode::TypeCast,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(5),
+                     .operands = {cast_arg, 1}});
+  instrs.push(inst_cast);
+  builder.reg({.type = i32, .def_idx = inst_cast});
+  ir::OperandSeq sel_args;
+  sel_args.push(
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(4), i1)));
+  sel_args.push(
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(2), i32)));
+  sel_args.push(
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(3), i32)));
+  const ir::InstructionIdx inst_sel =
+      builder.instr({.op = ir::Opcode::Select,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(6),
+                     .operands = sel_args.finish()});
+  instrs.push(inst_sel);
+  builder.reg({.type = i32, .def_idx = inst_sel});
+  // add = ext + sel; not = ~add; rev = bitreverse(not); ret = move(rev)
+  const ir::InstructionIdx inst_add =
+      binary(ir::Opcode::IntAdd, ir::RegisterIdx(5), ir::RegisterIdx(6), i32,
+             ir::RegisterIdx(7));
+  builder.reg({.type = i32, .def_idx = inst_add});
+  const ir::OperandIdx not_arg =
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(7), i32));
+  const ir::InstructionIdx inst_not = builder.instr({.op = ir::Opcode::Not,
+                                                     .flags = {},
+                                                     .dst = ir::RegisterIdx(8),
+                                                     .operands = {not_arg, 1}});
+  instrs.push(inst_not);
+  builder.reg({.type = i32, .def_idx = inst_not});
+  const ir::OperandIdx rev_arg =
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(8), i32));
+  const ir::InstructionIdx inst_rev =
+      builder.instr({.op = ir::Opcode::BitReverse,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(9),
+                     .operands = {rev_arg, 1}});
+  instrs.push(inst_rev);
+  builder.reg({.type = i32, .def_idx = inst_rev});
+  const ir::OperandIdx mov_arg =
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(9), i32));
+  const ir::InstructionIdx inst_mov = builder.instr({.op = ir::Opcode::Move,
+                                                     .flags = {},
+                                                     .dst = ir::RegisterIdx(10),
+                                                     .operands = {mov_arg, 1}});
+  instrs.push(inst_mov);
+  builder.reg({.type = i32, .def_idx = inst_mov});
+  const ir::OperandIdx drop_arg =
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(10), i32));
+  const ir::InstructionIdx inst_drop =
+      builder.instr({.op = ir::Opcode::Drop,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .operands = {drop_arg, 1}});
+  instrs.push(inst_drop);
+  const ir::OperandIdx ret_arg =
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(10), i32));
+  const ir::InstructionIdx inst_ret =
+      builder.instr({.op = ir::Opcode::Ret,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .operands = {ret_arg, 1}});
+  instrs.push(inst_ret);
+
+  const ir::BlockIdx block = builder.block({
+      .instrs = instrs.finish(),
+      .block_params = block_params.finish(),
+  });
+  builder.function({
+      .meta = {.return_type = i32,
+               .param_types = params.finish(),
+               .name = interner.intern("arith")},
+      .blocks = {block, 1},
+  });
+
+  ir::Storage storage = std::move(builder).build();
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner);
+
+  std::move(emitter).emit();
+
+  CHECK(!llvm::verifyModule(*module));
+
+  std::string ir_str;
+  llvm::raw_string_ostream os(ir_str);
+  module->print(os, nullptr);
+
+  CHECK(ir_str.find("sdiv") != std::string::npos);
+  CHECK(ir_str.find("urem") != std::string::npos);
+  CHECK(ir_str.find("icmp slt") != std::string::npos);
+  CHECK(ir_str.find("zext") != std::string::npos);
+  CHECK(ir_str.find("select") != std::string::npos);
+  CHECK(ir_str.find("bitreverse") != std::string::npos);
+
+  tests::logger.debug("LLVM IR dump:\n{}", ir_str);
+}
+
+TEST_CASE("Emit control flow") {
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("control_test", context);
+
+  str::StringInterner interner(mem::page_size());
+  ir::StorageBuilder builder;
+
+  const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
+  const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
+  const ir::ImmutableIdx one =
+      builder.immutable({.type = i32, .data = {.i32_value = 1}});
+  const ir::ImmutableIdx zero =
+      builder.immutable({.type = i32, .data = {.i32_value = 0}});
+  const ir::ImmutableIdx two =
+      builder.immutable({.type = i32, .data = {.i32_value = 2}});
+  const ir::ImmutableIdx ten =
+      builder.immutable({.type = i32, .data = {.i32_value = 10}});
+  const ir::ImmutableIdx twenty =
+      builder.immutable({.type = i32, .data = {.i32_value = 20}});
+
+  // @condbr(i1 %c) -> i32 with entry/then/else blocks.
+  ir::TypeSeq cond_params;
+  cond_params.push(builder.ref_type(i1));
+  builder.reg({.type = i1, .def_idx = ir::InstructionIdx(base::kInvalidIdx)});
+  const ir::BlockParamIdx cond_param =
+      builder.block_param({.type = i1, .reg = ir::RegisterIdx(0)});
+
+  auto ret_block = [&](ir::ImmutableIdx value) {
+    ir::OperandSeq args;
+    args.push(builder.operand(ir::Operand::from_immutable(value, i32)));
+    const ir::InstructionIdx inst =
+        builder.instr({.op = ir::Opcode::Ret,
+                       .flags = {},
+                       .dst = ir::RegisterIdx(base::kInvalidIdx),
+                       .operands = args.finish()});
+    ir::InstrSeq instrs;
+    instrs.push(inst);
+    return builder.block({.instrs = instrs.finish(), .block_params = {}});
+  };
+
+  // @condbr(i1 %c) -> i32 with entry/then/else blocks. The entry block is
+  // declared empty first (LLVM requires it first in vector order) and
+  // backpatched once the targets exist.
+  const ir::BlockIdx cond_entry = builder.block({{}, {}});
+  const ir::BlockIdx then_block = ret_block(one);
+  const ir::BlockIdx else_block = ret_block(zero);
+
+  ir::OperandSeq cond_args;
+  cond_args.push(
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(0), i1)));
+  cond_args.push(builder.operand(ir::Operand::from_block(then_block, i32)));
+  cond_args.push(builder.operand(ir::Operand::from_block(else_block, i32)));
+  const ir::InstructionIdx inst_condbr =
+      builder.instr({.op = ir::Opcode::CondBr,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .operands = cond_args.finish()});
+  ir::InstrSeq entry_instrs;
+  entry_instrs.push(inst_condbr);
+  builder.set_block_instrs(cond_entry, entry_instrs.finish());
+  ir::BlockParamSeq entry_params;
+  entry_params.push(cond_param);
+  builder.set_block_params(cond_entry, entry_params.finish());
+  ir::BlockSeq cond_blocks;
+  cond_blocks.push(cond_entry);
+  cond_blocks.push(then_block);
+  cond_blocks.push(else_block);
+  builder.function({
+      .meta = {.return_type = i32,
+               .param_types = cond_params.finish(),
+               .name = interner.intern("condbr")},
+      .blocks = cond_blocks.finish(),
+  });
+
+  // @sw(i32 %v) -> i32 with entry/default/case blocks.
+  builder.reg({.type = i32, .def_idx = ir::InstructionIdx(base::kInvalidIdx)});
+  const ir::BlockIdx sw_entry = builder.block({{}, {}});
+  const ir::BlockIdx sw_default = ret_block(zero);
+  const ir::BlockIdx sw_case1 = ret_block(ten);
+  const ir::BlockIdx sw_case2 = ret_block(twenty);
+  ir::OperandSeq sw_args;
+  sw_args.push(
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(1), i32)));
+  sw_args.push(builder.operand(ir::Operand::from_block(sw_default, i32)));
+  sw_args.push(builder.operand(ir::Operand::from_immutable(one, i32)));
+  sw_args.push(builder.operand(ir::Operand::from_block(sw_case1, i32)));
+  sw_args.push(builder.operand(ir::Operand::from_immutable(two, i32)));
+  sw_args.push(builder.operand(ir::Operand::from_block(sw_case2, i32)));
+  const ir::InstructionIdx inst_sw =
+      builder.instr({.op = ir::Opcode::Switch,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .operands = sw_args.finish()});
+  ir::InstrSeq sw_instrs;
+  sw_instrs.push(inst_sw);
+  builder.set_block_instrs(sw_entry, sw_instrs.finish());
+  ir::BlockParamSeq sw_params;
+  sw_params.push(builder.block_param({.type = i32, .reg = ir::RegisterIdx(1)}));
+  builder.set_block_params(sw_entry, sw_params.finish());
+  ir::TypeSeq sw_fn_params;
+  sw_fn_params.push(builder.ref_type(i32));
+  ir::BlockSeq sw_blocks;
+  sw_blocks.push(sw_entry);
+  sw_blocks.push(sw_default);
+  sw_blocks.push(sw_case1);
+  sw_blocks.push(sw_case2);
+  builder.function({
+      .meta = {.return_type = i32,
+               .param_types = sw_fn_params.finish(),
+               .name = interner.intern("sw")},
+      .blocks = sw_blocks.finish(),
+  });
+
+  ir::Storage storage = std::move(builder).build();
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner);
+
+  std::move(emitter).emit();
+
+  CHECK(!llvm::verifyModule(*module));
+
+  std::string ir_str;
+  llvm::raw_string_ostream os(ir_str);
+  module->print(os, nullptr);
+
+  CHECK(ir_str.find("br i1") != std::string::npos);
+  CHECK(ir_str.find("switch i32") != std::string::npos);
+
+  tests::logger.debug("LLVM IR dump:\n{}", ir_str);
+}
+
+TEST_CASE("Emit memory instructions") {
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("memory_test", context);
+
+  str::StringInterner interner(mem::page_size());
+  ir::StorageBuilder builder;
+
+  const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
+  ir::TypeSeq pair_fields;
+  pair_fields.push(builder.ref_type(i32));
+  pair_fields.push(builder.ref_type(i32));
+  const ir::TypeIdx pair =
+      builder.struct_type(interner.intern("Pair"), pair_fields.finish());
+
+  auto imm_op = [&](ir::ImmutableIdx imm, ir::TypeIdx ty) {
+    return builder.operand(ir::Operand::from_immutable(imm, ty));
+  };
+  auto reg_op = [&](ir::RegisterIdx reg, ir::TypeIdx ty) {
+    return builder.operand(ir::Operand::from_register(reg, ty));
+  };
+
+  const ir::ImmutableIdx one =
+      builder.immutable({.type = i32, .data = {.i32_value = 1}});
+  const ir::ImmutableIdx val42 =
+      builder.immutable({.type = i32, .data = {.i32_value = 42}});
+  const ir::ImmutableIdx val7 =
+      builder.immutable({.type = i32, .data = {.i32_value = 7}});
+  const ir::ImmutableIdx zero =
+      builder.immutable({.type = i32, .data = {.i32_value = 0}});
+
+  ir::InstrSeq instrs;
+  auto unary = [&](ir::Opcode op, ir::OperandIdx arg, ir::RegisterIdx dst,
+                   ir::TypeIdx dst_ty) {
+    ir::OperandSeq args;
+    args.push(arg);
+    const ir::InstructionIdx inst = builder.instr(
+        {.op = op, .flags = {}, .dst = dst, .operands = args.finish()});
+    instrs.push(inst);
+    builder.reg({.type = dst_ty, .def_idx = inst});
+    return inst;
+  };
+
+  // p = alloca i32; store 42 -> [p]; v = load [p]
+  const ir::InstructionIdx inst_alloc =
+      builder.instr({.op = ir::Opcode::Alloca,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(0),
+                     .operands = {imm_op(one, i32), 1}});
+  instrs.push(inst_alloc);
+  builder.reg({.type = i32, .def_idx = inst_alloc});
+  ir::OperandSeq store_args;
+  store_args.push(imm_op(val42, i32));
+  store_args.push(
+      reg_op(ir::RegisterIdx(0), ir::primitive_idx(ir::TypeTag::Ptr)));
+  instrs.push(builder.instr({.op = ir::Opcode::Store,
+                             .flags = {},
+                             .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .operands = store_args.finish()}));
+  unary(ir::Opcode::Load,
+        reg_op(ir::RegisterIdx(0), ir::primitive_idx(ir::TypeTag::Ptr)),
+        ir::RegisterIdx(1), i32);
+
+  // atomic store/load/rmw/cmpxchg + fence
+  ir::OperandSeq astore_args;
+  astore_args.push(imm_op(val7, i32));
+  astore_args.push(
+      reg_op(ir::RegisterIdx(0), ir::primitive_idx(ir::TypeTag::Ptr)));
+  instrs.push(builder.instr({.op = ir::Opcode::AtomicStore,
+                             .flags = {},
+                             .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .operands = astore_args.finish()}));
+  unary(ir::Opcode::AtomicLoad,
+        reg_op(ir::RegisterIdx(0), ir::primitive_idx(ir::TypeTag::Ptr)),
+        ir::RegisterIdx(2), i32);
+  ir::OperandSeq rmw_args;
+  rmw_args.push(
+      reg_op(ir::RegisterIdx(0), ir::primitive_idx(ir::TypeTag::Ptr)));
+  rmw_args.push(reg_op(ir::RegisterIdx(2), i32));
+  const ir::InstructionIdx inst_rmw =
+      builder.instr({.op = ir::Opcode::AtomicRmw,
+                     .flags = {.rmw_op = ir::AtomicRmwOp::Add},
+                     .dst = ir::RegisterIdx(3),
+                     .operands = rmw_args.finish()});
+  instrs.push(inst_rmw);
+  builder.reg({.type = i32, .def_idx = inst_rmw});
+
+  // r4 = cmpxchg [r0] cmp r2 -> r3 : {i32, i1}
+  ir::TypeSeq cmpxchg_fields;
+  cmpxchg_fields.push(builder.ref_type(i32));
+  cmpxchg_fields.push(builder.ref_type(builder.primitive(ir::TypeTag::I1)));
+  const ir::TypeIdx pair_i1 = builder.struct_type(interner.intern("CmpXchgRes"),
+                                                  cmpxchg_fields.finish());
+  ir::OperandSeq cmpxchg_args;
+  cmpxchg_args.push(
+      reg_op(ir::RegisterIdx(0), ir::primitive_idx(ir::TypeTag::Ptr)));
+  cmpxchg_args.push(reg_op(ir::RegisterIdx(2), i32));
+  cmpxchg_args.push(reg_op(ir::RegisterIdx(3), i32));
+  const ir::InstructionIdx inst_cmpxchg =
+      builder.instr({.op = ir::Opcode::AtomicCompareExchange,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(4),
+                     .operands = cmpxchg_args.finish()});
+  instrs.push(inst_cmpxchg);
+  builder.reg({.type = pair_i1, .def_idx = inst_cmpxchg});
+  instrs.push(builder.instr({.op = ir::Opcode::Fence,
+                             .flags = {},
+                             .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .operands = {}}));
+
+  // ps = alloca Pair; p1 = gep [ps, 0, 1]; store r1 -> [p1]; f1 = load [p1]
+  const ir::InstructionIdx inst_alloc_struct =
+      builder.instr({.op = ir::Opcode::Alloca,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(5),
+                     .operands = {imm_op(one, i32), 1}});
+  instrs.push(inst_alloc_struct);
+  builder.reg({.type = pair, .def_idx = inst_alloc_struct});
+  ir::OperandSeq gep_args;
+  gep_args.push(
+      reg_op(ir::RegisterIdx(5), ir::primitive_idx(ir::TypeTag::Ptr)));
+  gep_args.push(imm_op(zero, i32));
+  gep_args.push(imm_op(one, i32));
+  const ir::InstructionIdx inst_gep =
+      builder.instr({.op = ir::Opcode::GetElementPtr,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(6),
+                     .operands = gep_args.finish()});
+  instrs.push(inst_gep);
+  builder.reg(
+      {.type = ir::primitive_idx(ir::TypeTag::Ptr), .def_idx = inst_gep});
+  ir::OperandSeq field_store_args;
+  field_store_args.push(reg_op(ir::RegisterIdx(1), i32));
+  field_store_args.push(
+      reg_op(ir::RegisterIdx(6), ir::primitive_idx(ir::TypeTag::Ptr)));
+  instrs.push(builder.instr({.op = ir::Opcode::Store,
+                             .flags = {},
+                             .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .operands = field_store_args.finish()}));
+  unary(ir::Opcode::Load,
+        reg_op(ir::RegisterIdx(6), ir::primitive_idx(ir::TypeTag::Ptr)),
+        ir::RegisterIdx(7), i32);
+
+  // Insert/extract roundtrip on the cmpxchg result struct.
+  ir::OperandSeq ext_args;
+  ext_args.push(reg_op(ir::RegisterIdx(4), pair_i1));
+  ext_args.push(imm_op(zero, i32));
+  const ir::InstructionIdx inst_ext =
+      builder.instr({.op = ir::Opcode::ExtractValue,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(8),
+                     .operands = ext_args.finish()});
+  instrs.push(inst_ext);
+  builder.reg({.type = i32, .def_idx = inst_ext});
+  ir::OperandSeq ins_args;
+  ins_args.push(reg_op(ir::RegisterIdx(4), pair_i1));
+  ins_args.push(reg_op(ir::RegisterIdx(8), i32));
+  ins_args.push(imm_op(zero, i32));
+  const ir::InstructionIdx inst_ins =
+      builder.instr({.op = ir::Opcode::InsertValue,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(9),
+                     .operands = ins_args.finish()});
+  instrs.push(inst_ins);
+  builder.reg({.type = pair_i1, .def_idx = inst_ins});
+  ir::OperandSeq ext_args2;
+  ext_args2.push(reg_op(ir::RegisterIdx(9), pair_i1));
+  ext_args2.push(imm_op(zero, i32));
+  const ir::InstructionIdx inst_ext2 =
+      builder.instr({.op = ir::Opcode::ExtractValue,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(10),
+                     .operands = ext_args2.finish()});
+  instrs.push(inst_ext2);
+  builder.reg({.type = i32, .def_idx = inst_ext2});
+
+  const ir::InstructionIdx inst_ret =
+      builder.instr({.op = ir::Opcode::Ret,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .operands = {reg_op(ir::RegisterIdx(10), i32), 1}});
+  instrs.push(inst_ret);
+  const ir::BlockIdx block =
+      builder.block({.instrs = instrs.finish(), .block_params = {}});
+  builder.function({
+      .meta = {.return_type = i32,
+               .param_types = {},
+               .name = interner.intern("memtest")},
+      .blocks = {block, 1},
+  });
+
+  ir::Storage storage = std::move(builder).build();
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner);
+
+  std::move(emitter).emit();
+
+  CHECK(!llvm::verifyModule(*module));
+
+  std::string ir_str;
+  llvm::raw_string_ostream os(ir_str);
+  module->print(os, nullptr);
+
+  CHECK(ir_str.find("atomicrmw") != std::string::npos);
+  CHECK(ir_str.find("cmpxchg") != std::string::npos);
+  CHECK(ir_str.find("getelementptr") != std::string::npos);
+  CHECK(ir_str.find("extractvalue") != std::string::npos);
+  CHECK(ir_str.find("insertvalue") != std::string::npos);
 
   tests::logger.debug("LLVM IR dump:\n{}", ir_str);
 }

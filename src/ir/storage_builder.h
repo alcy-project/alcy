@@ -79,6 +79,20 @@ class StorageBuilder {
     return state_.functions.emplace_back(function);
   }
   BlockIdx block(Block block) { return state_.blocks.emplace_back(block); }
+
+  // Backpatches a block's instruction range. Branch targets must exist before
+  // the branching instruction can reference them, while LLVM requires the
+  // entry block first in vector order; declare the entry block empty, build
+  // the targets, then patch the entry.
+  void set_block_instrs(BlockIdx idx, InstructionIdxRange instrs) {
+    DCHECK(idx.idx < state_.blocks.size());
+    state_.blocks[idx].instrs = instrs;
+  }
+
+  void set_block_params(BlockIdx idx, BlockParamIdxRange params) {
+    DCHECK(idx.idx < state_.blocks.size());
+    state_.blocks[idx].block_params = params;
+  }
   BlockParamIdx block_param(BlockParam block_param) {
     return state_.block_params.emplace_back(block_param);
   }

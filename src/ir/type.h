@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "debug/dcheck.h"
 #include "debug/fatal.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/union.h"
@@ -71,6 +72,16 @@ struct TypeNode {
   TypeTag tag;
   // Meaningful only for Struct/Array tags.
   base::Union<StructTypeIdx, ArrayTypeIdx> data;
+
+  inline StructTypeIdx as_struct() const {
+    DCHECK_MSG(tag == TypeTag::Struct, "type node is not a struct");
+    return data.get<StructTypeIdx>();
+  }
+
+  inline ArrayTypeIdx as_array() const {
+    DCHECK_MSG(tag == TypeTag::Array, "type node is not an array");
+    return data.get<ArrayTypeIdx>();
+  }
 };
 
 constexpr const char* type_to_str(TypeTag tag) {

@@ -9,3 +9,4 @@ extend-exclude = [
 
 [default.extend-words]
 restat = "restat"
+OLT = "OLT"

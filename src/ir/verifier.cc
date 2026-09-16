@@ -14,6 +14,7 @@
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/storage.h"
+#include "ir/type_util.h"
 
 namespace ir {
 
@@ -43,7 +44,7 @@ VerifyResult verify_storage(const Storage& storage) {
   for (TypeIdx tidx(0); tidx.idx < storage.types().size(); ++tidx) {
     const TypeNode& node = storage.types()[tidx];
     if (node.tag == TypeTag::Struct) {
-      const StructTypeIdx sidx = node.data.get<StructTypeIdx>();
+      const StructTypeIdx sidx = node.as_struct();
       if (sidx.idx >= storage.struct_types().size()) {
         return err(VerifyErrorKind::TypeMetadataOutOfRange, tidx.idx);
       }
@@ -53,7 +54,7 @@ VerifyResult verify_storage(const Storage& storage) {
         return err(VerifyErrorKind::StructFieldsOutOfRange, sidx.idx);
       }
     } else if (node.tag == TypeTag::Array) {
-      const ArrayTypeIdx aidx = node.data.get<ArrayTypeIdx>();
+      const ArrayTypeIdx aidx = node.as_array();
       if (aidx.idx >= storage.array_types().size()) {
         return err(VerifyErrorKind::TypeMetadataOutOfRange, tidx.idx);
       }
@@ -201,6 +202,15 @@ VerifyResult verify_storage(const Storage& storage) {
         if (!head.is<FunctionIdx>() && !head.is<ExternalFunctionIdx>()) {
           return err(VerifyErrorKind::InvalidCallee, iidx.idx);
         }
+        // Argument count must match the callee signature.
+        const FunctionMeta& meta =
+            head.is<FunctionIdx>()
+                ? storage.functions()[head.as_function()].meta
+                : storage.external_functions()[head.as_external_function()]
+                      .meta;
+        if (instr.operands.size() - 1 != meta.param_types.size()) {
+          return err(VerifyErrorKind::InvalidCallee, iidx.idx);
+        }
       }
       if (instr.op == Opcode::Br) {
         if (instr.operands.empty()) {
@@ -208,6 +218,91 @@ VerifyResult verify_storage(const Storage& storage) {
         }
         if (!storage.operands()[instr.operands.head()].is<BlockIdx>()) {
           return err(VerifyErrorKind::InvalidBranchTarget, iidx.idx);
+        }
+      }
+      if (instr.op == Opcode::CondBr) {
+        // operands = [cond(i1), true_block, false_block]; targets take no
+        // block parameters in MVP.
+        if (instr.operands.size() != 3) {
+          return err(VerifyErrorKind::InvalidCondBr, iidx.idx);
+        }
+        const Operand& cond = storage.operands()[instr.operands.head()];
+        if (storage.types()[cond.type.idx].tag != TypeTag::I1) {
+          return err(VerifyErrorKind::InvalidCondBr, iidx.idx);
+        }
+        for (u32 offset = 1; offset <= 2; ++offset) {
+          const Operand& target =
+              storage.operands()[instr.operands.head() + offset];
+          if (!target.is<BlockIdx>()) {
+            return err(VerifyErrorKind::InvalidCondBr, iidx.idx);
+          }
+          if (!storage.blocks()[target.as_block()].block_params.empty()) {
+            return err(VerifyErrorKind::InvalidCondBr, iidx.idx);
+          }
+        }
+      }
+      if (instr.op == Opcode::Switch) {
+        // operands = [value, default_block, (case_imm, case_block)...];
+        // targets take no block parameters in MVP.
+        if (instr.operands.size() < 2 || (instr.operands.size() % 2) != 0) {
+          return err(VerifyErrorKind::InvalidSwitch, iidx.idx);
+        }
+        const Operand& value = storage.operands()[instr.operands.head()];
+        if (!is_integer_type(storage.types()[value.type.idx].tag)) {
+          return err(VerifyErrorKind::InvalidSwitch, iidx.idx);
+        }
+        const Operand& default_target =
+            storage.operands()[instr.operands.head() + 1];
+        if (!default_target.is<BlockIdx>()) {
+          return err(VerifyErrorKind::InvalidSwitch, iidx.idx);
+        }
+        if (!storage.blocks()[default_target.as_block()].block_params.empty()) {
+          return err(VerifyErrorKind::InvalidSwitch, iidx.idx);
+        }
+        for (u32 offset = 2; offset < instr.operands.size(); offset += 2) {
+          const Operand& case_value =
+              storage.operands()[instr.operands.head() + offset];
+          const Operand& case_target =
+              storage.operands()[instr.operands.head() + offset + 1];
+          if (!case_value.is<ImmutableIdx>() || !case_target.is<BlockIdx>()) {
+            return err(VerifyErrorKind::InvalidSwitch, iidx.idx);
+          }
+          if (!storage.blocks()[case_target.as_block()].block_params.empty()) {
+            return err(VerifyErrorKind::InvalidSwitch, iidx.idx);
+          }
+        }
+      }
+      if (instr.op == Opcode::GetElementPtr) {
+        // operands = [base_ptr(register), index(integer)...].
+        if (instr.operands.size() < 2) {
+          return err(VerifyErrorKind::InvalidGetElementPtr, iidx.idx);
+        }
+        if (!storage.operands()[instr.operands.head()].is<RegisterIdx>()) {
+          return err(VerifyErrorKind::InvalidGetElementPtr, iidx.idx);
+        }
+        for (u32 offset = 1; offset < instr.operands.size(); ++offset) {
+          const Operand& index =
+              storage.operands()[instr.operands.head() + offset];
+          if (!is_integer_type(storage.types()[index.type.idx].tag)) {
+            return err(VerifyErrorKind::InvalidGetElementPtr, iidx.idx);
+          }
+        }
+      }
+      if (instr.op == Opcode::ExtractValue || instr.op == Opcode::InsertValue) {
+        // Extract: [aggregate, index(imm)...]; Insert: [aggregate, value,
+        // index(imm)...]. Indexes must be integer immediates.
+        const u32 first_index = (instr.op == Opcode::ExtractValue) ? 1 : 2;
+        if (instr.operands.size() < first_index + 1) {
+          return err(VerifyErrorKind::InvalidExtractInsert, iidx.idx);
+        }
+        for (u32 offset = first_index; offset < instr.operands.size();
+             ++offset) {
+          const Operand& index =
+              storage.operands()[instr.operands.head() + offset];
+          if (!index.is<ImmutableIdx>() ||
+              !is_integer_type(storage.types()[index.type.idx].tag)) {
+            return err(VerifyErrorKind::InvalidExtractInsert, iidx.idx);
+          }
         }
       }
     }
