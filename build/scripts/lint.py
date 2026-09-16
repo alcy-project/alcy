@@ -4,26 +4,26 @@
 # This source code is licensed under the Apache License, Version 2.0 with LLVM
 # Exceptions which can be found in the LICENSE file.
 
+import argparse
 from pathlib import Path
-from utils.paths import (
-    project_root_dir,
-    project_source_dirs,
-    default_out_dir,
-)
-from utils.source import (
-    source_extensions,
-    compile_unit_extensions,
-)
-from utils.command import run_commands_in_parallel
-
 import sys
 
 import format
 import gn_check
+from utils.command import run_commands_in_parallel
+from utils.paths import (
+    default_out_dir,
+    project_root_dir,
+    project_source_dirs,
+)
+from utils.source import (
+    compile_unit_extensions,
+    source_extensions,
+)
 
 
 def create_commands(
-    target_dirs: list[Path], fix: bool, fix_errors: bool
+    target_dirs: list[Path], fix: bool, fix_errors: bool, verbose: bool
 ) -> list[list[str]]:
     commands: list[list[str]] = []
     files: list[str] = []
@@ -39,6 +39,9 @@ def create_commands(
                     comp_files.append(relative_path)
 
     base_clang_tidy_cmd = ["clang-tidy"]
+    if not verbose:
+        base_clang_tidy_cmd.append("--quiet")
+
     if fix_errors:
         base_clang_tidy_cmd.append("--fix-errors")
     elif fix:
@@ -48,13 +51,16 @@ def create_commands(
         commands.append(base_clang_tidy_cmd + [f])
 
     base_cpplint_cmd = ["uv", "run", "cpplint"]
+    if not verbose:
+        base_cpplint_cmd.append("--quiet")
+
     for f in files:
         commands.append(base_cpplint_cmd + [f])
 
     return commands
 
 
-def lint_files(fix: bool, fix_errors: bool):
+def lint_files(fix: bool, fix_errors: bool, verbose: bool):
     failed = False
 
     target_dirs = []
@@ -72,9 +78,7 @@ def lint_files(fix: bool, fix_errors: bool):
         if ret != 0:
             failed = True
 
-    commands = []
-    # commands.append(["typos"])
-    commands.extend(create_commands(target_dirs, fix, fix_errors))
+    commands = create_commands(target_dirs, fix, fix_errors, verbose)
 
     if not run_commands_in_parallel(commands):
         failed = True
@@ -91,18 +95,29 @@ def lint_files(fix: bool, fix_errors: bool):
 
 
 def main():
-    fix = False
-    fix_errors = False
-    if len(sys.argv) >= 2:
-        if sys.argv[1] == "--fix":
-            print("fix enabled")
-            fix = True
-        if sys.argv[1] == "--fix-errors":
-            print("fix errors enabled")
-            fix = True
-            fix_errors = True
+    parser = argparse.ArgumentParser(description="Run lint checks on source files.")
+    parser.add_argument(
+        "--fix", action="store_true", help="Automatically fix standard lint issues"
+    )
+    parser.add_argument(
+        "--fix-errors", action="store_true", help="Automatically fix lint errors"
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Enable verbose output"
+    )
 
-    return lint_files(fix, fix_errors)
+    args = parser.parse_args()
+
+    fix = args.fix or args.fix_errors
+    fix_errors = args.fix_errors
+
+    if args.verbose:
+        if fix_errors:
+            print("fix errors enabled")
+        elif fix:
+            print("fix enabled")
+
+    return lint_files(fix, fix_errors, args.verbose)
 
 
 if __name__ == "__main__":
