@@ -25,6 +25,7 @@
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
+#include "ir/verifier.h"
 
 #if BUILD_FLAG(IS_DEBUG)
 #include "ir/formatter.h"  // IWYU pragma: keep
@@ -102,6 +103,12 @@ void LlvmIrEmitter::emit() && noexcept {
   }
 
 #if BUILD_FLAG(IS_DEBUG)
+  if (base::Result<void, ir::VerifyError> result = ir::verify_storage(storage_);
+      result.is_err()) [[unlikely]] {
+    const ir::VerifyError error = std::move(result).unwrap_err();
+    DLOG("IR verification failed: {} #{}", error.kind, error.index);
+    UNREACHABLE();
+  }
   if (llvm::verifyModule(*module_, &llvm::errs())) [[unlikely]] {
     DLOG("LLVM verify module failed");
     module_->print(llvm::errs(), nullptr);

@@ -18,6 +18,8 @@ source_set("ir") {
     "storage_builder.h",
     "type.h",
     "type_util.h",
+    "verifier.cc",
+    "verifier.h",
   ]
   deps = [ "//src:base_modules" ]
   configs += [ "//src:alcy_config" ]

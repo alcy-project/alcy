@@ -64,15 +64,16 @@ ir::Storage hello_world_ir(str::StringInterner* interner) {
   const ir::OperandIdx arg_str_op =
       builder.operand(ir::Operand::from_immutable(imm_hello, ir::Type::Str));
 
-  const ir::RegisterIdx ret_register(0);
+  const ir::RegisterIdx ret_register(1);
   const ir::OperandIdx reg_op =
       builder.operand(ir::Operand::from_register(ret_register, ir::Type::I32));
-  /* const ir::InstructionId inst_call = */ builder.instr({
+  const ir::InstructionIdx inst_call = builder.instr({
       .op = ir::Opcode::Call,
       .flags = {},
       .dst = ret_register,
       .operands = ir::OperandIdxRange::from_to(puts_op, arg_str_op),
   });
+  builder.reg({.type = ir::Type::I32, .def_idx = inst_call});
 
   const ir::InstructionIdx inst_ret = builder.instr({
       .op = ir::Opcode::Ret,
