@@ -1,16 +1,25 @@
-# ADR NNNN: Title
+# ADR template
 
-Date: YYYY-MM-DD
-Status: accepted
+Copy this file to `NNNN-kebab-case-title.md` (next free number). Keep it
+short: the decision and its consequences matter, not the process.
+
+```markdown
+# ADR-NNNN: Title
+
+- Status: Proposed | Accepted | Superseded by ADR-MMMM
+- Date: YYYY-MM-DD
 
 ## Context
 
-What problem are we solving, and what constraints apply?
+What problem forces a decision? What constraints apply
+(`no_std` boundary, output-contract stability, crash safety, ...)?
 
 ## Decision
 
-What we decided, and the main alternatives considered.
+What we do, concretely (APIs, flags, schemas, defaults).
 
 ## Consequences
 
-What follows from this decision: benefits, costs, and things to watch.
+What this buys, what it costs, and what is explicitly out of scope.
+Link follow-up TODOs instead of expanding scope here.
+```
