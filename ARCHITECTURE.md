@@ -81,6 +81,31 @@ fixed set of opcodes (`src/ir/opcode.h`). Ownership-related operations
 (`Move`, `Drop`) are part of the instruction set so that later analyses
 can reason about them uniformly.
 
+Key design points:
+
+- **Interned types**: every type reference is a `TypeIdx` into a unified
+  type table (`TypeNode`: a `TypeTag` plus optional struct/array metadata).
+  Primitive tags are pre-interned in tag order, so they resolve without a
+  lookup; composite types (`Struct`, `Array`) are created through builder
+  factories.
+- **Tagged operands**: `Operand` pairs an `AutoTaggedUnion` payload with a
+  type reference (12 bytes, 4-byte aligned). Tag and payload cannot drift
+  apart; dispatch on `TagOf<T>` and checked `as_*` accessors.
+- **Structural verification**: `verify_storage()` checks index bounds,
+  single-definition of registers, terminator placement, and per-opcode
+  operand shapes, returning `base::Result<void, VerifyError>`. The emitter
+  runs it in debug builds before LLVM verification.
+- **Construction discipline**: index ranges must reference consecutive
+  entries. Multi-entry ranges are built with `SeqBuilder` (which enforces
+  contiguity); blocks needing forward references use backpatch setters.
+  See [docs/ir.md](docs/ir.md) for the full construction guide and opcode
+  conventions.
+
+`codegen_llvm` lowers verified IR to LLVM IR, split by concern into
+orchestration/control flow (`llvm_ir_emitter.cc`), compute
+(`llvm_ir_emitter_compute.cc`), and memory (`llvm_ir_emitter_memory.cc`),
+with emitted values tracked in `LlvmIrStorage`.
+
 ## Memory & allocation model
 
 Zero-allocation hot paths are enforced through three mechanisms:

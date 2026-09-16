@@ -40,6 +40,8 @@ before requesting a review.
 
 - Follow [ARCHITECTURE.md](ARCHITECTURE.md) for module responsibilities and core design principles
   (separation of concerns, YAGNI/DRY/KISS, zero vtables, and zero-allocation hot paths).
+  IR construction rules (type currency, operand factories, `SeqBuilder`, opcode
+  conventions) live in [docs/ir.md](docs/ir.md).
 - Standard: C++20 up to Google C++ Style Guide limits. No exceptions (`-fno-exceptions`).
   Code must not rely on RTTI or EH.
 - Naming & Types: `PascalCase` for classes/structs/enums, `kPascalCase` for constants,
