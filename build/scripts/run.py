@@ -53,15 +53,21 @@ def main():
 
     if args.target != "default":
         build_dir = project_root_dir / "out" / args.build_subdir
-        target_bin = build_dir / args.target
+        candidates = [build_dir / args.target, build_dir / (args.target + ".exe")]
+        target_bin = next((c for c in candidates if c.is_file()), None)
 
-        if target_bin.is_file():
-            print(f"Running '{args.target}'")
+        if target_bin is not None:
+            print(f"Running '{target_bin.name}'")
             cmd = [str(target_bin)] + args.run_args
             result = subprocess.run(cmd, cwd=build_dir)
             sys.exit(result.returncode)
         else:
-            print(f"{args.target} is not binary")
+            print(
+                f"error: '{args.target}' is not binary "
+                f"(looked for {candidates[0]} and {candidates[1]})",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
 
 if __name__ == "__main__":

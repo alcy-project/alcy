@@ -25,8 +25,12 @@ if [[ $target != "default" ]]; then
   if [[ -f "$build_dir/$target" ]]; then
     echo "Running '$target'"
     "$build_dir/$target" $run_args
+  elif [[ -f "$build_dir/$target.exe" ]]; then
+    echo "Running '$target.exe'"
+    "$build_dir/$target.exe" $run_args
   else
-    echo "$target is not binary"
+    echo "error: '$target' is not binary (looked for $build_dir/$target and $build_dir/$target.exe)" >&2
+    exit 1
   fi
 fi
 

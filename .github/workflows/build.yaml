@@ -187,8 +187,9 @@ jobs:
           if [ -f README.md ]; then cp README.md dist/; fi
 
           # Copy binaries from build output, explicitly ignoring third_party
-          rsync -av --exclude='third_party' out/build/ dist/ 2>/dev/null || cp -r out/build/* dist/ 2>/dev/null || true
-          rm -rf dist/third_party
+          # and unstripped intermediates.
+          rsync -av --exclude='third_party' --exclude='exe.unstripped' out/build/ dist/ 2>/dev/null || cp -r out/build/* dist/ 2>/dev/null || true
+          rm -rf dist/third_party dist/exe.unstripped
 
           FILE="${{ env.basename }}-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}${{ matrix.nix && '-nix' || '' }}.${{ matrix.archive }}"
           if [[ "${{ matrix.plat }}" == "windows" ]]; then

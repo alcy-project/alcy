@@ -298,7 +298,12 @@ template("gcc_clang") {
         link_command += "$start_group_flag @\"$rspfile\" $end_group_flag {{solibs}} {{libs}} $start_group_flag {{rlibs}} $end_group_flag"
       }
 
-      command = link_command
+      if (defined(invoker.strip)) {
+        strip_command = "${invoker.strip} -o \"$outfile\" \"$main_outfile\""
+        command = "$link_command && $strip_command"
+      } else {
+        command = link_command
+      }
 
       description = "LINK $outfile"
 
