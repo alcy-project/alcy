@@ -99,6 +99,19 @@ config("linker") {
     #   ldflags += [ "-B" + rebase_path(lld_path, root_build_dir) ]
     # }
   }
+  if (is_win && is_debug) {
+    # Workaround: clang's -fms-runtime-lib=*_debug still selects the release
+    # CRT (libcmt.lib) instead of the debug CRT (libcmtd.lib), leaving the
+    # debug CRT symbols (_malloc_dbg etc.) unresolved. Force the debug CRT
+    # explicitly. The C++ debug library (libcpmtd.lib) is already pulled in
+    # via the MSVC headers' #pragma comment(lib) directives.
+    ldflags += [
+      "-Xlinker",
+      "/NODEFAULTLIB:libcmt.lib",
+      "-Xlinker",
+      "/DEFAULTLIB:libcmtd.lib",
+    ]
+  }
   if (is_mac) {
     ldflags += [
       "-Wl,-rpath,@executable_path",
