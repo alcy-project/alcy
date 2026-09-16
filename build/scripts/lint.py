@@ -140,6 +140,9 @@ def lint_files(
     if not run_commands_in_parallel(commands):
         failed = True
 
+    if fix or fix_errors:
+        format.format_files(dry_run=False)
+
     if len(commands) == 0:
         print("None of the files were linted")
 
