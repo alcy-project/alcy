@@ -155,10 +155,14 @@ jobs:
         if: matrix.nix
         shell: bash
         run: |
+          set -euo pipefail
+          echo "Entering Nix development environment..."
           nix develop .#default --command bash -c '
             set -euo pipefail
+            echo "Verifying tools..."
             command -v llvm-readobj
             llvm-readobj --version
+            echo "Running static linkage verification..."
             uv run python ./build/scripts/verify_static_linkage.py \
               --build-dir=out/build
           '
@@ -168,8 +172,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo "Verifying tools..."
           command -v llvm-readobj
           llvm-readobj --version
+          echo "Running static linkage verification..."
           uv run python ./build/scripts/verify_static_linkage.py \
             --build-dir=out/build
 
