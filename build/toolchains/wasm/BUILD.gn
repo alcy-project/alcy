@@ -1,0 +1,21 @@
+import("//build/toolchains/gcc_clang.gni")
+
+# Emscripten toolchain targeting wasm32. Expects emcc/em++/emar on PATH
+# (e.g. via emsdk). Produces .js wrappers with sidecar .wasm files.
+clang_toolchain("emcc_wasm32") {
+  cc = "emcc"
+  cxx = "em++"
+  ld = cxx
+  ar = "emar"
+
+  readelf = "llvm-readobj"
+  nm = "llvm-nm"
+
+  executable_extension = ".js"
+
+  toolchain_args = {
+    current_cpu = "wasm32"
+    current_os = "emscripten"
+    is_clang = true
+  }
+}

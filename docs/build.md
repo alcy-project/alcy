@@ -37,8 +37,11 @@ action prepares a ready-to-link installation under
 1. **Reuse**: if the directory already exists and its recorded tag matches
    the submodule tag, nothing is done.
 2. **Download**: otherwise a prebuilt archive for the submodule tag and the
-   host triple is fetched from the fork's GitHub Releases
+   target triple is fetched from the fork's GitHub Releases
    (`llvm-<debug|release>-<triple>.tar.zst`, `.zip` on Windows) and extracted.
+   For wasm builds the triple is `wasm32-unknown-emscripten`; if the fork has
+   not published that asset yet, the setup fails — publish it first (see the
+   fork's `alcy-release.yaml`).
 3. **Build from source** (only when `build_llvm=true`, not the CI default):
    `.alcy/configure.sh` configures a minimal static LLVM build and installs it.
 
@@ -57,6 +60,12 @@ a missing asset.
   `lld-link: error: /failifmismatch: mismatch detected for 'RuntimeLibrary'`.
   If you see this error, the LLVM installation was built with a different
   CRT — re-run the setup after removing the stale install directory.
+- **WebAssembly**: built with Emscripten (`emcc`/`em++` on `PATH`) targeting
+  `wasm32-unknown-emscripten`, using Emscripten's bundled libc++ (the
+  `libcxx` GN config is excluded). Always use a dedicated output directory
+  (e.g. `--build-subdir=build_wasm --target-os=emscripten`); reusing a native
+  output directory leaves stale artifacts behind. Test binaries run under
+  `node` (`run.py` handles this automatically).
 
 ### Windows CRT details
 

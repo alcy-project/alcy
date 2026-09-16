@@ -16,11 +16,21 @@ def build(
     is_clang: str = "true",
     use_lld: str = "true",
     build_subdir: str = "build",
+    target_os: str = "",
+    target_cpu: str = "",
 ) -> int:
     out_dir = project_root_dir / "out"
     build_dir = out_dir / build_subdir
 
     is_debug = "true" if mode == "debug" else "false"
+
+    gn_args = (
+        f"is_debug={is_debug} is_clang={is_clang} use_lld={use_lld} build_llvm=false"
+    )
+    if target_os:
+        gn_args += f' target_os="{target_os}"'
+    if target_cpu:
+        gn_args += f' target_cpu="{target_cpu}"'
 
     try:
         # gn gen
@@ -29,7 +39,7 @@ def build(
                 "gn",
                 "gen",
                 str(build_dir),
-                f"--args=is_debug={is_debug} is_clang={is_clang} use_lld={use_lld} build_llvm=false",
+                f"--args={gn_args}",
             ],
             check=True,
             cwd=project_root_dir,
@@ -94,9 +104,29 @@ def main():
         default="build",
         help="Subdirectory inside out/ (default: build)",
     )
+    parser.add_argument(
+        "--target-os",
+        default="",
+        help='GN target_os override (e.g. "emscripten" for wasm builds)',
+    )
+    parser.add_argument(
+        "--target-cpu",
+        default="",
+        help='GN target_cpu override (e.g. "wasm32"; defaults per target_os)',
+    )
     args = parser.parse_args()
 
-    sys.exit(build(args.target, args.mode, args.clang, args.lld, args.build_subdir))
+    sys.exit(
+        build(
+            args.target,
+            args.mode,
+            args.clang,
+            args.lld,
+            args.build_subdir,
+            args.target_os,
+            args.target_cpu,
+        )
+    )
 
 
 if __name__ == "__main__":

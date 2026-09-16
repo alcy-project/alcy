@@ -281,7 +281,12 @@ template("gcc_clang") {
       default_output_extension = default_executable_extension
       default_output_dir = "{{root_out_dir}}"
 
-      use_strip = defined(invoker.strip) && current_os != "win"
+      # The unstripped split requires chaining link and strip with "&&",
+      # which the Windows shell invocation does not interpret, and which
+      # llvm-strip cannot handle for Emscripten outputs. Link directly on
+      # those platforms; neither carries debug info in release anyway.
+      use_strip = defined(invoker.strip) && current_os != "win" &&
+                  current_os != "emscripten"
       if (use_strip) {
         outfile_with_symbols = "{{root_out_dir}}/exe.unstripped/$exename"
       } else {
@@ -291,7 +296,8 @@ template("gcc_clang") {
       main_outfile = outfile_with_symbols
       link_command = "$ld {{ldflags}}${extra_ldflags} -o \"$main_outfile\" "
 
-      if (current_os == "mac" || current_os == "win") {
+      if (current_os == "mac" || current_os == "win" ||
+          current_os == "emscripten") {
         link_command += "@\"$rspfile\" {{solibs}} {{libs}} {{rlibs}}"
       } else {
         start_group_flag = "-Wl,--start-group"

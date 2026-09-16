@@ -11,14 +11,16 @@ build_subdir=${2:-"build"}
 mode=${3:-"debug"}
 clang=${4:-"true"}
 lld=${5:-"true"}
-run_args="${@:6}"
+target_os=${6:-""}
+target_cpu=${7:-""}
+run_args="${@:8}"
 
 script_dir="$(cd $(dirname $0) && pwd)"
 source "$script_dir/env.sh"
 
 build_dir="$out_dir/$build_subdir"
 
-$script_dir/build.sh $target $mode $build_subdir
+$script_dir/build.sh $target $build_subdir $mode $clang $lld $target_os $target_cpu
 
 if [[ $target != "default" ]]; then
   cd "$build_dir"
@@ -28,8 +30,11 @@ if [[ $target != "default" ]]; then
   elif [[ -f "$build_dir/$target.exe" ]]; then
     echo "Running '$target.exe'"
     "$build_dir/$target.exe" $run_args
+  elif [[ -f "$build_dir/$target.js" ]]; then
+    echo "Running '$target.js'"
+    node "$build_dir/$target.js" $run_args
   else
-    echo "error: '$target' is not binary (looked for $build_dir/$target and $build_dir/$target.exe)" >&2
+    echo "error: '$target' is not binary (looked for $build_dir/$target{,.exe,.js})" >&2
     exit 1
   fi
 fi

@@ -11,6 +11,8 @@ build_subdir=${2:-"build"}
 mode=${3:-"debug"}
 clang=${4:-"true"}
 lld=${5:-"true"}
+target_os=${6:-""}
+target_cpu=${7:-""}
 
 script_dir="$(cd $(dirname $0) && pwd)"
 source "$script_dir/env.sh"
@@ -23,7 +25,15 @@ else
   is_debug="false"
 fi
 
-gn gen $build_dir --args="is_debug=$is_debug is_clang=$clang use_lld=$lld"
+gn_args="is_debug=$is_debug is_clang=$clang use_lld=$lld"
+if [[ -n $target_os ]]; then
+  gn_args="$gn_args target_os=\"$target_os\""
+fi
+if [[ -n $target_cpu ]]; then
+  gn_args="$gn_args target_cpu=\"$target_cpu\""
+fi
+
+gn gen $build_dir --args="$gn_args"
 gn check $build_dir "//src/*"
 ninja -C $build_dir -t compdb > compile_commands.json
 ninja -C $build_dir $target

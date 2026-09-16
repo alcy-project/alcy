@@ -5,19 +5,20 @@ action("setup_llvm") {
   tag_cache_file = "$install_dir/.llvm_tag_cache"
 
   args = [
-    "--type=$llvm_build_type",
-    "--src-dir=" + rebase_path("src/llvm"),
-    "--build-dir=" + rebase_path(build_dir),
-    "--download-dir=" + rebase_path(download_dir),
-    "--install-dir=" + rebase_path(install_dir),
-    "--tag-cache-file=" + rebase_path(tag_cache_file),
-  ]
+           "--type=$llvm_build_type",
+           "--src-dir=" + rebase_path("src/llvm"),
+           "--build-dir=" + rebase_path(build_dir),
+           "--download-dir=" + rebase_path(download_dir),
+           "--install-dir=" + rebase_path(install_dir),
+           "--tag-cache-file=" + rebase_path(tag_cache_file),
+         ] + llvm_triple_args
 
   # The prebuilt LLVM for Windows (see src/.github/workflows/alcy-release.yaml)
   # is built with LLVM_ENABLE_LIBCXX=OFF, and the Windows build does not use
   # the libcxx config (see //build/config/BUILDCONFIG.gn), so only request a
-  # libc++-based LLVM build where the consumer actually uses libc++.
-  if (!is_win) {
+  # libc++-based LLVM build where the consumer actually uses libc++. Same for
+  # wasm, which uses Emscripten's bundled libc++.
+  if (!is_win && !is_wasm) {
     args += [ "--libcxx" ]
   }
 

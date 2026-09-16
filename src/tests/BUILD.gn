@@ -13,8 +13,7 @@ executable("tests") {
     "//src:win_sys_libs",
   ]
   deps = [
-    "//src:libs",
+    "//src:alcy_lib",
     "//third_party/doctest",
-    "//third_party/fpag",
   ]
 }

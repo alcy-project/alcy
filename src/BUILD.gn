@@ -40,6 +40,16 @@ group("libs") {
   ]
 }
 
+# Single static library archiving every compiler module. Executables link
+# only against this target, so CI and releases can ship the archive itself
+# (native libalcy.a / alcy.lib, wasm libalcy.a for the playground).
+static_library("alcy_lib") {
+  output_name = "alcy"
+  output_dir = root_out_dir
+  complete_static_lib = true
+  public_deps = [ ":libs" ]
+}
+
 config("win_sys_libs") {
   if (is_win) {
     libs = [

@@ -41,30 +41,55 @@ def main():
         help="Subdirectory inside out/ (default: build)",
     )
     parser.add_argument(
+        "--target-os",
+        default="",
+        help='GN target_os override (e.g. "emscripten" for wasm builds)',
+    )
+    parser.add_argument(
+        "--target-cpu",
+        default="",
+        help='GN target_cpu override (e.g. "wasm32"; defaults per target_os)',
+    )
+    parser.add_argument(
         "run_args",
         nargs=argparse.REMAINDER,
         help="Arguments to pass to the executable (use '--' before run_args if passing flags)",
     )
     args = parser.parse_args()
 
-    ret = build(args.target, args.mode, args.clang, args.lld, args.build_subdir)
+    ret = build(
+        args.target,
+        args.mode,
+        args.clang,
+        args.lld,
+        args.build_subdir,
+        args.target_os,
+        args.target_cpu,
+    )
     if ret != 0:
         sys.exit(ret)
 
     if args.target != "default":
         build_dir = project_root_dir / "out" / args.build_subdir
-        candidates = [build_dir / args.target, build_dir / (args.target + ".exe")]
+        candidates = [
+            build_dir / args.target,
+            build_dir / (args.target + ".exe"),
+            build_dir / (args.target + ".js"),
+        ]
         target_bin = next((c for c in candidates if c.is_file()), None)
 
         if target_bin is not None:
             print(f"Running '{target_bin.name}'")
-            cmd = [str(target_bin)] + args.run_args
+            if target_bin.suffix == ".js":
+                cmd = ["node", str(target_bin)] + args.run_args
+            else:
+                cmd = [str(target_bin)] + args.run_args
             result = subprocess.run(cmd, cwd=build_dir)
             sys.exit(result.returncode)
         else:
             print(
                 f"error: '{args.target}' is not binary "
-                f"(looked for {candidates[0]} and {candidates[1]})",
+                f"(looked for {', '.join(str(c) for c in candidates)})",
                 file=sys.stderr,
             )
             sys.exit(1)

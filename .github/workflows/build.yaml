@@ -30,8 +30,14 @@ jobs:
             plat: windows
             arch: x64
             archive: zip
+          - os: ubuntu-24.04
+            plat: wasm
+            arch: wasm32
+            archive: tar.gz
         exclude:
           - os: windows-2025-vs2026
+            nix: true
+          - plat: wasm
             nix: true
 
     env:
@@ -53,14 +59,33 @@ jobs:
             experimental-features = nix-command flakes
 
       - name: Setup build environment (Standard)
-        if: "!matrix.nix"
+        if: "!matrix.nix && matrix.plat != 'wasm'"
         uses: pug523/actions/cxx-gn-setup@e4abb74456e529372bb1b7ebb71db1b647be3fd1
         with:
           os: ${{ runner.os }}
           llvm_version: ${{ matrix.llvm_version }}
 
+      - name: Setup Emscripten
+        if: matrix.plat == 'wasm'
+        uses: emscripten-core/setup-emsdk@6ab9eb1bda2574c4ddb79809fc9247783eaf9021
+
+      - name: Setup node
+        if: matrix.plat == 'wasm'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Setup GN
+        if: matrix.plat == 'wasm'
+        uses: pug523/actions/setup-gn@e4abb74456e529372bb1b7ebb71db1b647be3fd1
+
+      - name: Install ninja
+        if: matrix.plat == 'wasm'
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build
+
       - name: Setup environment variables
-        if: "!matrix.nix"
+        if: "!matrix.nix && matrix.plat != 'wasm'"
         shell: bash
         run: |
           echo "${{ env.LLVM_PATH }}/bin" >> $GITHUB_PATH
@@ -94,7 +119,23 @@ jobs:
           git -C third_party/llvm/src fetch --tags --depth=1
           git -C third_party/llvm/src describe --tags --always
 
+      - name: Check LLVM asset
+        id: asset
+        if: matrix.plat == 'wasm'
+        shell: bash
+        run: |
+          tag=$(git -C third_party/llvm/src describe --tags --always)
+          url="https://github.com/alcy-project/llvm-alcy-fork/releases/download/${tag}/llvm-${{ inputs.build_type }}-wasm32-unknown-emscripten.tar.zst"
+          echo "Probing $url"
+          if curl -sSfI -o /dev/null --max-time 30 "$url"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "::notice::Prebuilt LLVM for ${tag}/wasm32-unknown-emscripten is not published yet; skipping wasm build until the fork releases it."
+          fi
+
       - name: Cache LLVM tag
+        if: matrix.plat != 'wasm' || steps.asset.outputs.exists == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: build/scripts/llvm/.llvm_tag_cache
@@ -114,6 +155,7 @@ jobs:
           echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
 
       - name: Cache third_party dependencies
+        if: matrix.plat != 'wasm' || steps.asset.outputs.exists == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: out/build/third_party
@@ -126,9 +168,9 @@ jobs:
           nix develop .#default --command bash -c "uv run ./build/scripts/build.py --target=default --mode=${{ inputs.build_type }} --build-subdir=build"
 
       - name: Build (Standard)
-        if: "!matrix.nix"
+        if: "!matrix.nix && (matrix.plat != 'wasm' || steps.asset.outputs.exists == 'true')"
         shell: bash
-        run: uv run ./build/scripts/build.py --target=default --mode=${{ inputs.build_type }} --build-subdir=build
+        run: uv run ./build/scripts/build.py --target=default --mode=${{ inputs.build_type }} --build-subdir=build --target-os=${{ matrix.plat == 'wasm' && 'emscripten' || '' }}
 
       - name: Build tests and run (Nix)
         if: matrix.nix
@@ -137,12 +179,12 @@ jobs:
           nix develop .#default --command bash -c "uv run ./build/scripts/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build"
 
       - name: Build tests and run (Standard)
-        if: "!matrix.nix"
+        if: "!matrix.nix && (matrix.plat != 'wasm' || steps.asset.outputs.exists == 'true')"
         shell: bash
-        run: uv run ./build/scripts/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build
+        run: uv run ./build/scripts/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build --target-os=${{ matrix.plat == 'wasm' && 'emscripten' || '' }}
 
       - name: Lint
-        if: runner.os == 'Linux' && inputs.build_type == 'debug' && !matrix.nix
+        if: runner.os == 'Linux' && inputs.build_type == 'debug' && !matrix.nix && matrix.plat != 'wasm'
         shell: bash
         run: uv run ./build/scripts/lint.py
 
@@ -152,7 +194,7 @@ jobs:
 
 
       - name: Verify static linkage (Nix)
-        if: matrix.nix
+        if: matrix.nix && matrix.plat != 'wasm'
         shell: bash
         run: |
           set -euo pipefail
@@ -168,7 +210,7 @@ jobs:
           '
 
       - name: Verify static linkage (Standard)
-        if: "!matrix.nix"
+        if: "!matrix.nix && matrix.plat != 'wasm'"
         shell: bash
         run: |
           set -euo pipefail
@@ -180,6 +222,7 @@ jobs:
             --build-dir=out/build
 
       - name: Package & Generate Checksum
+        if: matrix.plat != 'wasm' || steps.asset.outputs.exists == 'true'
         shell: bash
         run: |
           mkdir -p dist
@@ -205,6 +248,7 @@ jobs:
           fi
 
       - name: Upload build artifacts
+        if: matrix.plat != 'wasm' || steps.asset.outputs.exists == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}${{ matrix.nix && '-nix' || '' }}

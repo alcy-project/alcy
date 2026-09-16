@@ -5,8 +5,5 @@ executable("benchmarks") {
     "//src:alcy_config",
     "//src:win_sys_libs",
   ]
-  deps = [
-    "//src:libs",
-    "//third_party/fpag",
-  ]
+  deps = [ "//src:alcy_lib" ]
 }

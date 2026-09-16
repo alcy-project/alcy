@@ -18,6 +18,13 @@ install_dir = "$llvm_root_out_dir/install/$build_type_lower"
 build_dir = "$llvm_root_out_dir/build/$build_type_lower"
 download_dir = "$llvm_root_out_dir/download/$build_type_lower"
 
+# setup_llvm.py detects the host triple at runtime; only override it when
+# cross-compiling (wasm builds run on a native host but link wasm LLVM).
+llvm_triple_args = []
+if (is_wasm) {
+  llvm_triple_args = [ "--triple=wasm32-unknown-emscripten" ]
+}
+
 llvm_components = [
   "LLVMCodeGen",
   "LLVMTarget",

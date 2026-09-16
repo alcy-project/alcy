@@ -23,15 +23,17 @@
 
 namespace ir {
 
+// StringPoolId is a fixed u32 pair (8 bytes) on all platforms, so every
+// layout below is architecture-independent.
 TEST_CASE("Static assertion for IR elements") {
   static_assert(sizeof(Block) == 16);
   static_assert(sizeof(BlockParam) == 8);
 
-  static_assert(sizeof(ExternalFunction) == 40);
-  static_assert(sizeof(Function) == 40);
-  static_assert(sizeof(FunctionMeta) == 32);
+  static_assert(sizeof(ExternalFunction) == 24);
+  static_assert(sizeof(Function) == 28);
+  static_assert(sizeof(FunctionMeta) == 20);
 
-  static_assert(sizeof(Immutable) == 24);
+  static_assert(sizeof(Immutable) == 16);
   static_assert(sizeof(Instruction) == 16);
   static_assert(sizeof(InstructionFlags) == 1);
   static_assert(sizeof(Opcode) == 1);
@@ -41,7 +43,7 @@ TEST_CASE("Static assertion for IR elements") {
   static_assert(sizeof(Register) == 8);
   static_assert(sizeof(TypeTag) == 1);
   static_assert(sizeof(TypeNode) == 8);
-  static_assert(sizeof(StructType) == 24);
+  static_assert(sizeof(StructType) == 16);
 
   // static_assert(sizeof(StorageState) == 216);
   // static_assert(sizeof(Storage) == 216);

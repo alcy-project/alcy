@@ -93,7 +93,8 @@ config("linker") {
   #   inputs = [ linker_path ]
   #   ldflags += [ "--ld-path=" + rebase_path(linker_path, root_build_dir) ]
   # } else if (use_lld) {
-  if (use_lld) {
+  # emcc drives wasm-ld itself; -fuse-ld=lld is not accepted there.
+  if (use_lld && !is_wasm) {
     ldflags += [ "-fuse-ld=lld" ]
     # if (lld_path != "") {
     #   ldflags += [ "-B" + rebase_path(lld_path, root_build_dir) ]
@@ -117,12 +118,25 @@ config("linker") {
       "-Wl,-rpath,@executable_path",
       "-Wl,-rpath,@executable_path/lib",
     ]
-  } else if (!is_win) {
+  } else if (!is_win && !is_wasm) {
     ldflags += [
       "-Wl,-rpath=\$ORIGIN",
       "-Wl,-rpath=\$ORIGIN/lib",
     ]
   }
+}
+
+config("emscripten") {
+  # Keep in sync with the project-wide -fno-exceptions policy and make test
+  # binaries runnable under node with a growable heap (StringPool reserves
+  # address space up front on native builds; see S2 notes in the wasm plan).
+  ldflags = [
+    "-sWASM=1",
+    "-sENVIRONMENT=node",
+    "-sALLOW_MEMORY_GROWTH=1",
+    "-sEXIT_RUNTIME=1",
+    "-sDISABLE_EXCEPTION_CATCHING=1",
+  ]
 }
 
 config("libcxx") {
@@ -205,7 +219,7 @@ config("release") {
     "-O3",
     "-fomit-frame-pointer",
   ]
-  if (!is_mac && !is_win) {
+  if (!is_mac && !is_win && !is_wasm) {
     ldflags = [ "-Wl,--strip-all" ]
   }
 }

@@ -189,6 +189,10 @@ Top-level targets are defined in `BUILD.gn`:
 - `default` — the `alcy` compiler binary.
 - `tests`, `benchmarks` — test and benchmark binaries.
 - `all` — everything above.
+- `//src:alcy_lib` — a complete static library (`libalcy.a` / `alcy.lib`)
+  archiving every compiler module. The executables above link only against
+  this target; releases ship the archive alongside the binaries (including a
+  wasm build for the playground).
 
 Platform and toolchain selection lives in `build/`; per-module build rules
 live next to the sources. See [CONTRIBUTING.md](CONTRIBUTING.md) for the

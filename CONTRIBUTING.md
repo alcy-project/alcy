@@ -41,6 +41,32 @@ CI runs the same steps for debug and release on Linux, macOS, and Windows,
 plus a spell check (`spelling.yaml`), so please make sure all of them pass
 before requesting a review.
 
+## WebAssembly builds (compiler playground)
+
+The compiler also builds to WebAssembly via Emscripten (a `wasm` platform row
+in `.github/workflows/build.yaml`, Linux-only in CI):
+
+```bash
+# Locally (requires emcc and node on PATH):
+./build/scripts/check.sh --wasm
+
+# Or directly:
+uv run ./build/scripts/run.py --target=tests --mode=debug \
+  --build-subdir=build_wasm --target-os=emscripten
+```
+
+Notes:
+
+- The wasm build downloads a prebuilt LLVM for `wasm32-unknown-emscripten`
+  from the llvm-alcy-fork release matching the submodule tag. If that asset
+  does not exist yet, both `check.sh --wasm` and the CI job report it and
+  stop (CI stays green until the fork publishes the asset).
+- Keep `native` and `wasm` outputs in separate `--build-subdir` directories;
+  reusing one output directory across target OSes leaves stale artifacts.
+- fpag platform guards use `FPAG_BUILD_FLAG(IS_OS_ASMJS)` for Emscripten-only
+  fallbacks (no `execinfo.h`/`dladdr`/module lookup; capped address-space
+  reservations). See `docs/build.md` for details.
+
 ## Conventions
 
 - Follow [ARCHITECTURE.md](ARCHITECTURE.md) for module responsibilities and core design principles
