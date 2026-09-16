@@ -1,42 +1,38 @@
 # alcy programming language
 
-wip.
+alcy is an experimental statically-typed programming language.
+The project is in early development and not yet usable.
 
-## Build instruction
+## Status
 
-### Using Nix (Linux / Mac)
+Pre-MVP. The language specification, standard library, and most of the
+compiler pipeline are still being designed and implemented.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the planned design.
+
+## Build
+
+Requires GN, Ninja, Clang, LLD, and libc++ (see [docs/build.md](docs/build.md)
+for details).
 
 ```bash
+# Using Nix (Linux / macOS):
 nix develop
 uv run ./build/scripts/build.py
 
-# To run tests:
-# uv run ./build/scripts/run.py --target=tests
-```
-
-### Not using Nix
-
-Install GN, ninja, clang, lld, libc++ and then run:
-
-```bash
+# Without Nix (after installing the toolchain above):
 uv run ./build/scripts/build.py
-
-# Or you can build without uv / python:
-# ./build/scripts/build.sh
-
-# To run tests:
-# uv run ./build/scripts/run.py --target=tests
 ```
 
-### Build script arguments
+Run the tests with:
 
 ```bash
-# Build default target with release profile in `out/build_release`:
-uv run ./build/scripts/build.py --target=default --mode=release --build-subdir=build_release
-
-# Build all targets with debug profile:
-uv run ./build/scripts/build.py --target=all --mode=debug
-
-# Build and run tests with debug profile:
-uv run ./build/scripts/run.sh --target=tests --mode=debug
+uv run ./build/scripts/run.py --target=tests
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+Apache License 2.0 with LLVM Exceptions. See [LICENSE](LICENSE).
