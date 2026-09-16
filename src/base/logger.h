@@ -4,9 +4,10 @@
 
 #pragma once
 
-#include "fpag/logging/sink/composite_sink.h"
+#include "fpag/logging/log_level.h"
 #include "fpag/logging/sink/stdout_sink.h"
 #include "fpag/logging/sync/sync_logger.h"
+#include "fpag/term/color_style.h"
 
 namespace base {
 

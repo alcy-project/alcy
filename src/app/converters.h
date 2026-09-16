@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include "fpag/arg/converter.h"
+#include "fpag/base/result.h"
 #include "fpag/term/color_mode.h"
 
 template <>

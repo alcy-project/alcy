@@ -5,7 +5,6 @@
 #pragma once
 
 #include "fpag/base/numeric.h"
-#include "fpag/str/string_pool_id.h"
 #include "ir/function.h"
 
 namespace ir {

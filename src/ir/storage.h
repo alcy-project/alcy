@@ -5,11 +5,8 @@
 #pragma once
 
 #include <memory>
-#include <string>
 #include <utility>
-#include <vector>
 
-#include "fpag/base/numeric.h"
 #include "fpag/base/vec.h"
 #include "ir/block.h"
 #include "ir/block_param.h"

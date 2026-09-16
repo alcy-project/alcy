@@ -4,11 +4,8 @@
 
 #include "tests/util/test_util.h"
 
-#include <memory>
-
 #include "fpag/debug/logger.h"
 #include "fpag/logging/sink/stdout_sink.h"
-#include "fpag/logging/sync/sync_logger.h"
 #include "fpag/term/console.h"
 // #include "fpag/mem/page_allocator.h"
 

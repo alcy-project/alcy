@@ -8,6 +8,7 @@
 #include "fpag/debug/exit_handler.h"
 #include "fpag/debug/signal_handler.h"
 #include "fpag/debug/terminate_handler.h"
+#include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
 
 namespace app {

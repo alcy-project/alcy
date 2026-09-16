@@ -13,6 +13,7 @@
 #include "debug/fatal.h"
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
+#include "fpag/term/color_mode.h"
 #include "fpag/term/console.h"
 
 namespace app {

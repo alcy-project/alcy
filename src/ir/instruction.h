@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include "fpag/base/numeric.h"
 #include "ir/common.h"
 #include "ir/instruction_flags.h"
 #include "ir/opcode.h"

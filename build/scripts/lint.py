@@ -10,6 +10,7 @@ import sys
 
 import format
 import gn_check
+import subprocess
 from utils.command import run_commands_in_parallel
 from utils.paths import (
     default_out_dir,
@@ -22,10 +23,7 @@ from utils.source import (
 )
 
 
-def create_commands(
-    target_dirs: list[Path], fix: bool, fix_errors: bool, verbose: bool
-) -> list[list[str]]:
-    commands: list[list[str]] = []
+def target_files(target_dirs: list[Path]):
     files: list[str] = []
     comp_files: list[str] = []
     for d in target_dirs:
@@ -37,7 +35,57 @@ def create_commands(
                     files.append(relative_path)
                 if f.suffix in compile_unit_extensions:
                     comp_files.append(relative_path)
+    return files, comp_files
 
+
+def run_include_cleaner(comp_files: list[str], fix: bool, verbose: bool) -> bool:
+    success = True
+
+    for f in comp_files:
+        cmd = ["clang-include-cleaner", f"-p={default_out_dir}"]
+
+        if fix:
+            cmd.append("--edit")
+            cmd.append(f)
+            res = subprocess.run(cmd, capture_output=not verbose, text=True)
+            if res.returncode != 0:
+                print(f"clang-include-cleaner failed on {f}")
+                success = False
+        else:
+            cmd.append("--print=changes")
+            cmd.append(f)
+            res = subprocess.run(cmd, capture_output=True, text=True)
+
+            if res.returncode != 0:
+                print(f"clang-include-cleaner error on {f}:")
+                if res.stderr:
+                    print(res.stderr)
+                success = False
+                continue
+
+            output = res.stdout
+            has_changes = len(output.strip()) != 0
+
+            if has_changes:
+                print(f"Include cleaner recommendations found for {f}:")
+                print(output.strip())
+                success = False
+            elif verbose and output.strip():
+                print(f"clang-include-cleaner ({f}):\n{output.strip()}")
+
+    return success
+
+
+def create_commands(
+    files: list[str],
+    comp_files: list[str],
+    fix: bool,
+    fix_errors: bool,
+    verbose: bool,
+) -> list[list[str]]:
+    commands: list[list[str]] = []
+
+    # clang-tidy
     base_clang_tidy_cmd = ["clang-tidy"]
     if not verbose:
         base_clang_tidy_cmd.append("--quiet")
@@ -50,6 +98,7 @@ def create_commands(
     for f in comp_files:
         commands.append(base_clang_tidy_cmd + [f])
 
+    # cpplint
     base_cpplint_cmd = ["uv", "run", "cpplint"]
     if not verbose:
         base_cpplint_cmd.append("--quiet")
@@ -60,7 +109,11 @@ def create_commands(
     return commands
 
 
-def lint_files(fix: bool, fix_errors: bool, verbose: bool):
+def lint_files(
+    fix: bool,
+    fix_errors: bool,
+    verbose: bool,
+):
     failed = False
 
     target_dirs = []
@@ -78,8 +131,12 @@ def lint_files(fix: bool, fix_errors: bool, verbose: bool):
         if ret != 0:
             failed = True
 
-    commands = create_commands(target_dirs, fix, fix_errors, verbose)
+    files, comp_files = target_files(target_dirs)
 
+    if not run_include_cleaner(comp_files, fix, verbose):
+        failed = True
+
+    commands = create_commands(files, comp_files, fix, fix_errors, verbose)
     if not run_commands_in_parallel(commands):
         failed = True
 

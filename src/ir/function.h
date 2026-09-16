@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include "fpag/base/numeric.h"
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 #include "ir/type.h"

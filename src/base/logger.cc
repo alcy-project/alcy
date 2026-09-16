@@ -7,7 +7,8 @@
 #include <utility>
 
 #include "fpag/debug/logger.h"
-// #include "fpag/mem/page_allocator.h"
+#include "fpag/logging/sink/stdout_sink.h"
+#include "fpag/term/color_style.h"
 
 namespace base {
 

@@ -5,7 +5,6 @@
 #pragma once
 
 #include "app/driver_config.h"
-#include "fpag/arg/parse_status.h"
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/tagged_union.h"

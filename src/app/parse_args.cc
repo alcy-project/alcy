@@ -5,6 +5,7 @@
 #include "app/parse_args.h"
 
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -12,7 +13,18 @@
 #include "app/driver_config.h"
 #include "base/logger.h"
 #include "debug/fatal.h"
-#include "fpag/arg/macro.h"
+#include "fpag/arg/arg.h"
+#include "fpag/arg/command.h"
+#include "fpag/arg/error_formatter.h"
+#include "fpag/arg/matches.h"
+#include "fpag/arg/parse_error.h"
+#include "fpag/arg/parse_result.h"
+#include "fpag/arg/parse_status.h"
+#include "fpag/arg/parser.h"
+#include "fpag/arg/version_formatter.h"
+#include "fpag/base/numeric.h"
+#include "fpag/term/color_mode.h"
+#include "fpag/term/color_style.h"
 
 namespace app {
 

@@ -4,6 +4,8 @@
 
 #include "app/driver_config.h"
 
+#include "fpag/term/color_mode.h"
+
 namespace app {
 
 ValidationStatus validate_config(const DriverConfig& config) {
