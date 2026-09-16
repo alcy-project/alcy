@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2026 pugur
+# Copyright 2026 The Alcy Project Authors
 # This source code is licensed under the
 # which can be found in the LICENSE file.
 
