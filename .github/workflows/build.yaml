@@ -15,31 +15,37 @@ jobs:
       fail-fast: false
       matrix:
         llvm_version: [23.1.1]
-        nix: [false, true]
-        os: [ubuntu-24.04, macos-26, windows-2025-vs2026]
-        plat: [linux, macos, windows, wasm]
         include:
           - os: ubuntu-24.04
             plat: linux
             arch: x86_64
             archive: tar.gz
+            nix: false
+          - os: ubuntu-24.04
+            plat: linux
+            arch: x86_64
+            archive: tar.gz
+            nix: true
           - os: macos-26
             plat: macos
             arch: arm64
             archive: tar.gz
+            nix: false
+          - os: macos-26
+            plat: macos
+            arch: arm64
+            archive: tar.gz
+            nix: true
           - os: windows-2025-vs2026
             plat: windows
             arch: x64
             archive: zip
+            nix: false
           - os: ubuntu-24.04
             plat: wasm
             arch: wasm32
             archive: tar.gz
-        exclude:
-          - os: windows-2025-vs2026
-            nix: true
-          - nix: true
-            plat: wasm
+            nix: false
 
     env:
       COLORTERM: 256color
