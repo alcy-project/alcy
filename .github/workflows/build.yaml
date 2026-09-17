@@ -17,6 +17,7 @@ jobs:
         llvm_version: [23.1.1]
         nix: [false, true]
         os: [ubuntu-24.04, macos-26, windows-2025-vs2026]
+        plat: [linux, macos, windows, wasm]
         include:
           - os: ubuntu-24.04
             plat: linux
@@ -37,8 +38,8 @@ jobs:
         exclude:
           - os: windows-2025-vs2026
             nix: true
-          - plat: wasm
-            nix: true
+          - nix: true
+            plat: wasm
 
     env:
       COLORTERM: 256color
