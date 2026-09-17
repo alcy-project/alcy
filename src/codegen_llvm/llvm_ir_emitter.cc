@@ -13,6 +13,9 @@
 #include "debug/dcheck.h"
 #include "debug/dlog.h"
 #include "debug/fatal.h"
+#include "diag/diagnostic.h"
+#include "diag/render.h"
+#include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"
@@ -115,7 +118,10 @@ void LlvmIrEmitter::emit() && noexcept {
   if (base::Result<void, ir::VerifyError> result = ir::verify_storage(storage_);
       result.is_err()) [[unlikely]] {
     const ir::VerifyError error = std::move(result).unwrap_err();
-    DLOG("IR verification failed: {} #{}", error.kind, error.index);
+    const diag::Diagnostic diag = ir::to_diagnostic(error);
+    fmt::memory_buffer rendered;
+    diag::render(diag, rendered);
+    DLOG("{}", std::string_view(rendered.data(), rendered.size()));
     UNREACHABLE();
   }
   if (llvm::verifyModule(*module_, &llvm::errs())) [[unlikely]] {

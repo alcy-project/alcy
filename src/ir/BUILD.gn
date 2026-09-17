@@ -22,6 +22,9 @@ source_set("ir") {
     "verifier.cc",
     "verifier.h",
   ]
-  deps = [ "//src:base_modules" ]
+  deps = [
+    "//src:base_modules",
+    "//src/diag",
+  ]
   configs += [ "//src:alcy_config" ]
 }

@@ -26,6 +26,7 @@ group("modules") {
     "codegen",
     "codegen_llvm",
     "core",
+    "diag",
     "ir",
     "lexer",
     "parser",

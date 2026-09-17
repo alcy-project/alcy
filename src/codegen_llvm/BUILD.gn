@@ -9,7 +9,10 @@ source_set("codegen_llvm") {
     "llvm_ir_emitter_memory.cc",
     "llvm_ir_storage.h",
   ]
-  deps = [ "//src:base_modules" ]
+  deps = [
+    "//src:base_modules",
+    "//src/diag",
+  ]
   public_deps = [
     "//src/ir",
     "//third_party/llvm",

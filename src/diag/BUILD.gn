@@ -1,0 +1,12 @@
+source_set("diag") {
+  sources = [
+    "bag.cc",
+    "bag.h",
+    "diagnostic.h",
+    "render.cc",
+    "render.h",
+    "span.h",
+  ]
+  deps = [ "//src:base_modules" ]
+  configs += [ "//src:alcy_config" ]
+}

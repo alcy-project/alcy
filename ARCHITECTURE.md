@@ -69,6 +69,7 @@ stages beyond the data explicitly passed along.
 | `codegen_llvm` | Emits LLVM IR from analyzed IR. The active MVP code-generation path. | Local API buffers only. |
 | `codegen` | Native code generation backend, reserved as an eventual alternative to LLVM. Scaffolded in the repository layout; no committed design yet (see [Future work](#future-work)). | N/A — not yet implemented. |
 | `core` | Shared configuration and utilities used across modules. | Any new allocating utility here requires an ADR (see [System invariants](#system-invariants)). |
+| `diag` | Source spans, diagnostics, arena-backed bags, and the fmtlib renderer. | Zero heap allocations; message bytes bump-allocated from an injected arena. |
 | `base`, `debug`, `build` | Logging, diagnostics/assertion helpers, and build-time flags. | Zero heap allocations. |
 
 Supporting targets: `tests` (unit tests per module) and `benchmarks`.
