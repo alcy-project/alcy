@@ -16,6 +16,7 @@ jobs:
       matrix:
         llvm_version: [23.1.1]
         os: [ubuntu-24.04, macos-26, windows-2025-vs2026]
+        plat: [linux, macos, windows, wasm]
         include:
           - os: ubuntu-24.04
             plat: linux
