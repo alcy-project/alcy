@@ -17,6 +17,8 @@ jobs:
         llvm_version: [23.1.1]
         os: [ubuntu-24.04, macos-26, windows-2025-vs2026]
         plat: [linux, macos, windows, wasm]
+        arch: [x86_64, x64, arm64, wasm32]
+        nix: [true, false]
         include:
           - os: ubuntu-24.04
             plat: linux
