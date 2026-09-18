@@ -95,6 +95,11 @@ def current_tag(src_dir):
         print(
             f"Failed to run git describe (exit code {res.returncode}): {res.stderr.decode().strip()}"
         )
+        print(
+            "Hint: shallow or tag-less checkouts fail here; from the "
+            "repository root, run "
+            "'git -C third_party/llvm/src fetch --tags --depth=1'."
+        )
         return ""
 
 

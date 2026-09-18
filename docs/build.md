@@ -5,6 +5,14 @@
 - GN, Ninja, Clang, LLD, libc++.
 - Python 3.14+ managed by `uv` (`uv sync` once after cloning).
 - On Linux/macOS, `nix develop` provides all of the above.
+- A submodule checkout including tags: the LLVM setup resolves its prebuilt
+  archive with `git describe --tags` inside `third_party/llvm/src`, so
+  shallow or tag-less checkouts fail the setup. After cloning or updating
+  submodules, run:
+
+  ```bash
+  git -C third_party/llvm/src fetch --tags --depth=1
+  ```
 
 ## Basic commands
 

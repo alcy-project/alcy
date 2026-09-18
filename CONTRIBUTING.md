@@ -88,6 +88,10 @@ Notes:
 - Tooling is authoritative: `.clang-format`, `.clang-tidy`, `CPPLINT.cfg` (all checks must pass),
   and `typos.toml` enforce style. Use `format.py` and `lint.py --fix` to fix most issues automatically. 
   New source files must carry the license header.
+- Module names stay abbreviated (`pkg`, `diag`, `cfg`); directory, GN module,
+  and namespace must always match, and full forms live in ARCHITECTURE.md.
+- Wording: the private LLVM fork is `llvm-alcy-fork` on first mention per
+  document, `the fork` thereafter.
 - One decision, one record: significant technical decisions get an ADR in `docs/adr/`
   (copy `docs/adr/0000-template.md`). Small, obvious changes do not need one.
 
