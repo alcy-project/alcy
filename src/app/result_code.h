@@ -11,6 +11,8 @@ namespace app {
 enum class ResultCode : u8 {
   Success = 0,
   ArgParseError,
+  NotImplemented,
+  BuildFailed,
   // TODO
   // LexError,
   // ParseError,

@@ -16,6 +16,7 @@ enum class ParseInterruptedReason : u8 {
   ParseError,
   HelpRequested,
   VersionRequested,
+  UnknownSubcommand,
 };
 
 using ParseArgsResult =

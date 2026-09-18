@@ -16,6 +16,7 @@
 #include "fpag/arg/arg.h"
 #include "fpag/arg/command.h"
 #include "fpag/arg/error_formatter.h"
+#include "fpag/arg/help_formatter.h"
 #include "fpag/arg/matches.h"
 #include "fpag/arg/parse_error.h"
 #include "fpag/arg/parse_result.h"
@@ -35,7 +36,32 @@ DriverConfig extract_from_matches(arg::Matches&& matches) {
   c.time_trace = matches.get<bool>("time-trace").unwrap_or(c.time_trace);
   c.color_mode = matches.get<term::ColorMode>("color").unwrap_or(c.color_mode);
 
+  const std::string_view selected = matches.selected_command();
+  if (selected == "build") {
+    c.subcommand = Subcommand::Build;
+  } else if (selected == "test") {
+    c.subcommand = Subcommand::Test;
+  } else if (selected == "run") {
+    c.subcommand = Subcommand::Run;
+  } else if (selected == "new") {
+    c.subcommand = Subcommand::New;
+  } else if (selected == "check") {
+    c.subcommand = Subcommand::Check;
+  }
+  c.release = matches.get<bool>("release").unwrap_or(false);
+
+  const std::vector<std::string_view>& positionals = matches.positionals();
+  if (!positionals.empty()) {
+    c.target_dir = positionals[0];
+  }
+
   return c;
+}
+
+arg::CommandBuilder build_subcommand(std::string name, std::string about) {
+  arg::CommandBuilder builder(std::move(name));
+  builder.about(std::move(about));
+  return builder;
 }
 
 }  // namespace
@@ -54,6 +80,20 @@ arg::Parser build_parser() {
                       .help("Enable time profiling and generate the json file.")
                       .is_flag(true)
                       .build());
+  builder.add_subcommand(
+      build_subcommand("build", "Build a package or source directory")
+          .add_arg(arg::ArgBuilder("release")
+                       .help("Build with optimizations.")
+                       .is_flag(true)
+                       .build())
+          .build());
+  builder.add_subcommand(build_subcommand("test", "Run tests").build());
+  builder.add_subcommand(build_subcommand("run", "Run a package").build());
+  builder.add_subcommand(
+      build_subcommand("new", "Create a new package").build());
+  builder.add_subcommand(
+      build_subcommand("check", "Check a package without emitting code")
+          .build());
   return arg::Parser(std::move(builder).build());
 }
 
@@ -66,7 +106,18 @@ ParseArgsResult parse_args(arg::Parser&& parser,
 
   switch (result.status()) {
     case arg::ParseStatus::Success: {
-      return extract_from_matches(std::move(result).unwrap());
+      DriverConfig config = extract_from_matches(std::move(result).unwrap());
+      if (config.subcommand == Subcommand::None) {
+        if (!config.target_dir.empty()) {
+          base::logger.wo_prefix("unknown subcommand '{}'; see '{} --help'",
+                                 config.target_dir, name);
+          return ParseInterruptedReason::UnknownSubcommand;
+        }
+        base::logger.wo_prefix(
+            "{}", parser.help_message(arg::DefaultHelpFormatter{}, style));
+        return ParseInterruptedReason::HelpRequested;
+      }
+      return config;
     }
     case arg::ParseStatus::Error: {
       std::vector<arg::ParseError>&& errors = std::move(result).unwrap_err();
