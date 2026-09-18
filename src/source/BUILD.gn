@@ -1,0 +1,12 @@
+source_set("source") {
+  sources = [
+    "source.cc",
+    "source.h",
+  ]
+
+  # NOTE: must not depend on //src/diag (diag spans reference FileIds
+  # minted here; the reverse edge would be a dependency cycle). The fetch
+  # adapter lives in //src/pipeline instead.
+  deps = [ "//src:base_modules" ]
+  configs += [ "//src:alcy_config" ]
+}

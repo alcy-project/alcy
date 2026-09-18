@@ -7,8 +7,10 @@
 #include <string_view>
 
 #include "diag/diagnostic.h"
+#include "diag/span.h"
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
+#include "source/source.h"
 
 namespace diag {
 
@@ -22,7 +24,7 @@ struct SourceText {
 
 // Returns the source text for a file id, or an empty SourceText when the
 // file is unknown. Must never allocate.
-using SourceFetch = SourceText (*)(u32 file_id, const void* ctx);
+using SourceFetch = SourceText (*)(source::FileId file_id, const void* ctx);
 
 struct RenderOptions {
   bool color = false;

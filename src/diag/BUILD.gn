@@ -7,6 +7,12 @@ source_set("diag") {
     "render.h",
     "span.h",
   ]
-  deps = [ "//src:base_modules" ]
+
+  # Depends on source only for the FileId identity minted there; the
+  # direction is one-way (source never includes diag headers).
+  deps = [
+    "//src:base_modules",
+    "//src/source",
+  ]
   configs += [ "//src:alcy_config" ]
 }
