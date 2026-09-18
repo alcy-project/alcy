@@ -18,6 +18,7 @@ def build(
     build_subdir: str = "build",
     target_os: str = "",
     target_cpu: str = "",
+    gen_only: bool = False,
 ) -> int:
     out_dir = project_root_dir / "out"
     build_dir = out_dir / build_subdir
@@ -53,6 +54,8 @@ def build(
         )
 
         # ninja compdb
+        if gen_only:
+            return 0
         compdb_result = subprocess.run(
             ["ninja", "-C", str(build_dir), "-t", "compdb"],
             capture_output=True,
@@ -114,6 +117,11 @@ def main():
         default="",
         help='GN target_cpu override (e.g. "wasm32"; defaults per target_os)',
     )
+    parser.add_argument(
+        "--gen-only",
+        action="store_true",
+        help="Run gn gen and gn check only (validate foreign toolchains without building)",
+    )
     args = parser.parse_args()
 
     sys.exit(
@@ -125,6 +133,7 @@ def main():
             args.build_subdir,
             args.target_os,
             args.target_cpu,
+            args.gen_only,
         )
     )
 

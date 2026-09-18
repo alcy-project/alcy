@@ -50,6 +50,17 @@ uv run "$root_dir/build/scripts/verify_static_linkage.py" \
 uv run "$root_dir/build/scripts/verify_static_linkage.py" \
   --build-dir="$root_dir/out/$debug_subdir"
 
+# gen-only checking
+for os in linux win mac; do
+  for mode in debug release; do
+    uv run "$root_dir/build/scripts/build.py" \
+      --gen-only \
+      --mode=$mode \
+      --build-subdir="config-$os-$mode" \
+      --target-os=$cross_os
+  done
+done
+
 if [[ $run_wasm == true ]]; then
   command -v emcc >/dev/null || {
     echo "error: emcc not found; install Emscripten first" >&2
@@ -65,3 +76,5 @@ if [[ $run_wasm == true ]]; then
     --build-subdir=$wasm_subdir \
     --target-os=emscripten
 fi
+
+echo "check done"

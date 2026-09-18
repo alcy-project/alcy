@@ -129,11 +129,13 @@ template("gcc_clang") {
       }
 
       # The archive must be removed first so shrunk input lists do not leave
-      # stale members behind. `del` is a cmd builtin, so unlike `rm` it cannot
-      # resolve to an incompatible coreutils on Windows runners; `&` (not
-      # `&&`) keeps the chain running when the file does not exist yet.
+      # stale members behind. Ninja on Windows spawns commands with
+      # CreateProcess (no shell), so the removal must go through an explicit
+      # `cmd /c`; a bare `rm`/`del` either resolves to an incompatible
+      # coreutils or to nothing at all (del is a cmd builtin). `&` (not `&&`)
+      # keeps the chain running when the file does not exist yet.
       if (current_os == "win") {
-        command = "del /f /q {{output}} 2>nul & $command"
+        command = "cmd /c \"del /f /q {{output}} 2>nul & $command\""
       } else {
         command = "rm -f {{output}} && $command"
       }
