@@ -1,0 +1,8 @@
+source_set("path") {
+  sources = [
+    "path.cc",
+    "path.h",
+  ]
+  deps = [ "//src:base_modules" ]
+  configs += [ "//src:alcy_config" ]
+}
