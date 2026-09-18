@@ -74,7 +74,9 @@ def main():
 
     dry_run = False
     if len(sys.argv) >= 2 and sys.argv[1] == "--dry-run":
-        print("dry run enabled")
+        import os
+
+        print(f"{os.path.basename(__file__)}: dry run enabled")
         dry_run = True
 
     format_files(dry_run)

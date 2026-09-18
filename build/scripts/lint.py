@@ -172,10 +172,12 @@ def main():
     fix_errors = args.fix_errors
 
     if args.verbose:
+        import os
+
         if fix_errors:
-            print("fix errors enabled")
+            print(f"{os.path.basename(__file__)}: fix errors enabled")
         elif fix:
-            print("fix enabled")
+            print(f"{os.path.basename(__file__)}: fix enabled")
 
     return lint_files(fix, fix_errors, args.verbose)
 
