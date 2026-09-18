@@ -66,7 +66,7 @@ void report(const diag::DiagBag& bag, const source::SourceManager& sources) {
 bool make_dirs(const std::string& path) {
   std::string current;
   for (usize i = 0; i <= path.size(); ++i) {
-    if (i == path.size() || path[i] == '/') {
+    if (i == path.size() || path[i] == source::kDefaultPathSeparator) {
       if (!current.empty()) {
 #if BUILD_FLAG(IS_OS_WIN)
         ::_mkdir(current.c_str());
@@ -99,8 +99,9 @@ i32 run_build(const DriverConfig& config) {
 
   const std::string_view dir =
       config.target_dir.empty() ? "." : config.target_dir;
-  const std::string manifest_path =
-      std::string(dir) + "/" + std::string(pkg::kManifestFileName);
+  const std::string manifest_path = std::string(dir) +
+                                    source::kDefaultPathSeparator +
+                                    std::string(pkg::kManifestFileName);
 
   base::Result<source::FileId, source::SourceError> manifest =
       ctx.sources.load(manifest_path);
@@ -161,10 +162,11 @@ i32 run_new(const DriverConfig& config) {
 
   DriverContext ctx;
   const std::string root(config.target_dir);
-  const std::string src_dir = root + "/src";
-  const std::string manifest_path =
-      root + "/" + std::string(pkg::kManifestFileName);
-  const std::string main_path = src_dir + "/main.al";
+  const std::string src_dir = root + source::kDefaultPathSeparator + "src";
+  const std::string manifest_path = root + source::kDefaultPathSeparator +
+                                    std::string(pkg::kManifestFileName);
+  const std::string main_path =
+      src_dir + source::kDefaultPathSeparator + "main.al";
 
   const std::string manifest_text =
       "[package]\nname = \"" + root + "\"\nversion = \"0.1.0\"\n";

@@ -21,6 +21,15 @@ namespace source {
 using FileId = u32;
 constexpr FileId kUnknownFile = std::numeric_limits<FileId>::max();
 
+// File paths stored as file names or package directories canonically use
+// '/' on every platform (valid on Windows file APIs too), keeping lockfiles
+// and diagnostics portable. Never branch this per platform: mixing native
+// separators reintroduces mismatched spellings and invalid TOML escapes.
+constexpr char kDefaultPathSeparator = '/';
+// Folded into kDefaultPathSeparator on Windows; a valid filename character on
+// POSIX, so it is only ever treated as a separator under IS_OS_WIN.
+constexpr char kWindowsPathSeparator = '\\';
+
 enum class SourceError : u8 {
   OpenFailed,
   MapFailed,

@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "cfg/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
@@ -27,25 +28,37 @@ constexpr u32 kResolveCycleError = 2101;
 
 std::string join_path(std::string_view dir, std::string_view name) {
   std::string out(dir);
-  if (!out.empty() && out.back() != '/') {
-    out.push_back('/');
+  if (!out.empty() && out.back() != source::kDefaultPathSeparator) {
+    out.push_back(source::kDefaultPathSeparator);
   }
   out.append(name);
   return out;
 }
 
 // Lexically normalizes a path: collapses duplicate separators, resolves "."
-// and resolvable ".." segments, strips trailing slashes. Only '/' separates
-// (valid on Windows APIs too). Symlinks are not resolved, so cycle detection
-// covers spelling variants. Empty results normalize to ".".
+// and resolvable ".." segments, strips trailing slashes. The canonical
+// separator is '/' (valid on Windows APIs too); on Windows a '\' folds to
+// '/' first so native and joined spellings compare equal. Symlinks are not
+// resolved, so cycle detection covers spelling variants. Empty results
+// normalize to ".".
 std::string normalize_path(std::string_view path) {
-  const bool absolute = !path.empty() && path.front() == '/';
+#if BUILD_FLAG(IS_OS_WIN)
+  std::string folded(path);
+  for (char& c : folded) {
+    if (c == source::kWindowsPathSeparator) {
+      c = source::kDefaultPathSeparator;
+    }
+  }
+  path = folded;
+#endif
+  const bool absolute =
+      !path.empty() && path.front() == source::kDefaultPathSeparator;
   std::string out;
   std::vector<usize> starts;
   usize i = absolute ? 1 : 0;
   while (i <= path.size()) {
     usize end = i;
-    while (end < path.size() && path[end] != '/') {
+    while (end < path.size() && path[end] != source::kDefaultPathSeparator) {
       ++end;
     }
     const std::string_view part = path.substr(i, end - i);
@@ -57,21 +70,21 @@ std::string normalize_path(std::string_view path) {
         starts.pop_back();
       } else if (!absolute) {
         if (!out.empty()) {
-          out.push_back('/');
+          out.push_back(source::kDefaultPathSeparator);
         }
         out.append("..");
       }
     } else {
       starts.push_back(static_cast<usize>(out.size()));
       if (!out.empty()) {
-        out.push_back('/');
+        out.push_back(source::kDefaultPathSeparator);
       }
       out.append(part);
     }
     i = end + 1;
   }
   if (absolute) {
-    return "/" + out;
+    return std::string(1, source::kDefaultPathSeparator) + out;
   }
   return out.empty() ? "." : out;
 }

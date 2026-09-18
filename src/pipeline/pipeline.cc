@@ -47,12 +47,22 @@ bool has_source_extension(std::string_view path) {
 
 std::string join_path(std::string_view dir, std::string_view name) {
   std::string out(dir);
-#if BUILD_FLAG(IS_OS_WIN)
-  out.push_back('\\');
-#else
-  out.push_back('/');
-#endif
+  out.push_back(source::kDefaultPathSeparator);
   out.append(name);
+  return out;
+}
+
+// Canonical separator is '/': valid on Windows file APIs too, and it keeps
+// discovered names, lockfiles, and diagnostics portable across platforms.
+std::string canonicalize_separators(std::string_view path) {
+  std::string out(path);
+#if BUILD_FLAG(IS_OS_WIN)
+  for (char& c : out) {
+    if (c == source::kWindowsPathSeparator) {
+      c = source::kDefaultPathSeparator;
+    }
+  }
+#endif
   return out;
 }
 
@@ -71,7 +81,7 @@ bool is_nested_package(const std::string& dir) {
 bool walk_sources(const std::string& dir, std::vector<std::string>& paths) {
 #if BUILD_FLAG(IS_OS_WIN)
   WIN32_FIND_DATAA found;
-  HANDLE handle = ::FindFirstFileA((dir + "\\*").c_str(), &found);
+  HANDLE handle = ::FindFirstFileA((dir + "/*").c_str(), &found);
   if (handle == INVALID_HANDLE_VALUE) {
     return false;
   }
@@ -138,8 +148,9 @@ diag::Fallible<DiscoveredSources> discover_sources(
     std::string_view dir,
     source::SourceManager& sources,
     diag::DiagBag& bag) {
+  const std::string root = canonicalize_separators(dir);
   std::vector<std::string> paths;
-  if (!walk_sources(std::string(dir), paths)) {
+  if (!walk_sources(root, paths)) {
     const u32 index = bag.emit(diag::Severity::Error, kPipelineIoError,
                                "source directory '{}' is not accessible", dir);
     (void)index;
@@ -154,7 +165,7 @@ diag::Fallible<DiscoveredSources> discover_sources(
   std::sort(paths.begin(), paths.end());
 
   DiscoveredSources discovered;
-  discovered.root = std::string(dir);
+  discovered.root = root;
   for (const std::string& path : paths) {
     base::Result<source::FileId, source::SourceError> loaded =
         sources.load(path);

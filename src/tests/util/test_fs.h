@@ -13,6 +13,7 @@
 
 #include "cfg/build_config.h"
 #include "fpag/base/numeric.h"
+#include "source/source.h"
 
 #if BUILD_FLAG(IS_OS_WIN)
 #include <direct.h>
@@ -44,6 +45,16 @@ class TempDir {
     }
 #endif
     root_ = base + std::string(name);
+    // Canonical separator is '/': valid on Windows file APIs too, so test
+    // expectations stay identical across platforms. Untouched on POSIX,
+// where backslash is a valid filename character.
+#if BUILD_FLAG(IS_OS_WIN)
+    for (char& c : root_) {
+      if (c == source::kWindowsPathSeparator) {
+        c = source::kDefaultPathSeparator;
+      }
+    }
+#endif
     remove_all(root_);
     make_dirs(root_);
   }
@@ -65,11 +76,7 @@ class TempDir {
 
   std::string join(std::string_view child) const {
     std::string out = root_;
-#if BUILD_FLAG(IS_OS_WIN)
-    out.push_back('\\');
-#else
-    out.push_back('/');
-#endif
+    out.push_back(source::kDefaultPathSeparator);
     out.append(child);
     return out;
   }
@@ -146,7 +153,7 @@ class TempDir {
   static void remove_all(const std::string& path) {
 #if BUILD_FLAG(IS_OS_WIN)
     WIN32_FIND_DATAA found;
-    HANDLE handle = ::FindFirstFileA((path + "\\*").c_str(), &found);
+    HANDLE handle = ::FindFirstFileA((path + "/*").c_str(), &found);
     if (handle == INVALID_HANDLE_VALUE) {
       return;
     }
@@ -155,7 +162,7 @@ class TempDir {
       if (name == "." || name == "..") {
         continue;
       }
-      const std::string full = path + "\\" + std::string(name);
+      const std::string full = path + "/" + std::string(name);
       if ((found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0 &&
           (found.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0) {
         remove_all(full);
