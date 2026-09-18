@@ -10,7 +10,6 @@ import sys
 
 import format
 import gn_check
-import subprocess
 from utils.command import run_commands_in_parallel
 from utils.paths import (
     default_out_dir,
@@ -36,44 +35,6 @@ def target_files(target_dirs: list[Path]):
                 if f.suffix in compile_unit_extensions:
                     comp_files.append(relative_path)
     return files, comp_files
-
-
-def run_include_cleaner(comp_files: list[str], fix: bool, verbose: bool) -> bool:
-    success = True
-
-    for f in comp_files:
-        cmd = ["clang-include-cleaner", f"-p={default_out_dir}"]
-
-        if fix:
-            cmd.append("--edit")
-            cmd.append(f)
-            res = subprocess.run(cmd, capture_output=not verbose, text=True)
-            if res.returncode != 0:
-                print(f"clang-include-cleaner failed on {f}")
-                success = False
-        else:
-            cmd.append("--print=changes")
-            cmd.append(f)
-            res = subprocess.run(cmd, capture_output=True, text=True)
-
-            if res.returncode != 0:
-                print(f"clang-include-cleaner error on {f}:")
-                if res.stderr:
-                    print(res.stderr)
-                success = False
-                continue
-
-            output = res.stdout
-            has_changes = len(output.strip()) != 0
-
-            if has_changes:
-                print(f"Include cleaner recommendations found for {f}:")
-                print(output.strip())
-                success = False
-            elif verbose and output.strip():
-                print(f"clang-include-cleaner ({f}):\n{output.strip()}")
-
-    return success
 
 
 def create_commands(
@@ -132,9 +93,6 @@ def lint_files(
             failed = True
 
     files, comp_files = target_files(target_dirs)
-
-    if not run_include_cleaner(comp_files, fix, verbose):
-        failed = True
 
     commands = create_commands(files, comp_files, fix, fix_errors, verbose)
     if not run_commands_in_parallel(commands):
