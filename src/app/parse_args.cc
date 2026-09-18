@@ -4,6 +4,7 @@
 
 #include "app/parse_args.h"
 
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -50,7 +51,7 @@ DriverConfig extract_from_matches(arg::Matches&& matches) {
   }
   c.release = matches.get<bool>("release").unwrap_or(false);
 
-  const std::vector<std::string_view>& positionals = matches.positionals();
+  const std::span<const std::string_view> positionals = matches.positionals();
   if (!positionals.empty()) {
     c.target_dir = positionals[0];
   }

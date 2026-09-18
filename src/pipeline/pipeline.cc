@@ -5,6 +5,7 @@
 #include "pipeline/pipeline.h"
 
 #include <algorithm>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -171,7 +172,7 @@ diag::Fallible<DiscoveredSources> discover_sources(
 }
 
 diag::Fallible<ProjectBuild> compile_project(
-    const std::vector<pkg::ResolvedPackage>& packages,
+    std::span<const pkg::ResolvedPackage> packages,
     source::SourceManager& sources,
     diag::DiagBag& bag) {
   ProjectBuild build;

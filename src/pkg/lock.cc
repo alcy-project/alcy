@@ -5,9 +5,9 @@
 #include "pkg/lock.h"
 
 #include <iterator>
+#include <span>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include "fmt/core.h"
 #include "fmt/format.h"
@@ -53,7 +53,7 @@ void write_escaped(fmt::memory_buffer& out, std::string_view text) {
 
 }  // namespace
 
-Lockfile lock_resolved(const std::vector<ResolvedPackage>& resolved,
+Lockfile lock_resolved(std::span<const ResolvedPackage> resolved,
                        mem::Arena& arena) {
   LockedPackage* const packages =
       resolved.empty() ? nullptr

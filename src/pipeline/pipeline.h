@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -49,7 +50,7 @@ diag::Fallible<DiscoveredSources> discover_sources(
 // Full project flow over resolved packages: discover + load each package.
 // Lexing/parsing/codegen attach per file inside the loop once implemented.
 diag::Fallible<ProjectBuild> compile_project(
-    const std::vector<pkg::ResolvedPackage>& packages,
+    std::span<const pkg::ResolvedPackage> packages,
     source::SourceManager& sources,
     diag::DiagBag& bag);
 

@@ -4,8 +4,8 @@
 
 #pragma once
 
+#include <span>
 #include <string_view>
-#include <vector>
 
 #include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
@@ -29,7 +29,7 @@ struct Lockfile {
 };
 
 // Builds a lockfile model from resolved packages, in resolution order.
-Lockfile lock_resolved(const std::vector<ResolvedPackage>& resolved,
+Lockfile lock_resolved(std::span<const ResolvedPackage> resolved,
                        mem::Arena& arena);
 
 // Serializes in alcy.lock TOML format. Only '"' and '\\' and control
