@@ -40,6 +40,11 @@ config("compiler") {
 
       # "_DLL",
       "NOMINMAX",
+
+      # MSVC deprecates standard C calls (fopen etc.) as "unsafe"; the
+      # _s-suffixed replacements are MSVC-only, so silence the warning
+      # project-wide like Chromium and LLVM do instead of ifdeffing call sites.
+      "_CRT_SECURE_NO_WARNINGS",
     ]
 
     if (is_clang) {

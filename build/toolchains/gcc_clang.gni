@@ -128,7 +128,15 @@ template("gcc_clang") {
         command = "\"$ar\" {{arflags}} -r -c -D {{output}} @\"$rspfile\""
       }
 
-      command = "rm -f {{output}} && $command"
+      # The archive must be removed first so shrunk input lists do not leave
+      # stale members behind. `del` is a cmd builtin, so unlike `rm` it cannot
+      # resolve to an incompatible coreutils on Windows runners; `&` (not
+      # `&&`) keeps the chain running when the file does not exist yet.
+      if (current_os == "win") {
+        command = "del /f /q {{output}} 2>nul & $command"
+      } else {
+        command = "rm -f {{output}} && $command"
+      }
 
       if (ar != "" && get_path_info(ar, "file") != ar) {
         inputs =
