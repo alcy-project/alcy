@@ -291,6 +291,28 @@ with a from-source fallback. Build and platform details are documented in
   nondeterminism such as iteration order, wall-clock time, or mutable
   process-global state.
 
+- **No ambient inputs**: Builds must not depend on per-user machine state:
+  environment variables, ambient locale, wall-clock time, or user identity.
+  Every such input must be explicit (CLI flags, manifest, or source) so
+  that identical inputs reproduce identical results on any machine.
+  Diagnostic messages render in English by default; other languages are
+  selected only through an explicit `--lang` flag (never ambient
+  locale), keyed by stable diagnostic codes. Known tension: rendered
+  source paths are currently absolute; workspace-relative rendering is
+  future work, not a silent exception to this rule.
+
+- **Configuration layering**: each build dimension lives in exactly one
+  place. The manifest (`alcy.toml`, versioned and shared) declares what
+  is built: targets, dependencies, and package identity. CLI flags carry
+  invocation-scoped, user-specific configuration: presentation
+  (`--color`, `--lang`, verbosity), local paths, and parallelism.
+  Dimensions affecting outputs through a finite selection (such as the
+  debug/release mode) live on the CLI as part of the build identity;
+  option spaces are declared in the manifest while selection happens on
+  the CLI. No dimension is configured in both places without a
+  documented precedence, and environment variables are never a
+  behavioral input channel.
+
 - **Deterministic output**: Where the toolchain permits deterministic
   emission, identical inputs and build configuration should produce
   reproducible LLVM IR and object output.
@@ -320,7 +342,8 @@ The following do not have a committed MVP design:
 - Completing the `codegen` native backend or replacing LLVM/the system linker
   with a custom backend.
 - Advanced optimizations and whole-program analysis.
-- Language features beyond the MVP subset.
+- Language features beyond the MVP subset (defined in `docs/spec/`,
+  which is normative for language behavior).
 
 These are intentionally left open until the MVP architecture provides a
 stable foundation for evaluating them.

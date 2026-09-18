@@ -1,7 +1,7 @@
 # ADR 0002: Private LLVM fork consumed as prebuilt libraries
 
-Date: 2026-09-16
-Status: accepted
+- Status: Accepted
+- Date: 2026-09-16
 
 ## Context
 

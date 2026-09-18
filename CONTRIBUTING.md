@@ -105,6 +105,9 @@ Keep changes focused; avoid mixing refactors with behavior changes unless they a
 When changing architecture, module boundaries, invariants, ownership/lifetime rules, or other
 design-level contracts, update `ARCHITECTURE.md` and add or update an ADR when appropriate.
 
+When changing language behavior, update `docs/spec/` in the same change; spec and implementation
+must not drift apart.
+
 When changing behavior, tests should cover the new behavior and preserve relevant invariants.
 
 The project is pre-MVP, so APIs and the IR are still allowed to change, but please call out

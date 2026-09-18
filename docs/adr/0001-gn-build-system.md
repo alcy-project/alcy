@@ -1,7 +1,7 @@
 # ADR 0001: GN as the build system
 
-Date: 2026-09-16
-Status: accepted
+- Status: Accepted
+- Date: 2026-09-16
 
 ## Context
 
