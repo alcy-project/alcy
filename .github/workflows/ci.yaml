@@ -82,7 +82,14 @@ jobs:
   # Intentionally not gated on the test jobs: waiting would give back exactly
   # the wall clock the split was meant to save, and a red run is already
   # flagged as red.
-  dist:
+  dist-debug:
+    name: Package (debug)
+    uses: ./.github/workflows/build.yaml
+    with:
+      build_type: debug
+      role: dist
+
+  dist-release:
     name: Package (release)
     uses: ./.github/workflows/build.yaml
     with:
@@ -219,7 +226,7 @@ jobs:
           if-no-files-found: error
 
   summary:
-    needs: [style, test-debug, test-release, dist, wasm]
+    needs: [style, test-debug, test-release, dist-debug, dist-release, wasm]
     if: always()
     uses: ./.github/workflows/generate-summary.yaml
     with:
