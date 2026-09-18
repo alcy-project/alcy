@@ -19,8 +19,9 @@ Prior to generating, refactoring, or reviewing code, strictly follow the specifi
   - Use explicit, zero-overhead error reporting abstractions (e.g., `std::optional`, custom `Result`/`Status` types, or diagnostic handlers) instead of exceptions.
   - Use assertions (`DCHECK()`) or diagnostic logging (`src/base/`, `src/debug/`) for internal compiler invariant failures.
 - **Signal-to-Noise Ratio in Comments**:
-  - **Avoid Redundant Comments**: Do not write comments that merely restate obvious C++ code (e.g., `// constructor`, `// push to vector`).
-  - **Keep Value-Additive Comments**: Retain or add comments only when explaining non-trivial algorithms, invariants, complex LLVM IR lowering logic, or memory lifetime ownership details.
+  - **No Session or Metacognitive Leakage**: NEVER write comments that reference the prompt, chat session, negative decisions, or omitted alternatives (e.g., BAD: `// No std::filesystem, we don't use it here`, `// Per user instruction`). Write comments purely from the perspective of long-term codebase maintenance.
+  - **No Over-Explanation or Justifications**: Do not write multi-line defenses or excuses for obvious code choices.
+  - **Avoid Redundant Comments**: Do not restate what the C++ code clearly expresses (e.g., `// constructor`, `// push to vector`, `// return status`).
 - **Self-Documenting Code**: Prefer expressive namespaces, functions, type aliases, and strong types over heavy block comments.
 
 # Code Generation Directives

@@ -65,12 +65,14 @@ stages beyond the data explicitly passed along.
 | `ast` | Abstract syntax tree node definitions shared by the parser and later stages. | Arena-allocated nodes; no heap allocation outside the arena. |
 | `ir` | The core intermediate representation: functions, blocks, instructions, operands, and types, plus the storage that owns them. | Flat, arena-backed storage. |
 | `analyzer` | Name resolution, type checking, and ownership checking on the IR. | Zero heap allocations; operates over immutable IR slices. |
-| `pipeline` | Connects the stages above into a single compilation flow. | Arena reset at per-file phase boundaries. |
+| `pipeline` | Project-level build flow: package discovery, source loading, and per-file stage orchestration. | Arena reset at per-file phase boundaries. |
+| `pkg` | Package manifests (`alcy.toml`), path-only dependency resolution, and lockfile model. | Arena-backed views; no heap allocation in the model itself. |
+| `source` | Source file registry: memory-mapped file loading with stable file ids. | Mapped files plus small owned tables. |
 | `codegen_llvm` | Emits LLVM IR from analyzed IR. The active MVP code-generation path. | Local API buffers only. |
 | `codegen` | Native code generation backend, reserved as an eventual alternative to LLVM. Scaffolded in the repository layout; no committed design yet (see [Future work](#future-work)). | N/A — not yet implemented. |
 | `core` | Shared configuration and utilities used across modules. | Any new allocating utility here requires an ADR (see [System invariants](#system-invariants)). |
 | `diag` | Source spans, diagnostics, arena-backed bags, and the fmtlib renderer. | Zero heap allocations; message bytes bump-allocated from an injected arena. |
-| `base`, `debug`, `build` | Logging, diagnostics/assertion helpers, and build-time flags. | Zero heap allocations. |
+| `base`, `debug`, `cfg` | Logging, diagnostics/assertion helpers, and build-time flags. | Zero heap allocations. |
 
 Supporting targets: `tests` (unit tests per module) and `benchmarks`.
 

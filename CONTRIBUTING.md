@@ -37,14 +37,16 @@ uv run ./build/scripts/lint.py --fix-errors
 
 ```
 
-CI runs the same steps for debug and release on Linux, macOS, and Windows,
-plus a spell check (`spelling.yaml`), so please make sure all of them pass
-before requesting a review.
+CI (`ci.yaml`) runs the `style` job (formatting and typos), the `test-debug`
+and `test-release` legs on Linux, macOS, and Windows (standard and Nix
+toolchains each), the `dist` packaging legs (release only, intentionally not
+gated on the test jobs), and a dedicated `wasm` job, so please make sure all
+of them pass before requesting a review.
 
 ## WebAssembly builds (compiler playground)
 
-The compiler also builds to WebAssembly via Emscripten (a `wasm` platform row
-in `.github/workflows/build.yaml`, Linux-only in CI):
+The compiler also builds to WebAssembly via Emscripten (a dedicated `wasm`
+job in `.github/workflows/ci.yaml`, Linux-only in CI):
 
 ```bash
 # Locally (requires emcc and node on PATH):
