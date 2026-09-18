@@ -106,8 +106,8 @@ class StorageBuilder {
   ExternalFunctionIdx external_function(ExternalFunction external_function) {
     return state_.external_functions.emplace_back(external_function);
   }
-  OperandIdx operand(Operand operand) {
-    return state_.operands.emplace_back(operand);
+  OperandIdx operand(Operand&& operand) {
+    return state_.operands.emplace_back(std::move(operand));
   }
   TypeIdx type(TypeTag tag) {
     DCHECK(tag != TypeTag::Struct && tag != TypeTag::Array);

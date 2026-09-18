@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "cfg/build_config.h"
@@ -21,12 +22,13 @@
 #include "source/source.h"
 
 #if BUILD_FLAG(IS_OS_WIN)
-#include <windows.h>
+#include <fileapi.h>
+#include <handleapi.h>
+#include <minwinbase.h>
+#include <winnt.h>
 #else
 #include <dirent.h>
 #include <sys/stat.h>
-
-#include <utility>
 #endif
 
 namespace pipeline {

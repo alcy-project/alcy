@@ -158,8 +158,8 @@ TEST_CASE("Verify misplaced terminator") {
 
 TEST_CASE("Verify unknown operand tag") {
   StorageBuilder builder;
-  const Operand unknown{Operand::Payload{}, primitive_idx(TypeTag::Void)};
-  const OperandIdx oidx = builder.operand(unknown);
+  Operand unknown{Operand::Payload{}, primitive_idx(TypeTag::Void)};
+  const OperandIdx oidx = builder.operand(std::move(unknown));
   const InstructionIdx inst = builder.instr({
       .op = Opcode::Ret,
       .flags = {},

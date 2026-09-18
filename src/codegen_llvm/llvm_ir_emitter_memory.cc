@@ -21,6 +21,10 @@
 #include "ir/formatter.h"  // IWYU pragma: keep
 #endif
 
+#if BUILD_FLAG(IS_OS_WIN)
+#include <malloc.h>
+#endif
+
 namespace codegen_llvm {
 
 namespace {
