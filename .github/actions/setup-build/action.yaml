@@ -1,0 +1,89 @@
+# Shared toolchain setup for the standard (prebuilt LLVM) and Nix build
+# environments. Callers must check out the repository (with submodules)
+# before invoking this action.
+
+name: setup-build
+description: Install the Nix or prebuilt-LLVM toolchain, Python venv, and LLVM submodule tags.
+
+inputs:
+  nix:
+    description: "'true' selects the Nix development shell; 'false' selects the prebuilt LLVM toolchain."
+    required: false
+    default: "false"
+  os:
+    description: "Value forwarded to cxx-gn-setup (e.g. runner.os). Ignored for Nix."
+    required: false
+    default: ""
+  llvm-version:
+    description: "Prebuilt LLVM version. Ignored for Nix, which pins LLVM via flake.nix."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Nix
+      if: inputs.nix == 'true'
+      uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
+
+    - name: Setup build environment (Standard)
+      if: inputs.nix != 'true'
+      uses: pug523/actions/cxx-gn-setup@e4abb74456e529372bb1b7ebb71db1b647be3fd1
+      with:
+        os: ${{ inputs.os }}
+        llvm_version: ${{ inputs.llvm-version }}
+
+    # GN resolves libc++ headers and libraries through these variables
+    # (see docs/build.md). Windows uses the MSVC STL instead.
+    - name: Setup environment variables (Standard)
+      if: inputs.nix != 'true'
+      shell: bash
+      run: |
+        echo "${{ env.LLVM_PATH }}/bin" >> $GITHUB_PATH
+        if [[ "${{ runner.os }}" != "Windows" ]]; then
+          echo "LIBCXX_INCLUDE_DIR=${{ env.LLVM_PATH }}/include/c++/v1" >> $GITHUB_ENV
+        fi
+
+        if [[ "${{ runner.os }}" == "Linux" ]]; then
+          TARGET_INC=$(echo "${{ env.LLVM_PATH }}/include/"*linux*/c++/v1)
+          echo "LIBCXX_TARGET_INCLUDE_DIR=$TARGET_INC" >> $GITHUB_ENV
+          LIB_DIR=$(echo "${{ env.LLVM_PATH }}/lib/"*linux*)
+          echo "LIBCXX_LIB_DIR=$LIB_DIR" >> $GITHUB_ENV
+        elif [[ "${{ runner.os }}" == "macOS" ]]; then
+          LIB_DIR="${{ env.LLVM_PATH }}/lib"
+          LIBCXX_DIR="$LIB_DIR/libc++/v1"
+          shopt -s nullglob
+          FILES=("$LIB_DIR"/libc++*)
+          mkdir -p "$LIBCXX_DIR"
+          if [ ${#FILES[@]} -gt 0 ]; then
+            cp "${FILES[@]}" "$LIBCXX_DIR/"
+          fi
+          echo "LIBCXX_LIB_DIR=$LIBCXX_DIR" >> $GITHUB_ENV
+        else
+          echo "LIBCXX_LIB_DIR=${{ env.LLVM_PATH }}/lib" >> $GITHUB_ENV
+        fi
+
+    # The LLVM setup resolves its prebuilt archive with `git describe --tags`
+    # inside the submodule, so a shallow tag-less checkout fails without this.
+    - name: Fetch LLVM submodule tags
+      shell: bash
+      run: |
+        git -C third_party/llvm/src fetch --tags --depth=1
+        git -C third_party/llvm/src describe --tags --always
+
+    - name: Install uv
+      if: inputs.nix != 'true'
+      uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      with:
+        enable-cache: true
+
+    - name: Set up Python virtual environment
+      if: inputs.nix != 'true'
+      shell: bash
+      run: |
+        uv python install
+        uv sync --frozen
+        echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH

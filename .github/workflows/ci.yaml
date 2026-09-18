@@ -10,6 +10,7 @@ on:
       - third_party/**
       - build/**
       - .github/workflows/**
+      - .github/actions/**
       - .clang-tidy
       - CPPLINT.cfg
       - uv.lock
@@ -19,23 +20,197 @@ on:
     paths: *ci_paths
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+# Keep `main` runs intact so every merged commit keeps its own artifacts.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Keep in sync with the `llvm_version` default in build.yaml and docs/build.md.
+  LLVM_VERSION: 23.1.1
 
 jobs:
-  build-debug:
+  style:
+    name: Format & spelling
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          enable-cache: true
+
+      - name: Set up Python virtual environment
+        run: |
+          uv python install
+          uv sync --frozen
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+
+      # Neither check compiles anything, so they share one runner with no
+      # contention over build locks.
+      - name: Check formatting
+        run: uv run ./build/scripts/format.py --dry-run
+
+      - name: Spell check repository
+        uses: crate-ci/typos@d43b6c087ac471e2ea7b8af622ff15f05c0c365b
+
+  test-debug:
+    name: Test (debug)
     uses: ./.github/workflows/build.yaml
     with:
       build_type: debug
+      role: test
+      llvm_version: ${{ env.LLVM_VERSION }}
 
-  build-release:
+  test-release:
+    name: Test (release)
     uses: ./.github/workflows/build.yaml
     with:
       build_type: release
+      role: test
+      llvm_version: ${{ env.LLVM_VERSION }}
+
+  # Intentionally not gated on the test jobs: waiting would give back exactly
+  # the wall clock the split was meant to save, and a red run is already
+  # flagged as red.
+  dist:
+    name: Package (release)
+    uses: ./.github/workflows/build.yaml
+    with:
+      build_type: release
+      role: dist
+      llvm_version: ${{ env.LLVM_VERSION }}
+
+  # Split out of build.yaml: wasm needs Emscripten instead of the
+  # prebuilt-LLVM/Nix toolchains, so sharing the native matrix only added
+  # `if: plat == 'wasm'` branches everywhere.
+  wasm:
+    name: WebAssembly (${{ matrix.build_type }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [debug, release]
+
+    env:
+      COLORTERM: 256color
+      basename: alcy
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Setup Emscripten
+        uses: emscripten-core/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984
+
+      - name: Setup node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: Setup GN
+        uses: pug523/actions/setup-gn@e4abb74456e529372bb1b7ebb71db1b647be3fd1
+
+      - name: Install ninja
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          enable-cache: true
+
+      - name: Set up Python virtual environment
+        run: |
+          uv python install
+          uv sync --frozen
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+
+      - name: Fetch LLVM submodule tags
+        shell: bash
+        run: |
+          git -C third_party/llvm/src fetch --tags --depth=1
+          git -C third_party/llvm/src describe --tags --always
+
+      # The wasm LLVM asset is published from the fork on its own schedule;
+      # until it exists the wasm legs stay green and skip instead of failing.
+      - name: Check LLVM asset
+        id: asset
+        shell: bash
+        run: |
+          tag=$(git -C third_party/llvm/src describe --tags --always)
+          url="https://github.com/alcy-project/llvm-alcy-fork/releases/download/${tag}/llvm-${{ matrix.build_type }}-wasm32-unknown-emscripten.tar.zst"
+          echo "Probing $url"
+          if curl -sSfI -o /dev/null --max-time 30 "$url"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "::notice::Prebuilt LLVM for ${tag}/wasm32-unknown-emscripten is not published yet; skipping wasm build until the fork releases it."
+          fi
+
+      - name: Cache LLVM tag
+        if: steps.asset.outputs.exists == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: build/scripts/llvm/.llvm_tag_cache
+          key: ubuntu-24.04-wasm-wasm32-${{ matrix.build_type }}-false-${{ env.LLVM_VERSION }}-llvm_tag_cache
+
+      - name: Cache third_party dependencies
+        if: steps.asset.outputs.exists == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: out/build/third_party
+          key: ubuntu-24.04-wasm-wasm32-${{ matrix.build_type }}-false-${{ env.LLVM_VERSION }}-third_party_dependencies
+
+      - name: Build tests and run
+        if: steps.asset.outputs.exists == 'true'
+        shell: bash
+        run: uv run ./build/scripts/run.py --target=tests --mode=${{ matrix.build_type }} --build-subdir=build --target-os=emscripten
+
+      - name: Package & Generate Checksum
+        if: steps.asset.outputs.exists == 'true'
+        shell: bash
+        run: |
+          mkdir -p dist
+          if [ -f LICENSE ]; then cp LICENSE dist/; fi
+          if [ -f README.md ]; then cp README.md dist/; fi
+
+          rsync -av --exclude='third_party' --exclude='exe.unstripped' out/build/ dist/ 2>/dev/null || cp -r out/build/* dist/ 2>/dev/null || true
+          rm -rf dist/third_party dist/exe.unstripped
+
+          FILE="${{ env.basename }}-wasm-wasm32-${{ matrix.build_type }}.tar.gz"
+          cd dist && tar -czvf "../${FILE}" * && cd ..
+
+          if command -v sha256sum &> /dev/null; then
+            sha256sum "$FILE" > "${FILE}.sha256"
+          else
+            shasum -a 256 "$FILE" > "${FILE}.sha256"
+          fi
+
+      - name: Upload build artifacts
+        if: steps.asset.outputs.exists == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: wasm-wasm32-${{ matrix.build_type }}
+          path: |
+            *.tar.gz
+            *.sha256
+          if-no-files-found: error
 
   summary:
-    needs: [build-debug, build-release]
+    needs: [style, test-debug, test-release, dist, wasm]
     if: always()
     uses: ./.github/workflows/generate-summary.yaml
     with:
