@@ -4,7 +4,6 @@
 
 #include "pipeline/pipeline.h"
 
-#include <ostream>  // IWYU pragma: keep (required for doctest's CHECK macro on windows)
 #include <string>
 #include <string_view>
 #include <utility>
@@ -18,10 +17,10 @@
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
 #include "pkg/resolve.h"
 #include "source/source.h"
-#include "tests/util/test_fs.h"
 
 namespace pipeline {
 
@@ -38,7 +37,7 @@ struct Fixture {
 }  // namespace
 
 TEST_CASE("Discover finds nested sources in sorted order") {
-  test_fs::TempDir dir("alcy_pipeline_test");
+  io::TempDir dir("alcy_pipeline_test");
   const bool setup = dir.write_file("src/main.al", "fn main() {}\n") &&
                      dir.write_file("src/util.al", "") &&
                      dir.write_file("README.md", "not source\n") &&
@@ -74,7 +73,7 @@ TEST_CASE("Discover reports missing directories") {
 }
 
 TEST_CASE("Compile project loads every package") {
-  test_fs::TempDir dir("alcy_pipeline_project_test");
+  io::TempDir dir("alcy_pipeline_project_test");
   const bool setup =
       dir.write_file("root/alcy.toml",
                      "[package]\nname = \"root\"\nversion = \"0.1.0\"\n"
@@ -109,7 +108,7 @@ TEST_CASE("Compile project loads every package") {
 }
 
 TEST_CASE("Fetch adapter feeds the renderer") {
-  test_fs::TempDir dir("alcy_pipeline_fetch_test");
+  io::TempDir dir("alcy_pipeline_fetch_test");
   const bool setup = dir.write_file("b.al", "let y = 2;\n");
   CHECK(setup);
   if (!setup) {

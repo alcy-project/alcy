@@ -6,13 +6,13 @@ executable("tests") {
     "diag/render_test.cc",
     "ir/ir_common_test.cc",
     "ir/verifier_test.cc",
+    "path/path_test.cc",
     "pipeline/pipeline_test.cc",
     "pkg/lock_test.cc",
     "pkg/manifest_test.cc",
     "pkg/resolve_test.cc",
     "source/source_test.cc",
     "test_main.cc",
-    "util/test_fs.h",
     "util/test_util.cc",
     "util/test_util.h",
   ]
@@ -21,6 +21,13 @@ executable("tests") {
     "//src:alcy_config",
     "//src:win_sys_libs",
   ]
+
+  # doctest forward-declares std::ostream by default, which MSVC's
+  # string_view operator<< cannot instantiate; including the real headers
+  # fixes Windows builds (see doctest configuration.md). Must be global:
+  # every TU including doctest needs it before the first include.
+  defines = [ "DOCTEST_CONFIG_USE_STD_HEADERS" ]
+
   deps = [
     "//src:alcy_lib",
     "//src/app:driver",

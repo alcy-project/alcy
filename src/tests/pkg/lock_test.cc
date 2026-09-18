@@ -12,10 +12,10 @@
 #include "diag/bag.h"
 #include "doctest/doctest.h"
 #include "fmt/format.h"
+#include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
 #include "pkg/resolve.h"
 #include "source/source.h"
-#include "tests/util/test_fs.h"
 
 namespace pkg {
 
@@ -32,7 +32,7 @@ struct Fixture {
 }  // namespace
 
 TEST_CASE("Lockfile round-trips through resolve output") {
-  test_fs::TempDir dir("alcy_lock_test");
+  io::TempDir dir("alcy_lock_test");
   constexpr std::string_view manifest =
       "[package]\n"
       "name = \"app\"\n"

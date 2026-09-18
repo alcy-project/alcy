@@ -4,8 +4,6 @@
 
 #include "diag/bag.h"
 
-#include <ostream>  // IWYU pragma: keep (required for doctest's CHECK macro on windows)
-
 #include "diag/diagnostic.h"
 #include "diag/span.h"
 #include "doctest/doctest.h"

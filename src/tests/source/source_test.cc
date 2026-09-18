@@ -4,20 +4,19 @@
 
 #include "source/source.h"
 
-#include <ostream>  // IWYU pragma: keep (required for doctest's CHECK macro on windows)
 #include <string_view>
 #include <utility>
 
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
-#include "tests/util/test_fs.h"
+#include "fpag/io/temp_dir.h"
 
 namespace source {
 
 // NOTE: doctest REQUIRE needs exceptions (disabled here), so setup steps
 // use CHECK plus an early return instead.
 TEST_CASE("SourceManager loads files and dedups by path") {
-  test_fs::TempDir dir("alcy_source_test");
+  io::TempDir dir("alcy_source_test");
   const bool written = dir.write_file("a.al", "let x = 1;\n");
   CHECK(written);
   if (!written) {
@@ -56,7 +55,7 @@ TEST_CASE("SourceManager reports missing files") {
 }
 
 TEST_CASE("SourceManager loads empty files") {
-  test_fs::TempDir dir("alcy_source_empty_test");
+  io::TempDir dir("alcy_source_empty_test");
   const bool written = dir.write_file("empty.al", "");
   CHECK(written);
   if (!written) {

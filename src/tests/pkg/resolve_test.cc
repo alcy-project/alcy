@@ -4,7 +4,6 @@
 
 #include "pkg/resolve.h"
 
-#include <ostream>  // IWYU pragma: keep (required for doctest's CHECK macro on windows)
 #include <string>
 #include <string_view>
 #include <utility>
@@ -12,10 +11,10 @@
 
 #include "diag/bag.h"
 #include "doctest/doctest.h"
+#include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
 #include "pkg/manifest.h"
 #include "source/source.h"
-#include "tests/util/test_fs.h"
 
 namespace pkg {
 
@@ -51,7 +50,7 @@ struct Fixture {
   Fixture() { arena.reserve(1u << 20); }
 };
 
-bool write_package(test_fs::TempDir& dir,
+bool write_package(io::TempDir& dir,
                    std::string_view rel,
                    std::string_view manifest,
                    std::string& out_root) {
@@ -67,7 +66,7 @@ bool write_package(test_fs::TempDir& dir,
 }  // namespace
 
 TEST_CASE("Resolve collects transitive path dependencies") {
-  test_fs::TempDir dir("alcy_resolve_test");
+  io::TempDir dir("alcy_resolve_test");
   std::string root;
   bool setup = write_package(dir, "root", kRootManifest, root);
   setup = setup && dir.write_file("root/libs/leaf/alcy.toml", kLeafManifest);
@@ -100,7 +99,7 @@ TEST_CASE("Resolve collects transitive path dependencies") {
 }
 
 TEST_CASE("Resolve detects dependency cycles across spellings") {
-  test_fs::TempDir dir("alcy_resolve_cycle_test");
+  io::TempDir dir("alcy_resolve_cycle_test");
   constexpr std::string_view a_manifest =
       "[package]\nname = \"a\"\nversion = \"0.1.0\"\n"
       "[dependencies]\nb = { path = \"../b\" }\n";
@@ -121,7 +120,7 @@ TEST_CASE("Resolve detects dependency cycles across spellings") {
 }
 
 TEST_CASE("Resolve visits diamonds twice without cycle errors") {
-  test_fs::TempDir dir("alcy_resolve_diamond_test");
+  io::TempDir dir("alcy_resolve_diamond_test");
   constexpr std::string_view top_manifest =
       "[package]\nname = \"top\"\nversion = \"0.1.0\"\n"
       "[dependencies]\nb = { path = \"b\" }\nc = { path = \"c\" }\n";
@@ -153,7 +152,7 @@ TEST_CASE("Resolve visits diamonds twice without cycle errors") {
 }
 
 TEST_CASE("Resolve reports missing manifests") {
-  test_fs::TempDir dir("alcy_resolve_missing_test");
+  io::TempDir dir("alcy_resolve_missing_test");
   const bool setup = dir.make_dir("empty");
   CHECK(setup);
   if (!setup) {

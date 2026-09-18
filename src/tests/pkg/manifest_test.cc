@@ -4,7 +4,6 @@
 
 #include "pkg/manifest.h"
 
-#include <ostream>  // IWYU pragma: keep (required for doctest's CHECK macro on windows)
 #include <string_view>
 #include <utility>
 
