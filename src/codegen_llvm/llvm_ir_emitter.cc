@@ -8,7 +8,7 @@
 #include <string_view>
 #include <utility>
 
-#include "build/build_config.h"
+#include "cfg/build_config.h"
 #include "codegen_llvm/common.h"
 #include "debug/dcheck.h"
 #include "debug/dlog.h"

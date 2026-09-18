@@ -1,0 +1,17 @@
+source_set("pkg") {
+  sources = [
+    "lock.cc",
+    "lock.h",
+    "manifest.cc",
+    "manifest.h",
+    "resolve.cc",
+    "resolve.h",
+  ]
+  deps = [
+    "//src:base_modules",
+    "//src/diag",
+    "//src/source",
+    "//third_party/toml",
+  ]
+  configs += [ "//src:alcy_config" ]
+}

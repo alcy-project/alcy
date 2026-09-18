@@ -2,7 +2,7 @@
 // This source code is licensed under the Apache License, Version 2.0 with LLVM
 // Exceptions which can be found in the LICENSE file.
 
-#include "build/build_config.h"
+#include "cfg/build_config.h"
 #include "codegen_llvm/common.h"
 #include "codegen_llvm/llvm_ir_emitter.h"
 #include "debug/dcheck.h"
