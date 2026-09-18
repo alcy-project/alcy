@@ -1,4 +1,4 @@
-source_set("build") {
+source_set("cfg") {
   sources = [ "build_config.h" ]
   configs += [ "//src:alcy_config" ]
 }

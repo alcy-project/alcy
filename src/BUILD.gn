@@ -12,7 +12,7 @@ config("alcy_config") {
 group("base_modules") {
   public_deps = [
     "base",
-    "build",
+    "cfg",
     "debug",
     "//third_party/fpag",
   ]
@@ -31,6 +31,8 @@ group("modules") {
     "lexer",
     "parser",
     "pipeline",
+    "pkg",
+    "source",
   ]
 }
 
