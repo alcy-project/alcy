@@ -121,10 +121,10 @@ jobs:
       - name: Setup Emscripten
         uses: emscripten-core/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984
 
-      - name: Setup node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - name: Setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          node-version: 26
+          bun-version: 1.4.2
 
       - name: Setup GN
         uses: pug523/actions/setup-gn@e4abb74456e529372bb1b7ebb71db1b647be3fd1

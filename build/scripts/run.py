@@ -5,6 +5,7 @@
 # Exceptions which can be found in the LICENSE file.
 
 import argparse
+import shutil
 import subprocess
 import sys
 from build import build
@@ -81,7 +82,17 @@ def main():
         if target_bin is not None:
             print(f"Running '{target_bin.name}'")
             if target_bin.suffix == ".js":
-                cmd = ["node", str(target_bin)] + args.run_args
+                # Prefer bun over node for faster startup and TypeScript support
+                bun_path = shutil.which("bun")
+                node_path = shutil.which("node")
+                runtime = bun_path or node_path
+                if runtime is None:
+                    print(
+                        "error: neither 'bun' nor 'node' found; cannot run .js binary",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
+                cmd = [runtime, str(target_bin)] + args.run_args
             else:
                 cmd = [str(target_bin)] + args.run_args
             result = subprocess.run(cmd, cwd=build_dir)
