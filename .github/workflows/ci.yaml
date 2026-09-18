@@ -124,7 +124,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: 22
+          node-version: 26
 
       - name: Setup GN
         uses: pug523/actions/setup-gn@e4abb74456e529372bb1b7ebb71db1b647be3fd1
