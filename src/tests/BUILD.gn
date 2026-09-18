@@ -2,7 +2,8 @@ executable("tests") {
   sources = [
     "app/parse_args_test.cc",
     "codegen_llvm/llvm_ir_emitter_test.cc",
-    "diag/diag_test.cc",
+    "diag/bag_test.cc",
+    "diag/render_test.cc",
     "ir/ir_common_test.cc",
     "ir/verifier_test.cc",
     "pipeline/pipeline_test.cc",

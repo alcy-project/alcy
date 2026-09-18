@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "diag/diagnostic.h"
 #include "doctest/doctest.h"
 #include "fpag/base/idx.h"
 #include "fpag/str/string_pool_id.h"
@@ -738,6 +739,22 @@ TEST_CASE("Verify call arity") {
   });
   // One declared parameter but zero call arguments.
   CHECK(check(std::move(builder).build()) == VerifyErrorKind::InvalidCallee);
+}
+
+TEST_CASE("VerifyError converts to diagnostic") {
+  const VerifyError error{.kind = VerifyErrorKind::UndefinedRegister,
+                          .index = 5};
+  const diag::Diagnostic diag = to_diagnostic(error);
+  CHECK(diag.severity == diag::Severity::Error);
+  CHECK(diag.code >= 1000);
+  CHECK(diag.code < 2000);
+  CHECK(diag.message == "UndefinedRegister");
+  CHECK(!diag.has_primary_span);
+
+  // Codes are stable per kind.
+  const VerifyError other{.kind = VerifyErrorKind::UnterminatedBlock,
+                          .index = 0};
+  CHECK(to_diagnostic(other).code != diag.code);
 }
 
 }  // namespace ir
