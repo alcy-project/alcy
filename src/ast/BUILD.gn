@@ -1,5 +1,5 @@
 source_set("ast") {
-  sources = [ "lib.cc" ]
+  sources = [ "ast.h" ]
   deps = [
     "//src:base_modules",
     "//src/diag",
