@@ -30,12 +30,12 @@ jobs:
       # wasm32-unknown-emscripten separately because it needs Emscripten.
       matrix:
         include:
-          - os: ubuntu-26.04
+          - os: ubuntu-24.04
             plat: linux
             arch: x86_64
             archive: tar.gz
             nix: false
-          - os: ubuntu-26.04
+          - os: ubuntu-24.04
             plat: linux
             arch: x86_64
             archive: tar.gz
