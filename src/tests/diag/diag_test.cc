@@ -24,7 +24,7 @@ constexpr std::string_view kSrc = "let x = foo(1, 2);\nlet y = 2;\n";
 
 SourceText fetch_source(u32 file, const void*) {
   if (file == 3) {
-    return {"main.alcy", kSrc};
+    return {"main.al", kSrc};
   }
   return {};
 }
@@ -97,7 +97,7 @@ TEST_CASE("Render with source snippet") {
                  "bad call");
   CHECK(render_str(f.bag.at(i)) ==
         "error[E1]: bad call\n"
-        " --> main.alcy:1:9\n"
+        " --> main.al:1:9\n"
         "  |\n"
         "1 | let x = foo(1, 2);\n"
         "  |         ^^^\n");
@@ -111,7 +111,7 @@ TEST_CASE("Render clips multi-line spans and clamps offsets") {
                  "bad call");
   CHECK(render_str(f.bag.at(i)) ==
         "error[E1]: bad call\n"
-        " --> main.alcy:1:9\n"
+        " --> main.al:1:9\n"
         "  |\n"
         "1 | let x = foo(1, 2);\n"
         "  |         ^^^^^^^^^^\n");
@@ -121,7 +121,7 @@ TEST_CASE("Render clips multi-line spans and clamps offsets") {
       f.bag.emit(Severity::Error, 2,
                  Span{.file = 3, .offset = 1000, .length = 2}, "past the end");
   const std::string rendered = render_str(f.bag.at(j));
-  CHECK(rendered.find(" --> main.alcy:3:1\n") != std::string::npos);
+  CHECK(rendered.find(" --> main.al:3:1\n") != std::string::npos);
 }
 
 TEST_CASE("Render secondary labels") {
@@ -132,11 +132,11 @@ TEST_CASE("Render secondary labels") {
   f.bag.label(i, {{{.file = 3, .offset = 23, .length = 1}, "used here"}});
   CHECK(render_str(f.bag.at(i)) ==
         "error[E1]: bad call\n"
-        " --> main.alcy:1:9\n"
+        " --> main.al:1:9\n"
         "  |\n"
         "1 | let x = foo(1, 2);\n"
         "  |         ^^^\n"
-        " = note: used here --> main.alcy:2:5\n");
+        " = note: used here --> main.al:2:5\n");
 }
 
 TEST_CASE("Render unknown file") {
