@@ -19,7 +19,9 @@ jobs:
     with:
       build_type: release
       role: dist
-      llvm_version: ${{ env.LLVM_VERSION }}
+      # Literal: the env context is not available in reusable-workflow `with:`.
+      # Keep in sync with the LLVM_VERSION env in ci.yaml.
+      llvm_version: "23.1.1"
 
   publish:
     needs: build-release

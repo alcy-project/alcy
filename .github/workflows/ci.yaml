@@ -69,7 +69,9 @@ jobs:
     with:
       build_type: debug
       role: test
-      llvm_version: ${{ env.LLVM_VERSION }}
+      # Literal: the env context is not available in reusable-workflow `with:`.
+      # Keep in sync with the LLVM_VERSION env above and release.yaml.
+      llvm_version: "23.1.1"
 
   test-release:
     name: Test (release)
@@ -77,7 +79,9 @@ jobs:
     with:
       build_type: release
       role: test
-      llvm_version: ${{ env.LLVM_VERSION }}
+      # Literal: the env context is not available in reusable-workflow `with:`.
+      # Keep in sync with the LLVM_VERSION env above and release.yaml.
+      llvm_version: "23.1.1"
 
   # Intentionally not gated on the test jobs: waiting would give back exactly
   # the wall clock the split was meant to save, and a red run is already
@@ -88,7 +92,9 @@ jobs:
     with:
       build_type: release
       role: dist
-      llvm_version: ${{ env.LLVM_VERSION }}
+      # Literal: the env context is not available in reusable-workflow `with:`.
+      # Keep in sync with the LLVM_VERSION env above and release.yaml.
+      llvm_version: "23.1.1"
 
   # Split out of build.yaml: wasm needs Emscripten instead of the
   # prebuilt-LLVM/Nix toolchains, so sharing the native matrix only added
