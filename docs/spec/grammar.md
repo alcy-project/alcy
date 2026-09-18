@@ -12,9 +12,11 @@ rejected with guidance diagnostics.
   starts a range operator, never a float fraction (`1..2` is
   `1 .. 2`); `1. < 2` keeps float-then-compare.
 - Newlines are significant: outside brackets, a newline is lexed as
-  `;` unless the line ends with an operator, comma, arrow, `=>`,
-  `:`, `:=`, `=`, `as`, or an opening bracket. A line therefore
-  continues only in operator-led or bracket-open positions.
+  `;` when the preceding token ends a statement (identifiers,
+  literals, `)`, `]`, `}`, `break`, `continue`, `ret`) unless the
+  next token continues the construct (`else`, `,`, closers, `.`, or
+  end of file). A line therefore continues only in operator-led,
+  bracket-open, or continuation positions.
 - Block openers stay on their header line: the `{` of `if`, `while`,
   `match`, `fn`, `impl`, and `else` MUST NOT start on a following
   line (Go-style). `} else {` stays on one line.
@@ -58,7 +60,8 @@ type := primitive | "()" | "!" | "str" | tuple_type | path_type | ref_type
 primitive := integer | float | "bool"
 tuple_type := "(" type ("," type)+ ","? ")"
 ref_type  := "&" type | "&" "mut" type
-path_type := path   # named structs, enums, Result/Option instantiations
+path_type := path ("<" type ("," type)* ">")?   # blessed generics only
+            # Closing ">>" splits into two ">" (dangling halves error).
 ```
 
 `()` is the unit type. `!` is the never type and coerces to any type.
@@ -123,6 +126,9 @@ block_like  := block | if_expr | match_expr | loop_expr | while_expr
 - In statement position `Path {` opens a struct expression. After
   `if`/`while`/`match` conditions and `else`, `{` always opens a
   block: parenthesize conditions containing struct literals.
+- `match` scrutinees and `if`/`while` conditions never parse a
+  struct literal directly (the `{` belongs to the body); this keeps
+  `match x {` and `if c {` unambiguous without lookahead.
 
 ## Statements and blocks
 
@@ -136,7 +142,9 @@ expr_stmt  := expr
 ```
 
 - Newlines terminate statements; `;` separates multiple statements on
-  one line only (a trailing `;` is an allowed no-op).
+  one line only (a trailing `;` is an allowed no-op). Stray `;` are
+  skipped in item, block, and arm lists; `match` arms accept runs of
+  `,` and `;` as separators.
 - A block's value is its last expression; `{}` evaluates to `()`.
 - `if cond block (else block)?` and `if pattern := expr block
   (else block)?`; `while` mirrors `if` (both accept

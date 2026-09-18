@@ -39,10 +39,13 @@ bool is_alnum_or_underscore(char c) {
 }
 
 // A newline ends the statement started by these tokens, so the lexer
-// materializes the terminating `;` (Go-style insertion). Closing braces
-// self-delimit instead: the parser ends statements at `}` and chains
-// `else` explicitly, which needs no lookahead.
-bool ends_statement(TokenKind kind) {
+// materializes the terminating `;` (Go-style insertion), unless the
+// next token continues the construct (see suppress_semi below).
+// Closing braces are included: `Foo { .. }` or `if c { .. }` ending a
+// line still terminate their statement. The parser needs no special
+// brace handling beyond chaining `else` (covered by suppression) and
+// tolerating stray separators.
+bool inserts_semi(TokenKind kind) {
   switch (kind) {
     case TokenKind::Ident:
     case TokenKind::Underscore:
@@ -54,9 +57,26 @@ bool ends_statement(TokenKind kind) {
     case TokenKind::False:
     case TokenKind::RParen:
     case TokenKind::RBracket:
+    case TokenKind::RBrace:
     case TokenKind::Break:
     case TokenKind::Continue:
     case TokenKind::Ret: return true;
+    default: return false;
+  }
+}
+
+// Suppression set: `else` chains, closers/commas continue enclosing
+// syntax, and a leading `.` continues a method chain. Closing braces
+// self-delimit on top of this: the parser ends statements at `}`.
+bool suppress_semi(TokenKind next) {
+  switch (next) {
+    case TokenKind::Else:
+    case TokenKind::Comma:
+    case TokenKind::RParen:
+    case TokenKind::RBracket:
+    case TokenKind::RBrace:
+    case TokenKind::Dot:
+    case TokenKind::Eof: return true;
     default: return false;
   }
 }
@@ -117,6 +137,7 @@ constexpr Keyword kKeywords[] = {
     {"u8", TokenKind::U8},
     {"union", TokenKind::Union},
     {"unsafe", TokenKind::Unsafe},
+    {"use", TokenKind::Use},
     {"usize", TokenKind::Usize},
     {"where", TokenKind::Where},
     {"while", TokenKind::While},
@@ -191,7 +212,7 @@ void Lexer::skip_trivia(std::vector<Token>& out) {
     } else if (c == '\n') {
       const usize newline = pos_;
       advance();
-      if (ends_statement(last_significant_)) {
+      if (inserts_semi(last_significant_) && !suppress_semi(peek_next_kind())) {
         last_significant_ = TokenKind::Semicolon;
         out.push_back(
             Token{.kind = TokenKind::Semicolon, .span = span_at(newline, 1)});
@@ -233,6 +254,69 @@ void Lexer::skip_trivia(std::vector<Token>& out) {
     } else {
       break;
     }
+  }
+}
+
+// Looks past whitespace and comments to classify the next significant
+// token for semicolon suppression. Only the suppressed kinds are
+// distinguished; everything else reports Ident.
+TokenKind Lexer::peek_next_kind() const {
+  usize i = pos_;
+  const auto at = [&](usize k) -> char {
+    return (i + k < bytes_.size()) ? bytes_[i + k] : '\0';
+  };
+  while (true) {
+    while (i < bytes_.size() && (bytes_[i] == ' ' || bytes_[i] == '\t' ||
+                                 bytes_[i] == '\r' || bytes_[i] == '\n')) {
+      ++i;
+    }
+    if (at(0) == '/' && at(1) == '/') {
+      i += 2;
+      while (i < bytes_.size() && bytes_[i] != '\n') {
+        ++i;
+      }
+      continue;
+    }
+    if (at(0) == '/' && at(1) == '*') {
+      i += 2;
+      u32 depth = 1;
+      while (i < bytes_.size() && depth > 0) {
+        if (bytes_[i] == '/' && i + 1 < bytes_.size() && bytes_[i + 1] == '*') {
+          ++depth;
+          i += 2;
+        } else if (bytes_[i] == '*' && i + 1 < bytes_.size() &&
+                   bytes_[i + 1] == '/') {
+          --depth;
+          i += 2;
+        } else {
+          ++i;
+        }
+      }
+      continue;
+    }
+    break;
+  }
+  if (i >= bytes_.size()) {
+    return TokenKind::Eof;
+  }
+  const char c = bytes_[i];
+  if (is_alpha(c) || c == '_') {
+    usize end = i + 1;
+    while (end < bytes_.size() && is_alnum_or_underscore(bytes_[end])) {
+      ++end;
+    }
+    if (bytes_.substr(i, end - i) == "else") {
+      return TokenKind::Else;
+    }
+    return TokenKind::Ident;
+  }
+  switch (c) {
+    case ',': return TokenKind::Comma;
+    case ')': return TokenKind::RParen;
+    case ']': return TokenKind::RBracket;
+    case '}': return TokenKind::RBrace;
+    case '.': return TokenKind::Dot;
+    default: return TokenKind::Ident;
   }
 }
 

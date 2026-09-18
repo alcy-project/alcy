@@ -107,6 +107,35 @@ TEST_CASE("Lexer inserts semicolons at newlines") {
   CHECK(!f.bag.has_errors());
 }
 
+TEST_CASE("Lexer suppresses separators before continuations") {
+  Fixture f;
+  // Unclosed brackets, commas, and closers continue the construct.
+  CHECK(check_kinds("foo(a\n)", f.bag,
+                    {TokenKind::Ident, TokenKind::LParen, TokenKind::Ident,
+                     TokenKind::RParen, TokenKind::Eof}));
+  // Method chains continue across lines...
+  CHECK(check_kinds("foo()\n.bar()", f.bag,
+                    {TokenKind::Ident, TokenKind::LParen, TokenKind::RParen,
+                     TokenKind::Dot, TokenKind::Ident, TokenKind::LParen,
+                     TokenKind::RParen, TokenKind::Eof}));
+  // ...while a following call starts a new statement (no chain).
+  CHECK(check_kinds("foo()\n(bar)", f.bag,
+                    {TokenKind::Ident, TokenKind::LParen, TokenKind::RParen,
+                     TokenKind::Semicolon, TokenKind::LParen, TokenKind::Ident,
+                     TokenKind::RParen, TokenKind::Eof}));
+  // Leading operators do not continue; trailing operators do (see above).
+  CHECK(check_kinds("a\n+b", f.bag,
+                    {TokenKind::Ident, TokenKind::Semicolon, TokenKind::Plus,
+                     TokenKind::Ident, TokenKind::Eof}));
+  // Block ends terminate their statement through insertion.
+  CHECK(check_kinds(
+      "if c {1}\nfoo()", f.bag,
+      {TokenKind::If, TokenKind::Ident, TokenKind::LBrace, TokenKind::Integer,
+       TokenKind::RBrace, TokenKind::Semicolon, TokenKind::Ident,
+       TokenKind::LParen, TokenKind::RParen, TokenKind::Eof}));
+  CHECK(!f.bag.has_errors());
+}
+
 TEST_CASE("Lexer distinguishes colons equals and dots") {
   Fixture f;
   CHECK(check_kinds("a := 1", f.bag,

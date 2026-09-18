@@ -1,8 +1,14 @@
 source_set("parser") {
-  sources = [ "lib.cc" ]
+  sources = [
+    "parser.cc",
+    "parser.h",
+  ]
   deps = [
     "//src:base_modules",
     "//src/ast",
+    "//src/diag",
+    "//src/lexer",
+    "//src/source",
   ]
   configs += [ "//src:alcy_config" ]
 }

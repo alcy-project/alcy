@@ -23,6 +23,7 @@
 #include <memory>
 #include <span>
 #include <string_view>
+#include <vector>
 
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -37,7 +38,7 @@ struct Stmt;
 // Copies a scratch list into the arena; the returned span borrows arena
 // storage for the arena's lifetime.
 template <typename T>
-std::span<T> copy_to_arena(mem::Arena& arena, std::span<const T> items) {
+std::span<T> copy_to_arena(mem::Arena& arena, const std::vector<T>& items) {
   if (items.empty()) {
     return {};
   }
@@ -105,6 +106,8 @@ struct TupleType : Type {
 
 struct PathType : Type {
   const Path* path;
+  // Empty without "<...>" arguments (blessed generics only).
+  std::span<Type* const> args;
 };
 
 struct RefType : Type {

@@ -6,6 +6,7 @@
 
 #include <span>
 #include <string_view>
+#include <vector>
 
 #include "diag/span.h"
 #include "doctest/doctest.h"
@@ -49,17 +50,18 @@ TEST_CASE("Arena AST nodes downcast through their base") {
 
 TEST_CASE("Arena lists copy scratch buffers") {
   Fixture f;
-  const Ident names[] = {{.name = "a", .span = test_span()},
-                         {.name = "b", .span = test_span(1)}};
-  const std::span<const Ident> copied =
-      copy_to_arena(f.arena, std::span<const Ident>(names, 2));
+  const std::vector<ast::Ident> names = {
+      ast::Ident{.name = "a", .span = test_span()},
+      ast::Ident{.name = "b", .span = test_span(1)}};
+  const std::span<const ast::Ident> copied = ast::copy_to_arena(f.arena, names);
   CHECK(copied.size() == 2);
   CHECK(copied[0].name == "a");
   CHECK(copied[1].name == "b");
 
-  const std::span<const Ident> empty =
-      copy_to_arena(f.arena, std::span<const Ident>());
-  CHECK(empty.empty());
+  const std::vector<ast::Ident> empty;
+  const std::span<const ast::Ident> copied_empty =
+      ast::copy_to_arena(f.arena, empty);
+  CHECK(copied_empty.empty());
 }
 
 }  // namespace ast

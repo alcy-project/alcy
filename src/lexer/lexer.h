@@ -32,6 +32,7 @@ class Lexer {
   bool at_end() const;
 
   void skip_trivia(std::vector<Token>& out);
+  TokenKind peek_next_kind() const;
   void lex_identifier(std::vector<Token>& out);
   void lex_number(std::vector<Token>& out);
   void lex_string(std::vector<Token>& out);
