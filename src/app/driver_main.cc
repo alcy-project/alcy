@@ -164,7 +164,7 @@ i32 run_new(const DriverConfig& config) {
   const std::string src_dir = root + "/src";
   const std::string manifest_path =
       root + "/" + std::string(pkg::kManifestFileName);
-  const std::string main_path = src_dir + "/main.alcy";
+  const std::string main_path = src_dir + "/main.al";
 
   const std::string manifest_text =
       "[package]\nname = \"" + root + "\"\nversion = \"0.1.0\"\n";

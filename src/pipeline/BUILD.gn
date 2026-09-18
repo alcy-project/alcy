@@ -1,5 +1,14 @@
 source_set("pipeline") {
-  sources = [ "lib.cc" ]
-  deps = [ "//src:base_modules" ]
+  sources = [
+    "lib.cc",
+    "pipeline.cc",
+    "pipeline.h",
+  ]
+  deps = [
+    "//src:base_modules",
+    "//src/diag",
+    "//src/pkg",
+    "//src/source",
+  ]
   configs += [ "//src:alcy_config" ]
 }
