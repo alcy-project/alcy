@@ -117,7 +117,7 @@ state between stages beyond the data explicitly passed along.
 | `path`                 | Canonical path value type: native-separator folding, lexical normalization, and joining.                                               | Owned strings; setup-time use only.                                               |
 | `ast`                  | Abstract syntax tree node definitions shared by the parser and later stages.                                                           | Arena-allocated nodes; no independent heap allocation outside the arena.          |
 | `ir`                   | Core intermediate representation: functions, blocks, instructions, operands, and types, plus storage that owns them.                   | Flat, arena-backed storage.                                                       |
-| `analyzer`             | Name resolution, type checking, and ownership checking on the IR.                                                                      | No heap allocation on hot paths; operates over immutable IR views where possible. |
+| `analyzer`             | Name resolution and type checking on the AST, plus ownership checking on the IR.                                                       | No heap allocation on hot paths; operates over immutable views where possible.    |
 | `pipeline`             | Project-level build flow: package discovery, source loading, and per-file stage orchestration.                                         | Explicit phase boundaries and arena resets.                                       |
 | `pkg`                  | Stands for `package`. Package manifests (`alcy.toml`), path-only dependency resolution, and lockfile model.                            | Arena-backed views; no heap allocation in the model itself.                       |
 | `source`               | Source file registry: memory-mapped file loading with stable file ids.                                                                 | Mapped files plus small owned tables.                                             |
@@ -254,12 +254,18 @@ Source bytes
 2. **Parsing** — `parser` consumes the token buffer and emits a typed AST
    into the module's arena. IR construction is a later stage.
 
-3. **Semantic analysis** — `analyzer` operates on the IR and performs:
+3. **Semantic analysis** — `analyzer` resolves names and checks types
+   on the attributed AST, then checks ownership on the IR:
 
    * **Name resolution**: mapping interned `SymbolId`s to declarations.
    * **Type checking**: computing and verifying type signatures.
    * **Ownership analysis**: tracking `Move`/`Drop` instructions across the
      control-flow graph to enforce single-ownership guarantees.
+
+   Typed high-level desugars (`?`, `match` lowering, loop lowering) run
+   during AST-to-IR lowering, which consumes the type information above.
+   A separate HIR is revisited only if match-lowering complexity,
+   optimization passes, or region precision demand it.
 
 4. **LLVM code generation** — `codegen_llvm` walks verified basic blocks and
    lowers alcy IR operations to LLVM IR.

@@ -17,6 +17,9 @@
   bodies infer locals intraprocedurally (integer literals default to
   `i32`, float literals to `f64`).
 - Inherent `impl` blocks are MVP; they require no generics machinery.
+- The compiler provides a `print(msg: str)` intrinsic, lowered
+  directly to a write syscall. It migrates to an ordinary core
+  function once FFI lands.
 - `static` items have storage and MUST NOT contain `&mut`.
   `const X: T = ...` items are inline constants restricted to literal
   expressions in MVP (full const evaluation arrives with `comp fn`,
