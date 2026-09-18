@@ -187,8 +187,18 @@ jobs:
           if [ -f LICENSE ]; then cp LICENSE dist/; fi
           if [ -f README.md ]; then cp README.md dist/; fi
 
-          rsync -av --exclude='third_party' --exclude='exe.unstripped' out/build/ dist/ 2>/dev/null || cp -r out/build/* dist/ 2>/dev/null || true
-          rm -rf dist/third_party dist/exe.unstripped
+          # Same allowlist policy as build.yaml: final link outputs only,
+          # never obj/ or the third_party/llvm install. This job builds the
+          # tests target, so only its outputs (plus the archive) exist here.
+          for f in tests tests.js tests.wasm libalcy.a; do
+            if [ -f "out/build/${f}" ]; then
+              cp "out/build/${f}" dist/
+            fi
+          done
+          if ! ls dist/tests* >/dev/null 2>&1; then
+            echo "::error::expected tests output missing in out/build/"
+            exit 1
+          fi
 
           FILE="${{ env.basename }}-wasm-wasm32-${{ matrix.build_type }}.tar.gz"
           cd dist && tar -czvf "../${FILE}" * && cd ..

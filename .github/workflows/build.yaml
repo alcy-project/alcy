@@ -74,19 +74,11 @@ jobs:
           os: ${{ runner.os }}
           llvm-version: ${{ inputs.llvm_version }}
 
-      - name: Cache LLVM tag
+      - name: Cache build directory
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          path: build/scripts/llvm/.llvm_tag_cache
-          # Keyed apart by build type: debug and release resolve different
-          # prebuilt archives, and a shared key would thrash on every run.
-          key: ${{ runner.os }}-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ matrix.nix }}-${{ inputs.llvm_version }}-llvm_tag_cache
-
-      - name: Cache third_party dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: out/build/third_party
-          key: ${{ runner.os }}-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ matrix.nix }}-${{ inputs.llvm_version }}-third_party_dependencies
+          path: out/build
+          key: ${{ runner.os }}-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ matrix.nix }}-${{ inputs.llvm_version }}-build-dir
 
       - name: Build (Nix)
         if: matrix.nix
@@ -121,10 +113,6 @@ jobs:
         if: inputs.role == 'test' && inputs.build_type == 'debug' && runner.os == 'Linux' && !matrix.nix
         shell: bash
         run: uv run ./build/scripts/lint.py
-
-      - name: Clean third_party build outputs
-        shell: bash
-        run: rm -rf out/build/third_party
 
       - name: Verify static linkage (Nix)
         if: matrix.nix && inputs.role == 'dist'
@@ -162,10 +150,23 @@ jobs:
           if [ -f LICENSE ]; then cp LICENSE dist/; fi
           if [ -f README.md ]; then cp README.md dist/; fi
 
-          # Copy binaries from build output, explicitly ignoring third_party
-          # and unstripped intermediates.
-          rsync -av --exclude='third_party' --exclude='exe.unstripped' out/build/ dist/ 2>/dev/null || cp -r out/build/* dist/ 2>/dev/null || true
-          rm -rf dist/third_party dist/exe.unstripped
+          # Ship an explicit allowlist of final link outputs only. The build
+          # directory also holds obj/ and the third_party/llvm install
+          # (hundreds of MB), which must never reach the artifacts. One
+          # package shape serves both CI and releases: everything in it is
+          # shippable, and nothing build-local leaks in.
+          EXE=""
+          if [[ "${{ matrix.plat }}" == "windows" ]]; then EXE=".exe"; fi
+          for bin in alcy tests benchmarks; do
+            if [ -f "out/build/${bin}${EXE}" ]; then
+              cp "out/build/${bin}${EXE}" dist/
+            else
+              echo "::error::expected binary missing: out/build/${bin}${EXE}"
+              exit 1
+            fi
+          done
+          if [ -f out/build/libalcy.a ]; then cp out/build/libalcy.a dist/; fi
+          if [ -f out/build/alcy.lib ]; then cp out/build/alcy.lib dist/; fi
 
           FILE="${{ env.basename }}-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}${{ matrix.nix && '-nix' || '' }}.${{ matrix.archive }}"
           if [[ "${{ matrix.plat }}" == "windows" ]]; then
