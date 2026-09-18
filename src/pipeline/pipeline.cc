@@ -17,6 +17,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/file_handle.h"
+#include "path/path.h"
 #include "pkg/manifest.h"
 #include "pkg/resolve.h"
 #include "source/source.h"
@@ -45,43 +46,24 @@ bool has_source_extension(std::string_view path) {
   return path.substr(path.size() - kSourceExtension.size()) == kSourceExtension;
 }
 
-std::string join_path(std::string_view dir, std::string_view name) {
-  std::string out(dir);
-  out.push_back(source::kDefaultPathSeparator);
-  out.append(name);
-  return out;
-}
-
-// Canonical separator is '/': valid on Windows file APIs too, and it keeps
-// discovered names, lockfiles, and diagnostics portable across platforms.
-std::string canonicalize_separators(std::string_view path) {
-  std::string out(path);
-#if BUILD_FLAG(IS_OS_WIN)
-  for (char& c : out) {
-    if (c == source::kWindowsPathSeparator) {
-      c = source::kDefaultPathSeparator;
-    }
-  }
-#endif
-  return out;
-}
-
 // A directory containing alcy.toml is a nested package: its sources belong
 // to that package, so the subtree is skipped. The walk root itself is never
 // tested, only its children.
-bool is_nested_package(const std::string& dir) {
+bool is_nested_package(const path::Path& dir) {
   io::FileHandle probe;
-  return probe.open(join_path(dir, pkg::kManifestFileName),
+  return probe.open(dir.join(pkg::kManifestFileName).as_view(),
                     io::FileAccess::Read);
 }
 
 // Collects *.al files under dir, recursively. Directory symlinks are never
 // followed, so link cycles are impossible. Unreadable nested entries are
 // skipped. Returns false only when the root itself cannot be opened.
-bool walk_sources(const std::string& dir, std::vector<std::string>& paths) {
+bool walk_sources(const path::Path& dir, std::vector<path::Path>& paths) {
 #if BUILD_FLAG(IS_OS_WIN)
   WIN32_FIND_DATAA found;
-  HANDLE handle = ::FindFirstFileA((dir + "/*").c_str(), &found);
+  const std::string pattern =
+      std::string(dir.as_view()) + path::kDefaultPathSeparator + "*";
+  HANDLE handle = ::FindFirstFileA(pattern.c_str(), &found);
   if (handle == INVALID_HANDLE_VALUE) {
     return false;
   }
@@ -90,7 +72,7 @@ bool walk_sources(const std::string& dir, std::vector<std::string>& paths) {
     if (name == "." || name == "..") {
       continue;
     }
-    const std::string full = join_path(dir, name);
+    const path::Path full = dir.join(name);
     const bool is_dir =
         (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
     const bool is_link =
@@ -99,7 +81,7 @@ bool walk_sources(const std::string& dir, std::vector<std::string>& paths) {
       if (!is_nested_package(full)) {
         walk_sources(full, paths);
       }
-    } else if (!is_dir && has_source_extension(full)) {
+    } else if (!is_dir && has_source_extension(full.as_view())) {
       paths.push_back(full);
     }
   } while (::FindNextFileA(handle, &found) != 0);
@@ -115,7 +97,7 @@ bool walk_sources(const std::string& dir, std::vector<std::string>& paths) {
     if (name == "." || name == "..") {
       continue;
     }
-    const std::string full = join_path(dir, name);
+    const path::Path full = dir.join(name);
     struct stat info;
     // lstat: never follow symlinks, so link cycles are impossible.
     if (::lstat(full.c_str(), &info) != 0) {
@@ -125,7 +107,7 @@ bool walk_sources(const std::string& dir, std::vector<std::string>& paths) {
       if (!is_nested_package(full)) {
         walk_sources(full, paths);
       }
-    } else if (S_ISREG(info.st_mode) && has_source_extension(full)) {
+    } else if (S_ISREG(info.st_mode) && has_source_extension(full.as_view())) {
       paths.push_back(full);
     }
   }
@@ -148,9 +130,16 @@ diag::Fallible<DiscoveredSources> discover_sources(
     std::string_view dir,
     source::SourceManager& sources,
     diag::DiagBag& bag) {
-  const std::string root = canonicalize_separators(dir);
-  std::vector<std::string> paths;
-  if (!walk_sources(root, paths)) {
+  base::Result<path::Path, path::PathError> root = path::Path::from_native(dir);
+  if (root.is_err()) {
+    const u32 index = bag.emit(diag::Severity::Error, kPipelineIoError,
+                               "invalid source directory '{}'", dir);
+    (void)index;
+    return base::make_err(diag::Fatal{});
+  }
+  const path::Path root_path = std::move(root).unwrap();
+  std::vector<path::Path> paths;
+  if (!walk_sources(root_path, paths)) {
     const u32 index = bag.emit(diag::Severity::Error, kPipelineIoError,
                                "source directory '{}' is not accessible", dir);
     (void)index;
@@ -165,13 +154,14 @@ diag::Fallible<DiscoveredSources> discover_sources(
   std::sort(paths.begin(), paths.end());
 
   DiscoveredSources discovered;
-  discovered.root = root;
-  for (const std::string& path : paths) {
+  discovered.root = std::string(root_path.as_view());
+  for (const path::Path& path : paths) {
     base::Result<source::FileId, source::SourceError> loaded =
-        sources.load(path);
+        sources.load(path.as_view());
     if (loaded.is_err()) {
-      const u32 index = bag.emit(diag::Severity::Error, kPipelineIoError,
-                                 "cannot read source file '{}'", path);
+      const u32 index =
+          bag.emit(diag::Severity::Error, kPipelineIoError,
+                   "cannot read source file '{}'", path.as_view());
       (void)index;
       return base::make_err(diag::Fatal{});
     }
@@ -187,7 +177,7 @@ diag::Fallible<ProjectBuild> compile_project(
   ProjectBuild build;
   for (const pkg::ResolvedPackage& package : packages) {
     diag::Fallible<DiscoveredSources> discovered =
-        discover_sources(package.dir, sources, bag);
+        discover_sources(package.dir.as_view(), sources, bag);
     if (discovered.is_err()) {
       return base::make_err(diag::Fatal{});
     }

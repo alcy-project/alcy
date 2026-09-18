@@ -63,7 +63,7 @@ Lockfile lock_resolved(const std::vector<ResolvedPackage>& resolved,
   for (usize i = 0; i < resolved.size(); ++i) {
     const ResolvedPackage& package = resolved[i];
     std::string source = "path+file://";
-    source += package.dir;
+    source += package.dir.as_view();
     packages[i] = LockedPackage{
         .name = copy_str(arena, package.manifest.name),
         .version = package.manifest.version,

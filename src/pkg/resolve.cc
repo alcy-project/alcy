@@ -4,17 +4,16 @@
 
 #include "pkg/resolve.h"
 
-#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
-#include "cfg/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
+#include "path/path.h"
 #include "pkg/manifest.h"
 #include "source/source.h"
 
@@ -26,99 +25,37 @@ namespace {
 constexpr u32 kResolveIoError = 2100;
 constexpr u32 kResolveCycleError = 2101;
 
-std::string join_path(std::string_view dir, std::string_view name) {
-  std::string out(dir);
-  if (!out.empty() && out.back() != source::kDefaultPathSeparator) {
-    out.push_back(source::kDefaultPathSeparator);
-  }
-  out.append(name);
-  return out;
-}
-
-// Lexically normalizes a path: collapses duplicate separators, resolves "."
-// and resolvable ".." segments, strips trailing slashes. The canonical
-// separator is '/' (valid on Windows APIs too); on Windows a '\' folds to
-// '/' first so native and joined spellings compare equal. Symlinks are not
-// resolved, so cycle detection covers spelling variants. Empty results
-// normalize to ".".
-std::string normalize_path(std::string_view path) {
-#if BUILD_FLAG(IS_OS_WIN)
-  std::string folded(path);
-  for (char& c : folded) {
-    if (c == source::kWindowsPathSeparator) {
-      c = source::kDefaultPathSeparator;
-    }
-  }
-  path = folded;
-#endif
-  const bool absolute =
-      !path.empty() && path.front() == source::kDefaultPathSeparator;
-  std::string out;
-  std::vector<usize> starts;
-  usize i = absolute ? 1 : 0;
-  while (i <= path.size()) {
-    usize end = i;
-    while (end < path.size() && path[end] != source::kDefaultPathSeparator) {
-      ++end;
-    }
-    const std::string_view part = path.substr(i, end - i);
-    if (part.empty() || part == ".") {
-      // Skip.
-    } else if (part == "..") {
-      if (!starts.empty()) {
-        out.resize(starts.back());
-        starts.pop_back();
-      } else if (!absolute) {
-        if (!out.empty()) {
-          out.push_back(source::kDefaultPathSeparator);
-        }
-        out.append("..");
-      }
-    } else {
-      starts.push_back(static_cast<usize>(out.size()));
-      if (!out.empty()) {
-        out.push_back(source::kDefaultPathSeparator);
-      }
-      out.append(part);
-    }
-    i = end + 1;
-  }
-  if (absolute) {
-    return std::string(1, source::kDefaultPathSeparator) + out;
-  }
-  return out.empty() ? "." : out;
-}
-
 diag::Fallible<std::vector<ResolvedPackage>> resolve_into(
-    const std::string& canonical_dir,
+    const path::Path& canonical_dir,
     source::SourceManager& sources,
     mem::Arena& arena,
     diag::DiagBag& bag,
-    std::vector<std::string>& visited) {
-  for (const std::string& seen : visited) {
+    std::vector<path::Path>& visited) {
+  for (const path::Path& seen : visited) {
     if (seen == canonical_dir) {
-      const u32 index =
-          bag.emit(diag::Severity::Error, kResolveCycleError,
-                   "dependency cycle detected at '{}'", canonical_dir);
+      const u32 index = bag.emit(diag::Severity::Error, kResolveCycleError,
+                                 "dependency cycle detected at '{}'",
+                                 canonical_dir.as_view());
       (void)index;
       return base::make_err(diag::Fatal{});
     }
   }
   visited.push_back(canonical_dir);
 
-  const std::string manifest_path = join_path(canonical_dir, kManifestFileName);
+  const path::Path manifest_path = canonical_dir.join(kManifestFileName);
   base::Result<source::FileId, source::SourceError> loaded =
-      sources.load(manifest_path);
+      sources.load(manifest_path.as_view());
   if (loaded.is_err()) {
-    const u32 index = bag.emit(diag::Severity::Error, kResolveIoError,
-                               "cannot read manifest '{}'", manifest_path);
+    const u32 index =
+        bag.emit(diag::Severity::Error, kResolveIoError,
+                 "cannot read manifest '{}'", manifest_path.as_view());
     (void)index;
     return base::make_err(diag::Fatal{});
   }
   const source::FileId file = std::move(loaded).unwrap();
 
-  diag::Fallible<PackageManifest> parsed =
-      parse_manifest(sources.bytes(file), manifest_path, file, bag, arena);
+  diag::Fallible<PackageManifest> parsed = parse_manifest(
+      sources.bytes(file), manifest_path.as_view(), file, bag, arena);
   if (parsed.is_err()) {
     return base::make_err(diag::Fatal{});
   }
@@ -136,10 +73,8 @@ diag::Fallible<std::vector<ResolvedPackage>> resolve_into(
   const u32 root_dep_count = resolved.front().manifest.dependency_count;
   for (u32 i = 0; i < root_dep_count; ++i) {
     const Dependency& dep = root_deps[i];
-    const std::string joined = join_path(canonical_dir, dep.path);
-    const std::string canonical = normalize_path(joined);
-    diag::Fallible<std::vector<ResolvedPackage>> child =
-        resolve_into(canonical, sources, arena, bag, visited);
+    diag::Fallible<std::vector<ResolvedPackage>> child = resolve_into(
+        canonical_dir.join(dep.path), sources, arena, bag, visited);
     if (child.is_err()) {
       return base::make_err(diag::Fatal{});
     }
@@ -159,9 +94,17 @@ diag::Fallible<std::vector<ResolvedPackage>> resolve_package(
     source::SourceManager& sources,
     mem::Arena& arena,
     diag::DiagBag& bag) {
-  const std::string canonical = normalize_path(dir);
-  std::vector<std::string> visited;
-  return resolve_into(canonical, sources, arena, bag, visited);
+  base::Result<path::Path, path::PathError> canonical =
+      path::Path::from_native(dir);
+  if (canonical.is_err()) {
+    const u32 index = bag.emit(diag::Severity::Error, kResolveIoError,
+                               "invalid package directory '{}'", dir);
+    (void)index;
+    return base::make_err(diag::Fatal{});
+  }
+  std::vector<path::Path> visited;
+  return resolve_into(std::move(canonical).unwrap(), sources, arena, bag,
+                      visited);
 }
 
 }  // namespace pkg

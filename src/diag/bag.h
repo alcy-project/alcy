@@ -33,7 +33,7 @@ using Fallible = base::Result<T, Fatal>;
 // Arena-backed bag of diagnostics gathered during one compilation phase.
 //
 // The arena is injected, not owned: construct DiagBag over a caller-reserved
-// mem::Arena (cold path only — message composition is the only allocation,
+// mem::Arena (cold path only - message composition is the only allocation,
 // and it bumps the injected arena rather than the heap).
 //
 // Diagnostics are addressed by stable u32 indices: the entries array can

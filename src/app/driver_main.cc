@@ -27,6 +27,7 @@
 #include "fpag/mem/arena.h"
 #include "fpag/term/color_mode.h"
 #include "fpag/term/console.h"
+#include "path/path.h"
 #include "pipeline/pipeline.h"
 #include "pkg/manifest.h"
 #include "pkg/resolve.h"
@@ -63,10 +64,10 @@ void report(const diag::DiagBag& bag, const source::SourceManager& sources) {
   });
 }
 
-bool make_dirs(const std::string& path) {
+bool make_dirs(std::string_view path) {
   std::string current;
   for (usize i = 0; i <= path.size(); ++i) {
-    if (i == path.size() || path[i] == source::kDefaultPathSeparator) {
+    if (i == path.size() || path[i] == path::kDefaultPathSeparator) {
       if (!current.empty()) {
 #if BUILD_FLAG(IS_OS_WIN)
         ::_mkdir(current.c_str());
@@ -82,8 +83,11 @@ bool make_dirs(const std::string& path) {
   return true;
 }
 
-bool write_text_file(const std::string& path, std::string_view content) {
-  std::FILE* file = std::fopen(path.c_str(), "wb");
+bool write_text_file(std::string_view path, std::string_view content) {
+  // Copy first: fopen requires a null-terminated path, which only an owned
+  // copy guarantees.
+  const std::string owned(path);
+  std::FILE* file = std::fopen(owned.c_str(), "wb");
   if (file == nullptr) {
     return false;
   }
@@ -97,17 +101,25 @@ i32 run_build(const DriverConfig& config) {
   // TODO: picks up --release (config.release) once codegen lands.
   (void)config.release;
 
-  const std::string_view dir =
+  const std::string_view raw_dir =
       config.target_dir.empty() ? "." : config.target_dir;
-  const std::string manifest_path = std::string(dir) +
-                                    source::kDefaultPathSeparator +
-                                    std::string(pkg::kManifestFileName);
+  base::Result<path::Path, path::PathError> dir =
+      path::Path::from_native(raw_dir);
+  if (dir.is_err()) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kDriverIoError,
+                                   "invalid target directory '{}'", raw_dir);
+    (void)index;
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::BuildFailed);
+  }
+  const path::Path root = std::move(dir).unwrap();
+  const path::Path manifest_path = root.join(pkg::kManifestFileName);
 
   base::Result<source::FileId, source::SourceError> manifest =
-      ctx.sources.load(manifest_path);
+      ctx.sources.load(manifest_path.as_view());
   if (manifest.is_ok()) {
     diag::Fallible<std::vector<pkg::ResolvedPackage>> resolved =
-        pkg::resolve_package(dir, ctx.sources, ctx.arena, ctx.bag);
+        pkg::resolve_package(root.as_view(), ctx.sources, ctx.arena, ctx.bag);
     if (resolved.is_err()) {
       report(ctx.bag, ctx.sources);
       return result_code(ResultCode::BuildFailed);
@@ -126,10 +138,10 @@ i32 run_build(const DriverConfig& config) {
 
   const u32 index = ctx.bag.emit(
       diag::Severity::Warning, kDriverNoManifest,
-      "no manifest found at '{}'; building directory directly", dir);
+      "no manifest found at '{}'; building directory directly", raw_dir);
   (void)index;
   diag::Fallible<pipeline::DiscoveredSources> discovered =
-      pipeline::discover_sources(dir, ctx.sources, ctx.bag);
+      pipeline::discover_sources(root.as_view(), ctx.sources, ctx.bag);
   report(ctx.bag, ctx.sources);
   if (discovered.is_err() || ctx.bag.has_errors()) {
     return result_code(ResultCode::BuildFailed);
@@ -161,25 +173,36 @@ i32 run_new(const DriverConfig& config) {
   }
 
   DriverContext ctx;
-  const std::string root(config.target_dir);
-  const std::string src_dir = root + source::kDefaultPathSeparator + "src";
-  const std::string manifest_path = root + source::kDefaultPathSeparator +
-                                    std::string(pkg::kManifestFileName);
-  const std::string main_path =
-      src_dir + source::kDefaultPathSeparator + "main.al";
-
-  const std::string manifest_text =
-      "[package]\nname = \"" + root + "\"\nversion = \"0.1.0\"\n";
-  static constexpr std::string_view kMainText = "// Write your code here.\n";
-  if (!make_dirs(src_dir) || !write_text_file(manifest_path, manifest_text) ||
-      !write_text_file(main_path, kMainText)) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, kDriverIoError,
-                                   "cannot create package '{}'", root);
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(config.target_dir);
+  if (root.is_err()) {
+    const u32 index =
+        ctx.bag.emit(diag::Severity::Error, kDriverIoError,
+                     "cannot create package '{}'", config.target_dir);
     (void)index;
     report(ctx.bag, ctx.sources);
     return result_code(ResultCode::BuildFailed);
   }
-  base::logger.wo_prefix("created package '{}'", root);
+  const path::Path package_dir = std::move(root).unwrap();
+  const path::Path src_dir = package_dir.join("src");
+  const path::Path manifest_path = package_dir.join(pkg::kManifestFileName);
+  const path::Path main_path = src_dir.join("main.al");
+
+  const std::string manifest_text = "[package]\nname = \"" +
+                                    std::string(package_dir.as_view()) +
+                                    "\"\nversion = \"0.1.0\"\n";
+  static constexpr std::string_view kMainText = "// Write your code here.\n";
+  if (!make_dirs(src_dir.as_view()) ||
+      !write_text_file(manifest_path.as_view(), manifest_text) ||
+      !write_text_file(main_path.as_view(), kMainText)) {
+    const u32 index =
+        ctx.bag.emit(diag::Severity::Error, kDriverIoError,
+                     "cannot create package '{}'", package_dir.as_view());
+    (void)index;
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::BuildFailed);
+  }
+  base::logger.wo_prefix("created package '{}'", package_dir.as_view());
   return result_code(ResultCode::Success);
 }
 

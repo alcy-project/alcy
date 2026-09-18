@@ -10,6 +10,7 @@
 
 #include "diag/bag.h"
 #include "fpag/mem/arena.h"
+#include "path/path.h"
 #include "pkg/manifest.h"
 #include "source/source.h"
 
@@ -18,7 +19,7 @@ namespace pkg {
 struct ResolvedPackage {
   PackageManifest manifest;
   // Canonical directory path (owns its bytes).
-  std::string dir;
+  path::Path dir;
   // Manifest file id in the SourceManager passed to resolve_package().
   source::FileId manifest_file = source::kUnknownFile;
 };
