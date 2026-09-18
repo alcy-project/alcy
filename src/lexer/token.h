@@ -107,6 +107,7 @@ enum class TokenKind : u8 {
   GreaterGreaterEq,
   ColonEq,
   Eq,
+  EqEq,
   Bang,
   AmpAmp,
   PipePipe,
@@ -134,6 +135,11 @@ enum class TokenKind : u8 {
   RBracket,
   Question,
   Semicolon,
+  Hash,        // Reserved for future attributes; rejected with guidance.
+  Underscore,  // Wildcard patterns and explicit discards.
+
+  // Identifiers.
+  Ident,
 
   // Special.
   DocComment,

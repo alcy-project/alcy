@@ -31,7 +31,8 @@ strings; `'...'` characters (resolved to core `Char`; see
 Operators and delimiters: `+ - * / % **` `& | ^ ~ << >>` and
 assignment forms; `:=` (declare), `=` (reassign); `!` `&&` `||`
 `!=` `>` `<` `>=` `<=`; `->` `=>` `:` `::` `,` `.` `..` `..=` `..<`
-`(` `)` `{` `}` `[` `]` `?` (error propagation). `;` separates
+`(` `)` `{` `}` `[` `]` `?` (error propagation), `_` (wildcard),
+`#` (reserved for future attributes). `;` separates
 multiple statements on one line only.
 
 Comments: `//`, `/* */`, `///` (only one doc-comment style is MVP).
