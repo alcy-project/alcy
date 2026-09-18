@@ -35,10 +35,11 @@ runs:
 
     - name: Setup build environment (Standard)
       if: inputs.nix != 'true'
-      uses: pug523/actions/cxx-gn-setup@e4abb74456e529372bb1b7ebb71db1b647be3fd1
+      uses: pug523/actions/cxx-gn-setup@e176db8dcd0f9279f1cd45ea43ff0ee144795cd4
       with:
         os: ${{ inputs.os }}
         llvm_version: ${{ inputs.llvm-version }}
+        directory: ${{ runner.temp }}/llvm
 
     # GN resolves libc++ headers and libraries through these variables
     # (see docs/build.md). Windows uses the MSVC STL instead.
