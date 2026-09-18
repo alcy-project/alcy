@@ -30,6 +30,10 @@ uv run ./build/scripts/run.py --target=tests --mode=debug
 uv run ./build/scripts/build.py --target=all --mode=release
 ```
 
+`default` builds the compiler group only; test and benchmark executables
+are not referenced by any group, so they build solely under `all` (or when
+named explicitly, e.g. `--target=tests`).
+
 Without `uv`, the shell wrappers `./build/scripts/build.sh` and
 `./build/scripts/run.sh` accept the same arguments.
 
