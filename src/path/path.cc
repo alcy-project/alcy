@@ -82,12 +82,12 @@ base::Result<Path, PathError> Path::from_native(std::string_view path) {
 
 Path Path::join(std::string_view child) const {
   std::string out = value_;
+  out.push_back(kDefaultPathSeparator);
 #if BUILD_FLAG(IS_OS_WIN)
   for (const char c : child) {
     out.push_back(c == kWindowsPathSeparator ? kDefaultPathSeparator : c);
   }
 #else
-  out.push_back(kDefaultPathSeparator);
   out.append(child);
 #endif
   return Path(normalize_canonical(out));
