@@ -1,5 +1,11 @@
 source_set("lexer") {
-  sources = [ "lib.cc" ]
-  deps = [ "//src:base_modules" ]
+  sources = [
+    "lib.cc",
+    "token.h",
+  ]
+  deps = [
+    "//src:base_modules",
+    "//src/diag",
+  ]
   configs += [ "//src:alcy_config" ]
 }
