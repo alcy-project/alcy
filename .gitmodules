@@ -13,3 +13,6 @@
 [submodule "third_party/xxhash/src"]
 	path = third_party/xxhash/src
 	url = https://github.com/cyan4973/xxhash
+[submodule "third_party/toml/src"]
+	path = third_party/toml/src
+	url = https://github.com/marzer/tomlplusplus.git

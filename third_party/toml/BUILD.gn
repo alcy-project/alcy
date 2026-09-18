@@ -1,0 +1,10 @@
+config("toml_config") {
+  include_dirs = [ "src/include" ]
+}
+
+# toml++ is header-only by default (TOML_HEADER_ONLY=1); no sources needed.
+source_set("toml") {
+  configs = []
+  configs = default_third_party_configs
+  public_configs = [ ":toml_config" ]
+}
