@@ -29,7 +29,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  # Keep in sync with the `llvm_version` default in build.yaml and docs/build.md.
+  # Used by the `wasm` and `style` jobs below. Reusable workflow calls cannot
+  # read env (GitHub restriction), so build.yaml's `llvm_version` input
+  # default is the single source of truth there; keep the two in sync.
   LLVM_VERSION: 23.1.1
 
 jobs:
@@ -44,16 +46,16 @@ jobs:
           submodules: false
           fetch-depth: 1
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      # Same toolchain the lint legs use (clang-format and `gn format` both
+      # need it). Nix would work too, but its store download is uncached and
+      # the flake lacks clang tools, so the standard setup stays faster here.
+      - name: Setup build environment
+        uses: ./.github/actions/setup-build
         with:
-          enable-cache: true
-
-      - name: Set up Python virtual environment
-        run: |
-          uv python install
-          uv sync --frozen
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+          nix: "false"
+          os: Linux
+          llvm-version: ${{ env.LLVM_VERSION }}
+          fetch-tags: "false"
 
       # Neither check compiles anything, so they share one runner with no
       # contention over build locks.
@@ -69,9 +71,6 @@ jobs:
     with:
       build_type: debug
       role: test
-      # Literal: the env context is not available in reusable-workflow `with:`.
-      # Keep in sync with the LLVM_VERSION env above and release.yaml.
-      llvm_version: "23.1.1"
 
   test-release:
     name: Test (release)
@@ -79,9 +78,6 @@ jobs:
     with:
       build_type: release
       role: test
-      # Literal: the env context is not available in reusable-workflow `with:`.
-      # Keep in sync with the LLVM_VERSION env above and release.yaml.
-      llvm_version: "23.1.1"
 
   # Intentionally not gated on the test jobs: waiting would give back exactly
   # the wall clock the split was meant to save, and a red run is already
@@ -92,9 +88,6 @@ jobs:
     with:
       build_type: release
       role: dist
-      # Literal: the env context is not available in reusable-workflow `with:`.
-      # Keep in sync with the LLVM_VERSION env above and release.yaml.
-      llvm_version: "23.1.1"
 
   # Split out of build.yaml: wasm needs Emscripten instead of the
   # prebuilt-LLVM/Nix toolchains, so sharing the native matrix only added

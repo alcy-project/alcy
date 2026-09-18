@@ -13,7 +13,7 @@ on:
         required: true
         type: string
       llvm_version:
-        description: "Prebuilt LLVM version for standard legs. Keep in sync with the LLVM_VERSION env in ci.yaml."
+        description: "Prebuilt LLVM version for standard legs. This default is the single source of truth (callers must not pass env here); keep in sync with docs/build.md."
         required: false
         type: string
         default: "23.1.1"
@@ -83,13 +83,16 @@ jobs:
       - name: Build (Nix)
         if: matrix.nix
         shell: bash
+        # dist builds `all`: an explicit `ninja default` only covers
+        # phony/default (group alcy), while the tests/benchmarks executables
+        # are orphans that exist solely under `all`.
         run: |
-          nix develop .#default --command bash -c "uv run ./build/scripts/build.py --target=default --mode=${{ inputs.build_type }} --build-subdir=build"
+          nix develop .#default --command bash -c "uv run ./build/scripts/build.py --target=${{ inputs.role == 'dist' && 'all' || 'default' }} --mode=${{ inputs.build_type }} --build-subdir=build"
 
       - name: Build (Standard)
         if: "!matrix.nix"
         shell: bash
-        run: uv run ./build/scripts/build.py --target=default --mode=${{ inputs.build_type }} --build-subdir=build
+        run: uv run ./build/scripts/build.py --target=${{ inputs.role == 'dist' && 'all' || 'default' }} --mode=${{ inputs.build_type }} --build-subdir=build
 
       # The test role keeps the debug and release test signal identical to
       # the old layout; the dist role skips this so packaging never waits

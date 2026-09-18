@@ -18,6 +18,10 @@ inputs:
     description: "Prebuilt LLVM version. Ignored for Nix, which pins LLVM via flake.nix."
     required: false
     default: ""
+  fetch-tags:
+    description: "'false' skips fetching LLVM submodule tags (for jobs that never configure a build, e.g. style)."
+    required: false
+    default: "true"
 
 runs:
   using: composite
@@ -69,6 +73,7 @@ runs:
     # The LLVM setup resolves its prebuilt archive with `git describe --tags`
     # inside the submodule, so a shallow tag-less checkout fails without this.
     - name: Fetch LLVM submodule tags
+      if: inputs.fetch-tags == 'true'
       shell: bash
       run: |
         git -C third_party/llvm/src fetch --tags --depth=1

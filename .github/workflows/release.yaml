@@ -9,19 +9,12 @@ on:
       - "v*"
   workflow_dispatch:
 
-env:
-  # Keep in sync with the LLVM_VERSION env in ci.yaml.
-  LLVM_VERSION: 23.1.1
-
 jobs:
   build-release:
     uses: ./.github/workflows/build.yaml
     with:
       build_type: release
       role: dist
-      # Literal: the env context is not available in reusable-workflow `with:`.
-      # Keep in sync with the LLVM_VERSION env in ci.yaml.
-      llvm_version: "23.1.1"
 
   publish:
     needs: build-release
