@@ -4,6 +4,7 @@ extend-exclude = [
   "third_party/fmt/src",
   "third_party/fpag/src",
   "third_party/llvm/src",
+  "third_party/toml/src",
   "third_party/xxhash/src",
 ]
 
