@@ -101,7 +101,7 @@ jobs:
   # `if: plat == 'wasm'` branches everywhere.
   wasm:
     name: WebAssembly (${{ matrix.build_type }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -171,14 +171,14 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: build/scripts/llvm/.llvm_tag_cache
-          key: ubuntu-24.04-wasm-wasm32-${{ matrix.build_type }}-false-${{ env.LLVM_VERSION }}-llvm_tag_cache
+          key: ubuntu-26.04-wasm-wasm32-${{ matrix.build_type }}-false-${{ env.LLVM_VERSION }}-llvm_tag_cache
 
       - name: Cache third_party dependencies
         if: steps.asset.outputs.exists == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: out/build/third_party
-          key: ubuntu-24.04-wasm-wasm32-${{ matrix.build_type }}-false-${{ env.LLVM_VERSION }}-third_party_dependencies
+          key: ubuntu-26.04-wasm-wasm32-${{ matrix.build_type }}-false-${{ env.LLVM_VERSION }}-third_party_dependencies
 
       - name: Build tests and run
         if: steps.asset.outputs.exists == 'true'
