@@ -4,24 +4,18 @@
 
 #include "app/init_handler.h"
 
-#include "base/logger.h"
 #include "fpag/debug/exit_handler.h"
 #include "fpag/debug/signal_handler.h"
 #include "fpag/debug/terminate_handler.h"
-#include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
 
 namespace app {
 
-void init() {
+void init_runtime() {
   term::register_console();
   debug::register_exit_handler();
   debug::register_terminate_handler();
   debug::register_signal_handlers();
-
-  const term::ColorStyle style =
-      term::console_color_style(term::Stream::Stdout);
-  base::init_logger(style);
 }
 
 }  // namespace app

@@ -1,6 +1,8 @@
 executable("tests") {
   sources = [
+    "app/new_command_test.cc",
     "app/parse_args_test.cc",
+    "app/parse_output_test.cc",
     "ast/ast_test.cc",
     "codegen_llvm/llvm_ir_emitter_test.cc",
     "diag/bag_test.cc",

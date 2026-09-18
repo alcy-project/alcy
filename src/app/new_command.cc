@@ -1,0 +1,121 @@
+// Copyright 2026 The Alcy Project Authors
+// This source code is licensed under the Apache License, Version 2.0 with LLVM
+// Exceptions which can be found in the LICENSE file.
+
+#include "app/new_command.h"
+
+#include <cstdio>
+#include <string>
+#include <string_view>
+#include <utility>
+
+#include "app/driver_context.h"
+#include "app/result_code.h"
+#include "base/logger.h"
+#include "cfg/build_config.h"
+#include "diag/bag.h"
+#include "diag/diagnostic.h"
+#include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
+#include "path/path.h"
+#include "pkg/manifest.h"
+
+#if BUILD_FLAG(IS_OS_WIN)
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
+
+namespace app {
+
+namespace {
+
+bool make_dirs(std::string_view path) {
+  std::string current;
+  for (usize i = 0; i <= path.size(); ++i) {
+    if (i == path.size() || path[i] == path::kDefaultPathSeparator) {
+      if (!current.empty()) {
+#if BUILD_FLAG(IS_OS_WIN)
+        ::_mkdir(current.c_str());
+#else
+        ::mkdir(current.c_str(), 0755);
+#endif
+      }
+    }
+    if (i < path.size()) {
+      current.push_back(path[i]);
+    }
+  }
+  return true;
+}
+
+bool write_text_file(std::string_view path, std::string_view content) {
+  // Copy first: fopen requires a null-terminated path, which only an owned
+  // copy guarantees.
+  const std::string owned(path);
+  std::FILE* file = std::fopen(owned.c_str(), "wb");
+  if (file == nullptr) {
+    return false;
+  }
+  const usize written = std::fwrite(content.data(), 1, content.size(), file);
+  std::fclose(file);
+  return written == content.size();
+}
+
+}  // namespace
+
+bool valid_package_name(std::string_view name) {
+  if (name.empty()) {
+    return false;
+  }
+  for (const char c : name) {
+    const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                    (c >= '0' && c <= '9') || c == '_' || c == '-';
+    if (!ok) {
+      return false;
+    }
+  }
+  return true;
+}
+
+i32 run_new(std::string_view target_dir) {
+  if (!valid_package_name(target_dir)) {
+    base::logger.wo_prefix("invalid package name '{}'; use [A-Za-z0-9_-] only",
+                           target_dir);
+    return result_code(ResultCode::ArgParseError);
+  }
+
+  DriverContext ctx;
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(target_dir);
+  if (root.is_err()) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kDriverIoError,
+                                   "cannot create package '{}'", target_dir);
+    (void)index;
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::BuildFailed);
+  }
+  const path::Path package_dir = std::move(root).unwrap();
+  const path::Path src_dir = package_dir.join("src");
+  const path::Path manifest_path = package_dir.join(pkg::kManifestFileName);
+  const path::Path main_path = src_dir.join("main.al");
+
+  const std::string manifest_text = "[package]\nname = \"" +
+                                    std::string(package_dir.as_view()) +
+                                    "\"\nversion = \"0.1.0\"\n";
+  static constexpr std::string_view kMainText = "// Write your code here.\n";
+  if (!make_dirs(src_dir.as_view()) ||
+      !write_text_file(manifest_path.as_view(), manifest_text) ||
+      !write_text_file(main_path.as_view(), kMainText)) {
+    const u32 index =
+        ctx.bag.emit(diag::Severity::Error, kDriverIoError,
+                     "cannot create package '{}'", package_dir.as_view());
+    (void)index;
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::BuildFailed);
+  }
+  base::logger.wo_prefix("created package '{}'", package_dir.as_view());
+  return result_code(ResultCode::Success);
+}
+
+}  // namespace app

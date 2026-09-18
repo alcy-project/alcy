@@ -4,11 +4,15 @@
 
 #pragma once
 
+#include <string_view>
+
+#include "fpag/base/numeric.h"
+
 namespace app {
 
-// Registers console, exit, terminate, and signal handlers. Does not touch
-// the logger: driver_main initializes it after argument parsing so the
-// resolved --color mode applies from the first message.
-void init_runtime();
+bool valid_package_name(std::string_view name);
+
+// Scaffolds a new package directory. Returns the process exit code.
+i32 run_new(std::string_view target_dir);
 
 }  // namespace app

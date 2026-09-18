@@ -85,7 +85,7 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
       return llvm::ArrayType::get(type(array_type.element), array_type.count);
     }
     default: {
-      DLOG("unsupported type: {}", tag);
+      DLOG("Unsupported type: {}", tag);
       DCHECK(false);
       UNREACHABLE();
     }
@@ -433,7 +433,7 @@ void LlvmIrEmitter::setup_immutables() {
     } else if (tag == ir::TypeTag::Str) {
       const std::string_view str_val =
           interner_->get(immutable.data.str_id_value);
-      DLOG("str_val: {}", str_val);
+      // DLOG("str_val: {}", str_val);
       llvm::Constant* str_const = builder_->CreateGlobalString(
           llvm::StringRef(str_val), "", 0, module_);
       values_.add_immutable(immutable_idx, str_const);

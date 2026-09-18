@@ -1,14 +1,19 @@
 source_set("driver") {
   sources = [
     "converters.h",
-    "driver_config.cc",
     "driver_config.h",
+    "driver_context.cc",
+    "driver_context.h",
     "driver_main.cc",
     "driver_main.h",
     "init_handler.cc",
     "init_handler.h",
+    "new_command.cc",
+    "new_command.h",
     "parse_args.cc",
     "parse_args.h",
+    "parse_output.cc",
+    "parse_output.h",
     "result_code.h",
   ]
   defines = [

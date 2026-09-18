@@ -198,7 +198,7 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
         result =
             builder_->CreateICmp(int_predicate(i.op, false), lhs_val, rhs_val);
       } else {
-        DLOG("unsupported comparison type: {}", tag);
+        DLOG("Unsupported comparison type: {}", tag);
         DCHECK(false);
         UNREACHABLE();
       }
@@ -250,7 +250,7 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
       } else if (src_tag == ir::TypeTag::Ptr && ir::is_integer_type(dst_tag)) {
         result = builder_->CreatePtrToInt(value, dst_ty);
       } else {
-        DLOG("unsupported cast");
+        DLOG("Unsupported cast");
         DCHECK(false);
         UNREACHABLE();
       }

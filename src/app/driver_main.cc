@@ -4,28 +4,28 @@
 
 #include "app/driver_main.h"
 
-#include <cstdio>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include "app/driver_config.h"
+#include "app/driver_context.h"
 #include "app/init_handler.h"
+#include "app/new_command.h"
 #include "app/parse_args.h"
+#include "app/parse_output.h"
 #include "app/result_code.h"
 #include "base/logger.h"
-#include "cfg/build_config.h"
 #include "debug/fatal.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
-#include "diag/render.h"
-#include "fmt/format.h"
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/mem/arena.h"
 #include "fpag/term/color_mode.h"
+#include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
 #include "path/path.h"
 #include "pipeline/pipeline.h"
@@ -33,68 +33,9 @@
 #include "pkg/resolve.h"
 #include "source/source.h"
 
-#if BUILD_FLAG(IS_OS_WIN)
-#include <direct.h>
-#else
-#include <sys/stat.h>
-#endif
-
 namespace app {
 
 namespace {
-
-// Diagnostic codes 3000-3099 are reserved for the driver.
-constexpr u32 kDriverNoManifest = 3000;
-constexpr u32 kDriverIoError = 3001;
-constexpr u32 kDriverNotImplemented = 3002;
-
-struct DriverContext {
-  mem::Arena arena;
-  source::SourceManager sources;
-  diag::DiagBag bag;
-
-  DriverContext() : bag(arena) { arena.reserve(1u << 20); }
-};
-
-void report(const diag::DiagBag& bag, const source::SourceManager& sources) {
-  bag.for_each([&](const diag::Diagnostic& diag) {
-    fmt::memory_buffer out;
-    diag::render(diag, out, {}, pipeline::fetch_source, &sources);
-    base::logger.wo_prefix("{}", std::string_view(out.data(), out.size()));
-  });
-}
-
-bool make_dirs(std::string_view path) {
-  std::string current;
-  for (usize i = 0; i <= path.size(); ++i) {
-    if (i == path.size() || path[i] == path::kDefaultPathSeparator) {
-      if (!current.empty()) {
-#if BUILD_FLAG(IS_OS_WIN)
-        ::_mkdir(current.c_str());
-#else
-        ::mkdir(current.c_str(), 0755);
-#endif
-      }
-    }
-    if (i < path.size()) {
-      current.push_back(path[i]);
-    }
-  }
-  return true;
-}
-
-bool write_text_file(std::string_view path, std::string_view content) {
-  // Copy first: fopen requires a null-terminated path, which only an owned
-  // copy guarantees.
-  const std::string owned(path);
-  std::FILE* file = std::fopen(owned.c_str(), "wb");
-  if (file == nullptr) {
-    return false;
-  }
-  const usize written = std::fwrite(content.data(), 1, content.size(), file);
-  std::fclose(file);
-  return written == content.size();
-}
 
 i32 run_build(const DriverConfig& config) {
   DriverContext ctx;
@@ -151,61 +92,6 @@ i32 run_build(const DriverConfig& config) {
   return result_code(ResultCode::Success);
 }
 
-bool valid_package_name(std::string_view name) {
-  if (name.empty()) {
-    return false;
-  }
-  for (const char c : name) {
-    const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                    (c >= '0' && c <= '9') || c == '_' || c == '-';
-    if (!ok) {
-      return false;
-    }
-  }
-  return true;
-}
-
-i32 run_new(const DriverConfig& config) {
-  if (!valid_package_name(config.target_dir)) {
-    base::logger.wo_prefix("invalid package name '{}'; use [A-Za-z0-9_-] only",
-                           config.target_dir);
-    return result_code(ResultCode::ArgParseError);
-  }
-
-  DriverContext ctx;
-  base::Result<path::Path, path::PathError> root =
-      path::Path::from_native(config.target_dir);
-  if (root.is_err()) {
-    const u32 index =
-        ctx.bag.emit(diag::Severity::Error, kDriverIoError,
-                     "cannot create package '{}'", config.target_dir);
-    (void)index;
-    report(ctx.bag, ctx.sources);
-    return result_code(ResultCode::BuildFailed);
-  }
-  const path::Path package_dir = std::move(root).unwrap();
-  const path::Path src_dir = package_dir.join("src");
-  const path::Path manifest_path = package_dir.join(pkg::kManifestFileName);
-  const path::Path main_path = src_dir.join("main.al");
-
-  const std::string manifest_text = "[package]\nname = \"" +
-                                    std::string(package_dir.as_view()) +
-                                    "\"\nversion = \"0.1.0\"\n";
-  static constexpr std::string_view kMainText = "// Write your code here.\n";
-  if (!make_dirs(src_dir.as_view()) ||
-      !write_text_file(manifest_path.as_view(), manifest_text) ||
-      !write_text_file(main_path.as_view(), kMainText)) {
-    const u32 index =
-        ctx.bag.emit(diag::Severity::Error, kDriverIoError,
-                     "cannot create package '{}'", package_dir.as_view());
-    (void)index;
-    report(ctx.bag, ctx.sources);
-    return result_code(ResultCode::BuildFailed);
-  }
-  base::logger.wo_prefix("created package '{}'", package_dir.as_view());
-  return result_code(ResultCode::Success);
-}
-
 i32 not_implemented(std::string_view subcommand) {
   DriverContext ctx;
   const u32 index =
@@ -216,50 +102,49 @@ i32 not_implemented(std::string_view subcommand) {
   return result_code(ResultCode::NotImplemented);
 }
 
-i32 dispatch(ParseArgsResult&& args_result) {
-  switch (args_result.tag()) {
-    case ParseArgsResult::TagOf<DriverConfig>: {
-      DriverConfig config = std::move(args_result).get<DriverConfig>();
-      switch (config.subcommand) {
-        case Subcommand::Build: return run_build(config);
-        case Subcommand::New: return run_new(config);
-        case Subcommand::Test: return not_implemented("test");
-        case Subcommand::Run: return not_implemented("run");
-        case Subcommand::Check: return not_implemented("check");
-        case Subcommand::None: break;
-      }
-      UNREACHABLE();
-    }
-    case ParseArgsResult::TagOf<ParseInterruptedReason>: {
-      switch (std::move(args_result).get<ParseInterruptedReason>()) {
-        case ParseInterruptedReason::ParseError: {
-          return result_code(ResultCode::ArgParseError);
-        }
-        case ParseInterruptedReason::UnknownSubcommand: {
-          return result_code(ResultCode::ArgParseError);
-        }
-        case ParseInterruptedReason::HelpRequested: {
-          return result_code(ResultCode::Success);
-        }
-        case ParseInterruptedReason::VersionRequested: {
-          return result_code(ResultCode::Success);
-        }
-      }
-    }
-    default: UNREACHABLE();
+i32 dispatch(const DriverConfig& config) {
+  switch (config.subcommand) {
+    case Subcommand::Build: return run_build(config);
+    case Subcommand::New: return run_new(config.target_dir);
+    case Subcommand::Test: return not_implemented("test");
+    case Subcommand::Run: return not_implemented("run");
+    case Subcommand::Check: return not_implemented("check");
+    case Subcommand::None: break;
   }
+  // parse_args maps a missing subcommand to NoSubcommand/UnknownSubcommand,
+  // so only interruption outcomes carry Subcommand::None here.
+  UNREACHABLE();
+}
+
+i32 run_interruption(arg::Parser& parser,
+                     const ParseOutcome& outcome,
+                     ResultCode code,
+                     i32 argc,
+                     const char* const* argv) {
+  const term::ColorStyle style = term::console_color_style(
+      term::Stream::Stdout, scan_color_mode(argc, argv));
+  base::init_logger(style);
+  const std::string text = render_outcome(parser, outcome, style);
+  if (!text.empty()) {
+    base::logger.wo_prefix("{}", text);
+  }
+  return result_code(code);
 }
 
 }  // namespace
 
 i32 driver_main(i32 argc, char** argv) {
-  init();
+  init_runtime();
 
   arg::Parser parser = build_parser();
-  ParseArgsResult args_result = parse_args(
-      std::move(parser), argc, argv,
-      term::console_color_style(term::Stream::Stdout, term::ColorMode::Auto));
-  return dispatch(std::move(args_result));
+  ParseOutcome outcome = parse_args(parser, argc, argv);
+  if (const std::optional<ResultCode> code = interruption_exit_code(outcome)) {
+    return run_interruption(parser, outcome, *code, argc, argv);
+  }
+  const DriverConfig& config = outcome.get<DriverConfig>();
+  base::init_logger(
+      term::console_color_style(term::Stream::Stdout, config.color_mode));
+  return dispatch(config);
 }
 
 }  // namespace app

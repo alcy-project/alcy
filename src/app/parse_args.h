@@ -4,29 +4,45 @@
 
 #pragma once
 
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
+
 #include "app/driver_config.h"
+#include "fpag/arg/parse_error.h"
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/tagged_union.h"
-#include "fpag/term/color_style.h"
 
 namespace app {
 
-enum class ParseInterruptedReason : u8 {
-  ParseError,
-  HelpRequested,
-  VersionRequested,
-  UnknownSubcommand,
+// Pure command-line parsing: no I/O, no formatting. Rendering the outcome
+// (help text, error messages) is the caller's job; see parse_output.h.
+struct HelpRequested {};
+struct VersionRequested {};
+// Bare invocation with no subcommand. Render the root help for this.
+struct NoSubcommand {};
+struct UnknownSubcommand {
+  std::string name;
+};
+struct ParseFailure {
+  std::vector<arg::ParseError> errors;
 };
 
-using ParseArgsResult =
-    base::AutoTaggedUnion<DriverConfig, ParseInterruptedReason>;
+using ParseOutcome = base::AutoTaggedUnion<DriverConfig,
+                                           HelpRequested,
+                                           VersionRequested,
+                                           NoSubcommand,
+                                           UnknownSubcommand,
+                                           ParseFailure>;
 
 arg::Parser build_parser();
 
-ParseArgsResult parse_args(arg::Parser&& parser,
-                           i32 argc,
-                           const char* const* argv,
-                           term::ColorStyle style);
+// Parses args, where element 0 is the program name (same convention as
+// argv). Views in the returned config borrow the input storage.
+ParseOutcome parse_args(arg::Parser& parser,
+                        std::span<const std::string_view> args);
+ParseOutcome parse_args(arg::Parser& parser, i32 argc, const char* const* argv);
 
 }  // namespace app

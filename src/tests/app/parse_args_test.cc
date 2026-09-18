@@ -4,45 +4,39 @@
 
 #include "app/parse_args.h"
 
+#include <span>
 #include <string_view>
 #include <utility>
 
 #include "app/driver_config.h"
 #include "doctest/doctest.h"
+#include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
-#include "fpag/term/color_style.h"
 
 namespace app {
 
 namespace {
 
-DriverConfig parse_ok(std::string_view argv1,
-                      std::string_view argv2 = {},
-                      std::string_view argv3 = {}) {
-  // String literals are static; views stay valid through the call.
-  const char* argv[] = {"alcy", "", "", ""};
-  i32 argc = 1;
-  const std::string_view rest[] = {argv1, argv2, argv3};
-  for (const std::string_view arg : rest) {
-    if (arg.empty()) {
-      break;
-    }
-    argv[argc++] = arg.data();
-  }
-  ParseArgsResult result =
-      parse_args(build_parser(), argc, argv, term::ColorStyle::Off);
-  CHECK(result.tag() == ParseArgsResult::TagOf<DriverConfig>);
-  if (result.tag() != ParseArgsResult::TagOf<DriverConfig>) {
+ParseOutcome parse(std::span<const std::string_view> args) {
+  arg::Parser parser = build_parser();
+  return parse_args(parser, args);
+}
+
+DriverConfig parse_ok(std::span<const std::string_view> args) {
+  ParseOutcome outcome = parse(args);
+  CHECK(outcome.is<DriverConfig>());
+  if (!outcome.is<DriverConfig>()) {
     return DriverConfig{};
   }
-  return std::move(result).get<DriverConfig>();
+  return outcome.get<DriverConfig>();
 }
 
 }  // namespace
 
 TEST_CASE("Parse build subcommand") {
-  const DriverConfig config = parse_ok("build", "--release", "mydir");
+  const std::string_view args[] = {"alcy", "build", "--release", "mydir"};
+  const DriverConfig config = parse_ok(args);
   CHECK(config == DriverConfig{.time_trace = false,
                                .color_mode = term::ColorMode::Auto,
                                .subcommand = Subcommand::Build,
@@ -51,54 +45,87 @@ TEST_CASE("Parse build subcommand") {
 }
 
 TEST_CASE("Parse build defaults") {
-  const DriverConfig config = parse_ok("build");
+  const std::string_view args[] = {"alcy", "build"};
+  const DriverConfig config = parse_ok(args);
   CHECK(config.subcommand == Subcommand::Build);
   CHECK(!config.release);
   CHECK(config.target_dir.empty());
 }
 
 TEST_CASE("Parse other subcommands") {
-  CHECK(parse_ok("test").subcommand == Subcommand::Test);
-  CHECK(parse_ok("run").subcommand == Subcommand::Run);
-  CHECK(parse_ok("new").subcommand == Subcommand::New);
-  CHECK(parse_ok("check").subcommand == Subcommand::Check);
+  const std::string_view test[] = {"alcy", "test"};
+  const std::string_view run[] = {"alcy", "run"};
+  const std::string_view created[] = {"alcy", "new", "mypkg"};
+  const std::string_view check[] = {"alcy", "check"};
+  CHECK(parse_ok(test).subcommand == Subcommand::Test);
+  CHECK(parse_ok(run).subcommand == Subcommand::Run);
+  CHECK(parse_ok(created).subcommand == Subcommand::New);
+  CHECK(parse_ok(created).target_dir == "mypkg");
+  CHECK(parse_ok(check).subcommand == Subcommand::Check);
 }
 
 TEST_CASE("Parse global flags around subcommands") {
-  const DriverConfig before = parse_ok("--color=never", "build");
-  CHECK(before.color_mode == term::ColorMode::Never);
-  CHECK(before.subcommand == Subcommand::Build);
+  const std::string_view before[] = {"alcy", "--color=never", "build"};
+  const DriverConfig before_config = parse_ok(before);
+  CHECK(before_config.color_mode == term::ColorMode::Never);
+  CHECK(before_config.subcommand == Subcommand::Build);
 
-  const DriverConfig after = parse_ok("build", "--color=never");
-  CHECK(after.color_mode == term::ColorMode::Never);
-  CHECK(after.subcommand == Subcommand::Build);
+  const std::string_view after[] = {"alcy", "build", "--color=never"};
+  const DriverConfig after_config = parse_ok(after);
+  CHECK(after_config.color_mode == term::ColorMode::Never);
+  CHECK(after_config.subcommand == Subcommand::Build);
 }
 
-TEST_CASE("Parse bare invocation requests help") {
-  const char* argv[] = {"alcy"};
-  ParseArgsResult result =
-      parse_args(build_parser(), 1, argv, term::ColorStyle::Off);
-  CHECK(result.tag() == ParseArgsResult::TagOf<ParseInterruptedReason>);
-  CHECK(std::move(result).get<ParseInterruptedReason>() ==
-        ParseInterruptedReason::HelpRequested);
+TEST_CASE("Parse time-trace flag") {
+  const std::string_view args[] = {"alcy", "-t", "build"};
+  const DriverConfig config = parse_ok(args);
+  CHECK(config.time_trace);
+  CHECK(config.subcommand == Subcommand::Build);
 }
 
-TEST_CASE("Parse unknown subcommand") {
-  const char* argv[] = {"alcy", "frobnicate"};
-  ParseArgsResult result =
-      parse_args(build_parser(), 2, argv, term::ColorStyle::Off);
-  CHECK(result.tag() == ParseArgsResult::TagOf<ParseInterruptedReason>);
-  CHECK(std::move(result).get<ParseInterruptedReason>() ==
-        ParseInterruptedReason::UnknownSubcommand);
+TEST_CASE("Parse bare invocation has no subcommand") {
+  const std::string_view args[] = {"alcy"};
+  CHECK(parse(args).is<NoSubcommand>());
+}
+
+TEST_CASE("Parse unknown subcommand keeps its name") {
+  const std::string_view args[] = {"alcy", "frobnicate"};
+  ParseOutcome outcome = parse(args);
+  CHECK(outcome.is<UnknownSubcommand>());
+  if (outcome.is<UnknownSubcommand>()) {
+    CHECK(std::move(outcome).get<UnknownSubcommand>().name == "frobnicate");
+  }
 }
 
 TEST_CASE("Parse unknown flags") {
-  const char* argv[] = {"alcy", "build", "--frobnicator"};
-  ParseArgsResult result =
-      parse_args(build_parser(), 3, argv, term::ColorStyle::Off);
-  CHECK(result.tag() == ParseArgsResult::TagOf<ParseInterruptedReason>);
-  CHECK(std::move(result).get<ParseInterruptedReason>() ==
-        ParseInterruptedReason::ParseError);
+  const std::string_view args[] = {"alcy", "build", "--frobnicator"};
+  ParseOutcome outcome = parse(args);
+  CHECK(outcome.is<ParseFailure>());
+  if (outcome.is<ParseFailure>()) {
+    CHECK(!std::move(outcome).get<ParseFailure>().errors.empty());
+  }
+}
+
+TEST_CASE("Parse help and version requests") {
+  const std::string_view help[] = {"alcy", "--help"};
+  const std::string_view sub_help[] = {"alcy", "build", "--help"};
+  const std::string_view version[] = {"alcy", "--version"};
+  CHECK(parse(help).is<HelpRequested>());
+  CHECK(parse(sub_help).is<HelpRequested>());
+  CHECK(parse(version).is<VersionRequested>());
+}
+
+TEST_CASE("Parse argv overload") {
+  const char* argv[] = {"alcy", "build", "--release", "mydir"};
+  arg::Parser parser = build_parser();
+  ParseOutcome outcome = parse_args(parser, 4, argv);
+  CHECK(outcome.is<DriverConfig>());
+  if (outcome.is<DriverConfig>()) {
+    const DriverConfig config = outcome.get<DriverConfig>();
+    CHECK(config.subcommand == Subcommand::Build);
+    CHECK(config.release);
+    CHECK(config.target_dir == "mydir");
+  }
 }
 
 }  // namespace app

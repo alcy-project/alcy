@@ -8,25 +8,18 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 #include "app/converters.h"  // IWYU pragma: keep
 #include "app/driver_config.h"
-#include "base/logger.h"
 #include "debug/fatal.h"
 #include "fpag/arg/arg.h"
 #include "fpag/arg/command.h"
-#include "fpag/arg/error_formatter.h"
-#include "fpag/arg/help_formatter.h"
 #include "fpag/arg/matches.h"
-#include "fpag/arg/parse_error.h"
 #include "fpag/arg/parse_result.h"
 #include "fpag/arg/parse_status.h"
 #include "fpag/arg/parser.h"
-#include "fpag/arg/version_formatter.h"
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
-#include "fpag/term/color_style.h"
 
 namespace app {
 
@@ -57,6 +50,26 @@ DriverConfig extract_from_matches(arg::Matches&& matches) {
   }
 
   return c;
+}
+
+ParseOutcome to_outcome(arg::ParseResult<arg::Matches>&& result) {
+  switch (result.status()) {
+    case arg::ParseStatus::Success: {
+      DriverConfig config = extract_from_matches(std::move(result).unwrap());
+      if (config.subcommand == Subcommand::None) {
+        if (!config.target_dir.empty()) {
+          return UnknownSubcommand{std::string(config.target_dir)};
+        }
+        return NoSubcommand{};
+      }
+      return config;
+    }
+    case arg::ParseStatus::Error:
+      return ParseFailure{std::move(result).unwrap_err()};
+    case arg::ParseStatus::HelpRequested: return HelpRequested{};
+    case arg::ParseStatus::VersionRequested: return VersionRequested{};
+    default: UNREACHABLE();
+  }
 }
 
 arg::CommandBuilder build_subcommand(std::string name, std::string about) {
@@ -98,47 +111,15 @@ arg::Parser build_parser() {
   return arg::Parser(std::move(builder).build());
 }
 
-ParseArgsResult parse_args(arg::Parser&& parser,
-                           i32 argc,
-                           const char* const* argv,
-                           term::ColorStyle style) {
-  const std::string_view name = parser.root_command().name();
-  arg::ParseResult<arg::Matches> result = parser.try_parse(argc, argv);
+ParseOutcome parse_args(arg::Parser& parser,
+                        std::span<const std::string_view> args) {
+  return to_outcome(parser.try_parse(args));
+}
 
-  switch (result.status()) {
-    case arg::ParseStatus::Success: {
-      DriverConfig config = extract_from_matches(std::move(result).unwrap());
-      if (config.subcommand == Subcommand::None) {
-        if (!config.target_dir.empty()) {
-          base::logger.wo_prefix("unknown subcommand '{}'; see '{} --help'",
-                                 config.target_dir, name);
-          return ParseInterruptedReason::UnknownSubcommand;
-        }
-        base::logger.wo_prefix(
-            "{}", parser.help_message(arg::DefaultHelpFormatter{}, style));
-        return ParseInterruptedReason::HelpRequested;
-      }
-      return config;
-    }
-    case arg::ParseStatus::Error: {
-      std::vector<arg::ParseError>&& errors = std::move(result).unwrap_err();
-      const arg::DefaultErrorFormatter f;
-      base::logger.wo_prefix("{}", f(name, errors, style));
-      return ParseInterruptedReason::ParseError;
-    }
-    case arg::ParseStatus::HelpRequested: {
-      std::string&& help = std::move(result).unwrap_help();
-      base::logger.wo_prefix("{}", std::move(help));
-      return ParseInterruptedReason::HelpRequested;
-    }
-    case arg::ParseStatus::VersionRequested: {
-      std::string&& version = std::move(result).unwrap_version();
-      const arg::DefaultVersionFormatter f;
-      base::logger.wo_prefix("{}", f(name, std::move(version), style));
-      return ParseInterruptedReason::VersionRequested;
-    }
-    default: UNREACHABLE();
-  }
+ParseOutcome parse_args(arg::Parser& parser,
+                        i32 argc,
+                        const char* const* argv) {
+  return to_outcome(parser.try_parse(argc, argv));
 }
 
 }  // namespace app
