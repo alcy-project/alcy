@@ -30,5 +30,5 @@
 - Shadowing is permitted. Each shadowing declaration introduces a
   fresh binding; the compiler desugars shadowing before name
   resolution, so later analyses only ever see distinct bindings.
-- A `:=` declaration in the same scope MUST introduce at least one new
-  binding; otherwise it is a compile-time error suggesting `=`.
+- A `:=` declaration MUST bind only names that are new in its scope;
+  redeclaring is a compile-time error suggesting `=`.

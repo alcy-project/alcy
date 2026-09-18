@@ -22,7 +22,6 @@
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
-#include "tests/util/test_util.h"
 
 namespace codegen_llvm {
 
@@ -122,8 +121,6 @@ TEST_CASE("Emit Hello World") {
   std::string ir_str;
   llvm::raw_string_ostream os(ir_str);
   module->print(os, nullptr);
-
-  tests::logger.debug("LLVM IR dump:\n{}", ir_str);
 }
 
 TEST_CASE("Emit struct and array calls") {
@@ -232,8 +229,6 @@ TEST_CASE("Emit struct and array calls") {
 
   CHECK(ir_str.find("{ i32, i32 }") != std::string::npos);
   CHECK(ir_str.find("[4 x i32]") != std::string::npos);
-
-  tests::logger.debug("LLVM IR dump:\n{}", ir_str);
 }
 
 TEST_CASE("Emit compute instructions") {
@@ -386,8 +381,6 @@ TEST_CASE("Emit compute instructions") {
   CHECK(ir_str.find("zext") != std::string::npos);
   CHECK(ir_str.find("select") != std::string::npos);
   CHECK(ir_str.find("bitreverse") != std::string::npos);
-
-  tests::logger.debug("LLVM IR dump:\n{}", ir_str);
 }
 
 TEST_CASE("Emit control flow") {
@@ -517,8 +510,6 @@ TEST_CASE("Emit control flow") {
 
   CHECK(ir_str.find("br i1") != std::string::npos);
   CHECK(ir_str.find("switch i32") != std::string::npos);
-
-  tests::logger.debug("LLVM IR dump:\n{}", ir_str);
 }
 
 TEST_CASE("Emit memory instructions") {
@@ -728,8 +719,6 @@ TEST_CASE("Emit memory instructions") {
   CHECK(ir_str.find("getelementptr") != std::string::npos);
   CHECK(ir_str.find("extractvalue") != std::string::npos);
   CHECK(ir_str.find("insertvalue") != std::string::npos);
-
-  tests::logger.debug("LLVM IR dump:\n{}", ir_str);
 }
 
 }  // namespace codegen_llvm

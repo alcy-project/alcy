@@ -1,5 +1,7 @@
 source_set("parser") {
   sources = [
+    "desugar.cc",
+    "desugar.h",
     "parser.cc",
     "parser.h",
   ]
