@@ -1,6 +1,7 @@
 executable("tests") {
   sources = [
     "analyzer/resolve_modules_test.cc",
+    "analyzer/types_test.cc",
     "app/new_command_test.cc",
     "app/parse_args_test.cc",
     "app/parse_output_test.cc",

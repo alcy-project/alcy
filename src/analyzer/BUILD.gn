@@ -2,11 +2,14 @@ source_set("analyzer") {
   sources = [
     "resolve.cc",
     "resolve.h",
+    "types.cc",
+    "types.h",
   ]
   deps = [
     "//src:base_modules",
     "//src/ast",
     "//src/diag",
+    "//src/ir",
     "//src/lexer",
     "//src/parser",
     "//src/path",

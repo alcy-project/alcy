@@ -44,7 +44,9 @@ struct FileData {
   source::FileId id = source::kUnknownFile;
   path::Path dir;
   path::Path path;
-  mem::Arena arena;
+  // Items are parsed into the caller-provided arena (never a per-file
+  // arena): ModuleNode::items outlives resolve_modules, so per-file
+  // arenas would dangle.
   std::span<ast::Item* const> items;
   u32 module = kNoModule;
 
@@ -138,16 +140,15 @@ struct Resolver {
   }
 
   void lex_parse_file(FileData& file) {
-    file.arena.reserve(1u << 20);
     const std::string_view bytes = sources.bytes(file.id);
     lexer::Lexer lexer(bytes, file.id, bag);
     std::vector<lexer::Token> tokens;
     lexer.tokenize(tokens);
     parser::Parser parser(
         std::span<const lexer::Token>(tokens.data(), tokens.size()), bytes,
-        file.id, file.arena, bag);
+        file.id, arena, bag);
     file.items = parser.parse();
-    parser::desugar_shadowing(file.items, file.arena, bag);
+    parser::desugar_shadowing(file.items, arena, bag);
   }
 
   void build_tree() {

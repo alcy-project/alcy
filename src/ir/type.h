@@ -40,6 +40,19 @@ enum class TypeTag : u8 {
   Array,
   Function,
   Enum,
+  Never,
+  Tuple,
+  // Error recovery marker (never written by user code): failed resolutions
+  // produce this so checking can continue without cascades. Must never
+  // reach codegen; the driver aborts on any recorded error first.
+  Error,
+};
+
+// Target pointer width: selects the mapping of isize/usize. Passed
+// explicitly (never sniffed from the host) so cross builds stay honest.
+enum class PointerWidth : u8 {
+  W32,
+  W64,
 };
 
 // Number of primitive tags below Struct. StorageBuilder pre-interns them in
@@ -81,10 +94,24 @@ struct EnumType {
   EnumVariantTypeIdxRange variants;
 };
 
+// Pointee of a Ref or MutRef node. Reference nodes are structurally
+// interned by this payload (see StorageBuilder::reference_type); the
+// pre-interned placeholder nodes predate payloads and never match.
+struct RefType {
+  TypeIdx pointee;
+};
+
+struct TupleType {
+  // Element types in order.
+  TypeIdxRange elements;
+};
+
 struct TypeNode {
   TypeTag tag;
-  // Meaningful only for Struct/Array/Enum tags.
-  base::Union<StructTypeIdx, ArrayTypeIdx, EnumTypeIdx> data;
+  // Meaningful only for Struct/Array/Enum/Ref/MutRef/Tuple tags.
+  base::
+      Union<StructTypeIdx, ArrayTypeIdx, EnumTypeIdx, RefTypeIdx, TupleTypeIdx>
+          data;
 
   inline StructTypeIdx as_struct() const {
     DCHECK_MSG(tag == TypeTag::Struct, "type node is not a struct");
@@ -99,6 +126,17 @@ struct TypeNode {
   inline EnumTypeIdx as_enum() const {
     DCHECK_MSG(tag == TypeTag::Enum, "type node is not an enum");
     return data.get<EnumTypeIdx>();
+  }
+
+  inline RefTypeIdx as_ref() const {
+    DCHECK_MSG(tag == TypeTag::Ref || tag == TypeTag::MutRef,
+               "type node is not a reference");
+    return data.get<RefTypeIdx>();
+  }
+
+  inline TupleTypeIdx as_tuple() const {
+    DCHECK_MSG(tag == TypeTag::Tuple, "type node is not a tuple");
+    return data.get<TupleTypeIdx>();
   }
 };
 
@@ -130,6 +168,9 @@ constexpr const char* type_to_str(TypeTag tag) {
     case T::Array: return "array";
     case T::Function: return "function";
     case T::Enum: return "enum";
+    case T::Never: return "never";
+    case T::Tuple: return "tuple";
+    case T::Error: return "error";
     default: UNREACHABLE();
   }
 }

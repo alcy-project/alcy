@@ -64,4 +64,10 @@ struct EnumVariantType;
 using EnumVariantTypeIdx = base::Idx<EnumVariantType, IdBaseType>;
 using EnumVariantTypeIdxRange = base::IdxRange<EnumVariantTypeIdx>;
 
+struct RefType;
+using RefTypeIdx = base::Idx<RefType, IdBaseType>;
+
+struct TupleType;
+using TupleTypeIdx = base::Idx<TupleType, IdBaseType>;
+
 }  // namespace ir

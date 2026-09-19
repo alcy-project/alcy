@@ -111,16 +111,18 @@ class StorageBuilder {
   }
   TypeIdx type(TypeTag tag) {
     DCHECK(tag != TypeTag::Struct && tag != TypeTag::Array &&
-           tag != TypeTag::Enum);
+           tag != TypeTag::Enum && tag != TypeTag::Never &&
+           tag != TypeTag::Tuple && tag != TypeTag::Error);
     return primitive(tag);
   }
 
   // Returns the pre-interned node for a non-composite tag. O(1), no
-  // allocation. Struct, Array, and Enum nodes are created via struct_type(),
-  // array_type(), and enum_type() instead.
+  // allocation. Struct, Array, Enum, Never, Tuple, and Error nodes are
+  // created via their factories instead.
   TypeIdx primitive(TypeTag tag) const {
     DCHECK(tag != TypeTag::Struct && tag != TypeTag::Array &&
-           tag != TypeTag::Enum);
+           tag != TypeTag::Enum && tag != TypeTag::Never &&
+           tag != TypeTag::Tuple && tag != TypeTag::Error);
     return primitive_idx(tag);
   }
 
@@ -132,7 +134,40 @@ class StorageBuilder {
     return state_.types.emplace_back(node);
   }
 
+  // Reserves a nominal node for recursive types and returns its index
+  // immediately with empty contents; fill_struct/fill_enum complete it.
+  // Re-entrant references resolve to the reserved index. Placeholders
+  // are valid empty nominals, so error paths need no cleanup; the
+  // analyzer rejects uninhabited value-only cycles separately.
+  TypeIdx reserve_struct(str::StringPoolId name) {
+    TypeNode node{};
+    node.tag = TypeTag::Struct;
+    node.data.set(state_.struct_types.emplace_back(
+        StructType{.name = name, .fields = {TypeIdx(0), 0}}));
+    return state_.types.emplace_back(node);
+  }
+
+  void fill_struct(TypeIdx idx, TypeIdxRange fields) {
+    DCHECK(idx.idx < state_.types.size());
+    TypeNode& node = state_.types[idx];
+    DCHECK(node.tag == TypeTag::Struct);
+    state_.struct_types[node.as_struct()].fields = fields;
+  }
+
   TypeIdx array_type(TypeIdx element, u64 count) {
+    for (TypeIdx idx(kPrimitiveTypeCount + 1); idx.idx < state_.types.size();
+         ++idx) {
+      const TypeNode& node = state_.types[idx];
+      if (node.tag != TypeTag::Array) {
+        continue;
+      }
+      const ArrayTypeIdx aidx = node.data.get<ArrayTypeIdx>();
+      if (aidx.idx < state_.array_types.size() &&
+          state_.array_types[aidx].element.idx == element.idx &&
+          state_.array_types[aidx].count == count) {
+        return idx;
+      }
+    }
     TypeNode node{};
     node.tag = TypeTag::Array;
     node.data.set(state_.array_types.emplace_back(
@@ -140,9 +175,106 @@ class StorageBuilder {
     return state_.types.emplace_back(node);
   }
 
+  // Structural interning: identical reference shapes share one index, so
+  // type equality is index equality. Linear scans are fine at MVP scale;
+  // hash tables arrive if measurement demands. Scans start past the
+  // pre-interned block, whose placeholder Ref/MutRef payloads must
+  // never match.
+  TypeIdx reference_type(TypeIdx pointee, bool is_mut) {
+    const TypeTag tag = is_mut ? TypeTag::MutRef : TypeTag::Ref;
+    for (TypeIdx idx(kPrimitiveTypeCount + 1); idx.idx < state_.types.size();
+         ++idx) {
+      const TypeNode& node = state_.types[idx];
+      if (node.tag != tag) {
+        continue;
+      }
+      const RefTypeIdx ridx = node.data.get<RefTypeIdx>();
+      if (ridx.idx < state_.ref_types.size() &&
+          state_.ref_types[ridx].pointee.idx == pointee.idx) {
+        return idx;
+      }
+    }
+    TypeNode node{};
+    node.tag = tag;
+    node.data.set(state_.ref_types.emplace_back(RefType{.pointee = pointee}));
+    return state_.types.emplace_back(node);
+  }
+
+  TypeIdx tuple_type(TypeIdxRange elements) {
+    for (TypeIdx idx(kPrimitiveTypeCount + 1); idx.idx < state_.types.size();
+         ++idx) {
+      const TypeNode& node = state_.types[idx];
+      if (node.tag != TypeTag::Tuple) {
+        continue;
+      }
+      const TupleTypeIdx tidx = node.data.get<TupleTypeIdx>();
+      if (tidx.idx >= state_.tuple_types.size()) {
+        continue;
+      }
+      const TupleType& tuple = state_.tuple_types[tidx];
+      if (tuple.elements.size() != elements.size()) {
+        continue;
+      }
+      bool match = true;
+      for (u32 i = 0; match && i < elements.size(); ++i) {
+        match = tuple.elements[i].idx == elements[i].idx;
+      }
+      if (match) {
+        return idx;
+      }
+    }
+    TypeNode node{};
+    node.tag = TypeTag::Tuple;
+    // Elements are already interned; only the shape node is new.
+    TupleType tuple;
+    tuple.elements = elements;
+    node.data.set(state_.tuple_types.emplace_back(tuple));
+    return state_.types.emplace_back(node);
+  }
+
+  TypeIdx never_type() {
+    for (TypeIdx idx(kPrimitiveTypeCount + 1); idx.idx < state_.types.size();
+         ++idx) {
+      if (state_.types[idx].tag == TypeTag::Never) {
+        return idx;
+      }
+    }
+    TypeNode node{};
+    node.tag = TypeTag::Never;
+    return state_.types.emplace_back(node);
+  }
+
+  TypeIdx error_type() {
+    for (TypeIdx idx(kPrimitiveTypeCount + 1); idx.idx < state_.types.size();
+         ++idx) {
+      if (state_.types[idx].tag == TypeTag::Error) {
+        return idx;
+      }
+    }
+    TypeNode node{};
+    node.tag = TypeTag::Error;
+    return state_.types.emplace_back(node);
+  }
+
   EnumVariantTypeIdx enum_variant(str::StringPoolId name, TypeIdxRange fields) {
     return state_.enum_variant_types.emplace_back(
         EnumVariantType{.name = name, .fields = fields});
+  }
+
+  // Reserves a nominal node for recursive types; see reserve_struct.
+  TypeIdx reserve_enum(str::StringPoolId name) {
+    TypeNode node{};
+    node.tag = TypeTag::Enum;
+    node.data.set(state_.enum_types.emplace_back(
+        EnumType{.name = name, .variants = {EnumVariantTypeIdx(0), 0}}));
+    return state_.types.emplace_back(node);
+  }
+
+  void fill_enum(TypeIdx idx, EnumVariantTypeIdxRange variants) {
+    DCHECK(idx.idx < state_.types.size());
+    TypeNode& node = state_.types[idx];
+    DCHECK(node.tag == TypeTag::Enum);
+    state_.enum_types[node.as_enum()].variants = variants;
   }
 
   TypeIdx enum_type(str::StringPoolId name, EnumVariantTypeIdxRange variants) {

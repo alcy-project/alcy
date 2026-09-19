@@ -81,6 +81,16 @@ VerifyResult verify_storage(const Storage& storage) {
           return err(VerifyErrorKind::EnumFieldsOutOfRange, vidx.idx);
         }
       }
+    } else if (node.tag == TypeTag::Tuple) {
+      const TupleTypeIdx tuple_idx = node.as_tuple();
+      if (tuple_idx.idx >= storage.tuple_types().size()) {
+        return err(VerifyErrorKind::TypeMetadataOutOfRange, tidx.idx);
+      }
+      const TupleType& tuple = storage.tuple_types()[tuple_idx];
+      if (!range_in_bounds(tuple.elements.head(), tuple.elements.size(),
+                           storage.types().size())) {
+        return err(VerifyErrorKind::TupleFieldsOutOfRange, tuple_idx.idx);
+      }
     }
   }
 

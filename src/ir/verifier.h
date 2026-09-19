@@ -38,6 +38,7 @@ enum class VerifyErrorKind : u8 {
   InvalidGetElementPtr,
   InvalidExtractInsert,
   EnumFieldsOutOfRange,
+  TupleFieldsOutOfRange,
 };
 
 struct VerifyError {
@@ -73,6 +74,7 @@ constexpr std::string_view format_as(const VerifyErrorKind kind) {
     case K::InvalidGetElementPtr: return "InvalidGetElementPtr";
     case K::InvalidExtractInsert: return "InvalidExtractInsert";
     case K::EnumFieldsOutOfRange: return "EnumFieldsOutOfRange";
+    case K::TupleFieldsOutOfRange: return "TupleFieldsOutOfRange";
   }
 }
 
