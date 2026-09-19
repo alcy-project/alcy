@@ -226,6 +226,7 @@ enum class ExprKind : u8 {
   Struct,
   Tuple,
   Unary,
+  Borrow,
   Binary,
   Cast,
   Call,
@@ -276,6 +277,11 @@ struct TupleExpr : Expr {
 
 struct UnaryExpr : Expr {
   UnaryOp op;
+  const Expr* inner;
+};
+
+struct BorrowExpr : Expr {
+  bool is_mut;
   const Expr* inner;
 };
 

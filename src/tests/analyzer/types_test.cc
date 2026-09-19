@@ -966,4 +966,41 @@ TEST_CASE("Check items enforce entry and initializer rules") {
   }
 }
 
+TEST_CASE("Check borrow expressions") {
+  {
+    io::TempDir dir("alcy_borrow_ok_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() {\n"
+                                        "  x := 1\n"
+                                        "  r: &i32 := &x\n"
+                                        "  m: &mut i32 := &mut x\n"
+                                        "  _ := r\n"
+                                        "  _ := m\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_borrow_mismatch_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() {\n"
+                                        "  x := 1\n"
+                                        "  r: &i32 := &mut x\n"
+                                        "  _ := r\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+}
+
 }  // namespace analyzer

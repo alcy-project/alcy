@@ -1472,6 +1472,20 @@ ast::Expr* Parser::parse_unary() {
     case lexer::TokenKind::Minus: op = ast::UnaryOp::Neg; break;
     case lexer::TokenKind::Bang: op = ast::UnaryOp::Not; break;
     case lexer::TokenKind::Tilde: op = ast::UnaryOp::BitNot; break;
+    case lexer::TokenKind::Amp: {
+      advance();
+      const bool is_mut = match(lexer::TokenKind::Mut);
+      ast::Expr* inner = parse_unary();
+      if (inner == nullptr) {
+        return nullptr;
+      }
+      ast::BorrowExpr* expr = arena_.create<ast::BorrowExpr>();
+      expr->kind = ast::ExprKind::Borrow;
+      expr->span = span_from(mark);
+      expr->is_mut = is_mut;
+      expr->inner = inner;
+      return expr;
+    }
     default: return parse_postfix();
   }
   advance();

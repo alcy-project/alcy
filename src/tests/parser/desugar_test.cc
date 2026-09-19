@@ -315,6 +315,12 @@ struct NameCollector {
         visit_expr(range->end);
         break;
       }
+      case ast::ExprKind::Borrow: {
+        const ast::BorrowExpr* borrow =
+            static_cast<const ast::BorrowExpr*>(expr);
+        visit_expr(borrow->inner);
+        break;
+      }
       case ast::ExprKind::Break:
       case ast::ExprKind::Continue: break;
     }

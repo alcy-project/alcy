@@ -2709,6 +2709,22 @@ struct Checker {
         (void)index;
         return error_type();
       }
+      case ast::ExprKind::Borrow: {
+        const ast::BorrowExpr* borrow =
+            static_cast<const ast::BorrowExpr*>(expr);
+        // Place-ness is a borrow-checking (Phase C2) concern; here the
+        // inner type only determines the reference shape.
+        const ir::TypeIdx pointee = check_expr(module, borrow->inner, nullptr);
+        if (is_error(pointee)) {
+          return error_type();
+        }
+        const ir::TypeIdx type =
+            builder.reference_type(pointee, borrow->is_mut);
+        if (expected != nullptr) {
+          return unify(*expected, type, expr->span, "borrow");
+        }
+        return type;
+      }
       case ast::ExprKind::Binary: {
         const ast::BinaryExpr* binary =
             static_cast<const ast::BinaryExpr*>(expr);

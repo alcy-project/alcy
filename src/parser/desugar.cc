@@ -370,6 +370,11 @@ struct Desugar {
         visit_expr(const_cast<ast::Expr*>(unary->inner));
         break;
       }
+      case ast::ExprKind::Borrow: {
+        ast::BorrowExpr* borrow = static_cast<ast::BorrowExpr*>(expr);
+        visit_expr(const_cast<ast::Expr*>(borrow->inner));
+        break;
+      }
       case ast::ExprKind::Binary: {
         ast::BinaryExpr* binary = static_cast<ast::BinaryExpr*>(expr);
         visit_expr(const_cast<ast::Expr*>(binary->lhs));

@@ -258,6 +258,46 @@ TEST_CASE("Parser rejects chained comparisons") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Parser reads borrow expressions") {
+  {
+    Fixture f;
+    const ParseResult result = parse("fn f() { &x }", f);
+    CHECK(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    const ast::FnItem* fn = as_fn(result.items[0]);
+    CHECK(fn->body->value != nullptr);
+    CHECK(fn->body->value->kind == ast::ExprKind::Borrow);
+    if (fn->body->value == nullptr ||
+        fn->body->value->kind != ast::ExprKind::Borrow) {
+      return;
+    }
+    const ast::BorrowExpr* borrow =
+        static_cast<const ast::BorrowExpr*>(fn->body->value);
+    CHECK(!borrow->is_mut);
+    CHECK(borrow->inner->kind == ast::ExprKind::Path);
+  }
+  {
+    Fixture f;
+    const ParseResult result = parse("fn f() { &mut x }", f);
+    CHECK(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    const ast::FnItem* fn = as_fn(result.items[0]);
+    CHECK(fn->body->value != nullptr);
+    CHECK(fn->body->value->kind == ast::ExprKind::Borrow);
+    if (fn->body->value == nullptr ||
+        fn->body->value->kind != ast::ExprKind::Borrow) {
+      return;
+    }
+    const ast::BorrowExpr* borrow =
+        static_cast<const ast::BorrowExpr*>(fn->body->value);
+    CHECK(borrow->is_mut);
+  }
+}
+
 TEST_CASE("Parser builds control flow") {
   Fixture f;
   const ParseResult result = parse(
