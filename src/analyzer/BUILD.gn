@@ -1,8 +1,16 @@
 source_set("analyzer") {
-  sources = [ "lib.cc" ]
+  sources = [
+    "resolve.cc",
+    "resolve.h",
+  ]
   deps = [
     "//src:base_modules",
+    "//src/ast",
     "//src/diag",
+    "//src/lexer",
+    "//src/parser",
+    "//src/path",
+    "//src/source",
   ]
   configs += [ "//src:alcy_config" ]
 }
