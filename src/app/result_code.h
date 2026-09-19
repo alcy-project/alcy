@@ -13,6 +13,7 @@ enum class ResultCode : u8 {
   ArgParseError,
   NotImplemented,
   BuildFailed,
+  CheckFailed,
   // TODO
   // LexError,
   // ParseError,

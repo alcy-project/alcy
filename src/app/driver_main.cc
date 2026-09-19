@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/resolve.h"
 #include "app/driver_config.h"
 #include "app/driver_context.h"
 #include "app/init_handler.h"
@@ -92,6 +93,142 @@ i32 run_build(const DriverConfig& config) {
   return result_code(ResultCode::Success);
 }
 
+i32 check_package(DriverContext& ctx,
+                  const path::Path& root,
+                  source::FileId manifest_file,
+                  std::string_view manifest_name);
+
+i32 run_check(const DriverConfig& config) {
+  DriverContext ctx;
+  const std::string_view raw_target =
+      config.target_dir.empty() ? "." : config.target_dir;
+  base::Result<path::Path, path::PathError> target =
+      path::Path::from_native(raw_target);
+  if (target.is_err()) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kDriverIoError,
+                                   "invalid target '{}'", raw_target);
+    (void)index;
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::CheckFailed);
+  }
+  const path::Path target_path = std::move(target).unwrap();
+
+  const path::Path manifest_path = target_path.join(pkg::kManifestFileName);
+  base::Result<source::FileId, source::SourceError> manifest =
+      ctx.sources.load(manifest_path.as_view());
+  if (manifest.is_ok()) {
+    return check_package(ctx, target_path, std::move(manifest).unwrap(),
+                         manifest_path.as_view());
+  }
+
+  // Single-file mode for explicit `foo.al` targets. Directories without
+  // a manifest are not checked: module structure needs declared roots.
+  if (raw_target.size() < 4 ||
+      raw_target.substr(raw_target.size() - 3) != ".al") {
+    const u32 index = ctx.bag.emit(
+        diag::Severity::Error, kDriverNoManifest,
+        "no manifest found at '{}'; check a file or add alcy.toml", raw_target);
+    (void)index;
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::CheckFailed);
+  }
+  base::Result<source::FileId, source::SourceError> file =
+      ctx.sources.load(target_path.as_view());
+  if (file.is_err()) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kDriverIoError,
+                                   "cannot read '{}'", raw_target);
+    (void)index;
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::CheckFailed);
+  }
+  const source::FileId root = std::move(file).unwrap();
+  const std::vector<source::FileId> files{root};
+  diag::Fallible<analyzer::ModuleTree> tree = analyzer::resolve_modules(
+      root, files, "", ctx.sources, ctx.arena, ctx.bag);
+  if (tree.is_err()) {
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::CheckFailed);
+  }
+  report(ctx.bag, ctx.sources);
+  if (ctx.bag.has_errors()) {
+    return result_code(ResultCode::CheckFailed);
+  }
+  base::logger.wo_prefix("checked 1 file(s), {} module(s)",
+                         std::move(tree).unwrap().modules.size());
+  return result_code(ResultCode::Success);
+}
+
+i32 check_package(DriverContext& ctx,
+                  const path::Path& root,
+                  source::FileId manifest_file,
+                  std::string_view manifest_name) {
+  diag::Fallible<pkg::PackageManifest> parsed =
+      pkg::parse_manifest(ctx.sources.bytes(manifest_file), manifest_name,
+                          manifest_file, ctx.bag, ctx.arena);
+  if (parsed.is_err()) {
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::CheckFailed);
+  }
+  const pkg::PackageManifest manifest = std::move(parsed).unwrap();
+  if (manifest.bin_count == 0) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kDriverNoTargets,
+                                   "manifest '{}' declares no [[bin]] targets",
+                                   manifest_name);
+    (void)index;
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::CheckFailed);
+  }
+  if (manifest.bin_count > 1) {
+    const u32 index = ctx.bag.emit(
+        diag::Severity::Error, kDriverNoTargets,
+        "manifest '{}' declares {} [[bin]] targets; only one is supported",
+        manifest_name, manifest.bin_count);
+    (void)index;
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::CheckFailed);
+  }
+
+  diag::Fallible<pipeline::DiscoveredSources> discovered =
+      pipeline::discover_sources(root.as_view(), ctx.sources, ctx.bag);
+  if (discovered.is_err()) {
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::CheckFailed);
+  }
+  pipeline::DiscoveredSources found = std::move(discovered).unwrap();
+  const std::vector<source::FileId>& files = found.files;
+  const path::Path bin_path = root.join(manifest.bins[0].path);
+  source::FileId bin_file = source::kUnknownFile;
+  for (source::FileId id : files) {
+    if (ctx.sources.name(id) == bin_path.as_view()) {
+      bin_file = id;
+      break;
+    }
+  }
+  if (bin_file == source::kUnknownFile) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kDriverNoTargets,
+                                   "bin target '{}' was not discovered",
+                                   manifest.bins[0].path);
+    (void)index;
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::CheckFailed);
+  }
+
+  diag::Fallible<analyzer::ModuleTree> tree = analyzer::resolve_modules(
+      bin_file, files, manifest.name, ctx.sources, ctx.arena, ctx.bag);
+  if (tree.is_err()) {
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::CheckFailed);
+  }
+  report(ctx.bag, ctx.sources);
+  if (ctx.bag.has_errors()) {
+    return result_code(ResultCode::CheckFailed);
+  }
+  const analyzer::ModuleTree built = std::move(tree).unwrap();
+  base::logger.wo_prefix("checked {} file(s), {} module(s)", files.size(),
+                         built.modules.size());
+  return result_code(ResultCode::Success);
+}
+
 i32 not_implemented(std::string_view subcommand) {
   DriverContext ctx;
   const u32 index =
@@ -108,7 +245,7 @@ i32 dispatch(const DriverConfig& config) {
     case Subcommand::New: return run_new(config.target_dir);
     case Subcommand::Test: return not_implemented("test");
     case Subcommand::Run: return not_implemented("run");
-    case Subcommand::Check: return not_implemented("check");
+    case Subcommand::Check: return run_check(config);
     case Subcommand::None: break;
   }
   // parse_args maps a missing subcommand to NoSubcommand/UnknownSubcommand,

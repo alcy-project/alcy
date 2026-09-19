@@ -91,6 +91,45 @@ TEST_CASE("Manifest without dependencies parses") {
   CHECK(manifest.dependency_count == 0);
   CHECK(manifest.dependencies == nullptr);
   CHECK(manifest.edition.empty());
+  CHECK(manifest.bin_count == 0);
+  CHECK(manifest.bins == nullptr);
+}
+
+TEST_CASE("Manifest parses binary targets") {
+  Fixture f;
+  constexpr std::string_view bytes =
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\n"
+      "\n"
+      "[[bin]]\npath = \"src/main.al\"\n"
+      "\n"
+      "[[bin]]\nname = \"tool\"\npath = \"src/tool.al\"\n";
+  diag::Fallible<PackageManifest> result =
+      parse_manifest(bytes, "alcy.toml", source::kUnknownFile, f.bag, f.arena);
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  const PackageManifest manifest = std::move(result).unwrap();
+  CHECK(!f.bag.has_errors());
+  CHECK(manifest.bin_count == 2);
+  if (manifest.bin_count != 2) {
+    return;
+  }
+  CHECK(manifest.bins[0].name.empty());
+  CHECK(manifest.bins[0].path == "src/main.al");
+  CHECK(manifest.bins[1].name == "tool");
+  CHECK(manifest.bins[1].path == "src/tool.al");
+}
+
+TEST_CASE("Manifest rejects binary targets without paths") {
+  Fixture f;
+  constexpr std::string_view bytes =
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\n"
+      "\n"
+      "[[bin]]\nname = \"tool\"\n";
+  CHECK(parse_manifest(bytes, "alcy.toml", source::kUnknownFile, f.bag, f.arena)
+            .is_err());
+  CHECK(f.bag.has_errors());
 }
 
 TEST_CASE("Manifest syntax errors carry spans") {

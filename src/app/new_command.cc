@@ -102,7 +102,10 @@ i32 run_new(std::string_view target_dir) {
 
   const std::string manifest_text = "[package]\nname = \"" +
                                     std::string(package_dir.as_view()) +
-                                    "\"\nversion = \"0.1.0\"\n";
+                                    "\"\nversion = \"0.1.0\"\n"
+                                    "\n"
+                                    "[[bin]]\n"
+                                    "path = \"src/main.al\"\n";
   static constexpr std::string_view kMainText = "// Write your code here.\n";
   if (!make_dirs(src_dir.as_view()) ||
       !write_text_file(manifest_path.as_view(), manifest_text) ||

@@ -195,12 +195,61 @@ diag::Fallible<PackageManifest> parse_manifest(std::string_view bytes,
     }
   }
 
+  u32 bin_count = 0;
+  const toml::array* bins_array = nullptr;
+  const auto bins_it = root.find("bin");
+  if (bins_it != root.end()) {
+    if (!bins_it->second.is_array()) {
+      return semantic_error(bag, filename,
+                            "[[bin]] must be an array of tables");
+    }
+    bins_array = bins_it->second.as_array();
+    bin_count = static_cast<u32>(bins_array->size());
+  }
+
+  BinTarget* const bins =
+      bin_count > 0 ? static_cast<BinTarget*>(arena.alloc(
+                          sizeof(BinTarget) * bin_count, alignof(BinTarget)))
+                    : nullptr;
+  u32 bin_filled = 0;
+  if (bins_array != nullptr) {
+    for (const toml::node& node : *bins_array) {
+      if (!node.is_table()) {
+        return semantic_error(bag, filename, "[[bin]] entries must be tables");
+      }
+      const toml::table* const bin_table = node.as_table();
+      const auto path_it = bin_table->find("path");
+      if (path_it == bin_table->end()) {
+        return semantic_error(bag, filename, "[[bin]] entry needs a path");
+      }
+      const auto bin_path = path_it->second.value<std::string_view>();
+      if (!bin_path.has_value() || bin_path->empty()) {
+        return semantic_error(bag, filename, "[[bin]] path must be a string");
+      }
+      std::string_view bin_name;
+      const auto name_it = bin_table->find("name");
+      if (name_it != bin_table->end()) {
+        const auto name_value = name_it->second.value<std::string_view>();
+        if (!name_value.has_value() || name_value->empty()) {
+          return semantic_error(bag, filename, "[[bin]] name must be a string");
+        }
+        bin_name = copy_str(arena, *name_value);
+      }
+      bins[bin_filled++] = BinTarget{
+          .name = bin_name,
+          .path = copy_str(arena, *bin_path),
+      };
+    }
+  }
+
   return base::make_ok(PackageManifest{
       .name = copy_str(arena, *name),
       .version = std::move(version).unwrap(),
       .edition = edition,
       .dependencies = dependencies,
       .dependency_count = dependency_count,
+      .bins = bins,
+      .bin_count = bin_count,
   });
 }
 
