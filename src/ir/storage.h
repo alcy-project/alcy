@@ -37,6 +37,9 @@ struct StorageState {
   using Types = base::Vec<TypeNode, TypeIdx, Alloc<TypeNode>>;
   using StructTypes = base::Vec<StructType, StructTypeIdx, Alloc<StructType>>;
   using ArrayTypes = base::Vec<ArrayType, ArrayTypeIdx, Alloc<ArrayType>>;
+  using EnumTypes = base::Vec<EnumType, EnumTypeIdx, Alloc<EnumType>>;
+  using EnumVariantTypes =
+      base::Vec<EnumVariantType, EnumVariantTypeIdx, Alloc<EnumVariantType>>;
 
   Functions functions;
   Blocks blocks;
@@ -49,6 +52,8 @@ struct StorageState {
   Types types;
   StructTypes struct_types;
   ArrayTypes array_types;
+  EnumTypes enum_types;
+  EnumVariantTypes enum_variant_types;
 };
 
 class Storage {
@@ -84,6 +89,12 @@ class Storage {
   }
   const StorageState::ArrayTypes& array_types() const {
     return state_.array_types;
+  }
+  const StorageState::EnumTypes& enum_types() const {
+    return state_.enum_types;
+  }
+  const StorageState::EnumVariantTypes& enum_variant_types() const {
+    return state_.enum_variant_types;
   }
 
  private:

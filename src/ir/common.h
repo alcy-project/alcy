@@ -57,4 +57,11 @@ using StructTypeIdx = base::Idx<StructType, IdBaseType>;
 struct ArrayType;
 using ArrayTypeIdx = base::Idx<ArrayType, IdBaseType>;
 
+struct EnumType;
+using EnumTypeIdx = base::Idx<EnumType, IdBaseType>;
+
+struct EnumVariantType;
+using EnumVariantTypeIdx = base::Idx<EnumVariantType, IdBaseType>;
+using EnumVariantTypeIdxRange = base::IdxRange<EnumVariantTypeIdx>;
+
 }  // namespace ir

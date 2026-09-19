@@ -438,6 +438,56 @@ TEST_CASE("Verify struct and array types") {
   }
 }
 
+TEST_CASE("Verify enum types") {
+  // Valid: enum with a unit variant and a payload variant.
+  {
+    StorageBuilder builder;
+    const TypeIdx i32 = builder.primitive(TypeTag::I32);
+    TypeSeq payload;
+    payload.push(builder.ref_type(i32));
+    EnumVariantTypeSeq variants;
+    variants.push(builder.enum_variant(str::kEmptyStringId, {}));
+    variants.push(builder.enum_variant(str::kEmptyStringId, payload.finish()));
+    builder.enum_type(str::kEmptyStringId, variants.finish());
+    Storage storage = std::move(builder).build();
+    CHECK(verify_storage(storage).is_ok());
+  }
+  // Variant range exceeds the variant storage.
+  {
+    StorageState state;
+    state.enum_types.emplace_back(EnumType{
+        .name = str::kEmptyStringId,
+        .variants = {EnumVariantTypeIdx(7), 1},
+    });
+    TypeNode bad{};
+    bad.tag = TypeTag::Enum;
+    bad.data.set(EnumTypeIdx(0));
+    state.types.emplace_back(bad);
+    StorageBuilder builder(std::move(state));
+    Storage storage = std::move(builder).build();
+    CHECK(check(std::move(storage)) == VerifyErrorKind::TypeMetadataOutOfRange);
+  }
+  // Variant payload range exceeds the types storage.
+  {
+    StorageState state;
+    state.enum_variant_types.emplace_back(EnumVariantType{
+        .name = str::kEmptyStringId,
+        .fields = {TypeIdx(99), 1},
+    });
+    state.enum_types.emplace_back(EnumType{
+        .name = str::kEmptyStringId,
+        .variants = {EnumVariantTypeIdx(0), 1},
+    });
+    TypeNode bad{};
+    bad.tag = TypeTag::Enum;
+    bad.data.set(EnumTypeIdx(0));
+    state.types.emplace_back(bad);
+    StorageBuilder builder(std::move(state));
+    Storage storage = std::move(builder).build();
+    CHECK(check(std::move(storage)) == VerifyErrorKind::EnumFieldsOutOfRange);
+  }
+}
+
 TEST_CASE("Verify CondBr shapes") {
   // CondBr with a non-i1 condition reports InvalidCondBr.
   {

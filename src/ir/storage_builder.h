@@ -110,15 +110,17 @@ class StorageBuilder {
     return state_.operands.emplace_back(std::move(operand));
   }
   TypeIdx type(TypeTag tag) {
-    DCHECK(tag != TypeTag::Struct && tag != TypeTag::Array);
+    DCHECK(tag != TypeTag::Struct && tag != TypeTag::Array &&
+           tag != TypeTag::Enum);
     return primitive(tag);
   }
 
   // Returns the pre-interned node for a non-composite tag. O(1), no
-  // allocation. Struct and Array nodes are created via struct_type() and
-  // array_type() instead.
+  // allocation. Struct, Array, and Enum nodes are created via struct_type(),
+  // array_type(), and enum_type() instead.
   TypeIdx primitive(TypeTag tag) const {
-    DCHECK(tag != TypeTag::Struct && tag != TypeTag::Array);
+    DCHECK(tag != TypeTag::Struct && tag != TypeTag::Array &&
+           tag != TypeTag::Enum);
     return primitive_idx(tag);
   }
 
@@ -135,6 +137,19 @@ class StorageBuilder {
     node.tag = TypeTag::Array;
     node.data.set(state_.array_types.emplace_back(
         ArrayType{.element = element, .count = count}));
+    return state_.types.emplace_back(node);
+  }
+
+  EnumVariantTypeIdx enum_variant(str::StringPoolId name, TypeIdxRange fields) {
+    return state_.enum_variant_types.emplace_back(
+        EnumVariantType{.name = name, .fields = fields});
+  }
+
+  TypeIdx enum_type(str::StringPoolId name, EnumVariantTypeIdxRange variants) {
+    TypeNode node{};
+    node.tag = TypeTag::Enum;
+    node.data.set(state_.enum_types.emplace_back(
+        EnumType{.name = name, .variants = variants}));
     return state_.types.emplace_back(node);
   }
 

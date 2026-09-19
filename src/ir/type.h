@@ -39,6 +39,7 @@ enum class TypeTag : u8 {
   Struct,
   Array,
   Function,
+  Enum,
 };
 
 // Number of primitive tags below Struct. StorageBuilder pre-interns them in
@@ -68,10 +69,22 @@ struct ArrayType {
   u64 count;
 };
 
+struct EnumVariantType {
+  str::StringPoolId name;
+  // Payload field types in declaration order; empty for unit variants.
+  TypeIdxRange fields;
+};
+
+struct EnumType {
+  str::StringPoolId name;
+  // Variants in declaration order; the index doubles as the discriminant.
+  EnumVariantTypeIdxRange variants;
+};
+
 struct TypeNode {
   TypeTag tag;
-  // Meaningful only for Struct/Array tags.
-  base::Union<StructTypeIdx, ArrayTypeIdx> data;
+  // Meaningful only for Struct/Array/Enum tags.
+  base::Union<StructTypeIdx, ArrayTypeIdx, EnumTypeIdx> data;
 
   inline StructTypeIdx as_struct() const {
     DCHECK_MSG(tag == TypeTag::Struct, "type node is not a struct");
@@ -81,6 +94,11 @@ struct TypeNode {
   inline ArrayTypeIdx as_array() const {
     DCHECK_MSG(tag == TypeTag::Array, "type node is not an array");
     return data.get<ArrayTypeIdx>();
+  }
+
+  inline EnumTypeIdx as_enum() const {
+    DCHECK_MSG(tag == TypeTag::Enum, "type node is not an enum");
+    return data.get<EnumTypeIdx>();
   }
 };
 
@@ -111,6 +129,7 @@ constexpr const char* type_to_str(TypeTag tag) {
     case T::Struct: return "struct";
     case T::Array: return "array";
     case T::Function: return "function";
+    case T::Enum: return "enum";
     default: UNREACHABLE();
   }
 }

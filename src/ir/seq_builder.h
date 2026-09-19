@@ -50,5 +50,6 @@ using InstrSeq = SeqBuilder<InstructionIdx>;
 using BlockParamSeq = SeqBuilder<BlockParamIdx>;
 using BlockSeq = SeqBuilder<BlockIdx>;
 using TypeSeq = SeqBuilder<TypeIdx>;
+using EnumVariantTypeSeq = SeqBuilder<EnumVariantTypeIdx>;
 
 }  // namespace ir

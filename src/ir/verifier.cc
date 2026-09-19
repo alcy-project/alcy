@@ -62,6 +62,25 @@ VerifyResult verify_storage(const Storage& storage) {
         return err(VerifyErrorKind::TypeIdxOutOfRange,
                    storage.array_types()[aidx].element.idx);
       }
+    } else if (node.tag == TypeTag::Enum) {
+      const EnumTypeIdx eidx = node.as_enum();
+      if (eidx.idx >= storage.enum_types().size()) {
+        return err(VerifyErrorKind::TypeMetadataOutOfRange, tidx.idx);
+      }
+      const EnumType& enum_type = storage.enum_types()[eidx];
+      if (!range_in_bounds(enum_type.variants.head(), enum_type.variants.size(),
+                           storage.enum_variant_types().size())) {
+        return err(VerifyErrorKind::TypeMetadataOutOfRange, tidx.idx);
+      }
+      for (EnumVariantTypeIdx vidx = enum_type.variants.head();
+           vidx.idx < enum_type.variants.head().idx + enum_type.variants.size();
+           vidx = EnumVariantTypeIdx(vidx.idx + 1)) {
+        const EnumVariantType& variant = storage.enum_variant_types()[vidx];
+        if (!range_in_bounds(variant.fields.head(), variant.fields.size(),
+                             storage.types().size())) {
+          return err(VerifyErrorKind::EnumFieldsOutOfRange, vidx.idx);
+        }
+      }
     }
   }
 
