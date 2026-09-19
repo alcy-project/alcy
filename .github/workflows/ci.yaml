@@ -150,43 +150,21 @@ jobs:
           git -C third_party/llvm/src fetch --tags --depth=1
           git -C third_party/llvm/src describe --tags --always
 
-      # The wasm LLVM asset is published from the fork on its own schedule;
-      # until it exists the wasm legs stay green and skip instead of failing.
-      - name: Check LLVM asset
-        id: asset
+      - name: Cache build directory
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: out/build
+          key: ${{ runner.os }}-wasm-wasm32-${{ matrix.build_type }}-false-${{ env.LLVM_VERSION }}-build-dir
+
+      - name: Build
         shell: bash
-        run: |
-          tag=$(git -C third_party/llvm/src describe --tags --always)
-          url="https://github.com/alcy-project/llvm-alcy-fork/releases/download/${tag}/llvm-${{ matrix.build_type }}-wasm32-unknown-emscripten.tar.zst"
-          echo "Probing $url"
-          if curl -sSfI -o /dev/null --max-time 30 "$url"; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "::notice::Prebuilt LLVM for ${tag}/wasm32-unknown-emscripten is not published yet; skipping wasm build until the fork releases it."
-          fi
-
-      - name: Cache LLVM tag
-        if: steps.asset.outputs.exists == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: build/scripts/llvm/.llvm_tag_cache
-          key: ubuntu-24.04-wasm-wasm32-${{ matrix.build_type }}-false-${{ env.LLVM_VERSION }}-llvm_tag_cache
-
-      - name: Cache third_party dependencies
-        if: steps.asset.outputs.exists == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: out/build/third_party
-          key: ubuntu-24.04-wasm-wasm32-${{ matrix.build_type }}-false-${{ env.LLVM_VERSION }}-third_party_dependencies
+        run: uv run ./build/scripts/build.py --target=all --mode=${{ matrix.build_type }} --build-subdir=build --target-os=emscripten
 
       - name: Build tests and run
-        if: steps.asset.outputs.exists == 'true'
         shell: bash
         run: uv run ./build/scripts/run.py --target=tests --mode=${{ matrix.build_type }} --build-subdir=build --target-os=emscripten
 
       - name: Package & Generate Checksum
-        if: steps.asset.outputs.exists == 'true'
         shell: bash
         run: |
           mkdir -p dist
@@ -216,7 +194,6 @@ jobs:
           fi
 
       - name: Upload build artifacts
-        if: steps.asset.outputs.exists == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: wasm-wasm32-${{ matrix.build_type }}
