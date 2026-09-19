@@ -250,7 +250,7 @@ TEST_CASE("Check instantiates blessed types with dedup") {
   const bool setup =
       write_all(dir, {{"main.al",
                        "fn f(a: Result<i32, bool>) -> Option<i32> {\n"
-                       "  ret a\n"
+                       "  ret None\n"
                        "}\n"
                        "fn g(b: Result<i32, bool>) -> i32 {\n"
                        "  ret 0\n"
@@ -471,7 +471,7 @@ TEST_CASE("Check exposes blessed shapes in the registry") {
   const bool setup =
       write_all(dir, {{"main.al",
                        "fn f(a: Result<i32, bool>) -> Option<i32> {\n"
-                       "  ret a\n"
+                       "  ret None\n"
                        "}\n"}});
   CHECK(setup);
   if (!setup) {
@@ -550,6 +550,420 @@ TEST_CASE("Check judges Copy structurally") {
   CHECK(result.package->types.is_copy_type(all_copy->type));
   CHECK(!result.package->types.is_copy_type(has_mut->type));
   CHECK(!result.package->types.is_copy_type(mixed->type));
+}
+
+TEST_CASE("Check expressions accept well-typed programs") {
+  io::TempDir dir("alcy_expr_ok_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Point { x: i32, y: i32 }\n"
+                                      "fn add(a: i32, b: i32) -> i32 {\n"
+                                      "  ret a + b\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  x: u8 := 42u8\n"
+                                      "  y := x + 1\n"
+                                      "  p := Point { x: 1, y: 2 }\n"
+                                      "  t := (1, true)\n"
+                                      "  c := 1 as u64\n"
+                                      "  d := 1.5 + 2.0\n"
+                                      "  print(\"hi\")\n"
+                                      "  _ := y\n"
+                                      "  _ := p\n"
+                                      "  _ := t\n"
+                                      "  _ := c\n"
+                                      "  _ := d\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check expressions reject mismatches") {
+  {
+    io::TempDir dir("alcy_expr_suffix_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() {\n"
+                                        "  x: u8 := 42i32\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_expr_binop_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() {\n"
+                                        "  x := 1 + true\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_expr_ret_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f() -> i32 {\n"
+                                        "  ret true\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_expr_call_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn add(a: i32, b: i32) -> i32 {\n"
+                                        "  ret a + b\n"
+                                        "}\n"
+                                        "fn main() {\n"
+                                        "  _ := add(1)\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_expr_field_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "struct Point { x: i32 }\n"
+                                        "fn main() {\n"
+                                        "  p := Point { x: 1 }\n"
+                                        "  _ := p.y\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+}
+
+TEST_CASE("Check question-mark propagation") {
+  {
+    io::TempDir dir("alcy_question_ok_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn get() -> Result<i32, bool> {\n"
+                                        "  ret Ok(1)\n"
+                                        "}\n"
+                                        "fn caller() -> Result<i32, bool> {\n"
+                                        "  x := get()?\n"
+                                        "  ret Ok(x + 1)\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_question_mismatch_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn get() -> Result<i32, bool> {\n"
+                                        "  ret Ok(1)\n"
+                                        "}\n"
+                                        "fn caller() -> Result<i32, str> {\n"
+                                        "  x := get()?\n"
+                                        "  ret Ok(x + 1)\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_question_plain_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn get() -> Result<i32, bool> {\n"
+                                        "  ret Ok(1)\n"
+                                        "}\n"
+                                        "fn caller() -> i32 {\n"
+                                        "  ret get()?\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+}
+
+TEST_CASE("Check match exhaustiveness") {
+  {
+    io::TempDir dir("alcy_match_bool_ok_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(b: bool) -> i32 {\n"
+                                        "  ret match b {\n"
+                                        "    true => 1,\n"
+                                        "    false => 0,\n"
+                                        "  }\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_match_bool_bad_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(b: bool) -> i32 {\n"
+                                        "  ret match b {\n"
+                                        "    true => 1,\n"
+                                        "  }\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_match_enum_ok_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "enum Choice { Yes, No(i32) }\n"
+                                        "fn f(c: Choice) -> i32 {\n"
+                                        "  ret match c {\n"
+                                        "    Yes => 1,\n"
+                                        "    No(x) => x,\n"
+                                        "  }\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_match_enum_bad_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "enum Choice { Yes, No(i32) }\n"
+                                        "fn f(c: Choice) -> i32 {\n"
+                                        "  ret match c {\n"
+                                        "    Yes => 1,\n"
+                                        "  }\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_match_int_wild_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(x: i32) -> i32 {\n"
+                                        "  ret match x {\n"
+                                        "    0 => 1,\n"
+                                        "    _ => 0,\n"
+                                        "  }\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_match_int_bad_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(x: i32) -> i32 {\n"
+                                        "  ret match x {\n"
+                                        "    0 => 1,\n"
+                                        "  }\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+}
+
+TEST_CASE("Check methods and blessed methods") {
+  {
+    io::TempDir dir("alcy_method_ok_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "struct Point { x: i32 }\n"
+                                        "impl Point {\n"
+                                        "  fn get(self: &Self) -> i32 {\n"
+                                        "    ret self.x\n"
+                                        "  }\n"
+                                        "}\n"
+                                        "fn f(r: Result<i32, bool>) -> i32 {\n"
+                                        "  p := Point { x: 1 }\n"
+                                        "  v := r.unwrap()\n"
+                                        "  ok := r.is_ok()\n"
+                                        "  _ := ok\n"
+                                        "  ret p.get() + v\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_method_bad_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "struct Point { x: i32 }\n"
+                                        "fn f() {\n"
+                                        "  p := Point { x: 1 }\n"
+                                        "  _ := p.missing()\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+}
+
+TEST_CASE("Check must_use warnings") {
+  io::TempDir dir("alcy_mustuse_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn get() -> Result<i32, bool> {\n"
+                                      "  ret Ok(1)\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  get();\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(f.bag.warning_count() > 0);
+}
+
+TEST_CASE("Check items enforce entry and initializer rules") {
+  {
+    io::TempDir dir("alcy_main_bad_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() -> bool {\n"
+                                        "  ret true\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_static_mut_test");
+    const bool setup =
+        write_all(dir, {{"main.al", "static r: &mut i32 = 0\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_const_call_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn one() -> i32 {\n"
+                                        "  ret 1\n"
+                                        "}\n"
+                                        "const k: i32 = one()\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_let_refutable_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() {\n"
+                                        "  0 := 1\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_range_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() {\n"
+                                        "  _ := 1..10\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_break_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() {\n"
+                                        "  break\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
 }
 
 }  // namespace analyzer

@@ -60,7 +60,30 @@ bool inserts_semi(TokenKind kind) {
     case TokenKind::RBrace:
     case TokenKind::Break:
     case TokenKind::Continue:
-    case TokenKind::Ret: return true;
+    case TokenKind::Ret:
+    // A cast target (`1 as u64`, `x as Self`) ends the expression, so
+    // type keywords terminate the statement too. `!` is excluded: a
+    // trailing `!` negates and always continues the expression.
+    // A postfix `?` likewise ends its expression.
+    case TokenKind::Question:
+    case TokenKind::Self:
+    case TokenKind::SelfType:
+    case TokenKind::I8:
+    case TokenKind::I16:
+    case TokenKind::I32:
+    case TokenKind::I64:
+    case TokenKind::I128:
+    case TokenKind::Isize:
+    case TokenKind::U8:
+    case TokenKind::U16:
+    case TokenKind::U32:
+    case TokenKind::U64:
+    case TokenKind::U128:
+    case TokenKind::Usize:
+    case TokenKind::F32:
+    case TokenKind::F64:
+    case TokenKind::Bool:
+    case TokenKind::Str: return true;
     default: return false;
   }
 }

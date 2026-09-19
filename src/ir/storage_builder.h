@@ -103,6 +103,26 @@ class StorageBuilder {
     return state_.immutables.emplace_back(immutable);
   }
   RegisterIdx reg(Register reg) { return state_.registers.emplace_back(reg); }
+  // Const readers for analyses running before build(): body checking
+  // resolves annotations (interning new types) while inspecting the
+  // table, so it reads through the builder instead of a Storage.
+  const StorageState::Types& types() const { return state_.types; }
+  const StorageState::StructTypes& struct_types() const {
+    return state_.struct_types;
+  }
+  const StorageState::ArrayTypes& array_types() const {
+    return state_.array_types;
+  }
+  const StorageState::EnumTypes& enum_types() const {
+    return state_.enum_types;
+  }
+  const StorageState::EnumVariantTypes& enum_variant_types() const {
+    return state_.enum_variant_types;
+  }
+  const StorageState::RefTypes& ref_types() const { return state_.ref_types; }
+  const StorageState::TupleTypes& tuple_types() const {
+    return state_.tuple_types;
+  }
   ExternalFunctionIdx external_function(ExternalFunction external_function) {
     return state_.external_functions.emplace_back(external_function);
   }

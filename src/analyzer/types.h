@@ -37,6 +37,18 @@ struct CheckedModule {
     ir::TypeIdx ret;
   };
   std::vector<FnSig> functions;
+  // Inherent methods per impl block, including associated functions
+  // (receiver None). Mirrors the resolved signatures above so call
+  // checking can match (self type, name) without re-walking AST.
+  enum class ReceiverKind : u8 { None, ByValue, Shared, Exclusive };
+  struct MethodInfo {
+    ir::TypeIdx self_type;
+    std::string_view name;
+    std::vector<ir::TypeIdx> params;
+    ir::TypeIdx ret;
+    ReceiverKind receiver;
+  };
+  std::vector<MethodInfo> methods;
   struct StaticInfo {
     std::string_view name;
     ir::TypeIdx type;
