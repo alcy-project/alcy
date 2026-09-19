@@ -35,8 +35,7 @@ constexpr u32 kAnalyzerDuplicateDefinition = 4212;
 constexpr u32 kAnalyzerReservedName = 4213;
 constexpr u32 kAnalyzerArityMismatch = 4214;
 constexpr u32 kAnalyzerGenericArguments = 4215;
-constexpr u32 kAnalyzerMutField = 4216;
-constexpr u32 kAnalyzerUnsupportedType = 4217;
+constexpr u32 kAnalyzerUnsupportedType = 4216;
 
 constexpr u32 kNoModule = 0xFFFFFFFFu;
 
@@ -196,19 +195,9 @@ struct Checker {
       std::vector<ir::TypeIdx> fields;
       fields.reserve(decl->fields.size());
       for (const ast::StructField& field : decl->fields) {
-        ir::TypeIdx field_type =
-            resolve_type(entry.module, field.type, nullptr);
-        if (field.type->kind == ast::TypeKind::Ref) {
-          const ast::RefType* ref =
-              static_cast<const ast::RefType*>(field.type);
-          if (ref->is_mut) {
-            const u32 index = bag.emit(
-                diag::Severity::Error, kAnalyzerMutField, field.type->span,
-                "mutable references cannot be stored in struct fields");
-            (void)index;
-          }
-        }
-        fields.push_back(field_type);
+        // Exclusive references are legal fields; the structural Copy
+        // rule marks the aggregate move-only.
+        fields.push_back(resolve_type(entry.module, field.type, nullptr));
       }
       ir::TypeSeq seq;
       for (ir::TypeIdx field : fields) {
@@ -676,8 +665,12 @@ diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
   }
   ir::Storage storage = std::move(checker.builder).build();
   checker.validate_cycles(storage);
-  return base::make_ok(
-      CheckedPackage{tree, std::move(storage), std::move(checker.modules)});
+  CheckedPackage package{
+      tree, std::move(storage), std::move(checker.modules), {}};
+  for (const BlessedEntry& entry : checker.blessed) {
+    package.blessed.push_back({entry.is_result, entry.type, entry.args});
+  }
+  return base::make_ok(std::move(package));
 }
 
 }  // namespace analyzer

@@ -19,6 +19,7 @@ namespace analyzer {
 // refer to the package Storage below; all views borrow source bytes.
 struct CheckedModule {
   u32 module;
+
   struct NamedType {
     std::string_view name;
     ir::TypeIdx type;
@@ -48,6 +49,16 @@ struct CheckedPackage {
   ir::Storage types;
   // Aligned with tree.modules by index.
   std::vector<CheckedModule> modules;
+  // Every blessed instantiation in the package, in first-use order.
+  // Expression checking (Phase B4) maps a TypeIdx here for `?`,
+  // construction, and must_use; identity is the interned index.
+  struct BlessedType {
+    bool is_result;
+    ir::TypeIdx type;
+    // [T, E] for Result, [T] for Option.
+    std::vector<ir::TypeIdx> args;
+  };
+  std::vector<BlessedType> blessed;
 };
 
 // Resolves every type position in the package to interned TypeIdx:

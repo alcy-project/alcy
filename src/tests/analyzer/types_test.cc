@@ -18,6 +18,7 @@
 #include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
+#include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "source/source.h"
@@ -439,10 +440,10 @@ TEST_CASE("Check rejects malformed generics") {
   }
 }
 
-TEST_CASE("Check rejects mutable reference fields") {
+TEST_CASE("Check accepts mutable reference fields as move-only") {
   io::TempDir dir("alcy_types_mutfield_test");
   const bool setup = write_all(dir, {{"main.al",
-                                      "struct Holder { r: &mut i32 }\n"
+                                      "struct Holder { r: &mut i32, s: &i32 }\n"
                                       "fn main() {}\n"}});
   CHECK(setup);
   if (!setup) {
@@ -451,8 +452,104 @@ TEST_CASE("Check rejects mutable reference fields") {
 
   Fixture f;
   const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
-  CHECK(!result.package.has_value());
-  CHECK(f.bag.has_errors());
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  const CheckedModule::NamedType* holder =
+      root != nullptr ? find_type(*root, "Holder") : nullptr;
+  CHECK(holder != nullptr);
+  if (holder == nullptr) {
+    return;
+  }
+  CHECK(!result.package->types.is_copy_type(holder->type));
+}
+
+TEST_CASE("Check exposes blessed shapes in the registry") {
+  io::TempDir dir("alcy_types_registry_test");
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn f(a: Result<i32, bool>) -> Option<i32> {\n"
+                       "  ret a\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  CHECK(result.package->blessed.size() == 2);
+  if (result.package->blessed.size() != 2) {
+    return;
+  }
+  const ir::Storage& types = result.package->types;
+  for (const CheckedPackage::BlessedType& entry : result.package->blessed) {
+    CHECK(types.types()[entry.type].tag == ir::TypeTag::Enum);
+    const ir::EnumType& enum_type =
+        types.enum_types()[types.types()[entry.type].as_enum()];
+    CHECK(enum_type.variants.size() == 2);
+    const ir::EnumVariantType& first =
+        types.enum_variant_types()[enum_type.variants.head()];
+    const ir::EnumVariantType& second =
+        types.enum_variant_types()[ir::EnumVariantTypeIdx(
+            enum_type.variants.head().idx + 1)];
+    if (entry.is_result) {
+      CHECK(entry.args.size() == 2);
+      CHECK(first.fields.size() == 1);
+      CHECK(second.fields.size() == 1);
+      CHECK(types.types()[first.fields[0]].tag == ir::TypeTag::I32);
+      CHECK(types.types()[second.fields[0]].tag == ir::TypeTag::I1);
+    } else {
+      CHECK(entry.args.size() == 1);
+      CHECK(first.fields.size() == 1);
+      CHECK(second.fields.empty());
+      CHECK(types.types()[first.fields[0]].tag == ir::TypeTag::I32);
+    }
+  }
+}
+
+TEST_CASE("Check judges Copy structurally") {
+  io::TempDir dir("alcy_types_copy_test");
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct AllCopy { a: i32, b: &i32, c: (bool, str) }\n"
+                       "struct HasMut { r: &mut i32 }\n"
+                       "enum Mixed { A(i32), B(&mut bool) }\n"
+                       "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const CheckedModule::NamedType* all_copy = find_type(*root, "AllCopy");
+  const CheckedModule::NamedType* has_mut = find_type(*root, "HasMut");
+  const CheckedModule::NamedType* mixed = find_type(*root, "Mixed");
+  CHECK(all_copy != nullptr);
+  CHECK(has_mut != nullptr);
+  CHECK(mixed != nullptr);
+  if (all_copy == nullptr || has_mut == nullptr || mixed == nullptr) {
+    return;
+  }
+  CHECK(result.package->types.is_copy_type(all_copy->type));
+  CHECK(!result.package->types.is_copy_type(has_mut->type));
+  CHECK(!result.package->types.is_copy_type(mixed->type));
 }
 
 }  // namespace analyzer

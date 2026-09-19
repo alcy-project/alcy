@@ -110,7 +110,9 @@ class Storage {
   // Copy-ability of a fully interned type: primitives (except MutRef),
   // shared references, units, and structural types whose every part is
   // Copy. Must only run on cycle-free storage; check_package validates
-  // uninhabited value cycles before anyone queries.
+  // uninhabited value cycles before anyone queries. User-defined
+  // destructors force move-only once drop syntax lands (no syntax
+  // exists yet, so no check is needed here).
   bool is_copy_type(TypeIdx idx) const {
     const TypeNode& node = state_.types[idx];
     switch (node.tag) {
