@@ -25,21 +25,27 @@ exhaustiveness.
 
 - Exit: typed AST/IR type checking over the demo set.
 
-## Phase C — Borrow and regions (thesis risk)
+## Phase C — Lowering and borrow checking (thesis risk)
 
-Intraprocedural loan invalidation, exclusivity, drop elaboration,
-then topological summary computation and instantiation. Lead with a
-thin vertical slice (borrows through codegen on trivial programs)
-to expose thesis risk early.
+Ownership is checked on the IR (no AST-based borrow checking: that
+would be throwaway once lowering lands). This phase therefore covers
+the first half of lowering, sliced straight-line first so the thesis
+skeleton proves out early, then borrow checking on verifier-green IR:
+borrow expressions, the lowering slice (straight-line code, calls,
+aggregates, references, `Move` insertion), intraprocedural NLL
+(move checking, loan invalidation, exclusivity over CFG with dense
+bitsets), control-flow lowering, and summary computation with
+call-site instantiation.
 
-- Exit: borrow diagnostics plus summary propagation tests.
+- Exit: borrow diagnostics plus summary propagation tests, all on
+  verifier-green IR.
 
-## Phase D — Lowering, codegen, and runtime floor
+## Phase D — Codegen and runtime floor
 
-AST-to-IR lowering with typed desugars, full `codegen_llvm` opcode
-coverage, layouts, strings, the panic abort path, `main` forms, and
-the `print` intrinsic (lowered to a write syscall; migrates to a
-core function once FFI lands).
+Remaining `codegen_llvm` opcode coverage, layouts, strings, the
+panic abort path, `main` forms, and the `print` intrinsic (lowered
+to a write syscall; migrates to a core function once FFI lands).
+Any remaining AST-to-IR lowering lands here too.
 
 - Exit: LLVM IR to objects to executables, end to end.
 
