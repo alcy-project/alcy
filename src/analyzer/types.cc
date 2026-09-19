@@ -718,6 +718,18 @@ struct Checker {
     return tag_of(idx) == ir::TypeTag::Error;
   }
 
+  // User-facing type names: the table spells bool as `i1` and unit as
+  // `void`, which read poorly in diagnostics.
+  static const char* pretty_tag(ir::TypeTag tag) {
+    switch (tag) {
+      case ir::TypeTag::Void: return "()";
+      case ir::TypeTag::I1: return "bool";
+      case ir::TypeTag::Never: return "!";
+      case ir::TypeTag::Str: return "str";
+      default: return ir::type_to_str(tag);
+    }
+  }
+
   // Structural type equality. Field slots hold copies (ranges demand
   // consecutive fresh nodes), so index equality under-compares:
   // primitives compare by tag, references/tuples/arrays recurse, and
@@ -818,10 +830,10 @@ struct Checker {
     if (is_never(actual)) {
       return expected;
     }
-    const u32 index = bag.emit(
-        diag::Severity::Error, kAnalyzerTypeMismatch, span,
-        "type mismatch in {}: expected '{}', found '{}'", what,
-        ir::type_to_str(tag_of(expected)), ir::type_to_str(tag_of(actual)));
+    const u32 index =
+        bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, span,
+                 "type mismatch in {}: expected '{}', found '{}'", what,
+                 pretty_tag(tag_of(expected)), pretty_tag(tag_of(actual)));
     (void)index;
     return error_type();
   }
@@ -1747,7 +1759,7 @@ struct Checker {
     const u32 index =
         bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, span,
                  "type mismatch in {}: '{}' vs '{}'", what,
-                 ir::type_to_str(tag_of(left)), ir::type_to_str(tag_of(right)));
+                 pretty_tag(tag_of(left)), pretty_tag(tag_of(right)));
     (void)index;
     return error_type();
   }
@@ -2170,7 +2182,7 @@ struct Checker {
     }
     const u32 index =
         bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, field->span,
-                 "no fields on '{}'", ir::type_to_str(tag));
+                 "no fields on '{}'", pretty_tag(tag));
     (void)index;
     return error_type();
   }
@@ -2300,7 +2312,7 @@ struct Checker {
     }
     const u32 index = bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
                                cast->span, "invalid cast from '{}' to '{}'",
-                               ir::type_to_str(from), ir::type_to_str(to));
+                               pretty_tag(from), pretty_tag(to));
     (void)index;
     return error_type();
   }
@@ -2323,7 +2335,7 @@ struct Checker {
     if (tag_of(receiver) != ir::TypeTag::Array) {
       const u32 diag = bag.emit(
           diag::Severity::Error, kAnalyzerInvalidOperation, index->span,
-          "cannot index '{}'", ir::type_to_str(tag_of(receiver)));
+          "cannot index '{}'", pretty_tag(tag_of(receiver)));
       (void)diag;
       return error_type();
     }
@@ -2691,9 +2703,9 @@ struct Checker {
             }
             break;
         }
-        const u32 index = bag.emit(
-            diag::Severity::Error, kAnalyzerInvalidOperation, expr->span,
-            "invalid unary operand '{}'", ir::type_to_str(tag));
+        const u32 index =
+            bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                     expr->span, "invalid unary operand '{}'", pretty_tag(tag));
         (void)index;
         return error_type();
       }
@@ -2750,7 +2762,7 @@ struct Checker {
         }
         const u32 index = bag.emit(
             diag::Severity::Error, kAnalyzerInvalidOperation, expr->span,
-            "invalid binary operand '{}'", ir::type_to_str(tag));
+            "invalid binary operand '{}'", pretty_tag(tag));
         (void)index;
         return error_type();
       }

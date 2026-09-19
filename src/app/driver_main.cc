@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "analyzer/resolve.h"
+#include "analyzer/types.h"
 #include "app/driver_config.h"
 #include "app/driver_context.h"
 #include "app/init_handler.h"
@@ -28,6 +29,7 @@
 #include "fpag/term/color_mode.h"
 #include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
+#include "ir/type.h"
 #include "path/path.h"
 #include "pipeline/pipeline.h"
 #include "pkg/manifest.h"
@@ -98,6 +100,32 @@ i32 check_package(DriverContext& ctx,
                   source::FileId manifest_file,
                   std::string_view manifest_name);
 
+// MVP pointer width: isize/usize map to 64-bit integers. An explicit
+// choice (never sniffed from the host); a --target flag selects it
+// once cross builds land.
+constexpr ir::PointerWidth kCheckWidth = ir::PointerWidth::W64;
+
+// Runs type checking over a resolved tree, reports diagnostics, and
+// maps the outcome to an exit code. Shared by manifest and
+// single-file modes.
+i32 finish_check(DriverContext& ctx,
+                 analyzer::ModuleTree tree,
+                 usize file_count) {
+  diag::Fallible<analyzer::CheckedPackage> checked =
+      analyzer::check_package(tree, kCheckWidth, ctx.bag);
+  if (checked.is_err()) {
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::CheckFailed);
+  }
+  report(ctx.bag, ctx.sources);
+  if (ctx.bag.has_errors()) {
+    return result_code(ResultCode::CheckFailed);
+  }
+  base::logger.wo_prefix("checked {} file(s), {} module(s)", file_count,
+                         std::move(checked).unwrap().modules.size());
+  return result_code(ResultCode::Success);
+}
+
 i32 run_check(const DriverConfig& config) {
   DriverContext ctx;
   const std::string_view raw_target =
@@ -149,13 +177,11 @@ i32 run_check(const DriverConfig& config) {
     report(ctx.bag, ctx.sources);
     return result_code(ResultCode::CheckFailed);
   }
-  report(ctx.bag, ctx.sources);
   if (ctx.bag.has_errors()) {
+    report(ctx.bag, ctx.sources);
     return result_code(ResultCode::CheckFailed);
   }
-  base::logger.wo_prefix("checked 1 file(s), {} module(s)",
-                         std::move(tree).unwrap().modules.size());
-  return result_code(ResultCode::Success);
+  return finish_check(ctx, std::move(tree).unwrap(), files.size());
 }
 
 i32 check_package(DriverContext& ctx,
@@ -219,14 +245,11 @@ i32 check_package(DriverContext& ctx,
     report(ctx.bag, ctx.sources);
     return result_code(ResultCode::CheckFailed);
   }
-  report(ctx.bag, ctx.sources);
   if (ctx.bag.has_errors()) {
+    report(ctx.bag, ctx.sources);
     return result_code(ResultCode::CheckFailed);
   }
-  const analyzer::ModuleTree built = std::move(tree).unwrap();
-  base::logger.wo_prefix("checked {} file(s), {} module(s)", files.size(),
-                         built.modules.size());
-  return result_code(ResultCode::Success);
+  return finish_check(ctx, std::move(tree).unwrap(), files.size());
 }
 
 i32 not_implemented(std::string_view subcommand) {
