@@ -765,7 +765,25 @@ struct Lowerer {
     const analyzer::CheckedModule::CallTarget* target =
         call_target(call->callee);
     if (target == nullptr) {
-      internal(call->span, "call without target");
+      // Checking records free, associated, and method callees; the
+      // remainder is variant construction, which lands with enums.
+      bool variant = false;
+      if (call->callee->kind == ast::ExprKind::Path) {
+        const ast::PathExpr* path =
+            static_cast<const ast::PathExpr*>(call->callee);
+        if (path->path->segments.size() == 2) {
+          variant = true;
+        } else if (path->path->segments.size() == 1) {
+          const std::string_view name = path->path->segments[0].name;
+          variant =
+              name == "Ok" || name == "Err" || name == "Some" || name == "None";
+        }
+      }
+      if (variant) {
+        unsupported(call->span, "enum construction");
+      } else {
+        internal(call->span, "call without target");
+      }
       return Val{size_one, error_type(), false, false};
     }
     if (target->is_method) {

@@ -52,6 +52,12 @@ def main():
         help='GN target_cpu override (e.g. "wasm32"; defaults per target_os)',
     )
     parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Skip gn gen, gn check, and compdb before building "
+        "(iteration only, never for CI)",
+    )
+    parser.add_argument(
         "run_args",
         nargs=argparse.REMAINDER,
         help="Arguments to pass to the executable (use '--' before run_args if passing flags)",
@@ -66,6 +72,8 @@ def main():
         args.build_subdir,
         args.target_os,
         args.target_cpu,
+        False,
+        args.fast,
     )
     if ret != 0:
         sys.exit(ret)

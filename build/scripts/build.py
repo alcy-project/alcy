@@ -19,6 +19,7 @@ def build(
     target_os: str = "",
     target_cpu: str = "",
     gen_only: bool = False,
+    fast: bool = False,
 ) -> int:
     out_dir = project_root_dir / "out"
     build_dir = out_dir / build_subdir
@@ -34,36 +35,45 @@ def build(
         gn_args += f' target_cpu="{target_cpu}"'
 
     try:
-        # gn gen
-        subprocess.run(
-            [
-                "gn",
-                "gen",
-                str(build_dir),
-                f"--args={gn_args}",
-            ],
-            check=True,
-            cwd=project_root_dir,
-        )
+        if not fast:
+            # gn gen
+            subprocess.run(
+                [
+                    "gn",
+                    "gen",
+                    str(build_dir),
+                    f"--args={gn_args}",
+                ],
+                check=True,
+                cwd=project_root_dir,
+            )
 
-        # gn check
-        subprocess.run(
-            ["gn", "check", str(build_dir), "//src/*"],
-            check=True,
-            cwd=project_root_dir,
-        )
+            # gn check
+            subprocess.run(
+                ["gn", "check", str(build_dir), "//src/*"],
+                check=True,
+                cwd=project_root_dir,
+            )
 
-        # ninja compdb
-        if gen_only:
-            return 0
-        compdb_result = subprocess.run(
-            ["ninja", "-C", str(build_dir), "-t", "compdb"],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=project_root_dir,
-        )
-        (project_root_dir / "compile_commands.json").write_text(compdb_result.stdout)
+            # ninja compdb
+            if gen_only:
+                return 0
+            compdb_result = subprocess.run(
+                ["ninja", "-C", str(build_dir), "-t", "compdb"],
+                capture_output=True,
+                text=True,
+                check=True,
+                cwd=project_root_dir,
+            )
+            (project_root_dir / "compile_commands.json").write_text(
+                compdb_result.stdout
+            )
+        elif gen_only:
+            print(
+                "error: --fast and --gen-only are mutually exclusive",
+                file=sys.stderr,
+            )
+            return 1
 
         # ninja target
         subprocess.run(
@@ -122,6 +132,12 @@ def main():
         action="store_true",
         help="Run gn gen and gn check only (validate foreign toolchains without building)",
     )
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Skip gn gen, gn check, and compdb; straight to ninja "
+        "(iteration only, never for CI)",
+    )
     args = parser.parse_args()
 
     sys.exit(
@@ -134,6 +150,7 @@ def main():
             args.target_os,
             args.target_cpu,
             args.gen_only,
+            args.fast,
         )
     )
 

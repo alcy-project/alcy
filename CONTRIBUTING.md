@@ -15,6 +15,7 @@ Build, test, and check from the repository root:
 typos
 uv run ./build/scripts/build.py --target=default --mode=debug
 uv run ./build/scripts/run.py --target=tests --mode=debug
+uv run ./build/scripts/e2e.py
 uv run ./build/scripts/lint.py
 uv run ./build/scripts/format.py --dry-run
 uv run ./build/scripts/verify_static_linkage.py
@@ -22,7 +23,15 @@ uv run ./build/scripts/verify_static_linkage.py
 # Or run all of the above commands:
 ./build/scripts/check.sh
 
+# Faster iteration (skips gn gen, gn check, and compdb; never for CI):
+uv run ./build/scripts/build.py --target=tests --fast
 ```
+
+End-to-end acceptance cases live in `e2e/cases/<name>/` (sources plus
+`expect.txt` with the expected exit code and output). The `e2e.py`
+runner executes the built `alcy` binary against every case; add a case
+when a user-visible behavior needs a regression anchor that does not
+belong in unit tests.
 
 To automatically fix code style and lint issues:
 
