@@ -25,10 +25,6 @@ config("compiler") {
       defines += [ "_GNU_SOURCE" ]
     } else {
       # Gcc does not support ##__VA_ARGS__ when in standards-conforming mode,
-      # but we use this feature in several places in Chromium.
-      # TODO(thomasanderson): Replace usages of ##__VA_ARGS__ with the
-      # standard-compliant __VA_OPT__ added by C++20, and switch the gcc build
-      # to -std=c*.
       standard_prefix = "gnu"
     }
 
