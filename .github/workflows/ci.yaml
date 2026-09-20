@@ -15,6 +15,7 @@ on:
       - CPPLINT.cfg
       - uv.lock
       - flake.nix
+      - config.toml
   pull_request:
     branches: [main]
     paths: *ci_paths
@@ -28,15 +29,28 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-env:
-  # Used by the `wasm` and `style` jobs below. Reusable workflow calls cannot
-  # read env (GitHub restriction), so build.yaml's `llvm_version` input
-  # default is the single source of truth there; keep the two in sync.
-  LLVM_VERSION: 23.1.1
-
 jobs:
+  load-config:
+    name: Load Config
+    runs-on: ubuntu-24.04
+    outputs:
+      llvm_toolchain_version: ${{ steps.parse.outputs.llvm_toolchain_version }}
+      llvm_fork_tag: ${{ steps.parse.outputs.llvm_fork_tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Parse config.toml
+        id: parse
+        run: |
+          TOOLCHAIN_VER=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["llvm_toolchain_version"])')
+          FORK_TAG=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["llvm_fork_tag"])')
+          echo "llvm_toolchain_version=${TOOLCHAIN_VER}" >> $GITHUB_OUTPUT
+          echo "llvm_fork_tag=${FORK_TAG}" >> $GITHUB_OUTPUT
+
   style:
     name: Format & spelling
+    needs: [load-config]
     runs-on: ubuntu-24.04
 
     steps:
@@ -46,19 +60,13 @@ jobs:
           submodules: false
           fetch-depth: 1
 
-      # Same toolchain the lint legs use (clang-format and `gn format` both
-      # need it). Nix would work too, but its store download is uncached and
-      # the flake lacks clang tools, so the standard setup stays faster here.
       - name: Setup build environment
         uses: ./.github/actions/setup-build
         with:
           nix: "false"
           os: Linux
-          llvm-version: ${{ env.LLVM_VERSION }}
-          fetch-tags: "false"
+          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
-      # Neither check compiles anything, so they share one runner with no
-      # contention over build locks.
       - name: Check formatting
         run: uv run ./build/scripts/format.py --dry-run
 
@@ -66,41 +74,44 @@ jobs:
         uses: crate-ci/typos@d43b6c087ac471e2ea7b8af622ff15f05c0c365b
 
   test-debug:
+    needs: [load-config]
     name: Test (debug)
     uses: ./.github/workflows/build.yaml
     with:
       build_type: debug
       role: test
+      llvm_version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
   test-release:
+    needs: [load-config]
     name: Test (release)
     uses: ./.github/workflows/build.yaml
     with:
       build_type: release
       role: test
+      llvm_version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
-  # Intentionally not gated on the test jobs: waiting would give back exactly
-  # the wall clock the split was meant to save, and a red run is already
-  # flagged as red.
   dist-debug:
+    needs: [load-config]
     name: Package (debug)
     uses: ./.github/workflows/build.yaml
     with:
       build_type: debug
       role: dist
+      llvm_version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
   dist-release:
+    needs: [load-config]
     name: Package (release)
     uses: ./.github/workflows/build.yaml
     with:
       build_type: release
       role: dist
+      llvm_version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
-  # Split out of build.yaml: wasm needs Emscripten instead of the
-  # prebuilt-LLVM/Nix toolchains, so sharing the native matrix only added
-  # `if: plat == 'wasm'` branches everywhere.
   wasm:
     name: WebAssembly (${{ matrix.build_type }})
+    needs: [load-config]
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -110,12 +121,14 @@ jobs:
     env:
       COLORTERM: 256color
       basename: alcy
+      LLVM_VERSION: ${{ needs.load-config.outputs.llvm_toolchain_version }}
+      LLVM_FORK_TAG: ${{ needs.load-config.outputs.llvm_fork_tag }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          submodules: recursive
+          submodules: false
           fetch-depth: 1
 
       - name: Setup Emscripten
@@ -144,11 +157,6 @@ jobs:
           uv sync --frozen
           echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
 
-      - name: Fetch LLVM submodule tags
-        shell: bash
-        run: |
-          git -C third_party/llvm/src fetch --tags --depth=1
-          git -C third_party/llvm/src describe --tags --always
 
       - name: Cache build directory
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
@@ -171,9 +179,6 @@ jobs:
           if [ -f LICENSE ]; then cp LICENSE dist/; fi
           if [ -f README.md ]; then cp README.md dist/; fi
 
-          # Same allowlist policy as build.yaml: final link outputs only,
-          # never obj/ or the third_party/llvm install. This job builds the
-          # tests target, so only its outputs (plus the archive) exist here.
           for f in tests tests.js tests.wasm libalcy.a; do
             if [ -f "out/build/${f}" ]; then
               cp "out/build/${f}" dist/

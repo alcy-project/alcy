@@ -13,10 +13,9 @@ on:
         required: true
         type: string
       llvm_version:
-        description: "Prebuilt LLVM version for standard legs. This default is the single source of truth (callers must not pass env here); keep in sync with docs/build.md."
+        description: "Prebuilt LLVM version. If omitted, read from config.toml."
         required: false
         type: string
-        default: "23.1.1"
 
 jobs:
   build:
@@ -24,8 +23,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      # Explicit include-only matrix: every leg is spelled out so Nix and
-      # standard variants cannot silently collapse into each other.
       # Keep in sync with the `wasm` job in ci.yaml, which covers
       # wasm32-unknown-emscripten separately because it needs Emscripten.
       matrix:
@@ -67,12 +64,22 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
+      - name: Read config.toml
+        id: config
+        shell: bash
+        run: |
+          LLVM_VER="${{ inputs.llvm_version }}"
+          if [ -z "$LLVM_VER" ]; then
+            LLVM_VER=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["llvm_toolchain_version"])')
+          fi
+          echo "llvm_version=${LLVM_VER}" >> $GITHUB_OUTPUT
+
       - name: Setup build environment
         uses: ./.github/actions/setup-build
         with:
           nix: ${{ matrix.nix && 'true' || 'false' }}
           os: ${{ runner.os }}
-          llvm-version: ${{ inputs.llvm_version }}
+          llvm-version: ${{ steps.config.outputs.llvm_version }}
 
       - name: Cache build directory
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9

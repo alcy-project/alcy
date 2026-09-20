@@ -26,9 +26,7 @@ def build(
 
     is_debug = "true" if mode == "debug" else "false"
 
-    gn_args = (
-        f"is_debug={is_debug} is_clang={is_clang} use_lld={use_lld} build_llvm=false"
-    )
+    gn_args = f"is_debug={is_debug} is_clang={is_clang} use_lld={use_lld}"
     if target_os:
         gn_args += f' target_os="{target_os}"'
     if target_cpu:

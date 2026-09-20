@@ -1,6 +1,6 @@
 # ADR 0001: GN as the build system
 
-- Status: Accepted
+- Status: Superseded by ADR-0006
 - Date: 2026-09-16
 
 ## Context

@@ -1,7 +1,5 @@
 declare_args() {
   cache_llvm = true
-  download_llvm = true
-  build_llvm = true
 }
 
 if (is_debug) {
@@ -15,7 +13,6 @@ if (is_debug) {
 
 llvm_root_out_dir = "$root_build_dir/third_party/llvm"
 install_dir = "$llvm_root_out_dir/install/$build_type_lower"
-build_dir = "$llvm_root_out_dir/build/$build_type_lower"
 download_dir = "$llvm_root_out_dir/download/$build_type_lower"
 
 # setup_llvm.py detects the host triple at runtime; only override it when

@@ -12,6 +12,8 @@ build_dir: Path = project_root_dir / "build"
 scripts_dir: Path = build_dir / "scripts"
 default_out_dir: Path = project_root_dir / "out" / "build"
 
+config_toml_file: Path = project_root_dir / "config.toml"
+
 # include_dir: Path = project_root_dir / "include"
 src_dir: Path = project_root_dir / "src"
 # tests_dir: Path = project_root_dir / "tests"
