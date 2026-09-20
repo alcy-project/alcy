@@ -63,6 +63,13 @@ struct Lowerer {
   diag::DiagBag& bag;
   bool failed = false;
 
+  // Side tables for ownership analysis: every emitted instruction
+  // records its source span, and every address alloca records the
+  // bound name (for diagnostics; analysis needs only identity).
+  diag::Span cur_span_{};
+  std::vector<diag::Span> instr_spans_;
+  std::vector<LoweredPackage::AddrInfo> addr_names_;
+
   struct FnEntry {
     const ast::FnItem* item;
     ir::FunctionIdx idx;
@@ -80,6 +87,7 @@ struct Lowerer {
   std::vector<Local> locals;
   ir::InstrSeq instrs;
   bool terminated = false;
+  bool binding_param_ = false;
   ir::OperandIdx size_one = ir::OperandIdx(0);
   ir::OperandIdx zero_i32 = ir::OperandIdx(0);
 
@@ -209,6 +217,7 @@ struct Lowerer {
         builder.instr({.op = op, .flags = {}, .dst = dst, .operands = range});
     builder.reg({.type = type, .def_idx = instr});
     instrs.push(instr);
+    instr_spans_.push_back(cur_span_);
     return dst;
   }
 
@@ -223,7 +232,16 @@ struct Lowerer {
                                .flags = {},
                                .dst = ir::RegisterIdx(base::kInvalidIdx),
                                .operands = range}));
+    instr_spans_.push_back(cur_span_);
   }
+
+  struct SpanGuard {
+    Lowerer* lowerer;
+    diag::Span previous;
+    SpanGuard(Lowerer* lowerer, diag::Span previous)
+        : lowerer(lowerer), previous(previous) {}
+    ~SpanGuard() { lowerer->cur_span_ = previous; }
+  };
 
   Val materialize(Val v) {
     if (!v.address) {
@@ -613,6 +631,7 @@ struct Lowerer {
         emit_void(ir::Opcode::Store,
                   {material.op, to_operand(addr, init.type)});
         locals.push_back({name, addr, init.type});
+        addr_names_.push_back({addr, name, binding_param_});
         return;
       }
       case ast::PatternKind::Tuple: {
@@ -1032,6 +1051,10 @@ struct Lowerer {
         return Val{size_one, error_type(), false, false};
       }
       Val base_addr = address_of(base);
+      // Update consumes the base value.
+      if (base_addr.place && !is_copy(base_addr.type)) {
+        emit(ir::Opcode::Move, base_addr.type, {base_addr.op});
+      }
       for (u32 i = 0; i < static_cast<u32>(seen.size()); ++i) {
         if (seen[i]) {
           continue;
@@ -1180,6 +1203,8 @@ struct Lowerer {
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
+    SpanGuard guard{this, cur_span_};
+    cur_span_ = expr->span;
     switch (expr->kind) {
       case ast::ExprKind::Literal: {
         const ast::LiteralExpr* lit =
@@ -1241,7 +1266,8 @@ struct Lowerer {
         }
         const ir::TypeIdx ref =
             builder.reference_type(place.type, borrow->is_mut);
-        return Val{place.op, ref, false, false};
+        const ir::RegisterIdx loan = emit(ir::Opcode::Borrow, ref, {place.op});
+        return Val{to_operand(loan, ref), ref, false, false};
       }
       case ast::ExprKind::Binary: {
         const ast::BinaryExpr* binary =
@@ -1342,20 +1368,18 @@ struct Lowerer {
     if (failed || terminated) {
       return;
     }
+    SpanGuard guard{this, cur_span_};
+    cur_span_ = stmt->span;
     switch (stmt->kind) {
       case ast::StmtKind::Decl: {
         const ast::DeclStmt* decl = static_cast<const ast::DeclStmt*>(stmt);
-        const ir::TypeIdx* expected = nullptr;
-        ir::TypeIdx ascribed = error_type();
-        // Reuse the recorded init type only for literal shaping; the
-        // ascription (when present) re-resolves through declarations.
-        (void)ascribed;
-        (void)expected;
         Val init = lower_expr(decl->init, nullptr);
         if (failed) {
           return;
         }
-        bind_pattern(decl->pattern, init);
+        // Moving into the binding consumes a non-Copy place.
+        const ir::OperandIdx moved = use_value(init);
+        bind_pattern(decl->pattern, Val{moved, init.type, false, false});
         return;
       }
       case ast::StmtKind::Reassign: {
@@ -1435,6 +1459,7 @@ struct Lowerer {
       return;
     }
     // Bind parameters (patterns may destructure) after allocas exist.
+    binding_param_ = true;
     for (usize i = 0; i < fn->params.size() && !failed; ++i) {
       const ir::RegisterIdx preg = pending_params_[i];
       const ir::TypeIdx ptype = sig.params[i];
@@ -1451,6 +1476,7 @@ struct Lowerer {
                    Val{to_operand(addr, ptype), ptype, true, true});
     }
     pending_params_.clear();
+    binding_param_ = false;
     if (failed) {
       return;
     }
@@ -1542,15 +1568,18 @@ struct Lowerer {
 
 }  // namespace
 
-diag::Fallible<ir::Storage> lower_package(analyzer::CheckedPackage package,
-                                          ir::PointerWidth width,
-                                          str::StringInterner& strings,
-                                          diag::DiagBag& bag) {
+diag::Fallible<LoweredPackage> lower_package(analyzer::CheckedPackage package,
+                                             ir::PointerWidth width,
+                                             str::StringInterner& strings,
+                                             diag::DiagBag& bag) {
   Lowerer lowerer(std::move(package), width, strings, bag);
   lowerer.run();
   if (lowerer.failed) {
     return base::make_err(diag::Fatal{});
   }
+  // Tables leave before the builder moves; aggregate init stays whole.
+  std::vector<diag::Span> spans = std::move(lowerer.instr_spans_);
+  std::vector<LoweredPackage::AddrInfo> addrs = std::move(lowerer.addr_names_);
   ir::Storage storage = std::move(lowerer).finish();
   if (base::Result<void, ir::VerifyError> result = ir::verify_storage(storage);
       result.is_err()) {
@@ -1561,7 +1590,10 @@ diag::Fallible<ir::Storage> lower_package(analyzer::CheckedPackage package,
     (void)error;
     return base::make_err(diag::Fatal{});
   }
-  return base::make_ok(std::move(storage));
+  // Tables outlive the builder move above; the Lowerer shell is empty.
+  LoweredPackage lowered{std::move(storage), std::move(spans),
+                         std::move(addrs)};
+  return base::make_ok(std::move(lowered));
 }
 
 }  // namespace lower

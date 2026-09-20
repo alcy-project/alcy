@@ -66,6 +66,9 @@ enum class Opcode : u8 {
 
   Move,
   Drop,
+  // A live borrow: dst is the reference value, operands = [place].
+  // Mutability reads off the dst register type (Ref vs MutRef).
+  Borrow,
   // BorrowBegin,
   // BorrowEnd,
 
@@ -135,8 +138,9 @@ constexpr const char* opcode_to_str(const Opcode opcode) {
     case O::Fence: return "Fence";
 
     case O::Move: return "Move";
-    case O::Drop:
-      return "Drop";
+    case O::Drop: return "Drop";
+    case O::Borrow:
+      return "Borrow";
 
       // case O::BorrowBegin: return "BorrowBegin";
       // case O::BorrowEnd: return "BorrowEnd";

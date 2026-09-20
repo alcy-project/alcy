@@ -23,6 +23,7 @@ group("modules") {
     ":base_modules",
     "analyzer",
     "ast",
+    "borrow",
     "codegen",
     "codegen_llvm",
     "core",

@@ -6,6 +6,7 @@
 
 #include <initializer_list>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -52,9 +53,8 @@ bool write_all(
 }
 
 struct LowerCase {
-  ir::Storage storage;
+  std::optional<LoweredPackage> lowered;
   bool ok;
-  bool has_storage = false;
 };
 
 LowerCase lower_case(io::TempDir& dir,
@@ -78,21 +78,21 @@ LowerCase lower_case(io::TempDir& dir,
   diag::Fallible<analyzer::ModuleTree> tree_result = analyzer::resolve_modules(
       root, ids, "testpkg", f.sources, f.arena, f.bag);
   if (tree_result.is_err() || f.bag.has_errors()) {
-    return {ir::Storage(ir::StorageState{}), false, false};
+    return {std::nullopt, false};
   }
   analyzer::ModuleTree tree = std::move(tree_result).unwrap();
   diag::Fallible<analyzer::CheckedPackage> checked_result =
       analyzer::check_package(tree, ir::PointerWidth::W64, f.bag);
   if (checked_result.is_err() || f.bag.has_errors()) {
-    return {ir::Storage(ir::StorageState{}), false, false};
+    return {std::nullopt, false};
   }
   analyzer::CheckedPackage checked = std::move(checked_result).unwrap();
-  diag::Fallible<ir::Storage> storage_result = lower_package(
+  diag::Fallible<LoweredPackage> lowered_result = lower_package(
       std::move(checked), ir::PointerWidth::W64, f.strings, f.bag);
-  if (storage_result.is_err()) {
-    return {ir::Storage(ir::StorageState{}), false, false};
+  if (lowered_result.is_err()) {
+    return {std::nullopt, false};
   }
-  return {std::move(storage_result).unwrap(), !f.bag.has_errors(), true};
+  return {std::move(lowered_result).unwrap(), !f.bag.has_errors()};
 }
 
 }  // namespace
@@ -114,12 +114,12 @@ TEST_CASE("Lower straight-line arithmetic") {
   Fixture f;
   LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.ok);
-  CHECK(result.has_storage);
-  if (!result.ok || !result.has_storage) {
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
     return;
   }
-  CHECK(result.storage.functions().size() == 2);
-  CHECK(ir::verify_storage(result.storage).is_ok());
+  CHECK(result.lowered->storage.functions().size() == 2);
+  CHECK(ir::verify_storage(result.lowered->storage).is_ok());
 }
 
 TEST_CASE("Lower structs tuples fields and borrows") {
@@ -142,11 +142,11 @@ TEST_CASE("Lower structs tuples fields and borrows") {
   Fixture f;
   LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.ok);
-  CHECK(result.has_storage);
-  if (!result.ok || !result.has_storage) {
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
     return;
   }
-  CHECK(ir::verify_storage(result.storage).is_ok());
+  CHECK(ir::verify_storage(result.lowered->storage).is_ok());
 }
 
 TEST_CASE("Lower rejects control flow in the slice") {
@@ -186,15 +186,15 @@ TEST_CASE("Lower emits verifiable LLVM IR") {
   Fixture f;
   LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.ok);
-  CHECK(result.has_storage);
-  if (!result.ok || !result.has_storage) {
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
     return;
   }
   llvm::LLVMContext context;
   std::unique_ptr<llvm::Module> module =
       std::make_unique<llvm::Module>("lower_emit_test", context);
-  codegen_llvm::LlvmIrEmitter emitter(module.get(), std::move(result.storage),
-                                      &f.strings);
+  codegen_llvm::LlvmIrEmitter emitter(
+      module.get(), std::move(result.lowered->storage), &f.strings);
   std::move(emitter).emit();
   CHECK(!llvm::verifyModule(*module));
 }

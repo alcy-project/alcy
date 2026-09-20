@@ -20,6 +20,7 @@
 #include "app/parse_output.h"
 #include "app/result_code.h"
 #include "base/logger.h"
+#include "borrow/borrow.h"
 #include "debug/fatal.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -125,19 +126,21 @@ i32 finish_check(DriverContext& ctx,
   }
   analyzer::CheckedPackage package = std::move(checked).unwrap();
   const usize modules = package.modules.size();
-  diag::Fallible<ir::Storage> lowered = lower::lower_package(
+  diag::Fallible<lower::LoweredPackage> lowered = lower::lower_package(
       std::move(package), kCheckWidth, ctx.strings, ctx.bag);
   if (lowered.is_err()) {
     report(ctx.bag, ctx.sources);
     return result_code(ResultCode::CheckFailed);
   }
+  lower::LoweredPackage package_ir = std::move(lowered).unwrap();
+  const usize functions = package_ir.storage.functions().size();
+  borrow::check_borrows(package_ir, ctx.bag);
   report(ctx.bag, ctx.sources);
   if (ctx.bag.has_errors()) {
     return result_code(ResultCode::CheckFailed);
   }
   base::logger.wo_prefix("checked {} file(s), {} module(s), {} function(s)",
-                         file_count, modules,
-                         std::move(lowered).unwrap().functions().size());
+                         file_count, modules, functions);
   return result_code(ResultCode::Success);
 }
 

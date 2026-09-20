@@ -1,0 +1,17 @@
+# Copyright 2026 The Alcy Project Authors
+# This source code is licensed under the Apache License, Version 2.0 with LLVM
+# Exceptions which can be found in the LICENSE file.
+
+source_set("borrow") {
+  sources = [
+    "borrow.cc",
+    "borrow.h",
+  ]
+  deps = [
+    "//src:base_modules",
+    "//src/diag",
+    "//src/ir",
+    "//src/lower",
+  ]
+  configs += [ "//src:alcy_config" ]
+}

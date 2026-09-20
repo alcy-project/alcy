@@ -304,6 +304,15 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
       }
       break;
     }
+    case Op::Borrow: {
+      // The address operand already is the reference value.
+      DCHECK(ops.size() == 1);
+      if (i.dst.is_valid()) {
+        values_.add_register(
+            i.dst, resolve_operand_value(storage_.operands()[ops.head()]));
+      }
+      break;
+    }
     case Op::Drop: {
       // Ownership marker only; no code emitted.
       DCHECK(ops.size() <= 1);

@@ -4,9 +4,15 @@
 
 #pragma once
 
+#include <string_view>
+#include <utility>
+#include <vector>
+
 #include "analyzer/types.h"
 #include "diag/bag.h"
+#include "diag/span.h"
 #include "fpag/str/string_interner.h"
+#include "ir/common.h"
 #include "ir/storage.h"
 
 namespace lower {
@@ -39,9 +45,27 @@ namespace lower {
 // Runtime hooks (codegen provides the bodies):
 // `print` lowers to external `alcy_print(ptr) -> ()` and `panic` to
 // external `alcy_panic(ptr) -> !` followed by `Unreachable`.
-diag::Fallible<ir::Storage> lower_package(analyzer::CheckedPackage package,
-                                          ir::PointerWidth width,
-                                          str::StringInterner& strings,
-                                          diag::DiagBag& bag);
+//
+// Ownership analysis consumes LoweredPackage rather than raw storage:
+// instruction spans locate diagnostics and the address table names
+// places (analysis needs only identity, messages need names).
+struct LoweredPackage {
+  ir::Storage storage;
+  // Parallel to storage instrs by InstructionIdx.
+  std::vector<diag::Span> instr_spans;
+  // Alloca additions: address, bound name, and whether it backs a
+  // parameter (escape analysis treats parameters as external roots).
+  struct AddrInfo {
+    ir::RegisterIdx addr;
+    std::string_view name;
+    bool is_param = false;
+  };
+  std::vector<AddrInfo> addr_names;
+};
+
+diag::Fallible<LoweredPackage> lower_package(analyzer::CheckedPackage package,
+                                             ir::PointerWidth width,
+                                             str::StringInterner& strings,
+                                             diag::DiagBag& bag);
 
 }  // namespace lower

@@ -317,6 +317,18 @@ VerifyResult verify_storage(const Storage& storage) {
           }
         }
       }
+      if (instr.op == Opcode::Borrow) {
+        // operands = [place(register)]; dst carries Ref/MutRef type.
+        if (instr.operands.size() != 1) {
+          return err(VerifyErrorKind::InvalidBorrow, iidx.idx);
+        }
+        if (!storage.operands()[instr.operands.head()].is<RegisterIdx>()) {
+          return err(VerifyErrorKind::InvalidBorrow, iidx.idx);
+        }
+        if (!instr.dst.is_valid()) {
+          return err(VerifyErrorKind::InvalidBorrow, iidx.idx);
+        }
+      }
       if (instr.op == Opcode::ExtractValue || instr.op == Opcode::InsertValue) {
         // Extract: [aggregate, index(imm)...]; Insert: [aggregate, value,
         // index(imm)...]. Indexes must be integer immediates.
