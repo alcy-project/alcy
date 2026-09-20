@@ -62,6 +62,69 @@ struct StorageState {
   TupleTypes tuple_types;
 };
 
+// Structural Copy query over raw state, shared by Storage and passes
+// that read through a builder before build() (see lower). Cycle-free
+// input required (see Storage::is_copy_type).
+inline bool is_copy_type(const StorageState& state, TypeIdx idx) {
+  const TypeNode& node = state.types[idx];
+  switch (node.tag) {
+    case TypeTag::MutRef: return false;
+    case TypeTag::Error: return true;
+    case TypeTag::Ref:
+    case TypeTag::Void:
+    case TypeTag::Never:
+    case TypeTag::I1:
+    case TypeTag::I8:
+    case TypeTag::I16:
+    case TypeTag::I32:
+    case TypeTag::I64:
+    case TypeTag::U8:
+    case TypeTag::U16:
+    case TypeTag::U32:
+    case TypeTag::U64:
+    case TypeTag::F32:
+    case TypeTag::F64:
+    case TypeTag::Str:
+    case TypeTag::Ptr:
+    case TypeTag::Function: return true;
+    case TypeTag::Struct: {
+      const StructType& struct_type = state.struct_types[node.as_struct()];
+      for (TypeIdx field : struct_type.fields) {
+        if (!is_copy_type(state, field)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case TypeTag::Array:
+      return is_copy_type(state, state.array_types[node.as_array()].element);
+    case TypeTag::Enum: {
+      const EnumType& enum_type = state.enum_types[node.as_enum()];
+      for (EnumVariantTypeIdx vidx = enum_type.variants.head();
+           vidx.idx < enum_type.variants.head().idx + enum_type.variants.size();
+           vidx = EnumVariantTypeIdx(vidx.idx + 1)) {
+        const EnumVariantType& variant = state.enum_variant_types[vidx];
+        for (TypeIdx field : variant.fields) {
+          if (!is_copy_type(state, field)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+    case TypeTag::Tuple: {
+      const TupleType& tuple = state.tuple_types[node.as_tuple()];
+      for (TypeIdx element : tuple.elements) {
+        if (!is_copy_type(state, element)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    default: UNREACHABLE();
+  }
+}
+
 class Storage {
  public:
   explicit Storage(StorageState&& state) : state_(std::move(state)) {}
@@ -74,6 +137,10 @@ class Storage {
   Storage& operator=(Storage&&) noexcept = default;
 
   const StorageState& state() const { return state_; }
+
+  // Moves the state out for phase handoff (e.g. lowering reseeds its
+  // builder from checked storage). The Storage must not be used after.
+  StorageState take_state() && { return std::move(state_); }
 
   const StorageState::Functions& functions() const { return state_.functions; }
   const StorageState::Blocks& blocks() const { return state_.blocks; }
@@ -113,68 +180,7 @@ class Storage {
   // uninhabited value cycles before anyone queries. User-defined
   // destructors force move-only once drop syntax lands (no syntax
   // exists yet, so no check is needed here).
-  bool is_copy_type(TypeIdx idx) const {
-    const TypeNode& node = state_.types[idx];
-    switch (node.tag) {
-      case TypeTag::MutRef: return false;
-      case TypeTag::Error:
-        // Recovery marker: suppress follow-on diagnostics.
-        return true;
-      case TypeTag::Ref:
-      case TypeTag::Void:
-      case TypeTag::Never:
-      case TypeTag::I1:
-      case TypeTag::I8:
-      case TypeTag::I16:
-      case TypeTag::I32:
-      case TypeTag::I64:
-      case TypeTag::U8:
-      case TypeTag::U16:
-      case TypeTag::U32:
-      case TypeTag::U64:
-      case TypeTag::F32:
-      case TypeTag::F64:
-      case TypeTag::Str:
-      case TypeTag::Ptr:
-      case TypeTag::Function: return true;
-      case TypeTag::Struct: {
-        const StructType& struct_type = state_.struct_types[node.as_struct()];
-        for (TypeIdx field : struct_type.fields) {
-          if (!is_copy_type(field)) {
-            return false;
-          }
-        }
-        return true;
-      }
-      case TypeTag::Array:
-        return is_copy_type(state_.array_types[node.as_array()].element);
-      case TypeTag::Enum: {
-        const EnumType& enum_type = state_.enum_types[node.as_enum()];
-        for (EnumVariantTypeIdx vidx = enum_type.variants.head();
-             vidx.idx <
-             enum_type.variants.head().idx + enum_type.variants.size();
-             vidx = EnumVariantTypeIdx(vidx.idx + 1)) {
-          const EnumVariantType& variant = state_.enum_variant_types[vidx];
-          for (TypeIdx field : variant.fields) {
-            if (!is_copy_type(field)) {
-              return false;
-            }
-          }
-        }
-        return true;
-      }
-      case TypeTag::Tuple: {
-        const TupleType& tuple = state_.tuple_types[node.as_tuple()];
-        for (TypeIdx element : tuple.elements) {
-          if (!is_copy_type(element)) {
-            return false;
-          }
-        }
-        return true;
-      }
-      default: UNREACHABLE();
-    }
-  }
+  bool is_copy_type(TypeIdx idx) const { return ir::is_copy_type(state_, idx); }
 
  private:
   StorageState state_;

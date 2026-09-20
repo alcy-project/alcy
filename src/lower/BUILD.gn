@@ -1,0 +1,18 @@
+# Copyright 2026 The Alcy Project Authors
+# This source code is licensed under the Apache License, Version 2.0 with LLVM
+# Exceptions which can be found in the LICENSE file.
+
+source_set("lower") {
+  sources = [
+    "lower.cc",
+    "lower.h",
+  ]
+  deps = [
+    "//src:base_modules",
+    "//src/analyzer",
+    "//src/ast",
+    "//src/diag",
+    "//src/ir",
+  ]
+  configs += [ "//src:alcy_config" ]
+}

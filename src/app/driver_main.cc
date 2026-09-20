@@ -29,7 +29,9 @@
 #include "fpag/term/color_mode.h"
 #include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
+#include "ir/storage.h"
 #include "ir/type.h"
+#include "lower/lower.h"
 #include "path/path.h"
 #include "pipeline/pipeline.h"
 #include "pkg/manifest.h"
@@ -117,12 +119,25 @@ i32 finish_check(DriverContext& ctx,
     report(ctx.bag, ctx.sources);
     return result_code(ResultCode::CheckFailed);
   }
+  if (ctx.bag.has_errors()) {
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::CheckFailed);
+  }
+  analyzer::CheckedPackage package = std::move(checked).unwrap();
+  const usize modules = package.modules.size();
+  diag::Fallible<ir::Storage> lowered = lower::lower_package(
+      std::move(package), kCheckWidth, ctx.strings, ctx.bag);
+  if (lowered.is_err()) {
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::CheckFailed);
+  }
   report(ctx.bag, ctx.sources);
   if (ctx.bag.has_errors()) {
     return result_code(ResultCode::CheckFailed);
   }
-  base::logger.wo_prefix("checked {} file(s), {} module(s)", file_count,
-                         std::move(checked).unwrap().modules.size());
+  base::logger.wo_prefix("checked {} file(s), {} module(s), {} function(s)",
+                         file_count, modules,
+                         std::move(lowered).unwrap().functions().size());
   return result_code(ResultCode::Success);
 }
 

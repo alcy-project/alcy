@@ -37,7 +37,7 @@ struct ModuleNode {
   std::string path;
   // kUnknownFile for inline modules, which have no file of their own.
   source::FileId file;
-  // Top-level items of this module's file (Phase B input).
+  // Top-level items of this module's file (checked later).
   std::span<ast::Item* const> items;
   std::span<ModuleNode* const> children;
   std::span<const Import> imports;
@@ -54,7 +54,7 @@ struct ModuleTree {
 // Module paths resolve through the walked file set only: `mod` targets
 // are matched against loaded paths, never probed on disk, so no new
 // files enter the compilation. Value and type expressions are NOT
-// resolved here; that is Phase B work over ModuleNode::items.
+// resolved here; that is later semantic work over ModuleNode::items.
 diag::Fallible<ModuleTree> resolve_modules(
     source::FileId root,
     std::span<const source::FileId> files,

@@ -123,6 +123,8 @@ class StorageBuilder {
   const StorageState::TupleTypes& tuple_types() const {
     return state_.tuple_types;
   }
+  // Raw state for passes that query (never mutate) pre-build tables.
+  const StorageState& state() const { return state_; }
   ExternalFunctionIdx external_function(ExternalFunction external_function) {
     return state_.external_functions.emplace_back(external_function);
   }

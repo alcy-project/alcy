@@ -26,6 +26,11 @@ enum class Opcode : u8 {
   IntRem,   // Signed remainder
   UintRem,  // Unsigned remainder
 
+  FAdd,
+  FSub,
+  FMul,
+  FDiv,
+
   And,
   Or,
   Xor,
@@ -89,6 +94,11 @@ constexpr const char* opcode_to_str(const Opcode opcode) {
     case O::UintDiv: return "UintDiv";
     case O::IntRem: return "IntRem";
     case O::UintRem: return "UintRem";
+
+    case O::FAdd: return "FAdd";
+    case O::FSub: return "FSub";
+    case O::FMul: return "FMul";
+    case O::FDiv: return "FDiv";
 
     case O::And: return "And";
     case O::Or: return "Or";

@@ -118,6 +118,30 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
       });
       break;
     }
+    case Op::FAdd: {
+      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
+        return builder_->CreateFAdd(lhs, rhs);
+      });
+      break;
+    }
+    case Op::FSub: {
+      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
+        return builder_->CreateFSub(lhs, rhs);
+      });
+      break;
+    }
+    case Op::FMul: {
+      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
+        return builder_->CreateFMul(lhs, rhs);
+      });
+      break;
+    }
+    case Op::FDiv: {
+      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
+        return builder_->CreateFDiv(lhs, rhs);
+      });
+      break;
+    }
     case Op::And: {
       binary([this](llvm::Value* lhs, llvm::Value* rhs) {
         return builder_->CreateAnd(lhs, rhs);

@@ -29,6 +29,7 @@ group("modules") {
     "diag",
     "ir",
     "lexer",
+    "lower",
     "parser",
     "path",
     "pipeline",

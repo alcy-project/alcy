@@ -17,7 +17,7 @@
 
 namespace app {
 
-DriverContext::DriverContext() : bag(arena) {
+DriverContext::DriverContext() : bag(arena), strings(mem::page_size()) {
   arena.reserve(1u << 20);
 }
 

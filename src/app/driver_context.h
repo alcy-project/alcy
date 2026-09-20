@@ -7,6 +7,8 @@
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
+#include "fpag/mem/page_allocator.h"
+#include "fpag/str/string_interner.h"
 #include "source/source.h"
 
 namespace app {
@@ -21,6 +23,9 @@ struct DriverContext {
   mem::Arena arena;
   source::SourceManager sources;
   diag::DiagBag bag;
+  // Long-lived string pool for lowering and codegen (function names,
+  // string literals). Must outlive every phase that reads its ids.
+  str::StringInterner strings;
 
   DriverContext();
 };

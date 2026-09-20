@@ -14,6 +14,7 @@ executable("tests") {
     "ir/verifier_test.cc",
     "lexer/lexer_test.cc",
     "lexer/token_test.cc",
+    "lower/lower_test.cc",
     "parser/desugar_test.cc",
     "parser/parser_test.cc",
     "path/path_test.cc",

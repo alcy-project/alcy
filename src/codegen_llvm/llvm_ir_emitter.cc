@@ -66,6 +66,7 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
     // case T::I128: return builder_->getInt128Ty();
     case T::F32: return builder_->getFloatTy();
     case T::F64: return builder_->getDoubleTy();
+    case T::Str: return builder_->getPtrTy();
     case T::Ptr: return builder_->getPtrTy();
     case T::Ref: return builder_->getPtrTy();
     case T::MutRef: return builder_->getPtrTy();
@@ -142,15 +143,23 @@ void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
                                                           "", llvm_function));
   }
 
-  // Pre-generate phi nodes
+  // Pre-generate phi nodes. The entry block (first in function
+  // order) receives LLVM function arguments directly instead of
+  // PHIs: lowering places one block parameter per declared parameter.
+  unsigned arg_no = 0;
   for (const ir::BlockIdx block_idx : function.blocks) {
     const ir::Block& block = storage_.blocks()[block_idx];
     llvm::BasicBlock* llvm_block = values_.block(block_idx);
+    const bool is_entry = block_idx.idx == function.blocks.head().idx;
 
     builder_->SetInsertPoint(llvm_block);
     for (const ir::BlockParamIdx param_id : block.block_params) {
       const ir::BlockParam& param = storage_.block_params()[param_id];
 
+      if (is_entry) {
+        values_.add_register(param.reg, llvm_function->getArg(arg_no++));
+        continue;
+      }
       llvm::PHINode* phi = builder_->CreatePHI(type(param.type), 0);
       values_.add_register(param.reg, phi);
     }

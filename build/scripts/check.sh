@@ -77,4 +77,4 @@ if [[ $run_wasm == true ]]; then
     --target-os=emscripten
 fi
 
-echo "check done"
+echo "check ok"

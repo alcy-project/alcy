@@ -50,6 +50,9 @@ constexpr u32 kAnalyzerBadAssignment = 4229;
 constexpr u32 kAnalyzerBreakOutsideLoop = 4230;
 constexpr u32 kAnalyzerUnsupportedExpr = 4231;
 
+// Name-interning map capacity (power of two, fixed: the table never
+// resizes and traps on overflow, so size for programs, not tests).
+constexpr u32 kInternerCapacity = 1u << 16;
 constexpr u32 kNoModule = 0xFFFFFFFFu;
 
 struct NominalEntry {
@@ -70,7 +73,7 @@ struct BlessedEntry {
 
 struct Checker {
   Checker(const ModuleTree& tree, ir::PointerWidth width, diag::DiagBag& bag)
-      : tree(tree), width(width), bag(bag), interner(1024) {}
+      : tree(tree), width(width), bag(bag), interner(kInternerCapacity) {}
 
   const ModuleTree& tree;
   ir::PointerWidth width;
@@ -517,26 +520,30 @@ struct Checker {
             ret = resolve_type(module, fn->return_type, nullptr);
           }
           modules[module].functions.push_back(
-              {fn->name.name, std::move(params), ret});
+              {fn->name.name, std::move(params), ret, fn});
           break;
         }
         case ast::ItemKind::Static:
         case ast::ItemKind::Const: {
           std::string_view name;
           const ast::Type* type = nullptr;
-          if (item->kind == ast::ItemKind::Static) {
+          const ast::Expr* init = nullptr;
+          const bool is_const = item->kind == ast::ItemKind::Const;
+          if (!is_const) {
             const ast::StaticItem* decl =
                 static_cast<const ast::StaticItem*>(item);
             name = decl->name.name;
             type = decl->type;
+            init = decl->init;
           } else {
             const ast::ConstItem* decl =
                 static_cast<const ast::ConstItem*>(item);
             name = decl->name.name;
             type = decl->type;
+            init = decl->init;
           }
           modules[module].statics.push_back(
-              {name, resolve_type(module, type, nullptr)});
+              {name, resolve_type(module, type, nullptr), init, is_const});
           break;
         }
         case ast::ItemKind::Impl: {
@@ -587,7 +594,7 @@ struct Checker {
                                  self_ok ? &self_type : nullptr);
             }
             modules[module].functions.push_back(
-                {method->name.name, std::move(params), ret});
+                {method->name.name, std::move(params), ret, method});
             const CheckedModule::FnSig& sig = modules[module].functions.back();
             CheckedModule::ReceiverKind receiver =
                 CheckedModule::ReceiverKind::None;
@@ -596,7 +603,7 @@ struct Checker {
             }
             modules[module].methods.push_back(
                 {self_ok ? self_type : error_type(), method->name.name,
-                 sig.params, sig.ret, receiver});
+                 sig.params, sig.ret, receiver, method});
           }
           break;
         }
@@ -684,7 +691,7 @@ struct Checker {
     return "type";
   }
 
-  // ---- Expression checking (Phase B4) ----
+  // ---- Expression checking ----
 
   ir::TypeTag tag_of(ir::TypeIdx idx) const { return builder.types()[idx].tag; }
 
@@ -1127,6 +1134,32 @@ struct Checker {
       }
     }
     return nullptr;
+  }
+
+  void record_call(u32 module,
+                   const ast::Expr* callee,
+                   const CheckedModule::FnSig* fn) {
+    for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+      for (u32 i = 0; i < static_cast<u32>(modules[m].functions.size()); ++i) {
+        if (&modules[m].functions[i] == fn) {
+          modules[module].call_targets.push_back({callee, false, m, i});
+          return;
+        }
+      }
+    }
+  }
+
+  void record_call(u32 module,
+                   const ast::Expr* callee,
+                   const CheckedModule::MethodInfo* method) {
+    for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+      for (u32 i = 0; i < static_cast<u32>(modules[m].methods.size()); ++i) {
+        if (&modules[m].methods[i] == method) {
+          modules[module].call_targets.push_back({callee, true, m, i});
+          return;
+        }
+      }
+    }
   }
 
   struct PathValue {
@@ -1908,6 +1941,7 @@ struct Checker {
     }
     if (resolved.kind == PathValue::Kind::Function) {
       const CheckedModule::FnSig* fn = resolved.function;
+      record_call(module, callee, fn);
       check_call_args(module, args, fn->params, span, fn->name, false);
       if (expected != nullptr) {
         return unify(*expected, fn->ret, span, "call");
@@ -1916,7 +1950,9 @@ struct Checker {
     }
     if (resolved.kind == PathValue::Kind::AssocFunction) {
       const CheckedModule::MethodInfo* method = resolved.method;
-      check_call_args(module, args, method->params, span, method->name, true);
+      record_call(module, callee, method);
+      // Associated functions take no receiver; params map 1:1.
+      check_call_args(module, args, method->params, span, method->name, false);
       if (expected != nullptr) {
         return unify(*expected, method->ret, span, "call");
       }
@@ -2070,8 +2106,9 @@ struct Checker {
       (void)index;
       return error_type();
     }
+    record_call(module, call, method);
     // No autoref/deref in MVP beyond this: an owned receiver coerces
-    // to the declared borrow; borrow checking itself is Phase C.
+    // to the declared borrow; full borrow checking is a later stage.
     const ir::TypeIdx declared = method->params[0];
     if (receiver.idx != declared.idx) {
       bool coerced = false;
@@ -2109,7 +2146,7 @@ struct Checker {
       return error_type();
     }
     // Field access sees through references (method receivers are
-    // commonly `&Self`); borrow checking itself is Phase C.
+    // commonly `&Self`); borrow checking is a later stage.
     while (tag_of(receiver) == ir::TypeTag::Ref ||
            tag_of(receiver) == ir::TypeTag::MutRef) {
       receiver =
@@ -2616,6 +2653,14 @@ struct Checker {
   ir::TypeIdx check_expr(u32 module,
                          const ast::Expr* expr,
                          const ir::TypeIdx* expected) {
+    const ir::TypeIdx type = check_expr_inner(module, expr, expected);
+    modules[module].expr_types.emplace_back(expr, type);
+    return type;
+  }
+
+  ir::TypeIdx check_expr_inner(u32 module,
+                               const ast::Expr* expr,
+                               const ir::TypeIdx* expected) {
     switch (expr->kind) {
       case ast::ExprKind::Literal: {
         const ast::LiteralExpr* lit =
@@ -2712,7 +2757,7 @@ struct Checker {
       case ast::ExprKind::Borrow: {
         const ast::BorrowExpr* borrow =
             static_cast<const ast::BorrowExpr*>(expr);
-        // Place-ness is a borrow-checking (Phase C2) concern; here the
+        // Place-ness is a borrow-checking concern; here the
         // inner type only determines the reference shape.
         const ir::TypeIdx pointee = check_expr(module, borrow->inner, nullptr);
         if (is_error(pointee)) {
