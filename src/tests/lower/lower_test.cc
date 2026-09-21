@@ -7,6 +7,7 @@
 #include <initializer_list>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -253,6 +254,41 @@ TEST_CASE("Lower emits verifiable LLVM IR") {
       module.get(), std::move(result.lowered->storage), &f.strings);
   std::move(emitter).emit();
   CHECK(!llvm::verifyModule(*module));
+}
+
+TEST_CASE("Lower emits verifiable LLVM IR for print") {
+  io::TempDir dir("alcy_lower_emit_print_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  print(\"hi\")\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("lower_emit_print_test", context);
+  codegen_llvm::LlvmIrEmitter emitter(
+      module.get(), std::move(result.lowered->storage), &f.strings);
+  std::move(emitter).emit();
+  CHECK(!llvm::verifyModule(*module));
+
+  std::string ir_str;
+  llvm::raw_string_ostream os(ir_str);
+  module->print(os, nullptr);
+
+  // String globals carry an explicit NUL terminator for the runtime.
+  CHECK(ir_str.find("alcy_print") != std::string::npos);
+  CHECK(ir_str.find("c\"hi\\00\"") != std::string::npos);
 }
 
 TEST_CASE("Lowering emits no Drop markers") {
