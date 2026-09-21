@@ -45,6 +45,8 @@ uv run "$root_dir/build/scripts/run.py" \
 uv run "$root_dir/build/scripts/e2e.py" \
   --build-subdir=$debug_subdir
 
+uv run "$root_dir/build/scripts/check_runtime.py"
+
 uv run "$root_dir/build/scripts/format.py" --dry-run
 uv run "$root_dir/build/scripts/lint.py"
 
