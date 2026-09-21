@@ -779,7 +779,7 @@ struct Checker {
         return false;
       }
     }
-    summaries[fidx.idx] = next;
+    summaries[fidx.idx] = std::move(next);
     return true;
   }
 

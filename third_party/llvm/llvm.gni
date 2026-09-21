@@ -22,72 +22,114 @@ if (is_wasm) {
   llvm_triple_args = [ "--triple=wasm32-unknown-emscripten" ]
 }
 
-# Host codegen backends for object emission. Only the matching
-# backend links in; object emission on other triples reports an
-# error instead of linking every backend everywhere. Backend
-# archives precede the libraries they depend on (static link order).
-llvm_backend_components = []
+llvm_backend_components = [
+  "LLVMAsmPrinter",
+  "LLVMSelectionDAG",
+  "LLVMGlobalISel",
+  "LLVMInstrumentation",
+  "LLVMCFGuard",
+  "LLVMMCDisassembler",
+  "LLVMIRPrinter",
+]
+
+llvm_backend_components += [
+  "LLVMWebAssemblyCodeGen",
+  "LLVMWebAssemblyDesc",
+  "LLVMWebAssemblyInfo",
+  "LLVMWebAssemblyUtils",
+]
+
 if (!is_wasm) {
-  if (target_cpu == "x64" || target_cpu == "x86") {
-    llvm_backend_components += [
-      "LLVMX86CodeGen",
-      "LLVMX86Desc",
-      "LLVMX86Info",
-    ]
-  } else if (target_cpu == "arm64") {
-    llvm_backend_components += [
-      "LLVMAArch64CodeGen",
-      "LLVMAArch64Desc",
-      "LLVMAArch64Info",
-    ]
-  }
-  if (llvm_backend_components != []) {
-    llvm_backend_components += [
-      "LLVMAsmPrinter",
-      "LLVMSelectionDAG",
-      "LLVMGlobalISel",
-      "LLVMInstrumentation",
-      "LLVMCFGuard",
-      "LLVMMCDisassembler",
-      "LLVMIRPrinter",
-    ]
-  }
+  llvm_backend_components += [
+    "LLVMX86CodeGen",
+    "LLVMX86Desc",
+    "LLVMX86Info",
+
+    "LLVMAArch64CodeGen",
+    "LLVMAArch64Desc",
+    "LLVMAArch64Info",
+    "LLVMAArch64Utils",
+
+    "LLVMRISCVCodeGen",
+    "LLVMRISCVDesc",
+    "LLVMRISCVInfo",
+
+    # TODO: add all targets
+    # "LLVMAMDGPUCodeGen",
+    # "LLVMAMDGPUDesc",
+    # "LLVMAMDGPUInfo",
+    # "LLVMARMCodeGen",
+    # "LLVMARMDesc",
+    # "LLVMARMInfo",
+    # "LLVMAVRCodeGen",
+    # "LLVMAVRDesc",
+    # "LLVMAVRInfo",
+    # "LLVMBPFCodeGen",
+    # "LLVMBPFDesc",
+    # "LLVMBPFInfo",
+    # "LLVMHexagonCodeGen",
+    # "LLVMHexagonDesc",
+    # "LLVMHexagonInfo",
+    # "LLVMLanaiCodeGen",
+    # "LLVMLanaiDesc",
+    # "LLVMLanaiInfo",
+    # "LLVMLoongArchCodeGen",
+    # "LLVMLoongArchDesc",
+    # "LLVMLoongArchInfo",
+    # "LLVMMipsCodeGen",
+    # "LLVMMipsDesc",
+    # "LLVMMipsInfo",
+    # "LLVMNVPTXCodeGen",
+    # "LLVMNVPTXDesc",
+    # "LLVMNVPTXInfo",
+    # "LLVMPowerPCCodeGen",
+    # "LLVMPowerPCDesc",
+    # "LLVMPowerPCInfo",
+    # "LLVMSparcCodeGen",
+    # "LLVMSparcDesc",
+    # "LLVMSparcInfo",
+    # "LLVMSystemZCodeGen",
+    # "LLVMSystemZDesc",
+    # "LLVMSystemZInfo",
+  ]
 }
 
 llvm_components = llvm_backend_components + [
-  "LLVMCodeGen",
-  "LLVMTarget",
-  "LLVMScalarOpts",
-  "LLVMInstCombine",
-  "LLVMAggressiveInstCombine",
-  "LLVMObjCARCOpts",
-  "LLVMTransformUtils",
-  "LLVMCodeGenTypes",
-  "LLVMCGData",
-  "LLVMBitWriter",
-  "LLVMAnalysis",
-  "LLVMProfileData",
-  "LLVMSymbolize",
-  "LLVMDebugInfoBTF",
-  "LLVMDebugInfoPDB",
-  "LLVMDebugInfoMSF",
-  "LLVMDebugInfoCodeView",
-  "LLVMDebugInfoGSYM",
-  "LLVMDebugInfoDWARF",
-  "LLVMObject",
-  "LLVMTextAPI",
-  "LLVMMCParser",
-  "LLVMIRReader",
-  "LLVMAsmParser",
-  "LLVMMC",
-  "LLVMDebugInfoDWARFLowLevel",
-  "LLVMBitReader",
-  "LLVMFrontendHLSL",
-  "LLVMCore",
-  "LLVMRemarks",
-  "LLVMBitstreamReader",
-  "LLVMBinaryFormat",
-  "LLVMTargetParser",
-  "LLVMSupport",
-  "LLVMDemangle",
-]
+                    "LLVMCodeGen",
+                    "LLVMTarget",
+                    "LLVMScalarOpts",
+                    "LLVMInstCombine",
+                    "LLVMAggressiveInstCombine",
+                    "LLVMObjCARCOpts",
+                    "LLVMTransformUtils",
+                    "LLVMCodeGenTypes",
+                    "LLVMCGData",
+                    "LLVMBitWriter",
+                    "LLVMAnalysis",
+                    "LLVMProfileData",
+                    "LLVMSymbolize",
+                    "LLVMDebugInfoBTF",
+                    "LLVMDebugInfoPDB",
+                    "LLVMDebugInfoMSF",
+                    "LLVMDebugInfoCodeView",
+                    "LLVMDebugInfoGSYM",
+                    "LLVMDebugInfoDWARF",
+                    "LLVMObject",
+                    "LLVMTextAPI",
+                    "LLVMMCParser",
+                    "LLVMIRReader",
+                    "LLVMAsmParser",
+                    "LLVMMC",
+                    "LLVMDebugInfoDWARFLowLevel",
+                    "LLVMBitReader",
+                    "LLVMFrontendHLSL",
+                    "LLVMCore",
+                    "LLVMRemarks",
+                    "LLVMBitstreamReader",
+                    "LLVMBinaryFormat",
+                    "LLVMTargetParser",
+                    "LLVMSupport",
+                    "LLVMDemangle",
+                    "LLVMipo",
+                    "LLVMVectorize",
+                  ]

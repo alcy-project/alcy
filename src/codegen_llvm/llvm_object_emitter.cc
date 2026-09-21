@@ -9,7 +9,7 @@
 #include <string_view>
 #include <system_error>
 
-#include "cfg/build_config.h"  // IWYU pragma: keep
+#include "cfg/build_config.h"
 #include "codegen_llvm/common.h"
 #include "fpag/base/result.h"
 
@@ -18,18 +18,88 @@ namespace codegen_llvm {
 namespace {
 
 void init_linked_targets() {
-#if defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_X86)
+#if !BUILD_FLAG(IS_OS_ASMJS)
   ::LLVMInitializeX86TargetInfo();
   ::LLVMInitializeX86Target();
   ::LLVMInitializeX86TargetMC();
   ::LLVMInitializeX86AsmPrinter();
-#endif
-#if defined(ARCH_CPU_ARM64)
+
   ::LLVMInitializeAArch64TargetInfo();
   ::LLVMInitializeAArch64Target();
   ::LLVMInitializeAArch64TargetMC();
   ::LLVMInitializeAArch64AsmPrinter();
+
+  ::LLVMInitializeRISCVTargetInfo();
+  ::LLVMInitializeRISCVTarget();
+  ::LLVMInitializeRISCVTargetMC();
+  ::LLVMInitializeRISCVAsmPrinter();
 #endif
+
+  ::LLVMInitializeWebAssemblyTargetInfo();
+  ::LLVMInitializeWebAssemblyTarget();
+  ::LLVMInitializeWebAssemblyTargetMC();
+  ::LLVMInitializeWebAssemblyAsmPrinter();
+
+  // TODO: add all targets
+  // ::LLVMInitializeAMDGPUTargetInfo();
+  // ::LLVMInitializeAMDGPUTarget();
+  // ::LLVMInitializeAMDGPUTargetMC();
+  // ::LLVMInitializeAMDGPUAsmPrinter();
+
+  // ::LLVMInitializeARMTargetInfo();
+  // ::LLVMInitializeARMTarget();
+  // ::LLVMInitializeARMTargetMC();
+  // ::LLVMInitializeARMAsmPrinter();
+
+  // ::LLVMInitializeAVRTargetInfo();
+  // ::LLVMInitializeAVRTarget();
+  // ::LLVMInitializeAVRTargetMC();
+  // ::LLVMInitializeAVRAsmPrinter();
+
+  // ::LLVMInitializeBPFTargetInfo();
+  // ::LLVMInitializeBPFTarget();
+  // ::LLVMInitializeBPFTargetMC();
+  // ::LLVMInitializeBPFAsmPrinter();
+
+  // ::LLVMInitializeHexagonTargetInfo();
+  // ::LLVMInitializeHexagonTarget();
+  // ::LLVMInitializeHexagonTargetMC();
+  // ::LLVMInitializeHexagonAsmPrinter();
+
+  // ::LLVMInitializeLanaiTargetInfo();
+  // ::LLVMInitializeLanaiTarget();
+  // ::LLVMInitializeLanaiTargetMC();
+  // ::LLVMInitializeLanaiAsmPrinter();
+
+  // ::LLVMInitializeLoongArchTargetInfo();
+  // ::LLVMInitializeLoongArchTarget();
+  // ::LLVMInitializeLoongArchTargetMC();
+  // ::LLVMInitializeLoongArchAsmPrinter();
+
+  // ::LLVMInitializeMipsTargetInfo();
+  // ::LLVMInitializeMipsTarget();
+  // ::LLVMInitializeMipsTargetMC();
+  // ::LLVMInitializeMipsAsmPrinter();
+
+  // ::LLVMInitializeNVPTXTargetInfo();
+  // ::LLVMInitializeNVPTXTarget();
+  // ::LLVMInitializeNVPTXTargetMC();
+  // ::LLVMInitializeNVPTXAsmPrinter();
+
+  // ::LLVMInitializePowerPCTargetInfo();
+  // ::LLVMInitializePowerPCTarget();
+  // ::LLVMInitializePowerPCTargetMC();
+  // ::LLVMInitializePowerPCAsmPrinter();
+
+  // ::LLVMInitializeSparcTargetInfo();
+  // ::LLVMInitializeSparcTarget();
+  // ::LLVMInitializeSparcTargetMC();
+  // ::LLVMInitializeSparcAsmPrinter();
+
+  // ::LLVMInitializeSystemZTargetInfo();
+  // ::LLVMInitializeSystemZTarget();
+  // ::LLVMInitializeSystemZTargetMC();
+  // ::LLVMInitializeSystemZAsmPrinter();
 }
 
 }  // namespace
