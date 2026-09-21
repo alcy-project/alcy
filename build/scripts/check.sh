@@ -62,7 +62,7 @@ for os in linux win mac; do
       --gen-only \
       --mode=$mode \
       --build-subdir="config-$os-$mode" \
-      --target-os=$cross_os
+      --target-os=$os
   done
 done
 
