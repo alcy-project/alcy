@@ -24,6 +24,11 @@ def run(argv, **kwargs):
     return proc
 
 
+def executable(name):
+    suffix = ".exe" if sys.platform == "win32" else ""
+    return f"{name}{suffix}"
+
+
 def main():
     cc = "cc"
     runtime_dir = project_root_dir / "runtime"
@@ -56,7 +61,7 @@ def main():
             "  return 0;\n"
             "}\n"
         )
-        print_exe = tmpdir / "print_test"
+        print_exe = tmpdir / executable("print_test")
         proc = run(
             [
                 cc,
@@ -85,7 +90,7 @@ def main():
             "  return 0;\n"
             "}\n"
         )
-        panic_exe = tmpdir / "panic_test"
+        panic_exe = tmpdir / executable("panic_test")
         proc = run(
             [
                 cc,
@@ -101,8 +106,17 @@ def main():
             print(f"FAIL link panic driver:\n{proc.stderr}")
             return 1
         proc = run([str(panic_exe)])
-        # abort() terminates via SIGABRT (negative returncode).
-        if proc.returncode != -6 or proc.stderr.splitlines()[0] != "boom":
+
+        # Windows: abort() exits positive (e.g., 3221226505 / 0xC0000409);
+        # Unix: SIGABRT exits negative (-6).
+        abort_exit = proc.returncode
+        is_windows = sys.platform == "win32"
+        expected_abort = -6 if not is_windows else 3221226505
+        if (
+            abs(abort_exit) == abs(expected_abort) or abort_exit == expected_abort
+        ) and (proc.stderr.splitlines()[0] == "boom" if proc.stderr else False):
+            pass  # ok
+        else:
             failures.append(
                 f"panic: exit={proc.returncode} stdout={proc.stdout!r} "
                 f"stderr={proc.stderr!r}"
