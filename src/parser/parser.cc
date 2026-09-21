@@ -1828,7 +1828,11 @@ ast::Cond* Parser::parse_cond() {
   if (!expect(lexer::TokenKind::ColonEq, "`:=`")) {
     return nullptr;
   }
+  // Struct literals stay out so a following "{" reads as the body.
+  const bool saved = allow_struct_lit_;
+  allow_struct_lit_ = false;
   const ast::Expr* init = parse_expr();
+  allow_struct_lit_ = saved;
   if (init == nullptr) {
     return nullptr;
   }
@@ -2014,7 +2018,16 @@ ast::Block* Parser::parse_block() {
 
 ast::Stmt* Parser::parse_stmt() {
   const usize mark = pos_;
-  const StmtLead lead = scan_lead();
+  // Control-flow heads own their `:=` (if-let/while-let conditions);
+  // scanning for a declaration lead would misread them as patterns.
+  StmtLead lead = scan_lead();
+  switch (peek_kind()) {
+    case lexer::TokenKind::If:
+    case lexer::TokenKind::While:
+    case lexer::TokenKind::Loop:
+    case lexer::TokenKind::Match: lead = StmtLead::None; break;
+    default: break;
+  }
   if (lead == StmtLead::Decl) {
     const ast::Pattern* pattern = parse_pattern();
     if (pattern == nullptr) {

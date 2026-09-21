@@ -5,6 +5,7 @@
 #include "lower/lower.h"
 
 #include <cstdlib>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -13,9 +14,13 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "debug/dcheck.h"
+#include "debug/dlog.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/render.h"
 #include "diag/span.h"
+#include "fmt/format.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -85,9 +90,51 @@ struct Lowerer {
   // Per-function state.
   u32 module = 0;
   std::vector<Local> locals;
-  ir::InstrSeq instrs;
-  bool terminated = false;
+  // Instruction streams by reserved block: reservation order matches
+  // creation order, so reserved indexes line up with storage positions.
+  std::vector<ir::InstrSeq> streams_;
+  std::vector<ir::InstructionIdx> stream_last_;
+  std::vector<ir::BlockIdx> fn_blocks_;
+  ir::BlockIdx cur_{base::kInvalidIdx};
+  u32 block_next_ = 0;
+  u32 fn_block_base_ = 0;
   bool binding_param_ = false;
+  std::vector<ir::BlockIdx> break_targets_;
+  std::vector<ir::BlockIdx> continue_targets_;
+
+  static bool is_block_terminator(ir::Opcode op) {
+    return op == ir::Opcode::Br || op == ir::Opcode::CondBr ||
+           op == ir::Opcode::Switch || op == ir::Opcode::Ret ||
+           op == ir::Opcode::Unreachable;
+  }
+
+  usize at(ir::BlockIdx block) const { return block.idx - fn_block_base_; }
+
+  ir::BlockIdx reserve_block() {
+    streams_.emplace_back();
+    stream_last_.emplace_back(base::kInvalidIdx);
+    fn_blocks_.emplace_back(block_next_++);
+    return fn_blocks_.back();
+  }
+
+  void switch_to(ir::BlockIdx block) { cur_ = block; }
+
+  bool terminated(ir::BlockIdx block) {
+    for (usize i = 0; i < fn_blocks_.size(); ++i) {
+      if (fn_blocks_[i].idx == block.idx) {
+        const ir::InstructionIdx last = stream_last_[i];
+        return last.is_valid() &&
+               is_block_terminator(builder.state().instrs[last].op);
+      }
+    }
+    return false;
+  }
+
+  bool terminated_cur() {
+    const ir::InstructionIdx last = stream_last_[at(cur_)];
+    return last.is_valid() &&
+           is_block_terminator(builder.state().instrs[last].op);
+  }
   ir::OperandIdx size_one = ir::OperandIdx(0);
   ir::OperandIdx zero_i32 = ir::OperandIdx(0);
 
@@ -216,7 +263,8 @@ struct Lowerer {
     const ir::InstructionIdx instr =
         builder.instr({.op = op, .flags = {}, .dst = dst, .operands = range});
     builder.reg({.type = type, .def_idx = instr});
-    instrs.push(instr);
+    streams_[at(cur_)].push(instr);
+    stream_last_[at(cur_)] = instr;
     instr_spans_.push_back(cur_span_);
     return dst;
   }
@@ -228,10 +276,13 @@ struct Lowerer {
       builder.operand(ir::Operand(builder.state().operands[op_idx]));
     }
     const ir::OperandIdxRange range = {head, static_cast<u32>(ops.size())};
-    instrs.push(builder.instr({.op = op,
-                               .flags = {},
-                               .dst = ir::RegisterIdx(base::kInvalidIdx),
-                               .operands = range}));
+    const ir::InstructionIdx void_instr =
+        builder.instr({.op = op,
+                       .flags = {},
+                       .dst = ir::RegisterIdx(base::kInvalidIdx),
+                       .operands = range});
+    streams_[at(cur_)].push(void_instr);
+    stream_last_[at(cur_)] = void_instr;
     instr_spans_.push_back(cur_span_);
   }
 
@@ -264,16 +315,20 @@ struct Lowerer {
   // Uses a value, emitting a Move marker when a non-Copy place is
   // consumed. The marker's source is the place address so later
   // ownership analysis observes origins, not temporaries.
-  ir::OperandIdx use_value(Val v) {
+  void mark_move(Val v) {
     if (v.place && v.address && !is_copy(v.type)) {
       const ir::RegisterIdx marker = emit(ir::Opcode::Move, v.type, {v.op});
       (void)marker;
     }
+  }
+
+  ir::OperandIdx use_value(Val v) {
+    mark_move(v);
     return materialize(v).op;
   }
 
   const Local* lookup_local(std::string_view name) const {
-    for (const Local& local : locals) {
+    for (const auto& local : locals | std::views::reverse) {
       if (local.name == name) {
         return &local;
       }
@@ -728,6 +783,26 @@ struct Lowerer {
         return Val{size_one, error_type(), false, false};
       }
     }
+    if (const auto* use = variant_use(path->path)) {
+      // Unit values stand alone; payload constructors need call syntax
+      // (checking enforced this).
+      const std::vector<ir::TypeIdx> payloads =
+          variant_payload(use->enum_type, use->variant, use->blessed_first);
+      if (!payloads.empty()) {
+        internal(path->span, "variant without call");
+        return Val{size_one, error_type(), false, false};
+      }
+      const ir::TypeIdx slot = enum_slot_type();
+      const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, slot, {size_one});
+      const u32 discriminant =
+          use->blessed ? (use->blessed_first ? 0 : 1) : use->variant;
+      const ir::RegisterIdx tag =
+          emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
+               {to_operand(addr, slot), zero_i32, index_operand(0)});
+      emit_void(ir::Opcode::Store,
+                {disc_operand(discriminant), to_operand(tag, slot)});
+      return Val{to_operand(addr, slot), use->enum_type, true, false};
+    }
     internal(path->span, "path without lowering");
     return Val{size_one, error_type(), false, false};
   }
@@ -752,6 +827,164 @@ struct Lowerer {
                                    .calling_conv = ir::CallingConvention::C});
     exts.push_back({name, idx});
     return idx;
+  }
+
+  const analyzer::CheckedModule::VariantUse* variant_use(
+      const ast::Path* path) const {
+    for (const auto& checked : pkg.modules) {
+      for (const auto& use : checked.variants) {
+        if (use.path == path) {
+          return &use;
+        }
+      }
+    }
+    return nullptr;
+  }
+
+  const analyzer::CheckedModule::EnumInfo* enum_info(ir::TypeIdx type) const {
+    for (const auto& checked : pkg.modules) {
+      for (const auto& info : checked.enums) {
+        if (info.type.idx == type.idx) {
+          return &info;
+        }
+      }
+    }
+    return nullptr;
+  }
+
+  const analyzer::CheckedPackage::BlessedType* blessed_entry(
+      ir::TypeIdx type) const {
+    for (const auto& entry : pkg.blessed) {
+      if (entry.type.idx == type.idx) {
+        return &entry;
+      }
+    }
+    return nullptr;
+  }
+
+  bool blessed_ctor_side(std::string_view name, bool is_result, bool& first) {
+    if (name != "Ok" && name != "Err" && name != "Some" && name != "None") {
+      return false;
+    }
+    first = (name == "Ok" || name == "Some");
+    return (name == "Ok" || name == "Err") == is_result;
+  }
+
+  // Variant index by trailing name against a known enum type, for
+  // patterns (checking validated the match).
+  bool variant_index(ir::TypeIdx enum_type,
+                     std::string_view name,
+                     u32& index_out) {
+    if (const auto* info = enum_info(enum_type)) {
+      for (u32 i = 0; i < static_cast<u32>(info->variants.size()); ++i) {
+        if (info->variants[i] == name) {
+          index_out = i;
+          return true;
+        }
+      }
+      return false;
+    }
+    if (const auto* entry = blessed_entry(enum_type)) {
+      bool first = true;
+      if (!blessed_ctor_side(name, entry->is_result, first)) {
+        return false;
+      }
+      index_out = first ? 0 : 1;
+      return true;
+    }
+    return false;
+  }
+
+  // Payload field types of one variant, in order.
+  std::vector<ir::TypeIdx> variant_payload(ir::TypeIdx enum_type,
+                                           u32 variant,
+                                           bool blessed_first) {
+    if (const auto* entry = blessed_entry(enum_type)) {
+      if (blessed_first) {
+        return {entry->args[0]};
+      }
+      if (entry->is_result) {
+        return {entry->args[1]};
+      }
+      return {};
+    }
+    const ir::EnumType& enum_ty =
+        builder.state().enum_types[builder.state().types[enum_type].as_enum()];
+    std::vector<ir::TypeIdx> payloads;
+    u32 at = enum_ty.variants.head().idx + variant;
+    const ir::EnumVariantType& variant_ty =
+        builder.state().enum_variant_types[ir::EnumVariantTypeIdx(at)];
+    for (ir::TypeIdx field : variant_ty.fields) {
+      payloads.push_back(field);
+    }
+    return payloads;
+  }
+
+  ir::TypeIdx enum_slot_type() {
+    if (enum_slot_type_.is_valid()) {
+      return enum_slot_type_;
+    }
+    ir::TypeSeq seq;
+    seq.push(builder.ref_type(builder.primitive(ir::TypeTag::I32)));
+    seq.push(builder.ref_type(builder.primitive(ir::TypeTag::Ptr)));
+    enum_slot_type_ = builder.tuple_type(seq.finish());
+    return enum_slot_type_;
+  }
+
+  ir::TypeIdx enum_slot_type_ = ir::TypeIdx(base::kInvalidIdx);
+
+  Val lower_variant_construct(const ast::CallExpr* call,
+                              const analyzer::CheckedModule::VariantUse* use) {
+    const std::vector<ir::TypeIdx> payloads =
+        variant_payload(use->enum_type, use->variant, use->blessed_first);
+    if (call->args.size() != payloads.size()) {
+      internal(call->span, "variant arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::TypeIdx slot = enum_slot_type();
+    const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, slot, {size_one});
+    const u32 discriminant =
+        use->blessed ? (use->blessed_first ? 0 : 1) : use->variant;
+    const ir::RegisterIdx tag =
+        emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
+             {to_operand(addr, slot), zero_i32, index_operand(0)});
+    emit_void(ir::Opcode::Store,
+              {disc_operand(discriminant), to_operand(tag, slot)});
+    if (!payloads.empty()) {
+      ir::TypeSeq seq;
+      for (ir::TypeIdx field : payloads) {
+        seq.push(builder.ref_type(field));
+      }
+      const ir::TypeIdx payload_type = builder.tuple_type(seq.finish());
+      const ir::RegisterIdx payload =
+          emit(ir::Opcode::Alloca, payload_type, {size_one});
+      for (usize i = 0; i < payloads.size(); ++i) {
+        Val value = lower_expr(call->args[i], &payloads[i]);
+        if (failed) {
+          return Val{size_one, error_type(), false, false};
+        }
+        const ir::RegisterIdx field =
+            emit(ir::Opcode::GetElementPtr, payloads[i],
+                 {to_operand(payload, payload_type), zero_i32,
+                  index_operand(static_cast<u32>(i))});
+        emit_void(ir::Opcode::Store,
+                  {use_value(value), to_operand(field, payloads[i])});
+      }
+      const ir::TypeIdx ptr = builder.primitive(ir::TypeTag::Ptr);
+      const ir::RegisterIdx slot_field =
+          emit(ir::Opcode::GetElementPtr, ptr,
+               {to_operand(addr, slot), zero_i32, index_operand(1)});
+      emit_void(ir::Opcode::Store,
+                {to_operand(payload, ptr), to_operand(slot_field, ptr)});
+    }
+    return Val{to_operand(addr, slot), use->enum_type, true, false};
+  }
+
+  ir::OperandIdx disc_operand(u32 discriminant) {
+    const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
+    ir::Immutable imm{.type = i32_ty, .data = {}};
+    imm.data.i32_value = static_cast<i32>(discriminant);
+    return to_operand(builder.immutable(imm), i32_ty);
   }
 
   Val lower_call(const ast::CallExpr* call, const ir::TypeIdx* expected) {
@@ -785,24 +1018,15 @@ struct Lowerer {
         call_target(call->callee);
     if (target == nullptr) {
       // Checking records free, associated, and method callees; the
-      // remainder is variant construction, which lands with enums.
-      bool variant = false;
+      // remainder is variant construction.
       if (call->callee->kind == ast::ExprKind::Path) {
         const ast::PathExpr* path =
             static_cast<const ast::PathExpr*>(call->callee);
-        if (path->path->segments.size() == 2) {
-          variant = true;
-        } else if (path->path->segments.size() == 1) {
-          const std::string_view name = path->path->segments[0].name;
-          variant =
-              name == "Ok" || name == "Err" || name == "Some" || name == "None";
+        if (const auto* use = variant_use(path->path)) {
+          return lower_variant_construct(call, use);
         }
       }
-      if (variant) {
-        unsupported(call->span, "enum construction");
-      } else {
-        internal(call->span, "call without target");
-      }
+      internal(call->span, "call without target");
       return Val{size_one, error_type(), false, false};
     }
     if (target->is_method) {
@@ -832,7 +1056,6 @@ struct Lowerer {
     if (tag_of(sig.ret) == ir::TypeTag::Never) {
       emit_void(ir::Opcode::Call, ops);
       emit_void(ir::Opcode::Unreachable, {});
-      terminated = true;
       return Val{size_one, sig.ret, false, false};
     }
     if (tag_of(sig.ret) == ir::TypeTag::Void) {
@@ -911,7 +1134,6 @@ struct Lowerer {
                material.op});
     if (!is_print) {
       emit_void(ir::Opcode::Unreachable, {});
-      terminated = true;
       return Val{size_one, builder.never_type(), false, false};
     }
     return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
@@ -933,8 +1155,143 @@ struct Lowerer {
     return address_of(arg).op;
   }
 
+  // Address of an enum slot value (spills SSA temporaries).
+  Val enum_addr(Val value) { return address_of(value); }
+
+  // Loads the discriminant of an enum slot address.
+  Val load_disc(Val slot_addr) {
+    const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
+    const ir::RegisterIdx gep =
+        emit(ir::Opcode::GetElementPtr, i32,
+             {slot_addr.op, zero_i32, index_operand(0)});
+    const ir::RegisterIdx loaded =
+        emit(ir::Opcode::Load, i32, {to_operand(gep, i32)});
+    return Val{to_operand(loaded, i32), i32, false, false};
+  }
+
+  // Value of payload field i of the enum at slot_addr.
+  Val load_payload_field(Val slot_addr, ir::TypeIdx field_type, u32 field) {
+    const ir::TypeIdx ptr = builder.primitive(ir::TypeTag::Ptr);
+    const ir::RegisterIdx ptr_gep =
+        emit(ir::Opcode::GetElementPtr, ptr,
+             {slot_addr.op, zero_i32, index_operand(1)});
+    const ir::RegisterIdx payload =
+        emit(ir::Opcode::Load, ptr, {to_operand(ptr_gep, ptr)});
+    const ir::RegisterIdx field_gep =
+        emit(ir::Opcode::GetElementPtr, field_type,
+             {to_operand(payload, ptr), zero_i32, index_operand(field)});
+    const ir::RegisterIdx loaded =
+        emit(ir::Opcode::Load, field_type, {to_operand(field_gep, field_type)});
+    return Val{to_operand(loaded, field_type), field_type, false, false};
+  }
+
+  void emit_br(ir::BlockIdx target) {
+    emit_void(ir::Opcode::Br,
+              {builder.operand(ir::Operand::from_block(
+                  target, builder.primitive(ir::TypeTag::Void)))});
+  }
+
+  void emit_cond_br(ir::OperandIdx cond,
+                    ir::BlockIdx then_block,
+                    ir::BlockIdx else_block) {
+    const ir::TypeIdx void_ty = builder.primitive(ir::TypeTag::Void);
+    emit_void(
+        ir::Opcode::CondBr,
+        {cond, builder.operand(ir::Operand::from_block(then_block, void_ty)),
+         builder.operand(ir::Operand::from_block(else_block, void_ty))});
+  }
+
+  ir::OperandIdx bool_operand(bool value) {
+    const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
+    ir::Immutable imm{.type = i1, .data = {}};
+    imm.data.i1_value = value;
+    return to_operand(builder.immutable(imm), i1);
+  }
+
+  void emit_panic(ir::OperandIdx message) {
+    const ir::TypeIdx ptr = builder.primitive(ir::TypeTag::Ptr);
+    const ir::ExternalFunctionIdx ext =
+        declare_external("alcy_panic", builder.never_type(), {ptr});
+    emit_void(ir::Opcode::Call,
+              {builder.operand(ir::Operand::from_external_function(
+                   ext, builder.primitive(ir::TypeTag::Function))),
+               message});
+    emit_void(ir::Opcode::Unreachable, {});
+  }
+
+  ir::OperandIdx str_operand(std::string_view message) {
+    const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
+    const ir::ImmutableIdx imm = builder.immutable(
+        {.type = str, .data = {.str_id_value = strings.intern(message)}});
+    return to_operand(imm, str);
+  }
+
+  Val lower_blessed_method(const ast::MethodCallExpr* method,
+                           const analyzer::CheckedPackage::BlessedType* entry,
+                           Val receiver,
+                           const ir::TypeIdx* expected) {
+    const std::string_view name = method->name.name;
+    const bool is_ok = name == "is_ok";
+    if (name != "unwrap" && name != "expect" && !is_ok && name != "is_err") {
+      internal(method->span, "blessed method without lowering");
+      return Val{size_one, error_type(), false, false};
+    }
+    Val slot = enum_addr(receiver);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    if (name == "unwrap" || name == "expect") {
+      mark_move(slot);
+    }
+    Val tag = load_disc(slot);
+    const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+    if (is_ok || name == "is_err") {
+      const ir::RegisterIdx dst =
+          emit(ir::Opcode::Eq, boolean,
+               {tag.op, is_ok ? disc_operand(0) : disc_operand(1)});
+      Val result{to_operand(dst, boolean), boolean, false, false};
+      if (expected != nullptr) {
+        (void)expected;
+      }
+      return result;
+    }
+    // unwrap / expect: Ok payload on tag 0, else diverge.
+    ir::OperandIdx failure = str_operand("unwrap");
+    if (name == "expect") {
+      if (method->args.size() != 1) {
+        internal(method->span, "expect without message");
+        return Val{size_one, error_type(), false, false};
+      }
+      Val message = lower_expr(method->args[0], nullptr);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      failure = materialize(message).op;
+    }
+    ir::BlockIdx ok_block = reserve_block();
+    ir::BlockIdx bad_block = reserve_block();
+    ir::BlockIdx join_block = reserve_block();
+    const ir::RegisterIdx test =
+        emit(ir::Opcode::Eq, boolean, {tag.op, disc_operand(0)});
+    emit_cond_br(to_operand(test, boolean), ok_block, bad_block);
+    switch_to(bad_block);
+    emit_panic(failure);
+    switch_to(ok_block);
+    Val payload = load_payload_field(slot, entry->args[0], 0);
+    emit_br(join_block);
+    switch_to(join_block);
+    return payload;
+  }
+
   Val lower_method_call(const ast::MethodCallExpr* method,
                         const ir::TypeIdx* expected) {
+    Val receiver = lower_expr(method->receiver, nullptr);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    if (const auto* entry = blessed_entry(receiver.type)) {
+      return lower_blessed_method(method, entry, receiver, expected);
+    }
     const analyzer::CheckedModule::CallTarget* target = call_target(method);
     if (target == nullptr || !target->is_method) {
       internal(method->span, "method call without target");
@@ -946,10 +1303,6 @@ struct Lowerer {
     ir::FunctionIdx fn = fn_index(info.item);
     if (!fn.is_valid()) {
       internal(method->span, "method without function");
-      return Val{size_one, error_type(), false, false};
-    }
-    Val receiver = lower_expr(method->receiver, nullptr);
-    if (failed) {
       return Val{size_one, error_type(), false, false};
     }
     std::vector<ir::OperandIdx> ops;
@@ -1052,9 +1405,7 @@ struct Lowerer {
       }
       Val base_addr = address_of(base);
       // Update consumes the base value.
-      if (base_addr.place && !is_copy(base_addr.type)) {
-        emit(ir::Opcode::Move, base_addr.type, {base_addr.op});
-      }
+      mark_move(base_addr);
       for (u32 i = 0; i < static_cast<u32>(seen.size()); ++i) {
         if (seen[i]) {
           continue;
@@ -1199,6 +1550,448 @@ struct Lowerer {
     return Val{to_operand(dst, lhs.type), lhs.type, false, false};
   }
 
+  // Stores an arm value into a result slot (callers skip Void).
+  void store_result(Val slot, Val value) {
+    emit_void(ir::Opcode::Store, {use_value(value), slot.op});
+  }
+
+  // Result slot for joining control-flow values (none for Void).
+  Val result_slot(ir::TypeIdx type, diag::Span span) {
+    if (tag_of(type) == ir::TypeTag::Void) {
+      return Val{size_one, type, false, false};
+    }
+    const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, type, {size_one});
+    (void)span;
+    return Val{to_operand(addr, type), type, true, false};
+  }
+
+  // Tests one match arm against a scrutinee address. On success the
+  // pattern binds at the start of body_block and lowering continues
+  // there; on failure control jumps to fail_block. Or-patterns expand
+  // into sibling arms beforehand.
+  void lower_arm_test(const ast::Pattern* pattern,
+                      Val scrut_addr,
+                      ir::TypeIdx scrut_type,
+                      ir::BlockIdx body_block,
+                      ir::BlockIdx fail_block) {
+    switch (pattern->kind) {
+      case ast::PatternKind::Wildcard:
+        emit_br(body_block);
+        switch_to(body_block);
+        return;
+      case ast::PatternKind::Ident:
+      case ast::PatternKind::MutIdent: {
+        bind_pattern(pattern, materialize(scrut_addr));
+        if (failed) {
+          return;
+        }
+        emit_br(body_block);
+        switch_to(body_block);
+        return;
+      }
+      case ast::PatternKind::Literal: {
+        const ast::LiteralPattern* lit =
+            static_cast<const ast::LiteralPattern*>(pattern);
+        Val expected = lower_literal(lit->value, &scrut_type);
+        if (failed) {
+          return;
+        }
+        Val actual = materialize(scrut_addr);
+        const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+        const ir::RegisterIdx test =
+            emit(ir::Opcode::Eq, boolean, {actual.op, expected.op});
+        emit_cond_br(to_operand(test, boolean), body_block, fail_block);
+        switch_to(body_block);
+        return;
+      }
+      case ast::PatternKind::Tuple: {
+        const ast::TuplePattern* tuple =
+            static_cast<const ast::TuplePattern*>(pattern);
+        if (tuple->path == nullptr) {
+          // Plain tuple destructuring (checking validated shape).
+          const ir::TupleType& shape =
+              builder.state()
+                  .tuple_types[builder.state().types[scrut_type].as_tuple()];
+          for (u32 i = 0;
+               i < static_cast<u32>(tuple->elements.size()) && !failed; ++i) {
+            const ir::RegisterIdx gep =
+                emit(ir::Opcode::GetElementPtr, shape.elements[i],
+                     {scrut_addr.op, zero_i32, index_operand(i)});
+            bind_pattern(tuple->elements[i],
+                         Val{to_operand(gep, shape.elements[i]),
+                             shape.elements[i], true, scrut_addr.place});
+            if (failed) {
+              return;
+            }
+          }
+          emit_br(body_block);
+          switch_to(body_block);
+          return;
+        }
+        if (tuple->path->segments.empty()) {
+          internal(pattern->span, "variant without name");
+          return;
+        }
+        u32 variant = 0;
+        if (!variant_index(scrut_type, tuple->path->segments.back().name,
+                           variant)) {
+          internal(pattern->span, "variant without declaration");
+          return;
+        }
+        ir::BlockIdx bind_block = body_block;
+        Val tag = load_disc(scrut_addr);
+        const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+        const ir::RegisterIdx test =
+            emit(ir::Opcode::Eq, boolean, {tag.op, disc_operand(variant)});
+        emit_cond_br(to_operand(test, boolean), bind_block, fail_block);
+        switch_to(bind_block);
+        const std::vector<ir::TypeIdx> payloads =
+            variant_payload(scrut_type, variant, variant == 0);
+        if (payloads.size() != tuple->elements.size()) {
+          internal(pattern->span, "variant arity");
+          return;
+        }
+        for (usize i = 0; i < payloads.size() && !failed; ++i) {
+          Val field =
+              load_payload_field(scrut_addr, payloads[i], static_cast<u32>(i));
+          bind_pattern(tuple->elements[i], field);
+        }
+        return;
+      }
+      case ast::PatternKind::Struct: {
+        const ast::StructPattern* strukt =
+            static_cast<const ast::StructPattern*>(pattern);
+        for (const ast::FieldPattern& field : strukt->fields) {
+          u32 index = 0;
+          if (!struct_field_index(scrut_type, field.name.name, index)) {
+            internal(field.name.span, "pattern field without declaration");
+            return;
+          }
+          const ir::TypeIdx field_type =
+              field_type_of(scrut_type, index, pattern->span);
+          const ir::RegisterIdx gep =
+              emit(ir::Opcode::GetElementPtr, field_type,
+                   {scrut_addr.op, zero_i32, index_operand(index)});
+          bind_pattern(field.pattern, Val{to_operand(gep, field_type),
+                                          field_type, true, scrut_addr.place});
+          if (failed) {
+            return;
+          }
+        }
+        emit_br(body_block);
+        switch_to(body_block);
+        return;
+      }
+      case ast::PatternKind::Ref: {
+        Val loaded = materialize(scrut_addr);
+        bind_pattern(pattern, loaded);
+        if (failed) {
+          return;
+        }
+        emit_br(body_block);
+        switch_to(body_block);
+        return;
+      }
+      case ast::PatternKind::Or:
+        internal(pattern->span, "or-pattern without expansion");
+        return;
+    }
+  }
+
+  // Expands or-pattern alternatives into sibling (pattern, body) arms
+  // sharing one body; checking required identical bindings.
+  void expand_or_arms(
+      const ast::MatchArm& arm,
+      std::vector<std::pair<const ast::Pattern*, const ast::Expr*>>& out) {
+    if (arm.pattern->kind != ast::PatternKind::Or) {
+      out.emplace_back(arm.pattern, arm.body);
+      return;
+    }
+    const ast::OrPattern* or_pat =
+        static_cast<const ast::OrPattern*>(arm.pattern);
+    for (const ast::Pattern* alt : or_pat->alternatives) {
+      out.emplace_back(alt, arm.body);
+    }
+  }
+
+  Val lower_match(const ast::MatchExpr* match, const ir::TypeIdx* expected) {
+    Val scrut = lower_expr(match->scrutinee, nullptr);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    Val addr = address_of(scrut);
+    // By-value matches consume a non-Copy scrutinee; payload bindings
+    // copy out of the moved value.
+    mark_move(addr);
+    const ir::TypeIdx scrut_type = expr_type(match->scrutinee);
+    const ir::TypeIdx result_type = expr_type(match);
+    Val slot{size_one, result_type, false, false};
+    const bool has_slot = tag_of(result_type) != ir::TypeTag::Void &&
+                          tag_of(result_type) != ir::TypeTag::Error;
+    if (has_slot) {
+      slot = result_slot(result_type, match->span);
+    }
+    std::vector<std::pair<const ast::Pattern*, const ast::Expr*>> arms;
+    for (const ast::MatchArm& arm : match->arms) {
+      expand_or_arms(arm, arms);
+    }
+    std::vector<ir::BlockIdx> tests;
+    std::vector<ir::BlockIdx> bodies;
+    for (usize i = 0; i < arms.size(); ++i) {
+      tests.push_back(reserve_block());
+      bodies.push_back(reserve_block());
+    }
+    const ir::BlockIdx fail = reserve_block();
+    ir::BlockIdx join = ir::BlockIdx(base::kInvalidIdx);
+    if (arms.empty()) {
+      internal(match->span, "match without arms");
+      return Val{size_one, error_type(), false, false};
+    }
+    emit_br(tests.front());
+    for (usize i = 0; i < arms.size() && !failed; ++i) {
+      switch_to(tests[i]);
+      const ir::BlockIdx next = i + 1 < arms.size() ? tests[i + 1] : fail;
+      lower_arm_test(arms[i].first, addr, scrut_type, bodies[i], next);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      // Arm testing always leaves lowering at the body block.
+      switch_to(bodies[i]);
+      Val produced = lower_expr(arms[i].second, expected);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      if (has_slot && !terminated_cur()) {
+        store_result(slot, produced);
+      } else if (!has_slot) {
+        mark_move(produced);
+      }
+      if (!terminated_cur()) {
+        if (!join.is_valid()) {
+          join = reserve_block();
+        }
+        emit_br(join);
+      }
+    }
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    switch_to(fail);
+    emit_void(ir::Opcode::Unreachable, {});
+    if (join.is_valid()) {
+      switch_to(join);
+    }
+    if (has_slot) {
+      return materialize(slot);
+    }
+    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+  }
+
+  Val lower_if(const ast::IfExpr* if_expr, const ir::TypeIdx* expected) {
+    const ast::Expr* if_as_expr = if_expr;
+    const ir::TypeIdx result_type = expr_type(if_as_expr);
+    const bool has_slot = tag_of(result_type) != ir::TypeTag::Void &&
+                          tag_of(result_type) != ir::TypeTag::Error;
+    Val slot{size_one, result_type, false, false};
+    if (has_slot) {
+      slot = result_slot(result_type, if_expr->span);
+    }
+    ir::BlockIdx else_block = reserve_block();
+    ir::BlockIdx join = ir::BlockIdx(base::kInvalidIdx);
+    auto finish_arm = [&](Val produced) {
+      if (has_slot && !terminated_cur()) {
+        store_result(slot, produced);
+      } else if (!has_slot) {
+        mark_move(produced);
+      }
+      if (!terminated_cur()) {
+        if (!join.is_valid()) {
+          join = reserve_block();
+        }
+        emit_br(join);
+      }
+    };
+    if (!if_expr->cond->is_pattern) {
+      ir::BlockIdx then_block = reserve_block();
+      Val cond = lower_expr(if_expr->cond->value, nullptr);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      Val material = materialize(cond);
+      emit_cond_br(material.op, then_block, else_block);
+      switch_to(then_block);
+      finish_arm(lower_block(if_expr->then_block, expected));
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      switch_to(else_block);
+      if (if_expr->else_block != nullptr) {
+        finish_arm(lower_block(if_expr->else_block, expected));
+      } else if (has_slot) {
+        internal(if_expr->span, "value if without else");
+        return Val{size_one, error_type(), false, false};
+      } else {
+        // Statement position without else: the empty arm falls through.
+        if (!join.is_valid()) {
+          join = reserve_block();
+        }
+        emit_br(join);
+      }
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+    } else {
+      Val init = lower_expr(if_expr->cond->init, nullptr);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      Val addr = address_of(init);
+      mark_move(addr);
+      const ir::TypeIdx scrut_type = expr_type(if_expr->cond->init);
+      ir::BlockIdx body_block = reserve_block();
+      lower_arm_test(if_expr->cond->pattern, addr, scrut_type, body_block,
+                     else_block);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      switch_to(body_block);
+      finish_arm(lower_block(if_expr->then_block, expected));
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      switch_to(else_block);
+      if (if_expr->else_block != nullptr) {
+        finish_arm(lower_block(if_expr->else_block, expected));
+        if (failed) {
+          return Val{size_one, error_type(), false, false};
+        }
+      } else if (!has_slot) {
+        if (!join.is_valid()) {
+          join = reserve_block();
+        }
+        emit_br(join);
+      } else {
+        internal(if_expr->span, "value if without else");
+        return Val{size_one, error_type(), false, false};
+      }
+    }
+    if (join.is_valid()) {
+      switch_to(join);
+    }
+    if (has_slot) {
+      return materialize(slot);
+    }
+    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+  }
+
+  Val lower_loop(const ast::LoopExpr* loop) {
+    ir::BlockIdx header = reserve_block();
+    ir::BlockIdx exit = reserve_block();
+    emit_br(header);
+    switch_to(header);
+    break_targets_.push_back(exit);
+    continue_targets_.push_back(header);
+    lower_block(loop->body, nullptr);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    if (!terminated_cur()) {
+      emit_br(header);
+    }
+    break_targets_.pop_back();
+    continue_targets_.pop_back();
+    switch_to(exit);
+    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+  }
+
+  Val lower_while(const ast::WhileExpr* while_expr) {
+    ir::BlockIdx header = reserve_block();
+    ir::BlockIdx body = reserve_block();
+    ir::BlockIdx exit = reserve_block();
+    emit_br(header);
+    switch_to(header);
+    if (!while_expr->cond->is_pattern) {
+      Val cond = lower_expr(while_expr->cond->value, nullptr);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      emit_cond_br(materialize(cond).op, body, exit);
+      switch_to(body);
+    } else {
+      // The scrutinee re-evaluates on every iteration; the header both
+      // tests and binds, so continue re-enters the test.
+      Val init = lower_expr(while_expr->cond->init, nullptr);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      Val addr = address_of(init);
+      mark_move(addr);
+      const ir::TypeIdx scrut_type = expr_type(while_expr->cond->init);
+      lower_arm_test(while_expr->cond->pattern, addr, scrut_type, body, exit);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      switch_to(body);
+    }
+    break_targets_.push_back(exit);
+    continue_targets_.push_back(header);
+    lower_block(while_expr->body, nullptr);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    if (!terminated_cur()) {
+      emit_br(header);
+    }
+    break_targets_.pop_back();
+    continue_targets_.pop_back();
+    switch_to(exit);
+    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+  }
+
+  Val lower_question(const ast::QuestionExpr* question) {
+    Val scrut = lower_expr(question->inner, nullptr);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    Val addr = address_of(scrut);
+    mark_move(addr);
+    const ir::TypeIdx scrut_type = expr_type(question->inner);
+    const auto* entry = blessed_entry(scrut_type);
+    if (entry == nullptr) {
+      internal(question->span, "question without blessed type");
+      return Val{size_one, error_type(), false, false};
+    }
+    Val tag = load_disc(addr);
+    const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+    ir::BlockIdx ok_block = reserve_block();
+    ir::BlockIdx err_block = reserve_block();
+    ir::BlockIdx join_block = reserve_block();
+    const ir::RegisterIdx test =
+        emit(ir::Opcode::Eq, boolean, {tag.op, disc_operand(0)});
+    emit_cond_br(to_operand(test, boolean), ok_block, err_block);
+    switch_to(err_block);
+    if (entry->is_result) {
+      Val payload = load_payload_field(addr, entry->args[1], 0);
+      emit_void(ir::Opcode::Ret, {use_value(payload)});
+    } else {
+      // Propagate None by constructing it in the enclosing return type.
+      const ir::TypeIdx slot = enum_slot_type();
+      const ir::RegisterIdx none_addr =
+          emit(ir::Opcode::Alloca, slot, {size_one});
+      const ir::RegisterIdx none_tag =
+          emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
+               {to_operand(none_addr, slot), zero_i32, index_operand(0)});
+      emit_void(ir::Opcode::Store,
+                {disc_operand(1), to_operand(none_tag, slot)});
+      emit_void(ir::Opcode::Ret, {to_operand(none_addr, slot)});
+    }
+    switch_to(ok_block);
+    Val payload = load_payload_field(addr, entry->args[0], 0);
+    emit_br(join_block);
+    switch_to(join_block);
+    return payload;
+  }
+
   Val lower_expr(const ast::Expr* expr, const ir::TypeIdx* expected) {
     if (failed) {
       return Val{size_one, error_type(), false, false};
@@ -1306,15 +2099,46 @@ struct Lowerer {
         }
         return materialize(field_addr(base, field->name.name, field->span));
       }
+      case ast::ExprKind::Question: {
+        const ast::QuestionExpr* question =
+            static_cast<const ast::QuestionExpr*>(expr);
+        return lower_question(question);
+      }
+      case ast::ExprKind::If: {
+        const ast::IfExpr* if_expr = static_cast<const ast::IfExpr*>(expr);
+        return lower_if(if_expr, expected);
+      }
+      case ast::ExprKind::Match: {
+        const ast::MatchExpr* match = static_cast<const ast::MatchExpr*>(expr);
+        return lower_match(match, expected);
+      }
+      case ast::ExprKind::Loop: {
+        const ast::LoopExpr* loop = static_cast<const ast::LoopExpr*>(expr);
+        return lower_loop(loop);
+      }
+      case ast::ExprKind::While: {
+        const ast::WhileExpr* while_expr =
+            static_cast<const ast::WhileExpr*>(expr);
+        return lower_while(while_expr);
+      }
+      case ast::ExprKind::Break: {
+        if (break_targets_.empty()) {
+          internal(expr->span, "break without loop");
+          return Val{size_one, error_type(), false, false};
+        }
+        emit_br(break_targets_.back());
+        return Val{size_one, builder.never_type(), false, false};
+      }
+      case ast::ExprKind::Continue: {
+        if (continue_targets_.empty()) {
+          internal(expr->span, "continue without loop");
+          return Val{size_one, error_type(), false, false};
+        }
+        emit_br(continue_targets_.back());
+        return Val{size_one, builder.never_type(), false, false};
+      }
       case ast::ExprKind::Index:
-      case ast::ExprKind::Question:
-      case ast::ExprKind::If:
-      case ast::ExprKind::Match:
-      case ast::ExprKind::Loop:
-      case ast::ExprKind::While:
       case ast::ExprKind::Range:
-      case ast::ExprKind::Break:
-      case ast::ExprKind::Continue:
         unsupported(expr->span, "control flow in lowering");
         return Val{size_one, error_type(), false, false};
       case ast::ExprKind::Block: {
@@ -1336,7 +2160,6 @@ struct Lowerer {
             emit_void(ir::Opcode::Ret, {use_value(value)});
           }
         }
-        terminated = true;
         return Val{size_one, builder.never_type(), false, false};
       }
     }
@@ -1365,7 +2188,7 @@ struct Lowerer {
   }
 
   void lower_stmt(const ast::Stmt* stmt) {
-    if (failed || terminated) {
+    if (failed || terminated_cur()) {
       return;
     }
     SpanGuard guard{this, cur_span_};
@@ -1408,7 +2231,7 @@ struct Lowerer {
       case ast::StmtKind::Expr: {
         const ast::ExprStmt* expr_stmt =
             static_cast<const ast::ExprStmt*>(stmt);
-        lower_expr(expr_stmt->value, nullptr);
+        mark_move(lower_expr(expr_stmt->value, nullptr));
         return;
       }
     }
@@ -1417,11 +2240,11 @@ struct Lowerer {
   Val lower_block(const ast::Block* block, const ir::TypeIdx* expected) {
     for (ast::Stmt* stmt : block->statements) {
       lower_stmt(stmt);
-      if (failed || terminated) {
+      if (failed || terminated_cur()) {
         break;
       }
     }
-    if (failed || terminated) {
+    if (failed || terminated_cur()) {
       return Val{size_one, error_type(), false, false};
     }
     if (block->value == nullptr) {
@@ -1437,14 +2260,21 @@ struct Lowerer {
   void lower_fn(u32 mod, const analyzer::CheckedModule::FnSig& sig) {
     module = mod;
     locals.clear();
-    instrs = ir::InstrSeq{};
-    terminated = false;
+    fn_blocks_.clear();
+    streams_.clear();
+    stream_last_.clear();
+    fn_block_base_ = block_next_;
+    break_targets_.clear();
+    continue_targets_.clear();
+    pending_params_.clear();
     if (sig.item == nullptr || sig.item->body == nullptr) {
       internal(sig.item == nullptr ? diag::Span{} : sig.item->span,
                "function without body");
       return;
     }
     const ast::FnItem* fn = sig.item;
+    switch_to(reserve_block());
+    cur_span_ = fn->name.span;
     // Entry block parameters arrive in declaration order.
     ir::BlockParamSeq param_seq;
     for (usize i = 0; i < sig.params.size() && !failed; ++i) {
@@ -1484,7 +2314,7 @@ struct Lowerer {
     if (failed) {
       return;
     }
-    if (!terminated) {
+    if (!terminated_cur()) {
       if (tag_of(body.type) == ir::TypeTag::Void) {
         emit_void(ir::Opcode::Ret, {});
       } else if (tag_of(body.type) == ir::TypeTag::Never) {
@@ -1500,6 +2330,7 @@ struct Lowerer {
   std::vector<ir::RegisterIdx> pending_params_;
 
   void run() {
+    block_next_ = static_cast<u32>(builder.state().blocks.size());
     // Seed one-time operands before any function body runs.
     {
       const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
@@ -1525,7 +2356,7 @@ struct Lowerer {
     struct Done {
       analyzer::CheckedModule::FnSig sig;
       u32 mod;
-      ir::BlockIdx block;
+      std::vector<ir::BlockIdx> blocks;
     };
     std::vector<Done> done;
     for (u32 m = 0; m < static_cast<u32>(pkg.modules.size()) && !failed; ++m) {
@@ -1533,16 +2364,25 @@ struct Lowerer {
         if (sig.item == nullptr) {
           continue;
         }
-        // Fresh per-function instruction stream; block params were
-        // recorded during lower_fn.
         lower_fn(m, sig);
         if (failed) {
           return;
         }
-        ir::BlockIdx block = builder.block(
-            {.instrs = instrs.finish(), .block_params = pending_block_params_});
+        // Publish reserved blocks in reservation order; entry block
+        // carries the recorded parameters.
+        std::vector<ir::BlockIdx> blocks;
+        bool first = true;
+        for (usize i = 0; i < fn_blocks_.size(); ++i) {
+          ir::BlockIdx created =
+              builder.block({.instrs = streams_[i].finish(),
+                             .block_params = first ? pending_block_params_
+                                                   : ir::BlockParamIdxRange{}});
+          DCHECK(created.idx == fn_blocks_[i].idx);
+          first = false;
+          blocks.push_back(created);
+        }
         pending_block_params_ = ir::BlockParamIdxRange{};
-        done.push_back({sig, m, block});
+        done.push_back({sig, m, std::move(blocks)});
         (void)m;
       }
     }
@@ -1554,10 +2394,12 @@ struct Lowerer {
       for (ir::TypeIdx param : entry.sig.params) {
         params.push(builder.ref_type(param));
       }
+      ir::BlockIdxRange range{entry.blocks.front(),
+                              static_cast<u32>(entry.blocks.size())};
       builder.function({.meta = {.return_type = entry.sig.ret,
                                  .param_types = params.finish(),
                                  .name = strings.intern(entry.sig.name)},
-                        .blocks = {entry.block, 1}});
+                        .blocks = range});
     }
   }
 
@@ -1583,11 +2425,15 @@ diag::Fallible<LoweredPackage> lower_package(analyzer::CheckedPackage package,
   ir::Storage storage = std::move(lowerer).finish();
   if (base::Result<void, ir::VerifyError> result = ir::verify_storage(storage);
       result.is_err()) {
-    const ir::VerifyError error = std::move(result).unwrap_err();
+    ir::VerifyError error = std::move(result).unwrap_err();
     const u32 index = bag.emit(diag::Severity::Error, kLowerInternal,
                                diag::Span{}, "lowered IR failed verification");
     (void)index;
-    (void)error;
+    const diag::Diagnostic diag = ir::to_diagnostic(error);
+    fmt::memory_buffer rendered;
+    diag::render(diag, rendered);
+    DLOG("verify failure: {} at index {}",
+         std::string_view(rendered.data(), rendered.size()), error.index);
     return base::make_err(diag::Fatal{});
   }
   // Tables outlive the builder move above; the Lowerer shell is empty.

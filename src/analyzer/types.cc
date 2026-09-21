@@ -505,10 +505,18 @@ struct Checker {
                 fields.push_back(field.name.name);
               }
               modules[module].structs.push_back({resolved, std::move(fields)});
+            } else if (item->kind == ast::ItemKind::Enum) {
+              const ast::EnumItem* decl =
+                  static_cast<const ast::EnumItem*>(item);
+              std::vector<std::string_view> variants;
+              for (const ast::EnumVariant& variant : decl->variants) {
+                variants.push_back(variant.name.name);
+              }
+              modules[module].enums.push_back(
+                  {entry->name, resolved, std::move(variants)});
             }
           }
-          break;
-        }
+        } break;
         case ast::ItemKind::Fn: {
           const ast::FnItem* fn = static_cast<const ast::FnItem*>(item);
           std::vector<ir::TypeIdx> params;
@@ -1709,6 +1717,7 @@ struct Checker {
         if (or_pat->alternatives.empty()) {
           return false;
         }
+        const usize alt0_start = scopes.back().size();
         bool refutable = bind_pattern(module, or_pat->alternatives[0], type);
         const usize base = scopes.back().size();
         for (usize i = 1; i < or_pat->alternatives.size(); ++i) {
@@ -1720,7 +1729,7 @@ struct Checker {
           // dropped with a diagnostic.
           for (usize j = mark; j < scopes.back().size(); ++j) {
             bool found = false;
-            for (usize k = base; k < mark; ++k) {
+            for (usize k = alt0_start; k < base; ++k) {
               if (scopes.back()[k].name == scopes.back()[j].name) {
                 found = true;
                 break;
@@ -1830,6 +1839,10 @@ struct Checker {
       case PathValue::Kind::Local:
       case PathValue::Kind::Static:
       case PathValue::Kind::UnitVariant: {
+        if (resolved.kind == PathValue::Kind::UnitVariant) {
+          modules[module].variants.push_back(
+              {path, false, true, resolved.type, resolved.variant});
+        }
         if (expected != nullptr) {
           return unify(*expected, resolved.type, span, "path");
         }
@@ -1857,6 +1870,8 @@ struct Checker {
         if (expected != nullptr) {
           if (const BlessedEntry* entry = blessed_find(*expected)) {
             if (!entry->is_result) {
+              modules[module].variants.push_back(
+                  {path, true, false, *expected, 0});
               return *expected;
             }
           }
@@ -1997,6 +2012,13 @@ struct Checker {
         payloads = variant_payloads(resolved, enum_type, span);
       } else {
         payloads = variant_payloads(resolved, enum_type, span);
+      }
+      if (resolved.kind == PathValue::Kind::TupleVariant) {
+        modules[module].variants.push_back(
+            {path->path, false, true, enum_type, resolved.variant});
+      } else {
+        modules[module].variants.push_back(
+            {path->path, true, resolved.blessed_first, enum_type, 0});
       }
       if (args.size() != payloads.size()) {
         const u32 index =
@@ -2429,7 +2451,8 @@ struct Checker {
   // variants by enumeration, integer matches by wildcard (literal
   // ranges cannot cover a full integer type), tuples and structs by
   // wildcard or a matching constructor pattern.
-  void check_exhaustive(ir::TypeIdx scrutinee,
+  void check_exhaustive(u32 module,
+                        ir::TypeIdx scrutinee,
                         std::span<const ast::MatchArm> arms,
                         diag::Span span) {
     bool wildcard = false;
@@ -2471,10 +2494,20 @@ struct Checker {
           if (entry.type.idx != scrutinee.idx) {
             continue;
           }
+          // Blessed constructors cover by side: Ok/Some is variant 0,
+          // Err/None is variant 1. Unconditional patterns cover both.
+          bool covered[2] = {false, false};
+          for (const ast::MatchArm& arm : arms) {
+            mark_blessed_covered(module, arm.pattern, covered);
+          }
+          if (covered[0] && covered[1]) {
+            return;
+          }
+          const char* missing = covered[0] ? (entry.is_result ? "Err" : "None")
+                                           : (entry.is_result ? "Ok" : "Some");
           const u32 index =
               bag.emit(diag::Severity::Error, kAnalyzerNonExhaustiveMatch, span,
-                       "non-exhaustive match over '{}'",
-                       entry.is_result ? "Result" : "Option");
+                       "non-exhaustive match: '{}' not covered", missing);
           (void)index;
           return;
         }
@@ -2621,6 +2654,41 @@ struct Checker {
     }
   }
 
+  void mark_blessed_covered(u32 module,
+                            const ast::Pattern* pattern,
+                            bool covered[2]) {
+    switch (pattern->kind) {
+      case ast::PatternKind::Wildcard:
+      case ast::PatternKind::Ident:
+      case ast::PatternKind::MutIdent: return;
+      case ast::PatternKind::Tuple: {
+        const ast::TuplePattern* tuple =
+            static_cast<const ast::TuplePattern*>(pattern);
+        if (tuple->path == nullptr) {
+          return;
+        }
+        PathValue resolved;
+        if (!resolve_variant_path(module, tuple->path, resolved)) {
+          return;
+        }
+        if (resolved.kind != PathValue::Kind::BlessedCtor) {
+          return;
+        }
+        covered[resolved.blessed_first ? 0 : 1] = true;
+        return;
+      }
+      case ast::PatternKind::Or: {
+        const ast::OrPattern* or_pat =
+            static_cast<const ast::OrPattern*>(pattern);
+        for (const ast::Pattern* alt : or_pat->alternatives) {
+          mark_blessed_covered(module, alt, covered);
+        }
+        return;
+      }
+      default: return;
+    }
+  }
+
   ir::TypeIdx check_match(u32 module,
                           const ast::MatchExpr* match,
                           const ir::TypeIdx* expected) {
@@ -2642,7 +2710,7 @@ struct Checker {
       }
     }
     if (!is_error(scrutinee)) {
-      check_exhaustive(scrutinee, match->arms, match->span);
+      check_exhaustive(module, scrutinee, match->arms, match->span);
     }
     if (expected != nullptr && !first) {
       return unify(*expected, result, match->span, "match");

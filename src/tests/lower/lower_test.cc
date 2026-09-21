@@ -149,14 +149,25 @@ TEST_CASE("Lower structs tuples fields and borrows") {
   CHECK(ir::verify_storage(result.lowered->storage).is_ok());
 }
 
-TEST_CASE("Lower rejects control flow in the slice") {
+TEST_CASE("Lower lowers control flow to verifiable blocks") {
   io::TempDir dir("alcy_lower_control_test");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn f(b: bool) -> i32 {\n"
-                                      "  ret match b {\n"
+                                      "  r := match b {\n"
                                       "    true => 1,\n"
                                       "    false => 0,\n"
                                       "  }\n"
+                                      "  mut i := 0\n"
+                                      "  while i < r {\n"
+                                      "    i = i + 1\n"
+                                      "  }\n"
+                                      "  loop {\n"
+                                      "    if i <= 0 {\n"
+                                      "      break\n"
+                                      "    }\n"
+                                      "    i = i - 1\n"
+                                      "  }\n"
+                                      "  ret i\n"
                                       "}\n"}});
   CHECK(setup);
   if (!setup) {
@@ -165,8 +176,51 @@ TEST_CASE("Lower rejects control flow in the slice") {
 
   Fixture f;
   LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
-  CHECK(!result.ok);
-  CHECK(f.bag.has_errors());
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  CHECK(ir::verify_storage(result.lowered->storage).is_ok());
+}
+
+TEST_CASE("Lower lowers enums matches and question propagation") {
+  io::TempDir dir("alcy_lower_enum_test");
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "enum Shape { Circle(i32), Rect }\n"
+                       "fn area(s: Shape) -> i32 {\n"
+                       "  r := match s {\n"
+                       "    Shape::Circle(x) => x,\n"
+                       "    Shape::Rect => 0,\n"
+                       "  }\n"
+                       "  ret r\n"
+                       "}\n"
+                       "fn calc(o: Option<i32>) -> Option<i32> {\n"
+                       "  v := o?\n"
+                       "  ret Some(v + 1)\n"
+                       "}\n"
+                       "fn main() {\n"
+                       "  a := area(Shape::Circle(3))\n"
+                       "  o: Option<i32> := Some(7)\n"
+                       "  y := o.unwrap()\n"
+                       "  _ := a\n"
+                       "  _ := y\n"
+                       "  _ := calc(o)\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  CHECK(ir::verify_storage(result.lowered->storage).is_ok());
 }
 
 TEST_CASE("Lower emits verifiable LLVM IR") {

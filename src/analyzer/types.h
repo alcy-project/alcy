@@ -31,6 +31,14 @@ struct CheckedModule {
     std::vector<std::string_view> fields;
   };
   std::vector<StructInfo> structs;
+  // Variant names in declaration order (the index is the discriminant),
+  // mirroring structs for matches and construction.
+  struct EnumInfo {
+    std::string_view name;
+    ir::TypeIdx type;
+    std::vector<std::string_view> variants;
+  };
+  std::vector<EnumInfo> enums;
   struct FnSig {
     std::string_view name;
     std::vector<ir::TypeIdx> params;
@@ -71,6 +79,18 @@ struct CheckedModule {
     u32 index;
   };
   std::vector<CallTarget> call_targets;
+  // Variant resolution for lowering: every checked variant use records
+  // its meaning so lowering never re-resolves paths. `variant` is the
+  // declaration-order index for user enums; blessed constructors use
+  // `blessed_first` (Ok/Some side) with the instantiation in `enum_type`.
+  struct VariantUse {
+    const ast::Path* path;
+    bool blessed = false;
+    bool blessed_first = true;
+    ir::TypeIdx enum_type;
+    u32 variant = 0;
+  };
+  std::vector<VariantUse> variants;
 };
 
 struct CheckedPackage {

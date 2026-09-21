@@ -42,6 +42,16 @@ namespace lower {
 // stored to their allocas on entry. Non-Copy values crossing a move
 // position produce a `Move` marker for the borrow checker.
 //
+// Enum values occupy a shared slot shape: a tuple of an i32
+// discriminant (the variant index) and a payload pointer. Payloads
+// live in their own alloca shaped as a tuple of the variant fields;
+// unit variants store no payload. Matches test the discriminant and
+// project through the payload pointer.
+//
+// Joins merge through memory (result allocas with per-branch stores),
+// never through block parameters, matching what the verifier accepts
+// for branch targets.
+//
 // Runtime hooks (codegen provides the bodies):
 // `print` lowers to external `alcy_print(ptr) -> ()` and `panic` to
 // external `alcy_panic(ptr) -> !` followed by `Unreachable`.

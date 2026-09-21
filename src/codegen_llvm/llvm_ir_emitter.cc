@@ -85,6 +85,24 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
       const ir::ArrayType& array_type = storage_.array_types()[node.as_array()];
       return llvm::ArrayType::get(type(array_type.element), array_type.count);
     }
+    case T::Tuple: {
+      const ir::TupleType& tuple_type = storage_.tuple_types()[node.as_tuple()];
+      llvm::SmallVector<llvm::Type*, kFunctionArgsSooSize> element_types;
+      element_types.reserve(tuple_type.elements.size());
+      for (const ir::TypeIdx element : tuple_type.elements) {
+        element_types.emplace_back(type(element));
+      }
+      return llvm::StructType::get(module_->getContext(), element_types);
+    }
+    case T::Enum: {
+      // All enum values share the slot shape lowered as a tuple of an
+      // i32 discriminant and a payload pointer; loads and allocas of
+      // the enum type agree on this layout.
+      llvm::SmallVector<llvm::Type*, 2> slot_types;
+      slot_types.emplace_back(builder_->getInt32Ty());
+      slot_types.emplace_back(builder_->getPtrTy());
+      return llvm::StructType::get(module_->getContext(), slot_types);
+    }
     default: {
       DLOG("Unsupported type: {}", tag);
       DCHECK(false);

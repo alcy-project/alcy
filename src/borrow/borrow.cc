@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -77,7 +78,12 @@ struct Checker {
   std::vector<std::vector<u32>> flow;
   std::vector<u32> last_use;
   std::vector<Loan> loans;
-  std::vector<Place> moved;
+  // Move states per block, indexed by global block. Joins union
+  // predecessor states (a use after a maybe-move is an error);
+  // sibling branches stay independent through CFG predecessors.
+  // Checks seed from moved_in (before the block's own moves).
+  std::vector<std::vector<Place>> moved_in;
+  std::vector<std::vector<Place>> moved_out;
 
   const ir::Instruction& instr_at(ir::InstructionIdx idx) const {
     return storage.instrs()[idx];
@@ -217,16 +223,27 @@ struct Checker {
         if (!operand_reg(0, value) || !operand_reg(1, addr)) {
           break;
         }
-        for (u32 loan : flow[value]) {
-          bool known = false;
-          for (u32 prior : flow[addr]) {
+        auto union_loan = [&](u32 target, u32 loan) {
+          if (target >= flow.size()) {
+            return;
+          }
+          for (u32 prior : flow[target]) {
             if (prior == loan) {
-              known = true;
-              break;
+              return;
             }
           }
-          if (!known) {
-            flow[addr].push_back(loan);
+          flow[target].push_back(loan);
+        };
+        for (u32 loan : flow[value]) {
+          union_loan(addr, loan);
+        }
+        // Spills into aggregates keep the holder live: field stores
+        // also join the place root, so whole-aggregate uses observe
+        // field loans when computing expiry.
+        Place stored;
+        if (place_of(storage.operands()[instr.operands.head() + 1], stored)) {
+          for (u32 loan : flow[value]) {
+            union_loan(stored.root, loan);
           }
         }
         break;
@@ -302,7 +319,8 @@ struct Checker {
     return loan.birth <= pos && pos <= loan.expiry;
   }
 
-  void check_place_use(const Place& place,
+  void check_place_use(const std::vector<Place>& moved,
+                       const Place& place,
                        diag::Span span,
                        std::string_view action) {
     for (const Place& gone : moved) {
@@ -316,18 +334,209 @@ struct Checker {
     }
   }
 
-  void check_function(const ir::Function& fn) {
-    forward(fn);
-    compute_expiry();
-    for (ir::BlockIdx bidx : fn.blocks) {
-      const ir::Block& block = storage.blocks()[bidx];
-      for (ir::InstructionIdx iidx : block.instrs) {
-        check_instr(fn, iidx);
+  static bool same_place(const Place& a, const Place& b) {
+    return a.root == b.root && a.path == b.path;
+  }
+
+  static bool same_state(const std::vector<Place>& a,
+                         const std::vector<Place>& b) {
+    if (a.size() != b.size()) {
+      return false;
+    }
+    for (const Place& place : a) {
+      bool found = false;
+      for (const Place& other : b) {
+        if (same_place(place, other)) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static void add_moved(std::vector<Place>& state, const Place& place) {
+    for (const Place& prior : state) {
+      if (same_place(prior, place)) {
+        return;
+      }
+    }
+    state.push_back(place);
+  }
+
+  static void kill_moved(std::vector<Place>& state, const Place& place) {
+    for (usize i = 0; i < state.size();) {
+      if (overlaps(state[i], place)) {
+        state[i] = state.back();
+        state.pop_back();
+      } else {
+        ++i;
       }
     }
   }
 
-  void check_instr(const ir::Function& fn, ir::InstructionIdx iidx) {
+  // Successor blocks of a terminator; Ret/Unreachable end the path.
+  void successors(ir::BlockIdx block, std::vector<ir::BlockIdx>& out) const {
+    const ir::Block& blk = storage.blocks()[block];
+    if (blk.instrs.empty()) {
+      return;
+    }
+    const ir::Instruction& term = instr_at(
+        ir::InstructionIdx(blk.instrs.head().idx + blk.instrs.size() - 1));
+    auto push_target = [&](ir::OperandIdx oidx) {
+      const ir::Operand& operand = storage.operands()[oidx];
+      if (operand.is<ir::BlockIdx>()) {
+        out.push_back(operand.as_block());
+      }
+    };
+    switch (term.op) {
+      case ir::Opcode::Br:
+        if (!term.operands.empty()) {
+          push_target(term.operands.head());
+        }
+        break;
+      case ir::Opcode::CondBr:
+        if (term.operands.size() == 3) {
+          push_target(term.operands.head() + 1);
+          push_target(term.operands.head() + 2);
+        }
+        break;
+      case ir::Opcode::Switch:
+        // operands = [value, default, (case_imm, case_block)...].
+        for (u32 i = 1; i < term.operands.size(); ++i) {
+          push_target(term.operands.head() + i);
+        }
+        break;
+      default: break;
+    }
+  }
+
+  // Reverse post-order over reachable blocks; unreachable blocks
+  // append in layout order so every block still gets a state.
+  void reverse_post_order(const ir::Function& fn,
+                          std::vector<ir::BlockIdx>& order) {
+    std::vector<bool> seen(storage.blocks().size(), false);
+    std::vector<ir::BlockIdx> stack;
+    std::vector<ir::BlockIdx> post;
+    stack.push_back(fn.blocks.head());
+    seen[fn.blocks.head().idx] = true;
+    std::vector<ir::BlockIdx> succs;
+    while (!stack.empty()) {
+      const ir::BlockIdx top = stack.back();
+      succs.clear();
+      successors(top, succs);
+      bool descended = false;
+      for (ir::BlockIdx succ : succs) {
+        if (succ.idx < seen.size() && !seen[succ.idx]) {
+          seen[succ.idx] = true;
+          stack.push_back(succ);
+          descended = true;
+        }
+      }
+      if (!descended) {
+        post.push_back(top);
+        stack.pop_back();
+      }
+    }
+    for (usize i = post.size(); i-- > 0;) {
+      order.push_back(post[i]);
+    }
+    for (ir::BlockIdx bidx : fn.blocks) {
+      if (bidx.idx < seen.size() && !seen[bidx.idx]) {
+        order.push_back(bidx);
+      }
+    }
+  }
+
+  // Moves a block state forward without diagnostics.
+  void transfer(ir::BlockIdx bidx,
+                const std::vector<Place>& in,
+                std::vector<Place>& out) {
+    out = in;
+    const ir::Block& block = storage.blocks()[bidx];
+    for (ir::InstructionIdx iidx : block.instrs) {
+      const ir::Instruction& instr = instr_at(iidx);
+      if (instr.op == ir::Opcode::Move && !instr.operands.empty()) {
+        Place place;
+        if (place_of(storage.operands()[instr.operands.head()], place)) {
+          add_moved(out, place);
+        }
+      } else if (instr.op == ir::Opcode::Store && instr.operands.size() == 2) {
+        Place place;
+        if (place_of(storage.operands()[instr.operands.head() + 1], place)) {
+          kill_moved(out, place);
+        }
+      }
+    }
+  }
+
+  // May-move fixpoint: back-edges carry loop moves to the next
+  // iteration (bounded; the place universe is finite).
+  void compute_moved(const ir::Function& fn,
+                     const std::vector<ir::BlockIdx>& order) {
+    moved_in.assign(storage.blocks().size(), {});
+    moved_out.assign(storage.blocks().size(), {});
+    std::vector<std::vector<ir::BlockIdx>> preds(storage.blocks().size());
+    std::vector<ir::BlockIdx> succs;
+    for (ir::BlockIdx bidx : fn.blocks) {
+      succs.clear();
+      successors(bidx, succs);
+      for (ir::BlockIdx succ : succs) {
+        if (succ.idx < preds.size()) {
+          preds[succ.idx].push_back(bidx);
+        }
+      }
+    }
+    std::vector<Place> in;
+    std::vector<Place> out;
+    const usize cap = order.size() * 10 + 10;
+    for (usize iter = 0; iter < cap; ++iter) {
+      bool changed = false;
+      for (ir::BlockIdx bidx : order) {
+        in.clear();
+        for (ir::BlockIdx pred : preds[bidx.idx]) {
+          for (const Place& place : moved_out[pred.idx]) {
+            add_moved(in, place);
+          }
+        }
+        transfer(bidx, in, out);
+        // IN refreshes every visit (a changed IN with an unchanged OUT
+        // still feeds successors); only OUT changes drive convergence.
+        moved_in[bidx.idx] = in;
+        if (!same_state(out, moved_out[bidx.idx])) {
+          moved_out[bidx.idx] = out;
+          changed = true;
+        }
+      }
+      if (!changed) {
+        return;
+      }
+    }
+    DCHECK(false);
+  }
+
+  void check_function(const ir::Function& fn) {
+    forward(fn);
+    compute_expiry();
+    std::vector<ir::BlockIdx> order;
+    reverse_post_order(fn, order);
+    compute_moved(fn, order);
+    std::vector<Place> state;
+    for (ir::BlockIdx bidx : order) {
+      state = moved_in[bidx.idx];
+      const ir::Block& block = storage.blocks()[bidx];
+      for (ir::InstructionIdx iidx : block.instrs) {
+        check_instr(fn, iidx, state);
+      }
+    }
+  }
+
+  void check_instr(const ir::Function& fn,
+                   ir::InstructionIdx iidx,
+                   std::vector<Place>& moved) {
     const ir::Instruction& instr = instr_at(iidx);
     const u32 pos = iidx.idx;
     const diag::Span span = iidx.idx < lowered.instr_spans.size()
@@ -346,7 +555,7 @@ struct Checker {
         if (!operand_place(0, place)) {
           break;
         }
-        check_place_use(place, span, "move");
+        check_place_use(moved, place, span, "move");
         for (const Loan& loan : loans) {
           if (loan.expiry > pos && overlaps(loan.place, place)) {
             const u32 index =
@@ -357,7 +566,7 @@ struct Checker {
             break;
           }
         }
-        moved.push_back(place);
+        add_moved(moved, place);
         break;
       }
       case ir::Opcode::Borrow: {
@@ -365,7 +574,7 @@ struct Checker {
         if (!operand_place(0, place)) {
           break;
         }
-        check_place_use(place, span, "borrow");
+        check_place_use(moved, place, span, "borrow");
         const bool exclusive =
             instr.dst.is_valid() &&
             tag_of(storage.registers()[instr.dst].type) == ir::TypeTag::MutRef;
@@ -389,14 +598,7 @@ struct Checker {
       case ir::Opcode::Store: {
         Place place;
         if (operand_place(1, place)) {
-          for (usize i = 0; i < moved.size();) {
-            if (overlaps(moved[i], place)) {
-              moved[i] = moved.back();
-              moved.pop_back();
-            } else {
-              ++i;
-            }
-          }
+          kill_moved(moved, place);
         }
         break;
       }
@@ -437,7 +639,8 @@ struct Checker {
       flow.assign(storage.registers().size(), {});
       last_use.assign(storage.registers().size(), 0);
       loans.clear();
-      moved.clear();
+      moved_in.clear();
+      moved_out.clear();
       check_function(storage.functions()[fidx]);
     }
   }

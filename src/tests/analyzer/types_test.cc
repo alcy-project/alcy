@@ -802,12 +802,86 @@ TEST_CASE("Check match exhaustiveness") {
     CHECK(result.package.has_value());
   }
   {
+    io::TempDir dir("alcy_match_option_ok_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(o: Option<i32>) -> i32 {\n"
+                                        "  ret match o {\n"
+                                        "    Some(x) => x,\n"
+                                        "    None => 0,\n"
+                                        "  }\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_match_option_bad_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(o: Option<i32>) -> i32 {\n"
+                                        "  ret match o {\n"
+                                        "    Some(x) => x,\n"
+                                        "  }\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
     io::TempDir dir("alcy_match_int_bad_test");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn f(x: i32) -> i32 {\n"
                                         "  ret match x {\n"
                                         "    0 => 1,\n"
                                         "  }\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+}
+
+TEST_CASE("Check or-patterns bind shared names") {
+  {
+    io::TempDir dir("alcy_or_same_test");
+    const bool setup =
+        write_all(dir, {{"main.al",
+                         "enum Shape { Circle(i32), Square(i32), Rect }\n"
+                         "fn f(s: Shape) -> i32 {\n"
+                         "  ret match s {\n"
+                         "    Shape::Circle(x) | Shape::Square(x) => x,\n"
+                         "    Shape::Rect => 0,\n"
+                         "  }\n"
+                         "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_or_mismatch_test");
+    const bool setup =
+        write_all(dir, {{"main.al",
+                         "enum Shape { Circle(i32), Square(i32), Rect }\n"
+                         "fn f(s: Shape) -> i32 {\n"
+                         "  ret match s {\n"
+                         "    Shape::Circle(x) | Shape::Rect => x,\n"
+                         "    Shape::Square(y) => y,\n"
+                         "  }\n"
+                         "}\n"}});
     CHECK(setup);
     if (!setup) {
       return;

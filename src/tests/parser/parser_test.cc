@@ -195,6 +195,43 @@ TEST_CASE("Parser separates declaration reassignment and comparison") {
   }
 }
 
+TEST_CASE("Parser keeps control heads with pattern conditions") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn f() {\n"
+      "  if Some(v) := o {\n"
+      "    w := v\n"
+      "  }\n"
+      "  while Some(n) := cur {\n"
+      "    m := n\n"
+      "  }\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok) {
+    return;
+  }
+  const ast::FnItem* fn = as_fn(result.items[0]);
+  CHECK(fn != nullptr);
+  if (fn == nullptr) {
+    return;
+  }
+  CHECK(fn->body->statements.size() == 1);
+  if (fn->body->statements.size() != 1) {
+    return;
+  }
+  CHECK(fn->body->statements[0]->kind == ast::StmtKind::Expr);
+  const ast::ExprStmt* first =
+      static_cast<const ast::ExprStmt*>(fn->body->statements[0]);
+  CHECK(first->value->kind == ast::ExprKind::If);
+  // A trailing control expression is the block value, like any tail.
+  CHECK(fn->body->value != nullptr);
+  if (fn->body->value == nullptr) {
+    return;
+  }
+  CHECK(fn->body->value->kind == ast::ExprKind::While);
+}
+
 TEST_CASE("Parser respects operator precedence") {
   Fixture f;
   const ParseResult result = parse("fn f() { 1 + 2 * 3 }", f);
