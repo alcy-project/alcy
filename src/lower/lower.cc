@@ -295,7 +295,7 @@ struct Lowerer {
   };
 
   Val materialize(Val v) {
-    if (!v.address) {
+    if (!v.address || tag_of(v.type) == ir::TypeTag::Never) {
       return v;
     }
     const ir::RegisterIdx reg = emit(ir::Opcode::Load, v.type, {v.op});
@@ -1169,17 +1169,33 @@ struct Lowerer {
     return Val{to_operand(loaded, i32), i32, false, false};
   }
 
-  // Value of payload field i of the enum at slot_addr.
-  Val load_payload_field(Val slot_addr, ir::TypeIdx field_type, u32 field) {
+  ir::TypeIdx payload_tuple(const std::vector<ir::TypeIdx>& fields) {
+    ir::TypeSeq seq;
+    for (ir::TypeIdx field : fields) {
+      seq.push(builder.ref_type(field));
+    }
+    return builder.tuple_type(seq.finish());
+  }
+
+  // Value of payload field i of the enum at slot_addr. The payload
+  // pointer is type-erased in the slot, so it reinterprets through
+  // the variant payload type before projecting the field.
+  Val load_payload_field(Val slot_addr, ir::TypeIdx payload_type, u32 field) {
+    const ir::TupleType& shape =
+        builder.state()
+            .tuple_types[builder.state().types[payload_type].as_tuple()];
+    const ir::TypeIdx field_type = shape.elements[field];
     const ir::TypeIdx ptr = builder.primitive(ir::TypeTag::Ptr);
     const ir::RegisterIdx ptr_gep =
         emit(ir::Opcode::GetElementPtr, ptr,
              {slot_addr.op, zero_i32, index_operand(1)});
     const ir::RegisterIdx payload =
         emit(ir::Opcode::Load, ptr, {to_operand(ptr_gep, ptr)});
+    const ir::RegisterIdx typed =
+        emit(ir::Opcode::TypeCast, payload_type, {to_operand(payload, ptr)});
     const ir::RegisterIdx field_gep =
         emit(ir::Opcode::GetElementPtr, field_type,
-             {to_operand(payload, ptr), zero_i32, index_operand(field)});
+             {to_operand(typed, payload_type), zero_i32, index_operand(field)});
     const ir::RegisterIdx loaded =
         emit(ir::Opcode::Load, field_type, {to_operand(field_gep, field_type)});
     return Val{to_operand(loaded, field_type), field_type, false, false};
@@ -1277,7 +1293,7 @@ struct Lowerer {
     switch_to(bad_block);
     emit_panic(failure);
     switch_to(ok_block);
-    Val payload = load_payload_field(slot, entry->args[0], 0);
+    Val payload = load_payload_field(slot, payload_tuple({entry->args[0]}), 0);
     emit_br(join_block);
     switch_to(join_block);
     return payload;
@@ -1555,9 +1571,11 @@ struct Lowerer {
     emit_void(ir::Opcode::Store, {use_value(value), slot.op});
   }
 
-  // Result slot for joining control-flow values (none for Void).
+  // Result slot for joining control-flow values (none for Void or
+  // Never, whose arms all diverge).
   Val result_slot(ir::TypeIdx type, diag::Span span) {
-    if (tag_of(type) == ir::TypeTag::Void) {
+    if (tag_of(type) == ir::TypeTag::Void ||
+        tag_of(type) == ir::TypeTag::Never) {
       return Val{size_one, type, false, false};
     }
     const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, type, {size_one});
@@ -1651,9 +1669,10 @@ struct Lowerer {
           internal(pattern->span, "variant arity");
           return;
         }
+        const ir::TypeIdx payload_type = payload_tuple(payloads);
         for (usize i = 0; i < payloads.size() && !failed; ++i) {
           Val field =
-              load_payload_field(scrut_addr, payloads[i], static_cast<u32>(i));
+              load_payload_field(scrut_addr, payload_type, static_cast<u32>(i));
           bind_pattern(tuple->elements[i], field);
         }
         return;
@@ -1971,7 +1990,8 @@ struct Lowerer {
     emit_cond_br(to_operand(test, boolean), ok_block, err_block);
     switch_to(err_block);
     if (entry->is_result) {
-      Val payload = load_payload_field(addr, entry->args[1], 0);
+      Val payload =
+          load_payload_field(addr, payload_tuple({entry->args[1]}), 0);
       emit_void(ir::Opcode::Ret, {use_value(payload)});
     } else {
       // Propagate None by constructing it in the enclosing return type.
@@ -1983,10 +2003,12 @@ struct Lowerer {
                {to_operand(none_addr, slot), zero_i32, index_operand(0)});
       emit_void(ir::Opcode::Store,
                 {disc_operand(1), to_operand(none_tag, slot)});
-      emit_void(ir::Opcode::Ret, {to_operand(none_addr, slot)});
+      const ir::RegisterIdx none_loaded =
+          emit(ir::Opcode::Load, scrut_type, {to_operand(none_addr, slot)});
+      emit_void(ir::Opcode::Ret, {to_operand(none_loaded, scrut_type)});
     }
     switch_to(ok_block);
-    Val payload = load_payload_field(addr, entry->args[0], 0);
+    Val payload = load_payload_field(addr, payload_tuple({entry->args[0]}), 0);
     emit_br(join_block);
     switch_to(join_block);
     return payload;

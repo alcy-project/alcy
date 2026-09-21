@@ -22,6 +22,8 @@
 #include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
 #include "fpag/str/string_interner.h"
+#include "ir/instruction.h"
+#include "ir/opcode.h"
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/verifier.h"
@@ -247,6 +249,124 @@ TEST_CASE("Lower emits verifiable LLVM IR") {
   llvm::LLVMContext context;
   std::unique_ptr<llvm::Module> module =
       std::make_unique<llvm::Module>("lower_emit_test", context);
+  codegen_llvm::LlvmIrEmitter emitter(
+      module.get(), std::move(result.lowered->storage), &f.strings);
+  std::move(emitter).emit();
+  CHECK(!llvm::verifyModule(*module));
+}
+
+TEST_CASE("Lowering emits no Drop markers") {
+  io::TempDir dir("alcy_lower_no_drop_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct H { r: &mut i32 }\n"
+                                      "fn main() {\n"
+                                      "  mut x := 1\n"
+                                      "  h := H { r: &mut x }\n"
+                                      "  mut i := 0\n"
+                                      "  while i < 2 {\n"
+                                      "    g := h\n"
+                                      "    _ := g\n"
+                                      "    i = i + 1\n"
+                                      "  }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  // Drop stays a no-op ruling: destruction needs no markers.
+  for (const ir::Instruction& instr : result.lowered->storage.instrs()) {
+    CHECK(instr.op != ir::Opcode::Drop);
+  }
+}
+
+TEST_CASE("Lower emits verifiable LLVM IR for control flow") {
+  io::TempDir dir("alcy_lower_emit_control_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn f(b: bool) -> i32 {\n"
+                                      "  r := match b {\n"
+                                      "    true => 1,\n"
+                                      "    false => 0,\n"
+                                      "  }\n"
+                                      "  mut i := 0\n"
+                                      "  while i < r {\n"
+                                      "    i = i + 1\n"
+                                      "  }\n"
+                                      "  loop {\n"
+                                      "    if i <= 0 {\n"
+                                      "      break\n"
+                                      "    }\n"
+                                      "    i = i - 1\n"
+                                      "  }\n"
+                                      "  ret i\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("lower_emit_control_test", context);
+  codegen_llvm::LlvmIrEmitter emitter(
+      module.get(), std::move(result.lowered->storage), &f.strings);
+  std::move(emitter).emit();
+  CHECK(!llvm::verifyModule(*module));
+}
+
+TEST_CASE("Lower emits verifiable LLVM IR for enums and calls") {
+  io::TempDir dir("alcy_lower_emit_enum_test");
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "enum Shape { Circle(i32), Rect }\n"
+                       "fn area(s: Shape) -> i32 {\n"
+                       "  r := match s {\n"
+                       "    Shape::Circle(x) => x,\n"
+                       "    Shape::Rect => 0,\n"
+                       "  }\n"
+                       "  ret r\n"
+                       "}\n"
+                       "fn calc(o: Option<i32>) -> Option<i32> {\n"
+                       "  v := o?\n"
+                       "  ret Some(v + 1)\n"
+                       "}\n"
+                       "fn main() {\n"
+                       "  a := area(Shape::Circle(3))\n"
+                       "  o: Option<i32> := Some(7)\n"
+                       "  y := o.unwrap()\n"
+                       "  _ := a\n"
+                       "  _ := y\n"
+                       "  _ := calc(o)\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("lower_emit_enum_test", context);
   codegen_llvm::LlvmIrEmitter emitter(
       module.get(), std::move(result.lowered->storage), &f.strings);
   std::move(emitter).emit();

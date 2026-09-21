@@ -721,4 +721,68 @@ TEST_CASE("Emit memory instructions") {
   CHECK(ir_str.find("insertvalue") != std::string::npos);
 }
 
+TEST_CASE("Emit ignores Drop markers") {
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("marker_test", context);
+
+  str::StringInterner interner(mem::page_size());
+  ir::StorageBuilder builder;
+
+  const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
+  const ir::ImmutableIdx one =
+      builder.immutable({.type = i32, .data = {.i32_value = 1}});
+
+  auto imm_op = [&](ir::ImmutableIdx imm, ir::TypeIdx ty) {
+    return builder.operand(ir::Operand::from_immutable(imm, ty));
+  };
+  auto reg_op = [&](ir::RegisterIdx reg, ir::TypeIdx ty) {
+    return builder.operand(ir::Operand::from_register(reg, ty));
+  };
+
+  ir::InstrSeq instrs;
+  const ir::InstructionIdx inst_alloc =
+      builder.instr({.op = ir::Opcode::Alloca,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(0),
+                     .operands = {imm_op(one, i32), 1}});
+  instrs.push(inst_alloc);
+  builder.reg({.type = i32, .def_idx = inst_alloc});
+  // Drop is an ownership marker only; no code is emitted for it.
+  ir::OperandSeq drop_args;
+  drop_args.push(
+      reg_op(ir::RegisterIdx(0), ir::primitive_idx(ir::TypeTag::Ptr)));
+  instrs.push(builder.instr({.op = ir::Opcode::Drop,
+                             .flags = {},
+                             .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .operands = drop_args.finish()}));
+  const ir::InstructionIdx inst_ret =
+      builder.instr({.op = ir::Opcode::Ret,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .operands = {}});
+  instrs.push(inst_ret);
+  const ir::BlockIdx block =
+      builder.block({.instrs = instrs.finish(), .block_params = {}});
+  builder.function({
+      .meta = {.return_type = builder.primitive(ir::TypeTag::Void),
+               .param_types = {},
+               .name = interner.intern("markertest")},
+      .blocks = {block, 1},
+  });
+
+  ir::Storage storage = std::move(builder).build();
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner);
+
+  std::move(emitter).emit();
+
+  CHECK(!llvm::verifyModule(*module));
+
+  std::string ir_str;
+  llvm::raw_string_ostream os(ir_str);
+  module->print(os, nullptr);
+
+  CHECK(ir_str.find("drop") == std::string::npos);
+}
+
 }  // namespace codegen_llvm

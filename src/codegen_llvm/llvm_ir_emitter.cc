@@ -58,6 +58,10 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
 
   switch (tag) {
     case T::Void: return builder_->getVoidTy();
+    case T::Never:
+      // Uninhabited; only function return positions lower through
+      // here (noreturn externals), where LLVM expects void.
+      return builder_->getVoidTy();
     case T::I1: return builder_->getInt1Ty();
     case T::I8: return builder_->getInt8Ty();
     case T::I16: return builder_->getInt16Ty();

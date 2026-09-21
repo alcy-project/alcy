@@ -273,6 +273,16 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
         result = builder_->CreateIntToPtr(value, dst_ty);
       } else if (src_tag == ir::TypeTag::Ptr && ir::is_integer_type(dst_tag)) {
         result = builder_->CreatePtrToInt(value, dst_ty);
+      } else if (value->getType()->isPointerTy() &&
+                 (dst_tag == ir::TypeTag::Struct ||
+                  dst_tag == ir::TypeTag::Array ||
+                  dst_tag == ir::TypeTag::Tuple ||
+                  dst_tag == ir::TypeTag::Enum)) {
+        // Pointer reinterpretation (type-erased payloads): the value
+        // stays identical, but the destination labels the pointee
+        // type so later element access resolves it.
+        result = value;
+        values_.add_alloca_type(i.dst, dst_ty);
       } else {
         DLOG("Unsupported cast");
         DCHECK(false);
