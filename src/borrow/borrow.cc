@@ -796,7 +796,7 @@ struct Checker {
 
   void run() {
     summaries.assign(storage.functions().size(), {});
-    // Phase A: bounded summary fixed-point over the call graph.
+    // Bounded summary fixed-point over the call graph.
     // Sweeping all functions propagates one call edge per sweep;
     // chains longer than the function count cannot exist, so the
     // cap only fires on compiler bugs.
@@ -816,7 +816,7 @@ struct Checker {
     if (!stable) {
       DCHECK(false);
     }
-    // Phase B: checking with final summaries.
+    // Checking with final summaries.
     for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
          ++fidx) {
       reset_function();

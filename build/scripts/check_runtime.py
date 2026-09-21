@@ -4,7 +4,7 @@
 # This source code is licensed under the Apache License, Version 2.0 with LLVM
 # Exceptions which can be found in the LICENSE file.
 
-"""Standalone check for the program runtime (Phase D2).
+"""Standalone check for the program runtime.
 
 Compiles runtime/alcy_runtime.c with the system C compiler, links
 print/panic driver programs against it, and asserts stdout content,
