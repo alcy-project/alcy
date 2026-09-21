@@ -356,6 +356,149 @@ TEST_CASE("Borrow tracks loans spilled into aggregates") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Borrow reifies only returned parameters") {
+  io::TempDir dir("alcy_borrow_summary_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn fst(a: &i32, b: &i32) -> &i32 {\n"
+                                      "  ret a\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  p := 1\n"
+                                      "  q := 2\n"
+                                      "  x := fst(&p, &q)\n"
+                                      "  m := &mut q\n"
+                                      "  _ := x\n"
+                                      "  _ := m\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  CHECK(check_case(dir, "main.al", {"main.al"}, f));
+}
+
+TEST_CASE("Borrow summarizes struct returns") {
+  io::TempDir dir("alcy_borrow_struct_summary_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct H { r: &mut i32 }\n"
+                                      "fn wrap(r: &mut i32, s: &i32) -> H {\n"
+                                      "  ret H { r: r }\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  mut x := 1\n"
+                                      "  y := 2\n"
+                                      "  h := wrap(&mut x, &y)\n"
+                                      "  m := &mut y\n"
+                                      "  _ := h\n"
+                                      "  _ := m\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  CHECK(check_case(dir, "main.al", {"main.al"}, f));
+}
+
+TEST_CASE("Borrow rejects conflicts through summaries") {
+  io::TempDir dir("alcy_borrow_summary_conflict_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct H { r: &mut i32 }\n"
+                                      "fn proj(h: H) -> &mut i32 {\n"
+                                      "  ret h.r\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  mut x := 1\n"
+                                      "  h := H { r: &mut x }\n"
+                                      "  r := proj(h)\n"
+                                      "  n := &mut x\n"
+                                      "  _ := n\n"
+                                      "  _ := r\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  CHECK(!check_case(dir, "main.al", {"main.al"}, f));
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Borrow summarizes recursive functions") {
+  io::TempDir dir("alcy_borrow_recursion_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn f(n: i32, x: &i32) -> &i32 {\n"
+                                      "  if n <= 0 {\n"
+                                      "    ret x\n"
+                                      "  }\n"
+                                      "  ret f(n - 1, x)\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  a := 1\n"
+                                      "  r := f(3, &a)\n"
+                                      "  _ := r\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  CHECK(check_case(dir, "main.al", {"main.al"}, f));
+}
+
+TEST_CASE("Borrow iterates summaries to a fixed point") {
+  io::TempDir dir("alcy_borrow_fixpoint_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn a(n: i32, x: &i32) -> &i32 {\n"
+                                      "  ret b(n, x)\n"
+                                      "}\n"
+                                      "fn b(n: i32, x: &i32) -> &i32 {\n"
+                                      "  if n <= 0 {\n"
+                                      "    ret x\n"
+                                      "  }\n"
+                                      "  ret a(n - 1, x)\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  p := 1\n"
+                                      "  r := a(2, &p)\n"
+                                      "  m := &mut p\n"
+                                      "  _ := r\n"
+                                      "  _ := m\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  CHECK(!check_case(dir, "main.al", {"main.al"}, f));
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Borrow rejects assignment while borrowed") {
+  io::TempDir dir("alcy_borrow_assign_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  mut a := 1\n"
+                                      "  r := &mut a\n"
+                                      "  a = 10\n"
+                                      "  _ := r\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  CHECK(!check_case(dir, "main.al", {"main.al"}, f));
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Borrow rejects moves under live loans") {
   io::TempDir dir("alcy_borrow_invalidate_test");
   const bool setup = write_all(dir, {{"main.al",

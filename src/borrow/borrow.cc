@@ -29,6 +29,7 @@ namespace {
 constexpr u32 kBorrowUseAfterMove = 4400;
 constexpr u32 kBorrowConflict = 4401;
 constexpr u32 kBorrowEscape = 4402;
+constexpr u32 kBorrowAssignBorrowed = 4403;
 
 constexpr u32 kNoRoot = 0xFFFFFFFFu;
 
@@ -60,6 +61,10 @@ struct Loan {
   bool exclusive = false;
   u32 birth = 0;
   u32 expiry = 0;
+  // Summary token for a parameter alloca: carries the parameter
+  // index so return-reachability becomes a summary. Never conflicts;
+  // reification propagates the caller's own loans instead.
+  u32 param = kNoRoot;
 };
 
 struct Checker {
@@ -84,6 +89,10 @@ struct Checker {
   // Checks seed from moved_in (before the block's own moves).
   std::vector<std::vector<Place>> moved_in;
   std::vector<std::vector<Place>> moved_out;
+  // Function summaries (return-regions): parameter indexes whose
+  // loans may reach a return, indexed by function. Call sites
+  // reify them by propagating only those arguments' loans.
+  std::vector<std::vector<u32>> summaries;
 
   const ir::Instruction& instr_at(ir::InstructionIdx idx) const {
     return storage.instrs()[idx];
@@ -112,12 +121,26 @@ struct Checker {
         return true;
       }
     }
+    // Parameter home allocas (entry stores of block parameters).
+    const ir::Block& entry = storage.blocks()[fn.blocks.head()];
+    for (ir::InstructionIdx iidx : entry.instrs) {
+      const ir::Instruction& instr = instr_at(iidx);
+      if (instr.op != ir::Opcode::Store || instr.operands.size() != 2) {
+        continue;
+      }
+      const ir::Operand& value = storage.operands()[instr.operands.head()];
+      const ir::Operand& target = storage.operands()[instr.operands.head() + 1];
+      if (!value.is<ir::RegisterIdx>() || !target.is<ir::RegisterIdx>() ||
+          target.as_register().idx != reg) {
+        continue;
+      }
+      for (ir::BlockParamIdx pidx : entry.block_params) {
+        if (storage.block_params()[pidx].reg.idx == value.as_register().idx) {
+          return true;
+        }
+      }
+    }
     return false;
-  }
-
-  static bool is_ref_tag(ir::TypeTag tag) {
-    return tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef ||
-           tag == ir::TypeTag::Ptr;
   }
 
   // Resolves an address operand to its place. Returns false for
@@ -135,7 +158,25 @@ struct Checker {
     return true;
   }
 
+  // Seeds one summary token per parameter alloca before analysis.
+  // Parameters arrive already borrowed; the token makes their flow
+  // to the return observable without creating conflicts.
+  void seed_param_loans(const ir::Function& fn) {
+    std::vector<std::pair<u32, u32>> params;
+    param_allocas(fn, params);
+    for (const auto& [alloca, index] : params) {
+      if (alloca >= flow.size()) {
+        continue;
+      }
+      Place place;
+      place.root = alloca;
+      loans.push_back({alloca, place, false, 0, 0, index});
+      flow[alloca].push_back(static_cast<u32>(loans.size() - 1));
+    }
+  }
+
   void forward(const ir::Function& fn) {
+    seed_param_loans(fn);
     for (ir::BlockIdx bidx : fn.blocks) {
       const ir::Block& block = storage.blocks()[bidx];
       for (ir::InstructionIdx iidx : block.instrs) {
@@ -253,21 +294,24 @@ struct Checker {
           break;
         }
         const ir::Operand& callee = storage.operands()[instr.operands.head()];
+        // External calls have no summary; their results carry no
+        // caller loans (no such external exists in the surface
+        // language).
         if (!callee.is<ir::FunctionIdx>() || !instr.dst.is_valid()) {
           break;
         }
-        const ir::FunctionMeta& meta =
-            storage.functions()[callee.as_function()].meta;
-        for (u32 i = 1; i < instr.operands.size(); ++i) {
-          if (i - 1 >= meta.param_types.size()) {
+        const ir::FunctionIdx target = callee.as_function();
+        if (target.idx >= summaries.size()) {
+          break;
+        }
+        for (u32 param : summaries[target.idx]) {
+          if (param + 1 >= instr.operands.size()) {
             break;
           }
-          if (!is_ref_tag(tag_of(meta.param_types[i - 1]))) {
-            continue;
-          }
           const ir::Operand& arg =
-              storage.operands()[instr.operands.head() + i];
-          if (!arg.is<ir::RegisterIdx>()) {
+              storage.operands()[instr.operands.head() + param + 1];
+          if (!arg.is<ir::RegisterIdx>() ||
+              arg.as_register().idx >= flow.size()) {
             continue;
           }
           for (u32 loan : flow[arg.as_register().idx]) {
@@ -557,14 +601,18 @@ struct Checker {
         }
         check_place_use(moved, place, span, "move");
         for (const Loan& loan : loans) {
-          if (loan.expiry > pos && overlaps(loan.place, place)) {
-            const u32 index =
-                bag.emit(diag::Severity::Error, kBorrowUseAfterMove, span,
-                         "move of '{}' invalidates an outstanding borrow",
-                         addr_name(place.root));
-            (void)index;
-            break;
+          if (loan.param != kNoRoot) {
+            continue;
           }
+          if (!live_at(loan, pos) || !overlaps(loan.place, place)) {
+            continue;
+          }
+          const u32 index =
+              bag.emit(diag::Severity::Error, kBorrowUseAfterMove, span,
+                       "move of '{}' invalidates an outstanding borrow",
+                       addr_name(place.root));
+          (void)index;
+          break;
         }
         add_moved(moved, place);
         break;
@@ -579,7 +627,7 @@ struct Checker {
             instr.dst.is_valid() &&
             tag_of(storage.registers()[instr.dst].type) == ir::TypeTag::MutRef;
         for (const Loan& loan : loans) {
-          if (loan.reg == instr.dst.idx) {
+          if (loan.reg == instr.dst.idx || loan.param != kNoRoot) {
             continue;
           }
           if (!live_at(loan, pos) || !overlaps(loan.place, place)) {
@@ -599,6 +647,20 @@ struct Checker {
         Place place;
         if (operand_place(1, place)) {
           kill_moved(moved, place);
+          // Assignment invalidates outstanding borrows of the place.
+          for (const Loan& loan : loans) {
+            if (loan.param != kNoRoot) {
+              continue;
+            }
+            if (!live_at(loan, pos) || !overlaps(loan.place, place)) {
+              continue;
+            }
+            const u32 index = bag.emit(
+                diag::Severity::Error, kBorrowAssignBorrowed, span,
+                "cannot assign to '{}' while borrowed", addr_name(place.root));
+            (void)index;
+            break;
+          }
         }
         break;
       }
@@ -612,7 +674,7 @@ struct Checker {
           break;
         }
         for (u32 loan : flow[value.as_register().idx]) {
-          if (loan >= loans.size()) {
+          if (loan >= loans.size() || loans[loan].param != kNoRoot) {
             continue;
           }
           const u32 root = loans[loan].place.root;
@@ -630,17 +692,134 @@ struct Checker {
     }
   }
 
+  // Parameter allocas of a function: entry-block stores of
+  // block-parameter registers, in declaration order. Each parameter
+  // owns exactly one home alloca; destructuring derives from it.
+  void param_allocas(const ir::Function& fn,
+                     std::vector<std::pair<u32, u32>>& out) {
+    out.clear();
+    const ir::Block& entry = storage.blocks()[fn.blocks.head()];
+    for (ir::InstructionIdx iidx : entry.instrs) {
+      const ir::Instruction& instr = instr_at(iidx);
+      if (instr.op != ir::Opcode::Store || instr.operands.size() != 2) {
+        continue;
+      }
+      const ir::Operand& value = storage.operands()[instr.operands.head()];
+      const ir::Operand& target = storage.operands()[instr.operands.head() + 1];
+      if (!value.is<ir::RegisterIdx>() || !target.is<ir::RegisterIdx>()) {
+        continue;
+      }
+      u32 position = 0;
+      bool is_param = false;
+      for (ir::BlockParamIdx pidx : entry.block_params) {
+        if (storage.block_params()[pidx].reg.idx == value.as_register().idx) {
+          is_param = true;
+          break;
+        }
+        ++position;
+      }
+      if (is_param) {
+        out.emplace_back(target.as_register().idx, position);
+      }
+    }
+  }
+
+  // Recomputes one summary from current flow: parameter indexes
+  // whose loans reach a return. Summaries only grow across sweeps.
+  bool update_summary(ir::FunctionIdx fidx) {
+    const ir::Function& fn = storage.functions()[fidx];
+    std::vector<u32> next;
+    for (ir::BlockIdx bidx : fn.blocks) {
+      const ir::Block& block = storage.blocks()[bidx];
+      if (block.instrs.empty()) {
+        continue;
+      }
+      const ir::Instruction& term = instr_at(ir::InstructionIdx(
+          block.instrs.head().idx + block.instrs.size() - 1));
+      if (term.op != ir::Opcode::Ret || term.operands.empty()) {
+        continue;
+      }
+      const ir::Operand& value = storage.operands()[term.operands.head()];
+      if (!value.is<ir::RegisterIdx>() ||
+          value.as_register().idx >= flow.size()) {
+        continue;
+      }
+      for (u32 loan : flow[value.as_register().idx]) {
+        if (loan >= loans.size() || loans[loan].param == kNoRoot) {
+          continue;
+        }
+        bool known = false;
+        for (u32 prior : next) {
+          if (prior == loans[loan].param) {
+            known = true;
+            break;
+          }
+        }
+        if (!known) {
+          next.push_back(loans[loan].param);
+        }
+      }
+    }
+    if (next.size() == summaries[fidx.idx].size()) {
+      bool same = true;
+      for (u32 index : next) {
+        bool found = false;
+        for (u32 prior : summaries[fidx.idx]) {
+          if (prior == index) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          same = false;
+          break;
+        }
+      }
+      if (same) {
+        return false;
+      }
+    }
+    summaries[fidx.idx] = next;
+    return true;
+  }
+
+  void reset_function() {
+    // Per-function scratch shares global register indexes.
+    home.assign(storage.registers().size(), kNoRoot);
+    path.assign(storage.registers().size(), {});
+    flow.assign(storage.registers().size(), {});
+    last_use.assign(storage.registers().size(), 0);
+    loans.clear();
+    moved_in.clear();
+    moved_out.clear();
+  }
+
   void run() {
+    summaries.assign(storage.functions().size(), {});
+    // Phase A: bounded summary fixed-point over the call graph.
+    // Sweeping all functions propagates one call edge per sweep;
+    // chains longer than the function count cannot exist, so the
+    // cap only fires on compiler bugs.
+    const usize cap = storage.functions().size() + 1;
+    bool stable = false;
+    for (usize sweep = 0; sweep < cap && !stable; ++sweep) {
+      stable = true;
+      for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
+           ++fidx) {
+        reset_function();
+        forward(storage.functions()[fidx]);
+        if (update_summary(fidx)) {
+          stable = false;
+        }
+      }
+    }
+    if (!stable) {
+      DCHECK(false);
+    }
+    // Phase B: checking with final summaries.
     for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
          ++fidx) {
-      // Per-function scratch shares global register indexes.
-      home.assign(storage.registers().size(), kNoRoot);
-      path.assign(storage.registers().size(), {});
-      flow.assign(storage.registers().size(), {});
-      last_use.assign(storage.registers().size(), 0);
-      loans.clear();
-      moved_in.clear();
-      moved_out.clear();
+      reset_function();
       check_function(storage.functions()[fidx]);
     }
   }
