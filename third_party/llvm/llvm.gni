@@ -22,7 +22,39 @@ if (is_wasm) {
   llvm_triple_args = [ "--triple=wasm32-unknown-emscripten" ]
 }
 
-llvm_components = [
+# Host codegen backends for object emission. Only the matching
+# backend links in; object emission on other triples reports an
+# error instead of linking every backend everywhere. Backend
+# archives precede the libraries they depend on (static link order).
+llvm_backend_components = []
+if (!is_wasm) {
+  if (target_cpu == "x64" || target_cpu == "x86") {
+    llvm_backend_components += [
+      "LLVMX86CodeGen",
+      "LLVMX86Desc",
+      "LLVMX86Info",
+    ]
+  } else if (target_cpu == "arm64") {
+    llvm_backend_components += [
+      "LLVMAArch64CodeGen",
+      "LLVMAArch64Desc",
+      "LLVMAArch64Info",
+    ]
+  }
+  if (llvm_backend_components != []) {
+    llvm_backend_components += [
+      "LLVMAsmPrinter",
+      "LLVMSelectionDAG",
+      "LLVMGlobalISel",
+      "LLVMInstrumentation",
+      "LLVMCFGuard",
+      "LLVMMCDisassembler",
+      "LLVMIRPrinter",
+    ]
+  }
+}
+
+llvm_components = llvm_backend_components + [
   "LLVMCodeGen",
   "LLVMTarget",
   "LLVMScalarOpts",

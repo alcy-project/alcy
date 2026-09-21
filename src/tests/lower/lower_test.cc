@@ -16,10 +16,11 @@
 #include "analyzer/types.h"
 #include "codegen_llvm/common.h"
 #include "codegen_llvm/llvm_ir_emitter.h"
+#include "codegen_llvm/llvm_object_emitter.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
-#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/io/file_handle.h"
 #include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
 #include "fpag/str/string_interner.h"
@@ -290,6 +291,51 @@ TEST_CASE("Lower emits verifiable LLVM IR for print") {
   CHECK(ir_str.find("alcy_print") != std::string::npos);
   CHECK(ir_str.find("c\"hi\\00\"") != std::string::npos);
 }
+
+#if !defined(OS_ASMJS)
+TEST_CASE("Lower emits relocatable objects") {
+  io::TempDir dir("alcy_lower_emit_object_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn add(a: i32, b: i32) -> i32 {\n"
+                                      "  ret a + b\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  print(\"hi\")\n"
+                                      "  _ := add(40, 2)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("lower_emit_object_test", context);
+  codegen_llvm::LlvmIrEmitter emitter(
+      module.get(), std::move(result.lowered->storage), &f.strings);
+  std::move(emitter).emit();
+  CHECK(!llvm::verifyModule(*module));
+
+  const std::string object_path = dir.join("main.o");
+  base::Result<void, codegen_llvm::ObjectEmitError> emitted =
+      codegen_llvm::emit_object(*module, "", object_path);
+  CHECK(emitted.is_ok());
+  if (emitted.is_err()) {
+    return;
+  }
+  io::FileHandle object;
+  CHECK(object.open(object_path, io::FileAccess::Read));
+  // Non-empty relocatable output.
+  CHECK(object.get_size() > 0);
+}
+#endif
 
 TEST_CASE("Lowering emits no Drop markers") {
   io::TempDir dir("alcy_lower_no_drop_test");

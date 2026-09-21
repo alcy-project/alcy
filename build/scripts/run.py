@@ -5,6 +5,7 @@
 # Exceptions which can be found in the LICENSE file.
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -89,6 +90,12 @@ def main():
 
         if target_bin is not None:
             print(f"Running '{target_bin.name}'")
+            env = dict(os.environ)
+            # LLVM's target initialization trips a known
+            # libc++ container-overflow false positive under ASan;
+            # user overrides win.
+            if "ASAN_OPTIONS" not in env:
+                env["ASAN_OPTIONS"] = "detect_container_overflow=0"
             if target_bin.suffix == ".js":
                 # Prefer bun over node for faster startup and TypeScript support
                 bun_path = shutil.which("bun")
@@ -103,7 +110,7 @@ def main():
                 cmd = [runtime, str(target_bin)] + args.run_args
             else:
                 cmd = [str(target_bin)] + args.run_args
-            result = subprocess.run(cmd, cwd=build_dir)
+            result = subprocess.run(cmd, cwd=build_dir, env=env)
             sys.exit(result.returncode)
         else:
             print(

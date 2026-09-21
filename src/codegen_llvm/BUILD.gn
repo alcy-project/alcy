@@ -8,6 +8,8 @@ source_set("codegen_llvm") {
     "llvm_ir_emitter_compute.cc",
     "llvm_ir_emitter_memory.cc",
     "llvm_ir_storage.h",
+    "llvm_object_emitter.cc",
+    "llvm_object_emitter.h",
   ]
   deps = [
     "//src:base_modules",
