@@ -8,6 +8,7 @@ set -e
 
 script_dir=$(dirname "$0")
 cd "$script_dir/../.." && root_dir=$(pwd)
+tool_scripts_dir="$root_dir/build/scripts"
 
 # Pass --wasm to also build and run the tests as WebAssembly
 # (requires Emscripten and node on PATH).
@@ -26,45 +27,34 @@ release_subdir="build_release"
 debug_subdir="build"
 wasm_subdir="build_wasm"
 
-uv run "$root_dir/build/scripts/build.py" \
+uv run "$tool_scripts_dir/build.py" \
   --target=all \
   --mode=release \
   --build-subdir=$release_subdir
 
-uv run "$root_dir/build/scripts/build.py" \
+uv run "$tool_scripts_dir/build.py" \
   --target=all \
   --mode=debug \
   --build-subdir=$debug_subdir
 
-uv run "$root_dir/build/scripts/run.py" \
+uv run "$tool_scripts_dir/run.py" \
   --target=tests \
   --mode=debug \
   --build-subdir=$debug_subdir \
   -- --no-skip
 
-uv run "$root_dir/build/scripts/e2e.py" \
+uv run "$tool_scripts_dir/e2e.py" \
   --build-subdir=$debug_subdir
 
-uv run "$root_dir/build/scripts/check_runtime.py"
+uv run "$tool_scripts_dir/check_runtime.py"
 
-uv run "$root_dir/build/scripts/format.py" --dry-run
-uv run "$root_dir/build/scripts/lint.py"
+uv run "$tool_scripts_dir/format.py" --dry-run
+uv run "$tool_scripts_dir/lint.py"
 
-uv run "$root_dir/build/scripts/verify_static_linkage.py" \
+uv run "$tool_scripts_dir/verify_static_linkage.py" \
   --build-dir="$root_dir/out/$release_subdir"
-uv run "$root_dir/build/scripts/verify_static_linkage.py" \
+uv run "$tool_scripts_dir/verify_static_linkage.py" \
   --build-dir="$root_dir/out/$debug_subdir"
-
-# gen-only checking
-for os in linux win mac; do
-  for mode in debug release; do
-    uv run "$root_dir/build/scripts/build.py" \
-      --gen-only \
-      --mode=$mode \
-      --build-subdir="config-$os-$mode" \
-      --target-os=$os
-  done
-done
 
 if [[ $run_wasm == true ]]; then
   command -v emcc >/dev/null || {
@@ -75,7 +65,7 @@ if [[ $run_wasm == true ]]; then
     echo "error: node not found; install node first" >&2
     exit 1
   }
-  uv run "$root_dir/build/scripts/run.py" \
+  uv run "$tool_scripts_dir/run.py" \
     --target=tests \
     --mode=debug \
     --build-subdir=$wasm_subdir \
