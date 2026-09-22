@@ -6,6 +6,7 @@
 
 import argparse
 from pathlib import Path
+import subprocess
 import sys
 
 import format
@@ -70,6 +71,27 @@ def create_commands(
     return commands
 
 
+def refresh_compdb() -> int:
+    # clang-tidy reads the root compile_commands.json, which any
+    # build flavor overwrites (a wasm build leaves em++ commands
+    # behind). Regenerate it from the native debug dir so analysis
+    # always sees host defines.
+    result = subprocess.run(
+        ["ninja", "-C", str(default_out_dir), "-t", "compdb"],
+        capture_output=True,
+        text=True,
+        cwd=project_root_dir,
+    )
+    if result.returncode != 0:
+        print(
+            "lint requires a configured native build dir "
+            f"({default_out_dir}):\n{result.stderr}"
+        )
+        return -1
+    (project_root_dir / "compile_commands.json").write_text(result.stdout)
+    return 0
+
+
 def lint_files(
     fix: bool,
     fix_errors: bool,
@@ -86,6 +108,9 @@ def lint_files(
         target_dirs.append(d)
 
     format.format_files(dry_run=True)
+
+    if refresh_compdb() != 0:
+        return -1
 
     for src_dir in project_source_dirs:
         ret = gn_check.check_sources(default_out_dir, src_dir)
