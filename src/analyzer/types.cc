@@ -615,7 +615,6 @@ struct Checker {
           }
           break;
         }
-        case ast::ItemKind::Mod:
         case ast::ItemKind::Use: break;
       }
     }

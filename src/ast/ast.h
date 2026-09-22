@@ -15,7 +15,7 @@
 //   primitive   -> PrimitiveKind   struct     -> StructItem, StructField
 //   tuple type  -> TupleType       enum       -> EnumItem, EnumVariant
 //   ref type    -> RefType         impl       -> ImplItem
-//   pattern     -> Pattern family  mod/static -> ModItem, StaticItem
+//   pattern     -> Pattern family  static -> StaticItem
 //   literal     -> Literal         const/use  -> ConstItem, UseItem
 //   expressions -> Expr family     statements -> Stmt family, Block
 //   fn          -> FnItem
@@ -425,7 +425,6 @@ enum class ItemKind : u8 {
   Struct,
   Enum,
   Impl,
-  Mod,
   Static,
   Const,
   Use,
@@ -474,13 +473,6 @@ struct EnumItem : Item {
 struct ImplItem : Item {
   const Type* type;
   std::span<FnItem* const> methods;
-};
-
-struct ModItem : Item {
-  Ident name;
-  // Null for file modules (`mod foo;`); set for inline modules.
-  std::span<Item* const> items;
-  bool is_inline;
 };
 
 struct StaticItem : Item {

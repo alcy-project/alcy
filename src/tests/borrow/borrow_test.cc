@@ -52,7 +52,7 @@ bool check_case(io::TempDir& dir,
                 std::string_view root_rel,
                 std::initializer_list<std::string_view> rels,
                 Fixture& f) {
-  std::vector<source::FileId> ids;
+  std::vector<analyzer::ModuleInput> inputs;
   source::FileId root = source::kUnknownFile;
   for (std::string_view rel : rels) {
     base::Result<source::FileId, source::SourceError> loaded =
@@ -63,11 +63,19 @@ bool check_case(io::TempDir& dir,
     const source::FileId id = std::move(loaded).unwrap();
     if (rel == root_rel) {
       root = id;
+      inputs.push_back({"", id});
+    } else {
+      std::string_view name = rel;
+      constexpr std::string_view suffix = ".al";
+      if (name.size() > suffix.size() &&
+          name.substr(name.size() - suffix.size()) == suffix) {
+        name.remove_suffix(suffix.size());
+      }
+      inputs.push_back({name, id});
     }
-    ids.push_back(id);
   }
   diag::Fallible<analyzer::ModuleTree> tree_result = analyzer::resolve_modules(
-      root, ids, "testpkg", f.sources, f.arena, f.bag);
+      root, inputs, "testpkg", f.sources, f.arena, f.bag);
   if (tree_result.is_err() || f.bag.has_errors()) {
     return false;
   }

@@ -49,18 +49,23 @@ struct ModuleTree {
 };
 
 // Builds the module tree for one package and resolves its imports.
-// `root` is the package root file and must be listed in `files`; every
-// file is lexed, parsed, and desugared here (each in a per-file arena).
-// Module paths resolve through the walked file set only: `mod` targets
-// are matched against loaded paths, never probed on disk, so no new
-// files enter the compilation. Value and type expressions are NOT
-// resolved here; that is later semantic work over ModuleNode::items.
-diag::Fallible<ModuleTree> resolve_modules(
-    source::FileId root,
-    std::span<const source::FileId> files,
-    std::string_view package_name,
-    source::SourceManager& sources,
-    mem::Arena& arena,
-    diag::DiagBag& bag);
+// `root` is the package entry file; `modules` assigns every source
+// file its slash-separated module name ("" names the root itself).
+// Every file is lexed, parsed, and desugared here (each in a
+// per-file arena). Module membership comes from the caller, never
+// from source items, so no new files enter the compilation. Value
+// and type expressions are NOT resolved here; that is later
+// semantic work over ModuleNode::items.
+struct ModuleInput {
+  std::string_view name;
+  source::FileId id = source::kUnknownFile;
+};
+
+diag::Fallible<ModuleTree> resolve_modules(source::FileId root,
+                                           std::span<const ModuleInput> modules,
+                                           std::string_view package_name,
+                                           source::SourceManager& sources,
+                                           mem::Arena& arena,
+                                           diag::DiagBag& bag);
 
 }  // namespace analyzer

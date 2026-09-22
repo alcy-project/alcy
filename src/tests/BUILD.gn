@@ -24,6 +24,7 @@ executable("tests") {
     "pipeline/pipeline_test.cc",
     "pkg/lock_test.cc",
     "pkg/manifest_test.cc",
+    "pkg/modules_test.cc",
     "pkg/resolve_test.cc",
     "source/source_test.cc",
     "test_main.cc",

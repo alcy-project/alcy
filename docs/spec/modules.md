@@ -2,12 +2,21 @@
 
 ## File and module mapping
 
-- Modules are declared, never auto-discovered: `mod foo;` resolves to
-  `foo.al` or `foo/mod.al`. Inline `mod foo { ... }` is also allowed.
+- Modules are declared exclusively in `alcy.toml` under `[modules]`.
+  `include` specifies module paths (e.g., `["main", "utils/io"]` or `["*"]`)
+  mapped to files `main.al`, `utils/io.al`. The `mod` keyword is removed.
+  Inline modules (`mod foo { ... }`) are no longer allowed.
 - Name resolution runs after shadowing desugar (see `values.md`),
   which constrains pipeline ordering (desugar precedes resolution).
-- Files not reachable from the package root through `mod` declarations
-  MUST produce a warning diagnostic, not an error.
+- Files not reachable from declared modules in `alcy.toml`
+  produce a warning diagnostic, not an error.
+
+## Module Resolution Design
+
+- `mod` keyword removed; module declarations only in `alcy.toml`.
+- `[modules]` table has `include` (list of paths or `["*"]`) and `export` (public API).
+- Source paths use `/`; no `src/` hardcoding.
+- Module-to-file mapping is 1-to-1 explicit.
 
 ## Paths and imports
 

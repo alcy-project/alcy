@@ -6,7 +6,7 @@ update.
 
 ## MVP
 
-Declarations: `fn`, `struct`, `enum`, `mod`, `impl`, `static`, `pub`,
+Declarations: `fn`, `struct`, `enum`, `impl`, `static`, `pub`,
 `const`, `mut`, `use`
 
 Control flow: `if`, `else`, `loop`, `while`, `break`, `continue`,

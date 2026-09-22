@@ -124,7 +124,6 @@ TEST_CASE("Parser builds module items") {
   const ParseResult result = parse(
       "pub struct Point { x: i32, y: i32 }\n"
       "enum Choice { Yes, No }\n"
-      "mod inner;\n"
       "use package::other;\n"
       "static answer: i32 = 42\n"
       "const limit: i32 = 7\n"
@@ -134,24 +133,30 @@ TEST_CASE("Parser builds module items") {
   if (!result.ok) {
     return;
   }
-  CHECK(result.items.size() == 7);
-  if (result.items.size() != 7) {
+  CHECK(result.items.size() == 6);
+  if (result.items.size() != 6) {
     return;
   }
   CHECK(result.items[0]->kind == ast::ItemKind::Struct);
   CHECK(result.items[0]->is_pub);
   CHECK(result.items[1]->kind == ast::ItemKind::Enum);
-  CHECK(result.items[2]->kind == ast::ItemKind::Mod);
-  CHECK(result.items[3]->kind == ast::ItemKind::Use);
-  CHECK(result.items[4]->kind == ast::ItemKind::Static);
-  CHECK(result.items[5]->kind == ast::ItemKind::Const);
-  CHECK(result.items[6]->kind == ast::ItemKind::Impl);
+  CHECK(result.items[2]->kind == ast::ItemKind::Use);
+  CHECK(result.items[3]->kind == ast::ItemKind::Static);
+  CHECK(result.items[4]->kind == ast::ItemKind::Const);
+  CHECK(result.items[5]->kind == ast::ItemKind::Impl);
   const ast::StructItem* point =
       static_cast<const ast::StructItem*>(result.items[0]);
   CHECK(point->fields.size() == 2);
   const ast::EnumItem* choice =
       static_cast<const ast::EnumItem*>(result.items[1]);
   CHECK(choice->variants.size() == 2);
+}
+
+TEST_CASE("Parser rejects module declarations") {
+  // Modules come from the manifest; `mod` is not an item.
+  Fixture f;
+  const ParseResult result = parse("mod inner;\nfn main() {}\n", f);
+  CHECK(!result.ok);
 }
 
 TEST_CASE("Parser separates declaration reassignment and comparison") {

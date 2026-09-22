@@ -18,7 +18,6 @@ enum class TokenKind : u8 {
   Fn,
   Struct,
   Enum,
-  Mod,
   Impl,
   Static,
   Pub,

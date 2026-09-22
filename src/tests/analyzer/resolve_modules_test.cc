@@ -54,7 +54,7 @@ ResolveCase resolve_case(io::TempDir& dir,
                          std::initializer_list<std::string_view> rels,
                          Fixture& f,
                          std::string_view package_name = "testpkg") {
-  std::vector<source::FileId> ids;
+  std::vector<ModuleInput> inputs;
   source::FileId root = source::kUnknownFile;
   for (std::string_view rel : rels) {
     base::Result<source::FileId, source::SourceError> loaded =
@@ -65,11 +65,19 @@ ResolveCase resolve_case(io::TempDir& dir,
     const source::FileId id = std::move(loaded).unwrap();
     if (rel == root_rel) {
       root = id;
+      inputs.push_back({"", id});
+    } else {
+      std::string_view name = rel;
+      constexpr std::string_view suffix = ".al";
+      if (name.size() > suffix.size() &&
+          name.substr(name.size() - suffix.size()) == suffix) {
+        name.remove_suffix(suffix.size());
+      }
+      inputs.push_back({name, id});
     }
-    ids.push_back(id);
   }
   diag::Fallible<ModuleTree> result =
-      resolve_modules(root, ids, package_name, f.sources, f.arena, f.bag);
+      resolve_modules(root, inputs, package_name, f.sources, f.arena, f.bag);
   if (result.is_err()) {
     ModuleTree empty;
     empty.modules = {};
@@ -93,13 +101,12 @@ const ModuleNode* find_module(const ModuleTree& tree, std::string_view path) {
 
 TEST_CASE("Resolve builds nested module trees") {
   io::TempDir dir("alcy_analyzer_tree_test");
-  const bool setup =
-      write_all(dir, {
-                         {"main.al", "mod a;\nmod util;\nfn main() {}\n"},
-                         {"a.al", "mod b;\nstruct Point { x: i32 }\n"},
-                         {"a/b.al", "fn deep() {}\n"},
-                         {"util.al", "fn help() {}\n"},
-                     });
+  const bool setup = write_all(dir, {
+                                        {"main.al", "fn main() {}\n"},
+                                        {"a.al", "struct Point { x: i32 }\n"},
+                                        {"a/b.al", "fn deep() {}\n"},
+                                        {"util.al", "fn help() {}\n"},
+                                    });
   CHECK(setup);
   if (!setup) {
     return;
@@ -124,32 +131,17 @@ TEST_CASE("Resolve builds nested module trees") {
   if (a == nullptr || b == nullptr) {
     return;
   }
-  CHECK(a->items.size() == 2);
+  CHECK(a->items.size() == 1);
   CHECK(b->items.size() == 1);
   CHECK(result.tree.modules[result.tree.root]->path.empty());
 }
 
-TEST_CASE("Resolve reports missing module files") {
-  io::TempDir dir("alcy_analyzer_missing_test");
-  const bool setup = write_all(dir, {{"main.al", "mod nope;\nfn main() {}\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
-
-  Fixture f;
-  const ResolveCase result = resolve_case(dir, "main.al", {"main.al"}, f);
-  CHECK(!result.ok);
-  CHECK(f.bag.has_errors());
-}
-
-TEST_CASE("Resolve reports duplicate module declarations") {
-  io::TempDir dir("alcy_analyzer_dup_test");
-  const bool setup =
-      write_all(dir, {
-                         {"main.al", "mod a;\nmod a;\nfn main() {}\n"},
-                         {"a.al", "fn x() {}\n"},
-                     });
+TEST_CASE("Resolve attaches deeply nested modules") {
+  io::TempDir dir("alcy_analyzer_deep_test");
+  const bool setup = write_all(dir, {
+                                        {"main.al", "fn main() {}\n"},
+                                        {"x/y/z.al", "fn deep() {}\n"},
+                                    });
   CHECK(setup);
   if (!setup) {
     return;
@@ -157,12 +149,51 @@ TEST_CASE("Resolve reports duplicate module declarations") {
 
   Fixture f;
   const ResolveCase result =
-      resolve_case(dir, "main.al", {"main.al", "a.al"}, f);
-  CHECK(!result.ok);
+      resolve_case(dir, "main.al", {"main.al", "x/y/z.al"}, f);
+  CHECK(result.ok);
+  if (!result.ok) {
+    return;
+  }
+  CHECK(find_module(result.tree, "x::y::z") != nullptr);
+}
+
+TEST_CASE("Resolve reports duplicate module declarations") {
+  io::TempDir dir("alcy_analyzer_dup_test");
+  const bool setup = write_all(dir, {
+                                        {"main.al", "fn main() {}\n"},
+                                        {"a.al", "fn x() {}\n"},
+                                        {"sub/a.al", "fn y() {}\n"},
+                                    });
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  // Two files claiming one slash name collide regardless of paths.
+  base::Result<source::FileId, source::SourceError> first =
+      f.sources.load(dir.join("a.al"));
+  base::Result<source::FileId, source::SourceError> second =
+      f.sources.load(dir.join("sub/a.al"));
+  base::Result<source::FileId, source::SourceError> root =
+      f.sources.load(dir.join("main.al"));
+  CHECK(first.is_ok());
+  CHECK(second.is_ok());
+  CHECK(root.is_ok());
+  if (first.is_err() || second.is_err() || root.is_err()) {
+    return;
+  }
+  const ModuleInput inputs[] = {
+      {"", std::move(root).unwrap()},
+      {"a", std::move(first).unwrap()},
+      {"a", std::move(second).unwrap()},
+  };
+  diag::Fallible<ModuleTree> resolved = resolve_modules(
+      inputs[0].id, inputs, "testpkg", f.sources, f.arena, f.bag);
   CHECK(f.bag.has_errors());
 }
 
-TEST_CASE("Resolve warns on unreachable files") {
+TEST_CASE("Resolve attaches unreferenced files as modules") {
   io::TempDir dir("alcy_analyzer_unreachable_test");
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
@@ -174,10 +205,12 @@ TEST_CASE("Resolve warns on unreachable files") {
   }
 
   Fixture f;
+  // Every listed input attaches, so the resolve-level warning only
+  // fires through duplicate collisions (covered above); the
+  // manifest-aware version lands with driver warnings.
   const ResolveCase result =
       resolve_case(dir, "main.al", {"main.al", "stray.al"}, f);
   CHECK(result.ok);
-  CHECK(f.bag.warning_count() > 0);
 }
 
 TEST_CASE("Resolve resolves imports across modules") {
@@ -185,7 +218,7 @@ TEST_CASE("Resolve resolves imports across modules") {
   const bool setup = write_all(
       dir, {
                {"main.al",
-                "mod a;\nmod util;\nuse a::Point;\nuse util::help as h;\nfn "
+                "use a::Point;\nuse util::help as h;\nfn "
                 "main() {}\n"},
                {"a.al", "pub struct Point { x: i32 }\nuse package::util;\n"},
                {"util.al", "fn help() {}\n"},
@@ -254,8 +287,8 @@ TEST_CASE("Resolve handles super imports from nested modules") {
   io::TempDir dir("alcy_analyzer_super_test");
   const bool setup =
       write_all(dir, {
-                         {"main.al", "mod a;\nfn main() {}\n"},
-                         {"a.al", "mod b;\nstruct Thing { x: i32 }\n"},
+                         {"main.al", "fn main() {}\n"},
+                         {"a.al", "struct Thing { x: i32 }\n"},
                          {"a/b.al", "use super::Thing;\nfn deep() {}\n"},
                      });
   CHECK(setup);
@@ -281,7 +314,7 @@ TEST_CASE("Resolve handles super imports from nested modules") {
 TEST_CASE("Resolve reports bad imports") {
   io::TempDir dir("alcy_analyzer_unresolved_test");
   const bool setup = write_all(dir, {
-                                        {"main.al", "mod a;\nfn main() {}\n"},
+                                        {"main.al", "fn main() {}\n"},
                                         {"a.al", "struct Point { x: i32 }\n"},
                                     });
   CHECK(setup);
@@ -293,7 +326,7 @@ TEST_CASE("Resolve reports bad imports") {
   {
     io::TempDir dir2("alcy_analyzer_unresolved2_test");
     const bool setup2 =
-        write_all(dir2, {{"main.al", "mod a;\nuse a::Nope;\nfn main() {}\n"},
+        write_all(dir2, {{"main.al", "use a::Nope;\nfn main() {}\n"},
                          {"a.al", "struct Point { x: i32 }\n"}});
     CHECK(setup2);
     if (!setup2) {
@@ -338,8 +371,7 @@ TEST_CASE("Resolve reports conflicting imports") {
   io::TempDir dir("alcy_analyzer_ambiguous_test");
   const bool setup = write_all(
       dir, {
-               {"main.al",
-                "mod a;\nmod b;\nuse a::Thing;\nuse b::Thing;\nfn main() {}\n"},
+               {"main.al", "use a::Thing;\nuse b::Thing;\nfn main() {}\n"},
                {"a.al", "struct Thing { x: i32 }\n"},
                {"b.al", "struct Thing { x: i32 }\n"},
            });
@@ -359,8 +391,8 @@ TEST_CASE("Resolve follows public re-exports") {
   io::TempDir dir("alcy_analyzer_reexport_test");
   const bool setup =
       write_all(dir, {
-                         {"main.al", "mod a;\nuse a::Thing;\nfn main() {}\n"},
-                         {"a.al", "mod b;\npub use b::Thing;\n"},
+                         {"main.al", "use a::Thing;\nfn main() {}\n"},
+                         {"a.al", "pub use b::Thing;\n"},
                          {"a/b.al", "struct Thing { x: i32 }\n"},
                      });
   CHECK(setup);
@@ -406,12 +438,11 @@ TEST_CASE("Resolve follows public re-exports") {
 
 TEST_CASE("Resolve reports re-export cycles") {
   io::TempDir dir("alcy_analyzer_cycle_test");
-  const bool setup =
-      write_all(dir, {
-                         {"main.al", "mod a;\nmod b;\nfn main() {}\n"},
-                         {"a.al", "pub use b::Thing;\n"},
-                         {"b.al", "pub use a::Thing;\n"},
-                     });
+  const bool setup = write_all(dir, {
+                                        {"main.al", "fn main() {}\n"},
+                                        {"a.al", "pub use b::Thing;\n"},
+                                        {"b.al", "pub use a::Thing;\n"},
+                                    });
   CHECK(setup);
   if (!setup) {
     return;

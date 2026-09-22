@@ -43,6 +43,7 @@
 #include "path/path.h"
 #include "pipeline/pipeline.h"
 #include "pkg/manifest.h"
+#include "pkg/modules.h"
 #include "source/source.h"
 
 namespace app {
@@ -157,9 +158,9 @@ i32 build_single_file(DriverContext& ctx,
     return result_code(ResultCode::BuildFailed);
   }
   const source::FileId root = std::move(file).unwrap();
-  const std::vector<source::FileId> files{root};
+  const analyzer::ModuleInput single_input{"", root};
   diag::Fallible<analyzer::ModuleTree> tree = analyzer::resolve_modules(
-      root, files, "", ctx.sources, ctx.arena, ctx.bag);
+      root, {&single_input, 1}, "", ctx.sources, ctx.arena, ctx.bag);
   if (tree.is_err() || ctx.bag.has_errors()) {
     report(ctx.bag, ctx.sources);
     return result_code(ResultCode::BuildFailed);
@@ -337,9 +338,9 @@ i32 run_check(const DriverConfig& config) {
     return result_code(ResultCode::CheckFailed);
   }
   const source::FileId root = std::move(file).unwrap();
-  const std::vector<source::FileId> files{root};
+  const analyzer::ModuleInput single_input{"", root};
   diag::Fallible<analyzer::ModuleTree> tree = analyzer::resolve_modules(
-      root, files, "", ctx.sources, ctx.arena, ctx.bag);
+      root, {&single_input, 1}, "", ctx.sources, ctx.arena, ctx.bag);
   if (tree.is_err()) {
     report(ctx.bag, ctx.sources);
     return result_code(ResultCode::CheckFailed);
@@ -348,7 +349,7 @@ i32 run_check(const DriverConfig& config) {
     report(ctx.bag, ctx.sources);
     return result_code(ResultCode::CheckFailed);
   }
-  return finish_check(ctx, std::move(tree).unwrap(), files.size());
+  return finish_check(ctx, std::move(tree).unwrap(), 1);
 }
 
 // Resolved binary target: the module tree plus its source count and
@@ -410,8 +411,48 @@ diag::Fallible<BinTarget> resolve_bin_target(DriverContext& ctx,
     return base::make_err(diag::Fatal{});
   }
 
+  bool bin_selected = false;
+  diag::Fallible<std::vector<pkg::ModuleFile>> selection =
+      pkg::resolve_module_files(manifest, root.as_view(), files, ctx.sources,
+                                ctx.bag, ctx.arena);
+  if (selection.is_err() || ctx.bag.has_errors()) {
+    return base::make_err(diag::Fatal{});
+  }
+  std::vector<analyzer::ModuleInput> inputs;
+  // Module paths resolve relative to the entry file's directory, so
+  // `src/main.al` sees its sibling as `util` rather than `src::util`.
+  std::string_view bin_dir;
+  {
+    const std::string_view bin_path = manifest.bins[0].path;
+    const usize slash = bin_path.rfind('/');
+    if (slash != std::string_view::npos) {
+      bin_dir = bin_path.substr(0, slash);
+    }
+  }
+  for (const pkg::ModuleFile& entry : std::move(selection).unwrap()) {
+    if (entry.id == bin_file) {
+      bin_selected = true;
+      inputs.push_back({"", entry.id});
+    } else {
+      std::string_view name = entry.name;
+      if (!bin_dir.empty() && name.size() > bin_dir.size() &&
+          name.substr(0, bin_dir.size()) == bin_dir &&
+          name[bin_dir.size()] == '/') {
+        name.remove_prefix(bin_dir.size() + 1);
+      }
+      inputs.push_back({name, entry.id});
+    }
+  }
+  if (!bin_selected) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kDriverNoTargets,
+                                   "bin target '{}' is not in [modules]",
+                                   manifest.bins[0].path);
+    (void)index;
+    return base::make_err(diag::Fatal{});
+  }
+
   diag::Fallible<analyzer::ModuleTree> tree = analyzer::resolve_modules(
-      bin_file, files, manifest.name, ctx.sources, ctx.arena, ctx.bag);
+      bin_file, inputs, manifest.name, ctx.sources, ctx.arena, ctx.bag);
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Fatal{});
   }

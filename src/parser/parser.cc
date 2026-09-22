@@ -281,7 +281,6 @@ ast::Item* Parser::parse_item() {
     case lexer::TokenKind::Struct: return parse_struct(is_pub);
     case lexer::TokenKind::Enum: return parse_enum(is_pub);
     case lexer::TokenKind::Impl: return parse_impl(is_pub);
-    case lexer::TokenKind::Mod: return parse_mod(is_pub);
     case lexer::TokenKind::Static: return parse_static(is_pub);
     case lexer::TokenKind::Const: return parse_const(is_pub);
     case lexer::TokenKind::Use: return parse_use(is_pub);
@@ -537,49 +536,6 @@ ast::ImplItem* Parser::parse_impl(bool is_pub) {
   item->is_pub = is_pub;
   item->type = type;
   item->methods = ast::copy_to_arena(arena_, methods);
-  return item;
-}
-
-ast::ModItem* Parser::parse_mod(bool is_pub) {
-  const usize mark = pos_;
-  if (!expect(lexer::TokenKind::Mod, "module")) {
-    return nullptr;
-  }
-  base::Result<ast::Ident, diag::Fatal> name = parse_ident("module name");
-  if (name.is_err()) {
-    return nullptr;
-  }
-  ast::ModItem* item = arena_.create<ast::ModItem>();
-  item->kind = ast::ItemKind::Mod;
-  item->is_pub = is_pub;
-  item->name = std::move(name).unwrap();
-  if (match(lexer::TokenKind::Semicolon)) {
-    item->span = span_from(mark);
-    item->items = {};
-    item->is_inline = false;
-    return item;
-  }
-  if (!expect(lexer::TokenKind::LBrace, "`{`")) {
-    return nullptr;
-  }
-  std::vector<ast::Item*> items;
-  while (!check(lexer::TokenKind::RBrace) && !at_end()) {
-    if (match(lexer::TokenKind::Semicolon)) {
-      continue;
-    }
-    ast::Item* child = parse_item();
-    if (child == nullptr) {
-      synchronize();
-      continue;
-    }
-    items.push_back(child);
-  }
-  if (!expect(lexer::TokenKind::RBrace, "`}`")) {
-    return nullptr;
-  }
-  item->span = span_from(mark);
-  item->items = ast::copy_to_arena(arena_, items);
-  item->is_inline = true;
   return item;
 }
 

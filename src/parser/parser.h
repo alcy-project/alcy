@@ -66,7 +66,6 @@ class Parser {
   ast::StructItem* parse_struct(bool is_pub);
   ast::EnumItem* parse_enum(bool is_pub);
   ast::ImplItem* parse_impl(bool is_pub);
-  ast::ModItem* parse_mod(bool is_pub);
   ast::StaticItem* parse_static(bool is_pub);
   ast::ConstItem* parse_const(bool is_pub);
   ast::UseItem* parse_use(bool is_pub);

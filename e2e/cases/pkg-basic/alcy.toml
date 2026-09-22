@@ -2,6 +2,9 @@
 name = "demo"
 version = "0.1.0"
 
+[modules]
+include = ["main", "util"]
+
 [[bin]]
 name = "demo"
-path = "src/main.al"
+path = "main.al"

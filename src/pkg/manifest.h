@@ -88,6 +88,19 @@ struct Dependency {
   std::string_view path;
 };
 
+// Module set from the [modules] table. `include` lists module paths
+// (`"utils/io"` maps to `utils/io.al` under the package root); a
+// single `"*"` entry selects every discovered source file. `export`
+// lists the public surface for library packages. Views borrow arena
+// storage owned by the caller of parse_manifest().
+struct ModuleSet {
+  const std::string_view* include = nullptr;
+  u32 include_count = 0;
+  bool wildcard = false;
+  const std::string_view* exports = nullptr;
+  u32 export_count = 0;
+};
+
 struct PackageManifest {
   std::string_view name;
   Version version;
@@ -101,6 +114,9 @@ struct PackageManifest {
   // by the driver with guidance.
   const BinTarget* bins = nullptr;
   u32 bin_count = 0;
+  // Module membership from the [modules] table. Absent means every
+  // discovered source file.
+  ModuleSet modules;
 };
 
 // Parses manifest bytes; all strings reference arena copies. `file` backs

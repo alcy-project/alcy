@@ -56,7 +56,7 @@ CheckCase check_case(io::TempDir& dir,
                      std::initializer_list<std::string_view> rels,
                      Fixture& f,
                      ir::PointerWidth width = ir::PointerWidth::W64) {
-  std::vector<source::FileId> ids;
+  std::vector<ModuleInput> inputs;
   source::FileId root = source::kUnknownFile;
   for (std::string_view rel : rels) {
     base::Result<source::FileId, source::SourceError> loaded =
@@ -67,11 +67,19 @@ CheckCase check_case(io::TempDir& dir,
     const source::FileId id = std::move(loaded).unwrap();
     if (rel == root_rel) {
       root = id;
+      inputs.push_back({"", id});
+    } else {
+      std::string_view name = rel;
+      constexpr std::string_view suffix = ".al";
+      if (name.size() > suffix.size() &&
+          name.substr(name.size() - suffix.size()) == suffix) {
+        name.remove_suffix(suffix.size());
+      }
+      inputs.push_back({name, id});
     }
-    ids.push_back(id);
   }
   diag::Fallible<ModuleTree> tree_result =
-      resolve_modules(root, ids, "testpkg", f.sources, f.arena, f.bag);
+      resolve_modules(root, inputs, "testpkg", f.sources, f.arena, f.bag);
   if (tree_result.is_err() || f.bag.has_errors()) {
     return {std::nullopt};
   }
@@ -217,7 +225,7 @@ TEST_CASE("Check resolves cross-module types") {
       dir,
       {
           {"main.al",
-           "mod a;\nuse a::Point;\nstruct Holder { p: Point, q: a::Other }\nfn "
+           "use a::Point;\nstruct Holder { p: Point, q: a::Other }\nfn "
            "main() {}\n"},
           {"a.al", "pub struct Point { x: i32 }\nstruct Other { y: bool }\n"},
       });

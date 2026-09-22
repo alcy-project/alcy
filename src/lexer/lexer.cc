@@ -141,7 +141,6 @@ constexpr Keyword kKeywords[] = {
     {"isize", TokenKind::Isize},
     {"loop", TokenKind::Loop},
     {"match", TokenKind::Match},
-    {"mod", TokenKind::Mod},
     {"mut", TokenKind::Mut},
     {"package", TokenKind::Package},
     {"pub", TokenKind::Pub},

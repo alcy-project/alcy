@@ -167,13 +167,6 @@ struct Desugar {
         }
         break;
       }
-      case ast::ItemKind::Mod: {
-        ast::ModItem* mod = static_cast<ast::ModItem*>(item);
-        for (ast::Item* child : mod->items) {
-          visit_item(child);
-        }
-        break;
-      }
       case ast::ItemKind::Struct:
       case ast::ItemKind::Enum:
       case ast::ItemKind::Use: break;

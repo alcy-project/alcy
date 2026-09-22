@@ -77,13 +77,6 @@ struct NameCollector {
         }
         break;
       }
-      case ast::ItemKind::Mod: {
-        const ast::ModItem* mod = static_cast<const ast::ModItem*>(item);
-        for (ast::Item* child : mod->items) {
-          visit_item(child);
-        }
-        break;
-      }
       case ast::ItemKind::Struct:
       case ast::ItemKind::Enum:
       case ast::ItemKind::Use: break;

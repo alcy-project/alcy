@@ -242,6 +242,81 @@ diag::Fallible<PackageManifest> parse_manifest(std::string_view bytes,
     }
   }
 
+  // The [modules] table is optional; an absent table selects every
+  // discovered source file, keeping starter packages manifest-light.
+  ModuleSet modules;
+  const auto modules_it = root.find("modules");
+  if (modules_it != root.end()) {
+    if (!modules_it->second.is_table()) {
+      return semantic_error(bag, filename, "[modules] must be a table");
+    }
+    const toml::table* const modules_table = modules_it->second.as_table();
+    const auto include_it = modules_table->find("include");
+    if (include_it != modules_table->end()) {
+      if (!include_it->second.is_array()) {
+        return semantic_error(bag, filename,
+                              "[modules] include must be an array");
+      }
+      const toml::array* const include_array = include_it->second.as_array();
+      const u32 include_count = static_cast<u32>(include_array->size());
+      std::string_view* const include =
+          include_count > 0 ? static_cast<std::string_view*>(arena.alloc(
+                                  sizeof(std::string_view) * include_count,
+                                  alignof(std::string_view)))
+                            : nullptr;
+      u32 include_filled = 0;
+      for (const toml::node& node : *include_array) {
+        const auto entry = node.value<std::string_view>();
+        if (!entry.has_value() || entry->empty()) {
+          return semantic_error(bag, filename,
+                                "[modules] include entries must be strings");
+        }
+        if (*entry == "*") {
+          modules.wildcard = true;
+          continue;
+        }
+        for (u32 i = 0; i < include_filled; ++i) {
+          if (include[i] == *entry) {
+            return semantic_error(bag, filename,
+                                  "duplicate [modules] include entry");
+          }
+        }
+        include[include_filled++] = copy_str(arena, *entry);
+      }
+      modules.include = include;
+      modules.include_count = include_filled;
+    } else {
+      modules.wildcard = true;
+    }
+    const auto export_it = modules_table->find("export");
+    if (export_it != modules_table->end()) {
+      if (!export_it->second.is_array()) {
+        return semantic_error(bag, filename,
+                              "[modules] export must be an array");
+      }
+      const toml::array* const export_array = export_it->second.as_array();
+      const u32 export_count = static_cast<u32>(export_array->size());
+      std::string_view* const exports =
+          export_count > 0 ? static_cast<std::string_view*>(arena.alloc(
+                                 sizeof(std::string_view) * export_count,
+                                 alignof(std::string_view)))
+                           : nullptr;
+      u32 export_filled = 0;
+      for (const toml::node& node : *export_array) {
+        const auto entry = node.value<std::string_view>();
+        if (!entry.has_value() || entry->empty()) {
+          return semantic_error(bag, filename,
+                                "[modules] export entries must be strings");
+        }
+        exports[export_filled++] = copy_str(arena, *entry);
+      }
+      modules.exports = exports;
+      modules.export_count = export_filled;
+    }
+  } else {
+    modules.wildcard = true;
+  }
+
   return base::make_ok(PackageManifest{
       .name = copy_str(arena, *name),
       .version = std::move(version).unwrap(),
@@ -250,6 +325,7 @@ diag::Fallible<PackageManifest> parse_manifest(std::string_view bytes,
       .dependency_count = dependency_count,
       .bins = bins,
       .bin_count = bin_count,
+      .modules = modules,
   });
 }
 

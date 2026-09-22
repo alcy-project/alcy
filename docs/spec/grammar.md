@@ -31,7 +31,7 @@ rejected with guidance diagnostics.
 
 ```
 item      := vis? (fn_item | struct_item | enum_item | impl_item |
-                   mod_item | static_item | const_item | use_item)
+                   static_item | const_item | use_item)
 vis       := "pub"
 fn_item   := "fn" ident "(" params ")" ("->" type)? block
             # omitted return type means "()"
@@ -43,7 +43,7 @@ variant   := ident | ident "(" (type ("," type)*)? ")"
 impl_item := "impl" type "{" fn_item* "}"
             # methods take self, &self, or &mut self first; other
             # functions in the block are associated functions
-mod_item  := "mod" ident (";" | "{" item* "}")
+
 static_item := "static" ident ":" type "=" expr
 const_item  := "const" ident ":" type "=" literal_expr
 literal_expr := literal   # MVP const items admit literals only
@@ -161,5 +161,6 @@ path := ("package" | "self" | "super" | "<dep>" | ident)
         ("::" ident)*
 ```
 
-`mod foo;` resolves to `foo.al` or `foo/mod.al`. Files unreachable
-from the package root warn (see `modules.md`).
+Module declarations come exclusively from `alcy.toml` `[modules]`.
+Files not included in `include` and unreachable from declared modules
+warn (see `modules.md`).

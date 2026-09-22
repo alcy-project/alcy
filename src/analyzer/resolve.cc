@@ -31,7 +31,6 @@ namespace analyzer {
 namespace {
 
 // Diagnostic codes 4200-4299 are reserved for module resolution.
-constexpr u32 kAnalyzerMissingModuleFile = 4200;
 constexpr u32 kAnalyzerDuplicateModule = 4201;
 constexpr u32 kAnalyzerUnresolvedImport = 4202;
 constexpr u32 kAnalyzerAmbiguousImport = 4203;
@@ -42,7 +41,6 @@ constexpr u32 kNoModule = std::numeric_limits<u32>::max();
 
 struct FileData {
   source::FileId id = source::kUnknownFile;
-  path::Path dir;
   path::Path path;
   // Items are parsed into the caller-provided arena (never a per-file
   // arena): ModuleNode::items outlives resolve_modules, so per-file
@@ -50,8 +48,8 @@ struct FileData {
   std::span<ast::Item* const> items;
   u32 module = kNoModule;
 
-  FileData(source::FileId id, path::Path dir, path::Path path)
-      : id(id), dir(std::move(dir)), path(std::move(path)) {}
+  FileData(source::FileId id, path::Path path)
+      : id(id), path(std::move(path)) {}
 };
 
 struct NameEntry {
@@ -72,7 +70,6 @@ struct Resolver {
   std::vector<FileData> file_data;
   std::vector<ModuleNode*> modules;
   std::vector<u32> parents;
-  std::vector<path::Path> mod_dirs;
   std::vector<std::vector<NameEntry>> local_types;
   std::vector<std::vector<NameEntry>> local_values;
   std::vector<std::vector<NameEntry>> local_modules;
@@ -84,15 +81,13 @@ struct Resolver {
   u32 add_module(std::string path,
                  source::FileId file,
                  std::span<ast::Item* const> items,
-                 u32 parent,
-                 path::Path dir) {
+                 u32 parent) {
     ModuleNode* node = arena.create<ModuleNode>();
     node->path = std::move(path);
     node->file = file;
     node->items = items;
     modules.push_back(node);
     parents.push_back(parent);
-    mod_dirs.push_back(std::move(dir));
     local_types.emplace_back();
     local_values.emplace_back();
     local_modules.emplace_back();
@@ -119,15 +114,6 @@ struct Resolver {
       return std::string_view(path);
     }
     return std::string_view(path).substr(slash + 1);
-  }
-
-  u32 find_file_by_path(const path::Path& path) const {
-    for (u32 i = 0; i < static_cast<u32>(file_data.size()); ++i) {
-      if (file_data[i].path == path) {
-        return i;
-      }
-    }
-    return kNoModule;
   }
 
   u32 find_child_module(u32 module, std::string_view name) const {
@@ -159,16 +145,15 @@ struct Resolver {
       }
     }
     DCHECK(root_file != kNoModule);
-    const u32 root_module = add_module("", root, file_data[root_file].items,
-                                       kNoModule, file_data[root_file].dir);
+    const u32 root_module =
+        add_module("", root, file_data[root_file].items, kNoModule);
     file_data[root_file].module = root_module;
 
-    std::vector<u32> worklist;
-    worklist.push_back(root_module);
-    while (!worklist.empty()) {
-      const u32 module = worklist.back();
-      worklist.pop_back();
-      build_children(module, worklist);
+    for (u32 i = 0; i < static_cast<u32>(file_data.size()); ++i) {
+      if (i == root_file) {
+        continue;
+      }
+      attach_module(root_module, module_inputs[i], i);
     }
 
     for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
@@ -191,67 +176,42 @@ struct Resolver {
     }
   }
 
-  void build_children(u32 module, std::vector<u32>& worklist) {
-    ModuleNode* node = modules[module];
-    std::vector<std::string_view> declared;
-    for (ast::Item* item : node->items) {
-      if (item->kind != ast::ItemKind::Mod) {
-        continue;
+  // Attaches one listed file under the root, creating fileless
+  // intermediate nodes for slash-separated names (`utils/io`
+  // becomes root → `utils` → `utils::io`).
+  void attach_module(u32 root_module, std::string_view slash_name, u32 file) {
+    u32 parent = root_module;
+    std::string prefix;
+    usize start = 0;
+    while (start <= slash_name.size()) {
+      usize slash = slash_name.find('/', start);
+      if (slash == std::string_view::npos) {
+        slash = slash_name.size();
       }
-      const ast::ModItem* mod = static_cast<const ast::ModItem*>(item);
-      const std::string_view name = mod->name.name;
-      bool duplicate = false;
-      for (std::string_view seen : declared) {
-        if (seen == name) {
-          duplicate = true;
-          break;
-        }
-      }
-      if (duplicate) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerDuplicateModule, mod->span,
-                     "module '{}' is declared more than once", name);
+      const std::string_view segment = slash_name.substr(start, slash - start);
+      const std::string child_path = prefix.empty()
+                                         ? std::string(segment)
+                                         : prefix + "::" + std::string(segment);
+      const bool leaf = slash == slash_name.size();
+      u32 child = find_child_module(parent, segment);
+      if (child == kNoModule) {
+        child = add_module(
+            child_path, leaf ? file_data[file].id : source::kUnknownFile,
+            leaf ? file_data[file].items : std::span<ast::Item* const>{},
+            parent);
+        module_children[parent].push_back(child);
+      } else if (leaf) {
+        const u32 index = bag.emit(
+            diag::Severity::Error, kAnalyzerDuplicateModule, diag::Span{},
+            "module '{}' is declared more than once", slash_name);
         (void)index;
-        continue;
+        return;
       }
-      declared.push_back(name);
-      const std::string child_path =
-          node->path.empty() ? std::string(name)
-                             : node->path + "::" + std::string(name);
-      if (mod->is_inline) {
-        const u32 child = add_module(child_path, source::kUnknownFile,
-                                     mod->items, module, mod_dirs[module]);
-        module_children[module].push_back(child);
-        worklist.push_back(child);
-        continue;
-      }
-      // Candidates live directly under the declaring module's
-      // directory; the child's own directory (parent plus its name) is
-      // recorded separately below.
-      const path::Path first = mod_dirs[module].join(std::string(name) + ".al");
-      const path::Path second =
-          mod_dirs[module].join(std::string(name) + "/mod.al");
-      u32 file_index = find_file_by_path(first);
-      if (file_index == kNoModule) {
-        file_index = find_file_by_path(second);
-      }
-      if (file_index == kNoModule) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerMissingModuleFile,
-                     mod->span, "module '{}' has no file", name);
-        (void)index;
-        continue;
-      }
-      // The child's own directory extends the parent's with the module
-      // name (Rust-style: children of `a` in `<dir>/a.al` resolve under
-      // `<dir>/a/`), regardless of which candidate file matched.
-      const u32 child = add_module(child_path, file_data[file_index].id,
-                                   file_data[file_index].items, module,
-                                   mod_dirs[module].join(name));
-      file_data[file_index].module = child;
-      module_children[module].push_back(child);
-      worklist.push_back(child);
+      parent = child;
+      prefix = child_path;
+      start = slash + 1;
     }
+    file_data[file].module = parent;
   }
 
   void collect_locals() {
@@ -284,7 +244,6 @@ struct Resolver {
             local_values[m].push_back(NameEntry{name});
             break;
           }
-          case ast::ItemKind::Mod:
           case ast::ItemKind::Use:
           case ast::ItemKind::Impl: break;
         }
@@ -475,15 +434,17 @@ struct Resolver {
     }
   }
 
+  std::vector<std::string> module_inputs;
+
   ModuleTree run(source::FileId root_id,
-                 std::span<const source::FileId> files,
+                 std::span<const ModuleInput> inputs,
                  std::string_view package_name_in) {
     package_name = package_name_in;
     root = root_id;
-    file_data.reserve(files.size());
-    for (source::FileId id : files) {
+    file_data.reserve(inputs.size());
+    for (const ModuleInput& input : inputs) {
       base::Result<path::Path, path::PathError> canonical =
-          path::Path::from_native(sources.name(id));
+          path::Path::from_native(sources.name(input.id));
       if (canonical.is_err()) {
         const u32 index = bag.emit(diag::Severity::Error, kAnalyzerInvalidPath,
                                    "invalid source path for file");
@@ -491,8 +452,8 @@ struct Resolver {
         continue;
       }
       path::Path path = std::move(canonical).unwrap();
-      path::Path dir = path.parent();
-      file_data.emplace_back(id, std::move(dir), std::move(path));
+      module_inputs.emplace_back(input.name);
+      file_data.emplace_back(input.id, std::move(path));
     }
     for (FileData& file : file_data) {
       lex_parse_file(file);
@@ -524,13 +485,13 @@ struct Resolver {
 
 diag::Fallible<ModuleTree> resolve_modules(
     source::FileId root,
-    std::span<const source::FileId> files,
+    std::span<const ModuleInput> modules,
     std::string_view package_name,
     source::SourceManager& sources,
     mem::Arena& arena,
     diag::DiagBag& bag) {
   Resolver resolver{sources, arena, bag};
-  return base::make_ok(resolver.run(root, files, package_name));
+  return base::make_ok(resolver.run(root, modules, package_name));
 }
 
 }  // namespace analyzer
