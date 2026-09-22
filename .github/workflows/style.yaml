@@ -86,10 +86,11 @@ jobs:
           os: Linux
           llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
-      - name: Generate Compilation Database
+      - name: Generate Compilation Database and Setup LLVM for Backend
         shell: bash
         run: |
           uv run ./build/scripts/build.py --target=all --gen-only --build-subdir=lint-compdb
+          ninja -C out/lint-compdb setup_llvm
 
       - name: Lint
         shell: bash
