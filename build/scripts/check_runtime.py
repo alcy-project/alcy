@@ -10,12 +10,26 @@ print/panic driver programs against it, and asserts stdout content,
 stderr content, and the abort exit status.
 """
 
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
+
 from pathlib import Path
 
 from utils.paths import project_root_dir
+
+
+def system_cc():
+    cc = os.environ.get("CC")
+    if cc:
+        return cc
+    for compiler in ["clang", "gcc", "cc"]:
+
+        if shutil.which(compiler):
+            return compiler
+    return "cc"
 
 
 def run(argv, **kwargs):
@@ -29,7 +43,7 @@ def executable(name):
 
 
 def main():
-    cc = "cc"
+    cc = system_cc()
     runtime_dir = project_root_dir / "runtime"
     failures = []
 
