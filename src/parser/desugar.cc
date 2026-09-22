@@ -199,6 +199,17 @@ class Desugar {
       }
       case ast::StmtKind::Reassign: {
         ast::ReassignStmt* reassign = static_cast<ast::ReassignStmt*>(stmt);
+        if (reassign->compound) {
+          ast::BinaryExpr* binary = arena.create<ast::BinaryExpr>();
+          binary->kind = ast::ExprKind::Binary;
+          binary->span = reassign->span;
+          binary->op = reassign->op;
+          binary->lhs = const_cast<ast::Expr*>(reassign->place);
+          binary->rhs = const_cast<ast::Expr*>(reassign->value);
+
+          reassign->value = binary;
+          reassign->compound = false;
+        }
         visit_expr(const_cast<ast::Expr*>(reassign->place));
         visit_expr(const_cast<ast::Expr*>(reassign->value));
         break;
