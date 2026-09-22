@@ -334,6 +334,26 @@ TEST_CASE("Lower emits relocatable objects") {
   CHECK(object.open(object_path, io::FileAccess::Read));
   // Non-empty relocatable output.
   CHECK(object.get_size() > 0);
+
+  // Every linked backend emits independently of the host: any alcy
+  // binary produces objects for any supported architecture.
+  const std::pair<std::string_view, std::string_view> triples[] = {
+      {"x86_64-unknown-linux-gnu", "main_x64.o"},
+      {"aarch64-unknown-linux-gnu", "main_a64.o"},
+      {"riscv64-unknown-linux-gnu", "main_r64.o"},
+  };
+  for (const auto& [triple, name] : triples) {
+    const std::string path = dir.join(name);
+    base::Result<void, codegen_llvm::ObjectEmitError> triple_emitted =
+        codegen_llvm::emit_object(*module, triple, path);
+    CHECK(triple_emitted.is_ok());
+    if (triple_emitted.is_err()) {
+      continue;
+    }
+    io::FileHandle triple_object;
+    CHECK(triple_object.open(path, io::FileAccess::Read));
+    CHECK(triple_object.get_size() > 0);
+  }
 }
 #endif
 
