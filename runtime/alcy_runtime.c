@@ -1,6 +1,5 @@
 // Copyright 2026 The Alcy Project Authors
-// This source code is licensed under the Apache License, Version 2.0 with LLVM
-// Exceptions which can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // Minimal program runtime, compiled with the user program and linked
 // against libc. `print` lowers directly to the write syscall through
@@ -12,7 +11,19 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(_WIN32)
+#include <io.h>
+#define write _write
+#ifndef STDOUT_FILENO
+#define STDOUT_FILENO 1
+#endif
+#ifndef STDERR_FILENO
+#define STDERR_FILENO 2
+#endif
+typedef intptr_t ssize_t;
+#else
 #include <unistd.h>
+#endif
 
 // Writes the whole buffer, retrying short writes.
 static void write_all(int fd, const char* data, size_t len) {
