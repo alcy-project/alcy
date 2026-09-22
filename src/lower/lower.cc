@@ -400,43 +400,59 @@ class Lowerer {
   // Literal values. Suffixes were validated by checking; strip the
   // longest known suffix and parse what remains (wrapping arithmetic
   // matches release overflow semantics; checked overflow is later work).
-  u64 parse_int_value(std::string_view spelling) {
+  u64 parse_numeric_value(std::string_view spelling) {
     constexpr std::string_view kSuffixes[] = {
         "isize", "usize", "i8",  "i16", "i32", "i64",
         "u8",    "u16",   "u32", "u64", "f32", "f64",
     };
+
+    // Strip type suffix if present.
     for (std::string_view suffix : kSuffixes) {
-      if (spelling.size() > suffix.size() &&
-          spelling.substr(spelling.size() - suffix.size()) == suffix) {
+      const bool has_suffix =
+          spelling.size() > suffix.size() && spelling.ends_with(suffix);
+      if (has_suffix) {
         spelling.remove_suffix(suffix.size());
         break;
       }
     }
+
+    // Determine base and strip prefix (e.g., "0x", "0b", "0o").
     u32 base = 10;
-    if (spelling.size() > 2 && spelling[0] == '0') {
-      if (spelling[1] == 'x' || spelling[1] == 'X') {
+    const bool has_prefix = spelling.size() > 2 && spelling[0] == '0';
+    if (has_prefix) {
+      const char prefix_indicator = spelling[1];
+      if (prefix_indicator == 'x' || prefix_indicator == 'X') {
+        // hex
         base = 16;
         spelling.remove_prefix(2);
-      } else if (spelling[1] == 'b' || spelling[1] == 'B') {
+      } else if (prefix_indicator == 'b' || prefix_indicator == 'B') {
+        // bin
         base = 2;
         spelling.remove_prefix(2);
-      } else if (spelling[1] == 'o' || spelling[1] == 'O') {
+      } else if (prefix_indicator == 'o' || prefix_indicator == 'O') {
+        // oct
         base = 8;
         spelling.remove_prefix(2);
       }
     }
+
+    // Accumulate numerical digits.
     u64 value = 0;
-    for (char c : spelling) {
-      if (c == '_') {
+    for (const char ch : spelling) {
+      if (ch == '_') {
         continue;
       }
+
+      const bool is_digit = (ch >= '0' && ch <= '9');
+      const bool is_lower_hex = (ch >= 'a' && ch <= 'f');
+      const bool is_upper_hex = (ch >= 'A' && ch <= 'F');
       u32 digit = 0;
-      if (c >= '0' && c <= '9') {
-        digit = static_cast<u32>(c - '0');
-      } else if (c >= 'a' && c <= 'f') {
-        digit = static_cast<u32>(c - 'a' + 10);
-      } else if (c >= 'A' && c <= 'F') {
-        digit = static_cast<u32>(c - 'A' + 10);
+      if (is_digit) {
+        digit = static_cast<u32>(ch - '0');
+      } else if (is_lower_hex) {
+        digit = static_cast<u32>(ch - 'a' + 10);
+      } else if (is_upper_hex) {
+        digit = static_cast<u32>(ch - 'A' + 10);
       } else {
         continue;
       }
@@ -556,7 +572,7 @@ class Lowerer {
     if (tag == ir::TypeTag::I1) {
       value = lit->spelling == "true" ? 1 : 0;
     } else {
-      value = parse_int_value(lit->spelling);
+      value = parse_numeric_value(lit->spelling);
     }
     ir::Immutable imm{.type = type, .data = {}};
     switch (tag) {
