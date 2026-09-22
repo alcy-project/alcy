@@ -77,4 +77,58 @@ TEST_CASE("Check rejects a non-exhaustive match") {
   CHECK(run_check_on(dir, "bad.al") != 0);
 }
 
+i32 run_build_on(io::TempDir& dir,
+                   std::string_view rel,
+                   std::string_view output) {
+  const std::string target = dir.join(rel);
+  const std::string out = dir.join(output);
+  std::vector<std::string> storage{"alcy", "build", target, "-o", out};
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  return driver_main(static_cast<i32>(argv.size()), argv.data());
+}
+
+#if !defined(OS_ASMJS)
+TEST_CASE("Build emits an object file") {
+  io::TempDir dir("alcy_driver_build_object_test");
+  const bool setup = write_all(dir, "main.al",
+                               "fn main() {\n"
+                               "  print(\"hi\")\n"
+                               "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CHECK(run_build_on(dir, "main.al", "main.o") == 0);
+}
+
+TEST_CASE("Build links an executable") {
+  io::TempDir dir("alcy_driver_build_exe_test");
+  const bool setup = write_all(dir, "main.al",
+                               "fn main() -> i32 {\n"
+                               "  ret 3\n"
+                               "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CHECK(run_build_on(dir, "main.al", "main_exe") == 0);
+}
+#endif
+
+TEST_CASE("Build rejects an unwritable output") {
+  io::TempDir dir("alcy_driver_build_bad_output_test");
+  const bool setup = write_all(dir, "main.al",
+                               "fn main() {\n"
+                               "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CHECK(run_build_on(dir, "main.al", "no-such-dir/main.o") != 0);
+}
+
 }  // namespace app
