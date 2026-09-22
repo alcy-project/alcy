@@ -90,7 +90,7 @@ jobs:
       role: ci
 
   summary:
-    needs: [debug, release, wasm]
+    needs: [debug, release, wasm-debug, wasm-release]
     if: always()
     uses: ./.github/workflows/generate-summary.yaml
     with:
