@@ -1,6 +1,6 @@
 project_name = "alcy"
 project_version = "0.1.0"
-command_about = "alcy compiler"
+command_about = "alcy language compiler"
 
 if (target_os == "") {
   target_os = host_os
