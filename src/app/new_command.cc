@@ -79,11 +79,11 @@ bool valid_package_name(std::string_view name) {
   return true;
 }
 
-i32 run_new(std::string_view target_dir) {
+ResultCode run_new(std::string_view target_dir) {
   if (!valid_package_name(target_dir)) {
     base::logger.wo_prefix("invalid package name '{}'; use [A-Za-z0-9_-] only",
                            target_dir);
-    return result_code(ResultCode::ArgParseError);
+    return ResultCode::ArgParseError;
   }
 
   DriverContext ctx;
@@ -94,7 +94,7 @@ i32 run_new(std::string_view target_dir) {
                                    "cannot create package '{}'", target_dir);
     (void)index;
     report(ctx.bag, ctx.sources);
-    return result_code(ResultCode::BuildFailed);
+    return ResultCode::BuildFailed;
   }
   const path::Path package_dir = std::move(root).unwrap();
   const path::Path manifest_path = package_dir.join(pkg::kManifestFileName);
@@ -124,10 +124,10 @@ path = "main.al")",
                      "cannot create package '{}'", package_dir.as_view());
     (void)index;
     report(ctx.bag, ctx.sources);
-    return result_code(ResultCode::BuildFailed);
+    return ResultCode::BuildFailed;
   }
   base::logger.wo_prefix("created package '{}'", package_dir.as_view());
-  return result_code(ResultCode::Success);
+  return ResultCode::Success;
 }
 
 }  // namespace app

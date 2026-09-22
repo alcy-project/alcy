@@ -3,15 +3,12 @@
 
 #pragma once
 
-#include <string_view>
-
+#include "app/driver_config.h"
 #include "app/result_code.h"
 
 namespace app {
 
-bool valid_package_name(std::string_view name);
-
-// Scaffolds a new package directory.
-ResultCode run_new(std::string_view target_dir);
+ResultCode run_build(const DriverConfig& config);
 
 }  // namespace app
+

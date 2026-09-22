@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <string_view>
+
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
@@ -18,6 +20,8 @@ inline constexpr u32 kDriverNotImplemented = 3002;
 inline constexpr u32 kDriverNoTargets = 3003;
 inline constexpr u32 kDriverLinkError = 3004;
 
+constexpr std::string_view kSourceSuffix = ".al";
+
 struct DriverContext {
   mem::Arena arena;
   source::SourceManager sources;
@@ -28,6 +32,9 @@ struct DriverContext {
 
   DriverContext();
 };
+
+// Returns ".exe" on Windows or else ""
+std::string_view exe_suffix();
 
 // Renders every diagnostic in the bag through the logger.
 void report(const diag::DiagBag& bag, const source::SourceManager& sources);

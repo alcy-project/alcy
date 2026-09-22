@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "base/logger.h"
+#include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/render.h"
@@ -15,6 +16,15 @@
 #include "source/source.h"
 
 namespace app {
+
+// Executable suffix for linked output (Windows needs .exe).
+std::string_view exe_suffix() {
+#if BUILD_FLAG(IS_OS_WIN)
+  return ".exe";
+#else
+  return "";
+#endif
+}
 
 DriverContext::DriverContext() : bag(arena), strings(mem::page_size()) {
   arena.reserve(1u << 20);

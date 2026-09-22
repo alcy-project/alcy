@@ -16,6 +16,10 @@ action("embed_runtime") {
 source_set("driver") {
   sources = [
     "$target_gen_dir/embedded_runtime.cc",
+    "build_command.cc",
+    "build_command.h",
+    "check_command.cc",
+    "check_command.h",
     "converters.h",
     "driver_config.h",
     "driver_context.cc",
@@ -36,6 +40,8 @@ source_set("driver") {
     "runtime_stage.h",
     "spawn.cc",
     "spawn.h",
+    "target.cc",
+    "target.h",
   ]
   deps = [ ":embed_runtime" ]
   defines = [
