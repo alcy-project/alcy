@@ -18,6 +18,7 @@ inline constexpr u32 kDriverNoManifest = 3000;
 inline constexpr u32 kDriverIoError = 3001;
 inline constexpr u32 kDriverNotImplemented = 3002;
 inline constexpr u32 kDriverNoTargets = 3003;
+inline constexpr u32 kDriverLinkError = 3004;
 
 struct DriverContext {
   mem::Arena arena;

@@ -128,7 +128,8 @@ void LlvmIrEmitter::emit() && noexcept {
   setup_immutables();
   setup_external_functions();
 
-  // PERF: Consider run this process concurrently.
+  // Declare every function before defining any body so forward
+  // calls resolve regardless of declaration order.
   llvm::Function* entry_function = nullptr;
   ir::TypeTag entry_return = ir::TypeTag::Void;
   for (const ir::FunctionIdx function_idx : storage_.functions().idx_range()) {
@@ -147,7 +148,11 @@ void LlvmIrEmitter::emit() && noexcept {
       llvm_function = create_function(function.meta);
     }
     values_.add_function(function_idx, llvm_function);
-    emit_function(llvm_function, function);
+  }
+  // PERF: Consider run this process concurrently.
+  for (const ir::FunctionIdx function_idx : storage_.functions().idx_range()) {
+    const ir::Function& function = storage_.functions()[function_idx];
+    emit_function(values_.function(function_idx), function);
   }
   if (entry_function != nullptr) {
     emit_entry(entry_function, entry_return);

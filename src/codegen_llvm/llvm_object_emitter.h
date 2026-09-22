@@ -28,6 +28,7 @@ enum class ObjectEmitError : u8 {
 // UnknownTriple without touching the module.
 base::Result<void, ObjectEmitError> emit_object(llvm::Module& module,
                                                 std::string_view triple,
-                                                std::string_view output_path);
+                                                std::string_view output_path,
+                                                bool optimize = false);
 
 }  // namespace codegen_llvm

@@ -5,6 +5,7 @@
 #include "codegen_llvm/llvm_object_emitter.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -106,7 +107,8 @@ void init_linked_targets() {
 
 base::Result<void, ObjectEmitError> emit_object(llvm::Module& module,
                                                 std::string_view triple,
-                                                std::string_view output_path) {
+                                                std::string_view output_path,
+                                                bool optimize) {
   init_linked_targets();
   const std::string target_triple = triple.empty()
                                         ? llvm::sys::getDefaultTargetTriple()
@@ -120,8 +122,12 @@ base::Result<void, ObjectEmitError> emit_object(llvm::Module& module,
   }
   module.setTargetTriple(triple_obj);
   llvm::TargetOptions options;
-  std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
-      triple_obj, "generic", "", options, llvm::Reloc::PIC_));
+  const llvm::CodeGenOptLevel opt_level =
+      optimize ? llvm::CodeGenOptLevel::Aggressive
+               : llvm::CodeGenOptLevel::Default;
+  std::unique_ptr<llvm::TargetMachine> machine(
+      target->createTargetMachine(triple_obj, "generic", "", options,
+                                  llvm::Reloc::PIC_, std::nullopt, opt_level));
   if (machine == nullptr) {
     return base::make_err(ObjectEmitError::NoTargetMachine);
   }
