@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 
 # Copyright 2026 The Alcy Project Authors
-# This source code is licensed under the Apache License, Version 2.0 with LLVM
-# Exceptions which can be found in the LICENSE file.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import argparse
 from pathlib import Path
-import subprocess
 import sys
+import os
 
 import format
 import gn_check
@@ -41,6 +40,7 @@ def target_files(target_dirs: list[Path]):
 def create_commands(
     files: list[str],
     comp_files: list[str],
+    build_path: Path,
     fix: bool,
     fix_errors: bool,
     verbose: bool,
@@ -48,7 +48,7 @@ def create_commands(
     commands: list[list[str]] = []
 
     # clang-tidy
-    base_clang_tidy_cmd = ["clang-tidy"]
+    base_clang_tidy_cmd = ["clang-tidy", "-p", str(build_path)]
     if not verbose:
         base_clang_tidy_cmd.append("--quiet")
 
@@ -71,28 +71,8 @@ def create_commands(
     return commands
 
 
-def refresh_compdb() -> int:
-    # clang-tidy reads the root compile_commands.json, which any
-    # build flavor overwrites (a wasm build leaves em++ commands
-    # behind). Regenerate it from the native debug dir so analysis
-    # always sees host defines.
-    result = subprocess.run(
-        ["ninja", "-C", str(default_out_dir), "-t", "compdb"],
-        capture_output=True,
-        text=True,
-        cwd=project_root_dir,
-    )
-    if result.returncode != 0:
-        print(
-            "lint requires a configured native build dir "
-            f"({default_out_dir}):\n{result.stderr}"
-        )
-        return -1
-    (project_root_dir / "compile_commands.json").write_text(result.stdout)
-    return 0
-
-
 def lint_files(
+    build_path: Path,
     fix: bool,
     fix_errors: bool,
     verbose: bool,
@@ -109,17 +89,18 @@ def lint_files(
 
     format.format_files(dry_run=True)
 
-    if refresh_compdb() != 0:
-        return -1
+    compdb = build_path / "compile_commands.json"
+    if not os.path.isfile(compdb):
+        print(f"Compilation database not found at: {compdb}")
 
     for src_dir in project_source_dirs:
-        ret = gn_check.check_sources(default_out_dir, src_dir)
+        ret = gn_check.check_sources(build_path, src_dir)
         if ret != 0:
             failed = True
 
     files, comp_files = target_files(target_dirs)
 
-    commands = create_commands(files, comp_files, fix, fix_errors, verbose)
+    commands = create_commands(files, comp_files, build_path, fix, fix_errors, verbose)
     if not run_commands_in_parallel(commands):
         failed = True
 
@@ -139,6 +120,13 @@ def lint_files(
 
 def main():
     parser = argparse.ArgumentParser(description="Run lint checks on source files.")
+    parser.add_argument(
+        "-p",
+        "--build-path",
+        type=Path,
+        default=default_out_dir,
+        help="Path to the build directory containing compile_commands.json",
+    )
     parser.add_argument(
         "--fix", action="store_true", help="Automatically fix standard lint issues"
     )
@@ -162,7 +150,7 @@ def main():
         elif fix:
             print(f"{os.path.basename(__file__)}: fix enabled")
 
-    return lint_files(fix, fix_errors, args.verbose)
+    return lint_files(args.build_path, fix, fix_errors, args.verbose)
 
 
 if __name__ == "__main__":

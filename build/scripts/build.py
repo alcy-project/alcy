@@ -1,13 +1,28 @@
 #!/usr/bin/env python3
 
 # Copyright 2026 The Alcy Project Authors
-# This source code is licensed under the Apache License, Version 2.0 with LLVM
-# Exceptions which can be found in the LICENSE file.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import argparse
 import subprocess
 import sys
 from utils.paths import project_root_dir
+
+
+def update_compdb(build_dir) -> bool:
+    try:
+        compdb_result = subprocess.run(
+            ["ninja", "-C", str(build_dir), "-t", "compdb"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=project_root_dir,
+        )
+        (build_dir / "compile_commands.json").write_text(compdb_result.stdout)
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to generate compdb: {e}", file=sys.stderr)
+        return False
 
 
 def build(
@@ -53,19 +68,12 @@ def build(
                 cwd=project_root_dir,
             )
 
-            # ninja compdb
+            # update compdb
+            if not update_compdb(build_dir):
+                return 1
+
             if gen_only:
                 return 0
-            compdb_result = subprocess.run(
-                ["ninja", "-C", str(build_dir), "-t", "compdb"],
-                capture_output=True,
-                text=True,
-                check=True,
-                cwd=project_root_dir,
-            )
-            (project_root_dir / "compile_commands.json").write_text(
-                compdb_result.stdout
-            )
         elif gen_only:
             print(
                 "error: --fast and --gen-only are mutually exclusive",
@@ -128,7 +136,7 @@ def main():
     parser.add_argument(
         "--gen-only",
         action="store_true",
-        help="Run gn gen and gn check only (validate foreign toolchains without building)",
+        help="Run gn gen, gn check, and update compdb only (without building target)",
     )
     parser.add_argument(
         "--fast",
