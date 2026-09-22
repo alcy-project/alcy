@@ -2,7 +2,7 @@
 
 ## Numeric tower
 
-- Integers `i8`–`i64`, `u8`–`u64`, `isize`/`usize`; floats `f32`/`f64`;
+- Integers `i8`-`i64`, `u8`-`u64`, `isize`/`usize`; floats `f32`/`f64`;
   `bool`. `f16`, 128-bit integers, posits, and decimals are deferred.
 - Literals: decimal, `0b`/`0o`/`0x`, type suffixes (`42i32`, `1.5f64`),
   `_` separators.

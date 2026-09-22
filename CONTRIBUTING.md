@@ -95,7 +95,7 @@ Notes:
 - **Code style:** Use `#pragma once` for include guards and relative includes from project root.
   Prefer `std::string_view` over `std::string` and `std::span` over `std::vector` unless
   ownership retention is required.
-- **Comments:** English only. Write comments sparingly—only for design rationale, invariants or
+- **Comments:** English only. Write comments sparingly-only for design rationale, invariants or
   safety explanations, non-obvious code, or `TODO`s. Do not restate code that is already clear.
 - **Tooling is authoritative:** `.clang-format`, `.clang-tidy`, `CPPLINT.cfg`, and `typos.toml`
   enforce repository style. Use `format.py` and `lint.py --fix` to fix most issues automatically.

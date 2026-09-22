@@ -26,7 +26,7 @@ namespace lower {
 // `strings` (owned by the driver) interns function names and string
 // literal bytes for backend consumption.
 //
-// Supported input: straight-line functions — literals, locals, struct
+// Supported input: straight-line functions - literals, locals, struct
 // and tuple construction, field access, arithmetic/comparison/cast,
 // calls (free, associated, methods, blessed-free), borrows, blocks,
 // `ret`. Control flow (`if`/`match`/loops), `?`, indexing, enums,

@@ -59,7 +59,7 @@ the updated prebuilt release.
   runtimes fails the link with
   `lld-link: error: /failifmismatch: mismatch detected for 'RuntimeLibrary'`.
   If you see this error, the LLVM installation was built with a different
-  CRT — re-run the setup after removing the stale install directory.
+  CRT - re-run the setup after removing the stale install directory.
 - **WebAssembly**: built with Emscripten (`emcc`/`em++` on `PATH`) targeting
   `wasm32-unknown-emscripten`, using Emscripten's bundled libc++ (the
   `libcxx` GN config is excluded). Always use a dedicated output directory

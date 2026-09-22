@@ -26,6 +26,6 @@ builds in that order.
   the submodule pointer.
 - The fork must publish release archives for every supported triple and build
   type, with a build configuration (notably CRT and libc++ selection)
-  matching the compiler's flags — otherwise the link fails (see
+  matching the compiler's flags - otherwise the link fails (see
   `docs/build.md`, platform notes).
 - Updating LLVM means cutting a fork release and bumping the submodule.

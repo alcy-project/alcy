@@ -177,7 +177,7 @@ class Resolver {
 
   // Attaches one listed file under the root, creating fileless
   // intermediate nodes for slash-separated names (`utils/io`
-  // becomes root → `utils` → `utils::io`).
+  // becomes root -> `utils` -> `utils::io`).
   void attach_module(u32 root_module, std::string_view slash_name, u32 file) {
     u32 parent = root_module;
     std::string prefix;

@@ -96,12 +96,12 @@ runtime polymorphism.
 
 ## Repository layout
 
-- `src/` — the compiler. One directory per module, each with a `BUILD.gn`.
-- `build/` — GN build configuration: toolchains (`build/toolchains/`),
+- `src/` - the compiler. One directory per module, each with a `BUILD.gn`.
+- `build/` - GN build configuration: toolchains (`build/toolchains/`),
   compiler flags (`build/config/`), and helper scripts (`build/scripts/`).
-- `third_party/` — vendored dependencies as submodules (`llvm`, `fpag`,
+- `third_party/` - vendored dependencies as submodules (`llvm`, `fpag`,
   `fmt`, `doctest`, `xxhash`), each wrapped with a `BUILD.gn`.
-- `docs/` — detailed documentation and architecture decision records
+- `docs/` - detailed documentation and architecture decision records
   (`docs/adr/`).
 
 ## Compiler modules
@@ -122,7 +122,7 @@ state between stages beyond the data explicitly passed along.
 | `pkg`                  | Stands for `package`. Package manifests (`alcy.toml`), path-only dependency resolution, and lockfile model.                            | Arena-backed views; no heap allocation in the model itself.                       |
 | `source`               | Source file registry: memory-mapped file loading with stable file ids.                                                                 | Mapped files plus small owned tables.                                             |
 | `codegen_llvm`         | Emits LLVM IR from analyzed IR. The active MVP code-generation path.                                                                   | Local API buffers only.                                                           |
-| `codegen`              | Reserved native code generation backend; no committed design yet.                                                                      | N/A — not yet implemented.                                                        |
+| `codegen`              | Reserved native code generation backend; no committed design yet.                                                                      | N/A - not yet implemented.                                                        |
 | `core`                 | Shared configuration and utilities used across modules.                                                                                | New allocation here is an architectural decision.                                 |
 | `diag`                 | Stands for `diagnostic`. Source spans, diagnostics, arena-backed bags, and the fmtlib renderer.                                        | Zero heap allocation on hot paths; message bytes use an injected arena.           |
 | `base`, `debug`, `cfg` | `cfg` stands for `config`. Low-level shared facilities for numeric types, logging, diagnostics/assertion helpers, and build-time flags.| Zero heap allocations.                                                            |
@@ -233,28 +233,28 @@ consideration of their effect on these contracts.
 Source bytes
    │
    ▼
-[ Lexer ]          → token buffer
+[ Lexer ]          -> token buffer
    │
    ▼
-[ Parser ]         → AST
+[ Parser ]         -> AST
    │
    ▼
-[ Analyzer ]       → validated, ownership-checked IR
+[ Analyzer ]       -> validated, ownership-checked IR
    │
    ▼
-[ codegen_llvm ]   → LLVM IR / object code
+[ codegen_llvm ]   -> LLVM IR / object code
 
-   (codegen: native backend — reserved, not yet implemented)
+   (codegen: native backend - reserved, not yet implemented)
 ```
 
-1. **Lexing** — `lexer` reads a raw source view and produces a flat token
+1. **Lexing** - `lexer` reads a raw source view and produces a flat token
    buffer; tokens store fixed-width source offsets rather than line/column
    strings.
 
-2. **Parsing** — `parser` consumes the token buffer and emits a typed AST
+2. **Parsing** - `parser` consumes the token buffer and emits a typed AST
    into the module's arena. IR construction is a later stage.
 
-3. **Semantic analysis** — `analyzer` resolves names and checks types
+3. **Semantic analysis** - `analyzer` resolves names and checks types
    on the attributed AST, then checks ownership on the IR:
 
    * **Name resolution**: mapping interned `SymbolId`s to declarations.
@@ -267,7 +267,7 @@ Source bytes
    A separate HIR is revisited only if match-lowering complexity,
    optimization passes, or region precision demand it.
 
-4. **LLVM code generation** — `codegen_llvm` walks verified basic blocks and
+4. **LLVM code generation** - `codegen_llvm` walks verified basic blocks and
    lowers alcy IR operations to LLVM IR.
 
 Each stage should expose the minimum data needed by the next stage. A stage

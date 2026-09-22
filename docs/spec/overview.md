@@ -1,4 +1,4 @@
-# alcy Language Specification — Overview
+# alcy Language Specification - Overview
 
 Normative keywords (MUST, SHOULD, MAY) follow RFC 2119 throughout
 `docs/spec/`. Every section carries a staging label:

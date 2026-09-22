@@ -73,7 +73,7 @@ skips value binding for any producer with an invalid `dst`.
 | `Load` / `Store` | `[ptr]` / `[value, ptr]`; the loaded type comes from the destination register. |
 | `GetElementPtr` | `[base_ptr(register), integer index...]`. The element type is recovered from the base pointer's `Alloca` site, tracked by the emitter; pointers from elsewhere are unsupported in MVP. |
 | `ExtractValue` / `InsertValue` | Aggregate first, then integer-immediate indexes (`InsertValue` takes the field value second). |
-| `TypeCast` | Determined by source/destination tags: int resizing by width and signedness, int↔float, float resizing, int↔pointer. |
+| `TypeCast` | Determined by source/destination tags: int resizing by width and signedness, int<->float, float resizing, int<->pointer. |
 | Comparisons | Signedness follows the operand type (`I*` signed, `U*` unsigned); floats use ordered predicates; pointers support `Eq`/`Ne` only. |
 | Atomics | `AtomicLoad [ptr]`, `AtomicStore [value, ptr]`, `AtomicRmw [ptr, value]` (operation from `InstructionFlags::rmw_op`), `AtomicCompareExchange [ptr, cmp, new]`, `Fence`. All sequentially consistent in MVP. |
 | `Move` / `Drop` | Register alias / ownership marker; no code emitted. |
