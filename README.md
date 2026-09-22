@@ -9,7 +9,7 @@ Pre-MVP. The language specification, standard library, and most of the
 compiler pipeline are still being designed and implemented.
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the planned design.
 
-## Build
+## Build & Install
 
 Requires GN, Ninja, Clang, LLD, and libc++ (see [docs/build.md](docs/build.md)
 for details).
@@ -21,6 +21,9 @@ uv run ./build/scripts/build.py
 
 # Without Nix (after installing the toolchain above):
 uv run ./build/scripts/build.py
+
+# Build and install (requires nix)
+./build/scripts/install.sh
 ```
 
 Run the tests with:
