@@ -78,8 +78,8 @@ TEST_CASE("Check rejects a non-exhaustive match") {
 }
 
 i32 run_build_on(io::TempDir& dir,
-                   std::string_view rel,
-                   std::string_view output) {
+                 std::string_view rel,
+                 std::string_view output) {
   const std::string target = dir.join(rel);
   const std::string out = dir.join(output);
   std::vector<std::string> storage{"alcy", "build", target, "-o", out};
