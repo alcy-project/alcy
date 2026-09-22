@@ -18,12 +18,13 @@ expect.txt:
 -6 for SIGABRT). `stdout` must match exactly when present;
 `*contains` lines must all appear in the respective stream.
 
-Cases are copied to a scratch directory, built with `alcy build`
-to an object file, linked against the C runtime with the system C
-compiler, executed, and asserted.
+Cases are copied to a scratch directory, built to executables with
+`alcy build` (which links the embedded runtime), executed, and
+asserted. Directories holding alcy.toml build as packages.
 """
 
 import argparse
+import os
 import shutil
 import signal
 import subprocess
@@ -64,10 +65,11 @@ def parse_expect(path: Path):
     return expected_exit, expected_stdout, stdout_contains, stderr_contains
 
 
-def run_case(alcy: Path, cc: str, runtime_dir: Path, case_dir: Path):
+def run_case(alcy: Path, case_dir: Path):
+    is_package = (case_dir / "alcy.toml").is_file()
     main_al = case_dir / "main.al"
     expect_path = case_dir / "expect.txt"
-    if not main_al.is_file():
+    if not is_package and not main_al.is_file():
         return False, "no main.al found"
     if not expect_path.is_file():
         return False, "missing expect.txt"
@@ -77,9 +79,20 @@ def run_case(alcy: Path, cc: str, runtime_dir: Path, case_dir: Path):
     problems = []
     with tempfile.TemporaryDirectory(prefix="alcy_exe_case") as tmp:
         work = Path(tmp)
-        shutil.copy(main_al, work / "main.al")
+        exe_name = "main_exe.exe" if os.name == "nt" else "main_exe"
+        if is_package:
+            shutil.copytree(
+                case_dir,
+                work,
+                dirs_exist_ok=True,
+                ignore=shutil.ignore_patterns("expect.txt"),
+            )
+            build_argv = [str(alcy), "build", ".", "-o", exe_name]
+        else:
+            shutil.copy(main_al, work / "main.al")
+            build_argv = [str(alcy), "build", "main.al", "-o", exe_name]
         proc = subprocess.run(
-            [str(alcy), "build", "main.al", "-o", "main.o"],
+            build_argv,
             capture_output=True,
             text=True,
             cwd=work,
@@ -90,23 +103,7 @@ def run_case(alcy: Path, cc: str, runtime_dir: Path, case_dir: Path):
                 f"--- output ---\n{proc.stdout + proc.stderr}"
             )
         proc = subprocess.run(
-            [
-                cc,
-                "main.o",
-                str(runtime_dir / "alcy_runtime.c"),
-                "-I",
-                str(runtime_dir),
-                "-o",
-                "main",
-            ],
-            capture_output=True,
-            text=True,
-            cwd=work,
-        )
-        if proc.returncode != 0:
-            return False, (f"link failed:\n--- output ---\n{proc.stdout + proc.stderr}")
-        proc = subprocess.run(
-            [str(work / "main")], capture_output=True, text=True, cwd=work
+            [str(work / exe_name)], capture_output=True, text=True, cwd=work
         )
         if proc.returncode != expected_exit:
             problems.append(f"exit: got {proc.returncode}, want {expected_exit}")
@@ -137,11 +134,6 @@ def main():
         default="",
         help="Comma-separated case names to run (default: all)",
     )
-    parser.add_argument(
-        "--cc",
-        default="cc",
-        help="System C compiler for linking user objects",
-    )
     args = parser.parse_args()
 
     alcy = project_root_dir / "out" / args.build_subdir / "alcy"
@@ -150,7 +142,6 @@ def main():
     if not alcy.is_file():
         sys.exit(f"alcy binary not found in out/{args.build_subdir}/")
 
-    runtime_dir = project_root_dir / "runtime"
     cases_root = project_root_dir / "exe" / "cases"
     selected = (
         {name.strip() for name in args.cases.split(",") if name.strip()}
@@ -165,7 +156,7 @@ def main():
         if selected is not None and case_dir.name not in selected:
             continue
         ran += 1
-        ok, detail = run_case(alcy, args.cc, runtime_dir, case_dir)
+        ok, detail = run_case(alcy, case_dir)
         print(f"{'PASS' if ok else 'FAIL'} {case_dir.name}")
         if not ok:
             failures += 1
