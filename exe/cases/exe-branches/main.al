@@ -22,9 +22,9 @@ fn main() -> i32 {
     None => 0,
   }
   if v == 42 {
-    print("ok")
+    println("ok")
     ret 0
   }
-  print("bad")
+  println("bad")
   ret 1
 }

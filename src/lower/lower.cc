@@ -1014,8 +1014,9 @@ class Lowerer {
               break;
             }
           }
-          if (!shadowed && (name == "print" || name == "panic")) {
-            return lower_intrinsic(call, name == "print");
+          if (!shadowed &&
+              (name == "print" || name == "println" || name == "panic")) {
+            return lower_intrinsic(call, name);
           }
         }
       }
@@ -1118,7 +1119,7 @@ class Lowerer {
     return Val{to_operand(dst, info.ret), info.ret, false, false};
   }
 
-  Val lower_intrinsic(const ast::CallExpr* call, bool is_print) {
+  Val lower_intrinsic(const ast::CallExpr* call, std::string_view name) {
     if (call->args.size() != 1) {
       internal(call->span, "intrinsic arity");
       return Val{size_one, error_type(), false, false};
@@ -1130,15 +1131,25 @@ class Lowerer {
     }
     const Val material = materialize(arg);
     const ir::TypeIdx ptr = builder.primitive(ir::TypeTag::Ptr);
-    const ir::ExternalFunctionIdx ext =
-        is_print ? declare_external("alcy_print",
-                                    builder.primitive(ir::TypeTag::Void), {ptr})
-                 : declare_external("alcy_panic", builder.never_type(), {ptr});
+
+    bool is_panic = false;
+    ir::ExternalFunctionIdx ext(0);
+    if (name == "print") {
+      ext = declare_external("alcy_print", builder.primitive(ir::TypeTag::Void),
+                             {ptr});
+
+    } else if (name == "println") {
+      ext = declare_external("alcy_println",
+                             builder.primitive(ir::TypeTag::Void), {ptr});
+    } else if (name == "panic") {
+      is_panic = true;
+      ext = declare_external("alcy_panic", builder.never_type(), {ptr});
+    }
     emit_void(ir::Opcode::Call,
               {builder.operand(ir::Operand::from_external_function(
                    ext, builder.primitive(ir::TypeTag::Function))),
                material.op});
-    if (!is_print) {
+    if (is_panic) {
       emit_void(ir::Opcode::Unreachable, {});
       return Val{size_one, builder.never_type(), false, false};
     }

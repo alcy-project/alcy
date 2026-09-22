@@ -55,8 +55,9 @@ def main():
         (tmpdir / "print_main.c").write_text(
             '#include "alcy_runtime.h"\n'
             "int main(void) {\n"
-            '  alcy_print("hi");\n'
-            '  alcy_print("a:b");\n'
+            '  alcy_print("hi\\n");\n'
+            '  alcy_print("a:b\\n");\n'
+            '  alcy_println("see you");\n'
             "  return 0;\n"
             "}\n"
         )
@@ -76,7 +77,7 @@ def main():
             print(f"FAIL link print driver:\n{proc.stderr}")
             return 1
         proc = run([str(print_exe)])
-        if proc.returncode != 0 or proc.stdout != "hi\na:b\n":
+        if proc.returncode != 0 or proc.stdout != "hi\na:b\nsee you\n":
             failures.append(
                 f"print: exit={proc.returncode} stdout={proc.stdout!r} "
                 f"stderr={proc.stderr!r}"
@@ -85,7 +86,7 @@ def main():
         (tmpdir / "panic_main.c").write_text(
             '#include "alcy_runtime.h"\n'
             "int main(void) {\n"
-            '  alcy_panic("boom");\n'
+            '  alcy_panic("boom\\n");\n'
             "  return 0;\n"
             "}\n"
         )

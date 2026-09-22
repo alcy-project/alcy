@@ -56,6 +56,7 @@ jobs:
     env:
       COLORTERM: 256color
       basename: alcy
+      CC: clang
 
     steps:
       - name: Checkout repository
@@ -144,16 +145,12 @@ jobs:
       - name: Run exe acceptance (Nix)
         if: matrix.nix && inputs.role == 'test'
         shell: bash
-        env:
-          CC: clang
         run: |
           nix develop .#default --command bash -c "uv run ./build/scripts/check_exe.py --build-subdir=build"
 
       - name: Run exe acceptance (Standard)
         if: "!matrix.nix && inputs.role == 'test'"
         shell: bash
-        env:
-          CC: clang
         run: uv run ./build/scripts/check_exe.py --build-subdir=build
 
       # Single lint leg: clang-tidy and include-cleaner need the compile

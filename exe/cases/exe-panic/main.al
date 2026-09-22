@@ -1,3 +1,3 @@
 fn main() {
-  panic("boom")
+  panic("boom\n")
 }

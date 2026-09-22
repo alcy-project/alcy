@@ -1915,11 +1915,11 @@ class Checker {
         lookup_static(module, path->path->segments[0].name) == nullptr &&
         lookup_function(module, path->path->segments[0].name) == nullptr) {
       const std::string_view name = path->path->segments[0].name;
-      if (name == "print") {
+      if (name == "print" || name == "println") {
         if (args.size() != 1) {
           const u32 index =
               bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
-                       "'print' expects 1 argument, found {}", args.size());
+                       "'{}' expects 1 argument, found {}", name, args.size());
           (void)index;
           return error_type();
         }

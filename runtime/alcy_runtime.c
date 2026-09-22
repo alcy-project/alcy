@@ -42,6 +42,13 @@ void alcy_print(const char* message) {
     message = "";
   }
   write_all(STDOUT_FILENO, message, strlen(message));
+}
+
+void alcy_println(const char* message) {
+  if (message == NULL) {
+    message = "";
+  }
+  write_all(STDOUT_FILENO, message, strlen(message));
   write_all(STDOUT_FILENO, "\n", 1);
 }
 
@@ -50,6 +57,5 @@ void alcy_panic(const char* message) {
     message = "";
   }
   write_all(STDERR_FILENO, message, strlen(message));
-  write_all(STDERR_FILENO, "\n", 1);
   abort();
 }
