@@ -47,8 +47,8 @@ jobs:
       - name: Spell Check Repository
         uses: crate-ci/typos@512fc24f32f44ab01972217aaaf3dc86ec234d53
 
-  style:
-    name: Format & Lint
+  format:
+    name: Format
     needs: [load-config]
     runs-on: ubuntu-24.04
     steps:
@@ -67,6 +67,24 @@ jobs:
 
       - name: Check Formatting
         run: uv run ./build/scripts/format.py --dry-run
+
+  lint:
+    name: Lint
+    needs: [load-config]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build
+        with:
+          nix: "false"
+          os: Linux
+          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
       - name: Generate Compilation Database
         shell: bash
