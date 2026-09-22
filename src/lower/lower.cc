@@ -950,12 +950,17 @@ struct Lowerer {
              {to_operand(addr, slot), zero_i32, index_operand(0)});
     emit_void(ir::Opcode::Store,
               {disc_operand(discriminant), to_operand(tag, slot)});
-    if (!payloads.empty()) {
-      ir::TypeSeq seq;
-      for (ir::TypeIdx field : payloads) {
-        seq.push(builder.ref_type(field));
+    if (is_unit_payload(payloads)) {
+      // Lower for effects; nothing is stored.
+      for (usize i = 0; i < payloads.size(); ++i) {
+        Val value = lower_expr(call->args[i], &payloads[i]);
+        if (failed) {
+          return Val{size_one, error_type(), false, false};
+        }
+        mark_move(value);
       }
-      const ir::TypeIdx payload_type = builder.tuple_type(seq.finish());
+    } else if (!payloads.empty()) {
+      const ir::TypeIdx payload_type = payload_tuple(payloads);
       const ir::RegisterIdx payload =
           emit(ir::Opcode::Alloca, payload_type, {size_one});
       for (usize i = 0; i < payloads.size(); ++i) {
@@ -1169,6 +1174,24 @@ struct Lowerer {
     return Val{to_operand(loaded, i32), i32, false, false};
   }
 
+  // Unit payloads (`()` fields) carry no data; construction stores
+  // nothing and bindings receive a Void value.
+  bool is_unit_payload(const std::vector<ir::TypeIdx>& payloads) {
+    if (payloads.empty()) {
+      return false;
+    }
+    for (ir::TypeIdx field : payloads) {
+      if (tag_of(field) != ir::TypeTag::Void) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Val void_value() {
+    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+  }
+
   ir::TypeIdx payload_tuple(const std::vector<ir::TypeIdx>& fields) {
     ir::TypeSeq seq;
     for (ir::TypeIdx field : fields) {
@@ -1180,6 +1203,14 @@ struct Lowerer {
   // Value of payload field i of the enum at slot_addr. The payload
   // pointer is type-erased in the slot, so it reinterprets through
   // the variant payload type before projecting the field.
+  Val load_blessed_payload(Val slot_addr, u32 field,
+                               const std::vector<ir::TypeIdx>& fields) {
+    if (is_unit_payload(fields)) {
+      return void_value();
+    }
+    return load_payload_field(slot_addr, payload_tuple(fields), field);
+  }
+
   Val load_payload_field(Val slot_addr, ir::TypeIdx payload_type, u32 field) {
     const ir::TupleType& shape =
         builder.state()
@@ -1293,7 +1324,7 @@ struct Lowerer {
     switch_to(bad_block);
     emit_panic(failure);
     switch_to(ok_block);
-    Val payload = load_payload_field(slot, payload_tuple({entry->args[0]}), 0);
+    Val payload = load_blessed_payload(slot, 0, {entry->args[0]});
     emit_br(join_block);
     switch_to(join_block);
     return payload;
@@ -1669,6 +1700,12 @@ struct Lowerer {
           internal(pattern->span, "variant arity");
           return;
         }
+        if (is_unit_payload(payloads)) {
+          for (usize i = 0; i < payloads.size() && !failed; ++i) {
+            bind_pattern(tuple->elements[i], void_value());
+          }
+          return;
+        }
         const ir::TypeIdx payload_type = payload_tuple(payloads);
         for (usize i = 0; i < payloads.size() && !failed; ++i) {
           Val field =
@@ -1990,8 +2027,7 @@ struct Lowerer {
     emit_cond_br(to_operand(test, boolean), ok_block, err_block);
     switch_to(err_block);
     if (entry->is_result) {
-      Val payload =
-          load_payload_field(addr, payload_tuple({entry->args[1]}), 0);
+      Val payload = load_blessed_payload(addr, 0, {entry->args[1]});
       emit_void(ir::Opcode::Ret, {use_value(payload)});
     } else {
       // Propagate None by constructing it in the enclosing return type.
@@ -2008,7 +2044,7 @@ struct Lowerer {
       emit_void(ir::Opcode::Ret, {to_operand(none_loaded, scrut_type)});
     }
     switch_to(ok_block);
-    Val payload = load_payload_field(addr, payload_tuple({entry->args[0]}), 0);
+    Val payload = load_blessed_payload(addr, 0, {entry->args[0]});
     emit_br(join_block);
     switch_to(join_block);
     return payload;

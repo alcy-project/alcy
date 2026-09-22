@@ -129,12 +129,28 @@ void LlvmIrEmitter::emit() && noexcept {
   setup_external_functions();
 
   // PERF: Consider run this process concurrently.
+  llvm::Function* entry_function = nullptr;
+  ir::TypeTag entry_return = ir::TypeTag::Void;
   for (const ir::FunctionIdx function_idx : storage_.functions().idx_range()) {
     const ir::Function& function = storage_.functions()[function_idx];
 
-    llvm::Function* llvm_function = create_function(function.meta);
+    llvm::Function* llvm_function = nullptr;
+    if (entry_function == nullptr && is_entry_candidate(function)) {
+      // The user entry becomes an implementation detail; a C-ABI
+      // `main` below adapts its return form to an exit code.
+      ir::FunctionMeta renamed = function.meta;
+      renamed.name = interner_->intern("alcy_main");
+      llvm_function = create_function(renamed);
+      entry_function = llvm_function;
+      entry_return = storage_.types()[function.meta.return_type.idx].tag;
+    } else {
+      llvm_function = create_function(function.meta);
+    }
     values_.add_function(function_idx, llvm_function);
     emit_function(llvm_function, function);
+  }
+  if (entry_function != nullptr) {
+    emit_entry(entry_function, entry_return);
   }
 
 #if BUILD_FLAG(IS_DEBUG)
@@ -484,6 +500,59 @@ void LlvmIrEmitter::setup_external_functions() {
 
     values_.add_external_function(function_idx, create_function(function.meta));
   }
+}
+
+bool LlvmIrEmitter::is_entry_candidate(const ir::Function& function) const {
+  if (interner_->get(function.meta.name) != "main") {
+    return false;
+  }
+  if (!function.meta.param_types.empty()) {
+    return false;
+  }
+  const ir::TypeTag ret = storage_.types()[function.meta.return_type.idx].tag;
+  return ret == ir::TypeTag::Void || ret == ir::TypeTag::I32 ||
+         ret == ir::TypeTag::Enum;
+}
+
+void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
+                               ir::TypeTag ret) {
+  check_state();
+  llvm::LLVMContext& context = module_->getContext();
+  llvm::Function* main_function = llvm::Function::Create(
+      llvm::FunctionType::get(builder_->getInt32Ty(), false),
+      llvm::Function::ExternalLinkage, "main", module_);
+  llvm::BasicBlock* entry_block =
+      llvm::BasicBlock::Create(context, "", main_function);
+  builder_->SetInsertPoint(entry_block);
+  llvm::Value* result = builder_->CreateCall(entry_function);
+  if (ret == ir::TypeTag::I32) {
+    builder_->CreateRet(result);
+    return;
+  }
+  if (ret == ir::TypeTag::Enum) {
+    // Blessed `Result` slots return by value; a nonzero discriminant
+    // aborts through the panic path with a generic message.
+    llvm::Value* tag = builder_->CreateExtractValue(result, 0);
+    llvm::Value* is_ok = builder_->CreateICmpEQ(
+        tag, llvm::ConstantInt::get(builder_->getInt32Ty(), 0));
+    llvm::BasicBlock* ok_block =
+        llvm::BasicBlock::Create(context, "", main_function);
+    llvm::BasicBlock* err_block =
+        llvm::BasicBlock::Create(context, "", main_function);
+    builder_->CreateCondBr(is_ok, ok_block, err_block);
+    builder_->SetInsertPoint(ok_block);
+    builder_->CreateRet(llvm::ConstantInt::get(builder_->getInt32Ty(), 0));
+    builder_->SetInsertPoint(err_block);
+    llvm::FunctionCallee panic = module_->getOrInsertFunction(
+        "alcy_panic", llvm::FunctionType::get(builder_->getVoidTy(),
+                                              {builder_->getPtrTy()}, false));
+    llvm::Value* message =
+        builder_->CreateGlobalString("main returned Err", "", 0, module_);
+    builder_->CreateCall(panic, {message});
+    builder_->CreateUnreachable();
+    return;
+  }
+  builder_->CreateRet(llvm::ConstantInt::get(builder_->getInt32Ty(), 0));
 }
 
 }  // namespace codegen_llvm

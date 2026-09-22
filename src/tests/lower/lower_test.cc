@@ -357,6 +357,56 @@ TEST_CASE("Lower emits relocatable objects") {
 }
 #endif
 
+TEST_CASE("Lower wraps all main forms in a C entry") {
+  const std::pair<std::string_view, std::string_view> cases[] = {
+      {"alcy_entry_void_test",
+       "fn main() {\n"
+       "  print(\"hi\")\n"
+       "}\n"},
+      {"alcy_entry_i32_test",
+       "fn main() -> i32 {\n"
+       "  ret 3\n"
+       "}\n"},
+      {"alcy_entry_result_test",
+       "fn main() -> Result<(), i32> {\n"
+       "  ret Ok(if true {\n"
+       "  } else {\n"
+       "  })\n"
+       "}\n"},
+  };
+  for (const auto& [name, source] : cases) {
+    io::TempDir dir(name);
+    const bool setup = write_all(dir, {{"main.al", source}});
+    CHECK(setup);
+    if (!setup) {
+      continue;
+    }
+
+    Fixture f;
+    LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.ok);
+    CHECK(result.lowered.has_value());
+    if (!result.ok || !result.lowered.has_value()) {
+      continue;
+    }
+    llvm::LLVMContext context;
+    std::unique_ptr<llvm::Module> module =
+        std::make_unique<llvm::Module>("lower_entry_test", context);
+    codegen_llvm::LlvmIrEmitter emitter(
+        module.get(), std::move(result.lowered->storage), &f.strings);
+    std::move(emitter).emit();
+    CHECK(!llvm::verifyModule(*module));
+
+    std::string ir_str;
+    llvm::raw_string_ostream os(ir_str);
+    module->print(os, nullptr);
+
+    // The user entry is renamed; a C-ABI `main` adapts its return.
+    CHECK(ir_str.find("alcy_main") != std::string::npos);
+    CHECK(ir_str.find("define i32 @main()") != std::string::npos);
+  }
+}
+
 TEST_CASE("Lowering emits no Drop markers") {
   io::TempDir dir("alcy_lower_no_drop_test");
   const bool setup = write_all(dir, {{"main.al",
