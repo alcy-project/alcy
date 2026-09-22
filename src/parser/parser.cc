@@ -1823,14 +1823,26 @@ ast::Expr* Parser::parse_if() {
     return nullptr;
   }
 
-  // TODO: Add support for `else if``
   const ast::Block* else_block = nullptr;
   if (match(lexer::TokenKind::Else)) {
-    else_block = parse_block();
-    if (else_block == nullptr) {
-      return nullptr;
+    if (check(lexer::TokenKind::If)) {
+      ast::Expr* nested_if = parse_if();
+      if (nested_if == nullptr) {
+        return nullptr;
+      }
+      ast::Block* block = arena_.create<ast::Block>();
+      block->span = nested_if->span;
+      block->statements = {};
+      block->value = nested_if;
+      else_block = block;
+    } else {
+      else_block = parse_block();
+      if (else_block == nullptr) {
+        return nullptr;
+      }
     }
   }
+
   ast::IfExpr* expr = arena_.create<ast::IfExpr>();
   expr->kind = ast::ExprKind::If;
   expr->span = span_from(mark);
