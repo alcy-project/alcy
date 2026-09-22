@@ -1,2 +1,2 @@
 llvm_toolchain_version = "23.1.2"
-llvm_fork_tag = "alcy-llvm-23.1.1-4"
+llvm_fork_tag = "alcy-llvm-23.1.2-0"
