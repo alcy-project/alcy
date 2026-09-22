@@ -1,4 +1,0 @@
-exit: 0
-contains: W4226
-contains: unused non-() value
-not-contains: error[E

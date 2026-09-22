@@ -8,49 +8,39 @@
 Each case is a directory under e2e/cases/<name>/ holding either an
 alcy.toml package (checked as `alcy check .` with the case directory
 as cwd) or a single main.al file (checked as `alcy check main.al`).
-An expect.txt file declares the outcome:
+An expect.toml file declares the outcome:
 
-    exit: 0
-    contains: checked 1 file(s)
-    not-contains: error
+    exit = 0
+    contains = ["checked 1 file(s)"]
+    not_contains = ["error"]
 
-`exit` is required; `contains` lines must all appear in the combined
-output, `not-contains` lines must all be absent. Cases double as the
-demo/acceptance set; keep them minimal and intention-revealing.
+`exit` is required (integer value or "non-zero"); `contains` lines must
+all appear in the combined output, `not_contains` lines must all be absent.
 """
 
 import argparse
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 from utils.paths import project_root_dir
 
 
 def parse_expect(path: Path):
-    expected_exit = None
-    contains = []
-    not_contains = []
-    with open(path, encoding="utf-8") as f:
-        for lineno, raw in enumerate(f, start=1):
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            key, sep, value = line.partition(":")
-            if not sep:
-                sys.exit(f"{path}:{lineno}: malformed line: {raw.strip()}")
-            key = key.strip()
-            value = value.strip()
-            if key == "exit":
-                expected_exit = int(value)
-            elif key == "contains":
-                contains.append(value)
-            elif key == "not-contains":
-                not_contains.append(value)
-            else:
-                sys.exit(f"{path}:{lineno}: unknown key: {key}")
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except tomllib.TOMLDecodeError as e:
+        sys.exit(f"{path}: invalid TOML format: {e}")
+
+    expected_exit = data.get("exit")
     if expected_exit is None:
-        sys.exit(f"{path}: missing required 'exit:' line")
+        sys.exit(f"{path}: missing required 'exit' key")
+
+    contains = data.get("contains", [])
+    not_contains = data.get("not_contains", [])
+
     return expected_exit, contains, not_contains
 
 
@@ -63,21 +53,34 @@ def run_case(alcy: Path, case_dir: Path):
         cwd = project_root_dir
     else:
         return False, "no alcy.toml or main.al found"
+
     proc = subprocess.run(argv, capture_output=True, text=True, cwd=cwd)
     output = proc.stdout + proc.stderr
-    expect_path = case_dir / "expect.txt"
+    expect_path = case_dir / "expect.toml"
+
     if not expect_path.is_file():
-        return False, "missing expect.txt"
+        return False, "missing expect.toml"
+
     expected_exit, contains, not_contains = parse_expect(expect_path)
     problems = []
-    if proc.returncode != expected_exit:
+
+    if isinstance(expected_exit, str) and expected_exit.lower() in (
+        "non-zero",
+        "nonzero",
+        "!0",
+    ):
+        if proc.returncode == 0:
+            problems.append(f"exit: got {proc.returncode}, want non-zero")
+    elif proc.returncode != expected_exit:
         problems.append(f"exit: got {proc.returncode}, want {expected_exit}")
+
     for needle in contains:
         if needle not in output:
             problems.append(f"missing output: {needle!r}")
     for needle in not_contains:
         if needle in output:
             problems.append(f"unexpected output: {needle!r}")
+
     if problems:
         return False, "; ".join(problems) + "\n--- output ---\n" + output
     return True, ""

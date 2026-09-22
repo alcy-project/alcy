@@ -1,4 +1,0 @@
-exit: 0
-contains: W4302
-contains: unreachable
-not-contains: error[E

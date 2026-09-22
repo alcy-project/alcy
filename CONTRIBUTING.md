@@ -15,7 +15,9 @@ Build, test, and check from the repository root:
 typos
 uv run ./build/scripts/build.py --target=default --mode=debug
 uv run ./build/scripts/run.py --target=tests --mode=debug
-uv run ./build/scripts/e2e.py
+uv run ./build/scripts/check_e2e.py
+uv run ./build/scripts/check_runtime.py
+uv run ./build/scripts/check_exe.py
 uv run ./build/scripts/lint.py
 uv run ./build/scripts/format.py --dry-run
 uv run ./build/scripts/verify_static_linkage.py
@@ -28,7 +30,7 @@ uv run ./build/scripts/build.py --target=tests --fast
 ```
 
 End-to-end acceptance cases live in `e2e/cases/<name>/` (sources plus
-`expect.txt` with the expected exit code and output). The `e2e.py`
+`expect.toml` with the expected exit code and output). The `check_e2e.py`
 runner executes the built `alcy` binary against every case; add a case
 when a user-visible behavior needs a regression anchor that does not
 belong in unit tests.

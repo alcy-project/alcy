@@ -1,4 +1,0 @@
-exit: 0
-contains: W2002
-contains: not in [modules]
-not-contains: error[E

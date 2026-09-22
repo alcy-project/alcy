@@ -1,0 +1,2 @@
+exit = "non-zero"
+stderr_contains = ["boom"]

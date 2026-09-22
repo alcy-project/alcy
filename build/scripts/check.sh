@@ -42,7 +42,7 @@ uv run "$tool_scripts_dir/run.py" \
   --build-subdir=$debug_subdir \
   -- --no-skip
 
-uv run "$tool_scripts_dir/e2e.py" \
+uv run "$tool_scripts_dir/check_e2e.py" \
   --build-subdir=$debug_subdir
 
 uv run "$tool_scripts_dir/check_runtime.py"
