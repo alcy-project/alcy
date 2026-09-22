@@ -12,6 +12,7 @@ from utils.source import (
     source_extensions,
     gn_extensions,
 )
+import sys
 import header_license
 import subprocess
 
@@ -82,4 +83,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

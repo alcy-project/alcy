@@ -11,7 +11,7 @@ import os
 def main():
     if len(sys.argv) < 2:
         print("Usage: tool_runner.py [--cwd <dir>] <executable> [args...]")
-        sys.exit(1)
+        return 1
 
     args_start = 1
     work_dir = None
@@ -19,7 +19,7 @@ def main():
     if sys.argv[1] == "--cwd":
         if len(sys.argv) < 4:
             print("Usage: tool_runner.py --cwd <dir> <executable> [args...]")
-            sys.exit(1)
+            return 1
         work_dir = os.path.abspath(sys.argv[2])
         args_start = 3
 
@@ -35,7 +35,7 @@ def main():
 
     if not os.path.exists(exe):
         # print(f"Error: Binary not found at: {exe}")
-        # sys.exit(1)
+        # return 1
         exe = raw_exe
 
     cmd = [exe] + args
@@ -50,8 +50,8 @@ def main():
 
     if result.returncode != 0:
         print(f"Failed with exit code {result.returncode}: {' '.join(cmd)}")
-        sys.exit(result.returncode)
+        return result.returncode
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

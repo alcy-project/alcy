@@ -104,7 +104,8 @@ def main():
     if not alcy.is_file():
         alcy = alcy.with_suffix(".exe")
     if not alcy.is_file():
-        sys.exit(f"alcy binary not found in out/{args.build_subdir}/")
+        print(f"alcy binary not found in out/{args.build_subdir}/")
+        return -1
 
     cases_root = project_root_dir / "e2e" / "cases"
     selected = (
@@ -126,8 +127,8 @@ def main():
             failures += 1
             print(detail)
     print(f"e2e: {ran - failures}/{ran} passed")
-    sys.exit(1 if failures else 0)
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

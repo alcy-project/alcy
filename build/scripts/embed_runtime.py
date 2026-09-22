@@ -12,6 +12,7 @@ every host without external tools or per-architecture handling.
 """
 
 import argparse
+import sys
 from pathlib import Path
 
 
@@ -54,7 +55,8 @@ def main():
         for symbol, path in files.items():
             emit_array(out, symbol, path.read_bytes())
         out.write("}  // namespace app\n")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -76,7 +76,7 @@ def main():
         args.fast,
     )
     if ret != 0:
-        sys.exit(ret)
+        return ret
 
     if args.target != "default":
         build_dir = project_root_dir / "out" / args.build_subdir
@@ -105,20 +105,24 @@ def main():
                         "error: neither 'bun' nor 'node' found; cannot run .js binary",
                         file=sys.stderr,
                     )
-                    sys.exit(1)
+                    return 1
                 cmd = [runtime, str(target_bin)] + args.run_args
             else:
                 cmd = [str(target_bin)] + args.run_args
             result = subprocess.run(cmd, cwd=build_dir, env=env)
-            sys.exit(result.returncode)
+            return result.returncode
         else:
             print(
                 f"error: '{args.target}' is not binary "
                 f"(looked for {', '.join(str(c) for c in candidates)})",
                 file=sys.stderr,
             )
-            sys.exit(1)
+            return 1
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        print("\nInterrupted by user. Exiting immediately...", file=sys.stderr)
+        os._exit(130)

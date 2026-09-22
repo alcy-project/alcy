@@ -6,6 +6,7 @@
 import argparse
 import subprocess
 import sys
+import os
 from utils.paths import project_root_dir
 
 
@@ -146,20 +147,22 @@ def main():
     )
     args = parser.parse_args()
 
-    sys.exit(
-        build(
-            args.target,
-            args.mode,
-            args.clang,
-            args.lld,
-            args.build_subdir,
-            args.target_os,
-            args.target_cpu,
-            args.gen_only,
-            args.fast,
-        )
+    return build(
+        args.target,
+        args.mode,
+        args.clang,
+        args.lld,
+        args.build_subdir,
+        args.target_os,
+        args.target_cpu,
+        args.gen_only,
+        args.fast,
     )
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        print("\nInterrupted by user. Exiting immediately...", file=sys.stderr)
+        os._exit(130)
