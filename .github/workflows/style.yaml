@@ -95,4 +95,4 @@ jobs:
       - name: Lint
         shell: bash
         run: |
-          uv run ./build/scripts/lint.py --verbose --build-path=out/lint-compdb
+          uv run ./build/scripts/lint.py --build-path=out/lint-compdb
