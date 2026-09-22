@@ -15,6 +15,8 @@ source_set("driver") {
     "parse_output.cc",
     "parse_output.h",
     "result_code.h",
+    "spawn.cc",
+    "spawn.h",
   ]
   defines = [
     "ALCY_PROJECT_NAME=\"$project_name\"",
