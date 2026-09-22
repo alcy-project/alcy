@@ -8,12 +8,8 @@
 - These rules make safety checking independent of general may-alias
   analysis. Optimization-time alias analysis in backends is unaffected
   and still exists.
-- `&mut T` MUST NOT be stored in struct fields. `&T` fields are
-  permitted (see region composition below).
-- `&mut`-returning functions are restricted to identity and projection
-  forms: the returned reference MUST be the input reference or a
-  projection through its fields. No branching or synthesis over
-  multiple inputs for exclusive returns.
+- `&mut T` fields are permitted and make the aggregate move-only
+  through the structural `Copy` rule (see region composition below).
 
 ## Region model
 
@@ -32,11 +28,11 @@
 
 - Intraprocedural inference is classical dataflow over the control-flow
   graph (dense bitsets, post-order fixed-point iteration). Loans are
-  invalidated by moves, exclusive borrows, and scope exits.
+  invalidated by moves, exclusive borrows, and assignments.
 - Interprocedural reasoning is expressed exclusively through function
-  summaries (see `summaries.md`). MVP computes summaries in topological
-  call-graph order with bounded fixed-point iteration for recursion;
-  non-convergence is a compile-time error.
+  summaries (see `summaries.md`). MVP computes summaries in bounded
+  sweeps over the call graph; exceeding the bound is an internal
+  compiler error, never a silent precision loss.
 - No lifetime annotations exist in the language. If annotations ever
   become necessary, they MUST take `where`-style outlives-bound form,
   never boolean formulas.

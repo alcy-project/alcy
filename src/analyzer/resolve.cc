@@ -169,8 +169,7 @@ struct Resolver {
       if (file.module == kNoModule) {
         const u32 index =
             bag.emit(diag::Severity::Warning, kAnalyzerUnreachableFile,
-                     "source file '{}' is not reachable from the package root",
-                     file.path.as_view());
+                     "source file '{}' has no module", file.path.as_view());
         (void)index;
       }
     }
@@ -483,13 +482,12 @@ struct Resolver {
 
 }  // namespace
 
-diag::Fallible<ModuleTree> resolve_modules(
-    source::FileId root,
-    std::span<const ModuleInput> modules,
-    std::string_view package_name,
-    source::SourceManager& sources,
-    mem::Arena& arena,
-    diag::DiagBag& bag) {
+diag::Fallible<ModuleTree> resolve_modules(source::FileId root,
+                                           std::span<const ModuleInput> modules,
+                                           std::string_view package_name,
+                                           source::SourceManager& sources,
+                                           mem::Arena& arena,
+                                           diag::DiagBag& bag) {
   Resolver resolver{sources, arena, bag};
   return base::make_ok(resolver.run(root, modules, package_name));
 }

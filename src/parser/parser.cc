@@ -1603,6 +1603,14 @@ ast::Expr* Parser::parse_primary() {
     }
     case lexer::TokenKind::LParen: {
       advance();
+      if (check(lexer::TokenKind::RParen)) {
+        advance();
+        ast::TupleExpr* unit = arena_.create<ast::TupleExpr>();
+        unit->kind = ast::ExprKind::Tuple;
+        unit->span = span_from(mark);
+        unit->elements = {};
+        return unit;
+      }
       ast::Expr* first = parse_expr();
       if (first == nullptr) {
         return nullptr;

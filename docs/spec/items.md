@@ -27,9 +27,10 @@
 
 ## Structs and enums
 
-- Structs have named fields only, no constructors, and optional
-  user-defined destructors. Construction initializes every field;
-  `..base` move-update is allowed.
+- Structs have named fields only and no constructors.
+  Construction initializes every field; `..base` move-update is
+  allowed. Destructors do not exist in MVP: values end at scope exit
+  without running user code (panic path included).
 - Enums have unit and tuple variants only (`Ok(T)`/`Err(E)` and
   `Some(T)`/`None` are the canonical examples). Struct variants,
   explicit discriminants, and layout guarantees are deferred; default

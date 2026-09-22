@@ -24,6 +24,7 @@ namespace pkg {
 namespace {
 
 constexpr u32 kModulesSemanticError = 2001;
+constexpr u32 kModulesUnselectedFile = 2002;
 
 // Copies bytes into arena storage for name views.
 std::string_view copy_str(mem::Arena& arena, std::string_view bytes) {
@@ -123,6 +124,21 @@ diag::Fallible<std::vector<ModuleFile>> resolve_module_files(
         continue;
       }
       add_module(name, id);
+    }
+  }
+  for (source::FileId id : files) {
+    bool taken = false;
+    for (const ModuleFile& entry : selected) {
+      if (entry.id == id) {
+        taken = true;
+        break;
+      }
+    }
+    if (!taken) {
+      const u32 index =
+          bag.emit(diag::Severity::Warning, kModulesUnselectedFile,
+                   "source file '{}' is not in [modules]", sources.name(id));
+      (void)index;
     }
   }
   return base::make_ok(std::move(selected));

@@ -16,8 +16,8 @@ relied upon by MVP programs or by the MVP compiler implementation.
   (`map`, `and_then`) on `Result`/`Option`.
 - `break` with a value; `main` returning richer types.
 - `pub(...)` restricted visibility; glob imports.
-- `f16`, posit, and decimal types; `Char`/`Ascii`/grapheme semantics
-  in core (see `types.md`).
+- `f16`, 128-bit integers, posit, and decimal types; `Char`/`Ascii`/
+  grapheme semantics in core (see `types.md`).
 - `Range` iteration, stepping, and `for` loops (representation and
   endpoint-marking frozen in `types.md`).
 - Interior mutability; mutable statics; `const`-position extensions.
@@ -27,7 +27,7 @@ relied upon by MVP programs or by the MVP compiler implementation.
 
 - Summary-carrying package artifacts (`[lib]` targets, cross-package
   compilation).
-- Native backend, custom linker, incremental compilation and linking.
+- Custom linker, incremental compilation and linking.
 - Parallel compilation engine with demand-driven summaries.
 - Refinement types over a decidable predicate fragment.
 - Language server, formatter, linter, and other surrounding tools

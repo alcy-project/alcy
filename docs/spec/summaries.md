@@ -16,8 +16,10 @@ R ::= ri                    # identity
 ```
 
 - Shared (`&`) returns admit arbitrary combinations of the above.
-- Exclusive (`&mut`) returns admit exactly one `ri` or its projection;
-  this is enforced by type checking, not by inference search.
+- Exclusive (`&mut`) returns are flow-checked like any other return:
+  the summary records whichever inputs may flow out, and call-site
+  instantiation keeps those inputs alive. No synthesis restriction
+  beyond the borrow rules exists in MVP.
 - Reborrowing freezes the source place for the derived reference's
   lifetime; freezing is enforced by the exclusivity rule (loan
   invalidation), not by extra summary machinery.

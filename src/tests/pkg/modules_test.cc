@@ -134,6 +134,8 @@ TEST_CASE("Modules resolve explicit entries to files") {
   CHECK(selected[0].name == "main");
   CHECK(selected[1].name == "util");
   CHECK(!f.bag.has_errors());
+  // extra.al is discovered but unselected.
+  CHECK(f.bag.warning_count() > 0);
 }
 
 TEST_CASE("Modules resolve wildcards by relative path") {

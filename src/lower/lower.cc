@@ -44,6 +44,7 @@ namespace {
 // Diagnostic codes 4300-4319 are reserved for lowering.
 constexpr u32 kLowerUnsupported = 4300;
 constexpr u32 kLowerInternal = 4301;
+constexpr u32 kLowerUnreachable = 4302;
 
 // A lowered value: either an SSA operand or the address of one.
 // Places stay in address form so moves and borrows observe origins.
@@ -2297,13 +2298,29 @@ struct Lowerer {
   }
 
   Val lower_block(const ast::Block* block, const ir::TypeIdx* expected) {
+    bool reachable = true;
     for (ast::Stmt* stmt : block->statements) {
-      lower_stmt(stmt);
-      if (failed || terminated_cur()) {
+      if (failed) {
         break;
+      }
+      if (!reachable) {
+        const u32 index = bag.emit(diag::Severity::Warning, kLowerUnreachable,
+                                   stmt->span, "unreachable statement");
+        (void)index;
+        continue;
+      }
+      lower_stmt(stmt);
+      if (!failed && terminated_cur()) {
+        reachable = false;
       }
     }
     if (failed || terminated_cur()) {
+      if (!reachable && block->value != nullptr) {
+        const u32 index =
+            bag.emit(diag::Severity::Warning, kLowerUnreachable,
+                     block->value->span, "unreachable expression");
+        (void)index;
+      }
       return Val{size_one, error_type(), false, false};
     }
     if (block->value == nullptr) {

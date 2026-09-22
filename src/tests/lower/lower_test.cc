@@ -415,6 +415,24 @@ TEST_CASE("Lower wraps all main forms in a C entry") {
   }
 }
 
+TEST_CASE("Lower warns on unreachable statements") {
+  io::TempDir dir("alcy_lower_unreachable_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  ret\n"
+                                      "  _ := 2\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(f.bag.warning_count() > 0);
+}
+
 TEST_CASE("Lowering emits no Drop markers") {
   io::TempDir dir("alcy_lower_no_drop_test");
   const bool setup = write_all(dir, {{"main.al",

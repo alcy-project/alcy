@@ -2,13 +2,13 @@
 
 ## Numeric tower
 
-- Integers `i8`–`i128`, `u8`–`u128`, `isize`/`usize`; floats `f32`/`f64`;
-  `bool`. `f16`, posits, and decimals are deferred.
+- Integers `i8`–`i64`, `u8`–`u64`, `isize`/`usize`; floats `f32`/`f64`;
+  `bool`. `f16`, 128-bit integers, posits, and decimals are deferred.
 - Literals: decimal, `0b`/`0o`/`0x`, type suffixes (`42i32`, `1.5f64`),
   `_` separators.
-- Overflow: debug builds check and panic; release builds wrap.
-  Division by zero panics in both modes; overshifts panic in debug
-  and mask in release. No independent overflow-check flag exists;
+- Overflow: `+`, `-`, and `*` wrap in all modes. Division by zero
+  and overshifts are unchecked with backend-defined behavior; traps
+  for both are later work. No independent overflow-check flag exists;
   const evaluation follows the same semantics.
 
 ## Tuples
@@ -19,11 +19,10 @@
 
 ## Text (staged)
 
-- The compiler-known text type is `str`: validated UTF-8 byte
-  sequences, backing string literals. Character semantics (`Char`,
-  `Ascii`, graphemes, formatting) live in the core library, which
-  resolves `'x'` literals to its `Char` type. Baremetal targets
-  without core use `u8`/`u32` directly.
+- The compiler-known text type is `str`: byte sequences backing
+  string literals. No validation is performed in MVP; `Char` and the
+  core text library live post-MVP. Baremetal targets without core
+  use `u8`/`u32` directly.
 
 ## Ranges (representation decided, types deferred)
 

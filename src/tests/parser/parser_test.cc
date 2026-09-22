@@ -159,6 +159,25 @@ TEST_CASE("Parser rejects module declarations") {
   CHECK(!result.ok);
 }
 
+TEST_CASE("Parser builds empty tuples") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { _ := () }", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::FnItem* fn = as_fn(result.items[0]);
+  CHECK(fn != nullptr);
+  if (fn == nullptr || fn->body->statements.size() != 1) {
+    return;
+  }
+  const ast::DeclStmt* decl =
+      static_cast<const ast::DeclStmt*>(fn->body->statements[0]);
+  CHECK(decl->init->kind == ast::ExprKind::Tuple);
+  const ast::TupleExpr* tuple = static_cast<const ast::TupleExpr*>(decl->init);
+  CHECK(tuple->elements.empty());
+}
+
 TEST_CASE("Parser separates declaration reassignment and comparison") {
   Fixture f;
   const ParseResult result = parse(

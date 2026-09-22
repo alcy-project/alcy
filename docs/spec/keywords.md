@@ -14,8 +14,8 @@ Control flow: `if`, `else`, `loop`, `while`, `break`, `continue`,
 
 Paths and casts: `package`, `self`, `super`, `Self`, `as`
 
-Primitive types: `i8`, `i16`, `i32`, `i64`, `i128`, `isize`, `u8`,
-`u16`, `u32`, `u64`, `u128`, `usize`, `f32`, `f64`, `bool`, `str`
+Primitive types: `i8`, `i16`, `i32`, `i64`, `isize`, `u8`,
+`u16`, `u32`, `u64`, `usize`, `f32`, `f64`, `bool`, `str`
 
 ## Reserved (parsed, rejected with guidance)
 
@@ -25,8 +25,8 @@ Primitive types: `i8`, `i16`, `i32`, `i64`, `i128`, `isize`, `u8`,
 ## Literals, operators, delimiters, comments
 
 Literals: decimal, `0b`/`0o`/`0x` with type suffixes; `"..."`
-strings; `'...'` characters (resolved to core `Char`; see
-`types.md`); `true`, `false`
+strings; `'...'` characters (unresolved in MVP; `Char` lives
+post-MVP, see `types.md`); `true`, `false`
 
 Operators and delimiters: `+ - * / % **` `& | ^ ~ << >>` and
 assignment forms; `:=` (declare), `=` (reassign); `!` `&&` `||`

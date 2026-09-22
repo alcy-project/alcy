@@ -31,6 +31,6 @@ so MVP designs do not foreclose the baremetal story.
 
 ## Mangling
 
-- alcy-convention symbols mangle toward
-  `alcy_<package>_<module path>_<name>`; details finalize with
-  package artifacts. `extern "C"` names are unmangled.
+- alcy-convention symbols currently use plain item names; mangling
+  toward `alcy_<package>_<module path>_<name>` finalizes with package
+  artifacts. `extern "C"` names are unmangled.
