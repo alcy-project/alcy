@@ -6,6 +6,7 @@ on:
     paths: &ci_paths
       - src/**
       - e2e/**
+      - exe/**
       - runtime/**
       - third_party/**
       - build/**
