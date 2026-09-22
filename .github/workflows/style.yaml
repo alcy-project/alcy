@@ -1,0 +1,79 @@
+name: Style
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  load-config:
+    name: Load Config
+    runs-on: ubuntu-24.04
+    outputs:
+      llvm_toolchain_version: ${{ steps.parse.outputs.llvm_toolchain_version }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Parse config.toml
+        id: parse
+        run: |
+          TOOLCHAIN_VER=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["llvm_toolchain_version"])')
+          echo "llvm_toolchain_version=${TOOLCHAIN_VER}" >> $GITHUB_OUTPUT
+
+  spelling:
+    name: Spell Check
+    needs: [load-config]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Spell Check Repository
+        uses: crate-ci/typos@512fc24f32f44ab01972217aaaf3dc86ec234d53
+
+  style:
+    name: Format & Lint
+    needs: [load-config]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build
+        with:
+          nix: "false"
+          os: Linux
+          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
+
+      - name: Check Formatting
+        run: uv run ./build/scripts/format.py --dry-run
+
+      - name: Generate Compilation Database
+        shell: bash
+        run: |
+          uv run ./build/scripts/build.py --target=all --gen-only --build-subdir=lint-compdb
+
+      - name: Lint
+        shell: bash
+        run: |
+          uv run ./build/scripts/lint.py --verbose --build-path=out/lint-compdb

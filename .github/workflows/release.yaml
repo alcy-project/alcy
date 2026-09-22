@@ -14,22 +14,29 @@ jobs:
     uses: ./.github/workflows/build.yaml
     with:
       build_type: release
-      role: dist
+      role: release
+
+  build-wasm:
+    uses: ./.github/workflows/build-wasm.yaml
+    with:
+      build_type: release
+      role: release
 
   publish:
-    needs: build-release
+    needs: [build-release, build-wasm]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - name: Download all workflow artifacts
+      - name: Download All Workflow Artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
 
-      - name: Upload artifacts to release
+      - name: Upload Artifacts to Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
         with:
           files: |
             */*.tar.gz
+            */*.tar.zst
             */*.zip
             */*.sha256
           draft: true

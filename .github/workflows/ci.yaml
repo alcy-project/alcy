@@ -41,7 +41,7 @@ jobs:
       llvm_toolchain_version: ${{ steps.parse.outputs.llvm_toolchain_version }}
       llvm_fork_tag: ${{ steps.parse.outputs.llvm_fork_tag }}
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           submodules: false
@@ -55,167 +55,42 @@ jobs:
           echo "llvm_toolchain_version=${TOOLCHAIN_VER}" >> $GITHUB_OUTPUT
           echo "llvm_fork_tag=${FORK_TAG}" >> $GITHUB_OUTPUT
 
-  style:
-    name: Format & spelling
+  debug:
     needs: [load-config]
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          submodules: false
-          fetch-depth: 1
-
-      - name: Setup build environment
-        uses: ./.github/actions/setup-build
-        with:
-          nix: "false"
-          os: Linux
-          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
-
-      - name: Check formatting
-        run: uv run ./build/scripts/format.py --dry-run
-
-      - name: Spell check repository
-        uses: crate-ci/typos@512fc24f32f44ab01972217aaaf3dc86ec234d53
-
-  test-debug:
-    needs: [load-config]
-    name: Test (debug)
+    name: Debug Build & Test
     uses: ./.github/workflows/build.yaml
     with:
       build_type: debug
-      role: test
+      role: ci
       llvm_version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
-  test-release:
+  release:
     needs: [load-config]
-    name: Test (release)
+    name: Release Build & Test
     uses: ./.github/workflows/build.yaml
     with:
       build_type: release
-      role: test
+      role: ci
       llvm_version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
-  dist-debug:
+  wasm-debug:
     needs: [load-config]
-    name: Package (debug)
-    uses: ./.github/workflows/build.yaml
+    name: WebAssembly Debug Build & Test
+    uses: ./.github/workflows/build-wasm.yaml
     with:
       build_type: debug
-      role: dist
-      llvm_version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
+      role: ci
 
-  dist-release:
+  wasm-release:
     needs: [load-config]
-    name: Package (release)
-    uses: ./.github/workflows/build.yaml
+    name: WebAssembly Release Build & Test
+    uses: ./.github/workflows/build-wasm.yaml
     with:
       build_type: release
-      role: dist
-      llvm_version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
-
-  wasm:
-    name: WebAssembly (${{ matrix.build_type }})
-    needs: [load-config]
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        build_type: [debug, release]
-
-    env:
-      COLORTERM: 256color
-      basename: alcy
-      LLVM_VERSION: ${{ needs.load-config.outputs.llvm_toolchain_version }}
-      LLVM_FORK_TAG: ${{ needs.load-config.outputs.llvm_fork_tag }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          submodules: recursive
-          fetch-depth: 1
-
-      - name: Setup Emscripten
-        uses: emscripten-core/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984
-
-      - name: Setup bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: 1.4.2
-
-      - name: Setup GN
-        uses: pug523/actions/setup-gn@e4abb74456e529372bb1b7ebb71db1b647be3fd1
-
-      - name: Install ninja
-        shell: bash
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
-        with:
-          enable-cache: true
-
-      - name: Set up Python virtual environment
-        run: |
-          uv python install
-          uv sync --frozen
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
-
-
-      - name: Cache build directory
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: out/build
-          key: ${{ runner.os }}-wasm-wasm32-${{ matrix.build_type }}-false-${{ env.LLVM_VERSION }}-build-dir
-
-      - name: Build
-        shell: bash
-        run: uv run ./build/scripts/build.py --target=all --mode=${{ matrix.build_type }} --build-subdir=build --target-os=emscripten
-
-      - name: Build tests and run
-        shell: bash
-        run: uv run ./build/scripts/run.py --target=tests --mode=${{ matrix.build_type }} --build-subdir=build --target-os=emscripten
-
-      - name: Package & Generate Checksum
-        shell: bash
-        run: |
-          mkdir -p dist
-          if [ -f LICENSE ]; then cp LICENSE dist/; fi
-          if [ -f README.md ]; then cp README.md dist/; fi
-
-          for f in tests tests.js tests.wasm libalcy.a; do
-            if [ -f "out/build/${f}" ]; then
-              cp "out/build/${f}" dist/
-            fi
-          done
-          if ! ls dist/tests* >/dev/null 2>&1; then
-            echo "::error::expected tests output missing in out/build/"
-            exit 1
-          fi
-
-          FILE="${{ env.basename }}-wasm-wasm32-${{ matrix.build_type }}.tar.gz"
-          cd dist && tar -czvf "../${FILE}" * && cd ..
-
-          if command -v sha256sum &> /dev/null; then
-            sha256sum "$FILE" > "${FILE}.sha256"
-          else
-            shasum -a 256 "$FILE" > "${FILE}.sha256"
-          fi
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: wasm-wasm32-${{ matrix.build_type }}
-          path: |
-            *.tar.gz
-            *.sha256
-          if-no-files-found: error
+      role: ci
 
   summary:
-    needs: [style, test-debug, test-release, dist-debug, dist-release, wasm]
+    needs: [debug, release, wasm]
     if: always()
     uses: ./.github/workflows/generate-summary.yaml
     with:

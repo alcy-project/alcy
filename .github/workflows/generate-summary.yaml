@@ -14,7 +14,7 @@ jobs:
     name: Generate Summary
     runs-on: ubuntu-latest
     steps:
-      - name: Download all checksum artifacts
+      - name: Download All Checksum Artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: ${{ inputs.artifact_pattern }}

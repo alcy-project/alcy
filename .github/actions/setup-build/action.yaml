@@ -29,7 +29,7 @@ runs:
         extra_nix_config: |
           experimental-features = nix-command flakes
 
-    - name: Setup build environment (Standard)
+    - name: Setup Build Environment (Standard)
       if: inputs.nix != 'true'
       uses: pug523/actions/cxx-gn-setup@9f8be60fdd48fb0bd2aca3c5912ab454adb9b56f
       with:
@@ -39,7 +39,7 @@ runs:
 
     # GN resolves libc++ headers and libraries through these variables
     # (see docs/build.md). Windows uses the MSVC STL instead.
-    - name: Setup environment variables (Standard)
+    - name: Setup Environment Variables (Standard)
       if: inputs.nix != 'true'
       shell: bash
       run: |
@@ -73,7 +73,7 @@ runs:
       with:
         enable-cache: true
 
-    - name: Set up Python virtual environment
+    - name: Setup Python virtual environment
       if: inputs.nix != 'true'
       shell: bash
       run: |
