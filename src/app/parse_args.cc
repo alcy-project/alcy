@@ -43,6 +43,7 @@ DriverConfig extract_from_matches(arg::Matches&& matches) {
     c.subcommand = Subcommand::Check;
   }
   c.release = matches.get<bool>("release").unwrap_or(false);
+  c.output = matches.get<std::string_view>("output").unwrap_or(c.output);
 
   const std::span<const std::string_view> positionals = matches.positionals();
   if (!positionals.empty()) {
@@ -99,6 +100,11 @@ arg::Parser build_parser() {
           .add_arg(arg::ArgBuilder("release")
                        .help("Build with optimizations.")
                        .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("output")
+                       .short_name('o')
+                       .help("Object output path for single-file builds.")
+                       .default_value("")
                        .build())
           .build());
   builder.add_subcommand(build_subcommand("test", "Run tests").build());

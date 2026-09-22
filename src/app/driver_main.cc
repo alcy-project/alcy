@@ -4,6 +4,7 @@
 
 #include "app/driver_main.h"
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -21,6 +22,9 @@
 #include "app/result_code.h"
 #include "base/logger.h"
 #include "borrow/borrow.h"
+#include "codegen_llvm/common.h"
+#include "codegen_llvm/llvm_ir_emitter.h"
+#include "codegen_llvm/llvm_object_emitter.h"
 #include "debug/fatal.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -43,6 +47,85 @@ namespace app {
 
 namespace {
 
+constexpr std::string_view kSourceSuffix = ".al";
+
+// MVP pointer width: isize/usize map to 64-bit integers. An explicit
+// choice (never sniffed from the host); a --target flag selects it
+// once cross builds land.
+constexpr ir::PointerWidth kCheckWidth = ir::PointerWidth::W64;
+
+// Single-file object emission (Phase D path; package builds stay on
+// discovery until Phase E wires them). Runs the full frontend plus
+// borrow checking, then lowers and emits one relocatable object.
+i32 build_single_file(DriverContext& ctx,
+                      std::string_view target,
+                      std::string_view output) {
+  base::Result<source::FileId, source::SourceError> file =
+      ctx.sources.load(target);
+  if (file.is_err()) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kDriverIoError,
+                                   "cannot read '{}'", target);
+    (void)index;
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::BuildFailed);
+  }
+  const source::FileId root = std::move(file).unwrap();
+  const std::vector<source::FileId> files{root};
+  diag::Fallible<analyzer::ModuleTree> tree = analyzer::resolve_modules(
+      root, files, "", ctx.sources, ctx.arena, ctx.bag);
+  if (tree.is_err() || ctx.bag.has_errors()) {
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::BuildFailed);
+  }
+  diag::Fallible<analyzer::CheckedPackage> checked =
+      analyzer::check_package(std::move(tree).unwrap(), kCheckWidth, ctx.bag);
+  if (checked.is_err() || ctx.bag.has_errors()) {
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::BuildFailed);
+  }
+  diag::Fallible<lower::LoweredPackage> lowered = lower::lower_package(
+      std::move(checked).unwrap(), kCheckWidth, ctx.strings, ctx.bag);
+  if (lowered.is_err() || ctx.bag.has_errors()) {
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::BuildFailed);
+  }
+  lower::LoweredPackage package = std::move(lowered).unwrap();
+  borrow::check_borrows(package, ctx.bag);
+  if (ctx.bag.has_errors()) {
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::BuildFailed);
+  }
+  llvm::LLVMContext context;
+  auto module = std::make_unique<llvm::Module>("alcy_module", context);
+  codegen_llvm::LlvmIrEmitter emitter(module.get(), std::move(package.storage),
+                                      &ctx.strings);
+  std::move(emitter).emit();
+  std::string output_path;
+  if (output.empty()) {
+    output_path = std::string(target);
+    const usize dot = output_path.rfind('.');
+    if (dot == std::string::npos) {
+      output_path += ".o";
+    } else {
+      output_path.replace(dot, std::string::npos, ".o");
+    }
+  } else {
+    output_path = std::string(output);
+  }
+  base::Result<void, codegen_llvm::ObjectEmitError> emitted =
+      codegen_llvm::emit_object(*module, "", output_path);
+  if (emitted.is_err()) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kDriverIoError,
+                                   "cannot emit object '{}'", output_path);
+    (void)index;
+    report(ctx.bag, ctx.sources);
+    return result_code(ResultCode::BuildFailed);
+  }
+  report(ctx.bag, ctx.sources);
+  base::logger.wo_prefix("built {} to {}", target, output_path);
+  return result_code(ResultCode::Success);
+}
+
 i32 run_build(const DriverConfig& config) {
   DriverContext ctx;
   // TODO: picks up --release (config.release) once codegen lands.
@@ -50,6 +133,10 @@ i32 run_build(const DriverConfig& config) {
 
   const std::string_view raw_dir =
       config.target_dir.empty() ? "." : config.target_dir;
+  if (raw_dir.size() >= kSourceSuffix.size() &&
+      raw_dir.substr(raw_dir.size() - kSourceSuffix.size()) == kSourceSuffix) {
+    return build_single_file(ctx, raw_dir, config.output);
+  }
   base::Result<path::Path, path::PathError> dir =
       path::Path::from_native(raw_dir);
   if (dir.is_err()) {
@@ -102,11 +189,6 @@ i32 check_package(DriverContext& ctx,
                   const path::Path& root,
                   source::FileId manifest_file,
                   std::string_view manifest_name);
-
-// MVP pointer width: isize/usize map to 64-bit integers. An explicit
-// choice (never sniffed from the host); a --target flag selects it
-// once cross builds land.
-constexpr ir::PointerWidth kCheckWidth = ir::PointerWidth::W64;
 
 // Runs type checking over a resolved tree, reports diagnostics, and
 // maps the outcome to an exit code. Shared by manifest and

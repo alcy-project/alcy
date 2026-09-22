@@ -48,6 +48,9 @@ uv run "$tool_scripts_dir/e2e.py" \
 
 uv run "$tool_scripts_dir/check_runtime.py"
 
+uv run "$tool_scripts_dir/check_exe.py" \
+  --build-subdir=$debug_subdir
+
 uv run "$tool_scripts_dir/format.py" --dry-run
 uv run "$tool_scripts_dir/lint.py"
 

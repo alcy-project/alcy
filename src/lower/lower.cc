@@ -1203,8 +1203,9 @@ struct Lowerer {
   // Value of payload field i of the enum at slot_addr. The payload
   // pointer is type-erased in the slot, so it reinterprets through
   // the variant payload type before projecting the field.
-  Val load_blessed_payload(Val slot_addr, u32 field,
-                               const std::vector<ir::TypeIdx>& fields) {
+  Val load_blessed_payload(Val slot_addr,
+                           u32 field,
+                           const std::vector<ir::TypeIdx>& fields) {
     if (is_unit_payload(fields)) {
       return void_value();
     }

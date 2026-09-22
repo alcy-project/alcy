@@ -41,7 +41,16 @@ TEST_CASE("Parse build subcommand") {
                                .color_mode = term::ColorMode::Auto,
                                .subcommand = Subcommand::Build,
                                .release = true,
-                               .target_dir = "mydir"});
+                               .target_dir = "mydir",
+                               .output = ""});
+}
+
+TEST_CASE("Parse build output flag") {
+  const std::string_view args[] = {"alcy", "build", "main.al", "-o", "main.o"};
+  const DriverConfig config = parse_ok(args);
+  CHECK(config.subcommand == Subcommand::Build);
+  CHECK(config.target_dir == "main.al");
+  CHECK(config.output == "main.o");
 }
 
 TEST_CASE("Parse build defaults") {
