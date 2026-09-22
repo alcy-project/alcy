@@ -45,9 +45,6 @@ in this order:
 2. **Download**: otherwise, a prebuilt archive corresponding to `llvm_fork_tag`
     and the target triple is fetched from the fork's GitHub Releases
    (`llvm-<debug|release>-<triple>.tar.zst`, `.zip` on Windows) and extracted.
-   For wasm builds, the triple is `wasm32-unknown-emscripten`; if the fork has
-   not published that asset yet, the setup fails — publish it first (see the
-   fork's `alcy-release.yaml`).
 
 To update the LLVM dependency, change `llvm_fork_tag` in `config.toml`. GN and
 Ninja will automatically detect the change and trigger `setup_llvm.py` to fetch
@@ -68,7 +65,7 @@ the updated prebuilt release.
   `libcxx` GN config is excluded). Always use a dedicated output directory
   (e.g. `--build-subdir=build_wasm --target-os=emscripten`); reusing a native
   output directory leaves stale artifacts behind. Test binaries run under
-  `node` (`run.py` handles this automatically).
+  `bun` (falls back to `node` if `bun` not found. `run.py` handles this automatically).
 
 ### Windows CRT details
 
@@ -96,6 +93,5 @@ alike.
 - `gn gen` failures: make sure `gn` and `ninja` are on `PATH`
 (`nix develop`, or install them via your package manager).
 - Stale LLVM install: delete
-`out/<build-subdir>/third_party/llvm/install/` (and the tag cache at
-`build/scripts/llvm/.llvm_tag_cache`) to force re-resolution.
+`out/<build-subdir>/third_party/llvm/install/`  to force re-resolution.
 

@@ -11,12 +11,12 @@ Prior to generating, refactoring, or reviewing code, strictly follow the specifi
 # Code Quality & Refactoring Directives
 
 - **Modern & Idiomatic C++20**:
-  - Target C++20 features (e.g., `std::span`, `std::optional`, `std::variant`, concepts, designated initializers).
+  - Target C++20 features (e.g., `std::span`, `std::optional`, concepts, designated initializers).
   - Enforce explicit ownership using value semantics, `std::unique_ptr`, or `std::shared_ptr`. Avoid manual memory management (`new`/`delete`).
   - Keep functions pure and side-effect-free where possible. Prefer `const` by default for variables, members, and methods.
 - **Error Handling & Constraints**:
   - The project builds with `-fno-exceptions` and `-fno-rtti`. **Do not use `try`, `catch`, `throw`, `dynamic_cast`, or RTTI.**
-  - Use explicit, zero-overhead error reporting abstractions (e.g., `std::optional`, custom `Result`/`Status` types, or diagnostic handlers) instead of exceptions.
+  - Use explicit, zero-overhead error reporting abstractions (e.g., `std::optional`, custom `Result`/`AutoTaggedUnion` types, or diagnostic handlers) instead of exceptions.
   - Use assertions (`DCHECK()`) or diagnostic logging (`src/base/`, `src/debug/`) for internal compiler invariant failures.
 - **Signal-to-Noise Ratio in Comments**:
   - **No Session or Metacognitive Leakage**: NEVER write comments that reference the prompt, chat session, negative decisions, or omitted alternatives (e.g., BAD: `// No std::filesystem, we don't use it here`, `// Per user instruction`). Write comments purely from the perspective of long-term codebase maintenance.
