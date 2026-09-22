@@ -99,9 +99,9 @@ TEST_CASE("Manifest parses binary targets") {
   constexpr std::string_view bytes =
       "[package]\nname = \"app\"\nversion = \"0.1.0\"\n"
       "\n"
-      "[[bin]]\npath = \"src/main.al\"\n"
+      "[[bin]]\npath = \"main.al\"\n"
       "\n"
-      "[[bin]]\nname = \"tool\"\npath = \"src/tool.al\"\n";
+      "[[bin]]\nname = \"tool\"\npath = \"tool.al\"\n";
   diag::Fallible<PackageManifest> result =
       parse_manifest(bytes, "alcy.toml", source::kUnknownFile, f.bag, f.arena);
   CHECK(result.is_ok());
@@ -115,9 +115,9 @@ TEST_CASE("Manifest parses binary targets") {
     return;
   }
   CHECK(manifest.bins[0].name.empty());
-  CHECK(manifest.bins[0].path == "src/main.al");
+  CHECK(manifest.bins[0].path == "main.al");
   CHECK(manifest.bins[1].name == "tool");
-  CHECK(manifest.bins[1].path == "src/tool.al");
+  CHECK(manifest.bins[1].path == "tool.al");
 }
 
 TEST_CASE("Manifest rejects binary targets without paths") {

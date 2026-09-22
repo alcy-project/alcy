@@ -14,6 +14,7 @@
 #include "cfg/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "path/path.h"
@@ -29,6 +30,7 @@ namespace app {
 
 namespace {
 
+// TODO: Move this to fpag (maybe io module?)
 bool make_dirs(std::string_view path) {
   std::string current;
   for (usize i = 0; i <= path.size(); ++i) {
@@ -95,19 +97,27 @@ i32 run_new(std::string_view target_dir) {
     return result_code(ResultCode::BuildFailed);
   }
   const path::Path package_dir = std::move(root).unwrap();
-  const path::Path src_dir = package_dir.join("src");
   const path::Path manifest_path = package_dir.join(pkg::kManifestFileName);
-  const path::Path main_path = src_dir.join("main.al");
+  const path::Path main_path = package_dir.join("main.al");
 
-  const std::string manifest_text = "[package]\nname = \"" +
-                                    std::string(package_dir.as_view()) +
-                                    "\"\nversion = \"0.1.0\"\n"
-                                    "\n"
-                                    "[[bin]]\n"
-                                    "path = \"src/main.al\"\n";
-  static constexpr std::string_view kMainText = "// Write your code here.\n";
-  if (!make_dirs(src_dir.as_view()) ||
-      !write_text_file(manifest_path.as_view(), manifest_text) ||
+  // TODO: Add `include = ["*"]` syntax support.
+  const std::string manifest_template =
+      fmt::format(R"([package]
+name = "{}"
+version = "0.1.0"
+
+[modules]
+include = ["main"]
+
+[[bin]]
+name = "{}"
+path = "main.al")",
+                  package_dir.as_view(), package_dir.as_view());
+  static constexpr std::string_view kMainText =
+      "fn main() {\n  // Write your code here.\n}\n";
+
+  if (!make_dirs(package_dir.as_view()) ||
+      !write_text_file(manifest_path.as_view(), manifest_template) ||
       !write_text_file(main_path.as_view(), kMainText)) {
     const u32 index =
         ctx.bag.emit(diag::Severity::Error, kDriverIoError,

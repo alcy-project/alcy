@@ -37,8 +37,8 @@ struct Fixture {
 
 TEST_CASE("Discover finds nested sources in sorted order") {
   io::TempDir dir("alcy_pipeline_test");
-  const bool setup = dir.write_file("src/main.al", "fn main() {}\n") &&
-                     dir.write_file("src/util.al", "") &&
+  const bool setup = dir.write_file("main.al", "fn main() {}\n") &&
+                     dir.write_file("util.al", "") &&
                      dir.write_file("README.md", "not source\n") &&
                      dir.write_file("a.al", "");
   CHECK(setup);
@@ -59,10 +59,10 @@ TEST_CASE("Discover finds nested sources in sorted order") {
   if (discovered.files.size() != 3) {
     return;
   }
-  // Sorted: a.al, src/main.al, src/util.al.
+  // Sorted: a.al, main.al, util.al.
   CHECK(f.sources.name(discovered.files[0]) == dir.join("a.al"));
-  CHECK(f.sources.name(discovered.files[1]) == dir.join("src/main.al"));
-  CHECK(f.sources.name(discovered.files[2]) == dir.join("src/util.al"));
+  CHECK(f.sources.name(discovered.files[1]) == dir.join("main.al"));
+  CHECK(f.sources.name(discovered.files[2]) == dir.join("util.al"));
 }
 
 TEST_CASE("Discover reports missing directories") {
@@ -77,10 +77,10 @@ TEST_CASE("Compile project loads every package") {
       dir.write_file("root/alcy.toml",
                      "[package]\nname = \"root\"\nversion = \"0.1.0\"\n"
                      "[dependencies]\nlib = { path = \"lib\" }\n") &&
-      dir.write_file("root/src/main.al", "fn main() {}\n") &&
+      dir.write_file("root/main.al", "fn main() {}\n") &&
       dir.write_file("root/lib/alcy.toml",
                      "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n") &&
-      dir.write_file("root/lib/src/lib.al", "");
+      dir.write_file("root/lib/lib.al", "");
   CHECK(setup);
   if (!setup) {
     return;

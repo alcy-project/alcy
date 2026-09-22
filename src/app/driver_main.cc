@@ -426,8 +426,7 @@ diag::Fallible<BinTarget> resolve_bin_target(DriverContext& ctx,
     return base::make_err(diag::Fatal{});
   }
   std::vector<analyzer::ModuleInput> inputs;
-  // Module paths resolve relative to the entry file's directory, so
-  // `src/main.al` sees its sibling as `util` rather than `src::util`.
+  // Module paths resolve relative to the entry file's directory.
   std::string_view bin_dir;
   {
     const std::string_view bin_path = manifest.bins[0].path;
