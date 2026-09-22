@@ -31,11 +31,11 @@ namespace analyzer {
 namespace {
 
 // Diagnostic codes 4200-4299 are reserved for module resolution.
-constexpr u32 kAnalyzerDuplicateModule = 4201;
-constexpr u32 kAnalyzerUnresolvedImport = 4202;
-constexpr u32 kAnalyzerAmbiguousImport = 4203;
-constexpr u32 kAnalyzerUnreachableFile = 4204;
-constexpr u32 kAnalyzerInvalidPath = 4205;
+constexpr u32 kAnalyzerDuplicateModule = 4200;
+constexpr u32 kAnalyzerUnresolvedImport = 4201;
+constexpr u32 kAnalyzerAmbiguousImport = 4202;
+constexpr u32 kAnalyzerUnreachableFile = 4203;
+constexpr u32 kAnalyzerInvalidPath = 4204;
 
 constexpr u32 kNoModule = std::numeric_limits<u32>::max();
 
@@ -56,7 +56,8 @@ struct NameEntry {
   std::string_view name;
 };
 
-struct Resolver {
+class Resolver {
+ public:
   Resolver(source::SourceManager& sources,
            mem::Arena& arena,
            diag::DiagBag& bag)

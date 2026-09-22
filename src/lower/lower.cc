@@ -61,7 +61,8 @@ struct Local {
   ir::TypeIdx type;
 };
 
-struct Lowerer {
+class Lowerer {
+ public:
   analyzer::CheckedPackage pkg;
   ir::StorageBuilder builder;
   ir::PointerWidth width;

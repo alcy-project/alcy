@@ -67,7 +67,8 @@ struct Loan {
   u32 param = kNoRoot;
 };
 
-struct Checker {
+class Checker {
+ public:
   Checker(const lower::LoweredPackage& lowered,
           const ir::Storage& storage,
           diag::DiagBag& bag)

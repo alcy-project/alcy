@@ -22,15 +22,16 @@ namespace parser {
 namespace {
 
 // Diagnostic codes 4100-4199 are reserved for the parser.
-constexpr u32 kParserOrPatternMismatch = 4102;
-constexpr u32 kParserAlreadyBound = 4103;
+constexpr u32 kParserOrPatternMismatch = 4100;
+constexpr u32 kParserAlreadyBound = 4101;
 
 bool is_keyword_name(std::string_view name) {
   return name == "self" || name == "super" || name == "package" ||
          name == "Self";
 }
 
-struct Desugar {
+class Desugar {
+ public:
   struct Binding {
     std::string_view orig;
     std::string_view fresh;

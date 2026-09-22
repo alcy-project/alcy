@@ -71,7 +71,8 @@ struct BlessedEntry {
   ir::TypeIdx type;
 };
 
-struct Checker {
+class Checker {
+ public:
   Checker(const ModuleTree& tree, ir::PointerWidth width, diag::DiagBag& bag)
       : tree(tree), width(width), bag(bag), interner(kInternerCapacity) {}
 

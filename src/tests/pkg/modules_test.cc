@@ -77,7 +77,7 @@ TEST_CASE("Manifest parses explicit module sets") {
 
 TEST_CASE("Manifest without modules selects wildcards") {
   Fixture f;
-  const PackageManifest manifest = parse_ok(std::string(kBaseManifest), f);
+  const PackageManifest manifest = parse_ok(kBaseManifest, f);
   CHECK(manifest.modules.wildcard);
   CHECK(manifest.modules.include_count == 0);
   CHECK(manifest.modules.export_count == 0);
@@ -148,7 +148,7 @@ TEST_CASE("Modules resolve wildcards by relative path") {
     return;
   }
   Fixture f;
-  const PackageManifest manifest = parse_ok(std::string(kBaseManifest), f);
+  const PackageManifest manifest = parse_ok(kBaseManifest, f);
   CHECK(manifest.modules.wildcard);
   std::vector<source::FileId> files;
   for (std::string_view rel : {"main.al", "io/util.al"}) {
