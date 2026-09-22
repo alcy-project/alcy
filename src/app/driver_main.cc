@@ -368,17 +368,11 @@ struct BinTarget {
   std::string_view bin_name;
 };
 
-diag::Fallible<BinTarget> resolve_bin_target(DriverContext& ctx,
-                                             const path::Path& root,
-                                             source::FileId manifest_file,
-                                             std::string_view manifest_name) {
-  diag::Fallible<pkg::PackageManifest> parsed =
-      pkg::parse_manifest(ctx.sources.bytes(manifest_file), manifest_name,
-                          manifest_file, ctx.bag, ctx.arena);
-  if (parsed.is_err()) {
-    return base::make_err(diag::Fatal{});
-  }
-  const pkg::PackageManifest manifest = std::move(parsed).unwrap();
+diag::Fallible<BinTarget> resolve_bin_target(
+    DriverContext& ctx,
+    const path::Path& root,
+    const pkg::PackageManifest& manifest,
+    std::string_view manifest_name) {
   if (manifest.bin_count == 0) {
     const u32 index = ctx.bag.emit(diag::Severity::Error, kDriverNoTargets,
                                    "manifest '{}' declares no [[bin]] targets",
@@ -473,8 +467,16 @@ i32 check_package(DriverContext& ctx,
                   const path::Path& root,
                   source::FileId manifest_file,
                   std::string_view manifest_name) {
+  diag::Fallible<pkg::PackageManifest> parsed =
+      pkg::parse_manifest(ctx.sources.bytes(manifest_file), manifest_name,
+                          manifest_file, ctx.bag, ctx.arena);
+  if (parsed.is_err()) {
+    return result_code(ResultCode::CheckFailed);
+  }
+  const pkg::PackageManifest manifest = std::move(parsed).unwrap();
+
   diag::Fallible<BinTarget> target =
-      resolve_bin_target(ctx, root, manifest_file, manifest_name);
+      resolve_bin_target(ctx, root, manifest, manifest_name);
   if (target.is_err() || ctx.bag.has_errors()) {
     report(ctx.bag, ctx.sources);
     return result_code(ResultCode::CheckFailed);
@@ -489,8 +491,16 @@ i32 build_package(DriverContext& ctx,
                   std::string_view manifest_name,
                   std::string_view output,
                   bool optimize) {
+  diag::Fallible<pkg::PackageManifest> parsed =
+      pkg::parse_manifest(ctx.sources.bytes(manifest_file), manifest_name,
+                          manifest_file, ctx.bag, ctx.arena);
+  if (parsed.is_err()) {
+    return result_code(ResultCode::BuildFailed);
+  }
+  const pkg::PackageManifest manifest = std::move(parsed).unwrap();
+
   diag::Fallible<BinTarget> target =
-      resolve_bin_target(ctx, root, manifest_file, manifest_name);
+      resolve_bin_target(ctx, root, manifest, manifest_name);
   if (target.is_err() || ctx.bag.has_errors()) {
     report(ctx.bag, ctx.sources);
     return result_code(ResultCode::BuildFailed);
@@ -527,7 +537,7 @@ i32 build_package(DriverContext& ctx,
     return result_code(ResultCode::BuildFailed);
   }
   report(ctx.bag, ctx.sources);
-  base::logger.wo_prefix("built {} to {}", manifest_name, exe_path);
+  base::logger.wo_prefix("built {} to {}", manifest.name, exe_path);
   return result_code(ResultCode::Success);
 }
 
