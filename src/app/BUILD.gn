@@ -1,11 +1,28 @@
+action("embed_runtime") {
+  script = "//build/scripts/embed_runtime.py"
+  inputs = [
+    "//runtime/alcy_runtime.c",
+    "//runtime/alcy_runtime.h",
+  ]
+  outputs = [ "$target_gen_dir/embedded_runtime.cc" ]
+  args = [
+    "--runtime-dir",
+    rebase_path("//runtime", root_build_dir),
+    "--output",
+    rebase_path("$target_gen_dir/embedded_runtime.cc", root_build_dir),
+  ]
+}
+
 source_set("driver") {
   sources = [
+    "$target_gen_dir/embedded_runtime.cc",
     "converters.h",
     "driver_config.h",
     "driver_context.cc",
     "driver_context.h",
     "driver_main.cc",
     "driver_main.h",
+    "embedded_runtime.h",
     "init_handler.cc",
     "init_handler.h",
     "new_command.cc",
@@ -15,9 +32,12 @@ source_set("driver") {
     "parse_output.cc",
     "parse_output.h",
     "result_code.h",
+    "runtime_stage.cc",
+    "runtime_stage.h",
     "spawn.cc",
     "spawn.h",
   ]
+  deps = [ ":embed_runtime" ]
   defines = [
     "ALCY_PROJECT_NAME=\"$project_name\"",
     "ALCY_PROJECT_VERSION=\"$project_version\"",

@@ -6,6 +6,7 @@ executable("tests") {
     "app/new_command_test.cc",
     "app/parse_args_test.cc",
     "app/parse_output_test.cc",
+    "app/runtime_stage_test.cc",
     "app/spawn_test.cc",
     "ast/ast_test.cc",
     "borrow/borrow_test.cc",
