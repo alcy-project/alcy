@@ -3,6 +3,7 @@
 
 #include "app/driver_main.h"
 
+#include <cstdlib>
 #include <memory>
 #include <optional>
 #include <string>
@@ -122,8 +123,15 @@ bool link_executable(DriverContext& ctx,
                      const std::string& object_path,
                      const std::string& runtime_path,
                      const std::string& exe_path) {
+  const char* system_linker = nullptr;
+  if (const char* env = std::getenv("CC"); env && *env) {
+    system_linker = env;
+  } else {
+    system_linker = "clang";
+  }
+
   base::Result<i32, SpawnError> linked =
-      run_command({"cc", object_path, runtime_path, "-o", exe_path});
+      run_command({system_linker, object_path, runtime_path, "-o", exe_path});
   if (linked.is_err()) {
     const u32 index = ctx.bag.emit(diag::Severity::Error, kDriverLinkError,
                                    "cannot run the system compiler");
@@ -498,8 +506,11 @@ i32 build_package(DriverContext& ctx,
   lower::LoweredPackage lowered = std::move(package).unwrap();
   std::string exe_path;
   if (output.empty()) {
+    path::Path out_dir = root.join("out");
+    // TODO: make directory helper in correct location
+    // io::make_dirs(out_dir.c_str());
     exe_path =
-        root.join(std::string(resolved.bin_name) + std::string(exe_suffix()))
+        out_dir.join(std::string(resolved.bin_name) + std::string(exe_suffix()))
             .as_view();
   } else {
     exe_path = std::string(output);
