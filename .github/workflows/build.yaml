@@ -122,7 +122,7 @@ jobs:
           if [[ "${{ matrix.plat }}" == "windows" ]]; then EXE=".exe"; fi
 
           ROLE="${{ inputs.role }}"
-          if [[ "$ROLE" == "release" \vert{}\vert{} "$ROLE" == "dist" ]]; then
+          if [[ "$ROLE" == "release" ]]; then
             TARGET_BINS=("alcy")
           else
             TARGET_BINS=("alcy" "tests" "benchmarks")
@@ -140,7 +140,7 @@ jobs:
           if [ -f out/build/libalcy.a ]; then cp out/build/libalcy.a dist/; fi
           if [ -f out/build/alcy.lib ]; then cp out/build/alcy.lib dist/; fi
 
-          FILE="alcy-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}${{ matrix.nix && '-nix' \vert{}\vert{} '' }}.${{ matrix.archive }}"
+          FILE="alcy-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}${{ matrix.nix && '-nix' || '' }}.${{ matrix.archive }}"
           if [[ "${{ matrix.plat }}" == "windows" ]]; then
             cd dist && 7z a "../${FILE}" * && cd ..
           else
