@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "cfg/build_config.h"
+#include "config/build_config.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 
@@ -14,6 +14,8 @@
 #include <windows.h>
 #else
 #include <spawn.h>
+#include <stdlib.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #if BUILD_FLAG(IS_OS_APPLE)
 #include <crt_externs.h>
@@ -116,7 +118,7 @@ base::Result<i32, SpawnError> run_command(
       0) {
     return base::make_err(SpawnError::SpawnFailed);
   }
-  int status = 0;
+  i32 status = 0;
   if (::waitpid(pid, &status, 0) < 0) {
     return base::make_err(SpawnError::WaitFailed);
   }

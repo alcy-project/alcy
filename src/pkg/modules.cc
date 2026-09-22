@@ -22,6 +22,7 @@ namespace pkg {
 
 namespace {
 
+// TODO: fix duplicated with manifest errors
 constexpr u32 kModulesSemanticError = 2001;
 constexpr u32 kModulesUnselectedFile = 2002;
 

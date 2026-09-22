@@ -10,7 +10,6 @@
 #include "ast/ast.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
-#include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
 #include "lexer/lexer.h"
 #include "lexer/token.h"

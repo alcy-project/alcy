@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "diag/bag.h"
+#include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "lexer/token.h"
 #include "source/source.h"

@@ -6,7 +6,6 @@
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
-#include "fpag/mem/page_allocator.h"
 #include "fpag/str/string_interner.h"
 #include "source/source.h"
 

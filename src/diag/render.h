@@ -6,9 +6,7 @@
 #include <string_view>
 
 #include "diag/diagnostic.h"
-#include "diag/span.h"
 #include "fmt/format.h"
-#include "fpag/base/numeric.h"
 #include "source/source.h"
 
 namespace diag {

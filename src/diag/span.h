@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <limits>
-
 #include "fpag/base/numeric.h"
 #include "source/source.h"
 

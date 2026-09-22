@@ -4,7 +4,6 @@
 #pragma once
 
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include "analyzer/types.h"
@@ -13,6 +12,7 @@
 #include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/storage.h"
+#include "ir/type.h"
 
 namespace lower {
 
@@ -52,8 +52,9 @@ namespace lower {
 // for branch targets.
 //
 // Runtime hooks (codegen provides the bodies):
-// `print` lowers to external `alcy_print(ptr) -> ()` and `panic` to
-// external `alcy_panic(ptr) -> !` followed by `Unreachable`.
+// `print` lowers to external `alcy_print(ptr) -> ()`, `println` to
+// external `alcy_prinln(ptr) -> ()`, and `panic` to external
+// `alcy_panic(ptr) -> !` followed by `Unreachable`.
 //
 // Ownership analysis consumes LoweredPackage rather than raw storage:
 // instruction spans locate diagnostics and the address table names

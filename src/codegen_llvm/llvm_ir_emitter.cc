@@ -7,8 +7,8 @@
 #include <string_view>
 #include <utility>
 
-#include "cfg/build_config.h"
 #include "codegen_llvm/common.h"
+#include "config/build_config.h"
 #include "debug/dcheck.h"
 #include "debug/dlog.h"
 #include "debug/fatal.h"

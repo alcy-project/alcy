@@ -44,9 +44,9 @@ TEST_CASE("Static assertion for IR elements") {
   static_assert(sizeof(TypeNode) == 8);
   static_assert(sizeof(StructType) == 16);
 
-  // static_assert(sizeof(StorageState) == 216);
-  // static_assert(sizeof(Storage) == 216);
-  // static_assert(sizeof(StorageBuilder) == 216);
+  // static_assert(sizeof(StorageState) == 360);
+  // static_assert(sizeof(Storage) == 360);
+  // static_assert(sizeof(StorageBuilder) == 360);
 }
 
 TEST_CASE("SeqBuilder accumulates consecutive indexes") {

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "fpag/base/numeric.h"
+
 namespace ir {
 
 enum class AtomicRmwOp : u8 {

@@ -6,6 +6,7 @@
 #include <span>
 #include <string_view>
 
+#include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
 #include "pkg/manifest.h"

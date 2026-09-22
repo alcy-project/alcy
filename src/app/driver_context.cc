@@ -3,7 +3,6 @@
 
 #include "app/driver_context.h"
 
-#include <string>
 #include <string_view>
 
 #include "base/logger.h"
@@ -11,6 +10,7 @@
 #include "diag/diagnostic.h"
 #include "diag/render.h"
 #include "fmt/format.h"
+#include "fpag/mem/page_allocator.h"
 #include "pipeline/pipeline.h"
 #include "source/source.h"
 

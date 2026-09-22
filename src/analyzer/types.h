@@ -4,11 +4,14 @@
 #pragma once
 
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "analyzer/resolve.h"
+#include "ast/ast.h"
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
+#include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
 

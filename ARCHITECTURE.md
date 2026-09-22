@@ -109,23 +109,22 @@ runtime polymorphism.
 Compilation proceeds as a linear pipeline. There is no shared mutable global
 state between stages beyond the data explicitly passed along.
 
-| Module                 | Role                                                                                                                                   | Allocation contract                                                               |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------| --------------------------------------------------------------------------------- |
-| `app`                  | Driver: argument parsing, initialization, and pipeline orchestration.                                                                  | Standard allocation; setup-time work only.                                        |
-| `lexer`                | Tokenizes source files into a token stream.                                                                                            | Zero heap allocations on hot paths; fixed-width, contiguous token slices.         |
-| `parser`               | Builds a typed abstract syntax tree from the token stream.                                                                             | Arena-only for AST node construction.                                             |
-| `path`                 | Canonical path value type: native-separator folding, lexical normalization, and joining.                                               | Owned strings; setup-time use only.                                               |
-| `ast`                  | Abstract syntax tree node definitions shared by the parser and later stages.                                                           | Arena-allocated nodes; no independent heap allocation outside the arena.          |
-| `ir`                   | Core intermediate representation: functions, blocks, instructions, operands, and types, plus storage that owns them.                   | Flat, arena-backed storage.                                                       |
-| `analyzer`             | Name resolution and type checking on the AST, plus ownership checking on the IR.                                                       | No heap allocation on hot paths; operates over immutable views where possible.    |
-| `pipeline`             | Project-level build flow: package discovery, source loading, and per-file stage orchestration.                                         | Explicit phase boundaries and arena resets.                                       |
-| `pkg`                  | Stands for `package`. Package manifests (`alcy.toml`), path-only dependency resolution, and lockfile model.                            | Arena-backed views; no heap allocation in the model itself.                       |
-| `source`               | Source file registry: memory-mapped file loading with stable file ids.                                                                 | Mapped files plus small owned tables.                                             |
-| `codegen_llvm`         | Emits LLVM IR from analyzed IR. The active MVP code-generation path.                                                                   | Local API buffers only.                                                           |
-| `codegen`              | Reserved native code generation backend; no committed design yet.                                                                      | N/A - not yet implemented.                                                        |
-| `core`                 | Shared configuration and utilities used across modules.                                                                                | New allocation here is an architectural decision.                                 |
-| `diag`                 | Stands for `diagnostic`. Source spans, diagnostics, arena-backed bags, and the fmtlib renderer.                                        | Zero heap allocation on hot paths; message bytes use an injected arena.           |
-| `base`, `debug`, `cfg` | `cfg` stands for `config`. Low-level shared facilities for numeric types, logging, diagnostics/assertion helpers, and build-time flags.| Zero heap allocations.                                                            |
+| Module                    | Role                                                                                                                                   | Allocation contract                                                               |
+| --------------------------| ---------------------------------------------------------------------------------------------------------------------------------------| --------------------------------------------------------------------------------- |
+| `app`                     | Driver: argument parsing, initialization, and pipeline orchestration.                                                                  | Standard allocation; setup-time work only.                                        |
+| `lexer`                   | Tokenizes source files into a token stream.                                                                                            | Zero heap allocations on hot paths; fixed-width, contiguous token slices.         |
+| `parser`                  | Builds a typed abstract syntax tree from the token stream.                                                                             | Arena-only for AST node construction.                                             |
+| `path`                    | Canonical path value type: native-separator folding, lexical normalization, and joining.                                               | Owned strings; setup-time use only.                                               |
+| `ast`                     | Abstract syntax tree node definitions shared by the parser and later stages.                                                           | Arena-allocated nodes; no independent heap allocation outside the arena.          |
+| `ir`                      | Core intermediate representation: functions, blocks, instructions, operands, and types, plus storage that owns them.                   | Flat, arena-backed storage.                                                       |
+| `analyzer`                | Name resolution and type checking on the AST, plus ownership checking on the IR.                                                       | No heap allocation on hot paths; operates over immutable views where possible.    |
+| `pipeline`                | Project-level build flow: package discovery, source loading, and per-file stage orchestration.                                         | Explicit phase boundaries and arena resets.                                       |
+| `pkg`                     | Stands for `package`. Package manifests (`alcy.toml`), path-only dependency resolution, and lockfile model.                            | Arena-backed views; no heap allocation in the model itself.                       |
+| `source`                  | Source file registry: memory-mapped file loading with stable file ids.                                                                 | Mapped files plus small owned tables.                                             |
+| `codegen_llvm`            | Emits LLVM IR from analyzed IR. The active MVP code-generation path.                                                                   | Local API buffers only.                                                           |
+| `codegen`                 | Reserved native code generation backend; no committed design yet.                                                                      | N/A - not yet implemented.                                                        |
+| `diag`                    | Stands for `diagnostic`. Source spans, diagnostics, arena-backed bags, and the fmtlib renderer.                                        | Zero heap allocation on hot paths; message bytes use an injected arena.           |
+| `base`, `debug`, `config` | Low-level shared facilities for numeric types, logging, diagnostics/assertion helpers, and build-time flags.                           | Zero heap allocations.                                                            |
 
 Supporting targets include `tests` and `benchmarks`.
 
@@ -336,8 +335,7 @@ with a from-source fallback. Build and platform details are documented in
 
 - **No untracked allocation**: New allocating utilities in low-level
   infrastructure must be evaluated against the zero-allocation contracts of
-  the hot-path stages. In particular, additions to `src/core` or `src/base`
-  must not silently introduce heap allocation into existing hot paths.
+  the hot-path stages.
 
 ## Scope beyond MVP
 

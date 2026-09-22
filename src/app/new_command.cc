@@ -11,7 +11,7 @@
 #include "app/driver_context.h"
 #include "app/result_code.h"
 #include "base/logger.h"
-#include "cfg/build_config.h"
+#include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "fmt/format.h"

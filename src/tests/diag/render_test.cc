@@ -18,7 +18,7 @@ namespace diag {
 
 namespace {
 
-constexpr std::string_view kSrc = "let x = foo(1, 2);\nlet y = 2;\n";
+constexpr std::string_view kSrc = "x := foo(1, 2)\ny := 2\n";
 
 SourceText fetch_source(u32 file, const void*) {
   if (file == 3) {
@@ -55,28 +55,28 @@ TEST_CASE("Render without source") {
 TEST_CASE("Render with source snippet") {
   BagFixture f;
   const u32 i =
-      f.bag.emit(Severity::Error, 1, Span{.file = 3, .offset = 8, .length = 3},
+      f.bag.emit(Severity::Error, 1, Span{.file = 3, .offset = 5, .length = 3},
                  "bad call");
   CHECK(render_str(f.bag.at(i)) ==
         "error[E1]: bad call\n"
-        " --> main.al:1:9\n"
+        " --> main.al:1:6\n"
         "  |\n"
-        "1 | let x = foo(1, 2);\n"
-        "  |         ^^^\n");
+        "1 | x := foo(1, 2)\n"
+        "  |      ^^^\n");
 }
 
 TEST_CASE("Render clips multi-line spans and clamps offsets") {
   BagFixture f;
   // Length runs past the newline; only the first line is underlined.
   const u32 i =
-      f.bag.emit(Severity::Error, 1, Span{.file = 3, .offset = 8, .length = 40},
+      f.bag.emit(Severity::Error, 1, Span{.file = 3, .offset = 5, .length = 9},
                  "bad call");
   CHECK(render_str(f.bag.at(i)) ==
         "error[E1]: bad call\n"
-        " --> main.al:1:9\n"
+        " --> main.al:1:6\n"
         "  |\n"
-        "1 | let x = foo(1, 2);\n"
-        "  |         ^^^^^^^^^^\n");
+        "1 | x := foo(1, 2)\n"
+        "  |      ^^^^^^^^^\n");
 
   // Out-of-range offset clamps to the end of the buffer.
   const u32 j =
@@ -89,16 +89,16 @@ TEST_CASE("Render clips multi-line spans and clamps offsets") {
 TEST_CASE("Render secondary labels") {
   BagFixture f;
   const u32 i =
-      f.bag.emit(Severity::Error, 1, Span{.file = 3, .offset = 8, .length = 3},
+      f.bag.emit(Severity::Error, 1, Span{.file = 3, .offset = 5, .length = 3},
                  "bad call");
   f.bag.label(i, {{{.file = 3, .offset = 23, .length = 1}, "used here"}});
   CHECK(render_str(f.bag.at(i)) ==
         "error[E1]: bad call\n"
-        " --> main.al:1:9\n"
+        " --> main.al:1:6\n"
         "  |\n"
-        "1 | let x = foo(1, 2);\n"
-        "  |         ^^^\n"
-        " = note: used here --> main.al:2:5\n");
+        "1 | x := foo(1, 2)\n"
+        "  |      ^^^\n"
+        " = note: used here --> main.al:3:1\n");
 }
 
 TEST_CASE("Render unknown file") {

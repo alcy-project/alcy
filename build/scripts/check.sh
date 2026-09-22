@@ -5,6 +5,16 @@
 
 set -e
 
+# Determine Python runner tool or fall back to python3
+if command -v uv >/dev/null 2>&1; then
+  py_runner=(uv run)
+elif command -v python3 >/dev/null 2>&1; then
+  py_runner=(python3)
+else
+  echo "error: uv or python3 is required to run this script" >&2
+  exit 1
+fi
+
 script_dir=$(dirname "$0")
 cd "$script_dir/../.." && root_dir=$(pwd)
 tool_scripts_dir="$root_dir/build/scripts"
@@ -16,9 +26,12 @@ if [[ "${1:-}" == "--wasm" ]]; then
   run_wasm=true
 fi
 
-typos
+if command -v typos >/dev/null 2>&1; then
+  typos
+fi
 
-if [ -z "$IN_NIX_SHELL" ]; then
+# Enter nix develop shell if nix is available and not already inside
+if [ -z "${IN_NIX_SHELL:-}" ] && command -v nix >/dev/null 2>&1; then
   exec nix develop -c "$0" "$@"
 fi
 
@@ -26,48 +39,48 @@ release_subdir="build_release"
 debug_subdir="build"
 wasm_subdir="build_wasm"
 
-uv run "$tool_scripts_dir/build.py" \
+"${py_runner[@]}" "$tool_scripts_dir/build.py" \
   --target=all \
   --mode=release \
   --build-subdir=$release_subdir
 
-uv run "$tool_scripts_dir/build.py" \
+"${py_runner[@]}" "$tool_scripts_dir/build.py" \
   --target=all \
   --mode=debug \
   --build-subdir=$debug_subdir
 
-uv run "$tool_scripts_dir/run.py" \
+"${py_runner[@]}" "$tool_scripts_dir/run.py" \
   --target=tests \
   --mode=debug \
   --build-subdir=$debug_subdir \
   -- --no-skip
 
-uv run "$tool_scripts_dir/check_e2e.py" \
+"${py_runner[@]}" "$tool_scripts_dir/check_e2e.py" \
   --build-subdir=$debug_subdir
 
-uv run "$tool_scripts_dir/check_runtime.py"
+"${py_runner[@]}" "$tool_scripts_dir/check_runtime.py"
 
-uv run "$tool_scripts_dir/check_exe.py" \
+"${py_runner[@]}" "$tool_scripts_dir/check_exe.py" \
   --build-subdir=$debug_subdir
 
-uv run "$tool_scripts_dir/format.py" --dry-run
-uv run "$tool_scripts_dir/lint.py"
+"${py_runner[@]}" "$tool_scripts_dir/format.py" --dry-run
+"${py_runner[@]}" "$tool_scripts_dir/lint.py"
 
-uv run "$tool_scripts_dir/verify_static_linkage.py" \
+"${py_runner[@]}" "$tool_scripts_dir/verify_static_linkage.py" \
   --build-dir="$root_dir/out/$release_subdir"
-uv run "$tool_scripts_dir/verify_static_linkage.py" \
+"${py_runner[@]}" "$tool_scripts_dir/verify_static_linkage.py" \
   --build-dir="$root_dir/out/$debug_subdir"
 
 if [[ $run_wasm == true ]]; then
-  command -v emcc >/dev/null || {
+  command -v emcc >/dev/null 2>&1 || {
     echo "error: emcc not found; install Emscripten first" >&2
     exit 1
   }
-  command -v node >/dev/null || {
+  command -v node >/dev/null 2>&1 || {
     echo "error: node not found; install node first" >&2
     exit 1
   }
-  uv run "$tool_scripts_dir/run.py" \
+  "${py_runner[@]}" "$tool_scripts_dir/run.py" \
     --target=tests \
     --mode=debug \
     --build-subdir=$wasm_subdir \

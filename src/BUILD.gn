@@ -12,7 +12,7 @@ config("alcy_config") {
 group("base_modules") {
   public_deps = [
     "base",
-    "cfg",
+    "config",
     "debug",
     "//third_party/fpag",
   ]
@@ -26,7 +26,6 @@ group("modules") {
     "borrow",
     "codegen",
     "codegen_llvm",
-    "core",
     "diag",
     "ir",
     "lexer",

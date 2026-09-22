@@ -5,12 +5,12 @@
 
 #include <span>
 #include <string_view>
-#include <vector>
 
 #include "ast/ast.h"
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
 #include "lexer/token.h"
 #include "source/source.h"

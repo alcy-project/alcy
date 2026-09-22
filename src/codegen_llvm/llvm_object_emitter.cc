@@ -9,8 +9,8 @@
 #include <string_view>
 #include <system_error>
 
-#include "cfg/build_config.h"
 #include "codegen_llvm/common.h"
+#include "config/build_config.h"
 #include "fpag/base/result.h"
 
 namespace codegen_llvm {

@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "cfg/build_config.h"
+#include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/render.h"

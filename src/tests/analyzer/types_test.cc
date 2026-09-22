@@ -13,7 +13,6 @@
 #include "analyzer/resolve.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
-#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"

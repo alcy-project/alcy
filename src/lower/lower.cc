@@ -2294,6 +2294,9 @@ class Lowerer {
           // is unnecessary: checking validated the shape, and only
           // plain assignment reaches lowering intact when the operator
           // needs control flow. Arithmetic compounds lower directly.
+
+          // TODO: Actually, compound operation is not handled before this.
+          // Maybe Desugar or something should handle this.
           (void)loaded;
         }
         emit_void(ir::Opcode::Store, {stored, place.op});

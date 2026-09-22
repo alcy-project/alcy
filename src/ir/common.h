@@ -9,64 +9,67 @@
 
 namespace ir {
 
-using IdBaseType = base::IdxBaseType;
+namespace details {
+template <typename T>
+using Idx = base::Idx<T, base::IdxBaseType>;
+}
 
 struct Function;
-using FunctionIdx = base::Idx<Function, IdBaseType>;
+using FunctionIdx = details::Idx<Function>;
 using FunctionIdxRange = base::IdxRange<FunctionIdx>;
 // constexpr u32 kFunctionParameterTypesSooThreshold = 8;
 
 struct Block;
-using BlockIdx = base::Idx<Block, IdBaseType>;
+using BlockIdx = details::Idx<Block>;
 using BlockIdxRange = base::IdxRange<BlockIdx>;
 // constexpr u32 kBlockParameterTypesSooThreshold = 20;
 
 struct BlockParam;
-using BlockParamIdx = base::Idx<BlockParam, IdBaseType>;
+using BlockParamIdx = details::Idx<BlockParam>;
 using BlockParamIdxRange = base::IdxRange<BlockParamIdx>;
 
 struct Immutable;
-using ImmutableIdx = base::Idx<Immutable, IdBaseType>;
+using ImmutableIdx = details::Idx<Immutable>;
 using ImmutableIdxRange = base::IdxRange<ImmutableIdx>;
 
 struct Register;
-using RegisterIdx = base::Idx<Register, IdBaseType>;
+using RegisterIdx = details::Idx<Register>;
 using RegisterIdxRange = base::IdxRange<RegisterIdx>;
 
 struct Instruction;
-using InstructionIdx = base::Idx<Instruction, IdBaseType>;
+using InstructionIdx = details::Idx<Instruction>;
 using InstructionIdxRange = base::IdxRange<InstructionIdx>;
 
 struct ExternalFunction;
-using ExternalFunctionIdx = base::Idx<ExternalFunction, IdBaseType>;
+using ExternalFunctionIdx = details::Idx<ExternalFunction>;
 using ExternalFunctionIdxRange = base::IdxRange<ExternalFunctionIdx>;
 
 struct Operand;
-using OperandIdx = base::Idx<Operand, IdBaseType>;
+using OperandIdx = details::Idx<Operand>;
 using OperandIdxRange = base::IdxRange<OperandIdx>;
 
 enum class TypeTag : u8;
 struct TypeNode;
-using TypeIdx = base::Idx<TypeNode, IdBaseType>;
+using TypeIdx = details::Idx<TypeNode>;
 using TypeIdxRange = base::IdxRange<TypeIdx>;
 
 struct StructType;
-using StructTypeIdx = base::Idx<StructType, IdBaseType>;
+using StructTypeIdx = details::Idx<StructType>;
 
 struct ArrayType;
-using ArrayTypeIdx = base::Idx<ArrayType, IdBaseType>;
+using ArrayTypeIdx = details::Idx<ArrayType>;
 
 struct EnumType;
-using EnumTypeIdx = base::Idx<EnumType, IdBaseType>;
+using EnumTypeIdx = details::Idx<EnumType>;
 
 struct EnumVariantType;
-using EnumVariantTypeIdx = base::Idx<EnumVariantType, IdBaseType>;
+using EnumVariantTypeIdx = details::Idx<EnumVariantType>;
 using EnumVariantTypeIdxRange = base::IdxRange<EnumVariantTypeIdx>;
 
 struct RefType;
-using RefTypeIdx = base::Idx<RefType, IdBaseType>;
+using RefTypeIdx = details::Idx<RefType>;
 
 struct TupleType;
-using TupleTypeIdx = base::Idx<TupleType, IdBaseType>;
+using TupleTypeIdx = details::Idx<TupleType>;
 
 }  // namespace ir

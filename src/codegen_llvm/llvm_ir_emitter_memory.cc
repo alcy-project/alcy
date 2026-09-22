@@ -1,9 +1,9 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "cfg/build_config.h"
 #include "codegen_llvm/common.h"
 #include "codegen_llvm/llvm_ir_emitter.h"
+#include "config/build_config.h"
 #include "debug/dcheck.h"
 #include "debug/dlog.h"
 #include "debug/fatal.h"

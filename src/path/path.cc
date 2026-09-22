@@ -7,7 +7,7 @@
 #include <string_view>
 #include <vector>
 
-#include "cfg/build_config.h"
+#include "config/build_config.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 

@@ -3,6 +3,7 @@
 
 #include "pkg/manifest.h"
 
+#include <optional>
 #include <string_view>
 #include <utility>
 
@@ -17,13 +18,16 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-literal-operator"
 #pragma clang diagnostic ignored "-Wswitch"
+// Umbrella header provides the .inl implementations; keep it whole.
+#include "toml++/toml.hpp"  // IWYU pragma: keep
+// Other headers must be included after toml.hpp
+#include "toml++/impl/array.hpp"
+#include "toml++/impl/node.hpp"
 #include "toml++/impl/parse_error.hpp"
 #include "toml++/impl/parse_result.hpp"
 #include "toml++/impl/parser.hpp"
 #include "toml++/impl/source_region.hpp"
 #include "toml++/impl/table.hpp"
-// Umbrella header provides the .inl implementations; keep it whole.
-#include "toml++/toml.hpp"  // IWYU pragma: keep
 #pragma clang diagnostic pop
 
 namespace pkg {

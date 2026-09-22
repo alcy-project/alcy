@@ -22,6 +22,7 @@
 #include "fpag/io/file_handle.h"
 #include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
+#include "fpag/mem/page_allocator.h"
 #include "fpag/str/string_interner.h"
 #include "ir/instruction.h"
 #include "ir/opcode.h"

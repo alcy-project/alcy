@@ -12,8 +12,6 @@
 
 namespace source {
 
-// NOTE: doctest REQUIRE needs exceptions (disabled here), so setup steps
-// use CHECK plus an early return instead.
 TEST_CASE("SourceManager loads files and dedups by path") {
   io::TempDir dir("alcy_source_test");
   const bool written = dir.write_file("a.al", "let x = 1;\n");

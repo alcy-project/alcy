@@ -11,7 +11,9 @@
 #include "ast/ast.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/span.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
 #include "lexer/token.h"
 #include "source/source.h"
@@ -187,7 +189,7 @@ diag::Span Parser::span_from(usize mark) const {
 
 void Parser::synchronize() {
   const usize start = pos_;
-  int depth = 0;
+  i32 depth = 0;
   while (!at_end()) {
     const lexer::TokenKind kind = peek_kind();
     if (depth == 0 &&
@@ -221,7 +223,7 @@ void Parser::synchronize() {
 }
 
 Parser::StmtLead Parser::scan_lead() const {
-  int depth = 0;
+  i32 depth = 0;
   for (usize i = pos_; i < tokens_.size();) {
     const lexer::TokenKind kind = tokens_[i].kind;
     if (kind == lexer::TokenKind::Error ||
@@ -1820,6 +1822,8 @@ ast::Expr* Parser::parse_if() {
   if (then_block == nullptr) {
     return nullptr;
   }
+
+  // TODO: Add support for `else if``
   const ast::Block* else_block = nullptr;
   if (match(lexer::TokenKind::Else)) {
     else_block = parse_block();
