@@ -26,6 +26,7 @@
             pkgs.ninja
             pkgs.pkg-config
             pkgs.uv
+            pkgs.ast-grep
             llvmPkgs.lld
             llvmPkgs.llvm
           ];
