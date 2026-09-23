@@ -162,3 +162,16 @@ jobs:
             *.${{ matrix.archive }}
             *.sha256
           if-no-files-found: error
+
+      - name: Run Smoke Test
+        shell: bash
+        run: |
+          exe=""
+          if [[ "${{ matrix.plat }}" == "windows" ]]; then exe=".exe"; fi
+          bin="./out/build/alcy${exe}"
+
+          version_out=$(${{ matrix.nix && 'nix develop .#default --command ' || '' }}"$bin" --version)
+          echo "$version_out"
+
+          help_out=$(${{ matrix.nix && 'nix develop .#default --command ' || '' }}"$bin" --help)
+          echo "$help_out"
