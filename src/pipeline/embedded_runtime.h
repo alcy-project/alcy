@@ -5,7 +5,7 @@
 
 #include "fpag/base/numeric.h"
 
-namespace cli {
+namespace pipeline {
 
 // Embedded program runtime sources (generated). Staged to a scratch
 // directory at `alcy build` time so the system compiler can consume
@@ -15,4 +15,4 @@ extern const u64 kAlcyRuntimeHeader_len;
 extern const unsigned char kAlcyRuntimeSource[];
 extern const u64 kAlcyRuntimeSource_len;
 
-}  // namespace cli
+}  // namespace pipeline

@@ -35,7 +35,7 @@ is an `AutoTaggedUnion`, so a factory-selected tag always matches its data.
 Range members (`operands`, `instrs`, `block_params`, function `blocks`,
 parameter/field lists) must reference **consecutive** vector entries.
 
-- Use `SeqBuilder<T>` (`OperandSeq`, `InstrSeq`, `BlockSeq`, …) for every
+- Use `SeqBuilder<T>` (`OperandSeq`, `InstrSeq`, `BlockSeq`, ...) for every
   range of two or more entries. It records the head on first push and
   verifies contiguity on every push (debug builds).
 - Single-entry ranges (`{idx, 1}`) use braced literals directly.

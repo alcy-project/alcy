@@ -32,7 +32,6 @@ group("modules") {
     "lower",
     "parser",
     "path",
-    "pipeline",
     "pkg",
     "source",
   ]
@@ -42,6 +41,7 @@ group("libs") {
   public_deps = [
     ":base_modules",
     ":modules",
+    "pipeline",
   ]
 }
 

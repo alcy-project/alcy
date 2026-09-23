@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "cli/target.h"
+#include "pipeline/target.h"
 
 #include <cstdlib>
 #include <string_view>
@@ -9,26 +9,26 @@
 #include <vector>
 
 #include "analyzer/resolve.h"
-#include "cli/cli_context.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "path/path.h"
 #include "pipeline/pipeline.h"
+#include "pipeline/pipeline_context.h"
 #include "pkg/manifest.h"
 #include "pkg/modules.h"
 #include "source/source.h"
 
-namespace cli {
+namespace pipeline {
 
 diag::Fallible<BinTarget> resolve_bin_target(
-    CliContext& ctx,
+    PipelineContext& ctx,
     const path::Path& root,
     const pkg::PackageManifest& manifest,
     std::string_view manifest_name) {
   if (manifest.bin_count == 0) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, kCliNoTargets,
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineNoTargets,
                                    "manifest '{}' declares no [[bin]] targets",
                                    manifest_name);
     (void)index;
@@ -36,7 +36,7 @@ diag::Fallible<BinTarget> resolve_bin_target(
   }
   if (manifest.bin_count > 1) {
     const u32 index = ctx.bag.emit(
-        diag::Severity::Error, kCliNoTargets,
+        diag::Severity::Error, kPipelineNoTargets,
         "manifest '{}' declares {} [[bin]] targets; only one is supported",
         manifest_name, manifest.bin_count);
     (void)index;
@@ -59,7 +59,7 @@ diag::Fallible<BinTarget> resolve_bin_target(
     }
   }
   if (bin_file == source::kUnknownFile) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, kCliNoTargets,
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineNoTargets,
                                    "bin target '{}' was not discovered",
                                    manifest.bins[0].path);
     (void)index;
@@ -98,7 +98,7 @@ diag::Fallible<BinTarget> resolve_bin_target(
     }
   }
   if (!bin_selected) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, kCliNoTargets,
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineNoTargets,
                                    "bin target '{}' is not in [modules]",
                                    manifest.bins[0].path);
     (void)index;
@@ -117,4 +117,4 @@ diag::Fallible<BinTarget> resolve_bin_target(
   return base::make_ok(target);
 }
 
-}  // namespace cli
+}  // namespace pipeline

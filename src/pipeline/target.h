@@ -6,19 +6,19 @@
 #include <string_view>
 
 #include "analyzer/resolve.h"
-#include "cli/cli_context.h"
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "ir/type.h"
 #include "path/path.h"
+#include "pipeline/pipeline_context.h"
 #include "pkg/manifest.h"
 
-namespace cli {
+namespace pipeline {
 
 // MVP pointer width: isize/usize map to 64-bit integers. An explicit
 // choice (never sniffed from the host); a --target flag selects it
 // once cross builds land.
-constexpr ir::PointerWidth kCheckWidth = ir::PointerWidth::W64;
+constexpr ir::PointerWidth kTargetWidth = ir::PointerWidth::W64;
 
 // Resolved binary target: the module tree plus its source count and
 // binary name. Shared by check and build; callers report and map
@@ -30,9 +30,9 @@ struct BinTarget {
 };
 
 diag::Fallible<BinTarget> resolve_bin_target(
-    CliContext& ctx,
+    PipelineContext& ctx,
     const path::Path& root,
     const pkg::PackageManifest& manifest,
     std::string_view manifest_name);
 
-}  // namespace cli
+}  // namespace pipeline

@@ -21,6 +21,8 @@ constexpr char kDefaultPathSeparator = '/';
 // POSIX, so it is only ever treated as a separator under IS_OS_WIN.
 constexpr char kWindowsPathSeparator = '\\';
 
+constexpr std::string_view kSourceExtension = ".al";
+
 enum class PathError : u8 { ContainsNul };
 
 // Canonical path value type. The canonical form is established once at

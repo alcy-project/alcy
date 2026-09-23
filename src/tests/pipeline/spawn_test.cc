@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "cli/spawn.h"
+#include "pipeline/spawn.h"
 
 #include <utility>
 #include <vector>
@@ -11,7 +11,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 
-namespace cli {
+namespace pipeline {
 
 namespace {
 
@@ -52,4 +52,4 @@ TEST_CASE("Spawn forwards exit codes") {
 
 }  // namespace
 
-}  // namespace cli
+}  // namespace pipeline

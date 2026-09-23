@@ -1,11 +1,11 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "cli/new_command.h"
+#include "pipeline/new.h"
 
 #include "doctest/doctest.h"
 
-namespace cli {
+namespace pipeline {
 
 TEST_CASE("Valid package names") {
   CHECK(valid_package_name("mypkg"));
@@ -21,4 +21,4 @@ TEST_CASE("Invalid package names") {
   CHECK(!valid_package_name("pkg!"));
 }
 
-}  // namespace cli
+}  // namespace pipeline

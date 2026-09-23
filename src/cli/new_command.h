@@ -9,8 +9,6 @@
 
 namespace cli {
 
-bool valid_package_name(std::string_view name);
-
 // Scaffolds a new package directory.
 ResultCode run_new(std::string_view target_dir);
 

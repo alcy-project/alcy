@@ -12,15 +12,12 @@
 #include "cli/build_command.h"
 #include "cli/check_command.h"
 #include "cli/cli_config.h"
-#include "cli/cli_context.h"
 #include "cli/init_handler.h"
 #include "cli/new_command.h"
 #include "cli/parse_args.h"
 #include "cli/parse_output.h"
 #include "cli/result_code.h"
 #include "debug/fatal.h"
-#include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_style.h"
@@ -31,12 +28,7 @@ namespace cli {
 namespace {
 
 ResultCode not_implemented(std::string_view subcommand) {
-  CliContext ctx;
-  const u32 index =
-      ctx.bag.emit(diag::Severity::Error, kCliNotImplemented,
-                   "'alcy {}' is not implemented yet", subcommand);
-  (void)index;
-  report(ctx.bag, ctx.sources);
+  base::logger.error("'alcy {}' is not implemented yet", subcommand);
   return ResultCode::NotImplemented;
 }
 

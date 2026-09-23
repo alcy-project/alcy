@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "config/build_config.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/io/temp_dir.h"
@@ -90,7 +91,7 @@ i32 run_build_on(io::TempDir& dir,
   return cli_main(static_cast<i32>(argv.size()), argv.data());
 }
 
-#if !defined(OS_ASMJS)
+#if !BUILD_FLAG(IS_OS_ASMJS)
 TEST_CASE("Build emits an object file") {
   io::TempDir dir("alcy_cli_build_object_test");
   const bool setup = write_all(dir, "main.al",
@@ -116,9 +117,8 @@ TEST_CASE("Build links an executable") {
   }
   CHECK(run_build_on(dir, "main.al", "main_exe") == 0);
 }
-#endif
 
-TEST_CASE("Build rejects an unwritable output") {
+TEST_CASE("Build creates nonexistent directory") {
   io::TempDir dir("alcy_cli_build_bad_output_test");
   const bool setup = write_all(dir, "main.al",
                                "fn main() {\n"
@@ -129,5 +129,6 @@ TEST_CASE("Build rejects an unwritable output") {
   }
   CHECK(run_build_on(dir, "main.al", "no-such-dir/main.o") == 0);
 }
+#endif
 
 }  // namespace cli

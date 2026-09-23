@@ -1,15 +1,15 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "cli/runtime_stage.h"
+#include "pipeline/runtime_stage.h"
 
 #include <string_view>
 
-#include "cli/embedded_runtime.h"
 #include "fpag/base/numeric.h"
 #include "fpag/io/temp_dir.h"
+#include "pipeline/embedded_runtime.h"
 
-namespace cli {
+namespace pipeline {
 
 namespace {
 
@@ -36,4 +36,4 @@ std::string_view runtime_source_name() {
   return "alcy_runtime.c";
 }
 
-}  // namespace cli
+}  // namespace pipeline

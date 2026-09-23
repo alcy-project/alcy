@@ -1,19 +1,19 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "cli/runtime_stage.h"
+#include "pipeline/runtime_stage.h"
 
 #include <string_view>
 #include <utility>
 
-#include "cli/embedded_runtime.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
+#include "pipeline/embedded_runtime.h"
 #include "source/source.h"
 
-namespace cli {
+namespace pipeline {
 
 namespace {
 
@@ -49,4 +49,4 @@ TEST_CASE("Stage writes embedded runtime sources") {
 
 }  // namespace
 
-}  // namespace cli
+}  // namespace pipeline

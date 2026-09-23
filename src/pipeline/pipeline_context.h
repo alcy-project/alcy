@@ -12,18 +12,16 @@
 #include "fpag/str/string_interner.h"
 #include "source/source.h"
 
-namespace cli {
+namespace pipeline {
 
-// Diagnostic codes 3000-3099 are reserved for the cli.
-inline constexpr u32 kCliNoManifest = 3000;
-inline constexpr u32 kCliIoError = 3001;
-inline constexpr u32 kCliNotImplemented = 3002;
-inline constexpr u32 kCliNoTargets = 3003;
-inline constexpr u32 kCliLinkError = 3004;
+// Diagnostic codes 3000-3099 are reserved for the pipeline.
+inline constexpr u32 kPipelineNoManifest = 3000;
+inline constexpr u32 kPipelineIoError = 3001;
+inline constexpr u32 kPipelineNotImplemented = 3002;
+inline constexpr u32 kPipelineNoTargets = 3003;
+inline constexpr u32 kPipelineLinkError = 3004;
 
-constexpr std::string_view kSourceSuffix = ".al";
-
-struct CliContext {
+struct PipelineContext {
   mem::Arena arena;
   ast::AstArena ast;
   source::SourceManager sources;
@@ -32,7 +30,7 @@ struct CliContext {
   // string literals). Must outlive every phase that reads its ids.
   str::StringInterner strings;
 
-  CliContext();
+  PipelineContext();
 };
 
 // Returns ".exe" on Windows or else ""
@@ -41,4 +39,4 @@ std::string_view exe_suffix();
 // Renders every diagnostic in the bag through the logger.
 void report(const diag::DiagBag& bag, const source::SourceManager& sources);
 
-}  // namespace cli
+}  // namespace pipeline

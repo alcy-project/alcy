@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "cli/spawn.h"
+#include "pipeline/spawn.h"
 
 #include <string>
 #include <vector>
@@ -25,7 +25,7 @@ extern char** environ;
 #endif
 #endif
 
-namespace cli {
+namespace pipeline {
 
 namespace {
 
@@ -129,4 +129,4 @@ base::Result<i32, SpawnError> run_command(
 #endif
 }
 
-}  // namespace cli
+}  // namespace pipeline

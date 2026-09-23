@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "cli/cli_context.h"
+#include "pipeline/pipeline_context.h"
 
 #include <string_view>
 
@@ -15,7 +15,7 @@
 #include "pipeline/pipeline.h"
 #include "source/source.h"
 
-namespace cli {
+namespace pipeline {
 
 // Executable suffix for linked output (Windows needs .exe).
 std::string_view exe_suffix() {
@@ -26,7 +26,7 @@ std::string_view exe_suffix() {
 #endif
 }
 
-CliContext::CliContext() : bag(arena), strings(mem::page_size()) {
+PipelineContext::PipelineContext() : bag(arena), strings(mem::page_size()) {
   arena.reserve(1u << 20);
 }
 
@@ -38,4 +38,4 @@ void report(const diag::DiagBag& bag, const source::SourceManager& sources) {
   });
 }
 
-}  // namespace cli
+}  // namespace pipeline

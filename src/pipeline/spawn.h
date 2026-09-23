@@ -9,7 +9,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 
-namespace cli {
+namespace pipeline {
 
 enum class SpawnError : u8 {
   EmptyArgv,
@@ -23,4 +23,4 @@ enum class SpawnError : u8 {
 // by a signal reports BadExit.
 base::Result<i32, SpawnError> run_command(const std::vector<std::string>& argv);
 
-}  // namespace cli
+}  // namespace pipeline

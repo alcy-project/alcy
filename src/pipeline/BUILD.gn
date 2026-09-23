@@ -1,15 +1,43 @@
+action("embed_runtime") {
+  script = "//build/scripts/embed_runtime.py"
+  inputs = [
+    "//runtime/alcy_runtime.c",
+    "//runtime/alcy_runtime.h",
+  ]
+  outputs = [ "$target_gen_dir/embedded_runtime.cc" ]
+  args = [
+    "--runtime-dir",
+    rebase_path("//runtime", root_build_dir),
+    "--output",
+    rebase_path("$target_gen_dir/embedded_runtime.cc", root_build_dir),
+  ]
+}
+
 source_set("pipeline") {
   sources = [
-    "lib.cc",
+    "$target_gen_dir/embedded_runtime.cc",
+    "build.cc",
+    "build.h",
+    "check.cc",
+    "check.h",
+    "embedded_runtime.h",
+    "new.cc",
+    "new.h",
     "pipeline.cc",
     "pipeline.h",
+    "pipeline_context.cc",
+    "pipeline_context.h",
+    "runtime_stage.cc",
+    "runtime_stage.h",
+    "spawn.cc",
+    "spawn.h",
+    "target.cc",
+    "target.h",
   ]
   deps = [
+    ":embed_runtime",
     "//src:base_modules",
-    "//src/diag",
-    "//src/path",
-    "//src/pkg",
-    "//src/source",
+    "//src:modules",
   ]
   configs += [ "//src:alcy_config" ]
 }

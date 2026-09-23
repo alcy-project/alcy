@@ -13,12 +13,7 @@ enum class ResultCode : u8 {
   NotImplemented,
   BuildFailed,
   CheckFailed,
-  // TODO
-  // LexError,
-  // ParseError,
-  // SemaError,
-  // CodeGenError,
-  // LinkError,
+  NewFailed,
 };
 
 inline constexpr i32 result_code(ResultCode code) {

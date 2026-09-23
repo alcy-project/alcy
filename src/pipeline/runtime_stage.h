@@ -9,7 +9,7 @@ namespace io {
 class TempDir;
 }  // namespace io
 
-namespace cli {
+namespace pipeline {
 
 // Writes the embedded runtime sources into dir for the system
 // compiler. Returns false when either write fails.
@@ -19,4 +19,4 @@ bool stage_runtime(io::TempDir& dir);
 std::string_view runtime_header_name();
 std::string_view runtime_source_name();
 
-}  // namespace cli
+}  // namespace pipeline
