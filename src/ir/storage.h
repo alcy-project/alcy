@@ -22,6 +22,10 @@
 namespace ir {
 
 struct StorageState {
+  // Note: base::Vec maintained (not arena) because idx stability,
+  // random access, and DOD iteration favor dense table; arena conversion
+  // offers no benefit for IR storage.
+
   template <typename T>
   using Alloc = std::allocator<T>;
 
