@@ -108,7 +108,7 @@ struct PackageManifest {
   u32 dependency_count = 0;
   // Declared build targets ([[bin]] tables). MVP builds a single binary;
   // additional entries are parsed for forward compatibility and rejected
-  // by the driver with guidance.
+  // by the cli with guidance.
   const BinTarget* bins = nullptr;
   u32 bin_count = 0;
   // Module membership from the [modules] table. Absent means every

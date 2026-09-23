@@ -7,10 +7,12 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <system_error>
+#include <utility>
+#include <vector>
 
 #include "codegen_llvm/common.h"
 #include "config/build_config.h"
+#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 
 namespace codegen_llvm {
@@ -104,10 +106,8 @@ void init_linked_targets() {
 
 }  // namespace
 
-base::Result<void, ObjectEmitError> emit_object(llvm::Module& module,
-                                                std::string_view triple,
-                                                std::string_view output_path,
-                                                bool optimize) {
+base::Result<std::vector<u8>, ObjectEmitError>
+emit_object(llvm::Module& module, std::string_view triple, bool optimize) {
   init_linked_targets();
   const std::string target_triple = triple.empty()
                                         ? llvm::sys::getDefaultTargetTriple()
@@ -131,20 +131,17 @@ base::Result<void, ObjectEmitError> emit_object(llvm::Module& module,
     return base::make_err(ObjectEmitError::NoTargetMachine);
   }
   module.setDataLayout(machine->createDataLayout());
-  std::error_code code;
-  llvm::raw_fd_ostream output(std::string(output_path), code,
-                              llvm::sys::fs::OF_None);
-  if (code) {
-    return base::make_err(ObjectEmitError::IoError);
-  }
+  llvm::SmallVector<char, 0> buffer_vec;
+  llvm::raw_svector_ostream output(buffer_vec);
   llvm::legacy::PassManager passes;
   if (machine->addPassesToEmitFile(passes, output, nullptr,
                                    llvm::CodeGenFileType::ObjectFile)) {
     return base::make_err(ObjectEmitError::CannotEmit);
   }
   passes.run(module);
-  output.flush();
-  return base::make_ok();
+
+  std::vector<u8> result(buffer_vec.begin(), buffer_vec.end());
+  return base::make_ok(std::move(result));
 }
 
 }  // namespace codegen_llvm

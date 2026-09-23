@@ -15,7 +15,7 @@ namespace borrow {
 // last use. Interprocedural precision comes from function summaries
 // (parameter positions whose loans may reach a return, computed to
 // a bounded fixed-point over the call graph) reified at call sites.
-// Diagnostics only; the driver gates the exit code on the bag.
+// Diagnostics only; the cli gates the exit code on the bag.
 void check_borrows(const lower::LoweredPackage& lowered, diag::DiagBag& bag);
 
 }  // namespace borrow

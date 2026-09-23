@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string_view>
+#include <vector>
 
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -25,9 +26,9 @@ enum class ObjectEmitError : u8 {
 // selects the host. Only targets linked into the binary are
 // available (host backends on native builds); anything else reports
 // UnknownTriple without touching the module.
-base::Result<void, ObjectEmitError> emit_object(llvm::Module& module,
-                                                std::string_view triple,
-                                                std::string_view output_path,
-                                                bool optimize = false);
+base::Result<std::vector<u8>, ObjectEmitError> emit_object(
+    llvm::Module& module,
+    std::string_view triple,
+    bool optimize = false);
 
 }  // namespace codegen_llvm

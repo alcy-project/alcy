@@ -40,8 +40,8 @@ TEST_CASE("Lockfile round-trips through resolve output") {
       "[dependencies]\n"
       "dep = { path = \"dep\" }\n";
   const bool setup =
-      dir.write_file("app/alcy.toml", manifest) &&
-      dir.write_file("app/dep/alcy.toml",
+      dir.write_file("cli/alcy.toml", manifest) &&
+      dir.write_file("cli/dep/alcy.toml",
                      "[package]\nname = \"dep\"\nversion = \"0.0.1\"\n");
   CHECK(setup);
   if (!setup) {
@@ -50,7 +50,7 @@ TEST_CASE("Lockfile round-trips through resolve output") {
 
   Fixture f;
   diag::Fallible<std::vector<ResolvedPackage>> resolved =
-      resolve_package(dir.join("app"), f.sources, f.arena, f.bag);
+      resolve_package(dir.join("cli"), f.sources, f.arena, f.bag);
   CHECK(resolved.is_ok());
   if (!resolved.is_ok()) {
     return;
@@ -73,14 +73,14 @@ TEST_CASE("Lockfile round-trips through resolve output") {
       "name = \"app\"\n"
       "version = \"1.2.3\"\n"
       "source = \"path+file://" +
-      dir.join("app") +
+      dir.join("cli") +
       "\"\n"
       "\n"
       "[[package]]\n"
       "name = \"dep\"\n"
       "version = \"0.0.1\"\n"
       "source = \"path+file://" +
-      dir.join("app") + "/dep\"\n";
+      dir.join("cli") + "/dep\"\n";
   CHECK(text == expected);
 }
 

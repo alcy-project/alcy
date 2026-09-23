@@ -25,7 +25,7 @@ struct Fatal {};
 
 // Conventional phase result: T on success, Fatal (details in DiagBag) on
 // unrecoverable failure. Recoverable diagnostics never fail the result;
-// the driver decides the exit code from DiagBag::has_errors().
+// the cli decides the exit code from DiagBag::has_errors().
 template <typename T>
 using Fallible = base::Result<T, Fatal>;
 

@@ -24,7 +24,7 @@ struct ModuleFile {
 // map to `<entry>.al` under root, while a wildcard adds every
 // discovered file by its root-relative path. Explicit entries must
 // resolve; undiscovered names are errors, and files outside the
-// selection stay out (the driver warns about them separately).
+// selection stay out (the cli warns about them separately).
 diag::Fallible<std::vector<ModuleFile>> resolve_module_files(
     const PackageManifest& manifest,
     std::string_view root,

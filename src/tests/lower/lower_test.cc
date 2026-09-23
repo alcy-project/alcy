@@ -19,6 +19,7 @@
 #include "codegen_llvm/llvm_object_emitter.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
+#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/file_handle.h"
 #include "fpag/io/temp_dir.h"
@@ -334,16 +335,15 @@ TEST_CASE("Lower emits relocatable objects") {
   CHECK(!llvm::verifyModule(*module));
 
   const std::string object_path = dir.join("main.o");
-  base::Result<void, codegen_llvm::ObjectEmitError> emitted =
-      codegen_llvm::emit_object(*module, "", object_path);
+  base::Result<std::vector<u8>, codegen_llvm::ObjectEmitError> emitted =
+      codegen_llvm::emit_object(*module, "");
   CHECK(emitted.is_ok());
   if (emitted.is_err()) {
     return;
   }
-  io::FileHandle object;
-  CHECK(object.open(object_path, io::FileAccess::Read));
+  std::vector<u8> object = std::move(emitted).unwrap();
   // Non-empty relocatable output.
-  CHECK(object.get_size() > 0);
+  CHECK(object.size() > 0);
 
   // Every linked backend emits independently of the host: any alcy
   // binary produces objects for any supported architecture.
@@ -353,16 +353,14 @@ TEST_CASE("Lower emits relocatable objects") {
       {"riscv64-unknown-linux-gnu", "main_r64.o"},
   };
   for (const auto& [triple, name] : triples) {
-    const std::string path = dir.join(name);
-    base::Result<void, codegen_llvm::ObjectEmitError> triple_emitted =
-        codegen_llvm::emit_object(*module, triple, path);
+    base::Result<std::vector<u8>, codegen_llvm::ObjectEmitError>
+        triple_emitted = codegen_llvm::emit_object(*module, triple);
     CHECK(triple_emitted.is_ok());
     if (triple_emitted.is_err()) {
       continue;
     }
-    io::FileHandle triple_object;
-    CHECK(triple_object.open(path, io::FileAccess::Read));
-    CHECK(triple_object.get_size() > 0);
+    const std::vector<u8>& buf = std::move(triple_emitted).unwrap();
+    CHECK(buf.size() > 0);
   }
 }
 #endif

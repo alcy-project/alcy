@@ -30,6 +30,7 @@ source_set("fpag") {
     "src/src/debug/stack_trace/symbolicator.cc",
     "src/src/debug/terminate_handler.cc",
     "src/src/io/file_handle.cc",
+    "src/src/io/io_util.cc",
     "src/src/io/memory_mapped_file.cc",
     "src/src/io/temp_dir.cc",
     "src/src/io/temp_file.cc",

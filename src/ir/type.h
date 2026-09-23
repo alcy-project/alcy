@@ -43,7 +43,7 @@ enum class TypeTag : u8 {
   Tuple,
   // Error recovery marker (never written by user code): failed resolutions
   // produce this so checking can continue without cascades. Must never
-  // reach codegen; the driver aborts on any recorded error first.
+  // reach codegen; the cli aborts on any recorded error first.
   Error,
 };
 

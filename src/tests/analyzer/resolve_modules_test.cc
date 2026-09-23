@@ -208,7 +208,7 @@ TEST_CASE("Resolve attaches unreferenced files as modules") {
   Fixture f;
   // Every listed input attaches, so the resolve-level warning only
   // fires through duplicate collisions (covered above); the
-  // manifest-aware version lands with driver warnings.
+  // manifest-aware version lands with cli warnings.
   const ResolveCase result =
       resolve_case(dir, "main.al", {"main.al", "stray.al"}, f);
   CHECK(result.ok);

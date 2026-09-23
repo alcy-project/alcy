@@ -23,7 +23,7 @@ namespace lower {
 // in place: the package is taken by value and its state reseeds the
 // builder, so type indexes stay identical to the analyzer output.
 // AST views and spellings borrow the caller's arena and sources;
-// `strings` (owned by the driver) interns function names and string
+// `strings` (owned by the cli) interns function names and string
 // literal bytes for backend consumption.
 //
 // Supported input: straight-line functions - literals, locals, struct

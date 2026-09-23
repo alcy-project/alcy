@@ -111,7 +111,7 @@ state between stages beyond the data explicitly passed along.
 
 | Module                    | Role                                                                                                                                   | Allocation contract                                                               |
 | --------------------------| ---------------------------------------------------------------------------------------------------------------------------------------| --------------------------------------------------------------------------------- |
-| `app`                     | Driver: argument parsing, initialization, and pipeline orchestration.                                                                  | Standard allocation; setup-time work only.                                        |
+| `cli`                     | Cli: argument parsing, initialization, and pipeline orchestration.                                                                     | Standard allocation; setup-time work only.                                        |
 | `lexer`                   | Tokenizes source files into a token stream.                                                                                            | Zero heap allocations on hot paths; fixed-width, contiguous token slices.         |
 | `parser`                  | Builds a typed abstract syntax tree from the token stream.                                                                             | Arena-only for AST node construction.                                             |
 | `path`                    | Canonical path value type: native-separator folding, lexical normalization, and joining.                                               | Owned strings; setup-time use only.                                               |
@@ -146,7 +146,7 @@ In particular:
   generation policy.
 - `codegen_llvm` depends on compiler IR and LLVM APIs, but the IR must remain
   independent of LLVM.
-- Pipeline and driver code coordinate stages rather than embedding their
+- Pipeline and cli code coordinate stages rather than embedding their
   implementation details into shared lower-level modules.
 
 Avoid cyclic dependencies between modules.
