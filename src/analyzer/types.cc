@@ -17,6 +17,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"
+#include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
@@ -57,7 +58,7 @@ constexpr u32 kNoModule = 0xFFFFFFFFu;
 struct NominalEntry {
   u32 module;
   std::string_view name;
-  const ast::Item* item;
+  ast::ItemIdx item;
   diag::Span span;
   ir::TypeIdx type;
   bool started = false;
@@ -72,10 +73,18 @@ struct BlessedEntry {
 
 class Checker {
  public:
-  Checker(const ModuleTree& tree, ir::PointerWidth width, diag::DiagBag& bag)
-      : tree(tree), width(width), bag(bag), interner(kInternerCapacity) {}
+  Checker(const ModuleTree& tree,
+          ir::PointerWidth width,
+          ast::AstArena& ast,
+          diag::DiagBag& bag)
+      : tree(tree),
+        ast(ast),
+        width(width),
+        bag(bag),
+        interner(kInternerCapacity) {}
 
   const ModuleTree& tree;
+  ast::AstArena& ast;
   ir::PointerWidth width;
   diag::DiagBag& bag;
   ir::StorageBuilder builder;
@@ -101,21 +110,20 @@ class Checker {
   // and reserved names. No interning happens here.
   void register_nominals() {
     for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
-      for (ast::Item* item : tree.modules[m]->items) {
-        if (item->kind != ast::ItemKind::Struct &&
-            item->kind != ast::ItemKind::Enum) {
+      for (ast::ItemIdx item : tree.modules[m]->items) {
+        const ast::ItemNode& node = ast.items[item];
+        if (node.kind != ast::ItemKind::Struct &&
+            node.kind != ast::ItemKind::Enum) {
           continue;
         }
         std::string_view name;
         diag::Span span;
-        if (item->kind == ast::ItemKind::Struct) {
-          const ast::StructItem* decl = static_cast<ast::StructItem*>(item);
-          name = decl->name.name;
-          span = decl->name.span;
+        if (node.kind == ast::ItemKind::Struct) {
+          name = node.payload.get<ast::ItemStruct>().name.name;
+          span = node.payload.get<ast::ItemStruct>().name.span;
         } else {
-          const ast::EnumItem* decl = static_cast<ast::EnumItem*>(item);
-          name = decl->name.name;
-          span = decl->name.span;
+          name = node.payload.get<ast::ItemEnum>().name.name;
+          span = node.payload.get<ast::ItemEnum>().name.span;
         }
         if (name == "Result" || name == "Option") {
           const u32 index =
@@ -231,18 +239,18 @@ class Checker {
       return entry.type;
     }
     const str::StringPoolId name = interner.intern(entry.name);
-    if (entry.item->kind == ast::ItemKind::Struct) {
+    const ast::ItemNode& node = ast.items[entry.item];
+    if (node.kind == ast::ItemKind::Struct) {
       entry.type = builder.reserve_struct(name);
     } else {
       entry.type = builder.reserve_enum(name);
     }
     entry.started = true;
-    if (entry.item->kind == ast::ItemKind::Struct) {
-      const ast::StructItem* decl =
-          static_cast<const ast::StructItem*>(entry.item);
+    if (node.kind == ast::ItemKind::Struct) {
       std::vector<ir::TypeIdx> fields;
-      fields.reserve(decl->fields.size());
-      for (const ast::StructField& field : decl->fields) {
+      fields.reserve(node.payload.get<ast::ItemStruct>().fields.size());
+      for (const ast::ItemStructField& field :
+           node.payload.get<ast::ItemStruct>().fields) {
         // Exclusive references are legal fields; the structural Copy
         // rule marks the aggregate move-only.
         fields.push_back(resolve_type(entry.module, field.type, nullptr));
@@ -253,21 +261,22 @@ class Checker {
       }
       builder.fill_struct(entry.type, seq.finish());
     } else {
-      const ast::EnumItem* decl = static_cast<const ast::EnumItem*>(entry.item);
       // Payloads resolve first so variant nodes append back-to-back.
       std::vector<std::vector<ir::TypeIdx>> payloads;
-      payloads.reserve(decl->variants.size());
-      for (const ast::EnumVariant& variant : decl->variants) {
+      payloads.reserve(node.payload.get<ast::ItemEnum>().variants.size());
+      for (const ast::ItemEnumVariant& variant :
+           node.payload.get<ast::ItemEnum>().variants) {
         std::vector<ir::TypeIdx> fields;
         fields.reserve(variant.fields.size());
-        for (const ast::Type* field : variant.fields) {
+        for (ast::TypeIdx field : variant.fields) {
           fields.push_back(resolve_type(entry.module, field, nullptr));
         }
         payloads.push_back(std::move(fields));
       }
       ir::EnumVariantTypeSeq variants;
       u32 index = 0;
-      for (const ast::EnumVariant& variant : decl->variants) {
+      for (const ast::ItemEnumVariant& variant :
+           node.payload.get<ast::ItemEnum>().variants) {
         ir::TypeSeq seq;
         for (ir::TypeIdx field : payloads[index]) {
           seq.push(builder.ref_type(field));
@@ -311,11 +320,12 @@ class Checker {
   // Resolves all path segments but the last to a module. Shared by
   // type and value paths; `what` names the namespace for diagnostics.
   bool walk_module_prefix(u32 module,
-                          const ast::Path* path,
+                          ast::PathIdx path,
                           std::string_view what,
                           u32& module_out) {
-    const std::string_view head = path->segments[0].name;
-    if (path->segments.size() == 1) {
+    const std::span<const ast::Ident> segments = ast.paths[path].segments;
+    const std::string_view head = segments[0].name;
+    if (segments.size() == 1) {
       module_out = module;
       return true;
     }
@@ -326,8 +336,9 @@ class Checker {
       current = module;
     } else if (head == "super") {
       if (parents[module] == kNoModule) {
-        const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownType,
-                                   path->span, "the root module has no parent");
+        const u32 index =
+            bag.emit(diag::Severity::Error, kAnalyzerUnknownType,
+                     ast.paths[path].span, "the root module has no parent");
         (void)index;
         return false;
       }
@@ -336,18 +347,18 @@ class Checker {
       current = find_child_module(module, head);
       if (current == kNoModule) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerUnknownType, path->span,
-                     "unresolved {} '{}'", what, head);
+            bag.emit(diag::Severity::Error, kAnalyzerUnknownType,
+                     ast.paths[path].span, "unresolved {} '{}'", what, head);
         (void)index;
         return false;
       }
     }
-    for (usize i = 1; i + 1 < path->segments.size(); ++i) {
-      current = find_child_module(current, path->segments[i].name);
+    for (usize i = 1; i + 1 < segments.size(); ++i) {
+      current = find_child_module(current, segments[i].name);
       if (current == kNoModule) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerUnknownType, path->span,
-                     "unresolved {} '{}'", what, path->segments[i].name);
+        const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownType,
+                                   ast.paths[path].span, "unresolved {} '{}'",
+                                   what, segments[i].name);
         (void)index;
         return false;
       }
@@ -357,36 +368,37 @@ class Checker {
   }
 
   bool resolve_type_path(u32 module,
-                         const ast::Path* path,
+                         ast::PathIdx path,
                          u32& module_out,
                          std::string_view& name_out) {
-    if (path->segments.empty()) {
+    const std::span<const ast::Ident> segments = ast.paths[path].segments;
+    if (segments.empty()) {
       return false;
     }
     if (!walk_module_prefix(module, path, "type", module_out)) {
       return false;
     }
-    name_out = path->segments.back().name;
+    name_out = segments.back().name;
     return true;
   }
 
   ir::TypeIdx resolve_type(u32 module,
-                           const ast::Type* type,
+                           ast::TypeIdx type,
                            const ir::TypeIdx* self) {
-    switch (type->kind) {
+    const ast::TypeNode& node = ast.types[type];
+    switch (node.kind) {
       case ast::TypeKind::Primitive: {
-        const ast::PrimitiveType* primitive =
-            static_cast<const ast::PrimitiveType*>(type);
-        return primitive_type(primitive->primitive, type->span);
+        return primitive_type(node.payload.get<ast::TypePrimitive>().primitive,
+                              node.span);
       }
       case ast::TypeKind::Unit: return builder.primitive(ir::TypeTag::Void);
       case ast::TypeKind::Never: return builder.never_type();
       case ast::TypeKind::Str: return builder.primitive(ir::TypeTag::Str);
       case ast::TypeKind::Tuple: {
-        const ast::TupleType* tuple = static_cast<const ast::TupleType*>(type);
         std::vector<ir::TypeIdx> elements;
-        elements.reserve(tuple->elements.size());
-        for (const ast::Type* element : tuple->elements) {
+        elements.reserve(node.payload.get<ast::TypeTuple>().elements.size());
+        for (ast::TypeIdx element :
+             node.payload.get<ast::TypeTuple>().elements) {
           elements.push_back(resolve_type(module, element, self));
         }
         ir::TypeSeq seq;
@@ -396,26 +408,28 @@ class Checker {
         return builder.tuple_type(seq.finish());
       }
       case ast::TypeKind::Ref: {
-        const ast::RefType* ref = static_cast<const ast::RefType*>(type);
-        ir::TypeIdx pointee = resolve_type(module, ref->inner, self);
-        return builder.reference_type(pointee, ref->is_mut);
+        ir::TypeIdx pointee =
+            resolve_type(module, node.payload.get<ast::TypeRef>().inner, self);
+        return builder.reference_type(pointee,
+                                      node.payload.get<ast::TypeRef>().is_mut);
       }
       case ast::TypeKind::Path: {
-        const ast::PathType* path = static_cast<const ast::PathType*>(type);
-        if (path->path->segments.size() == 1) {
-          const std::string_view name = path->path->segments[0].name;
+        const ast::Path& path =
+            ast.paths[node.payload.get<ast::TypePath>().path];
+        if (path.segments.size() == 1) {
+          const std::string_view name = path.segments[0].name;
           if (name == "Self") {
             if (self == nullptr) {
               const u32 index =
                   bag.emit(diag::Severity::Error, kAnalyzerUnknownType,
-                           type->span, "Self outside of an impl block");
+                           node.span, "Self outside of an impl block");
               (void)index;
               return error_type();
             }
-            if (!path->args.empty()) {
+            if (!node.payload.get<ast::TypePath>().args.empty()) {
               const u32 index =
                   bag.emit(diag::Severity::Error, kAnalyzerGenericArguments,
-                           type->span, "generic arguments are not supported");
+                           node.span, "generic arguments are not supported");
               (void)index;
               return error_type();
             }
@@ -424,38 +438,38 @@ class Checker {
           if (name == "Result" || name == "Option") {
             const bool is_result = name == "Result";
             const usize want = is_result ? 2 : 1;
-            if (path->args.size() != want) {
+            if (node.payload.get<ast::TypePath>().args.size() != want) {
               const u32 index =
                   bag.emit(diag::Severity::Error, kAnalyzerArityMismatch,
-                           type->span, "'{}' expects {} argument{}", name, want,
+                           node.span, "'{}' expects {} argument{}", name, want,
                            want == 1 ? "" : "s");
               (void)index;
               return error_type();
             }
             std::vector<ir::TypeIdx> args;
-            args.reserve(path->args.size());
-            for (const ast::Type* arg : path->args) {
+            args.reserve(node.payload.get<ast::TypePath>().args.size());
+            for (ast::TypeIdx arg : node.payload.get<ast::TypePath>().args) {
               args.push_back(resolve_type(module, arg, self));
             }
             return intern_blessed(is_result, args);
           }
         }
-        if (!path->args.empty()) {
+        if (!node.payload.get<ast::TypePath>().args.empty()) {
           const u32 index =
               bag.emit(diag::Severity::Error, kAnalyzerGenericArguments,
-                       type->span, "generic arguments are not supported");
+                       node.span, "generic arguments are not supported");
           (void)index;
           return error_type();
         }
         u32 target_module = kNoModule;
         std::string_view target_name;
-        if (!resolve_type_path(module, path->path, target_module,
-                               target_name)) {
+        if (!resolve_type_path(module, node.payload.get<ast::TypePath>().path,
+                               target_module, target_name)) {
           return error_type();
         }
         // Single-segment names resolve through imports as well.
         NominalEntry* entry = find_nominal(target_module, target_name);
-        if (entry == nullptr && path->path->segments.size() == 1) {
+        if (entry == nullptr && path.segments.size() == 1) {
           for (const Import& import : tree.modules[module]->imports) {
             if (import.ns != Namespace::Type || import.name != target_name) {
               continue;
@@ -470,7 +484,7 @@ class Checker {
         }
         if (entry == nullptr) {
           const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerUnknownType, type->span,
+              bag.emit(diag::Severity::Error, kAnalyzerUnknownType, node.span,
                        "'{}' is not a type", target_name);
           (void)index;
           return error_type();
@@ -481,35 +495,33 @@ class Checker {
   }
 
   void process_module(u32 module) {
-    for (ast::Item* item : tree.modules[module]->items) {
-      switch (item->kind) {
+    for (ast::ItemIdx item : tree.modules[module]->items) {
+      const ast::ItemNode& node = ast.items[item];
+      switch (node.kind) {
         case ast::ItemKind::Struct:
         case ast::ItemKind::Enum: {
           NominalEntry* entry = nullptr;
-          if (item->kind == ast::ItemKind::Struct) {
-            const ast::StructItem* decl =
-                static_cast<const ast::StructItem*>(item);
-            entry = find_nominal(module, decl->name.name);
+          if (node.kind == ast::ItemKind::Struct) {
+            entry = find_nominal(module,
+                                 node.payload.get<ast::ItemStruct>().name.name);
           } else {
-            const ast::EnumItem* decl = static_cast<const ast::EnumItem*>(item);
-            entry = find_nominal(module, decl->name.name);
+            entry = find_nominal(module,
+                                 node.payload.get<ast::ItemEnum>().name.name);
           }
           if (entry != nullptr) {
             const ir::TypeIdx resolved = intern_nominal(*entry);
             modules[module].types.push_back({entry->name, resolved});
-            if (item->kind == ast::ItemKind::Struct) {
-              const ast::StructItem* decl =
-                  static_cast<const ast::StructItem*>(item);
+            if (node.kind == ast::ItemKind::Struct) {
               std::vector<std::string_view> fields;
-              for (const ast::StructField& field : decl->fields) {
+              for (const ast::ItemStructField& field :
+                   node.payload.get<ast::ItemStruct>().fields) {
                 fields.push_back(field.name.name);
               }
               modules[module].structs.push_back({resolved, std::move(fields)});
-            } else if (item->kind == ast::ItemKind::Enum) {
-              const ast::EnumItem* decl =
-                  static_cast<const ast::EnumItem*>(item);
+            } else if (node.kind == ast::ItemKind::Enum) {
               std::vector<std::string_view> variants;
-              for (const ast::EnumVariant& variant : decl->variants) {
+              for (const ast::ItemEnumVariant& variant :
+                   node.payload.get<ast::ItemEnum>().variants) {
                 variants.push_back(variant.name.name);
               }
               modules[module].enums.push_back(
@@ -518,91 +530,93 @@ class Checker {
           }
         } break;
         case ast::ItemKind::Fn: {
-          const ast::FnItem* fn = static_cast<const ast::FnItem*>(item);
           std::vector<ir::TypeIdx> params;
-          for (const ast::FnParam& param : fn->params) {
+          for (const ast::ItemFnParam& param :
+               node.payload.get<ast::ItemFn>().params) {
             params.push_back(resolve_type(module, param.type, nullptr));
           }
           ir::TypeIdx ret = builder.primitive(ir::TypeTag::Void);
-          if (fn->return_type != nullptr) {
-            ret = resolve_type(module, fn->return_type, nullptr);
+          if (node.payload.get<ast::ItemFn>().return_type.is_valid()) {
+            ret = resolve_type(
+                module, node.payload.get<ast::ItemFn>().return_type, nullptr);
           }
           modules[module].functions.push_back(
-              {fn->name.name, std::move(params), ret, fn});
+              {node.payload.get<ast::ItemFn>().name.name, std::move(params),
+               ret, item});
           break;
         }
         case ast::ItemKind::Static:
         case ast::ItemKind::Const: {
           std::string_view name;
-          const ast::Type* type = nullptr;
-          const ast::Expr* init = nullptr;
-          const bool is_const = item->kind == ast::ItemKind::Const;
+          ast::TypeIdx type = ast::TypeIdx::invalid();
+          ast::ExprIdx init = ast::ExprIdx::invalid();
+          const bool is_const = node.kind == ast::ItemKind::Const;
           if (!is_const) {
-            const ast::StaticItem* decl =
-                static_cast<const ast::StaticItem*>(item);
-            name = decl->name.name;
-            type = decl->type;
-            init = decl->init;
+            name = node.payload.get<ast::ItemStatic>().name.name;
+            type = node.payload.get<ast::ItemStatic>().type;
+            init = node.payload.get<ast::ItemStatic>().init;
           } else {
-            const ast::ConstItem* decl =
-                static_cast<const ast::ConstItem*>(item);
-            name = decl->name.name;
-            type = decl->type;
-            init = decl->init;
+            name = node.payload.get<ast::ItemConst>().name.name;
+            type = node.payload.get<ast::ItemConst>().type;
+            init = node.payload.get<ast::ItemConst>().init;
           }
           modules[module].statics.push_back(
               {name, resolve_type(module, type, nullptr), init, is_const});
           break;
         }
         case ast::ItemKind::Impl: {
-          const ast::ImplItem* impl = static_cast<const ast::ImplItem*>(item);
           ir::TypeIdx self_type = error_type();
           bool self_ok = false;
-          if (impl->type->kind == ast::TypeKind::Path) {
-            const ast::PathType* path =
-                static_cast<const ast::PathType*>(impl->type);
-            if (!path->args.empty()) {
+          const ast::TypeNode& self_node =
+              ast.types[node.payload.get<ast::ItemImpl>().type];
+          if (self_node.kind == ast::TypeKind::Path) {
+            if (!self_node.payload.get<ast::TypePath>().args.empty()) {
               const u32 index = bag.emit(
                   diag::Severity::Error, kAnalyzerGenericArguments,
-                  impl->type->span, "generic impl blocks are not supported");
+                  self_node.span, "generic impl blocks are not supported");
               (void)index;
             } else {
               u32 target_module = kNoModule;
               std::string_view target_name;
-              if (resolve_type_path(module, path->path, target_module,
-                                    target_name)) {
+              if (resolve_type_path(module,
+                                    self_node.payload.get<ast::TypePath>().path,
+                                    target_module, target_name)) {
                 NominalEntry* entry = find_nominal(target_module, target_name);
                 if (entry != nullptr) {
                   self_type = intern_nominal(*entry);
                   self_ok = true;
                 } else {
-                  const u32 index =
-                      bag.emit(diag::Severity::Error, kAnalyzerUnknownType,
-                               impl->type->span,
-                               "inherent impl requires a nominal type");
+                  const u32 index = bag.emit(
+                      diag::Severity::Error, kAnalyzerUnknownType,
+                      self_node.span, "inherent impl requires a nominal type");
                   (void)index;
                 }
               }
             }
           } else {
             const u32 index = bag.emit(diag::Severity::Error,
-                                       kAnalyzerUnknownType, impl->type->span,
+                                       kAnalyzerUnknownType, self_node.span,
                                        "inherent impl requires a nominal type");
             (void)index;
           }
-          for (const ast::FnItem* method : impl->methods) {
+          for (ast::ItemIdx method :
+               node.payload.get<ast::ItemImpl>().methods) {
+            const ast::ItemNode& method_node = ast.items[method];
             std::vector<ir::TypeIdx> params;
-            for (const ast::FnParam& param : method->params) {
+            for (const ast::ItemFnParam& param :
+                 method_node.payload.get<ast::ItemFn>().params) {
               params.push_back(resolve_type(module, param.type,
                                             self_ok ? &self_type : nullptr));
             }
             ir::TypeIdx ret = builder.primitive(ir::TypeTag::Void);
-            if (method->return_type != nullptr) {
-              ret = resolve_type(module, method->return_type,
-                                 self_ok ? &self_type : nullptr);
+            if (method_node.payload.get<ast::ItemFn>().return_type.is_valid()) {
+              ret = resolve_type(
+                  module, method_node.payload.get<ast::ItemFn>().return_type,
+                  self_ok ? &self_type : nullptr);
             }
             modules[module].functions.push_back(
-                {method->name.name, std::move(params), ret, method});
+                {method_node.payload.get<ast::ItemFn>().name.name,
+                 std::move(params), ret, method});
             const CheckedModule::FnSig& sig = modules[module].functions.back();
             CheckedModule::ReceiverKind receiver =
                 CheckedModule::ReceiverKind::None;
@@ -610,8 +624,9 @@ class Checker {
               receiver = classify_receiver(sig.params[0], self_type);
             }
             modules[module].methods.push_back(
-                {self_ok ? self_type : error_type(), method->name.name,
-                 sig.params, sig.ret, receiver, method});
+                {self_ok ? self_type : error_type(),
+                 method_node.payload.get<ast::ItemFn>().name.name, sig.params,
+                 sig.ret, receiver, method});
           }
           break;
         }
@@ -918,27 +933,28 @@ class Checker {
     return true;
   }
 
-  ir::TypeIdx check_literal(const ast::Literal* lit,
+  ir::TypeIdx check_literal(ast::LiteralIdx value,
                             const ir::TypeIdx* expected) {
     using LK = ast::LiteralKind;
-    switch (lit->kind) {
+    const ast::Literal& lit = ast.literals[value];
+    switch (lit.kind) {
       case LK::Bool: {
         const ir::TypeIdx type = builder.primitive(ir::TypeTag::I1);
         if (expected != nullptr) {
-          return unify(*expected, type, lit->span, "boolean literal");
+          return unify(*expected, type, lit.span, "boolean literal");
         }
         return type;
       }
       case LK::String: {
         const ir::TypeIdx type = builder.primitive(ir::TypeTag::Str);
         if (expected != nullptr) {
-          return unify(*expected, type, lit->span, "string literal");
+          return unify(*expected, type, lit.span, "string literal");
         }
         return type;
       }
       case LK::Char: {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerUnsupportedType, lit->span,
+            bag.emit(diag::Severity::Error, kAnalyzerUnsupportedType, lit.span,
                      "character literals need the core Char type (deferred)");
         (void)index;
         return error_type();
@@ -947,13 +963,13 @@ class Checker {
         ir::TypeTag tag = ir::TypeTag::I32;
         bool is_float = false;
         const bool has_suffix =
-            classify_suffix(lit->spelling, tag, is_float, lit->span);
+            classify_suffix(lit.spelling, tag, is_float, lit.span);
         if (tag == ir::TypeTag::Error) {
           return error_type();
         }
         if (is_float) {
           const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, lit->span,
+              bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, lit.span,
                        "float suffix on an integer literal");
           (void)index;
           return error_type();
@@ -964,7 +980,7 @@ class Checker {
         }
         const ir::TypeIdx type = builder.primitive(tag);
         if (expected != nullptr) {
-          return unify(*expected, type, lit->span, "integer literal");
+          return unify(*expected, type, lit.span, "integer literal");
         }
         return type;
       }
@@ -972,13 +988,13 @@ class Checker {
         ir::TypeTag tag = ir::TypeTag::F64;
         bool is_float = true;
         const bool has_suffix =
-            classify_suffix(lit->spelling, tag, is_float, lit->span);
+            classify_suffix(lit.spelling, tag, is_float, lit.span);
         if (tag == ir::TypeTag::Error) {
           return error_type();
         }
         if (has_suffix && !is_float_tag(tag)) {
           const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, lit->span,
+              bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, lit.span,
                        "integer suffix on a float literal");
           (void)index;
           return error_type();
@@ -989,7 +1005,7 @@ class Checker {
         }
         const ir::TypeIdx type = builder.primitive(tag);
         if (expected != nullptr) {
-          return unify(*expected, type, lit->span, "float literal");
+          return unify(*expected, type, lit.span, "float literal");
         }
         return type;
       }
@@ -1065,12 +1081,18 @@ class Checker {
                        std::string_view name,
                        std::vector<VariantMatch>& out) {
     for (NominalEntry& entry : nominals) {
-      if (entry.module != module || entry.item->kind != ast::ItemKind::Enum) {
+      if (entry.module != module) {
         continue;
       }
-      const ast::EnumItem* decl = static_cast<const ast::EnumItem*>(entry.item);
-      for (u32 i = 0; i < static_cast<u32>(decl->variants.size()); ++i) {
-        if (decl->variants[i].name.name == name) {
+      const ast::ItemNode& node = ast.items[entry.item];
+      if (node.kind != ast::ItemKind::Enum) {
+        continue;
+      }
+      for (u32 i = 0;
+           i <
+           static_cast<u32>(node.payload.get<ast::ItemEnum>().variants.size());
+           ++i) {
+        if (node.payload.get<ast::ItemEnum>().variants[i].name.name == name) {
           out.push_back({&entry, i});
         }
       }
@@ -1092,11 +1114,17 @@ class Checker {
         continue;
       }
       NominalEntry* target = find_nominal(import.target_module, import.member);
-      if (target != nullptr && target->item->kind == ast::ItemKind::Enum) {
-        const ast::EnumItem* decl =
-            static_cast<const ast::EnumItem*>(target->item);
-        for (u32 i = 0; i < static_cast<u32>(decl->variants.size()); ++i) {
-          if (decl->variants[i].name.name == name) {
+      if (target != nullptr) {
+        const ast::ItemNode& target_node = ast.items[target->item];
+        if (target_node.kind != ast::ItemKind::Enum) {
+          continue;
+        }
+        for (u32 i = 0;
+             i < static_cast<u32>(
+                     target_node.payload.get<ast::ItemEnum>().variants.size());
+             ++i) {
+          if (target_node.payload.get<ast::ItemEnum>().variants[i].name.name ==
+              name) {
             matches.push_back({target, i});
           }
         }
@@ -1144,7 +1172,7 @@ class Checker {
   }
 
   void record_call(u32 module,
-                   const ast::Expr* callee,
+                   ast::ExprIdx callee,
                    const CheckedModule::FnSig* fn) {
     for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
       for (u32 i = 0; i < static_cast<u32>(modules[m].functions.size()); ++i) {
@@ -1157,7 +1185,7 @@ class Checker {
   }
 
   void record_call(u32 module,
-                   const ast::Expr* callee,
+                   ast::ExprIdx callee,
                    const CheckedModule::MethodInfo* method) {
     for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
       for (u32 i = 0; i < static_cast<u32>(modules[m].methods.size()); ++i) {
@@ -1212,12 +1240,13 @@ class Checker {
   // Resolves an expression path to its value meaning. Locals shadow
   // everything; nominal type names resolve to Kind::Type so callers
   // can report "found type" instead of "unknown".
-  bool resolve_value_path(u32 module, const ast::Path* path, PathValue& out) {
-    if (path->segments.empty()) {
+  bool resolve_value_path(u32 module, ast::PathIdx path, PathValue& out) {
+    const ast::Path& node = ast.paths[path];
+    if (node.segments.empty()) {
       return false;
     }
-    if (path->segments.size() == 1) {
-      const std::string_view name = path->segments[0].name;
+    if (node.segments.size() == 1) {
+      const std::string_view name = node.segments[0].name;
       if (const Local* local = lookup_local(name)) {
         out.kind = PathValue::Kind::Local;
         out.type = local->type;
@@ -1234,13 +1263,14 @@ class Checker {
         return true;
       }
       VariantMatch match;
-      if (find_variant(module, name, path->span, match)) {
-        const ast::EnumItem* decl =
-            static_cast<const ast::EnumItem*>(match.enom->item);
+      if (find_variant(module, name, node.span, match)) {
+        const ast::ItemNode& decl = ast.items[match.enom->item];
         out.enom = match.enom;
         out.variant = match.variant;
         out.type = intern_nominal(*match.enom);
-        if (decl->variants[match.variant].fields.empty()) {
+        if (decl.payload.get<ast::ItemEnum>()
+                .variants[match.variant]
+                .fields.empty()) {
           out.kind = PathValue::Kind::UnitVariant;
         } else {
           out.kind = PathValue::Kind::TupleVariant;
@@ -1255,13 +1285,13 @@ class Checker {
         return true;
       }
       const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
-                                 path->span, "unresolved value '{}'", name);
+                                 node.span, "unresolved value '{}'", name);
       (void)index;
       return false;
     }
-    if (path->segments.size() == 2) {
-      const std::string_view head = path->segments[0].name;
-      const std::string_view member = path->segments[1].name;
+    if (node.segments.size() == 2) {
+      const std::string_view head = node.segments[0].name;
+      const std::string_view member = node.segments[1].name;
       const u32 child = (head == "package" || head == "self" || head == "super")
                             ? kNoModule
                             : find_child_module(module, head);
@@ -1284,35 +1314,45 @@ class Checker {
         }
         std::vector<VariantMatch> matches;
         if (find_variant_in(target, member, matches) && matches.size() == 1) {
-          const ast::EnumItem* decl =
-              static_cast<const ast::EnumItem*>(matches[0].enom->item);
+          const ast::ItemNode& decl = ast.items[matches[0].enom->item];
           out.enom = matches[0].enom;
           out.variant = matches[0].variant;
           out.type = intern_nominal(*matches[0].enom);
-          out.kind = decl->variants[matches[0].variant].fields.empty()
+          out.kind = decl.payload.get<ast::ItemEnum>()
+                             .variants[matches[0].variant]
+                             .fields.empty()
                          ? PathValue::Kind::UnitVariant
                          : PathValue::Kind::TupleVariant;
           return true;
         }
         const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
-                                   path->span, "unresolved value '{}'", member);
+                                   node.span, "unresolved value '{}'", member);
         (void)index;
         return false;
       }
       // Nominal prefix: `Enum::Variant` or `Type::assoc`.
       NominalEntry* nominal = find_nominal_in_scope(module, head);
-      if (nominal != nullptr && nominal->item->kind == ast::ItemKind::Enum) {
-        const ast::EnumItem* decl =
-            static_cast<const ast::EnumItem*>(nominal->item);
-        for (u32 i = 0; i < static_cast<u32>(decl->variants.size()); ++i) {
-          if (decl->variants[i].name.name == member) {
-            out.enom = nominal;
-            out.variant = i;
-            out.type = intern_nominal(*nominal);
-            out.kind = decl->variants[i].fields.empty()
-                           ? PathValue::Kind::UnitVariant
-                           : PathValue::Kind::TupleVariant;
-            return true;
+      if (nominal != nullptr) {
+        const ast::ItemNode& nominal_node = ast.items[nominal->item];
+        if (nominal_node.kind == ast::ItemKind::Enum) {
+          for (u32 i = 0;
+               i <
+               static_cast<u32>(
+                   nominal_node.payload.get<ast::ItemEnum>().variants.size());
+               ++i) {
+            if (nominal_node.payload.get<ast::ItemEnum>()
+                    .variants[i]
+                    .name.name == member) {
+              out.enom = nominal;
+              out.variant = i;
+              out.type = intern_nominal(*nominal);
+              out.kind = nominal_node.payload.get<ast::ItemEnum>()
+                                 .variants[i]
+                                 .fields.empty()
+                             ? PathValue::Kind::UnitVariant
+                             : PathValue::Kind::TupleVariant;
+              return true;
+            }
           }
         }
       }
@@ -1332,7 +1372,7 @@ class Checker {
         return true;
       }
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerUnknownValue, path->span,
+          bag.emit(diag::Severity::Error, kAnalyzerUnknownValue, node.span,
                    "unresolved value '{}::{}'", head, member);
       (void)index;
       return false;
@@ -1341,7 +1381,7 @@ class Checker {
     if (!walk_module_prefix(module, path, "value", target)) {
       return false;
     }
-    const std::string_view member = path->segments.back().name;
+    const std::string_view member = node.segments.back().name;
     if (const CheckedModule::StaticInfo* info = lookup_static(target, member)) {
       out.kind = PathValue::Kind::Static;
       out.type = info->type;
@@ -1353,7 +1393,7 @@ class Checker {
       return true;
     }
     const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
-                               path->span, "unresolved value '{}'", member);
+                               node.span, "unresolved value '{}'", member);
     (void)index;
     return false;
   }
@@ -1362,14 +1402,15 @@ class Checker {
   // in scope, `Enum::Variant`, `module::Variant`, or a blessed
   // constructor (`Ok`, `Err`, `Some`, `None`; the instantiation is
   // fixed later against the scrutinee type, so blessed stays null).
-  bool resolve_variant_path(u32 module, const ast::Path* path, PathValue& out) {
-    if (path->segments.empty()) {
+  bool resolve_variant_path(u32 module, ast::PathIdx path, PathValue& out) {
+    const ast::Path& node = ast.paths[path];
+    if (node.segments.empty()) {
       return false;
     }
-    if (path->segments.size() == 1) {
-      const std::string_view name = path->segments[0].name;
+    if (node.segments.size() == 1) {
+      const std::string_view name = node.segments[0].name;
       VariantMatch match;
-      if (find_variant(module, name, path->span, match)) {
+      if (find_variant(module, name, node.span, match)) {
         out.kind = PathValue::Kind::TupleVariant;
         out.enom = match.enom;
         out.variant = match.variant;
@@ -1385,9 +1426,9 @@ class Checker {
       }
       return false;
     }
-    if (path->segments.size() == 2) {
-      const std::string_view head = path->segments[0].name;
-      const std::string_view member = path->segments[1].name;
+    if (node.segments.size() == 2) {
+      const std::string_view head = node.segments[0].name;
+      const std::string_view member = node.segments[1].name;
       const u32 child = (head == "package" || head == "self" || head == "super")
                             ? kNoModule
                             : find_child_module(module, head);
@@ -1408,11 +1449,16 @@ class Checker {
         return false;
       }
       if (NominalEntry* nominal = find_nominal_in_scope(module, head)) {
-        if (nominal->item->kind == ast::ItemKind::Enum) {
-          const ast::EnumItem* decl =
-              static_cast<const ast::EnumItem*>(nominal->item);
-          for (u32 i = 0; i < static_cast<u32>(decl->variants.size()); ++i) {
-            if (decl->variants[i].name.name == member) {
+        const ast::ItemNode& nominal_node = ast.items[nominal->item];
+        if (nominal_node.kind == ast::ItemKind::Enum) {
+          for (u32 i = 0;
+               i <
+               static_cast<u32>(
+                   nominal_node.payload.get<ast::ItemEnum>().variants.size());
+               ++i) {
+            if (nominal_node.payload.get<ast::ItemEnum>()
+                    .variants[i]
+                    .name.name == member) {
               out.kind = PathValue::Kind::TupleVariant;
               out.enom = nominal;
               out.variant = i;
@@ -1449,11 +1495,12 @@ class Checker {
       return {};
     }
     if (resolved.kind != PathValue::Kind::BlessedCtor) {
-      const ast::EnumItem* decl =
-          static_cast<const ast::EnumItem*>(resolved.enom->item);
+      const ast::ItemNode& decl = ast.items[resolved.enom->item];
+      const std::span<const ast::ItemEnumVariant>& variants =
+          decl.payload.get<ast::ItemEnum>().variants;
       std::vector<ir::TypeIdx> payloads;
-      payloads.reserve(decl->variants[resolved.variant].fields.size());
-      for (const ast::Type* field : decl->variants[resolved.variant].fields) {
+      payloads.reserve(variants[resolved.variant].fields.size());
+      for (ast::TypeIdx field : variants[resolved.variant].fields) {
         payloads.push_back(resolve_type(resolved.enom->module, field, nullptr));
       }
       return payloads;
@@ -1475,19 +1522,21 @@ class Checker {
     return {};
   }
 
-  NominalEntry* resolve_struct_path(u32 module, const ast::Path* path) {
-    if (path->segments.empty()) {
+  NominalEntry* resolve_struct_path(u32 module, ast::PathIdx path) {
+    const ast::Path& node = ast.paths[path];
+    if (node.segments.empty()) {
       return nullptr;
     }
-    if (path->segments.size() == 1) {
+    if (node.segments.size() == 1) {
       NominalEntry* nominal =
-          find_nominal_in_scope(module, path->segments[0].name);
-      if (nominal != nullptr && nominal->item->kind == ast::ItemKind::Struct) {
+          find_nominal_in_scope(module, node.segments[0].name);
+      if (nominal != nullptr &&
+          ast.items[nominal->item].kind == ast::ItemKind::Struct) {
         return nominal;
       }
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerUnknownValue, path->span,
-                   "unresolved struct '{}'", path->segments[0].name);
+          bag.emit(diag::Severity::Error, kAnalyzerUnknownValue, node.span,
+                   "unresolved struct '{}'", node.segments[0].name);
       (void)index;
       return nullptr;
     }
@@ -1495,62 +1544,54 @@ class Checker {
     if (!walk_module_prefix(module, path, "value", target)) {
       return nullptr;
     }
-    NominalEntry* nominal = find_nominal(target, path->segments.back().name);
-    if (nominal != nullptr && nominal->item->kind == ast::ItemKind::Struct) {
+    NominalEntry* nominal = find_nominal(target, node.segments.back().name);
+    if (nominal != nullptr &&
+        ast.items[nominal->item].kind == ast::ItemKind::Struct) {
       return nominal;
     }
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerUnknownValue, path->span,
-                 "unresolved struct '{}'", path->segments.back().name);
+        bag.emit(diag::Severity::Error, kAnalyzerUnknownValue, node.span,
+                 "unresolved struct '{}'", node.segments.back().name);
     (void)index;
     return nullptr;
   }
 
   // ---- Patterns ----
 
-  void collect_pattern_idents(const ast::Pattern* pattern,
+  void collect_pattern_idents(ast::PatternIdx pattern,
                               std::vector<std::string_view>& out) {
-    switch (pattern->kind) {
+    switch (ast.patterns[pattern].kind) {
       case ast::PatternKind::Wildcard:
       case ast::PatternKind::Literal: return;
       case ast::PatternKind::Ident: {
-        const ast::IdentPattern* ident =
-            static_cast<const ast::IdentPattern*>(pattern);
-        out.push_back(ident->name.name);
+        out.push_back(ast.patterns[pattern].payload.ident.name.name);
         return;
       }
       case ast::PatternKind::MutIdent: {
-        const ast::MutIdentPattern* ident =
-            static_cast<const ast::MutIdentPattern*>(pattern);
-        out.push_back(ident->name.name);
+        out.push_back(ast.patterns[pattern].payload.mut_ident.name.name);
         return;
       }
       case ast::PatternKind::Tuple: {
-        const ast::TuplePattern* tuple =
-            static_cast<const ast::TuplePattern*>(pattern);
-        for (const ast::Pattern* element : tuple->elements) {
+        for (ast::PatternIdx element :
+             ast.patterns[pattern].payload.tuple.elements) {
           collect_pattern_idents(element, out);
         }
         return;
       }
       case ast::PatternKind::Struct: {
-        const ast::StructPattern* strukt =
-            static_cast<const ast::StructPattern*>(pattern);
-        for (const ast::FieldPattern& field : strukt->fields) {
+        for (const ast::FieldPattern& field :
+             ast.patterns[pattern].payload.strukt.fields) {
           collect_pattern_idents(field.pattern, out);
         }
         return;
       }
       case ast::PatternKind::Ref: {
-        const ast::RefPattern* ref =
-            static_cast<const ast::RefPattern*>(pattern);
-        collect_pattern_idents(ref->inner, out);
+        collect_pattern_idents(ast.patterns[pattern].payload.ref.inner, out);
         return;
       }
       case ast::PatternKind::Or: {
-        const ast::OrPattern* or_pat =
-            static_cast<const ast::OrPattern*>(pattern);
-        for (const ast::Pattern* alt : or_pat->alternatives) {
+        for (ast::PatternIdx alt :
+             ast.patterns[pattern].payload.or_pat.alternatives) {
           collect_pattern_idents(alt, out);
         }
         return;
@@ -1558,7 +1599,7 @@ class Checker {
     }
   }
 
-  void bind_error_idents(u32 module, const ast::Pattern* pattern) {
+  void bind_error_idents(u32 module, ast::PatternIdx pattern) {
     std::vector<std::string_view> names;
     collect_pattern_idents(pattern, names);
     (void)module;
@@ -1569,33 +1610,27 @@ class Checker {
 
   // Binds a pattern against a type, declaring locals. Returns true
   // when the pattern is refutable (declarations reject those).
-  bool bind_pattern(u32 module, const ast::Pattern* pattern, ir::TypeIdx type) {
-    switch (pattern->kind) {
+  bool bind_pattern(u32 module, ast::PatternIdx pattern, ir::TypeIdx type) {
+    const ast::PatternNode& node = ast.patterns[pattern];
+    switch (node.kind) {
       case ast::PatternKind::Wildcard: return false;
       case ast::PatternKind::Ident: {
-        const ast::IdentPattern* ident =
-            static_cast<const ast::IdentPattern*>(pattern);
-        scopes.back().push_back({ident->name.name, type, false});
+        scopes.back().push_back({node.payload.ident.name.name, type, false});
         return false;
       }
       case ast::PatternKind::MutIdent: {
-        const ast::MutIdentPattern* ident =
-            static_cast<const ast::MutIdentPattern*>(pattern);
-        scopes.back().push_back({ident->name.name, type, true});
+        scopes.back().push_back({node.payload.mut_ident.name.name, type, true});
         return false;
       }
       case ast::PatternKind::Literal: {
-        const ast::LiteralPattern* lit =
-            static_cast<const ast::LiteralPattern*>(pattern);
-        check_literal(lit->value, &type);
+        check_literal(node.payload.literal.value, &type);
         return true;
       }
       case ast::PatternKind::Tuple: {
-        const ast::TuplePattern* tuple =
-            static_cast<const ast::TuplePattern*>(pattern);
-        if (tuple->path != nullptr) {
+        if (node.payload.tuple.path.is_valid()) {
           PathValue resolved;
-          if (!resolve_variant_path(module, tuple->path, resolved)) {
+          if (!resolve_variant_path(module, node.payload.tuple.path,
+                                    resolved)) {
             bind_error_idents(module, pattern);
             return true;
           }
@@ -1603,76 +1638,78 @@ class Checker {
               resolved.kind != PathValue::Kind::BlessedCtor) {
             const u32 index =
                 bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch,
-                         pattern->span, "not a tuple variant");
+                         node.span, "not a tuple variant");
             (void)index;
             bind_error_idents(module, pattern);
             return true;
           }
           if (resolved.kind == PathValue::Kind::TupleVariant) {
-            unify(type, resolved.type, pattern->span, "tuple variant pattern");
+            unify(type, resolved.type, node.span, "tuple variant pattern");
           }
           std::vector<ir::TypeIdx> payloads =
-              variant_payloads(resolved, type, pattern->span);
-          if (payloads.size() != tuple->elements.size()) {
-            const u32 index = bag.emit(
-                diag::Severity::Error, kAnalyzerArityError, pattern->span,
-                "variant expects {} fields, pattern has {}", payloads.size(),
-                tuple->elements.size());
+              variant_payloads(resolved, type, node.span);
+          const std::span<const ast::PatternIdx> elements =
+              node.payload.tuple.elements;
+          if (payloads.size() != elements.size()) {
+            const u32 index =
+                bag.emit(diag::Severity::Error, kAnalyzerArityError, node.span,
+                         "variant expects {} fields, pattern has {}",
+                         payloads.size(), elements.size());
             (void)index;
             bind_error_idents(module, pattern);
             return true;
           }
           bool refutable = true;
           for (usize i = 0; i < payloads.size(); ++i) {
-            refutable = bind_pattern(module, tuple->elements[i], payloads[i]) &&
-                        refutable;
+            refutable =
+                bind_pattern(module, elements[i], payloads[i]) && refutable;
           }
           return refutable;
         }
         if (tag_of(type) != ir::TypeTag::Tuple) {
-          unify(type, builder.tuple_type({ir::TypeIdx(0), 0}), pattern->span,
+          unify(type, builder.tuple_type({ir::TypeIdx(0), 0}), node.span,
                 "tuple pattern");
           bind_error_idents(module, pattern);
           return false;
         }
         const ir::TupleType& tuple_type =
             builder.tuple_types()[builder.types()[type].as_tuple()];
-        if (tuple_type.elements.size() != tuple->elements.size()) {
-          const u32 index = bag.emit(
-              diag::Severity::Error, kAnalyzerArityError, pattern->span,
-              "tuple pattern has {} elements, type has {}",
-              tuple->elements.size(), tuple_type.elements.size());
+        const std::span<const ast::PatternIdx> elements =
+            node.payload.tuple.elements;
+        if (tuple_type.elements.size() != elements.size()) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerArityError, node.span,
+                       "tuple pattern has {} elements, type has {}",
+                       elements.size(), tuple_type.elements.size());
           (void)index;
           bind_error_idents(module, pattern);
           return false;
         }
         bool refutable = false;
-        for (u32 i = 0; i < static_cast<u32>(tuple->elements.size()); ++i) {
-          if (bind_pattern(module, tuple->elements[i],
-                           tuple_type.elements[i])) {
+        for (u32 i = 0; i < static_cast<u32>(elements.size()); ++i) {
+          if (bind_pattern(module, elements[i], tuple_type.elements[i])) {
             refutable = true;
           }
         }
         return refutable;
       }
       case ast::PatternKind::Struct: {
-        const ast::StructPattern* strukt =
-            static_cast<const ast::StructPattern*>(pattern);
-        NominalEntry* nominal = resolve_struct_path(module, strukt->path);
+        NominalEntry* nominal =
+            resolve_struct_path(module, node.payload.strukt.path);
         if (nominal == nullptr) {
           bind_error_idents(module, pattern);
           return false;
         }
-        unify(type, intern_nominal(*nominal), pattern->span, "struct pattern");
-        const ast::StructItem* decl =
-            static_cast<const ast::StructItem*>(nominal->item);
+        unify(type, intern_nominal(*nominal), node.span, "struct pattern");
+        const ast::ItemNode& decl = ast.items[nominal->item];
         const ir::StructType& struct_type =
             builder.struct_types()[builder.types()[nominal->type].as_struct()];
         bool refutable = false;
-        for (const ast::FieldPattern& field : strukt->fields) {
+        for (const ast::FieldPattern& field : node.payload.strukt.fields) {
           u32 index = 0;
           bool found = false;
-          for (const ast::StructField& decl_field : decl->fields) {
+          for (const ast::ItemStructField& decl_field :
+               decl.payload.get<ast::ItemStruct>().fields) {
             if (decl_field.name.name == field.name.name) {
               found = true;
               break;
@@ -1694,34 +1731,32 @@ class Checker {
         return refutable;
       }
       case ast::PatternKind::Ref: {
-        const ast::RefPattern* ref =
-            static_cast<const ast::RefPattern*>(pattern);
         const ir::TypeTag tag = tag_of(type);
-        if ((ref->is_mut && tag != ir::TypeTag::MutRef) ||
-            (!ref->is_mut && tag != ir::TypeTag::Ref)) {
-          const u32 index = bag.emit(
-              diag::Severity::Error, kAnalyzerTypeMismatch, pattern->span,
-              "reference pattern on a non-reference type");
+        if ((node.payload.ref.is_mut && tag != ir::TypeTag::MutRef) ||
+            (!node.payload.ref.is_mut && tag != ir::TypeTag::Ref)) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, node.span,
+                       "reference pattern on a non-reference type");
           (void)index;
           bind_error_idents(module, pattern);
           return false;
         }
         const ir::TypeIdx pointee =
             builder.ref_types()[builder.types()[type].as_ref()].pointee;
-        return bind_pattern(module, ref->inner, pointee);
+        return bind_pattern(module, node.payload.ref.inner, pointee);
       }
       case ast::PatternKind::Or: {
-        const ast::OrPattern* or_pat =
-            static_cast<const ast::OrPattern*>(pattern);
-        if (or_pat->alternatives.empty()) {
+        const std::span<const ast::PatternIdx> alternatives =
+            node.payload.or_pat.alternatives;
+        if (alternatives.empty()) {
           return false;
         }
         const usize alt0_start = scopes.back().size();
-        bool refutable = bind_pattern(module, or_pat->alternatives[0], type);
+        bool refutable = bind_pattern(module, alternatives[0], type);
         const usize base = scopes.back().size();
-        for (usize i = 1; i < or_pat->alternatives.size(); ++i) {
+        for (usize i = 1; i < alternatives.size(); ++i) {
           const usize mark = scopes.back().size();
-          if (bind_pattern(module, or_pat->alternatives[i], type)) {
+          if (bind_pattern(module, alternatives[i], type)) {
             refutable = true;
           }
           // Every alternative must bind the same names; extras are
@@ -1737,7 +1772,7 @@ class Checker {
             if (!found) {
               const u32 index =
                   bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
-                           or_pat->alternatives[i]->span,
+                           ast.patterns[alternatives[i]].span,
                            "or-pattern alternatives must bind the same names");
               (void)index;
             }
@@ -1754,15 +1789,17 @@ class Checker {
 
   // ---- Expressions ----
 
-  bool is_bare_int_literal(const ast::Expr* expr) const {
-    if (expr->kind != ast::ExprKind::Literal) {
+  bool is_bare_int_literal(ast::ExprIdx expr) const {
+    const ast::ExprNode& node = ast.exprs[expr];
+    if (node.kind != ast::ExprKind::Literal) {
       return false;
     }
-    const ast::LiteralExpr* lit = static_cast<const ast::LiteralExpr*>(expr);
-    if (lit->value->kind != ast::LiteralKind::Integer) {
+    const ast::Literal& value =
+        ast.literals[node.payload.get<ast::ExprLiteral>().value];
+    if (value.kind != ast::LiteralKind::Integer) {
       return false;
     }
-    const std::string_view spelling = lit->value->spelling;
+    const std::string_view spelling = value.spelling;
     for (char c : spelling) {
       if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
         return false;
@@ -1775,8 +1812,8 @@ class Checker {
   // bare integer literals coerced to the other side (so `x + 42`
   // works for any integer x without an annotation).
   ir::TypeIdx check_binary_operands(u32 module,
-                                    const ast::Expr* lhs,
-                                    const ast::Expr* rhs,
+                                    ast::ExprIdx lhs,
+                                    ast::ExprIdx rhs,
                                     diag::Span span,
                                     std::string_view what) {
     ir::TypeIdx left = check_expr(module, lhs, nullptr);
@@ -1806,7 +1843,7 @@ class Checker {
   }
 
   void check_call_args(u32 module,
-                       std::span<ast::Expr* const> args,
+                       std::span<const ast::ExprIdx> args,
                        const std::vector<ir::TypeIdx>& params,
                        diag::Span span,
                        std::string_view what,
@@ -1822,12 +1859,12 @@ class Checker {
     for (usize i = 0; i < args.size(); ++i) {
       const ir::TypeIdx param = params[fixed + i];
       const ir::TypeIdx actual = check_expr(module, args[i], &param);
-      unify(param, actual, args[i]->span, "argument");
+      unify(param, actual, ast.exprs[args[i]].span, "argument");
     }
   }
 
   ir::TypeIdx check_path_expr(u32 module,
-                              const ast::Path* path,
+                              ast::PathIdx path,
                               const ir::TypeIdx* expected,
                               diag::Span span) {
     PathValue resolved;
@@ -1895,26 +1932,30 @@ class Checker {
   // functions, tuple variant constructors (user and blessed), and
   // the `print` intrinsic.
   ir::TypeIdx check_call(u32 module,
-                         const ast::Expr* callee,
-                         std::span<ast::Expr* const> args,
-                         const ir::TypeIdx* expected,
-                         diag::Span span) {
-    if (callee->kind != ast::ExprKind::Path) {
+                         ast::ExprIdx expr,
+                         const ir::TypeIdx* expected) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ast::ExprIdx callee = node.payload.get<ast::ExprCall>().callee;
+    const std::span<const ast::ExprIdx> args =
+        node.payload.get<ast::ExprCall>().args;
+    const diag::Span span = node.span;
+    if (ast.exprs[callee].kind != ast::ExprKind::Path) {
       const u32 index =
           bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
-                   callee->span, "cannot call a non-path expression");
+                   ast.exprs[callee].span, "cannot call a non-path expression");
       (void)index;
-      for (const ast::Expr* arg : args) {
+      for (ast::ExprIdx arg : args) {
         check_expr(module, arg, nullptr);
       }
       return error_type();
     }
-    const ast::PathExpr* path = static_cast<const ast::PathExpr*>(callee);
-    if (path->path->segments.size() == 1 &&
-        lookup_local(path->path->segments[0].name) == nullptr &&
-        lookup_static(module, path->path->segments[0].name) == nullptr &&
-        lookup_function(module, path->path->segments[0].name) == nullptr) {
-      const std::string_view name = path->path->segments[0].name;
+    const ast::PathIdx path =
+        ast.exprs[callee].payload.get<ast::ExprPath>().idx;
+    const std::span<const ast::Ident> segments = ast.paths[path].segments;
+    if (segments.size() == 1 && lookup_local(segments[0].name) == nullptr &&
+        lookup_static(module, segments[0].name) == nullptr &&
+        lookup_function(module, segments[0].name) == nullptr) {
+      const std::string_view name = segments[0].name;
       if (name == "print" || name == "println") {
         if (args.size() != 1) {
           const u32 index =
@@ -1925,7 +1966,7 @@ class Checker {
         }
         const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
         const ir::TypeIdx actual = check_expr(module, args[0], &str);
-        unify(str, actual, args[0]->span, "print argument");
+        unify(str, actual, ast.exprs[args[0]].span, "print argument");
         const ir::TypeIdx unit = builder.primitive(ir::TypeTag::Void);
         if (expected != nullptr) {
           return unify(*expected, unit, span, "call");
@@ -1942,13 +1983,13 @@ class Checker {
         }
         const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
         const ir::TypeIdx actual = check_expr(module, args[0], &str);
-        unify(str, actual, args[0]->span, "panic argument");
+        unify(str, actual, ast.exprs[args[0]].span, "panic argument");
         return builder.never_type();
       }
     }
     PathValue resolved;
-    if (!resolve_value_path(module, path->path, resolved)) {
-      for (const ast::Expr* arg : args) {
+    if (!resolve_value_path(module, path, resolved)) {
+      for (ast::ExprIdx arg : args) {
         check_expr(module, arg, nullptr);
       }
       return error_type();
@@ -1992,7 +2033,7 @@ class Checker {
               bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
                        "cannot infer the blessed type; add an annotation");
           (void)index;
-          for (const ast::Expr* arg : args) {
+          for (ast::ExprIdx arg : args) {
             check_expr(module, arg, nullptr);
           }
           return error_type();
@@ -2014,10 +2055,10 @@ class Checker {
       }
       if (resolved.kind == PathValue::Kind::TupleVariant) {
         modules[module].variants.push_back(
-            {path->path, false, true, enum_type, resolved.variant});
+            {path, false, true, enum_type, resolved.variant});
       } else {
         modules[module].variants.push_back(
-            {path->path, true, resolved.blessed_first, enum_type, 0});
+            {path, true, resolved.blessed_first, enum_type, 0});
       }
       if (args.size() != payloads.size()) {
         const u32 index =
@@ -2025,14 +2066,14 @@ class Checker {
                      "variant expects {} arguments, found {}", payloads.size(),
                      args.size());
         (void)index;
-        for (const ast::Expr* arg : args) {
+        for (ast::ExprIdx arg : args) {
           check_expr(module, arg, nullptr);
         }
         return error_type();
       }
       for (usize i = 0; i < args.size(); ++i) {
         const ir::TypeIdx actual = check_expr(module, args[i], &payloads[i]);
-        unify(payloads[i], actual, args[i]->span, "variant argument");
+        unify(payloads[i], actual, ast.exprs[args[i]].span, "variant argument");
       }
       if (expected != nullptr) {
         return unify(*expected, enum_type, span, "call");
@@ -2042,65 +2083,75 @@ class Checker {
     const u32 index = bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
                                span, "not callable");
     (void)index;
-    for (const ast::Expr* arg : args) {
+    for (ast::ExprIdx arg : args) {
       check_expr(module, arg, nullptr);
     }
     return error_type();
   }
 
   ir::TypeIdx check_method_call(u32 module,
-                                const ast::MethodCallExpr* call,
+                                ast::ExprIdx expr,
                                 const ir::TypeIdx* expected) {
-    const ir::TypeIdx receiver = check_expr(module, call->receiver, nullptr);
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ir::TypeIdx receiver = check_expr(
+        module, node.payload.get<ast::ExprMethodCall>().receiver, nullptr);
     if (is_error(receiver)) {
-      for (const ast::Expr* arg : call->args) {
+      for (ast::ExprIdx arg : node.payload.get<ast::ExprMethodCall>().args) {
         check_expr(module, arg, nullptr);
       }
       return error_type();
     }
-    const std::string_view name = call->name.name;
+    const std::string_view name =
+        node.payload.get<ast::ExprMethodCall>().name.name;
+    const diag::Span span = node.span;
     if (const BlessedEntry* entry = blessed_find(receiver)) {
       const ir::TypeIdx ok = entry->args[0];
       if (name == "unwrap") {
-        if (!call->args.empty()) {
-          const u32 index = bag.emit(
-              diag::Severity::Error, kAnalyzerArityError, call->span,
-              "'unwrap' expects 0 arguments, found {}", call->args.size());
+        if (!node.payload.get<ast::ExprMethodCall>().args.empty()) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
+                       "'unwrap' expects 0 arguments, found {}",
+                       node.payload.get<ast::ExprMethodCall>().args.size());
           (void)index;
           return error_type();
         }
         if (expected != nullptr) {
-          return unify(*expected, ok, call->span, "method call");
+          return unify(*expected, ok, span, "method call");
         }
         return ok;
       }
       if (name == "expect") {
-        if (call->args.size() != 1) {
-          const u32 index = bag.emit(
-              diag::Severity::Error, kAnalyzerArityError, call->span,
-              "'expect' expects 1 argument, found {}", call->args.size());
+        if (node.payload.get<ast::ExprMethodCall>().args.size() != 1) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
+                       "'expect' expects 1 argument, found {}",
+                       node.payload.get<ast::ExprMethodCall>().args.size());
           (void)index;
           return error_type();
         }
         const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
-        const ir::TypeIdx actual = check_expr(module, call->args[0], &str);
-        unify(str, actual, call->args[0]->span, "expect argument");
+        const ir::TypeIdx actual = check_expr(
+            module, node.payload.get<ast::ExprMethodCall>().args[0], &str);
+        unify(str, actual,
+              ast.exprs[node.payload.get<ast::ExprMethodCall>().args[0]].span,
+              "expect argument");
         if (expected != nullptr) {
-          return unify(*expected, ok, call->span, "method call");
+          return unify(*expected, ok, span, "method call");
         }
         return ok;
       }
       if (name == "is_ok" || name == "is_err") {
-        if (!call->args.empty()) {
-          const u32 index = bag.emit(
-              diag::Severity::Error, kAnalyzerArityError, call->span,
-              "'{}' expects 0 arguments, found {}", name, call->args.size());
+        if (!node.payload.get<ast::ExprMethodCall>().args.empty()) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
+                       "'{}' expects 0 arguments, found {}", name,
+                       node.payload.get<ast::ExprMethodCall>().args.size());
           (void)index;
           return error_type();
         }
         const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
         if (expected != nullptr) {
-          return unify(*expected, boolean, call->span, "method call");
+          return unify(*expected, boolean, span, "method call");
         }
         return boolean;
       }
@@ -2112,22 +2163,25 @@ class Checker {
     }
     const CheckedModule::MethodInfo* method = lookup_method(nominal, name);
     if (method == nullptr) {
-      const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
-                                 call->name.span, "no method '{}'", name);
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
+                   node.payload.get<ast::ExprMethodCall>().name.span,
+                   "no method '{}'", name);
       (void)index;
-      for (const ast::Expr* arg : call->args) {
+      for (ast::ExprIdx arg : node.payload.get<ast::ExprMethodCall>().args) {
         check_expr(module, arg, nullptr);
       }
       return error_type();
     }
     if (method->receiver == CheckedModule::ReceiverKind::None) {
-      const u32 index = bag.emit(
-          diag::Severity::Error, kAnalyzerInvalidOperation, call->name.span,
-          "associated function '{}' called as a method", name);
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                   node.payload.get<ast::ExprMethodCall>().name.span,
+                   "associated function '{}' called as a method", name);
       (void)index;
       return error_type();
     }
-    record_call(module, call, method);
+    record_call(module, expr, method);
     // No autoref/deref in MVP beyond this: an owned receiver coerces
     // to the declared borrow; full borrow checking is a later stage.
     const ir::TypeIdx declared = method->params[0];
@@ -2143,26 +2197,31 @@ class Checker {
         }
       }
       if (!coerced) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch,
-                     call->receiver->span, "type mismatch in receiver");
+        const u32 index = bag.emit(
+            diag::Severity::Error, kAnalyzerTypeMismatch,
+            ast.exprs[node.payload.get<ast::ExprMethodCall>().receiver].span,
+            "type mismatch in receiver");
         (void)index;
         return error_type();
       }
     }
     std::vector<ir::TypeIdx> rest(method->params.begin() + 1,
                                   method->params.end());
-    check_call_args(module, call->args, rest, call->span, name, false);
+    check_call_args(module, node.payload.get<ast::ExprMethodCall>().args, rest,
+                    span, name, false);
     if (expected != nullptr) {
-      return unify(*expected, method->ret, call->span, "method call");
+      return unify(*expected, method->ret, span, "method call");
     }
     return method->ret;
   }
 
   ir::TypeIdx check_field(u32 module,
-                          const ast::FieldExpr* field,
+                          ast::ExprIdx expr,
                           const ir::TypeIdx* expected) {
-    ir::TypeIdx receiver = check_expr(module, field->receiver, nullptr);
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ast::Ident field_name = node.payload.get<ast::ExprField>().name;
+    ir::TypeIdx receiver = check_expr(
+        module, node.payload.get<ast::ExprField>().receiver, nullptr);
     if (is_error(receiver)) {
       return error_type();
     }
@@ -2180,15 +2239,17 @@ class Checker {
       NominalEntry* owner = nullptr;
       u32 field_index = 0;
       for (NominalEntry& entry : nominals) {
-        if (!entry.complete || entry.type.idx != receiver.idx ||
-            entry.item->kind != ast::ItemKind::Struct) {
+        if (!entry.complete || entry.type.idx != receiver.idx) {
           continue;
         }
-        const ast::StructItem* decl =
-            static_cast<const ast::StructItem*>(entry.item);
+        const ast::ItemNode& owner_node = ast.items[entry.item];
+        if (owner_node.kind != ast::ItemKind::Struct) {
+          continue;
+        }
         u32 i = 0;
-        for (const ast::StructField& decl_field : decl->fields) {
-          if (decl_field.name.name == field->name.name) {
+        for (const ast::ItemStructField& decl_field :
+             owner_node.payload.get<ast::ItemStruct>().fields) {
+          if (decl_field.name.name == field_name.name) {
             owner = &entry;
             field_index = i;
             break;
@@ -2202,14 +2263,14 @@ class Checker {
       if (owner == nullptr) {
         const u32 index =
             bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
-                     field->name.span, "unknown field '{}'", field->name.name);
+                     field_name.span, "unknown field '{}'", field_name.name);
         (void)index;
         return error_type();
       }
       const ir::TypeIdx result = struct_type.fields[field_index];
       (void)module;
       if (expected != nullptr) {
-        return unify(*expected, result, field->span, "field");
+        return unify(*expected, result, node.span, "field");
       }
       return result;
     }
@@ -2217,8 +2278,8 @@ class Checker {
       const ir::TupleType& tuple_type =
           builder.tuple_types()[builder.types()[receiver].as_tuple()];
       u32 index = 0;
-      bool digits = !field->name.name.empty();
-      for (char c : field->name.name) {
+      bool digits = !field_name.name.empty();
+      for (char c : field_name.name) {
         if (c < '0' || c > '9') {
           digits = false;
           break;
@@ -2227,47 +2288,52 @@ class Checker {
       }
       if (!digits || index >= tuple_type.elements.size()) {
         const u32 diag = bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
-                                  field->name.span, "unknown tuple field '{}'",
-                                  field->name.name);
+                                  field_name.span, "unknown tuple field '{}'",
+                                  field_name.name);
         (void)diag;
         return error_type();
       }
       const ir::TypeIdx result = tuple_type.elements[index];
       if (expected != nullptr) {
-        return unify(*expected, result, field->span, "field");
+        return unify(*expected, result, node.span, "field");
       }
       return result;
     }
-    const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, field->span,
-                 "no fields on '{}'", pretty_tag(tag));
+    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                               node.span, "no fields on '{}'", pretty_tag(tag));
     (void)index;
     return error_type();
   }
 
   ir::TypeIdx check_struct_expr(u32 module,
-                                const ast::StructExpr* strukt,
+                                ast::ExprIdx expr,
                                 const ir::TypeIdx* expected) {
-    NominalEntry* nominal = resolve_struct_path(module, strukt->path);
+    const ast::ExprNode& node = ast.exprs[expr];
+    NominalEntry* nominal =
+        resolve_struct_path(module, node.payload.get<ast::ExprStruct>().path);
     if (nominal == nullptr) {
-      for (const ast::FieldInit& field : strukt->init) {
+      for (const ast::ExprFieldInit& field :
+           node.payload.get<ast::ExprStruct>().init) {
         check_expr(module, field.value, nullptr);
       }
-      if (strukt->base_expr != nullptr) {
-        check_expr(module, strukt->base_expr, nullptr);
+      if (node.payload.get<ast::ExprStruct>().base_expr.is_valid()) {
+        check_expr(module, node.payload.get<ast::ExprStruct>().base_expr,
+                   nullptr);
       }
       return error_type();
     }
     const ir::TypeIdx struct_type = intern_nominal(*nominal);
-    const ast::StructItem* decl =
-        static_cast<const ast::StructItem*>(nominal->item);
+    const ast::ItemNode& decl = ast.items[nominal->item];
     const ir::StructType& fields =
         builder.struct_types()[builder.types()[struct_type].as_struct()];
-    std::vector<bool> seen(decl->fields.size(), false);
-    for (const ast::FieldInit& field : strukt->init) {
+    std::vector<bool> seen(decl.payload.get<ast::ItemStruct>().fields.size(),
+                           false);
+    for (const ast::ExprFieldInit& field :
+         node.payload.get<ast::ExprStruct>().init) {
       u32 index = 0;
       bool found = false;
-      for (const ast::StructField& decl_field : decl->fields) {
+      for (const ast::ItemStructField& decl_field :
+           decl.payload.get<ast::ItemStruct>().fields) {
         if (decl_field.name.name == field.name.name) {
           found = true;
           break;
@@ -2285,42 +2351,48 @@ class Checker {
       seen[index] = true;
       const ir::TypeIdx field_type = fields.fields[index];
       const ir::TypeIdx actual = check_expr(module, field.value, &field_type);
-      unify(field_type, actual, field.value->span, "field");
+      unify(field_type, actual, ast.exprs[field.value].span, "field");
     }
-    if (strukt->base_expr != nullptr) {
-      const ir::TypeIdx base = check_expr(module, strukt->base_expr, nullptr);
-      unify(struct_type, base, strukt->base_expr->span, "struct update base");
+    if (node.payload.get<ast::ExprStruct>().base_expr.is_valid()) {
+      const ir::TypeIdx base = check_expr(
+          module, node.payload.get<ast::ExprStruct>().base_expr, nullptr);
+      unify(struct_type, base,
+            ast.exprs[node.payload.get<ast::ExprStruct>().base_expr].span,
+            "struct update base");
     } else {
       for (usize i = 0; i < seen.size(); ++i) {
         if (!seen[i]) {
           const u32 diag =
-              bag.emit(diag::Severity::Error, kAnalyzerArityError, strukt->span,
-                       "missing field '{}'", decl->fields[i].name.name);
+              bag.emit(diag::Severity::Error, kAnalyzerArityError, node.span,
+                       "missing field '{}'",
+                       decl.payload.get<ast::ItemStruct>().fields[i].name.name);
           (void)diag;
         }
       }
     }
     if (expected != nullptr) {
-      return unify(*expected, struct_type, strukt->span, "struct");
+      return unify(*expected, struct_type, node.span, "struct");
     }
     return struct_type;
   }
 
   ir::TypeIdx check_question(u32 module,
-                             const ast::QuestionExpr* question,
+                             ast::ExprIdx expr,
                              const ir::TypeIdx* expected) {
-    const ir::TypeIdx inner = check_expr(module, question->inner, nullptr);
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ir::TypeIdx inner = check_expr(
+        module, node.payload.get<ast::ExprQuestion>().inner, nullptr);
     const BlessedEntry* scrutinee = blessed_find(inner);
     if (scrutinee == nullptr) {
       const u32 index = bag.emit(diag::Severity::Error, kAnalyzerBadQuestion,
-                                 question->span, "'?' needs Result or Option");
+                                 node.span, "'?' needs Result or Option");
       (void)index;
       return error_type();
     }
     const BlessedEntry* enclosing = blessed_find(fn_ret);
     if (enclosing == nullptr) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, question->span,
+          bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, node.span,
                    "'?' needs an enclosing Result or Option function");
       (void)index;
       return error_type();
@@ -2328,31 +2400,34 @@ class Checker {
     if (scrutinee->is_result != enclosing->is_result ||
         scrutinee->args.size() != enclosing->args.size()) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, question->span,
+          bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, node.span,
                    "'?' type does not match the function return type");
       (void)index;
       return error_type();
     }
     for (usize i = 0; i < scrutinee->args.size(); ++i) {
       if (!types_equal(scrutinee->args[i], enclosing->args[i])) {
-        const u32 index = bag.emit(
-            diag::Severity::Error, kAnalyzerBadQuestion, question->span,
-            "'?' type does not match the function return type");
+        const u32 index =
+            bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, node.span,
+                     "'?' type does not match the function return type");
         (void)index;
         return error_type();
       }
     }
     if (expected != nullptr) {
-      return unify(*expected, scrutinee->args[0], question->span, "'?'");
+      return unify(*expected, scrutinee->args[0], node.span, "'?'");
     }
     return scrutinee->args[0];
   }
 
   ir::TypeIdx check_cast(u32 module,
-                         const ast::CastExpr* cast,
+                         ast::ExprIdx expr,
                          const ir::TypeIdx* expected) {
-    const ir::TypeIdx inner = check_expr(module, cast->inner, nullptr);
-    const ir::TypeIdx target = resolve_type(module, cast->type, nullptr);
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ir::TypeIdx inner =
+        check_expr(module, node.payload.get<ast::ExprCast>().inner, nullptr);
+    const ir::TypeIdx target =
+        resolve_type(module, node.payload.get<ast::ExprCast>().type, nullptr);
     if (is_error(inner) || is_error(target)) {
       return error_type();
     }
@@ -2364,86 +2439,92 @@ class Checker {
         is_integer_tag(to) || is_float_tag(to) || to == ir::TypeTag::I1;
     if (from == ir::TypeTag::Never || (numeric_from && numeric_to)) {
       if (expected != nullptr) {
-        return unify(*expected, target, cast->span, "cast");
+        return unify(*expected, target, node.span, "cast");
       }
       return target;
     }
     const u32 index = bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
-                               cast->span, "invalid cast from '{}' to '{}'",
+                               node.span, "invalid cast from '{}' to '{}'",
                                pretty_tag(from), pretty_tag(to));
     (void)index;
     return error_type();
   }
 
   ir::TypeIdx check_index(u32 module,
-                          const ast::IndexExpr* index,
+                          ast::ExprIdx expr,
                           const ir::TypeIdx* expected) {
-    const ir::TypeIdx receiver = check_expr(module, index->receiver, nullptr);
-    const ir::TypeIdx position = check_expr(module, index->index, nullptr);
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ir::TypeIdx receiver = check_expr(
+        module, node.payload.get<ast::ExprIndex>().receiver, nullptr);
+    const ir::TypeIdx position =
+        check_expr(module, node.payload.get<ast::ExprIndex>().index, nullptr);
     if (is_error(receiver) || is_error(position)) {
       return error_type();
     }
     if (!is_integer_tag(tag_of(position))) {
       const u32 diag =
           bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch,
-                   index->index->span, "array index must be an integer");
+                   ast.exprs[node.payload.get<ast::ExprIndex>().index].span,
+                   "array index must be an integer");
       (void)diag;
       return error_type();
     }
     if (tag_of(receiver) != ir::TypeTag::Array) {
-      const u32 diag = bag.emit(
-          diag::Severity::Error, kAnalyzerInvalidOperation, index->span,
-          "cannot index '{}'", pretty_tag(tag_of(receiver)));
+      const u32 diag =
+          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, node.span,
+                   "cannot index '{}'", pretty_tag(tag_of(receiver)));
       (void)diag;
       return error_type();
     }
     const ir::ArrayType& array =
         builder.array_types()[builder.types()[receiver].as_array()];
     if (expected != nullptr) {
-      return unify(*expected, array.element, index->span, "index");
+      return unify(*expected, array.element, node.span, "index");
     }
     return array.element;
   }
 
-  void check_cond(u32 module, const ast::Cond* cond, bool& binds) {
+  void check_cond(u32 module, ast::CondIdx cond, bool& binds) {
+    const ast::Cond& node = ast.conds[cond];
     binds = false;
-    if (cond->is_pattern) {
-      const ir::TypeIdx init = check_expr(module, cond->init, nullptr);
+    if (node.is_pattern) {
+      const ir::TypeIdx init = check_expr(module, node.init, nullptr);
       scopes.emplace_back();
       binds = true;
-      bind_pattern(module, cond->pattern, init);
+      bind_pattern(module, node.pattern, init);
       return;
     }
     const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
-    const ir::TypeIdx actual = check_expr(module, cond->value, &boolean);
-    unify(boolean, actual, cond->value->span, "condition");
+    const ir::TypeIdx actual = check_expr(module, node.value, &boolean);
+    unify(boolean, actual, ast.exprs[node.value].span, "condition");
   }
 
   ir::TypeIdx check_if(u32 module,
-                       const ast::IfExpr* if_expr,
+                       ast::ExprIdx expr,
                        const ir::TypeIdx* expected) {
+    const ast::ExprNode& node = ast.exprs[expr];
     bool binds = false;
-    check_cond(module, if_expr->cond, binds);
-    const ir::TypeIdx then = check_block(module, if_expr->then_block, expected);
+    check_cond(module, node.payload.get<ast::ExprIf>().cond, binds);
+    const ir::TypeIdx then = check_block(
+        module, node.payload.get<ast::ExprIf>().then_block, expected);
     if (binds) {
       scopes.pop_back();
     }
-    if (if_expr->else_block == nullptr) {
+    if (!node.payload.get<ast::ExprIf>().else_block.is_valid()) {
       if (!is_void(then) && !is_error(then) && !is_never(then)) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch,
-                     if_expr->span, "if without else yields '()'");
+        const u32 index = bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch,
+                                   node.span, "if without else yields '()'");
         (void)index;
       }
       const ir::TypeIdx unit = builder.primitive(ir::TypeTag::Void);
       if (expected != nullptr) {
-        return unify(*expected, unit, if_expr->span, "if");
+        return unify(*expected, unit, node.span, "if");
       }
       return unit;
     }
-    const ir::TypeIdx otherwise =
-        check_block(module, if_expr->else_block, expected);
-    return unify(then, otherwise, if_expr->span, "if branches");
+    const ir::TypeIdx otherwise = check_block(
+        module, node.payload.get<ast::ExprIf>().else_block, expected);
+    return unify(then, otherwise, node.span, "if branches");
   }
 
   // Exhaustiveness over the plan's bounded scope: bool and enum
@@ -2452,11 +2533,11 @@ class Checker {
   // wildcard or a matching constructor pattern.
   void check_exhaustive(u32 module,
                         ir::TypeIdx scrutinee,
-                        std::span<const ast::MatchArm> arms,
+                        std::span<const ast::ExprMatchArm> arms,
                         diag::Span span) {
     bool wildcard = false;
     std::vector<bool> covered_bool{false, false};
-    for (const ast::MatchArm& arm : arms) {
+    for (const ast::ExprMatchArm& arm : arms) {
       if (pattern_is_wildcard(arm.pattern)) {
         wildcard = true;
       }
@@ -2480,13 +2561,17 @@ class Checker {
       const ir::EnumType& enum_type =
           builder.enum_types()[builder.types()[scrutinee].as_enum()];
       // Find the declaring nominal for variant names.
-      const ast::EnumItem* decl = nullptr;
+      const ast::ItemNode* decl = nullptr;
       for (NominalEntry& entry : nominals) {
-        if (entry.complete && entry.type.idx == scrutinee.idx &&
-            entry.item->kind == ast::ItemKind::Enum) {
-          decl = static_cast<const ast::EnumItem*>(entry.item);
-          break;
+        if (!entry.complete || entry.type.idx != scrutinee.idx) {
+          continue;
         }
+        const ast::ItemNode& candidate = ast.items[entry.item];
+        if (candidate.kind != ast::ItemKind::Enum) {
+          continue;
+        }
+        decl = &candidate;
+        break;
       }
       if (decl == nullptr) {
         for (const BlessedEntry& entry : blessed) {
@@ -2496,7 +2581,7 @@ class Checker {
           // Blessed constructors cover by side: Ok/Some is variant 0,
           // Err/None is variant 1. Unconditional patterns cover both.
           bool covered[2] = {false, false};
-          for (const ast::MatchArm& arm : arms) {
+          for (const ast::ExprMatchArm& arm : arms) {
             mark_blessed_covered(module, arm.pattern, covered);
           }
           if (covered[0] && covered[1]) {
@@ -2514,15 +2599,16 @@ class Checker {
       }
       std::vector<bool> covered(static_cast<usize>(enum_type.variants.size()),
                                 false);
-      for (const ast::MatchArm& arm : arms) {
-        mark_variant_covered(arm.pattern, decl, covered);
+      const std::span<const ast::ItemEnumVariant> variants =
+          decl->payload.get<ast::ItemEnum>().variants;
+      for (const ast::ExprMatchArm& arm : arms) {
+        mark_variant_covered(arm.pattern, variants, covered);
       }
       for (usize i = 0; i < covered.size(); ++i) {
         if (!covered[i]) {
-          const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerNonExhaustiveMatch, span,
-                       "non-exhaustive match: '{}' not covered",
-                       decl->variants[i].name.name);
+          const u32 index = bag.emit(
+              diag::Severity::Error, kAnalyzerNonExhaustiveMatch, span,
+              "non-exhaustive match: '{}' not covered", variants[i].name.name);
           (void)index;
           return;
         }
@@ -2537,10 +2623,9 @@ class Checker {
       return;
     }
     if (tag == ir::TypeTag::Tuple) {
-      for (const ast::MatchArm& arm : arms) {
-        if (arm.pattern->kind == ast::PatternKind::Tuple &&
-            static_cast<const ast::TuplePattern*>(arm.pattern)->path ==
-                nullptr) {
+      for (const ast::ExprMatchArm& arm : arms) {
+        if (ast.patterns[arm.pattern].kind == ast::PatternKind::Tuple &&
+            !ast.patterns[arm.pattern].payload.tuple.path.is_valid()) {
           return;
         }
       }
@@ -2551,8 +2636,8 @@ class Checker {
       return;
     }
     if (tag == ir::TypeTag::Struct) {
-      for (const ast::MatchArm& arm : arms) {
-        if (arm.pattern->kind == ast::PatternKind::Struct) {
+      for (const ast::ExprMatchArm& arm : arms) {
+        if (ast.patterns[arm.pattern].kind == ast::PatternKind::Struct) {
           return;
         }
       }
@@ -2568,15 +2653,14 @@ class Checker {
     (void)index;
   }
 
-  bool pattern_is_wildcard(const ast::Pattern* pattern) const {
-    switch (pattern->kind) {
+  bool pattern_is_wildcard(ast::PatternIdx pattern) const {
+    switch (ast.patterns[pattern].kind) {
       case ast::PatternKind::Wildcard: return true;
       case ast::PatternKind::Ident:
       case ast::PatternKind::MutIdent: return true;
       case ast::PatternKind::Or: {
-        const ast::OrPattern* or_pat =
-            static_cast<const ast::OrPattern*>(pattern);
-        for (const ast::Pattern* alt : or_pat->alternatives) {
+        for (ast::PatternIdx alt :
+             ast.patterns[pattern].payload.or_pat.alternatives) {
           if (pattern_is_wildcard(alt)) {
             return true;
           }
@@ -2587,21 +2671,20 @@ class Checker {
     }
   }
 
-  void collect_bool_literals(const ast::Pattern* pattern,
+  void collect_bool_literals(ast::PatternIdx pattern,
                              std::vector<bool>& covered) const {
-    switch (pattern->kind) {
+    switch (ast.patterns[pattern].kind) {
       case ast::PatternKind::Literal: {
-        const ast::LiteralPattern* lit =
-            static_cast<const ast::LiteralPattern*>(pattern);
-        if (lit->value->kind == ast::LiteralKind::Bool) {
-          covered[lit->value->spelling == "true" ? 0 : 1] = true;
+        const ast::Literal& value =
+            ast.literals[ast.patterns[pattern].payload.literal.value];
+        if (value.kind == ast::LiteralKind::Bool) {
+          covered[value.spelling == "true" ? 0 : 1] = true;
         }
         return;
       }
       case ast::PatternKind::Or: {
-        const ast::OrPattern* or_pat =
-            static_cast<const ast::OrPattern*>(pattern);
-        for (const ast::Pattern* alt : or_pat->alternatives) {
+        for (ast::PatternIdx alt :
+             ast.patterns[pattern].payload.or_pat.alternatives) {
           collect_bool_literals(alt, covered);
         }
         return;
@@ -2610,16 +2693,15 @@ class Checker {
     }
   }
 
-  void mark_variant_covered(const ast::Pattern* pattern,
-                            const ast::EnumItem* decl,
+  void mark_variant_covered(ast::PatternIdx pattern,
+                            std::span<const ast::ItemEnumVariant> variants,
                             std::vector<bool>& covered) {
-    switch (pattern->kind) {
+    const ast::PatternNode& node = ast.patterns[pattern];
+    switch (node.kind) {
       case ast::PatternKind::Ident: {
-        const ast::IdentPattern* ident =
-            static_cast<const ast::IdentPattern*>(pattern);
         for (usize i = 0; i < covered.size(); ++i) {
-          if (decl->variants[i].name.name == ident->name.name &&
-              decl->variants[i].fields.empty()) {
+          if (variants[i].name.name == node.payload.ident.name.name &&
+              variants[i].fields.empty()) {
             covered[i] = true;
             return;
           }
@@ -2627,14 +2709,14 @@ class Checker {
         return;
       }
       case ast::PatternKind::Tuple: {
-        const ast::TuplePattern* tuple =
-            static_cast<const ast::TuplePattern*>(pattern);
-        if (tuple->path == nullptr || tuple->path->segments.empty()) {
+        if (!node.payload.tuple.path.is_valid() ||
+            ast.paths[node.payload.tuple.path].segments.empty()) {
           return;
         }
-        const std::string_view name = tuple->path->segments.back().name;
+        const std::string_view name =
+            ast.paths[node.payload.tuple.path].segments.back().name;
         for (usize i = 0; i < covered.size(); ++i) {
-          if (decl->variants[i].name.name == name) {
+          if (variants[i].name.name == name) {
             covered[i] = true;
             return;
           }
@@ -2642,10 +2724,8 @@ class Checker {
         return;
       }
       case ast::PatternKind::Or: {
-        const ast::OrPattern* or_pat =
-            static_cast<const ast::OrPattern*>(pattern);
-        for (const ast::Pattern* alt : or_pat->alternatives) {
-          mark_variant_covered(alt, decl, covered);
+        for (ast::PatternIdx alt : node.payload.or_pat.alternatives) {
+          mark_variant_covered(alt, variants, covered);
         }
         return;
       }
@@ -2654,20 +2734,19 @@ class Checker {
   }
 
   void mark_blessed_covered(u32 module,
-                            const ast::Pattern* pattern,
+                            ast::PatternIdx pattern,
                             bool covered[2]) {
-    switch (pattern->kind) {
+    const ast::PatternNode& node = ast.patterns[pattern];
+    switch (node.kind) {
       case ast::PatternKind::Wildcard:
       case ast::PatternKind::Ident:
       case ast::PatternKind::MutIdent: return;
       case ast::PatternKind::Tuple: {
-        const ast::TuplePattern* tuple =
-            static_cast<const ast::TuplePattern*>(pattern);
-        if (tuple->path == nullptr) {
+        if (!node.payload.tuple.path.is_valid()) {
           return;
         }
         PathValue resolved;
-        if (!resolve_variant_path(module, tuple->path, resolved)) {
+        if (!resolve_variant_path(module, node.payload.tuple.path, resolved)) {
           return;
         }
         if (resolved.kind != PathValue::Kind::BlessedCtor) {
@@ -2677,9 +2756,7 @@ class Checker {
         return;
       }
       case ast::PatternKind::Or: {
-        const ast::OrPattern* or_pat =
-            static_cast<const ast::OrPattern*>(pattern);
-        for (const ast::Pattern* alt : or_pat->alternatives) {
+        for (ast::PatternIdx alt : node.payload.or_pat.alternatives) {
           mark_blessed_covered(module, alt, covered);
         }
         return;
@@ -2689,12 +2766,15 @@ class Checker {
   }
 
   ir::TypeIdx check_match(u32 module,
-                          const ast::MatchExpr* match,
+                          ast::ExprIdx expr,
                           const ir::TypeIdx* expected) {
-    const ir::TypeIdx scrutinee = check_expr(module, match->scrutinee, nullptr);
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ir::TypeIdx scrutinee = check_expr(
+        module, node.payload.get<ast::ExprMatch>().scrutinee, nullptr);
     ir::TypeIdx result = error_type();
     bool first = true;
-    for (const ast::MatchArm& arm : match->arms) {
+    for (const ast::ExprMatchArm& arm :
+         node.payload.get<ast::ExprMatch>().arms) {
       scopes.emplace_back();
       if (!is_error(scrutinee)) {
         bind_pattern(module, arm.pattern, scrutinee);
@@ -2705,20 +2785,21 @@ class Checker {
         result = body;
         first = false;
       } else {
-        result = unify(result, body, arm.body->span, "match arms");
+        result = unify(result, body, ast.exprs[arm.body].span, "match arms");
       }
     }
     if (!is_error(scrutinee)) {
-      check_exhaustive(module, scrutinee, match->arms, match->span);
+      check_exhaustive(module, scrutinee,
+                       node.payload.get<ast::ExprMatch>().arms, node.span);
     }
     if (expected != nullptr && !first) {
-      return unify(*expected, result, match->span, "match");
+      return unify(*expected, result, node.span, "match");
     }
     return result;
   }
 
   ir::TypeIdx check_expr(u32 module,
-                         const ast::Expr* expr,
+                         ast::ExprIdx expr,
                          const ir::TypeIdx* expected) {
     const ir::TypeIdx type = check_expr_inner(module, expr, expected);
     modules[module].expr_types.emplace_back(expr, type);
@@ -2726,29 +2807,27 @@ class Checker {
   }
 
   ir::TypeIdx check_expr_inner(u32 module,
-                               const ast::Expr* expr,
+                               ast::ExprIdx expr,
                                const ir::TypeIdx* expected) {
-    switch (expr->kind) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    switch (node.kind) {
       case ast::ExprKind::Literal: {
-        const ast::LiteralExpr* lit =
-            static_cast<const ast::LiteralExpr*>(expr);
-        return check_literal(lit->value, expected);
+        return check_literal(node.payload.get<ast::ExprLiteral>().value,
+                             expected);
       }
       case ast::ExprKind::Path: {
-        const ast::PathExpr* path = static_cast<const ast::PathExpr*>(expr);
-        return check_path_expr(module, path->path, expected, expr->span);
+        return check_path_expr(module, node.payload.get<ast::ExprPath>().idx,
+                               expected, node.span);
       }
       case ast::ExprKind::Struct: {
-        const ast::StructExpr* strukt =
-            static_cast<const ast::StructExpr*>(expr);
-        return check_struct_expr(module, strukt, expected);
+        return check_struct_expr(module, expr, expected);
       }
       case ast::ExprKind::Tuple: {
-        const ast::TupleExpr* tuple = static_cast<const ast::TupleExpr*>(expr);
-        if (tuple->elements.empty()) {
+        const ast::ExprTuple& tuple = node.payload.get<ast::ExprTuple>();
+        if (tuple.elements.empty()) {
           const ir::TypeIdx unit = builder.primitive(ir::TypeTag::Void);
           if (expected != nullptr) {
-            return unify(*expected, unit, expr->span, "unit");
+            return unify(*expected, unit, node.span, "unit");
           }
           return unit;
         }
@@ -2760,17 +2839,17 @@ class Checker {
           expected_tuple = &expected_copy;
         }
         std::vector<ir::TypeIdx> elements;
-        elements.reserve(tuple->elements.size());
-        for (usize i = 0; i < tuple->elements.size(); ++i) {
+        elements.reserve(tuple.elements.size());
+        for (usize i = 0; i < tuple.elements.size(); ++i) {
           const ir::TypeIdx* element_expected = nullptr;
           ir::TypeIdx element_type = error_type();
           if (expected_tuple != nullptr &&
-              expected_tuple->elements.size() == tuple->elements.size()) {
+              expected_tuple->elements.size() == tuple.elements.size()) {
             element_type = expected_tuple->elements[i];
             element_expected = &element_type;
           }
           elements.push_back(
-              check_expr(module, tuple->elements[i], element_expected));
+              check_expr(module, tuple.elements[i], element_expected));
         }
         ir::TypeSeq seq;
         for (ir::TypeIdx element : elements) {
@@ -2778,22 +2857,22 @@ class Checker {
         }
         const ir::TypeIdx type = builder.tuple_type(seq.finish());
         if (expected != nullptr) {
-          return unify(*expected, type, expr->span, "tuple");
+          return unify(*expected, type, node.span, "tuple");
         }
         return type;
       }
       case ast::ExprKind::Unary: {
-        const ast::UnaryExpr* unary = static_cast<const ast::UnaryExpr*>(expr);
-        const ir::TypeIdx inner = check_expr(module, unary->inner, nullptr);
+        const ir::TypeIdx inner = check_expr(
+            module, node.payload.get<ast::ExprUnary>().inner, nullptr);
         if (is_error(inner)) {
           return error_type();
         }
         const ir::TypeTag tag = tag_of(inner);
-        switch (unary->op) {
+        switch (node.payload.get<ast::ExprUnary>().op) {
           case ast::UnaryOp::Neg:
             if (is_integer_tag(tag) || is_float_tag(tag)) {
               if (expected != nullptr) {
-                return unify(*expected, inner, expr->span, "negation");
+                return unify(*expected, inner, node.span, "negation");
               }
               return inner;
             }
@@ -2801,7 +2880,7 @@ class Checker {
           case ast::UnaryOp::Not:
             if (tag == ir::TypeTag::I1) {
               if (expected != nullptr) {
-                return unify(*expected, inner, expr->span, "not");
+                return unify(*expected, inner, node.span, "not");
               }
               return inner;
             }
@@ -2809,7 +2888,7 @@ class Checker {
           case ast::UnaryOp::BitNot:
             if (is_integer_tag(tag)) {
               if (expected != nullptr) {
-                return unify(*expected, inner, expr->span, "bitwise not");
+                return unify(*expected, inner, node.span, "bitwise not");
               }
               return inner;
             }
@@ -2817,53 +2896,57 @@ class Checker {
         }
         const u32 index =
             bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
-                     expr->span, "invalid unary operand '{}'", pretty_tag(tag));
+                     node.span, "invalid unary operand '{}'", pretty_tag(tag));
         (void)index;
         return error_type();
       }
       case ast::ExprKind::Borrow: {
-        const ast::BorrowExpr* borrow =
-            static_cast<const ast::BorrowExpr*>(expr);
         // Place-ness is a borrow-checking concern; here the
         // inner type only determines the reference shape.
-        const ir::TypeIdx pointee = check_expr(module, borrow->inner, nullptr);
+        const ir::TypeIdx pointee = check_expr(
+            module, node.payload.get<ast::ExprBorrow>().inner, nullptr);
         if (is_error(pointee)) {
           return error_type();
         }
-        const ir::TypeIdx type =
-            builder.reference_type(pointee, borrow->is_mut);
+        const ir::TypeIdx type = builder.reference_type(
+            pointee, node.payload.get<ast::ExprBorrow>().is_mut);
         if (expected != nullptr) {
-          return unify(*expected, type, expr->span, "borrow");
+          return unify(*expected, type, node.span, "borrow");
         }
         return type;
       }
       case ast::ExprKind::Binary: {
-        const ast::BinaryExpr* binary =
-            static_cast<const ast::BinaryExpr*>(expr);
-        if (binary->op == ast::BinaryOp::And ||
-            binary->op == ast::BinaryOp::Or) {
+        if (node.payload.get<ast::ExprBinary>().op == ast::BinaryOp::And ||
+            node.payload.get<ast::ExprBinary>().op == ast::BinaryOp::Or) {
           const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
-          const ir::TypeIdx left = check_expr(module, binary->lhs, &boolean);
-          const ir::TypeIdx right = check_expr(module, binary->rhs, &boolean);
-          unify(boolean, left, binary->lhs->span, "logical operand");
-          unify(boolean, right, binary->rhs->span, "logical operand");
+          const ir::TypeIdx left = check_expr(
+              module, node.payload.get<ast::ExprBinary>().lhs, &boolean);
+          const ir::TypeIdx right = check_expr(
+              module, node.payload.get<ast::ExprBinary>().rhs, &boolean);
+          unify(boolean, left,
+                ast.exprs[node.payload.get<ast::ExprBinary>().lhs].span,
+                "logical operand");
+          unify(boolean, right,
+                ast.exprs[node.payload.get<ast::ExprBinary>().rhs].span,
+                "logical operand");
           if (expected != nullptr) {
-            return unify(*expected, boolean, expr->span, "logical");
+            return unify(*expected, boolean, node.span, "logical");
           }
           return boolean;
         }
         const ir::TypeIdx operands = check_binary_operands(
-            module, binary->lhs, binary->rhs, expr->span, "binary");
+            module, node.payload.get<ast::ExprBinary>().lhs,
+            node.payload.get<ast::ExprBinary>().rhs, node.span, "binary");
         if (is_error(operands)) {
           return error_type();
         }
         const ir::TypeTag tag = tag_of(operands);
-        switch (binary->op) {
+        switch (node.payload.get<ast::ExprBinary>().op) {
           case ast::BinaryOp::Eq:
           case ast::BinaryOp::NotEq: {
             const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
             if (expected != nullptr) {
-              return unify(*expected, boolean, expr->span, "comparison");
+              return unify(*expected, boolean, node.span, "comparison");
             }
             return boolean;
           }
@@ -2874,7 +2957,7 @@ class Checker {
             if (is_integer_tag(tag) || is_float_tag(tag)) {
               const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
               if (expected != nullptr) {
-                return unify(*expected, boolean, expr->span, "comparison");
+                return unify(*expected, boolean, node.span, "comparison");
               }
               return boolean;
             }
@@ -2882,114 +2965,102 @@ class Checker {
           default:
             if (is_integer_tag(tag) || is_float_tag(tag)) {
               if (expected != nullptr) {
-                return unify(*expected, operands, expr->span, "arithmetic");
+                return unify(*expected, operands, node.span, "arithmetic");
               }
               return operands;
             }
             break;
         }
-        const u32 index = bag.emit(
-            diag::Severity::Error, kAnalyzerInvalidOperation, expr->span,
-            "invalid binary operand '{}'", pretty_tag(tag));
+        const u32 index =
+            bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                     node.span, "invalid binary operand '{}'", pretty_tag(tag));
         (void)index;
         return error_type();
       }
       case ast::ExprKind::Cast: {
-        const ast::CastExpr* cast = static_cast<const ast::CastExpr*>(expr);
-        return check_cast(module, cast, expected);
+        return check_cast(module, expr, expected);
       }
       case ast::ExprKind::Call: {
-        const ast::CallExpr* call = static_cast<const ast::CallExpr*>(expr);
-        return check_call(module, call->callee, call->args, expected,
-                          expr->span);
+        return check_call(module, expr, expected);
       }
       case ast::ExprKind::MethodCall: {
-        const ast::MethodCallExpr* call =
-            static_cast<const ast::MethodCallExpr*>(expr);
-        return check_method_call(module, call, expected);
+        return check_method_call(module, expr, expected);
       }
       case ast::ExprKind::Field: {
-        const ast::FieldExpr* field = static_cast<const ast::FieldExpr*>(expr);
-        return check_field(module, field, expected);
+        return check_field(module, expr, expected);
       }
       case ast::ExprKind::Index: {
-        const ast::IndexExpr* index = static_cast<const ast::IndexExpr*>(expr);
-        return check_index(module, index, expected);
+        return check_index(module, expr, expected);
       }
       case ast::ExprKind::Question: {
-        const ast::QuestionExpr* question =
-            static_cast<const ast::QuestionExpr*>(expr);
-        return check_question(module, question, expected);
+        return check_question(module, expr, expected);
       }
       case ast::ExprKind::If: {
-        const ast::IfExpr* if_expr = static_cast<const ast::IfExpr*>(expr);
-        return check_if(module, if_expr, expected);
+        return check_if(module, expr, expected);
       }
       case ast::ExprKind::Match: {
-        const ast::MatchExpr* match = static_cast<const ast::MatchExpr*>(expr);
-        return check_match(module, match, expected);
+        return check_match(module, expr, expected);
       }
       case ast::ExprKind::Loop: {
-        const ast::LoopExpr* loop = static_cast<const ast::LoopExpr*>(expr);
         const ir::TypeIdx unit = builder.primitive(ir::TypeTag::Void);
         ++loop_depth;
-        check_block(module, loop->body, &unit);
+        check_block(module, node.payload.get<ast::ExprLoop>().body, &unit);
         --loop_depth;
         if (expected != nullptr) {
-          return unify(*expected, unit, expr->span, "loop");
+          return unify(*expected, unit, node.span, "loop");
         }
         return unit;
       }
       case ast::ExprKind::While: {
-        const ast::WhileExpr* while_expr =
-            static_cast<const ast::WhileExpr*>(expr);
         bool binds = false;
-        check_cond(module, while_expr->cond, binds);
+        check_cond(module, node.payload.get<ast::ExprWhile>().cond, binds);
         const ir::TypeIdx unit = builder.primitive(ir::TypeTag::Void);
         ++loop_depth;
-        check_block(module, while_expr->body, &unit);
+        check_block(module, node.payload.get<ast::ExprWhile>().body, &unit);
         --loop_depth;
         if (binds) {
           scopes.pop_back();
         }
         if (expected != nullptr) {
-          return unify(*expected, unit, expr->span, "while");
+          return unify(*expected, unit, node.span, "while");
         }
         return unit;
       }
       case ast::ExprKind::Block: {
-        const ast::BlockExpr* block = static_cast<const ast::BlockExpr*>(expr);
-        return check_block(module, block->block, expected);
+        return check_block(module, node.payload.get<ast::ExprBlock>().block,
+                           expected);
       }
       case ast::ExprKind::Return: {
-        const ast::ReturnExpr* ret = static_cast<const ast::ReturnExpr*>(expr);
         if (!in_fn) {
           const u32 index = bag.emit(diag::Severity::Error, kAnalyzerBadReturn,
-                                     expr->span, "'ret' outside of a function");
+                                     node.span, "'ret' outside of a function");
           (void)index;
           return error_type();
         }
-        if (ret->value == nullptr) {
-          unify(fn_ret, builder.primitive(ir::TypeTag::Void), expr->span,
+        if (!node.payload.get<ast::ExprReturn>().value.is_valid()) {
+          unify(fn_ret, builder.primitive(ir::TypeTag::Void), node.span,
                 "return");
         } else {
-          const ir::TypeIdx value = check_expr(module, ret->value, &fn_ret);
-          unify(fn_ret, value, ret->value->span, "return");
+          const ir::TypeIdx value = check_expr(
+              module, node.payload.get<ast::ExprReturn>().value, &fn_ret);
+          unify(fn_ret, value,
+                ast.exprs[node.payload.get<ast::ExprReturn>().value].span,
+                "return");
         }
         return builder.never_type();
       }
       case ast::ExprKind::Break:
       case ast::ExprKind::Continue: {
         if (loop_depth == 0) {
-          if (expr->kind == ast::ExprKind::Break) {
+          if (node.kind == ast::ExprKind::Break) {
             const u32 index =
                 bag.emit(diag::Severity::Error, kAnalyzerBreakOutsideLoop,
-                         expr->span, "'break' outside of a loop");
+                         node.span, "'break' outside of a loop");
             (void)index;
           } else {
             const u32 index =
                 bag.emit(diag::Severity::Error, kAnalyzerBreakOutsideLoop,
-                         expr->span, "'continue' outside of a loop");
+                         node.span, "'continue' outside of a loop");
             (void)index;
           }
           return error_type();
@@ -2998,8 +3069,8 @@ class Checker {
       }
       case ast::ExprKind::Range: {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerUnsupportedExpr,
-                     expr->span, "range expressions arrive post-MVP");
+            bag.emit(diag::Severity::Error, kAnalyzerUnsupportedExpr, node.span,
+                     "range expressions arrive post-MVP");
         (void)index;
         return error_type();
       }
@@ -3007,75 +3078,77 @@ class Checker {
   }
 
   ir::TypeIdx check_block(u32 module,
-                          const ast::Block* block,
+                          ast::BlockIdx block,
                           const ir::TypeIdx* expected) {
+    const ast::Block& node = ast.blocks[block];
     scopes.emplace_back();
-    for (ast::Stmt* stmt : block->statements) {
+    for (ast::StmtIdx stmt : node.statements) {
       check_stmt(module, stmt);
     }
     ir::TypeIdx result = builder.primitive(ir::TypeTag::Void);
-    if (block->value != nullptr) {
-      result = check_expr(module, block->value, expected);
+    if (node.value.is_valid()) {
+      result = check_expr(module, node.value, expected);
       if (expected != nullptr) {
-        result = unify(*expected, result, block->value->span, "block");
+        result = unify(*expected, result, ast.exprs[node.value].span, "block");
       }
     } else if (expected != nullptr) {
-      result = unify(*expected, result, block->span, "block");
+      result = unify(*expected, result, node.span, "block");
     }
     scopes.pop_back();
     return result;
   }
 
-  ir::TypeIdx check_place(u32 module, const ast::Expr* place) {
-    switch (place->kind) {
+  ir::TypeIdx check_place(u32 module, ast::ExprIdx place) {
+    const ast::ExprNode& node = ast.exprs[place];
+    switch (node.kind) {
       case ast::ExprKind::Path: {
-        const ast::PathExpr* path = static_cast<const ast::PathExpr*>(place);
+        const ast::PathIdx path = node.payload.get<ast::ExprPath>().idx;
         PathValue resolved;
-        if (!resolve_value_path(module, path->path, resolved)) {
+        if (!resolve_value_path(module, path, resolved)) {
           return error_type();
         }
         if (resolved.kind != PathValue::Kind::Local) {
           const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerBadAssignment,
-                       place->span, "cannot assign to this place");
+              bag.emit(diag::Severity::Error, kAnalyzerBadAssignment, node.span,
+                       "cannot assign to this place");
           (void)index;
           return error_type();
         }
         // Locals shadow everything, but the resolution above may have
         // found the name through another namespace; confirm mutability
         // through the scope entry.
-        const Local* local = lookup_local(path->path->segments.back().name);
+        const Local* local = lookup_local(ast.paths[path].segments.back().name);
         if (local == nullptr || !local->is_mut) {
           const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerBadAssignment,
-                       place->span, "cannot assign to an immutable binding");
+              bag.emit(diag::Severity::Error, kAnalyzerBadAssignment, node.span,
+                       "cannot assign to an immutable binding");
           (void)index;
           return error_type();
         }
         return local->type;
       }
       case ast::ExprKind::Field: {
-        const ast::FieldExpr* field = static_cast<const ast::FieldExpr*>(place);
-        const ir::TypeIdx receiver = check_place(module, field->receiver);
+        const ir::TypeIdx receiver =
+            check_place(module, node.payload.get<ast::ExprField>().receiver);
         if (is_error(receiver)) {
           return error_type();
         }
         if (tag_of(receiver) != ir::TypeTag::Struct) {
           return error_type();
         }
-        return check_field(module, field, nullptr);
+        return check_field(module, place, nullptr);
       }
       case ast::ExprKind::Index: {
-        const ast::IndexExpr* index = static_cast<const ast::IndexExpr*>(place);
-        const ir::TypeIdx receiver = check_place(module, index->receiver);
+        const ir::TypeIdx receiver =
+            check_place(module, node.payload.get<ast::ExprIndex>().receiver);
         if (is_error(receiver)) {
           return error_type();
         }
-        return check_index(module, index, nullptr);
+        return check_index(module, place, nullptr);
       }
       default: {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerBadAssignment, place->span,
+            bag.emit(diag::Severity::Error, kAnalyzerBadAssignment, node.span,
                      "cannot assign to this place");
         (void)index;
         return error_type();
@@ -3083,62 +3156,71 @@ class Checker {
     }
   }
 
-  void check_stmt(u32 module, const ast::Stmt* stmt) {
-    switch (stmt->kind) {
+  void check_stmt(u32 module, ast::StmtIdx stmt) {
+    const ast::StmtNode& node = ast.stmts[stmt];
+    switch (node.kind) {
       case ast::StmtKind::Decl: {
-        const ast::DeclStmt* decl = static_cast<const ast::DeclStmt*>(stmt);
         const ir::TypeIdx* expected = nullptr;
         ir::TypeIdx ascribed = error_type();
-        if (decl->type != nullptr) {
-          ascribed = resolve_type(module, decl->type, nullptr);
+        if (node.payload.get<ast::StmtDecl>().type.is_valid()) {
+          ascribed = resolve_type(
+              module, node.payload.get<ast::StmtDecl>().type, nullptr);
           expected = &ascribed;
         }
-        const ir::TypeIdx init = check_expr(module, decl->init, expected);
+        const ir::TypeIdx init = check_expr(
+            module, node.payload.get<ast::StmtDecl>().init, expected);
         if (expected != nullptr) {
-          unify(*expected, init, decl->init->span, "declaration");
+          unify(*expected, init,
+                ast.exprs[node.payload.get<ast::StmtDecl>().init].span,
+                "declaration");
         }
-        if (bind_pattern(module, decl->pattern, init)) {
+        if (bind_pattern(module, node.payload.get<ast::StmtDecl>().pattern,
+                         init)) {
           const u32 index = bag.emit(
-              diag::Severity::Error, kAnalyzerRefutableLet, decl->pattern->span,
+              diag::Severity::Error, kAnalyzerRefutableLet,
+              ast.patterns[node.payload.get<ast::StmtDecl>().pattern].span,
               "refutable pattern in declaration; use match");
           (void)index;
         }
         return;
       }
       case ast::StmtKind::Reassign: {
-        const ast::ReassignStmt* reassign =
-            static_cast<const ast::ReassignStmt*>(stmt);
-        const ir::TypeIdx place = check_place(module, reassign->place);
-        const ir::TypeIdx value = check_expr(module, reassign->value, &place);
-        if (reassign->compound) {
+        const ir::TypeIdx place =
+            check_place(module, node.payload.get<ast::StmtReassign>().place);
+        const ir::TypeIdx value = check_expr(
+            module, node.payload.get<ast::StmtReassign>().value, &place);
+        if (node.payload.get<ast::StmtReassign>().compound) {
           const ir::TypeTag tag = tag_of(place);
           if (!is_integer_tag(tag) && !is_float_tag(tag)) {
             const u32 index = bag.emit(
-                diag::Severity::Error, kAnalyzerInvalidOperation, stmt->span,
+                diag::Severity::Error, kAnalyzerInvalidOperation, node.span,
                 "compound assignment needs a numeric place");
             (void)index;
             return;
           }
         }
-        unify(place, value, reassign->value->span, "assignment");
+        unify(place, value,
+              ast.exprs[node.payload.get<ast::StmtReassign>().value].span,
+              "assignment");
         return;
       }
       case ast::StmtKind::Expr: {
-        const ast::ExprStmt* expr_stmt =
-            static_cast<const ast::ExprStmt*>(stmt);
-        const ir::TypeIdx type = check_expr(module, expr_stmt->value, nullptr);
+        const ir::TypeIdx type = check_expr(
+            module, node.payload.get<ast::StmtExpr>().value, nullptr);
+        const diag::Span span =
+            ast.exprs[node.payload.get<ast::StmtExpr>().value].span;
         if (is_void(type) || is_error(type) || is_never(type)) {
           return;
         }
         if (is_must_use(type)) {
           const u32 index = bag.emit(
-              diag::Severity::Warning, kAnalyzerMustUse, expr_stmt->value->span,
+              diag::Severity::Warning, kAnalyzerMustUse, span,
               "unused Result/Option value; bind or discard it explicitly");
           (void)index;
           return;
         }
         const u32 index = bag.emit(
-            diag::Severity::Warning, kAnalyzerMustUse, expr_stmt->value->span,
+            diag::Severity::Warning, kAnalyzerMustUse, span,
             "unused non-() value; discard it explicitly with `_ := ...`");
         (void)index;
         return;
@@ -3199,39 +3281,44 @@ class Checker {
     }
   }
 
-  void check_fn(u32 module, const ast::FnItem* fn, const ir::TypeIdx* self) {
+  void check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
+    const ast::ItemNode& node = ast.items[fn];
     fn_ret = builder.primitive(ir::TypeTag::Void);
-    if (fn->return_type != nullptr) {
-      fn_ret = resolve_type(module, fn->return_type, self);
+    if (node.payload.get<ast::ItemFn>().return_type.is_valid()) {
+      fn_ret = resolve_type(module, node.payload.get<ast::ItemFn>().return_type,
+                            self);
     }
     in_fn = true;
     scopes.emplace_back();
     loop_depth = 0;
-    for (const ast::FnParam& param : fn->params) {
+    for (const ast::ItemFnParam& param :
+         node.payload.get<ast::ItemFn>().params) {
       const ir::TypeIdx type = resolve_type(module, param.type, self);
       if (bind_pattern(module, param.pattern, type)) {
         const u32 index = bag.emit(diag::Severity::Error, kAnalyzerRefutableLet,
-                                   param.pattern->span,
+                                   ast.patterns[param.pattern].span,
                                    "refutable pattern in function parameter");
         (void)index;
       }
     }
-    if (fn->body != nullptr) {
-      check_block(module, fn->body, &fn_ret);
+    if (node.payload.get<ast::ItemFn>().body.is_valid()) {
+      check_block(module, node.payload.get<ast::ItemFn>().body, &fn_ret);
     }
     scopes.pop_back();
     in_fn = false;
   }
 
-  void check_main(u32 module, const ast::FnItem* fn) {
-    if (!fn->params.empty()) {
+  void check_main(u32 module, ast::ItemIdx fn) {
+    const ast::ItemNode& node = ast.items[fn];
+    if (!node.payload.get<ast::ItemFn>().params.empty()) {
       const u32 index = bag.emit(diag::Severity::Error, kAnalyzerBadReturn,
-                                 fn->span, "'main' must take no parameters");
+                                 node.span, "'main' must take no parameters");
       (void)index;
     }
     ir::TypeIdx ret = builder.primitive(ir::TypeTag::Void);
-    if (fn->return_type != nullptr) {
-      ret = resolve_type(module, fn->return_type, nullptr);
+    if (node.payload.get<ast::ItemFn>().return_type.is_valid()) {
+      ret = resolve_type(module, node.payload.get<ast::ItemFn>().return_type,
+                         nullptr);
     }
     if (is_error(ret)) {
       return;
@@ -3246,44 +3333,45 @@ class Checker {
       }
     }
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerBadReturn, fn->span,
+        bag.emit(diag::Severity::Error, kAnalyzerBadReturn, node.span,
                  "'main' must return '()', 'i32', or 'Result<(), E>'");
     (void)index;
   }
 
   void check_bodies() {
     for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
-      for (ast::Item* item : tree.modules[m]->items) {
-        switch (item->kind) {
+      for (ast::ItemIdx item : tree.modules[m]->items) {
+        const ast::ItemNode& node = ast.items[item];
+        switch (node.kind) {
           case ast::ItemKind::Fn: {
-            const ast::FnItem* fn = static_cast<const ast::FnItem*>(item);
-            check_fn(m, fn, nullptr);
-            if (m == tree.root && fn->name.name == "main") {
-              check_main(m, fn);
+            check_fn(m, item, nullptr);
+            if (m == tree.root &&
+                node.payload.get<ast::ItemFn>().name.name == "main") {
+              check_main(m, item);
             }
             break;
           }
           case ast::ItemKind::Impl: {
-            const ast::ImplItem* impl = static_cast<const ast::ImplItem*>(item);
             ir::TypeIdx self = error_type();
             const ir::TypeIdx* self_ptr = nullptr;
-            if (impl->type->kind == ast::TypeKind::Path) {
-              const ast::PathType* path =
-                  static_cast<const ast::PathType*>(impl->type);
-              if (path->args.empty()) {
-                u32 target_module = kNoModule;
-                std::string_view target_name;
-                if (resolve_type_path(m, path->path, target_module,
-                                      target_name)) {
-                  if (NominalEntry* entry =
-                          find_nominal(target_module, target_name)) {
-                    self = intern_nominal(*entry);
-                    self_ptr = &self;
-                  }
+            const ast::TypeNode& self_node =
+                ast.types[node.payload.get<ast::ItemImpl>().type];
+            if (self_node.kind == ast::TypeKind::Path &&
+                self_node.payload.get<ast::TypePath>().args.empty()) {
+              u32 target_module = kNoModule;
+              std::string_view target_name;
+              if (resolve_type_path(m,
+                                    self_node.payload.get<ast::TypePath>().path,
+                                    target_module, target_name)) {
+                if (NominalEntry* entry =
+                        find_nominal(target_module, target_name)) {
+                  self = intern_nominal(*entry);
+                  self_ptr = &self;
                 }
               }
             }
-            for (const ast::FnItem* method : impl->methods) {
+            for (ast::ItemIdx method :
+                 node.payload.get<ast::ItemImpl>().methods) {
               check_fn(m, method, self_ptr);
             }
             break;
@@ -3291,42 +3379,40 @@ class Checker {
           case ast::ItemKind::Static:
           case ast::ItemKind::Const: {
             std::string_view name;
-            const ast::Type* type = nullptr;
-            const ast::Expr* init = nullptr;
-            const bool is_const = item->kind == ast::ItemKind::Const;
+            ast::TypeIdx type = ast::TypeIdx::invalid();
+            ast::ExprIdx init = ast::ExprIdx::invalid();
+            const bool is_const = node.kind == ast::ItemKind::Const;
             if (is_const) {
-              const ast::ConstItem* decl =
-                  static_cast<const ast::ConstItem*>(item);
-              name = decl->name.name;
-              type = decl->type;
-              init = decl->init;
+              name = node.payload.get<ast::ItemConst>().name.name;
+              type = node.payload.get<ast::ItemConst>().type;
+              init = node.payload.get<ast::ItemConst>().init;
             } else {
-              const ast::StaticItem* decl =
-                  static_cast<const ast::StaticItem*>(item);
-              name = decl->name.name;
-              type = decl->type;
-              init = decl->init;
+              name = node.payload.get<ast::ItemStatic>().name.name;
+              type = node.payload.get<ast::ItemStatic>().type;
+              init = node.payload.get<ast::ItemStatic>().init;
             }
             const ir::TypeIdx declared = resolve_type(m, type, nullptr);
-            if (is_const && init->kind != ast::ExprKind::Literal) {
-              const u32 index = bag.emit(
-                  diag::Severity::Error, kAnalyzerInvalidOperation, init->span,
-                  "const '{}' admits literal expressions only", name);
+            if (is_const && ast.exprs[init].kind != ast::ExprKind::Literal) {
+              const u32 index =
+                  bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                           ast.exprs[init].span,
+                           "const '{}' admits literal expressions only", name);
               (void)index;
             }
             if (!is_const) {
               std::vector<u32> visited;
               if (contains_mut_ref(declared, visited)) {
-                const u32 index = bag.emit(
-                    diag::Severity::Error, kAnalyzerInvalidOperation,
-                    type->span, "static '{}' must not contain '&mut'", name);
+                const u32 index =
+                    bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                             ast.types[type].span,
+                             "static '{}' must not contain '&mut'", name);
                 (void)index;
               }
             }
             in_fn = false;
             scopes.emplace_back();
             const ir::TypeIdx actual = check_expr(m, init, &declared);
-            unify(declared, actual, init->span, "item initializer");
+            unify(declared, actual, ast.exprs[init].span, "item initializer");
             scopes.pop_back();
             break;
           }
@@ -3347,8 +3433,9 @@ class Checker {
 
 diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
                                              ir::PointerWidth width,
+                                             ast::AstArena& ast,
                                              diag::DiagBag& bag) {
-  Checker checker{tree, width, bag};
+  Checker checker{tree, width, ast, bag};
   checker.register_nominals();
   checker.parents.assign(tree.modules.size(), kNoModule);
   for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {

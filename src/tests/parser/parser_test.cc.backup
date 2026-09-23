@@ -1,0 +1,428 @@
+// Copyright 2026 The Alcy Project Authors
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "parser/parser.h"
+
+#include <span>
+#include <string_view>
+#include <vector>
+
+#include "ast/ast.h"
+#include "diag/bag.h"
+#include "doctest/doctest.h"
+#include "fpag/mem/arena.h"
+#include "lexer/lexer.h"
+#include "lexer/token.h"
+#include "source/source.h"
+
+namespace parser {
+
+namespace {
+
+struct Fixture {
+  mem::Arena arena;
+  ast::AstArena ast;
+  diag::DiagBag bag{arena};
+
+  Fixture() { arena.reserve(1u << 20); }
+};
+
+struct ParseResult {
+  std::span<ast::Item* const> items;
+  bool ok;
+};
+
+ParseResult parse(std::string_view bytes, Fixture& f) {
+  lexer::Lexer lexer(bytes, source::kUnknownFile, f.bag);
+  std::vector<lexer::Token> tokens;
+  lexer.tokenize(tokens);
+  Parser parser(std::span<const lexer::Token>(tokens.data(), tokens.size()),
+                bytes, source::kUnknownFile, f.ast, f.bag);
+  std::span<ast::Item* const> items = parser.parse();
+  return {items, !f.bag.has_errors()};
+}
+
+const ast::FnItem* as_fn(const ast::Item* item) {
+  if (item->kind != ast::ItemKind::Fn) {
+    return nullptr;
+  }
+  return static_cast<const ast::FnItem*>(item);
+}
+
+const ast::BinaryExpr* as_binary(const ast::Expr* expr) {
+  if (expr->kind != ast::ExprKind::Binary) {
+    return nullptr;
+  }
+  return static_cast<const ast::BinaryExpr*>(expr);
+}
+
+}  // namespace
+
+TEST_CASE("Parser accepts empty files") {
+  Fixture f;
+  const ParseResult result = parse("", f);
+  CHECK(result.ok);
+  CHECK(result.items.empty());
+}
+
+TEST_CASE("Parser builds an empty main function") {
+  Fixture f;
+  const ParseResult result = parse("fn main() { }", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::FnItem* fn = as_fn(result.items[0]);
+  CHECK(fn != nullptr);
+  if (fn == nullptr) {
+    return;
+  }
+  CHECK(fn->name.name == "main");
+  CHECK(fn->params.empty());
+  CHECK(fn->return_type == nullptr);
+  CHECK(fn->body->statements.empty());
+  CHECK(!fn->body->value.is_valid());
+  CHECK(fn->span.length == 13);
+}
+
+TEST_CASE("Parser builds functions with params and return types") {
+  Fixture f;
+  const ParseResult result =
+      parse("fn add(a: i32, b: i32) -> i32 { ret a + b }", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::FnItem* fn = as_fn(result.items[0]);
+  CHECK(fn != nullptr);
+  if (fn == nullptr) {
+    return;
+  }
+  CHECK(fn->params.size() == 2);
+  CHECK(fn->return_type != nullptr);
+  CHECK(fn->return_type->kind == ast::TypeKind::Primitive);
+  // `ret a + b` becomes the block value; the return expression wraps
+  // a binary addition.
+  CHECK(fn->body->value != nullptr);
+  CHECK(fn->body->value->kind == ast::ExprKind::Return);
+  if (fn->body->value == nullptr) {
+    return;
+  }
+  const ast::ReturnExpr* ret =
+      static_cast<const ast::ReturnExpr*>(fn->body->value);
+  const ast::BinaryExpr* add = as_binary(ret->value);
+  CHECK(add != nullptr);
+  if (add == nullptr) {
+    return;
+  }
+  CHECK(add->op == ast::BinaryOp::Add);
+}
+
+TEST_CASE("Parser builds module items") {
+  Fixture f;
+  const ParseResult result = parse(
+      "pub struct Point { x: i32, y: i32 }\n"
+      "enum Choice { Yes, No }\n"
+      "use package::other;\n"
+      "static answer: i32 = 42\n"
+      "const limit: i32 = 7\n"
+      "impl Point { fn get(self: Self) -> i32 { ret 0 } }\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok) {
+    return;
+  }
+  CHECK(result.items.size() == 6);
+  if (result.items.size() != 6) {
+    return;
+  }
+  CHECK(result.items[0]->kind == ast::ItemKind::Struct);
+  CHECK(result.items[0]->is_pub);
+  CHECK(result.items[1]->kind == ast::ItemKind::Enum);
+  CHECK(result.items[2]->kind == ast::ItemKind::Use);
+  CHECK(result.items[3]->kind == ast::ItemKind::Static);
+  CHECK(result.items[4]->kind == ast::ItemKind::Const);
+  CHECK(result.items[5]->kind == ast::ItemKind::Impl);
+  const ast::StructItem* point =
+      static_cast<const ast::StructItem*>(result.items[0]);
+  CHECK(point->fields.size() == 2);
+  const ast::EnumItem* choice =
+      static_cast<const ast::EnumItem*>(result.items[1]);
+  CHECK(choice->variants.size() == 2);
+}
+
+TEST_CASE("Parser rejects module declarations") {
+  // Modules come from the manifest; `mod` is not an item.
+  Fixture f;
+  const ParseResult result = parse("mod inner;\nfn main() {}\n", f);
+  CHECK(!result.ok);
+}
+
+TEST_CASE("Parser builds empty tuples") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { _ := () }", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::FnItem* fn = as_fn(result.items[0]);
+  CHECK(fn != nullptr);
+  if (fn == nullptr || fn->body->statements.size() != 1) {
+    return;
+  }
+  const ast::DeclStmt* decl =
+      static_cast<const ast::DeclStmt*>(fn->body->statements[0]);
+  CHECK(decl->init->kind == ast::ExprKind::Tuple);
+  const ast::TupleExpr* tuple = static_cast<const ast::TupleExpr*>(decl->init);
+  CHECK(tuple->elements.empty());
+}
+
+TEST_CASE("Parser separates declaration reassignment and comparison") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn f() {\n"
+      "  x := 1\n"
+      "  mut y: f64 := 2.0\n"
+      "  x = 3\n"
+      "  x += 4\n"
+      "  x == 5\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok) {
+    return;
+  }
+  const ast::FnItem* fn = as_fn(result.items[0]);
+  CHECK(fn != nullptr);
+  if (fn == nullptr) {
+    return;
+  }
+  CHECK(fn->body->statements.size() == 4);
+  if (fn->body->statements.size() != 4) {
+    return;
+  }
+  CHECK(fn->body->statements[0]->kind == ast::StmtKind::Decl);
+  CHECK(fn->body->statements[2]->kind == ast::StmtKind::Reassign);
+  const ast::ReassignStmt* plain =
+      static_cast<const ast::ReassignStmt*>(fn->body->statements[2]);
+  CHECK(!plain->compound);
+  const ast::ReassignStmt* compound =
+      static_cast<const ast::ReassignStmt*>(fn->body->statements[3]);
+  CHECK(compound->compound);
+  CHECK(compound->op == ast::BinaryOp::Add);
+  CHECK(fn->body->value != nullptr);
+  const ast::BinaryExpr* cmp = as_binary(fn->body->value);
+  CHECK(cmp != nullptr);
+  if (cmp != nullptr) {
+    CHECK(cmp->op == ast::BinaryOp::Eq);
+  }
+}
+
+TEST_CASE("Parser keeps control heads with pattern conditions") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn f() {\n"
+      "  if Some(v) := o {\n"
+      "    w := v\n"
+      "  }\n"
+      "  while Some(n) := cur {\n"
+      "    m := n\n"
+      "  }\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok) {
+    return;
+  }
+  const ast::FnItem* fn = as_fn(result.items[0]);
+  CHECK(fn != nullptr);
+  if (fn == nullptr) {
+    return;
+  }
+  CHECK(fn->body->statements.size() == 1);
+  if (fn->body->statements.size() != 1) {
+    return;
+  }
+  CHECK(fn->body->statements[0]->kind == ast::StmtKind::Expr);
+  const ast::ExprStmt* first =
+      static_cast<const ast::ExprStmt*>(fn->body->statements[0]);
+  CHECK(first->value->kind == ast::ExprKind::If);
+  // A trailing control expression is the block value, like any tail.
+  CHECK(fn->body->value != nullptr);
+  if (fn->body->value == nullptr) {
+    return;
+  }
+  CHECK(fn->body->value->kind == ast::ExprKind::While);
+}
+
+TEST_CASE("Parser respects operator precedence") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { 1 + 2 * 3 }", f);
+  CHECK(result.ok);
+  if (!result.ok) {
+    return;
+  }
+  const ast::FnItem* fn = as_fn(result.items[0]);
+  const ast::BinaryExpr* add = as_binary(fn->body->value);
+  CHECK(add != nullptr);
+  if (add == nullptr) {
+    return;
+  }
+  CHECK(add->op == ast::BinaryOp::Add);
+  const ast::BinaryExpr* mul = as_binary(add->rhs);
+  CHECK(mul != nullptr);
+  if (mul != nullptr) {
+    CHECK(mul->op == ast::BinaryOp::Mul);
+  }
+}
+
+TEST_CASE("Parser treats power as right associative") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { 2 ** 3 ** 2 }", f);
+  CHECK(result.ok);
+  if (!result.ok) {
+    return;
+  }
+  const ast::FnItem* fn = as_fn(result.items[0]);
+  const ast::BinaryExpr* outer = as_binary(fn->body->value);
+  CHECK(outer != nullptr);
+  if (outer == nullptr) {
+    return;
+  }
+  CHECK(outer->op == ast::BinaryOp::Pow);
+  CHECK(as_binary(outer->rhs) != nullptr);
+}
+
+TEST_CASE("Parser binds unary minus tighter than as-casts") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { -x as i32 }", f);
+  CHECK(result.ok);
+  if (!result.ok) {
+    return;
+  }
+  const ast::FnItem* fn = as_fn(result.items[0]);
+  CHECK(fn->body->value != nullptr);
+  CHECK(fn->body->value->kind == ast::ExprKind::Cast);
+  if (fn->body->value == nullptr) {
+    return;
+  }
+  const ast::CastExpr* cast =
+      static_cast<const ast::CastExpr*>(fn->body->value);
+  CHECK(cast->inner->kind == ast::ExprKind::Unary);
+}
+
+TEST_CASE("Parser rejects chained comparisons") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { a < b < c }", f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Parser reads borrow expressions") {
+  {
+    Fixture f;
+    const ParseResult result = parse("fn f() { &x }", f);
+    CHECK(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    const ast::FnItem* fn = as_fn(result.items[0]);
+    CHECK(fn->body->value != nullptr);
+    CHECK(fn->body->value->kind == ast::ExprKind::Borrow);
+    if (fn->body->value == nullptr ||
+        fn->body->value->kind != ast::ExprKind::Borrow) {
+      return;
+    }
+    const ast::BorrowExpr* borrow =
+        static_cast<const ast::BorrowExpr*>(fn->body->value);
+    CHECK(!borrow->is_mut);
+    CHECK(borrow->inner->kind == ast::ExprKind::Path);
+  }
+  {
+    Fixture f;
+    const ParseResult result = parse("fn f() { &mut x }", f);
+    CHECK(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    const ast::FnItem* fn = as_fn(result.items[0]);
+    CHECK(fn->body->value != nullptr);
+    CHECK(fn->body->value->kind == ast::ExprKind::Borrow);
+    if (fn->body->value == nullptr ||
+        fn->body->value->kind != ast::ExprKind::Borrow) {
+      return;
+    }
+    const ast::BorrowExpr* borrow =
+        static_cast<const ast::BorrowExpr*>(fn->body->value);
+    CHECK(borrow->is_mut);
+  }
+}
+
+TEST_CASE("Parser builds control flow") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn f(x: i32) -> i32 {\n"
+      "  if x == 1 {\n"
+      "    ret 10\n"
+      "  } else {\n"
+      "    ret match x {\n"
+      "      0 => 100,\n"
+      "      _ => 200\n"
+      "    }\n"
+      "  }\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok) {
+    return;
+  }
+  const ast::FnItem* fn = as_fn(result.items[0]);
+  CHECK(fn->body->value != nullptr);
+  CHECK(fn->body->value->kind == ast::ExprKind::If);
+}
+
+TEST_CASE("Parser reads generic blessed types") {
+  Fixture f;
+  const ParseResult result =
+      parse("fn f(x: Result<Option<i32>, bool>) -> i32 { ret 0 }", f);
+  CHECK(result.ok);
+  if (!result.ok) {
+    return;
+  }
+  const ast::FnItem* fn = as_fn(result.items[0]);
+  CHECK(fn->params.size() == 1);
+  if (fn->params.empty()) {
+    return;
+  }
+  CHECK(fn->params[0].type->kind == ast::TypeKind::Path);
+  const ast::PathType* outer =
+      static_cast<const ast::PathType*>(fn->params[0].type);
+  CHECK(outer->args.size() == 2);
+}
+
+TEST_CASE("Parser reports errors without stopping at the first") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn broken( { }\n"
+      "fn fine() { }\n",
+      f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+  CHECK(result.items.size() == 1);
+}
+
+TEST_CASE("Parser rejects reserved words with guidance") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { for x in y {} }", f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Parser rejects struct field assignment syntax") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { Foo { x = 1 } }", f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
+}  // namespace parser

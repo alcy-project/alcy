@@ -45,8 +45,8 @@ struct CheckedModule {
     std::string_view name;
     std::vector<ir::TypeIdx> params;
     ir::TypeIdx ret;
-    // Declaring item for body lowering (null for synthesized entries).
-    const ast::FnItem* item = nullptr;
+    // Declaring item for body lowering (invalid for synthesized entries).
+    ast::ItemIdx item;
   };
   std::vector<FnSig> functions;
   // Inherent methods per impl block, including associated functions
@@ -59,23 +59,23 @@ struct CheckedModule {
     std::vector<ir::TypeIdx> params;
     ir::TypeIdx ret;
     ReceiverKind receiver;
-    const ast::FnItem* item = nullptr;
+    ast::ItemIdx item;
   };
   std::vector<MethodInfo> methods;
   struct StaticInfo {
     std::string_view name;
     ir::TypeIdx type;
-    // Initializer for const inlining (null for statics in lowering).
-    const ast::Expr* init = nullptr;
+    // Initializer for const inlining (invalid for statics in lowering).
+    ast::ExprIdx init;
     bool is_const = false;
   };
   std::vector<StaticInfo> statics;
   // Lowering side tables: every checked expression records its type,
   // and every checked call records its callee, so lowering never
   // re-resolves paths or re-derives types.
-  std::vector<std::pair<const ast::Expr*, ir::TypeIdx>> expr_types;
+  std::vector<std::pair<ast::ExprIdx, ir::TypeIdx>> expr_types;
   struct CallTarget {
-    const ast::Expr* callee;
+    ast::ExprIdx callee;
     bool is_method;
     u32 module;
     u32 index;
@@ -86,7 +86,7 @@ struct CheckedModule {
   // declaration-order index for user enums; blessed constructors use
   // `blessed_first` (Ok/Some side) with the instantiation in `enum_type`.
   struct VariantUse {
-    const ast::Path* path;
+    ast::PathIdx path;
     bool blessed = false;
     bool blessed_first = true;
     ir::TypeIdx enum_type;
@@ -118,6 +118,7 @@ struct CheckedPackage {
 // and malformed types, then checks bodies.
 diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
                                              ir::PointerWidth width,
+                                             ast::AstArena& ast,
                                              diag::DiagBag& bag);
 
 }  // namespace analyzer

@@ -5,6 +5,7 @@
 
 #include <cstdlib>
 #include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -65,6 +66,7 @@ class Lowerer {
   analyzer::CheckedPackage pkg;
   ir::StorageBuilder builder;
   ir::PointerWidth width;
+  ast::AstArena& ast;
   str::StringInterner& strings;
   diag::DiagBag& bag;
   bool failed = false;
@@ -77,7 +79,7 @@ class Lowerer {
   std::vector<LoweredPackage::AddrInfo> addr_names_;
 
   struct FnEntry {
-    const ast::FnItem* item;
+    ast::ItemIdx item;
     ir::FunctionIdx idx;
   };
   std::vector<FnEntry> fns;
@@ -141,11 +143,13 @@ class Lowerer {
 
   Lowerer(analyzer::CheckedPackage package,
           ir::PointerWidth width,
+          ast::AstArena& ast,
           str::StringInterner& strings,
           diag::DiagBag& bag)
       : pkg(std::move(package)),
         builder(std::move(pkg.types).take_state()),
         width(width),
+        ast(ast),
         strings(strings),
         bag(bag) {}
 
@@ -358,7 +362,7 @@ class Lowerer {
     return nullptr;
   }
 
-  ir::TypeIdx expr_type(const ast::Expr* expr) {
+  ir::TypeIdx expr_type(ast::ExprIdx expr) {
     for (const auto& entry : pkg.modules[module].expr_types) {
       if (entry.first == expr) {
         return entry.second;
@@ -368,7 +372,7 @@ class Lowerer {
   }
 
   const analyzer::CheckedModule::CallTarget* call_target(
-      const ast::Expr* callee) const {
+      ast::ExprIdx callee) const {
     for (const auto& entry : pkg.modules[module].call_targets) {
       if (entry.callee == callee) {
         return &entry;
@@ -377,7 +381,7 @@ class Lowerer {
     return nullptr;
   }
 
-  ir::FunctionIdx fn_index(const ast::FnItem* item) {
+  ir::FunctionIdx fn_index(ast::ItemIdx item) {
     for (const FnEntry& entry : fns) {
       if (entry.item == item) {
         return entry.idx;
@@ -461,15 +465,15 @@ class Lowerer {
     return value;
   }
 
-  ir::TypeTag literal_tag(const ast::Literal* lit,
-                          const ir::TypeIdx* expected) {
-    if (lit->kind == ast::LiteralKind::Bool) {
+  ir::TypeTag literal_tag(ast::LiteralIdx value, const ir::TypeIdx* expected) {
+    const ast::Literal& lit = ast.literals[value];
+    if (lit.kind == ast::LiteralKind::Bool) {
       return ir::TypeTag::I1;
     }
-    if (lit->kind == ast::LiteralKind::String) {
+    if (lit.kind == ast::LiteralKind::String) {
       return ir::TypeTag::Str;
     }
-    const bool is_float = lit->kind == ast::LiteralKind::Float;
+    const bool is_float = lit.kind == ast::LiteralKind::Float;
     if (expected != nullptr) {
       const ir::TypeTag tag = tag_of(*expected);
       const bool matches =
@@ -495,8 +499,8 @@ class Lowerer {
         {"u32", ir::TypeTag::U32},   {"u64", ir::TypeTag::U64},
     };
     for (const SuffixTag& entry : kSuffixes) {
-      if (lit->spelling.size() > entry.suffix.size() &&
-          lit->spelling.substr(lit->spelling.size() - entry.suffix.size()) ==
+      if (lit.spelling.size() > entry.suffix.size() &&
+          lit.spelling.substr(lit.spelling.size() - entry.suffix.size()) ==
               entry.suffix) {
         if (entry.suffix == "isize") {
           return width == ir::PointerWidth::W64 ? ir::TypeTag::I64
@@ -512,12 +516,13 @@ class Lowerer {
     return is_float ? ir::TypeTag::F64 : ir::TypeTag::I32;
   }
 
-  Val lower_literal(const ast::Literal* lit, const ir::TypeIdx* expected) {
-    const ir::TypeTag tag = literal_tag(lit, expected);
+  Val lower_literal(ast::LiteralIdx lit_idx, const ir::TypeIdx* expected) {
+    const ast::Literal& lit = ast.literals[lit_idx];
+    const ir::TypeTag tag = literal_tag(lit_idx, expected);
     const ir::TypeIdx type = builder.primitive(tag);
     if (tag == ir::TypeTag::Str) {
       std::string bytes;
-      std::string_view spelling = lit->spelling;
+      std::string_view spelling = lit.spelling;
       if (spelling.size() >= 2) {
         spelling.remove_prefix(1);
         spelling.remove_suffix(1);
@@ -546,7 +551,7 @@ class Lowerer {
     }
     if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
       std::string digits;
-      for (char c : lit->spelling) {
+      for (char c : lit.spelling) {
         if (c == '_') {
           continue;
         }
@@ -570,9 +575,9 @@ class Lowerer {
     }
     u64 value = 0;
     if (tag == ir::TypeTag::I1) {
-      value = lit->spelling == "true" ? 1 : 0;
+      value = lit.spelling == "true" ? 1 : 0;
     } else {
-      value = parse_numeric_value(lit->spelling);
+      value = parse_numeric_value(lit.spelling);
     }
     ir::Immutable imm{.type = type, .data = {}};
     switch (tag) {
@@ -602,29 +607,32 @@ class Lowerer {
 
   // Address of a place expression. Non-places diagnose: checking
   // accepts any inner shape for borrows, lowering needs an origin.
-  Val place_addr(const ast::Expr* expr) {
-    switch (expr->kind) {
+  Val place_addr(ast::ExprIdx expr) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    switch (node.kind) {
       case ast::ExprKind::Path: {
-        const ast::PathExpr* path = static_cast<const ast::PathExpr*>(expr);
-        if (path->path->segments.size() == 1) {
-          if (const Local* local = lookup_local(path->path->segments[0].name)) {
+        const ast::ExprPath& path = node.payload.get<ast::ExprPath>();
+        const std::span<const ast::Ident> segments =
+            ast.paths[path.idx].segments;
+        if (segments.size() == 1) {
+          if (const Local* local = lookup_local(segments[0].name)) {
             return Val{to_operand(local->addr, local->type), local->type, true,
                        true};
           }
         }
-        unsupported(expr->span, "borrowed place");
+        unsupported(node.span, "borrowed place");
         return Val{size_one, error_type(), true, false};
       }
       case ast::ExprKind::Field: {
-        const ast::FieldExpr* field = static_cast<const ast::FieldExpr*>(expr);
-        Val base = place_addr(field->receiver);
+        Val base = place_addr(node.payload.get<ast::ExprField>().receiver);
         if (failed) {
           return base;
         }
-        return field_addr(base, field->name.name, field->span);
+        return field_addr(base, node.payload.get<ast::ExprField>().name.name,
+                          node.span);
       }
       default:
-        unsupported(expr->span, "borrowed temporary");
+        unsupported(node.span, "borrowed temporary");
         return Val{size_one, error_type(), true, false};
     }
   }
@@ -681,16 +689,17 @@ class Lowerer {
     return error_type();
   }
 
-  void bind_pattern(const ast::Pattern* pattern, Val init) {
-    switch (pattern->kind) {
+  void bind_pattern(ast::PatternIdx pattern, Val init) {
+    const ast::PatternNode& node = ast.patterns[pattern];
+    switch (node.kind) {
       case ast::PatternKind::Wildcard: break;
       case ast::PatternKind::Ident:
       case ast::PatternKind::MutIdent: {
         std::string_view name;
-        if (pattern->kind == ast::PatternKind::Ident) {
-          name = static_cast<const ast::IdentPattern*>(pattern)->name.name;
+        if (node.kind == ast::PatternKind::Ident) {
+          name = node.payload.ident.name.name;
         } else {
-          name = static_cast<const ast::MutIdentPattern*>(pattern)->name.name;
+          name = node.payload.mut_ident.name.name;
         }
         if (tag_of(init.type) == ir::TypeTag::Void) {
           locals.push_back(
@@ -707,25 +716,24 @@ class Lowerer {
         return;
       }
       case ast::PatternKind::Tuple: {
-        const ast::TuplePattern* tuple =
-            static_cast<const ast::TuplePattern*>(pattern);
-        if (tuple->path != nullptr) {
-          unsupported(pattern->span, "variant pattern in lowering");
+        if (node.payload.tuple.path.is_valid()) {
+          unsupported(node.span, "variant pattern in lowering");
           return;
         }
         Val base = address_of(init);
         if (failed) {
           return;
         }
-        for (u32 i = 0; i < static_cast<u32>(tuple->elements.size()); ++i) {
+        for (u32 i = 0;
+             i < static_cast<u32>(node.payload.tuple.elements.size()); ++i) {
           const ir::TypeIdx element_type =
-              field_type_of(base.type, i, pattern->span);
+              field_type_of(base.type, i, node.span);
           const ir::RegisterIdx gep =
               emit(ir::Opcode::GetElementPtr, element_type,
                    {base.op, zero_i32, index_operand(i)});
           Val element{to_operand(gep, element_type), element_type, true,
                       init.place};
-          bind_pattern(tuple->elements[i], element);
+          bind_pattern(node.payload.tuple.elements[i], element);
           if (failed) {
             return;
           }
@@ -733,20 +741,18 @@ class Lowerer {
         return;
       }
       case ast::PatternKind::Struct: {
-        const ast::StructPattern* strukt =
-            static_cast<const ast::StructPattern*>(pattern);
         Val base = address_of(init);
         if (failed) {
           return;
         }
-        for (const ast::FieldPattern& field : strukt->fields) {
+        for (const ast::FieldPattern& field : node.payload.strukt.fields) {
           u32 index = 0;
           if (!struct_field_index(base.type, field.name.name, index)) {
             internal(field.name.span, "pattern field without declaration");
             return;
           }
           const ir::TypeIdx element_type =
-              field_type_of(base.type, index, pattern->span);
+              field_type_of(base.type, index, node.span);
           const ir::RegisterIdx gep =
               emit(ir::Opcode::GetElementPtr, element_type,
                    {base.op, zero_i32, index_operand(index)});
@@ -759,8 +765,6 @@ class Lowerer {
         return;
       }
       case ast::PatternKind::Ref: {
-        const ast::RefPattern* ref =
-            static_cast<const ast::RefPattern*>(pattern);
         // Through a reference pattern the inner name observes the
         // pointer slot itself.
         const Val material = materialize(init);
@@ -768,20 +772,23 @@ class Lowerer {
             emit(ir::Opcode::Alloca, init.type, {size_one});
         emit_void(ir::Opcode::Store,
                   {material.op, to_operand(addr, init.type)});
-        bind_pattern(ref->inner,
+        bind_pattern(node.payload.ref.inner,
                      Val{to_operand(addr, init.type), init.type, true, false});
         return;
       }
       case ast::PatternKind::Literal:
       case ast::PatternKind::Or:
-        unsupported(pattern->span, "refutable pattern in lowering");
+        unsupported(node.span, "refutable pattern in lowering");
         return;
     }
   }
 
-  Val lower_path(const ast::PathExpr* path, const ir::TypeIdx* expected) {
-    if (path->path->segments.size() == 1) {
-      const std::string_view name = path->path->segments[0].name;
+  Val lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ast::PathIdx path = node.payload.get<ast::ExprPath>().idx;
+    const std::span<const ast::Ident> segments = ast.paths[path].segments;
+    if (segments.size() == 1) {
+      const std::string_view name = segments[0].name;
       if (const Local* local = lookup_local(name)) {
         if (tag_of(local->type) == ir::TypeTag::Void) {
           return Val{size_one, local->type, false, false};
@@ -790,23 +797,23 @@ class Lowerer {
                    true};
       }
       if (const auto* info = lookup_static(module, name)) {
-        if (info->is_const && info->init != nullptr &&
-            info->init->kind == ast::ExprKind::Literal) {
-          const ast::LiteralExpr* lit =
-              static_cast<const ast::LiteralExpr*>(info->init);
-          return lower_literal(lit->value, expected);
+        if (info->is_const && info->init.is_valid() &&
+            ast.exprs[info->init].kind == ast::ExprKind::Literal) {
+          return lower_literal(
+              ast.exprs[info->init].payload.get<ast::ExprLiteral>().value,
+              expected);
         }
-        unsupported(path->span, "static item in lowering");
+        unsupported(node.span, "static item in lowering");
         return Val{size_one, error_type(), false, false};
       }
     }
-    if (const auto* use = variant_use(path->path)) {
+    if (const auto* use = variant_use(path)) {
       // Unit values stand alone; payload constructors need call syntax
       // (checking enforced this).
       const std::vector<ir::TypeIdx> payloads =
           variant_payload(use->enum_type, use->variant, use->blessed_first);
       if (!payloads.empty()) {
-        internal(path->span, "variant without call");
+        internal(node.span, "variant without call");
         return Val{size_one, error_type(), false, false};
       }
       const ir::TypeIdx slot = enum_slot_type();
@@ -820,7 +827,7 @@ class Lowerer {
                 {disc_operand(discriminant), to_operand(tag, slot)});
       return Val{to_operand(addr, slot), use->enum_type, true, false};
     }
-    internal(path->span, "path without lowering");
+    internal(node.span, "path without lowering");
     return Val{size_one, error_type(), false, false};
   }
 
@@ -847,7 +854,7 @@ class Lowerer {
   }
 
   const analyzer::CheckedModule::VariantUse* variant_use(
-      const ast::Path* path) const {
+      ast::PathIdx path) const {
     for (const auto& checked : pkg.modules) {
       for (const auto& use : checked.variants) {
         if (use.path == path) {
@@ -950,12 +957,13 @@ class Lowerer {
 
   ir::TypeIdx enum_slot_type_ = ir::TypeIdx(base::kInvalidIdx);
 
-  Val lower_variant_construct(const ast::CallExpr* call,
+  Val lower_variant_construct(ast::ExprIdx expr,
                               const analyzer::CheckedModule::VariantUse* use) {
+    const ast::ExprNode& call = ast.exprs[expr];
     const std::vector<ir::TypeIdx> payloads =
         variant_payload(use->enum_type, use->variant, use->blessed_first);
-    if (call->args.size() != payloads.size()) {
-      internal(call->span, "variant arity");
+    if (call.payload.get<ast::ExprCall>().args.size() != payloads.size()) {
+      internal(call.span, "variant arity");
       return Val{size_one, error_type(), false, false};
     }
     const ir::TypeIdx slot = enum_slot_type();
@@ -970,7 +978,8 @@ class Lowerer {
     if (is_unit_payload(payloads)) {
       // Lower for effects; nothing is stored.
       for (usize i = 0; i < payloads.size(); ++i) {
-        Val value = lower_expr(call->args[i], &payloads[i]);
+        Val value =
+            lower_expr(call.payload.get<ast::ExprCall>().args[i], &payloads[i]);
         if (failed) {
           return Val{size_one, error_type(), false, false};
         }
@@ -981,7 +990,8 @@ class Lowerer {
       const ir::RegisterIdx payload =
           emit(ir::Opcode::Alloca, payload_type, {size_one});
       for (usize i = 0; i < payloads.size(); ++i) {
-        Val value = lower_expr(call->args[i], &payloads[i]);
+        Val value =
+            lower_expr(call.payload.get<ast::ExprCall>().args[i], &payloads[i]);
         if (failed) {
           return Val{size_one, error_type(), false, false};
         }
@@ -1009,13 +1019,16 @@ class Lowerer {
     return to_operand(builder.immutable(imm), i32_ty);
   }
 
-  Val lower_call(const ast::CallExpr* call, const ir::TypeIdx* expected) {
+  Val lower_call(ast::ExprIdx expr, const ir::TypeIdx* expected) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
     // Intrinsics by name (checking rejected shadowing definitions).
-    if (call->callee->kind == ast::ExprKind::Path) {
-      const ast::PathExpr* path =
-          static_cast<const ast::PathExpr*>(call->callee);
-      if (path->path->segments.size() == 1) {
-        const std::string_view name = path->path->segments[0].name;
+    if (ast.exprs[call.callee].kind == ast::ExprKind::Path) {
+      const ast::ExprPath& path =
+          ast.exprs[call.callee].payload.get<ast::ExprPath>();
+      const ast::PathIdx path_idx = path.idx;
+      if (ast.paths[path_idx].segments.size() == 1) {
+        const std::string_view name = ast.paths[path_idx].segments[0].name;
         if (lookup_local(name) == nullptr &&
             lookup_static(module, name) == nullptr) {
           bool shadowed = false;
@@ -1032,45 +1045,46 @@ class Lowerer {
           }
           if (!shadowed &&
               (name == "print" || name == "println" || name == "panic")) {
-            return lower_intrinsic(call, name);
+            return lower_intrinsic(expr, name);
           }
         }
       }
     }
     const analyzer::CheckedModule::CallTarget* target =
-        call_target(call->callee);
+        call_target(call.callee);
     if (target == nullptr) {
       // Checking records free, associated, and method callees; the
       // remainder is variant construction.
-      if (call->callee->kind == ast::ExprKind::Path) {
-        const ast::PathExpr* path =
-            static_cast<const ast::PathExpr*>(call->callee);
-        if (const auto* use = variant_use(path->path)) {
-          return lower_variant_construct(call, use);
+      if (ast.exprs[call.callee].kind == ast::ExprKind::Path) {
+        const ast::ExprPath& path =
+            ast.exprs[call.callee].payload.get<ast::ExprPath>();
+        const ast::PathIdx path_idx = path.idx;
+        if (const auto* use = variant_use(path_idx)) {
+          return lower_variant_construct(expr, use);
         }
       }
-      internal(call->span, "call without target");
+      internal(node.span, "call without target");
       return Val{size_one, error_type(), false, false};
     }
     if (target->is_method) {
-      return lower_associated_call(call);
+      return lower_associated_call(expr);
     }
     const analyzer::CheckedModule& def = pkg.modules[target->module];
     const analyzer::CheckedModule::FnSig& sig = def.functions[target->index];
     const ir::FunctionIdx fn = fn_index(sig.item);
     if (!fn.is_valid()) {
-      internal(call->span, "call without function");
+      internal(node.span, "call without function");
       return Val{size_one, error_type(), false, false};
     }
-    if (call->args.size() != sig.params.size()) {
-      internal(call->span, "call arity");
+    if (call.args.size() != sig.params.size()) {
+      internal(node.span, "call arity");
       return Val{size_one, error_type(), false, false};
     }
     std::vector<ir::OperandIdx> ops;
     ops.push_back(builder.operand(ir::Operand::from_function(
         fn, builder.primitive(ir::TypeTag::Function))));
-    for (usize i = 0; i < call->args.size(); ++i) {
-      Val arg = lower_expr(call->args[i], &sig.params[i]);
+    for (usize i = 0; i < call.args.size(); ++i) {
+      Val arg = lower_expr(call.args[i], &sig.params[i]);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
@@ -1092,36 +1106,38 @@ class Lowerer {
     return Val{to_operand(dst, sig.ret), sig.ret, false, false};
   }
 
-  Val lower_associated_call(const ast::CallExpr* call) {
+  Val lower_associated_call(ast::ExprIdx expr) {
+    const ast::ExprNode& call = ast.exprs[expr];
     const analyzer::CheckedModule::CallTarget* target =
-        call_target(call->callee);
+        call_target(call.payload.get<ast::ExprCall>().callee);
     if (target == nullptr || !target->is_method) {
-      internal(call->span, "call without target");
+      internal(call.span, "call without target");
       return Val{size_one, error_type(), false, false};
     }
     const analyzer::CheckedModule& def = pkg.modules[target->module];
     const analyzer::CheckedModule::MethodInfo& info =
         def.methods[target->index];
     if (info.receiver != analyzer::CheckedModule::ReceiverKind::None) {
-      internal(call->span, "method without receiver");
+      internal(call.span, "method without receiver");
       return Val{size_one, error_type(), false, false};
     }
     const ir::FunctionIdx fn = fn_index(info.item);
     if (!fn.is_valid()) {
-      internal(call->span, "call without function");
+      internal(call.span, "call without function");
       return Val{size_one, error_type(), false, false};
     }
     // Recorded params already exclude the receiver: associated
     // functions lower like free functions.
-    if (call->args.size() != info.params.size()) {
-      internal(call->span, "call arity");
+    if (call.payload.get<ast::ExprCall>().args.size() != info.params.size()) {
+      internal(call.span, "call arity");
       return Val{size_one, error_type(), false, false};
     }
     std::vector<ir::OperandIdx> ops;
     ops.push_back(builder.operand(ir::Operand::from_function(
         fn, builder.primitive(ir::TypeTag::Function))));
-    for (usize i = 0; i < call->args.size(); ++i) {
-      Val arg = lower_expr(call->args[i], &info.params[i]);
+    for (usize i = 0; i < call.payload.get<ast::ExprCall>().args.size(); ++i) {
+      Val arg = lower_expr(call.payload.get<ast::ExprCall>().args[i],
+                           &info.params[i]);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
@@ -1135,13 +1151,14 @@ class Lowerer {
     return Val{to_operand(dst, info.ret), info.ret, false, false};
   }
 
-  Val lower_intrinsic(const ast::CallExpr* call, std::string_view name) {
-    if (call->args.size() != 1) {
-      internal(call->span, "intrinsic arity");
+  Val lower_intrinsic(ast::ExprIdx expr, std::string_view name) {
+    const ast::ExprNode& call = ast.exprs[expr];
+    if (call.payload.get<ast::ExprCall>().args.size() != 1) {
+      internal(call.span, "intrinsic arity");
       return Val{size_one, error_type(), false, false};
     }
     const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
-    Val arg = lower_expr(call->args[0], &str);
+    Val arg = lower_expr(call.payload.get<ast::ExprCall>().args[0], &str);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
@@ -1302,14 +1319,16 @@ class Lowerer {
     return to_operand(imm, str);
   }
 
-  Val lower_blessed_method(const ast::MethodCallExpr* method,
+  Val lower_blessed_method(ast::ExprIdx expr,
                            const analyzer::CheckedPackage::BlessedType* entry,
                            Val receiver,
                            const ir::TypeIdx* expected) {
-    const std::string_view name = method->name.name;
+    const ast::ExprNode& method = ast.exprs[expr];
+    const std::string_view name =
+        method.payload.get<ast::ExprMethodCall>().name.name;
     const bool is_ok = name == "is_ok";
     if (name != "unwrap" && name != "expect" && !is_ok && name != "is_err") {
-      internal(method->span, "blessed method without lowering");
+      internal(method.span, "blessed method without lowering");
       return Val{size_one, error_type(), false, false};
     }
     Val slot = enum_addr(receiver);
@@ -1334,11 +1353,12 @@ class Lowerer {
     // unwrap / expect: Ok payload on tag 0, else diverge.
     ir::OperandIdx failure = str_operand("unwrap");
     if (name == "expect") {
-      if (method->args.size() != 1) {
-        internal(method->span, "expect without message");
+      if (method.payload.get<ast::ExprMethodCall>().args.size() != 1) {
+        internal(method.span, "expect without message");
         return Val{size_one, error_type(), false, false};
       }
-      Val message = lower_expr(method->args[0], nullptr);
+      Val message = lower_expr(
+          method.payload.get<ast::ExprMethodCall>().args[0], nullptr);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
@@ -1359,18 +1379,19 @@ class Lowerer {
     return payload;
   }
 
-  Val lower_method_call(const ast::MethodCallExpr* method,
-                        const ir::TypeIdx* expected) {
-    Val receiver = lower_expr(method->receiver, nullptr);
+  Val lower_method_call(ast::ExprIdx expr, const ir::TypeIdx* expected) {
+    const ast::ExprNode& method = ast.exprs[expr];
+    Val receiver =
+        lower_expr(method.payload.get<ast::ExprMethodCall>().receiver, nullptr);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
     if (const auto* entry = blessed_entry(receiver.type)) {
-      return lower_blessed_method(method, entry, receiver, expected);
+      return lower_blessed_method(expr, entry, receiver, expected);
     }
-    const analyzer::CheckedModule::CallTarget* target = call_target(method);
+    const analyzer::CheckedModule::CallTarget* target = call_target(expr);
     if (target == nullptr || !target->is_method) {
-      internal(method->span, "method call without target");
+      internal(method.span, "method call without target");
       return Val{size_one, error_type(), false, false};
     }
     const analyzer::CheckedModule& def = pkg.modules[target->module];
@@ -1378,15 +1399,17 @@ class Lowerer {
         def.methods[target->index];
     ir::FunctionIdx fn = fn_index(info.item);
     if (!fn.is_valid()) {
-      internal(method->span, "method without function");
+      internal(method.span, "method without function");
       return Val{size_one, error_type(), false, false};
     }
     std::vector<ir::OperandIdx> ops;
     ops.push_back(builder.operand(ir::Operand::from_function(
         fn, builder.primitive(ir::TypeTag::Function))));
     ops.push_back(arg_for(receiver, info.params[0]));
-    for (usize i = 0; i < method->args.size(); ++i) {
-      Val arg = lower_expr(method->args[i], &info.params[i + 1]);
+    for (usize i = 0; i < method.payload.get<ast::ExprMethodCall>().args.size();
+         ++i) {
+      Val arg = lower_expr(method.payload.get<ast::ExprMethodCall>().args[i],
+                           &info.params[i + 1]);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
@@ -1438,10 +1461,11 @@ class Lowerer {
     return Val{to_operand(gep, field_type), field_type, true, base.place};
   }
 
-  Val lower_struct(const ast::StructExpr* strukt) {
-    const ir::TypeIdx struct_type = expr_type(strukt);
+  Val lower_struct(ast::ExprIdx expr) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ir::TypeIdx struct_type = expr_type(expr);
     if (tag_of(struct_type) != ir::TypeTag::Struct) {
-      internal(strukt->span, "struct without type");
+      internal(node.span, "struct without type");
       return Val{size_one, error_type(), false, false};
     }
     const ir::RegisterIdx addr =
@@ -1455,7 +1479,8 @@ class Lowerer {
       }
     }
     std::vector<bool> seen(field_count, false);
-    for (const ast::FieldInit& field : strukt->init) {
+    for (const ast::ExprFieldInit& field :
+         node.payload.get<ast::ExprStruct>().init) {
       u32 index = 0;
       if (!struct_field_index(struct_type, field.name.name, index)) {
         internal(field.name.span, "field without declaration");
@@ -1463,7 +1488,7 @@ class Lowerer {
       }
       seen[index] = true;
       const ir::TypeIdx element_type =
-          field_type_of(struct_type, index, field.value->span);
+          field_type_of(struct_type, index, ast.exprs[field.value].span);
       Val value = lower_expr(field.value, &element_type);
       if (failed) {
         return Val{size_one, error_type(), false, false};
@@ -1474,8 +1499,9 @@ class Lowerer {
       emit_void(ir::Opcode::Store,
                 {use_value(value), to_operand(gep, element_type)});
     }
-    if (strukt->base_expr != nullptr) {
-      Val base = lower_expr(strukt->base_expr, nullptr);
+    if (node.payload.get<ast::ExprStruct>().base_expr.is_valid()) {
+      Val base =
+          lower_expr(node.payload.get<ast::ExprStruct>().base_expr, nullptr);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
@@ -1487,7 +1513,7 @@ class Lowerer {
           continue;
         }
         const ir::TypeIdx element_type =
-            field_type_of(struct_type, i, strukt->span);
+            field_type_of(struct_type, i, node.span);
         const ir::RegisterIdx src =
             emit(ir::Opcode::GetElementPtr, element_type,
                  {base_addr.op, zero_i32, index_operand(i)});
@@ -1503,13 +1529,15 @@ class Lowerer {
     return Val{to_operand(addr, struct_type), struct_type, true, false};
   }
 
-  Val lower_tuple(const ast::TupleExpr* tuple, const ast::Expr* expr) {
-    if (tuple->elements.empty()) {
+  Val lower_tuple(ast::ExprIdx expr) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ast::ExprTuple& tuple = node.payload.get<ast::ExprTuple>();
+    if (tuple.elements.empty()) {
       return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
     }
     const ir::TypeIdx tuple_type = expr_type(expr);
     if (tag_of(tuple_type) != ir::TypeTag::Tuple) {
-      internal(expr->span, "tuple without type");
+      internal(node.span, "tuple without type");
       return Val{size_one, error_type(), false, false};
     }
     const ir::TupleType& shape =
@@ -1517,7 +1545,7 @@ class Lowerer {
             .tuple_types[builder.state().types[tuple_type].as_tuple()];
     const ir::RegisterIdx addr =
         emit(ir::Opcode::Alloca, tuple_type, {size_one});
-    for (u32 i = 0; i < static_cast<u32>(tuple->elements.size()) && !failed;
+    for (u32 i = 0; i < static_cast<u32>(tuple.elements.size()) && !failed;
          ++i) {
       const ir::TypeIdx* element_expected = nullptr;
       ir::TypeIdx element_type = error_type();
@@ -1525,7 +1553,7 @@ class Lowerer {
         element_type = shape.elements[i];
         element_expected = &element_type;
       }
-      Val value = lower_expr(tuple->elements[i], element_expected);
+      Val value = lower_expr(tuple.elements[i], element_expected);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
@@ -1570,32 +1598,33 @@ class Lowerer {
     }
   }
 
-  Val lower_binary(const ast::BinaryExpr* binary) {
-    if (binary->op == ast::BinaryOp::Pow) {
-      unsupported(binary->span, "power operator");
+  Val lower_binary(ast::ExprIdx expr) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ast::ExprBinary& bin = node.payload.get<ast::ExprBinary>();
+    if (bin.op == ast::BinaryOp::Pow) {
+      unsupported(node.span, "power operator");
       return Val{size_one, error_type(), false, false};
     }
-    Val lhs = lower_expr(binary->lhs, nullptr);
+    Val lhs = lower_expr(bin.lhs, nullptr);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    Val rhs = lower_expr(binary->rhs, nullptr);
+    Val rhs = lower_expr(bin.rhs, nullptr);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
     const ir::TypeTag tag = tag_of(lhs.type);
-    if (binary->op == ast::BinaryOp::And || binary->op == ast::BinaryOp::Or) {
-      const ir::RegisterIdx dst = emit(
-          binary->op == ast::BinaryOp::And ? ir::Opcode::And : ir::Opcode::Or,
-          lhs.type, {use_value(lhs), use_value(rhs)});
+    if (bin.op == ast::BinaryOp::And || bin.op == ast::BinaryOp::Or) {
+      const ir::RegisterIdx dst =
+          emit(bin.op == ast::BinaryOp::And ? ir::Opcode::And : ir::Opcode::Or,
+               lhs.type, {use_value(lhs), use_value(rhs)});
       return Val{to_operand(dst, lhs.type), lhs.type, false, false};
     }
-    if (binary->op == ast::BinaryOp::Eq || binary->op == ast::BinaryOp::NotEq ||
-        binary->op == ast::BinaryOp::Gt || binary->op == ast::BinaryOp::Lt ||
-        binary->op == ast::BinaryOp::GtEq ||
-        binary->op == ast::BinaryOp::LtEq) {
+    if (bin.op == ast::BinaryOp::Eq || bin.op == ast::BinaryOp::NotEq ||
+        bin.op == ast::BinaryOp::Gt || bin.op == ast::BinaryOp::Lt ||
+        bin.op == ast::BinaryOp::GtEq || bin.op == ast::BinaryOp::LtEq) {
       ir::Opcode op = ir::Opcode::Eq;
-      switch (binary->op) {
+      switch (bin.op) {
         case ast::BinaryOp::Eq: op = ir::Opcode::Eq; break;
         case ast::BinaryOp::NotEq: op = ir::Opcode::Ne; break;
         case ast::BinaryOp::Gt: op = ir::Opcode::Gt; break;
@@ -1610,7 +1639,7 @@ class Lowerer {
     }
     if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
       ir::Opcode op = ir::Opcode::FAdd;
-      switch (binary->op) {
+      switch (bin.op) {
         case ast::BinaryOp::Add: op = ir::Opcode::FAdd; break;
         case ast::BinaryOp::Sub: op = ir::Opcode::FSub; break;
         case ast::BinaryOp::Mul: op = ir::Opcode::FMul; break;
@@ -1620,7 +1649,7 @@ class Lowerer {
           emit(op, lhs.type, {use_value(lhs), use_value(rhs)});
       return Val{to_operand(dst, lhs.type), lhs.type, false, false};
     }
-    const ir::Opcode op = int_binop(binary->op, tag);
+    const ir::Opcode op = int_binop(bin.op, tag);
     const ir::RegisterIdx dst =
         emit(op, lhs.type, {use_value(lhs), use_value(rhs)});
     return Val{to_operand(dst, lhs.type), lhs.type, false, false};
@@ -1647,12 +1676,14 @@ class Lowerer {
   // pattern binds at the start of body_block and lowering continues
   // there; on failure control jumps to fail_block. Or-patterns expand
   // into sibling arms beforehand.
-  void lower_arm_test(const ast::Pattern* pattern,
+  void lower_arm_test(ast::PatternIdx pattern,
                       Val scrut_addr,
                       ir::TypeIdx scrut_type,
                       ir::BlockIdx body_block,
                       ir::BlockIdx fail_block) {
-    switch (pattern->kind) {
+    const ast::PatternNode& node = ast.patterns[pattern];
+    const diag::Span span = node.span;
+    switch (node.kind) {
       case ast::PatternKind::Wildcard:
         emit_br(body_block);
         switch_to(body_block);
@@ -1668,9 +1699,7 @@ class Lowerer {
         return;
       }
       case ast::PatternKind::Literal: {
-        const ast::LiteralPattern* lit =
-            static_cast<const ast::LiteralPattern*>(pattern);
-        Val expected = lower_literal(lit->value, &scrut_type);
+        Val expected = lower_literal(node.payload.literal.value, &scrut_type);
         if (failed) {
           return;
         }
@@ -1683,19 +1712,19 @@ class Lowerer {
         return;
       }
       case ast::PatternKind::Tuple: {
-        const ast::TuplePattern* tuple =
-            static_cast<const ast::TuplePattern*>(pattern);
-        if (tuple->path == nullptr) {
+        if (!node.payload.tuple.path.is_valid()) {
           // Plain tuple destructuring (checking validated shape).
           const ir::TupleType& shape =
               builder.state()
                   .tuple_types[builder.state().types[scrut_type].as_tuple()];
           for (u32 i = 0;
-               i < static_cast<u32>(tuple->elements.size()) && !failed; ++i) {
+               i < static_cast<u32>(node.payload.tuple.elements.size()) &&
+               !failed;
+               ++i) {
             const ir::RegisterIdx gep =
                 emit(ir::Opcode::GetElementPtr, shape.elements[i],
                      {scrut_addr.op, zero_i32, index_operand(i)});
-            bind_pattern(tuple->elements[i],
+            bind_pattern(node.payload.tuple.elements[i],
                          Val{to_operand(gep, shape.elements[i]),
                              shape.elements[i], true, scrut_addr.place});
             if (failed) {
@@ -1706,14 +1735,16 @@ class Lowerer {
           switch_to(body_block);
           return;
         }
-        if (tuple->path->segments.empty()) {
-          internal(pattern->span, "variant without name");
+        if (ast.paths[node.payload.tuple.path].segments.empty()) {
+          internal(span, "variant without name");
           return;
         }
         u32 variant = 0;
-        if (!variant_index(scrut_type, tuple->path->segments.back().name,
-                           variant)) {
-          internal(pattern->span, "variant without declaration");
+        if (!variant_index(
+                scrut_type,
+                ast.paths[node.payload.tuple.path].segments.back().name,
+                variant)) {
+          internal(span, "variant without declaration");
           return;
         }
         ir::BlockIdx bind_block = body_block;
@@ -1725,13 +1756,15 @@ class Lowerer {
         switch_to(bind_block);
         const std::vector<ir::TypeIdx> payloads =
             variant_payload(scrut_type, variant, variant == 0);
-        if (payloads.size() != tuple->elements.size()) {
-          internal(pattern->span, "variant arity");
+        const std::span<const ast::PatternIdx> elements =
+            node.payload.tuple.elements;
+        if (payloads.size() != elements.size()) {
+          internal(span, "variant arity");
           return;
         }
         if (is_unit_payload(payloads)) {
           for (usize i = 0; i < payloads.size() && !failed; ++i) {
-            bind_pattern(tuple->elements[i], void_value());
+            bind_pattern(elements[i], void_value());
           }
           return;
         }
@@ -1739,21 +1772,18 @@ class Lowerer {
         for (usize i = 0; i < payloads.size() && !failed; ++i) {
           Val field =
               load_payload_field(scrut_addr, payload_type, static_cast<u32>(i));
-          bind_pattern(tuple->elements[i], field);
+          bind_pattern(elements[i], field);
         }
         return;
       }
       case ast::PatternKind::Struct: {
-        const ast::StructPattern* strukt =
-            static_cast<const ast::StructPattern*>(pattern);
-        for (const ast::FieldPattern& field : strukt->fields) {
+        for (const ast::FieldPattern& field : node.payload.strukt.fields) {
           u32 index = 0;
           if (!struct_field_index(scrut_type, field.name.name, index)) {
             internal(field.name.span, "pattern field without declaration");
             return;
           }
-          const ir::TypeIdx field_type =
-              field_type_of(scrut_type, index, pattern->span);
+          const ir::TypeIdx field_type = field_type_of(scrut_type, index, span);
           const ir::RegisterIdx gep =
               emit(ir::Opcode::GetElementPtr, field_type,
                    {scrut_addr.op, zero_i32, index_operand(index)});
@@ -1778,7 +1808,7 @@ class Lowerer {
         return;
       }
       case ast::PatternKind::Or:
-        internal(pattern->span, "or-pattern without expansion");
+        internal(span, "or-pattern without expansion");
         return;
     }
   }
@@ -1786,21 +1816,22 @@ class Lowerer {
   // Expands or-pattern alternatives into sibling (pattern, body) arms
   // sharing one body; checking required identical bindings.
   void expand_or_arms(
-      const ast::MatchArm& arm,
-      std::vector<std::pair<const ast::Pattern*, const ast::Expr*>>& out) {
-    if (arm.pattern->kind != ast::PatternKind::Or) {
+      const ast::ExprMatchArm& arm,
+      std::vector<std::pair<ast::PatternIdx, ast::ExprIdx>>& out) {
+    if (ast.patterns[arm.pattern].kind != ast::PatternKind::Or) {
       out.emplace_back(arm.pattern, arm.body);
       return;
     }
-    const ast::OrPattern* or_pat =
-        static_cast<const ast::OrPattern*>(arm.pattern);
-    for (const ast::Pattern* alt : or_pat->alternatives) {
+    for (ast::PatternIdx alt :
+         ast.patterns[arm.pattern].payload.or_pat.alternatives) {
       out.emplace_back(alt, arm.body);
     }
   }
 
-  Val lower_match(const ast::MatchExpr* match, const ir::TypeIdx* expected) {
-    Val scrut = lower_expr(match->scrutinee, nullptr);
+  Val lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ast::ExprMatch& match = node.payload.get<ast::ExprMatch>();
+    Val scrut = lower_expr(match.scrutinee, nullptr);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
@@ -1808,16 +1839,16 @@ class Lowerer {
     // By-value matches consume a non-Copy scrutinee; payload bindings
     // copy out of the moved value.
     mark_move(addr);
-    const ir::TypeIdx scrut_type = expr_type(match->scrutinee);
-    const ir::TypeIdx result_type = expr_type(match);
+    const ir::TypeIdx scrut_type = expr_type(match.scrutinee);
+    const ir::TypeIdx result_type = expr_type(expr);
     Val slot{size_one, result_type, false, false};
     const bool has_slot = tag_of(result_type) != ir::TypeTag::Void &&
                           tag_of(result_type) != ir::TypeTag::Error;
     if (has_slot) {
-      slot = result_slot(result_type, match->span);
+      slot = result_slot(result_type, node.span);
     }
-    std::vector<std::pair<const ast::Pattern*, const ast::Expr*>> arms;
-    for (const ast::MatchArm& arm : match->arms) {
+    std::vector<std::pair<ast::PatternIdx, ast::ExprIdx>> arms;
+    for (const ast::ExprMatchArm& arm : match.arms) {
       expand_or_arms(arm, arms);
     }
     std::vector<ir::BlockIdx> tests;
@@ -1829,7 +1860,7 @@ class Lowerer {
     const ir::BlockIdx fail = reserve_block();
     ir::BlockIdx join = ir::BlockIdx(base::kInvalidIdx);
     if (arms.empty()) {
-      internal(match->span, "match without arms");
+      internal(node.span, "match without arms");
       return Val{size_one, error_type(), false, false};
     }
     emit_br(tests.front());
@@ -1872,14 +1903,15 @@ class Lowerer {
     return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
   }
 
-  Val lower_if(const ast::IfExpr* if_expr, const ir::TypeIdx* expected) {
-    const ast::Expr* if_as_expr = if_expr;
-    const ir::TypeIdx result_type = expr_type(if_as_expr);
+  Val lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ast::ExprIf& if_expr = node.payload.get<ast::ExprIf>();
+    const ir::TypeIdx result_type = expr_type(expr);
     const bool has_slot = tag_of(result_type) != ir::TypeTag::Void &&
                           tag_of(result_type) != ir::TypeTag::Error;
     Val slot{size_one, result_type, false, false};
     if (has_slot) {
-      slot = result_slot(result_type, if_expr->span);
+      slot = result_slot(result_type, node.span);
     }
     ir::BlockIdx else_block = reserve_block();
     ir::BlockIdx join = ir::BlockIdx(base::kInvalidIdx);
@@ -1896,24 +1928,25 @@ class Lowerer {
         emit_br(join);
       }
     };
-    if (!if_expr->cond->is_pattern) {
+    const ast::Cond& cond_node = ast.conds[if_expr.cond];
+    if (!cond_node.is_pattern) {
       ir::BlockIdx then_block = reserve_block();
-      Val cond = lower_expr(if_expr->cond->value, nullptr);
+      Val cond = lower_expr(cond_node.value, nullptr);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
       Val material = materialize(cond);
       emit_cond_br(material.op, then_block, else_block);
       switch_to(then_block);
-      finish_arm(lower_block(if_expr->then_block, expected));
+      finish_arm(lower_block(if_expr.then_block, expected));
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
       switch_to(else_block);
-      if (if_expr->else_block != nullptr) {
-        finish_arm(lower_block(if_expr->else_block, expected));
+      if (if_expr.else_block.is_valid()) {
+        finish_arm(lower_block(if_expr.else_block, expected));
       } else if (has_slot) {
-        internal(if_expr->span, "value if without else");
+        internal(node.span, "value if without else");
         return Val{size_one, error_type(), false, false};
       } else {
         // Statement position without else: the empty arm falls through.
@@ -1926,27 +1959,27 @@ class Lowerer {
         return Val{size_one, error_type(), false, false};
       }
     } else {
-      Val init = lower_expr(if_expr->cond->init, nullptr);
+      Val init = lower_expr(cond_node.init, nullptr);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
       Val addr = address_of(init);
       mark_move(addr);
-      const ir::TypeIdx scrut_type = expr_type(if_expr->cond->init);
+      const ir::TypeIdx scrut_type = expr_type(cond_node.init);
       ir::BlockIdx body_block = reserve_block();
-      lower_arm_test(if_expr->cond->pattern, addr, scrut_type, body_block,
+      lower_arm_test(cond_node.pattern, addr, scrut_type, body_block,
                      else_block);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
       switch_to(body_block);
-      finish_arm(lower_block(if_expr->then_block, expected));
+      finish_arm(lower_block(if_expr.then_block, expected));
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
       switch_to(else_block);
-      if (if_expr->else_block != nullptr) {
-        finish_arm(lower_block(if_expr->else_block, expected));
+      if (if_expr.else_block.is_valid()) {
+        finish_arm(lower_block(if_expr.else_block, expected));
         if (failed) {
           return Val{size_one, error_type(), false, false};
         }
@@ -1956,7 +1989,7 @@ class Lowerer {
         }
         emit_br(join);
       } else {
-        internal(if_expr->span, "value if without else");
+        internal(node.span, "value if without else");
         return Val{size_one, error_type(), false, false};
       }
     }
@@ -1969,14 +2002,16 @@ class Lowerer {
     return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
   }
 
-  Val lower_loop(const ast::LoopExpr* loop) {
+  Val lower_loop(ast::ExprIdx expr) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ast::ExprLoop& loop_expr = node.payload.get<ast::ExprLoop>();
     ir::BlockIdx header = reserve_block();
     ir::BlockIdx exit = reserve_block();
     emit_br(header);
     switch_to(header);
     break_targets_.push_back(exit);
     continue_targets_.push_back(header);
-    lower_block(loop->body, nullptr);
+    lower_block(loop_expr.body, nullptr);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
@@ -1989,14 +2024,17 @@ class Lowerer {
     return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
   }
 
-  Val lower_while(const ast::WhileExpr* while_expr) {
+  Val lower_while(ast::ExprIdx expr) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ast::ExprWhile& while_expr = node.payload.get<ast::ExprWhile>();
     ir::BlockIdx header = reserve_block();
     ir::BlockIdx body = reserve_block();
     ir::BlockIdx exit = reserve_block();
     emit_br(header);
     switch_to(header);
-    if (!while_expr->cond->is_pattern) {
-      Val cond = lower_expr(while_expr->cond->value, nullptr);
+    const ast::Cond& cond_node = ast.conds[while_expr.cond];
+    if (!cond_node.is_pattern) {
+      Val cond = lower_expr(cond_node.value, nullptr);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
@@ -2005,14 +2043,14 @@ class Lowerer {
     } else {
       // The scrutinee re-evaluates on every iteration; the header both
       // tests and binds, so continue re-enters the test.
-      Val init = lower_expr(while_expr->cond->init, nullptr);
+      Val init = lower_expr(cond_node.init, nullptr);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
       Val addr = address_of(init);
       mark_move(addr);
-      const ir::TypeIdx scrut_type = expr_type(while_expr->cond->init);
-      lower_arm_test(while_expr->cond->pattern, addr, scrut_type, body, exit);
+      const ir::TypeIdx scrut_type = expr_type(cond_node.init);
+      lower_arm_test(cond_node.pattern, addr, scrut_type, body, exit);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
@@ -2020,7 +2058,7 @@ class Lowerer {
     }
     break_targets_.push_back(exit);
     continue_targets_.push_back(header);
-    lower_block(while_expr->body, nullptr);
+    lower_block(while_expr.body, nullptr);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
@@ -2033,17 +2071,19 @@ class Lowerer {
     return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
   }
 
-  Val lower_question(const ast::QuestionExpr* question) {
-    Val scrut = lower_expr(question->inner, nullptr);
+  Val lower_question(ast::ExprIdx expr) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ast::ExprQuestion& question = node.payload.get<ast::ExprQuestion>();
+    Val scrut = lower_expr(question.inner, nullptr);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
     Val addr = address_of(scrut);
     mark_move(addr);
-    const ir::TypeIdx scrut_type = expr_type(question->inner);
+    const ir::TypeIdx scrut_type = expr_type(question.inner);
     const auto* entry = blessed_entry(scrut_type);
     if (entry == nullptr) {
-      internal(question->span, "question without blessed type");
+      internal(node.span, "question without blessed type");
       return Val{size_one, error_type(), false, false};
     }
     Val tag = load_disc(addr);
@@ -2079,53 +2119,49 @@ class Lowerer {
     return payload;
   }
 
-  Val lower_expr(const ast::Expr* expr, const ir::TypeIdx* expected) {
+  Val lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
+    const ast::ExprNode& node = ast.exprs[expr];
     SpanGuard guard{this, cur_span_};
-    cur_span_ = expr->span;
-    switch (expr->kind) {
+    cur_span_ = node.span;
+    switch (node.kind) {
       case ast::ExprKind::Literal: {
-        const ast::LiteralExpr* lit =
-            static_cast<const ast::LiteralExpr*>(expr);
-        if (lit->value->kind == ast::LiteralKind::Char) {
-          internal(expr->span, "character literal without type");
+        const ast::ExprLiteral& literal = node.payload.get<ast::ExprLiteral>();
+        if (ast.literals[literal.value].kind == ast::LiteralKind::Char) {
+          internal(node.span, "character literal without type");
           return Val{size_one, error_type(), false, false};
         }
-        return lower_literal(lit->value, expected);
+        return lower_literal(literal.value, expected);
       }
       case ast::ExprKind::Path: {
-        const ast::PathExpr* path = static_cast<const ast::PathExpr*>(expr);
-        return lower_path(path, expected);
+        return lower_path(expr, expected);
       }
       case ast::ExprKind::Struct: {
-        const ast::StructExpr* strukt =
-            static_cast<const ast::StructExpr*>(expr);
-        return lower_struct(strukt);
+        return lower_struct(expr);
       }
       case ast::ExprKind::Tuple: {
-        const ast::TupleExpr* tuple = static_cast<const ast::TupleExpr*>(expr);
-        return lower_tuple(tuple, expr);
+        return lower_tuple(expr);
       }
       case ast::ExprKind::Unary: {
-        const ast::UnaryExpr* unary = static_cast<const ast::UnaryExpr*>(expr);
-        Val inner = lower_expr(unary->inner, nullptr);
+        const ast::ExprUnary& unary = node.payload.get<ast::ExprUnary>();
+        Val inner = lower_expr(unary.inner, nullptr);
         if (failed) {
           return Val{size_one, error_type(), false, false};
         }
         const ir::TypeTag tag = tag_of(inner.type);
-        if (unary->op == ast::UnaryOp::Not) {
+        if (unary.op == ast::UnaryOp::Not) {
           const ir::RegisterIdx dst =
               emit(ir::Opcode::Not, inner.type, {use_value(inner)});
           return Val{to_operand(dst, inner.type), inner.type, false, false};
         }
-        if (unary->op == ast::UnaryOp::BitNot) {
+        if (unary.op == ast::UnaryOp::BitNot) {
           const ir::RegisterIdx dst =
               emit(ir::Opcode::Not, inner.type, {use_value(inner)});
           return Val{to_operand(dst, inner.type), inner.type, false, false};
         }
-        Val zero = lower_literal_zero(inner.type, expr->span);
+        Val zero = lower_literal_zero(inner.type, node.span);
         if (failed) {
           return Val{size_one, error_type(), false, false};
         }
@@ -2138,31 +2174,28 @@ class Lowerer {
         return Val{to_operand(dst, inner.type), inner.type, false, false};
       }
       case ast::ExprKind::Borrow: {
-        const ast::BorrowExpr* borrow =
-            static_cast<const ast::BorrowExpr*>(expr);
-        Val place = place_addr(borrow->inner);
+        const ast::ExprBorrow& borrow = node.payload.get<ast::ExprBorrow>();
+        Val place = place_addr(borrow.inner);
         if (failed) {
           return Val{size_one, error_type(), false, false};
         }
         const ir::TypeIdx ref =
-            builder.reference_type(place.type, borrow->is_mut);
+            builder.reference_type(place.type, borrow.is_mut);
         const ir::RegisterIdx loan = emit(ir::Opcode::Borrow, ref, {place.op});
         return Val{to_operand(loan, ref), ref, false, false};
       }
       case ast::ExprKind::Binary: {
-        const ast::BinaryExpr* binary =
-            static_cast<const ast::BinaryExpr*>(expr);
-        return lower_binary(binary);
+        return lower_binary(expr);
       }
       case ast::ExprKind::Cast: {
-        const ast::CastExpr* cast = static_cast<const ast::CastExpr*>(expr);
-        Val inner = lower_expr(cast->inner, nullptr);
+        const ast::ExprCast& cast = node.payload.get<ast::ExprCast>();
+        Val inner = lower_expr(cast.inner, nullptr);
         if (failed) {
           return Val{size_one, error_type(), false, false};
         }
         const ir::TypeIdx target = expr_type(expr);
         if (tag_of(target) == ir::TypeTag::Error) {
-          internal(expr->span, "cast without type");
+          internal(node.span, "cast without type");
           return Val{size_one, error_type(), false, false};
         }
         const ir::RegisterIdx dst =
@@ -2170,47 +2203,37 @@ class Lowerer {
         return Val{to_operand(dst, target), target, false, false};
       }
       case ast::ExprKind::Call: {
-        const ast::CallExpr* call = static_cast<const ast::CallExpr*>(expr);
-        return lower_call(call, expected);
+        return lower_call(expr, expected);
       }
       case ast::ExprKind::MethodCall: {
-        const ast::MethodCallExpr* method =
-            static_cast<const ast::MethodCallExpr*>(expr);
-        return lower_method_call(method, expected);
+        return lower_method_call(expr, expected);
       }
       case ast::ExprKind::Field: {
-        const ast::FieldExpr* field = static_cast<const ast::FieldExpr*>(expr);
-        Val base = lower_expr(field->receiver, nullptr);
+        const ast::ExprField& field = node.payload.get<ast::ExprField>();
+        Val base = lower_expr(field.receiver, nullptr);
         if (failed) {
           return Val{size_one, error_type(), false, false};
         }
-        return materialize(field_addr(base, field->name.name, field->span));
+        return materialize(field_addr(base, field.name.name, node.span));
       }
       case ast::ExprKind::Question: {
-        const ast::QuestionExpr* question =
-            static_cast<const ast::QuestionExpr*>(expr);
-        return lower_question(question);
+        return lower_question(expr);
       }
       case ast::ExprKind::If: {
-        const ast::IfExpr* if_expr = static_cast<const ast::IfExpr*>(expr);
-        return lower_if(if_expr, expected);
+        return lower_if(expr, expected);
       }
       case ast::ExprKind::Match: {
-        const ast::MatchExpr* match = static_cast<const ast::MatchExpr*>(expr);
-        return lower_match(match, expected);
+        return lower_match(expr, expected);
       }
       case ast::ExprKind::Loop: {
-        const ast::LoopExpr* loop = static_cast<const ast::LoopExpr*>(expr);
-        return lower_loop(loop);
+        return lower_loop(expr);
       }
       case ast::ExprKind::While: {
-        const ast::WhileExpr* while_expr =
-            static_cast<const ast::WhileExpr*>(expr);
-        return lower_while(while_expr);
+        return lower_while(expr);
       }
       case ast::ExprKind::Break: {
         if (break_targets_.empty()) {
-          internal(expr->span, "break without loop");
+          internal(node.span, "break without loop");
           return Val{size_one, error_type(), false, false};
         }
         emit_br(break_targets_.back());
@@ -2218,7 +2241,7 @@ class Lowerer {
       }
       case ast::ExprKind::Continue: {
         if (continue_targets_.empty()) {
-          internal(expr->span, "continue without loop");
+          internal(node.span, "continue without loop");
           return Val{size_one, error_type(), false, false};
         }
         emit_br(continue_targets_.back());
@@ -2226,18 +2249,18 @@ class Lowerer {
       }
       case ast::ExprKind::Index:
       case ast::ExprKind::Range:
-        unsupported(expr->span, "control flow in lowering");
+        unsupported(node.span, "control flow in lowering");
         return Val{size_one, error_type(), false, false};
       case ast::ExprKind::Block: {
-        const ast::BlockExpr* block = static_cast<const ast::BlockExpr*>(expr);
-        return lower_block(block->block, expected);
+        const ast::ExprBlock& block = node.payload.get<ast::ExprBlock>();
+        return lower_block(block.block, expected);
       }
       case ast::ExprKind::Return: {
-        const ast::ReturnExpr* ret = static_cast<const ast::ReturnExpr*>(expr);
-        if (ret->value == nullptr) {
+        const ast::ExprReturn& ret = node.payload.get<ast::ExprReturn>();
+        if (!ret.value.is_valid()) {
           emit_void(ir::Opcode::Ret, {});
         } else {
-          Val value = lower_expr(ret->value, nullptr);
+          Val value = lower_expr(ret.value, nullptr);
           if (failed) {
             return Val{size_one, error_type(), false, false};
           }
@@ -2274,37 +2297,38 @@ class Lowerer {
     return Val{to_operand(builder.immutable(imm), type), type, false, false};
   }
 
-  void lower_stmt(const ast::Stmt* stmt) {
+  void lower_stmt(ast::StmtIdx stmt) {
     if (failed || terminated_cur()) {
       return;
     }
+    const ast::StmtNode& node = ast.stmts[stmt];
     SpanGuard guard{this, cur_span_};
-    cur_span_ = stmt->span;
-    switch (stmt->kind) {
+    cur_span_ = node.span;
+    switch (node.kind) {
       case ast::StmtKind::Decl: {
-        const ast::DeclStmt* decl = static_cast<const ast::DeclStmt*>(stmt);
-        Val init = lower_expr(decl->init, nullptr);
+        const ast::StmtDecl& decl = node.payload.get<ast::StmtDecl>();
+        Val init = lower_expr(decl.init, nullptr);
         if (failed) {
           return;
         }
         // Moving into the binding consumes a non-Copy place.
         const ir::OperandIdx moved = use_value(init);
-        bind_pattern(decl->pattern, Val{moved, init.type, false, false});
+        bind_pattern(decl.pattern, Val{moved, init.type, false, false});
         return;
       }
       case ast::StmtKind::Reassign: {
-        const ast::ReassignStmt* reassign =
-            static_cast<const ast::ReassignStmt*>(stmt);
-        Val place = place_addr(reassign->place);
+        const ast::StmtReassign& reassign =
+            node.payload.get<ast::StmtReassign>();
+        Val place = place_addr(reassign.place);
         if (failed) {
           return;
         }
-        Val value = lower_expr(reassign->value, nullptr);
+        Val value = lower_expr(reassign.value, nullptr);
         if (failed) {
           return;
         }
         ir::OperandIdx stored = use_value(value);
-        if (reassign->compound) {
+        if (reassign.compound) {
           Val loaded = materialize(place);
           // Rebuild the compound operation from the operator spelling
           // is unnecessary: checking validated the shape, and only
@@ -2316,23 +2340,24 @@ class Lowerer {
         return;
       }
       case ast::StmtKind::Expr: {
-        const ast::ExprStmt* expr_stmt =
-            static_cast<const ast::ExprStmt*>(stmt);
-        mark_move(lower_expr(expr_stmt->value, nullptr));
+        const ast::StmtExpr& expr = node.payload.get<ast::StmtExpr>();
+        mark_move(lower_expr(expr.value, nullptr));
         return;
       }
     }
   }
 
-  Val lower_block(const ast::Block* block, const ir::TypeIdx* expected) {
+  Val lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
+    const ast::Block& node = ast.blocks[block];
     bool reachable = true;
-    for (ast::Stmt* stmt : block->statements) {
+    for (ast::StmtIdx stmt : node.statements) {
       if (failed) {
         break;
       }
       if (!reachable) {
-        const u32 index = bag.emit(diag::Severity::Warning, kLowerUnreachable,
-                                   stmt->span, "unreachable statement");
+        const u32 index =
+            bag.emit(diag::Severity::Warning, kLowerUnreachable,
+                     ast.stmts[stmt].span, "unreachable statement");
         (void)index;
         continue;
       }
@@ -2342,18 +2367,18 @@ class Lowerer {
       }
     }
     if (failed || terminated_cur()) {
-      if (!reachable && block->value != nullptr) {
+      if (!reachable && node.value.is_valid()) {
         const u32 index =
             bag.emit(diag::Severity::Warning, kLowerUnreachable,
-                     block->value->span, "unreachable expression");
+                     ast.exprs[node.value].span, "unreachable expression");
         (void)index;
       }
       return Val{size_one, error_type(), false, false};
     }
-    if (block->value == nullptr) {
+    if (!node.value.is_valid()) {
       return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
     }
-    Val value = lower_expr(block->value, expected);
+    Val value = lower_expr(node.value, expected);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
@@ -2370,14 +2395,16 @@ class Lowerer {
     break_targets_.clear();
     continue_targets_.clear();
     pending_params_.clear();
-    if (sig.item == nullptr || sig.item->body == nullptr) {
-      internal(sig.item == nullptr ? diag::Span{} : sig.item->span,
+
+    const ast::ItemNode& item = ast.items[sig.item];
+    const ast::ItemFn& fn = item.payload.get<ast::ItemFn>();
+    if (!sig.item.is_valid() || !fn.body.is_valid()) {
+      internal(!sig.item.is_valid() ? diag::Span{} : item.span,
                "function without body");
       return;
     }
-    const ast::FnItem* fn = sig.item;
     switch_to(reserve_block());
-    cur_span_ = fn->name.span;
+    cur_span_ = fn.name.span;
     // Entry block parameters arrive in declaration order.
     ir::BlockParamSeq param_seq;
     for (usize i = 0; i < sig.params.size() && !failed; ++i) {
@@ -2393,19 +2420,20 @@ class Lowerer {
     }
     // Bind parameters (patterns may destructure) after allocas exist.
     binding_param_ = true;
-    for (usize i = 0; i < fn->params.size() && !failed; ++i) {
+    const std::span<const ast::ItemFnParam> params = fn.params;
+    for (usize i = 0; i < params.size() && !failed; ++i) {
       const ir::RegisterIdx preg = pending_params_[i];
       const ir::TypeIdx ptype = sig.params[i];
       Val param{to_operand(preg, ptype), ptype, false, true};
       // Parameters live in memory like locals so borrows observe them.
       if (tag_of(ptype) == ir::TypeTag::Void) {
-        bind_pattern(fn->params[i].pattern, param);
+        bind_pattern(params[i].pattern, param);
         continue;
       }
       const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, ptype, {size_one});
       emit_void(ir::Opcode::Store,
                 {to_operand(preg, ptype), to_operand(addr, ptype)});
-      bind_pattern(fn->params[i].pattern,
+      bind_pattern(params[i].pattern,
                    Val{to_operand(addr, ptype), ptype, true, true});
     }
     pending_params_.clear();
@@ -2413,7 +2441,7 @@ class Lowerer {
     if (failed) {
       return;
     }
-    Val body = lower_block(fn->body, nullptr);
+    Val body = lower_block(fn.body, nullptr);
     if (failed) {
       return;
     }
@@ -2448,7 +2476,7 @@ class Lowerer {
     u32 next = 0;
     for (const auto& mod : pkg.modules) {
       for (const auto& sig : mod.functions) {
-        if (sig.item == nullptr) {
+        if (!sig.item.is_valid()) {
           continue;
         }
         fns.push_back({sig.item, ir::FunctionIdx(next++)});
@@ -2464,7 +2492,7 @@ class Lowerer {
     std::vector<Done> done;
     for (u32 m = 0; m < static_cast<u32>(pkg.modules.size()) && !failed; ++m) {
       for (const auto& sig : pkg.modules[m].functions) {
-        if (sig.item == nullptr) {
+        if (!sig.item.is_valid()) {
           continue;
         }
         lower_fn(m, sig);
@@ -2515,9 +2543,10 @@ class Lowerer {
 
 diag::Fallible<LoweredPackage> lower_package(analyzer::CheckedPackage package,
                                              ir::PointerWidth width,
+                                             ast::AstArena& ast,
                                              str::StringInterner& strings,
                                              diag::DiagBag& bag) {
-  Lowerer lowerer(std::move(package), width, strings, bag);
+  Lowerer lowerer(std::move(package), width, ast, strings, bag);
   lowerer.run();
   if (lowerer.failed) {
     return base::make_err(diag::Fatal{});

@@ -40,7 +40,7 @@ ResultCode finish_check(DriverContext& ctx,
                         analyzer::ModuleTree tree,
                         usize file_count) {
   diag::Fallible<analyzer::CheckedPackage> checked =
-      analyzer::check_package(tree, kCheckWidth, ctx.bag);
+      analyzer::check_package(tree, kCheckWidth, ctx.ast, ctx.bag);
   if (checked.is_err()) {
     report(ctx.bag, ctx.sources);
     return ResultCode::CheckFailed;
@@ -52,7 +52,7 @@ ResultCode finish_check(DriverContext& ctx,
   analyzer::CheckedPackage package = std::move(checked).unwrap();
   const usize modules = package.modules.size();
   diag::Fallible<lower::LoweredPackage> lowered = lower::lower_package(
-      std::move(package), kCheckWidth, ctx.strings, ctx.bag);
+      std::move(package), kCheckWidth, ctx.ast, ctx.strings, ctx.bag);
   if (lowered.is_err()) {
     report(ctx.bag, ctx.sources);
     return ResultCode::CheckFailed;
@@ -139,7 +139,7 @@ ResultCode run_check(const DriverConfig& config) {
   const source::FileId root = std::move(file).unwrap();
   const analyzer::ModuleInput single_input{"", root};
   diag::Fallible<analyzer::ModuleTree> tree = analyzer::resolve_modules(
-      root, {&single_input, 1}, "", ctx.sources, ctx.arena, ctx.bag);
+      root, {&single_input, 1}, "", ctx.sources, ctx.ast, ctx.bag);
   if (tree.is_err()) {
     report(ctx.bag, ctx.sources);
     return ResultCode::CheckFailed;

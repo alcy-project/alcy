@@ -5,6 +5,7 @@
 
 #include <string_view>
 
+#include "ast/ast.h"
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
@@ -24,6 +25,7 @@ constexpr std::string_view kSourceSuffix = ".al";
 
 struct DriverContext {
   mem::Arena arena;
+  ast::AstArena ast;
   source::SourceManager sources;
   diag::DiagBag bag;
   // Long-lived string pool for lowering and codegen (function names,

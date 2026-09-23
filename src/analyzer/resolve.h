@@ -37,7 +37,7 @@ struct ModuleNode {
   // kUnknownFile for inline modules, which have no file of their own.
   source::FileId file;
   // Top-level items of this module's file (checked later).
-  std::span<ast::Item* const> items;
+  std::span<const ast::ItemIdx> items;
   std::span<ModuleNode* const> children;
   std::span<const Import> imports;
 };
@@ -64,7 +64,7 @@ diag::Fallible<ModuleTree> resolve_modules(source::FileId root,
                                            std::span<const ModuleInput> modules,
                                            std::string_view package_name,
                                            source::SourceManager& sources,
-                                           mem::Arena& arena,
+                                           ast::AstArena& ast,
                                            diag::DiagBag& bag);
 
 }  // namespace analyzer

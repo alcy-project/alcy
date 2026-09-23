@@ -10,6 +10,7 @@
 
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
+#include "ast/ast.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
@@ -27,6 +28,7 @@ namespace {
 
 struct Fixture {
   mem::Arena arena;
+  ast::AstArena ast;
   diag::DiagBag bag{arena};
   source::SourceManager sources;
   str::StringInterner strings{mem::page_size()};
@@ -73,19 +75,19 @@ bool check_case(io::TempDir& dir,
     }
   }
   diag::Fallible<analyzer::ModuleTree> tree_result = analyzer::resolve_modules(
-      root, inputs, "testpkg", f.sources, f.arena, f.bag);
+      root, inputs, "testpkg", f.sources, f.ast, f.bag);
   if (tree_result.is_err() || f.bag.has_errors()) {
     return false;
   }
   analyzer::ModuleTree tree = std::move(tree_result).unwrap();
   diag::Fallible<analyzer::CheckedPackage> checked_result =
-      analyzer::check_package(tree, ir::PointerWidth::W64, f.bag);
+      analyzer::check_package(tree, ir::PointerWidth::W64, f.ast, f.bag);
   if (checked_result.is_err() || f.bag.has_errors()) {
     return false;
   }
   diag::Fallible<lower::LoweredPackage> lowered_result =
       lower::lower_package(std::move(checked_result).unwrap(),
-                           ir::PointerWidth::W64, f.strings, f.bag);
+                           ir::PointerWidth::W64, f.ast, f.strings, f.bag);
   if (lowered_result.is_err() || f.bag.has_errors()) {
     return false;
   }

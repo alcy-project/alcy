@@ -14,7 +14,6 @@
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
-#include "fpag/mem/arena.h"
 
 namespace parser {
 
@@ -40,13 +39,13 @@ class Desugar {
     bool seen = false;
   };
 
-  mem::Arena& arena;
+  ast::AstArena& ast;
   diag::DiagBag& bag;
   u32 counter = 0;
   std::vector<std::vector<Binding>> scopes;
   std::vector<ast::Ident> path_scratch;
 
-  Desugar(mem::Arena& arena, diag::DiagBag& bag) : arena(arena), bag(bag) {}
+  Desugar(ast::AstArena& ast, diag::DiagBag& bag) : ast(ast), bag(bag) {}
 
   void push_scope() { scopes.emplace_back(); }
 
@@ -80,7 +79,7 @@ class Desugar {
   std::string_view fresh_name(std::string_view orig) {
     std::string spelled = std::string(orig) + "$" + std::to_string(counter);
     ++counter;
-    char* const owned = static_cast<char*>(arena.alloc(spelled.size(), 1));
+    char* const owned = static_cast<char*>(ast.spans.alloc(spelled.size(), 1));
     spelled.copy(owned, spelled.size());
     return std::string_view(owned, spelled.size());
   }
@@ -126,43 +125,41 @@ class Desugar {
     return fresh;
   }
 
-  void run(std::span<ast::Item* const> items) {
+  void run(std::span<const ast::ItemIdx> items) {
     push_scope();
-    for (ast::Item* item : items) {
+    for (ast::ItemIdx item : items) {
       visit_item(item);
     }
     pop_scope();
   }
 
-  void visit_item(ast::Item* item) {
-    switch (item->kind) {
+  void visit_item(ast::ItemIdx item) {
+    const ast::ItemNode& node = ast.items[item];
+    switch (node.kind) {
       case ast::ItemKind::Fn: {
-        ast::FnItem* fn = static_cast<ast::FnItem*>(item);
         push_scope();
-        for (const ast::FnParam& param : fn->params) {
-          visit_pattern(const_cast<ast::Pattern*>(param.pattern));
+        for (const ast::ItemFnParam& param :
+             node.payload.get<ast::ItemFn>().params) {
+          visit_pattern(param.pattern);
         }
-        visit_block(const_cast<ast::Block*>(fn->body));
+        visit_block(node.payload.get<ast::ItemFn>().body);
         pop_scope();
         break;
       }
       case ast::ItemKind::Static: {
-        ast::StaticItem* decl = static_cast<ast::StaticItem*>(item);
         push_scope();
-        visit_expr(const_cast<ast::Expr*>(decl->init));
+        visit_expr(node.payload.get<ast::ItemStatic>().init);
         pop_scope();
         break;
       }
       case ast::ItemKind::Const: {
-        ast::ConstItem* decl = static_cast<ast::ConstItem*>(item);
         push_scope();
-        visit_expr(const_cast<ast::Expr*>(decl->init));
+        visit_expr(node.payload.get<ast::ItemConst>().init);
         pop_scope();
         break;
       }
       case ast::ItemKind::Impl: {
-        ast::ImplItem* impl = static_cast<ast::ImplItem*>(item);
-        for (ast::FnItem* method : impl->methods) {
+        for (ast::ItemIdx method : node.payload.get<ast::ItemImpl>().methods) {
           visit_item(method);
         }
         break;
@@ -173,111 +170,113 @@ class Desugar {
     }
   }
 
-  void visit_block(ast::Block* block) {
-    if (block == nullptr) {
-      return;
-    }
+  void visit_block(ast::BlockIdx block) {
+    const ast::Block& node = ast.blocks[block];
     push_scope();
-    for (ast::Stmt* stmt : block->statements) {
+    for (ast::StmtIdx stmt : node.statements) {
       visit_stmt(stmt);
     }
-    if (block->value != nullptr) {
-      visit_expr(const_cast<ast::Expr*>(block->value));
+    if (node.value.is_valid()) {
+      visit_expr(node.value);
     }
     pop_scope();
   }
 
-  void visit_stmt(ast::Stmt* stmt) {
-    switch (stmt->kind) {
+  void visit_stmt(ast::StmtIdx stmt) {
+    const ast::StmtNode& node = ast.stmts[stmt];
+    switch (node.kind) {
       case ast::StmtKind::Decl: {
-        ast::DeclStmt* decl = static_cast<ast::DeclStmt*>(stmt);
         // Initializers evaluate before the bindings they introduce, so
         // `x := x` reads the outer `x`.
-        visit_expr(const_cast<ast::Expr*>(decl->init));
-        visit_pattern(const_cast<ast::Pattern*>(decl->pattern));
+        visit_expr(node.payload.get<ast::StmtDecl>().init);
+        visit_pattern(node.payload.get<ast::StmtDecl>().pattern);
         break;
       }
       case ast::StmtKind::Reassign: {
-        ast::ReassignStmt* reassign = static_cast<ast::ReassignStmt*>(stmt);
-        if (reassign->compound) {
-          ast::BinaryExpr* binary = arena.create<ast::BinaryExpr>();
-          binary->kind = ast::ExprKind::Binary;
-          binary->span = reassign->span;
-          binary->op = reassign->op;
-          binary->lhs = const_cast<ast::Expr*>(reassign->place);
-          binary->rhs = const_cast<ast::Expr*>(reassign->value);
-
-          reassign->value = binary;
-          reassign->compound = false;
+        const ast::StmtReassign& reassign =
+            node.payload.get<ast::StmtReassign>();
+        if (reassign.compound) {
+          ast::ExprNode binary;
+          binary.kind = ast::ExprKind::Binary;
+          binary.span = ast.stmts[stmt].span;
+          binary.payload.set(ast::ExprBinary{
+              .op = reassign.op,
+              .lhs = reassign.place,
+              .rhs = reassign.value,
+          });
+          ast::StmtNode& target = ast.stmts[stmt];
+          target.payload.set(ast::StmtReassign{
+              .place = target.payload.get<ast::StmtReassign>().place,
+              .compound = false,
+              .op = target.payload.get<ast::StmtReassign>().op,
+              .value = ast.exprs.push_back(binary),
+          });
         }
-        visit_expr(const_cast<ast::Expr*>(reassign->place));
-        visit_expr(const_cast<ast::Expr*>(reassign->value));
+        visit_expr(reassign.place);
+        visit_expr(ast.stmts[stmt].payload.get<ast::StmtReassign>().value);
         break;
       }
       case ast::StmtKind::Expr: {
-        ast::ExprStmt* expr_stmt = static_cast<ast::ExprStmt*>(stmt);
-        visit_expr(const_cast<ast::Expr*>(expr_stmt->value));
+        visit_expr(node.payload.get<ast::StmtExpr>().value);
         break;
       }
     }
   }
 
-  void visit_pattern(ast::Pattern* pattern) {
-    switch (pattern->kind) {
+  void visit_pattern(ast::PatternIdx pattern) {
+    const ast::PatternNode& node = ast.patterns[pattern];
+    switch (node.kind) {
       case ast::PatternKind::Wildcard: break;
       case ast::PatternKind::Ident: {
-        ast::IdentPattern* ident = static_cast<ast::IdentPattern*>(pattern);
-        ident->name.name = declare_named(ident->name);
+        ast::PatternNode& target = ast.patterns[pattern];
+        target.payload.ident.name.name =
+            declare_named(target.payload.ident.name);
         break;
       }
       case ast::PatternKind::MutIdent: {
-        ast::MutIdentPattern* ident =
-            static_cast<ast::MutIdentPattern*>(pattern);
-        ident->name.name = declare_named(ident->name);
+        ast::PatternNode& target = ast.patterns[pattern];
+        target.payload.mut_ident.name.name =
+            declare_named(target.payload.mut_ident.name);
         break;
       }
       case ast::PatternKind::Literal: break;
       case ast::PatternKind::Tuple: {
-        ast::TuplePattern* tuple = static_cast<ast::TuplePattern*>(pattern);
-        for (ast::Pattern* element : tuple->elements) {
+        for (ast::PatternIdx element : node.payload.tuple.elements) {
           visit_pattern(element);
         }
         break;
       }
       case ast::PatternKind::Struct: {
-        ast::StructPattern* record = static_cast<ast::StructPattern*>(pattern);
-        for (const ast::FieldPattern& field : record->fields) {
-          visit_pattern(const_cast<ast::Pattern*>(field.pattern));
+        for (const ast::FieldPattern& field : node.payload.strukt.fields) {
+          visit_pattern(field.pattern);
         }
         break;
       }
       case ast::PatternKind::Ref: {
-        ast::RefPattern* ref = static_cast<ast::RefPattern*>(pattern);
-        visit_pattern(const_cast<ast::Pattern*>(ref->inner));
+        visit_pattern(node.payload.ref.inner);
         break;
       }
-      case ast::PatternKind::Or:
-        visit_or(static_cast<ast::OrPattern*>(pattern));
-        break;
+      case ast::PatternKind::Or: visit_or(pattern); break;
     }
   }
 
-  void visit_or(ast::OrPattern* or_pattern) {
+  void visit_or(ast::PatternIdx or_pattern) {
+    const ast::PatternNode& node = ast.patterns[or_pattern];
     // The first alternative establishes the scope; the rest reuse its
     // mapping and must bind the identical set. Afterwards the mapping
     // merges into the current scope so siblings and bodies resolve.
     push_scope();
-    visit_pattern(const_cast<ast::Pattern*>(or_pattern->alternatives[0]));
+    visit_pattern(node.payload.or_pat.alternatives[0]);
     std::vector<Binding> first = std::move(current());
     pop_scope();
-    for (usize i = 1; i < or_pattern->alternatives.size(); ++i) {
+    for (usize i = 1; i < node.payload.or_pat.alternatives.size(); ++i) {
       push_scope();
       for (Binding binding : first) {
         binding.seen = false;
         binding.preseeded = true;
         current().push_back(binding);
       }
-      visit_pattern(const_cast<ast::Pattern*>(or_pattern->alternatives[i]));
+      visit_pattern(node.payload.or_pat.alternatives[i]);
       bool mismatch = current().size() != first.size();
       if (!mismatch) {
         for (const Binding& binding : current()) {
@@ -288,9 +287,9 @@ class Desugar {
         }
       }
       if (mismatch) {
-        const u32 index = bag.emit(
-            diag::Severity::Error, kParserOrPatternMismatch, or_pattern->span,
-            "or-pattern alternatives must bind the same names");
+        const u32 index =
+            bag.emit(diag::Severity::Error, kParserOrPatternMismatch, node.span,
+                     "or-pattern alternatives must bind the same names");
         (void)index;
       }
       pop_scope();
@@ -304,9 +303,9 @@ class Desugar {
         }
       }
       if (clash) {
-        const u32 index = bag.emit(
-            diag::Severity::Error, kParserAlreadyBound, or_pattern->span,
-            "`{}` is already bound in this scope", binding.orig);
+        const u32 index =
+            bag.emit(diag::Severity::Error, kParserAlreadyBound, node.span,
+                     "`{}` is already bound in this scope", binding.orig);
         (void)index;
         continue;
       }
@@ -314,165 +313,156 @@ class Desugar {
     }
   }
 
-  void visit_cond(ast::Cond* cond, bool* pushed) {
+  void visit_cond(ast::CondIdx cond, bool* pushed) {
+    const ast::Cond& node = ast.conds[cond];
     // Initializers evaluate outside the bindings they introduce.
-    if (cond->is_pattern) {
-      visit_expr(const_cast<ast::Expr*>(cond->init));
+    if (node.is_pattern) {
+      visit_expr(node.init);
       push_scope();
-      visit_pattern(const_cast<ast::Pattern*>(cond->pattern));
+      visit_pattern(node.pattern);
       *pushed = true;
       return;
     }
     *pushed = false;
-    visit_expr(const_cast<ast::Expr*>(cond->value));
+    visit_expr(node.value);
   }
 
-  void visit_expr(ast::Expr* expr) {
-    if (expr == nullptr) {
+  void visit_expr(ast::ExprIdx expr) {
+    if (!expr.is_valid()) {
       return;
     }
-    switch (expr->kind) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    switch (node.kind) {
       case ast::ExprKind::Literal: break;
       case ast::ExprKind::Path: {
-        ast::PathExpr* path = static_cast<ast::PathExpr*>(expr);
-        if (path->path->segments.size() == 1) {
-          const ast::Ident& first = path->path->segments[0];
+        const ast::PathIdx path = node.payload.get<ast::ExprPath>().idx;
+        if (ast.paths[path].segments.size() == 1) {
+          const ast::Ident& first = ast.paths[path].segments[0];
           const std::string_view resolved = lookup(first.name);
           if (resolved != first.name) {
             path_scratch.clear();
-            for (const ast::Ident& segment : path->path->segments) {
+            for (const ast::Ident& segment : ast.paths[path].segments) {
               path_scratch.push_back(segment);
             }
             path_scratch[0].name = resolved;
-            ast::Path* renamed = arena.create<ast::Path>();
-            renamed->segments = ast::copy_to_arena(arena, path_scratch);
-            renamed->span = path->path->span;
-            path->path = renamed;
+            ast::Path renamed;
+            renamed.segments = ast::copy_to_arena(ast.spans, path_scratch);
+            renamed.span = ast.paths[path].span;
+            ast.exprs[expr].payload.set(ast::ExprPath{
+                .idx = ast.paths.push_back(renamed),
+            });
           }
         }
         break;
       }
       case ast::ExprKind::Struct: {
-        ast::StructExpr* init = static_cast<ast::StructExpr*>(expr);
-        for (const ast::FieldInit& field : init->init) {
-          visit_expr(const_cast<ast::Expr*>(field.value));
+        for (const ast::ExprFieldInit& field :
+             node.payload.get<ast::ExprStruct>().init) {
+          visit_expr(field.value);
         }
-        if (init->base_expr != nullptr) {
-          visit_expr(const_cast<ast::Expr*>(init->base_expr));
+        if (node.payload.get<ast::ExprStruct>().base_expr.is_valid()) {
+          visit_expr(node.payload.get<ast::ExprStruct>().base_expr);
         }
         break;
       }
       case ast::ExprKind::Tuple: {
-        ast::TupleExpr* tuple = static_cast<ast::TupleExpr*>(expr);
-        for (ast::Expr* element : tuple->elements) {
+        for (ast::ExprIdx element :
+             node.payload.get<ast::ExprTuple>().elements) {
           visit_expr(element);
         }
         break;
       }
       case ast::ExprKind::Unary: {
-        ast::UnaryExpr* unary = static_cast<ast::UnaryExpr*>(expr);
-        visit_expr(const_cast<ast::Expr*>(unary->inner));
+        visit_expr(node.payload.get<ast::ExprUnary>().inner);
         break;
       }
       case ast::ExprKind::Borrow: {
-        ast::BorrowExpr* borrow = static_cast<ast::BorrowExpr*>(expr);
-        visit_expr(const_cast<ast::Expr*>(borrow->inner));
+        visit_expr(node.payload.get<ast::ExprBorrow>().inner);
         break;
       }
       case ast::ExprKind::Binary: {
-        ast::BinaryExpr* binary = static_cast<ast::BinaryExpr*>(expr);
-        visit_expr(const_cast<ast::Expr*>(binary->lhs));
-        visit_expr(const_cast<ast::Expr*>(binary->rhs));
+        visit_expr(node.payload.get<ast::ExprBinary>().lhs);
+        visit_expr(node.payload.get<ast::ExprBinary>().rhs);
         break;
       }
       case ast::ExprKind::Cast: {
-        ast::CastExpr* cast = static_cast<ast::CastExpr*>(expr);
-        visit_expr(const_cast<ast::Expr*>(cast->inner));
+        visit_expr(node.payload.get<ast::ExprCast>().inner);
         break;
       }
       case ast::ExprKind::Call: {
-        ast::CallExpr* call = static_cast<ast::CallExpr*>(expr);
-        visit_expr(const_cast<ast::Expr*>(call->callee));
-        for (ast::Expr* arg : call->args) {
+        visit_expr(node.payload.get<ast::ExprCall>().callee);
+        for (ast::ExprIdx arg : node.payload.get<ast::ExprCall>().args) {
           visit_expr(arg);
         }
         break;
       }
       case ast::ExprKind::MethodCall: {
-        ast::MethodCallExpr* call = static_cast<ast::MethodCallExpr*>(expr);
-        visit_expr(const_cast<ast::Expr*>(call->receiver));
-        for (ast::Expr* arg : call->args) {
+        visit_expr(node.payload.get<ast::ExprMethodCall>().receiver);
+        for (ast::ExprIdx arg : node.payload.get<ast::ExprMethodCall>().args) {
           visit_expr(arg);
         }
         break;
       }
       case ast::ExprKind::Field: {
-        ast::FieldExpr* field = static_cast<ast::FieldExpr*>(expr);
-        visit_expr(const_cast<ast::Expr*>(field->receiver));
+        visit_expr(node.payload.get<ast::ExprField>().receiver);
         break;
       }
       case ast::ExprKind::Index: {
-        ast::IndexExpr* index = static_cast<ast::IndexExpr*>(expr);
-        visit_expr(const_cast<ast::Expr*>(index->receiver));
-        visit_expr(const_cast<ast::Expr*>(index->index));
+        visit_expr(node.payload.get<ast::ExprIndex>().receiver);
+        visit_expr(node.payload.get<ast::ExprIndex>().index);
         break;
       }
       case ast::ExprKind::Question: {
-        ast::QuestionExpr* question = static_cast<ast::QuestionExpr*>(expr);
-        visit_expr(const_cast<ast::Expr*>(question->inner));
+        visit_expr(node.payload.get<ast::ExprQuestion>().inner);
         break;
       }
       case ast::ExprKind::If: {
-        ast::IfExpr* branch = static_cast<ast::IfExpr*>(expr);
         bool pushed = false;
-        visit_cond(const_cast<ast::Cond*>(branch->cond), &pushed);
-        visit_block(const_cast<ast::Block*>(branch->then_block));
+        visit_cond(node.payload.get<ast::ExprIf>().cond, &pushed);
+        visit_block(node.payload.get<ast::ExprIf>().then_block);
         if (pushed) {
           pop_scope();
         }
-        visit_block(const_cast<ast::Block*>(branch->else_block));
+        if (node.payload.get<ast::ExprIf>().else_block.is_valid()) {
+          visit_block(node.payload.get<ast::ExprIf>().else_block);
+        }
         break;
       }
       case ast::ExprKind::Match: {
-        ast::MatchExpr* match = static_cast<ast::MatchExpr*>(expr);
-        visit_expr(const_cast<ast::Expr*>(match->scrutinee));
-        for (const ast::MatchArm& arm : match->arms) {
+        visit_expr(node.payload.get<ast::ExprMatch>().scrutinee);
+        for (const ast::ExprMatchArm& arm :
+             node.payload.get<ast::ExprMatch>().arms) {
           push_scope();
-          visit_pattern(const_cast<ast::Pattern*>(arm.pattern));
-          visit_expr(const_cast<ast::Expr*>(arm.body));
+          visit_pattern(arm.pattern);
+          visit_expr(arm.body);
           pop_scope();
         }
         break;
       }
       case ast::ExprKind::Loop: {
-        ast::LoopExpr* loop = static_cast<ast::LoopExpr*>(expr);
-        visit_block(const_cast<ast::Block*>(loop->body));
+        visit_block(node.payload.get<ast::ExprLoop>().body);
         break;
       }
       case ast::ExprKind::While: {
-        ast::WhileExpr* loop = static_cast<ast::WhileExpr*>(expr);
         bool pushed = false;
-        visit_cond(const_cast<ast::Cond*>(loop->cond), &pushed);
-        visit_block(const_cast<ast::Block*>(loop->body));
+        visit_cond(node.payload.get<ast::ExprWhile>().cond, &pushed);
+        visit_block(node.payload.get<ast::ExprWhile>().body);
         if (pushed) {
           pop_scope();
         }
         break;
       }
       case ast::ExprKind::Block: {
-        ast::BlockExpr* block = static_cast<ast::BlockExpr*>(expr);
-        visit_block(const_cast<ast::Block*>(block->block));
+        visit_block(node.payload.get<ast::ExprBlock>().block);
         break;
       }
       case ast::ExprKind::Return: {
-        ast::ReturnExpr* ret = static_cast<ast::ReturnExpr*>(expr);
-        visit_expr(const_cast<ast::Expr*>(ret->value));
+        visit_expr(node.payload.get<ast::ExprReturn>().value);
         break;
       }
       case ast::ExprKind::Range: {
-        ast::RangeExpr* range = static_cast<ast::RangeExpr*>(expr);
-        visit_expr(const_cast<ast::Expr*>(range->start));
-        visit_expr(const_cast<ast::Expr*>(range->end));
+        visit_expr(node.payload.get<ast::ExprRange>().start);
+        visit_expr(node.payload.get<ast::ExprRange>().end);
         break;
       }
       case ast::ExprKind::Break:
@@ -483,10 +473,10 @@ class Desugar {
 
 }  // namespace
 
-void desugar_shadowing(std::span<ast::Item* const> items,
-                       mem::Arena& arena,
+void desugar_shadowing(std::span<const ast::ItemIdx> items,
+                       ast::AstArena& ast,
                        diag::DiagBag& bag) {
-  Desugar desugar{arena, bag};
+  Desugar desugar{ast, bag};
   desugar.run(items);
 }
 

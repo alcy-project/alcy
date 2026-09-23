@@ -44,12 +44,12 @@ diag::Fallible<lower::LoweredPackage> compile_tree_to_ir(
     DriverContext& ctx,
     analyzer::ModuleTree tree) {
   diag::Fallible<analyzer::CheckedPackage> checked =
-      analyzer::check_package(tree, kCheckWidth, ctx.bag);
+      analyzer::check_package(tree, kCheckWidth, ctx.ast, ctx.bag);
   if (checked.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Fatal{});
   }
   diag::Fallible<lower::LoweredPackage> lowered = lower::lower_package(
-      std::move(checked).unwrap(), kCheckWidth, ctx.strings, ctx.bag);
+      std::move(checked).unwrap(), kCheckWidth, ctx.ast, ctx.strings, ctx.bag);
   if (lowered.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Fatal{});
   }
@@ -132,7 +132,7 @@ ResultCode build_single_file(DriverContext& ctx,
   const source::FileId root = std::move(file).unwrap();
   const analyzer::ModuleInput single_input{"", root};
   diag::Fallible<analyzer::ModuleTree> tree = analyzer::resolve_modules(
-      root, {&single_input, 1}, "", ctx.sources, ctx.arena, ctx.bag);
+      root, {&single_input, 1}, "", ctx.sources, ctx.ast, ctx.bag);
   if (tree.is_err() || ctx.bag.has_errors()) {
     report(ctx.bag, ctx.sources);
     return ResultCode::BuildFailed;

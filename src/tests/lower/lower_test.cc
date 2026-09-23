@@ -13,6 +13,7 @@
 
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
+#include "ast/ast.h"
 #include "codegen_llvm/common.h"
 #include "codegen_llvm/llvm_ir_emitter.h"
 #include "codegen_llvm/llvm_object_emitter.h"
@@ -37,6 +38,7 @@ namespace {
 
 struct Fixture {
   mem::Arena arena;
+  ast::AstArena ast;
   diag::DiagBag bag{arena};
   source::SourceManager sources;
   str::StringInterner strings{mem::page_size()};
@@ -88,19 +90,19 @@ LowerCase lower_case(io::TempDir& dir,
     }
   }
   diag::Fallible<analyzer::ModuleTree> tree_result = analyzer::resolve_modules(
-      root, inputs, "testpkg", f.sources, f.arena, f.bag);
+      root, inputs, "testpkg", f.sources, f.ast, f.bag);
   if (tree_result.is_err() || f.bag.has_errors()) {
     return {std::nullopt, false};
   }
   analyzer::ModuleTree tree = std::move(tree_result).unwrap();
   diag::Fallible<analyzer::CheckedPackage> checked_result =
-      analyzer::check_package(tree, ir::PointerWidth::W64, f.bag);
+      analyzer::check_package(tree, ir::PointerWidth::W64, f.ast, f.bag);
   if (checked_result.is_err() || f.bag.has_errors()) {
     return {std::nullopt, false};
   }
   analyzer::CheckedPackage checked = std::move(checked_result).unwrap();
   diag::Fallible<LoweredPackage> lowered_result = lower_package(
-      std::move(checked), ir::PointerWidth::W64, f.strings, f.bag);
+      std::move(checked), ir::PointerWidth::W64, f.ast, f.strings, f.bag);
   if (lowered_result.is_err()) {
     return {std::nullopt, false};
   }

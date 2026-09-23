@@ -7,7 +7,6 @@
 
 #include "ast/ast.h"
 #include "diag/bag.h"
-#include "fpag/mem/arena.h"
 
 namespace parser {
 
@@ -24,8 +23,8 @@ namespace parser {
 // nested scopes freshens. `or`-pattern alternatives share one scope
 // each, pre-seeded from the first alternative, and must bind identical
 // name sets.
-void desugar_shadowing(std::span<ast::Item* const> items,
-                       mem::Arena& arena,
+void desugar_shadowing(std::span<const ast::ItemIdx> items,
+                       ast::AstArena& ast,
                        diag::DiagBag& bag);
 
 }  // namespace parser

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "analyzer/resolve.h"
+#include "ast/ast.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
@@ -23,6 +24,7 @@ namespace {
 
 struct Fixture {
   mem::Arena arena;
+  ast::AstArena ast;
   diag::DiagBag bag{arena};
   source::SourceManager sources;
 
@@ -76,7 +78,7 @@ ResolveCase resolve_case(io::TempDir& dir,
     }
   }
   diag::Fallible<ModuleTree> result =
-      resolve_modules(root, inputs, package_name, f.sources, f.arena, f.bag);
+      resolve_modules(root, inputs, package_name, f.sources, f.ast, f.bag);
   if (result.is_err()) {
     ModuleTree empty;
     empty.modules = {};
@@ -187,8 +189,8 @@ TEST_CASE("Resolve reports duplicate module declarations") {
       {"a", std::move(first).unwrap()},
       {"a", std::move(second).unwrap()},
   };
-  diag::Fallible<ModuleTree> resolved = resolve_modules(
-      inputs[0].id, inputs, "testpkg", f.sources, f.arena, f.bag);
+  diag::Fallible<ModuleTree> resolved =
+      resolve_modules(inputs[0].id, inputs, "testpkg", f.sources, f.ast, f.bag);
   CHECK(f.bag.has_errors());
 }
 

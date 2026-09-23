@@ -75,6 +75,7 @@ struct LoweredPackage {
 
 diag::Fallible<LoweredPackage> lower_package(analyzer::CheckedPackage package,
                                              ir::PointerWidth width,
+                                             ast::AstArena& ast,
                                              str::StringInterner& strings,
                                              diag::DiagBag& bag);
 

@@ -106,7 +106,7 @@ diag::Fallible<BinTarget> resolve_bin_target(
   }
 
   diag::Fallible<analyzer::ModuleTree> tree = analyzer::resolve_modules(
-      bin_file, inputs, manifest.name, ctx.sources, ctx.arena, ctx.bag);
+      bin_file, inputs, manifest.name, ctx.sources, ctx.ast, ctx.bag);
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Fatal{});
   }

@@ -11,7 +11,6 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/mem/arena.h"
 #include "lexer/token.h"
 #include "source/source.h"
 
@@ -28,12 +27,12 @@ class Parser {
   Parser(std::span<const lexer::Token> tokens,
          std::string_view bytes,
          source::FileId file,
-         mem::Arena& arena,
+         ast::AstArena& arena,
          diag::DiagBag& bag);
 
   // Parses a whole file into items. Always returns; errors accumulate
   // in the bag and erroneous constructs are simply absent.
-  std::span<ast::Item* const> parse();
+  std::span<const ast::ItemIdx> parse();
 
  private:
   // Token cursor. Never rests on skipped kinds.
@@ -60,60 +59,60 @@ class Parser {
   StmtLead scan_lead() const;
 
   // Items.
-  ast::Item* parse_item();
-  ast::FnItem* parse_fn(bool is_pub);
-  ast::StructItem* parse_struct(bool is_pub);
-  ast::EnumItem* parse_enum(bool is_pub);
-  ast::ImplItem* parse_impl(bool is_pub);
-  ast::StaticItem* parse_static(bool is_pub);
-  ast::ConstItem* parse_const(bool is_pub);
-  ast::UseItem* parse_use(bool is_pub);
+  ast::ItemIdx parse_item();
+  ast::ItemIdx parse_fn(bool is_pub);
+  ast::ItemIdx parse_struct(bool is_pub);
+  ast::ItemIdx parse_enum(bool is_pub);
+  ast::ItemIdx parse_impl(bool is_pub);
+  ast::ItemIdx parse_static(bool is_pub);
+  ast::ItemIdx parse_const(bool is_pub);
+  ast::ItemIdx parse_use(bool is_pub);
 
   // Types. parse_closed_type additionally rejects a dangling banked
   // ">" left over from splitting ">>" in nested argument lists.
-  ast::Type* parse_type();
-  ast::Type* parse_closed_type();
+  ast::TypeIdx parse_type();
+  ast::TypeIdx parse_closed_type();
 
   // Patterns and expressions (null on error, no recovery inside).
-  ast::Pattern* parse_pattern();
-  ast::Pattern* parse_or_pattern();
-  ast::Pattern* parse_primary_pattern();
-  ast::Expr* parse_expr();
-  ast::Expr* parse_range();
-  ast::Expr* parse_or();
-  ast::Expr* parse_and();
-  ast::Expr* parse_cmp();
-  ast::Expr* parse_bitor();
-  ast::Expr* parse_bitxor();
-  ast::Expr* parse_bitand();
-  ast::Expr* parse_shift();
-  ast::Expr* parse_add();
-  ast::Expr* parse_mul();
-  ast::Expr* parse_pow();
-  ast::Expr* parse_cast();
-  ast::Expr* parse_unary();
-  ast::Expr* parse_postfix();
-  ast::Expr* parse_primary();
-  ast::Expr* parse_if();
-  ast::Expr* parse_match();
-  ast::Expr* parse_loop();
-  ast::Expr* parse_while();
-  ast::Expr* parse_block_expr();
-  ast::Block* parse_block();
+  ast::PatternIdx parse_pattern();
+  ast::PatternIdx parse_or_pattern();
+  ast::PatternIdx parse_primary_pattern();
+  ast::ExprIdx parse_expr();
+  ast::ExprIdx parse_range();
+  ast::ExprIdx parse_or();
+  ast::ExprIdx parse_and();
+  ast::ExprIdx parse_cmp();
+  ast::ExprIdx parse_bitor();
+  ast::ExprIdx parse_bitxor();
+  ast::ExprIdx parse_bitand();
+  ast::ExprIdx parse_shift();
+  ast::ExprIdx parse_add();
+  ast::ExprIdx parse_mul();
+  ast::ExprIdx parse_pow();
+  ast::ExprIdx parse_cast();
+  ast::ExprIdx parse_unary();
+  ast::ExprIdx parse_postfix();
+  ast::ExprIdx parse_primary();
+  ast::ExprIdx parse_if();
+  ast::ExprIdx parse_match();
+  ast::ExprIdx parse_loop();
+  ast::ExprIdx parse_while();
+  ast::ExprIdx parse_block_expr();
+  ast::BlockIdx parse_block();
 
   // Statements (recover at boundaries).
-  ast::Stmt* parse_stmt();
+  ast::StmtIdx parse_stmt();
 
   // Small pieces.
   base::Result<ast::Ident, diag::Fatal> parse_ident(std::string_view what);
-  ast::Path* parse_path();
-  ast::Cond* parse_cond();
+  ast::PathIdx parse_path();
+  ast::CondIdx parse_cond();
   bool consume_gt();
 
   std::span<const lexer::Token> tokens_;
   std::string_view bytes_;
   source::FileId file_;
-  mem::Arena& arena_;
+  ast::AstArena& ast_;
   diag::DiagBag& bag_;
   usize pos_ = 0;
   diag::Span previous_span_;

@@ -23,17 +23,18 @@ namespace {
 
 struct Fixture {
   mem::Arena arena;
+  ast::AstArena ast;
   diag::DiagBag bag{arena};
 
   Fixture() { arena.reserve(1u << 20); }
 };
 
-std::span<ast::Item* const> parse(std::string_view bytes, Fixture& f) {
+std::span<const ast::ItemIdx> parse(std::string_view bytes, Fixture& f) {
   lexer::Lexer lexer(bytes, source::kUnknownFile, f.bag);
   std::vector<lexer::Token> tokens;
   lexer.tokenize(tokens);
   Parser parser(std::span<const lexer::Token>(tokens.data(), tokens.size()),
-                bytes, source::kUnknownFile, f.arena, f.bag);
+                bytes, source::kUnknownFile, f.ast, f.bag);
   return parser.parse();
 }
 
@@ -41,37 +42,41 @@ std::span<ast::Item* const> parse(std::string_view bytes, Fixture& f) {
 // MutIdentPattern declarations, single-segment path uses.
 struct NameCollector {
   std::vector<std::string> names;
+  ast::AstArena& ast;
 
-  void run(std::span<ast::Item* const> items) {
-    for (ast::Item* item : items) {
-      visit_item(item);
+  explicit NameCollector(ast::AstArena& ast) : ast(ast) {}
+
+  void run(std::span<const ast::ItemIdx> items) {
+    for (ast::ItemIdx item_idx : items) {
+      visit_item(item_idx);
     }
   }
 
-  void visit_item(ast::Item* item) {
-    switch (item->kind) {
+  void visit_item(ast::ItemIdx item_idx) {
+    const ast::ItemNode& item = ast.items[item_idx];
+    switch (item.kind) {
       case ast::ItemKind::Fn: {
-        const ast::FnItem* fn = static_cast<const ast::FnItem*>(item);
-        for (const ast::FnParam& param : fn->params) {
+        const ast::ItemFn& fn = item.payload.get<ast::ItemFn>();
+        for (const ast::ItemFnParam& param : fn.params) {
           visit_pattern(param.pattern);
         }
-        visit_block(fn->body);
+        visit_block(fn.body);
         break;
       }
       case ast::ItemKind::Static: {
-        const ast::StaticItem* decl = static_cast<const ast::StaticItem*>(item);
-        visit_expr(decl->init);
+        const ast::ItemStatic& decl = item.payload.get<ast::ItemStatic>();
+        visit_expr(decl.init);
         break;
       }
       case ast::ItemKind::Const: {
-        const ast::ConstItem* decl = static_cast<const ast::ConstItem*>(item);
-        visit_expr(decl->init);
+        const ast::ItemConst& decl = item.payload.get<ast::ItemConst>();
+        visit_expr(decl.init);
         break;
       }
       case ast::ItemKind::Impl: {
-        const ast::ImplItem* impl = static_cast<const ast::ImplItem*>(item);
-        for (ast::FnItem* method : impl->methods) {
-          visit_item(method);
+        const ast::ItemImpl& impl = item.payload.get<ast::ItemImpl>();
+        for (ast::ItemIdx method_idx : impl.methods) {
+          visit_item(method_idx);
         }
         break;
       }
@@ -81,235 +86,239 @@ struct NameCollector {
     }
   }
 
-  void visit_block(const ast::Block* block) {
-    if (block == nullptr) {
+  void visit_block(ast::BlockIdx block_idx) {
+    if (!block_idx.is_valid()) {
       return;
     }
-    for (ast::Stmt* stmt : block->statements) {
-      visit_stmt(stmt);
+    const ast::Block& block = ast.blocks[block_idx];
+    for (ast::StmtIdx stmt_idx : block.statements) {
+      visit_stmt(stmt_idx);
     }
-    visit_expr(block->value);
+    visit_expr(block.value);
   }
 
-  void visit_stmt(const ast::Stmt* stmt) {
-    switch (stmt->kind) {
+  void visit_stmt(ast::StmtIdx stmt_idx) {
+    const ast::StmtNode& stmt = ast.stmts[stmt_idx];
+    switch (stmt.kind) {
       case ast::StmtKind::Decl: {
-        const ast::DeclStmt* decl = static_cast<const ast::DeclStmt*>(stmt);
-        visit_pattern(decl->pattern);
-        visit_expr(decl->init);
+        const ast::StmtDecl& decl = stmt.payload.get<ast::StmtDecl>();
+        visit_pattern(decl.pattern);
+        visit_expr(decl.init);
         break;
       }
       case ast::StmtKind::Reassign: {
-        const ast::ReassignStmt* reassign =
-            static_cast<const ast::ReassignStmt*>(stmt);
-        visit_expr(reassign->place);
-        visit_expr(reassign->value);
+        const ast::StmtReassign& reassign =
+            stmt.payload.get<ast::StmtReassign>();
+        visit_expr(reassign.place);
+        visit_expr(reassign.value);
         break;
       }
       case ast::StmtKind::Expr: {
-        const ast::ExprStmt* expr_stmt =
-            static_cast<const ast::ExprStmt*>(stmt);
-        visit_expr(expr_stmt->value);
+        const ast::StmtExpr& expr_stmt = stmt.payload.get<ast::StmtExpr>();
+        visit_expr(expr_stmt.value);
         break;
       }
     }
   }
 
-  void visit_pattern(const ast::Pattern* pattern) {
-    switch (pattern->kind) {
+  void visit_pattern(ast::PatternIdx pat_idx) {
+    const ast::PatternNode& pat = ast.patterns[pat_idx];
+    switch (pat.kind) {
       case ast::PatternKind::Wildcard:
       case ast::PatternKind::Literal: break;
       case ast::PatternKind::Ident: {
-        const ast::IdentPattern* ident =
-            static_cast<const ast::IdentPattern*>(pattern);
-        names.emplace_back(ident->name.name);
+        const ast::PatternIdent& ident = pat.payload.ident;
+        names.emplace_back(ident.name.name);
         break;
       }
       case ast::PatternKind::MutIdent: {
-        const ast::MutIdentPattern* ident =
-            static_cast<const ast::MutIdentPattern*>(pattern);
-        names.emplace_back(ident->name.name);
+        const ast::PatternIdent& ident = pat.payload.mut_ident;
+        names.emplace_back(ident.name.name);
         break;
       }
       case ast::PatternKind::Tuple: {
-        const ast::TuplePattern* tuple =
-            static_cast<const ast::TuplePattern*>(pattern);
-        for (ast::Pattern* element : tuple->elements) {
-          visit_pattern(element);
+        const ast::PatternTuple& tuple = pat.payload.tuple;
+        for (ast::PatternIdx element_idx : tuple.elements) {
+          visit_pattern(element_idx);
         }
         break;
       }
       case ast::PatternKind::Struct: {
-        const ast::StructPattern* record =
-            static_cast<const ast::StructPattern*>(pattern);
-        for (const ast::FieldPattern& field : record->fields) {
+        const ast::PatternStruct record = pat.payload.strukt;
+        for (const ast::FieldPattern& field : record.fields) {
           visit_pattern(field.pattern);
         }
         break;
       }
       case ast::PatternKind::Ref: {
-        const ast::RefPattern* ref =
-            static_cast<const ast::RefPattern*>(pattern);
-        visit_pattern(ref->inner);
+        const ast::PatternRef ref = pat.payload.ref;
+        visit_pattern(ref.inner);
         break;
       }
       case ast::PatternKind::Or: {
-        const ast::OrPattern* or_pattern =
-            static_cast<const ast::OrPattern*>(pattern);
-        for (ast::Pattern* alternative : or_pattern->alternatives) {
-          visit_pattern(alternative);
+        const ast::PatternOr or_pattern = pat.payload.or_pat;
+        for (ast::PatternIdx alternative_idx : or_pattern.alternatives) {
+          visit_pattern(alternative_idx);
         }
         break;
       }
     }
   }
 
-  void visit_expr(const ast::Expr* expr) {
-    if (expr == nullptr) {
+  void visit_expr(ast::ExprIdx expr_idx) {
+    if (!expr_idx.is_valid()) {
       return;
     }
-    switch (expr->kind) {
+    const ast::ExprNode& expr = ast.exprs[expr_idx];
+    switch (expr.kind) {
       case ast::ExprKind::Literal: break;
       case ast::ExprKind::Path: {
-        const ast::PathExpr* path = static_cast<const ast::PathExpr*>(expr);
-        if (path->path->segments.size() == 1) {
-          names.emplace_back(path->path->segments[0].name);
-        } else {
-          std::string joined;
-          for (const ast::Ident& segment : path->path->segments) {
-            if (!joined.empty()) {
-              joined.push_back(':');
-              joined.push_back(':');
+        const ast::ExprPath& path = expr.payload.get<ast::ExprPath>();
+        if (path.idx.is_valid()) {
+          const ast::Path& p = ast.paths[path.idx];
+          if (p.segments.size() == 1) {
+            names.emplace_back(p.segments[0].name);
+          } else {
+            std::string joined;
+            for (const ast::Ident& segment : p.segments) {
+              if (!joined.empty()) {
+                joined.push_back(':');
+                joined.push_back(':');
+              }
+              joined.append(segment.name);
             }
-            joined.append(segment.name);
+            names.push_back(joined);
           }
-          names.push_back(joined);
         }
         break;
       }
       case ast::ExprKind::Struct: {
-        const ast::StructExpr* init = static_cast<const ast::StructExpr*>(expr);
-        for (const ast::FieldInit& field : init->init) {
+        const ast::ExprStruct& init = expr.payload.get<ast::ExprStruct>();
+        for (const ast::ExprFieldInit& field : init.init) {
           visit_expr(field.value);
         }
-        visit_expr(init->base_expr);
+        visit_expr(init.base_expr);
         break;
       }
       case ast::ExprKind::Tuple: {
-        const ast::TupleExpr* tuple = static_cast<const ast::TupleExpr*>(expr);
-        for (ast::Expr* element : tuple->elements) {
-          visit_expr(element);
+        const ast::ExprTuple& tuple = expr.payload.get<ast::ExprTuple>();
+        for (ast::ExprIdx element_idx : tuple.elements) {
+          visit_expr(element_idx);
         }
         break;
       }
       case ast::ExprKind::Unary: {
-        const ast::UnaryExpr* unary = static_cast<const ast::UnaryExpr*>(expr);
-        visit_expr(unary->inner);
+        const ast::ExprUnary& unary = expr.payload.get<ast::ExprUnary>();
+        visit_expr(unary.inner);
         break;
       }
       case ast::ExprKind::Binary: {
-        const ast::BinaryExpr* binary =
-            static_cast<const ast::BinaryExpr*>(expr);
-        visit_expr(binary->lhs);
-        visit_expr(binary->rhs);
+        const ast::ExprBinary& binary = expr.payload.get<ast::ExprBinary>();
+        visit_expr(binary.lhs);
+        visit_expr(binary.rhs);
         break;
       }
       case ast::ExprKind::Cast: {
-        const ast::CastExpr* cast = static_cast<const ast::CastExpr*>(expr);
-        visit_expr(cast->inner);
+        const ast::ExprCast& cast = expr.payload.get<ast::ExprCast>();
+        visit_expr(cast.inner);
         break;
       }
       case ast::ExprKind::Call: {
-        const ast::CallExpr* call = static_cast<const ast::CallExpr*>(expr);
-        visit_expr(call->callee);
-        for (ast::Expr* arg : call->args) {
-          visit_expr(arg);
+        const ast::ExprCall& call = expr.payload.get<ast::ExprCall>();
+        visit_expr(call.callee);
+        for (ast::ExprIdx arg_idx : call.args) {
+          visit_expr(arg_idx);
         }
         break;
       }
       case ast::ExprKind::MethodCall: {
-        const ast::MethodCallExpr* call =
-            static_cast<const ast::MethodCallExpr*>(expr);
-        visit_expr(call->receiver);
-        for (ast::Expr* arg : call->args) {
-          visit_expr(arg);
+        const ast::ExprMethodCall& call =
+            expr.payload.get<ast::ExprMethodCall>();
+        visit_expr(call.receiver);
+        for (ast::ExprIdx arg_idx : call.args) {
+          visit_expr(arg_idx);
         }
         break;
       }
       case ast::ExprKind::Field: {
-        const ast::FieldExpr* field = static_cast<const ast::FieldExpr*>(expr);
-        visit_expr(field->receiver);
+        const ast::ExprField& field = expr.payload.get<ast::ExprField>();
+        visit_expr(field.receiver);
         break;
       }
       case ast::ExprKind::Index: {
-        const ast::IndexExpr* index = static_cast<const ast::IndexExpr*>(expr);
-        visit_expr(index->receiver);
-        visit_expr(index->index);
+        const ast::ExprIndex& index = expr.payload.get<ast::ExprIndex>();
+        visit_expr(index.receiver);
+        visit_expr(index.index);
         break;
       }
       case ast::ExprKind::Question: {
-        const ast::QuestionExpr* question =
-            static_cast<const ast::QuestionExpr*>(expr);
-        visit_expr(question->inner);
+        const ast::ExprQuestion& question =
+            expr.payload.get<ast::ExprQuestion>();
+        visit_expr(question.inner);
         break;
       }
       case ast::ExprKind::If: {
-        const ast::IfExpr* branch = static_cast<const ast::IfExpr*>(expr);
-        if (branch->cond->is_pattern) {
-          visit_pattern(branch->cond->pattern);
-          visit_expr(branch->cond->init);
-        } else {
-          visit_expr(branch->cond->value);
+        const ast::ExprIf& branch = expr.payload.get<ast::ExprIf>();
+        if (branch.cond.is_valid()) {
+          const ast::Cond& cond = ast.conds[branch.cond];
+          if (cond.is_pattern) {
+            visit_pattern(cond.pattern);
+            visit_expr(cond.init);
+          } else {
+            visit_expr(cond.value);
+          }
         }
-        visit_block(branch->then_block);
-        visit_block(branch->else_block);
+        visit_block(branch.then_block);
+        visit_block(branch.else_block);
         break;
       }
       case ast::ExprKind::Match: {
-        const ast::MatchExpr* match = static_cast<const ast::MatchExpr*>(expr);
-        visit_expr(match->scrutinee);
-        for (const ast::MatchArm& arm : match->arms) {
+        const ast::ExprMatch& match = expr.payload.get<ast::ExprMatch>();
+        visit_expr(match.scrutinee);
+        for (const ast::ExprMatchArm& arm : match.arms) {
           visit_pattern(arm.pattern);
           visit_expr(arm.body);
         }
         break;
       }
       case ast::ExprKind::Loop: {
-        const ast::LoopExpr* loop = static_cast<const ast::LoopExpr*>(expr);
-        visit_block(loop->body);
+        const ast::ExprLoop& loop = expr.payload.get<ast::ExprLoop>();
+        visit_block(loop.body);
         break;
       }
       case ast::ExprKind::While: {
-        const ast::WhileExpr* loop = static_cast<const ast::WhileExpr*>(expr);
-        if (loop->cond->is_pattern) {
-          visit_pattern(loop->cond->pattern);
-          visit_expr(loop->cond->init);
-        } else {
-          visit_expr(loop->cond->value);
+        const ast::ExprWhile& loop = expr.payload.get<ast::ExprWhile>();
+        if (loop.cond.is_valid()) {
+          const ast::Cond& cond = ast.conds[loop.cond];
+          if (cond.is_pattern) {
+            visit_pattern(cond.pattern);
+            visit_expr(cond.init);
+          } else {
+            visit_expr(cond.value);
+          }
         }
-        visit_block(loop->body);
+        visit_block(loop.body);
         break;
       }
       case ast::ExprKind::Block: {
-        const ast::BlockExpr* block = static_cast<const ast::BlockExpr*>(expr);
-        visit_block(block->block);
+        const ast::ExprBlock& block = expr.payload.get<ast::ExprBlock>();
+        visit_block(block.block);
         break;
       }
       case ast::ExprKind::Return: {
-        const ast::ReturnExpr* ret = static_cast<const ast::ReturnExpr*>(expr);
-        visit_expr(ret->value);
+        const ast::ExprReturn& ret = expr.payload.get<ast::ExprReturn>();
+        visit_expr(ret.value);
         break;
       }
       case ast::ExprKind::Range: {
-        const ast::RangeExpr* range = static_cast<const ast::RangeExpr*>(expr);
-        visit_expr(range->start);
-        visit_expr(range->end);
+        const ast::ExprRange& range = expr.payload.get<ast::ExprRange>();
+        visit_expr(range.start);
+        visit_expr(range.end);
         break;
       }
       case ast::ExprKind::Borrow: {
-        const ast::BorrowExpr* borrow =
-            static_cast<const ast::BorrowExpr*>(expr);
-        visit_expr(borrow->inner);
+        const ast::ExprBorrow& borrow = expr.payload.get<ast::ExprBorrow>();
+        visit_expr(borrow.inner);
         break;
       }
       case ast::ExprKind::Break:
@@ -318,8 +327,9 @@ struct NameCollector {
   }
 };
 
-std::vector<std::string> collect_names(std::span<ast::Item* const> items) {
-  NameCollector collector;
+std::vector<std::string> collect_names(std::span<const ast::ItemIdx> items,
+                                       ast::AstArena& ast) {
+  NameCollector collector(ast);
   collector.run(items);
   return collector.names;
 }
@@ -327,24 +337,24 @@ std::vector<std::string> collect_names(std::span<ast::Item* const> items) {
 bool check_names(std::string_view bytes,
                  Fixture& f,
                  const std::vector<std::string>& expected) {
-  const std::span<ast::Item* const> items = parse(bytes, f);
+  std::span<const ast::ItemIdx> items = parse(bytes, f);
   if (f.bag.has_errors()) {
     return false;
   }
-  desugar_shadowing(items, f.arena, f.bag);
+  desugar_shadowing(items, f.ast, f.bag);
   if (f.bag.has_errors()) {
     return false;
   }
-  return collect_names(items) == expected;
+  return collect_names(items, f.ast) == expected;
 }
 
 // True when parsing succeeds but desugaring reports errors.
 bool check_desugar_fails(std::string_view bytes, Fixture& f) {
-  const std::span<ast::Item* const> items = parse(bytes, f);
+  std::span<const ast::ItemIdx> items = parse(bytes, f);
   if (f.bag.has_errors()) {
     return false;
   }
-  desugar_shadowing(items, f.arena, f.bag);
+  desugar_shadowing(items, f.ast, f.bag);
   return f.bag.has_errors();
 }
 

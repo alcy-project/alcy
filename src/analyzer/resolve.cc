@@ -17,7 +17,6 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/mem/arena.h"
 #include "lexer/lexer.h"
 #include "lexer/token.h"
 #include "parser/desugar.h"
@@ -41,10 +40,10 @@ constexpr u32 kNoModule = std::numeric_limits<u32>::max();
 struct FileData {
   source::FileId id = source::kUnknownFile;
   path::Path path;
-  // Items are parsed into the caller-provided arena (never a per-file
+  // Items are parsed into the package AstArena (never a per-file
   // arena): ModuleNode::items outlives resolve_modules, so per-file
   // arenas would dangle.
-  std::span<ast::Item* const> items;
+  std::span<const ast::ItemIdx> items;
   u32 module = kNoModule;
 
   FileData(source::FileId id, path::Path path)
@@ -58,12 +57,12 @@ struct NameEntry {
 class Resolver {
  public:
   Resolver(source::SourceManager& sources,
-           mem::Arena& arena,
+           ast::AstArena& ast,
            diag::DiagBag& bag)
-      : sources(sources), arena(arena), bag(bag) {}
+      : sources(sources), ast(ast), bag(bag) {}
 
   source::SourceManager& sources;
-  mem::Arena& arena;
+  ast::AstArena& ast;
   diag::DiagBag& bag;
   std::string_view package_name;
   source::FileId root = source::kUnknownFile;
@@ -80,9 +79,9 @@ class Resolver {
 
   u32 add_module(std::string path,
                  source::FileId file,
-                 std::span<ast::Item* const> items,
+                 std::span<const ast::ItemIdx> items,
                  u32 parent) {
-    ModuleNode* node = arena.create<ModuleNode>();
+    ModuleNode* node = ast.spans.create<ModuleNode>();
     node->path = std::move(path);
     node->file = file;
     node->items = items;
@@ -132,9 +131,9 @@ class Resolver {
     lexer.tokenize(tokens);
     parser::Parser parser(
         std::span<const lexer::Token>(tokens.data(), tokens.size()), bytes,
-        file.id, arena, bag);
+        file.id, ast, bag);
     file.items = parser.parse();
-    parser::desugar_shadowing(file.items, arena, bag);
+    parser::desugar_shadowing(file.items, ast, bag);
   }
 
   void build_tree() {
@@ -162,7 +161,7 @@ class Resolver {
       for (u32 child : module_children[m]) {
         children.push_back(modules[child]);
       }
-      modules[m]->children = ast::copy_to_arena(arena, children);
+      modules[m]->children = ast::copy_to_arena(ast.spans, children);
     }
 
     for (const FileData& file : file_data) {
@@ -196,7 +195,7 @@ class Resolver {
       if (child == kNoModule) {
         child = add_module(
             child_path, leaf ? file_data[file].id : source::kUnknownFile,
-            leaf ? file_data[file].items : std::span<ast::Item* const>{},
+            leaf ? file_data[file].items : std::span<const ast::ItemIdx>{},
             parent);
         module_children[parent].push_back(child);
       } else if (leaf) {
@@ -215,36 +214,25 @@ class Resolver {
 
   void collect_locals() {
     for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
-      for (ast::Item* item : modules[m]->items) {
-        switch (item->kind) {
-          case ast::ItemKind::Struct:
-          case ast::ItemKind::Enum: {
-            std::string_view name{};
-            if (item->kind == ast::ItemKind::Struct) {
-              name = static_cast<const ast::StructItem*>(item)->name.name;
-            } else {
-              name = static_cast<const ast::EnumItem*>(item)->name.name;
-            }
+      for (ast::ItemIdx item : modules[m]->items) {
+        const ast::ItemNode& node = ast.items[item];
+        std::string_view name = node.name();
+        using I = ast::ItemKind;
+        switch (node.kind) {
+          case I::Struct:
+          case I::Enum: {
             local_types[m].push_back(NameEntry{name});
             local_values[m].push_back(NameEntry{name});
             break;
           }
-          case ast::ItemKind::Fn:
-          case ast::ItemKind::Static:
-          case ast::ItemKind::Const: {
-            std::string_view name{};
-            if (item->kind == ast::ItemKind::Fn) {
-              name = static_cast<const ast::FnItem*>(item)->name.name;
-            } else if (item->kind == ast::ItemKind::Static) {
-              name = static_cast<const ast::StaticItem*>(item)->name.name;
-            } else {
-              name = static_cast<const ast::ConstItem*>(item)->name.name;
-            }
+          case I::Fn:
+          case I::Static:
+          case I::Const: {
             local_values[m].push_back(NameEntry{name});
             break;
           }
-          case ast::ItemKind::Use:
-          case ast::ItemKind::Impl: break;
+          case I::Use:
+          case I::Impl: break;
         }
       }
       for (u32 child : module_children[m]) {
@@ -261,64 +249,68 @@ class Resolver {
       return;
     }
     if (exports_state[module] == 1) {
-      const u32 index = bag.emit(
-          diag::Severity::Error, kAnalyzerUnresolvedImport,
-          modules[module]->items.empty() ? diag::Span{}
-                                         : modules[module]->items[0]->span,
-          "dependency cycle in re-exports");
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerUnresolvedImport,
+                   modules[module]->items.empty()
+                       ? diag::Span{}
+                       : ast.items[modules[module]->items[0]].span,
+                   "dependency cycle in re-exports");
       (void)index;
       exports_state[module] = 2;
       return;
     }
     exports_state[module] = 1;
-    for (ast::Item* item : modules[module]->items) {
-      if (item->kind != ast::ItemKind::Use) {
+
+    // Resolve public uses
+    for (ast::ItemIdx item : modules[module]->items) {
+      if (ast.items[item].kind != ast::ItemKind::Use) {
         continue;
       }
-      const ast::UseItem* use = static_cast<const ast::UseItem*>(item);
-      if (use->is_pub) {
-        resolve_use(module, use);
+      if (ast.items[item].is_pub) {
+        resolve_use(module, item);
       }
     }
-    for (ast::Item* item : modules[module]->items) {
-      if (item->kind != ast::ItemKind::Use) {
+
+    // Resolve private uses
+    for (ast::ItemIdx item : modules[module]->items) {
+      if (ast.items[item].kind != ast::ItemKind::Use) {
         continue;
       }
-      const ast::UseItem* use = static_cast<const ast::UseItem*>(item);
-      if (!use->is_pub) {
-        resolve_use(module, use);
+      if (!ast.items[item].is_pub) {
+        resolve_use(module, item);
       }
     }
     exports_state[module] = 2;
   }
 
   void add_import(u32 module,
-                  const ast::UseItem* use,
+                  ast::ItemIdx use,
                   std::string_view name,
                   Namespace ns,
                   u32 target,
                   std::string_view member) {
+    const ast::ItemNode& use_node = ast.items[use];
     if (has_name(ns == Namespace::Type    ? local_types[module]
                  : ns == Namespace::Value ? local_values[module]
                                           : local_modules[module],
                  name)) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerAmbiguousImport, use->span,
-                   "`{}` conflicts with a local item", name);
+          bag.emit(diag::Severity::Error, kAnalyzerAmbiguousImport,
+                   use_node.span, "`{}` conflicts with a local item", name);
       (void)index;
       return;
     }
     for (const Import& prior : module_imports[module]) {
       if (prior.ns == ns && prior.name == name) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerAmbiguousImport, use->span,
-                     "`{}` is imported more than once", name);
+            bag.emit(diag::Severity::Error, kAnalyzerAmbiguousImport,
+                     use_node.span, "`{}` is imported more than once", name);
         (void)index;
         return;
       }
     }
     module_imports[module].push_back(
-        Import{name, ns, target, member, use->is_pub});
+        Import{name, ns, target, member, use_node.is_pub});
   }
 
   // Looks a member up in a module's locals.
@@ -345,14 +337,16 @@ class Resolver {
     return false;
   }
 
-  void resolve_use(u32 module, const ast::UseItem* use) {
+  void resolve_use(u32 module, ast::ItemIdx use) {
+    const ast::ItemNode& node = ast.items[use];
+    const ast::Path& path = ast.paths[node.payload.get<ast::ItemUse>().path];
     std::vector<std::string_view> segments;
-    for (const ast::Ident& segment : use->path->segments) {
+    for (const ast::Ident& segment : path.segments) {
       segments.push_back(segment.name);
     }
     if (segments.size() < 2) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerUnresolvedImport, use->span,
+          bag.emit(diag::Severity::Error, kAnalyzerUnresolvedImport, node.span,
                    "imports must be module-qualified (`self::foo`)");
       (void)index;
       return;
@@ -373,7 +367,7 @@ class Resolver {
       if (parents[module] == kNoModule) {
         const u32 index =
             bag.emit(diag::Severity::Error, kAnalyzerUnresolvedImport,
-                     use->span, "the root module has no parent");
+                     node.span, "the root module has no parent");
         (void)index;
         return;
       }
@@ -383,7 +377,7 @@ class Resolver {
       if (current == kNoModule) {
         const u32 index =
             bag.emit(diag::Severity::Error, kAnalyzerUnresolvedImport,
-                     use->span, "unresolved import '{}'", head);
+                     node.span, "unresolved import '{}'", head);
         (void)index;
         return;
       }
@@ -393,13 +387,16 @@ class Resolver {
       if (current == kNoModule) {
         const u32 index =
             bag.emit(diag::Severity::Error, kAnalyzerUnresolvedImport,
-                     use->span, "unresolved import '{}'", segments[i]);
+                     node.span, "unresolved import '{}'", segments[i]);
         (void)index;
         return;
       }
     }
     const std::string_view member = segments.back();
-    const std::string_view name = use->has_alias ? use->alias.name : member;
+    const std::string_view name =
+        node.payload.get<ast::ItemUse>().has_alias
+            ? node.payload.get<ast::ItemUse>().alias.name
+            : member;
     // Locals first: no recursion is needed and self-targets never false
     // cycle. Re-exports follow only for members locals lack.
     bool resolved = false;
@@ -427,7 +424,7 @@ class Resolver {
     }
     if (!resolved) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerUnresolvedImport, use->span,
+          bag.emit(diag::Severity::Error, kAnalyzerUnresolvedImport, node.span,
                    "unresolved import '{}'", member);
       (void)index;
     }
@@ -463,7 +460,7 @@ class Resolver {
       resolve_exports(m);
     }
     for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
-      modules[m]->imports = ast::copy_to_arena(arena, module_imports[m]);
+      modules[m]->imports = ast::copy_to_arena(ast.spans, module_imports[m]);
     }
     u32 root_index = 0;
     for (u32 i = 0; i < static_cast<u32>(modules.size()); ++i) {
@@ -474,7 +471,7 @@ class Resolver {
     }
     ModuleTree tree;
     tree.modules = ast::copy_to_arena(
-        arena, std::vector<ModuleNode*>(modules.begin(), modules.end()));
+        ast.spans, std::vector<ModuleNode*>(modules.begin(), modules.end()));
     tree.root = root_index;
     return tree;
   }
@@ -486,9 +483,9 @@ diag::Fallible<ModuleTree> resolve_modules(source::FileId root,
                                            std::span<const ModuleInput> modules,
                                            std::string_view package_name,
                                            source::SourceManager& sources,
-                                           mem::Arena& arena,
+                                           ast::AstArena& ast,
                                            diag::DiagBag& bag) {
-  Resolver resolver{sources, arena, bag};
+  Resolver resolver{sources, ast, bag};
   return base::make_ok(resolver.run(root, modules, package_name));
 }
 

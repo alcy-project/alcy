@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "analyzer/resolve.h"
+#include "ast/ast.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
@@ -27,6 +28,7 @@ namespace {
 
 struct Fixture {
   mem::Arena arena;
+  ast::AstArena ast;
   diag::DiagBag bag{arena};
   source::SourceManager sources;
 
@@ -77,12 +79,12 @@ CheckCase check_case(io::TempDir& dir,
     }
   }
   diag::Fallible<ModuleTree> tree_result =
-      resolve_modules(root, inputs, "testpkg", f.sources, f.arena, f.bag);
+      resolve_modules(root, inputs, "testpkg", f.sources, f.ast, f.bag);
   if (tree_result.is_err() || f.bag.has_errors()) {
     return {std::nullopt};
   }
   ModuleTree tree = std::move(tree_result).unwrap();
-  CheckedPackage checked = check_package(tree, width, f.bag).unwrap();
+  CheckedPackage checked = check_package(tree, width, f.ast, f.bag).unwrap();
   if (f.bag.has_errors()) {
     return {std::nullopt};
   }
