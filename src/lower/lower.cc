@@ -1368,7 +1368,7 @@ class Lowerer {
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
-      emit_void(ir::Opcode::Memcpy,
+      emit_void(ir::Opcode::Memcopy,
                 {use_value(dst), use_value(src), use_value(len)});
       return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
     }

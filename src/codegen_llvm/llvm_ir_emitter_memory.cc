@@ -93,7 +93,7 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       }
       break;
     }
-    case Op::Memcpy: {
+    case Op::Memcopy: {
       DCHECK(ops.size() == 3);
       DCHECK(!i.dst.is_valid());
       builder_->CreateMemCpy(

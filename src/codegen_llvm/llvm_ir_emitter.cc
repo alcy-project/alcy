@@ -285,7 +285,7 @@ void LlvmIrEmitter::emit_instruction(const ir::Instruction& instr) {
     case Op::Alloca:
     case Op::Load:
     case Op::Store:
-    case Op::Memcpy:
+    case Op::Memcopy:
     case Op::GetElementPtr:
     case Op::ExtractValue:
     case Op::InsertValue:

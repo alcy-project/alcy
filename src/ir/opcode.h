@@ -18,7 +18,7 @@ enum class Opcode : u8 {
   InsertValue,
   // Copies `len` bytes from `src` to `dst`:
   // operands = [dst_ptr, src_ptr, len(integer)], discarded value.
-  Memcpy,
+  Memcopy,
 
   IntAdd,
   IntSub,
@@ -91,7 +91,7 @@ constexpr const char* opcode_to_str(const Opcode opcode) {
     case O::GetElementPtr: return "GetElementPtr";
     case O::ExtractValue: return "ExtractValue";
     case O::InsertValue: return "InsertValue";
-    case O::Memcpy: return "Memcpy";
+    case O::Memcopy: return "Memcopy";
 
     case O::IntAdd: return "IntAdd";
     case O::IntSub: return "IntSub";
