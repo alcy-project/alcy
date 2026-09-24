@@ -79,34 +79,12 @@ jobs:
       - name: Package & Generate Checksum
         shell: bash
         run: |
-          mkdir -p dist
-          if [ -f LICENSE ]; then cp LICENSE dist/; fi
-          if [ -f README.md ]; then cp README.md dist/; fi
-
-          ROLE="${{ inputs.role }}"
-          if [[ "$ROLE" == "release" ]]; then
-            TARGET_FILES=("alcy.js" "alcy.wasm" "libalcy.a")
-          else
-            TARGET_FILES=("alcy.js" "alcy.wasm" "tests.js" "tests.wasm" "libalcy.a")
-          fi
-
-          for f in "${TARGET_FILES[@]}"; do
-            if [ -f "out/build/${f}" ]; then
-              cp "out/build/${f}" dist/
-            else
-              echo "::error::expected output file missing: out/build/${f}"
-              exit 1
-            fi
-          done
-
-          FILE="alcy-wasm-wasm32-${{ inputs.build_type }}.tar.zst"
-          cd dist && tar cf - * | zstd -3 -T0 -o "../${FILE}" && cd ..
-
-          if command -v sha256sum &> /dev/null; then
-            sha256sum "$FILE" > "${FILE}.sha256"
-          else
-            shasum -a 256 "$FILE" > "${FILE}.sha256"
-          fi
+          uv run python ./build/scripts/package.py \
+            --plat=wasm \
+            --arch=wasm32 \
+            --mode="${{ inputs.build_type }}" \
+            --role="${{ inputs.role }}" \
+            --archive=tar.zst
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

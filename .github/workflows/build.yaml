@@ -124,49 +124,13 @@ jobs:
       - name: Package & Generate Checksum
         shell: bash
         run: |
-          mkdir -p dist
-          if [ -f LICENSE ]; then cp LICENSE dist/; fi
-          if [ -f README.md ]; then cp README.md dist/; fi
-
-          # Ship an explicit allowlist of final link outputs only. The build
-          # directory also holds obj/ and the third_party/llvm install
-          # (hundreds of MB), which must never reach the artifacts.
-          # Filter executables according to the requested role.
-          EXE=""
-          if [[ "${{ matrix.plat }}" == "windows" ]]; then EXE=".exe"; fi
-
-          ROLE="${{ inputs.role }}"
-          if [[ "$ROLE" == "release" ]]; then
-            TARGET_BINS=("alcy")
-          else
-            TARGET_BINS=("alcy" "tests" "benchmarks")
-          fi
-
-          for bin in "${TARGET_BINS[@]}"; do
-            if [ -f "out/build/${bin}${EXE}" ]; then
-              cp "out/build/${bin}${EXE}" dist/
-            else
-              echo "::error::expected binary missing: out/build/${bin}${EXE}"
-              exit 1
-            fi
-          done
-
-          if [ -f out/build/libalcy.a ]; then cp out/build/libalcy.a dist/; fi
-          if [ -f out/build/alcy.lib ]; then cp out/build/alcy.lib dist/; fi
-
-          FILE="alcy-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}${{ matrix.nix && '-nix' || '' }}.${{ matrix.archive }}"
-          if [[ "${{ matrix.plat }}" == "windows" ]]; then
-            cd dist && 7z a "../${FILE}" * && cd ..
-          else
-            # Use zstd pipeline to bypass differences between BSD tar and GNU tar flags across macOS/Linux runners.
-            cd dist && tar cf - * | zstd -3 -T0 -o "../${FILE}" && cd ..
-          fi
-
-          if command -v sha256sum &> /dev/null; then
-            sha256sum "$FILE" > "${FILE}.sha256"
-          else
-            shasum -a 256 "$FILE" > "${FILE}.sha256"
-          fi
+          ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run python ./build/scripts/package.py \
+            --plat="${{ matrix.plat }}" \
+            --arch="${{ matrix.arch }}" \
+            --mode="${{ inputs.build_type }}" \
+            --role="${{ inputs.role }}" \
+            --archive="${{ matrix.archive }}" \
+            ${{ matrix.nix && '--nix' || '' }}
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

@@ -50,10 +50,10 @@ jobs:
       - name: Parse config.toml
         id: parse
         run: |
-          TOOLCHAIN_VER=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["llvm_toolchain_version"])')
-          FORK_TAG=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["llvm_fork_tag"])')
-          echo "llvm_toolchain_version=${TOOLCHAIN_VER}" >> $GITHUB_OUTPUT
-          echo "llvm_fork_tag=${FORK_TAG}" >> $GITHUB_OUTPUT
+          toolchain_ver=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["llvm_toolchain_version"])')
+          fork_tag=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["llvm_fork_tag"])')
+          echo "llvm_toolchain_version=${toolchain_ver}" >> $GITHUB_OUTPUT
+          echo "llvm_fork_tag=${fork_tag}" >> $GITHUB_OUTPUT
 
   debug:
     needs: [load-config]

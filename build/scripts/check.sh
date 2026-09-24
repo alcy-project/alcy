@@ -41,11 +41,6 @@ wasm_subdir="build_wasm"
 
 "${py_runner[@]}" "$tool_scripts_dir/build.py" \
   --target=all \
-  --mode=release \
-  --build-subdir=$release_subdir
-
-"${py_runner[@]}" "$tool_scripts_dir/build.py" \
-  --target=all \
   --mode=debug \
   --build-subdir=$debug_subdir
 
@@ -54,6 +49,11 @@ wasm_subdir="build_wasm"
   --mode=debug \
   --build-subdir=$debug_subdir \
   -- --no-skip
+
+"${py_runner[@]}" "$tool_scripts_dir/build.py" \
+  --target=all \
+  --mode=release \
+  --build-subdir=$release_subdir
 
 "${py_runner[@]}" "$tool_scripts_dir/check_e2e.py" \
   --build-subdir=$debug_subdir
