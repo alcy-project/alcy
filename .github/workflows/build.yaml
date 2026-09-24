@@ -20,12 +20,10 @@ on:
 
 jobs:
   build:
-    name: Build (${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ inputs.role }}${{ matrix.nix && '-nix' || '' }})
+    name: Build & Test (${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ inputs.role }}${{ matrix.nix && '-nix' || '' }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      # Keep in sync with the `wasm` job in ci.yaml, which covers
-      # wasm32-unknown-emscripten separately because it needs Emscripten.
       matrix:
         include:
           - os: ubuntu-24.04
@@ -83,12 +81,45 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/build.py --target=all --mode=${{ inputs.build_type }} --build-subdir=build
 
-      - name: Upload Intermediates for Testing
+      - name: Upload Intermediates for Debug
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: build-out-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}${{ matrix.nix && '-nix' || '' }}
           path: out/build/
           retention-days: 1
+
+      - name: Run Tests
+        shell: bash
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build
+
+      - name: Run e2e Acceptance
+        shell: bash
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/check_e2e.py --build-subdir=build
+
+      - name: Check Runtime
+        shell: bash
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/check_runtime.py --build-subdir=build
+
+      - name: Run exe Acceptance
+        shell: bash
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/check_exe.py --build-subdir=build
+
+      - name: Verify Static Linkage
+        shell: bash
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run python ./build/scripts/verify_static_linkage.py --build-dir=out/build
+
+      - name: Run Smoke Test
+        shell: bash
+        run: |
+          exe=""
+          if [[ "${{ matrix.plat }}" == "windows" ]]; then exe=".exe"; fi
+          bin="./out/build/alcy${exe}"
+
+          version_out=$(${{ matrix.nix && 'nix develop .#default --command ' || '' }}"$bin" --version)
+          echo "$version_out"
+
+          help_out=$(${{ matrix.nix && 'nix develop .#default --command ' || '' }}"$bin" --help)
+          echo "$help_out"
 
       - name: Package & Generate Checksum
         shell: bash
@@ -145,94 +176,3 @@ jobs:
             *.${{ matrix.archive }}
             *.sha256
           if-no-files-found: error
-
-  test:
-    name: Test (${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ inputs.role }}${{ matrix.nix && '-nix' || '' }})
-    needs: build
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            plat: linux
-            arch: x86_64
-            archive: tar.zst
-            nix: false
-          - os: ubuntu-24.04
-            plat: linux
-            arch: x86_64
-            archive: tar.zst
-            nix: true
-          - os: macos-26
-            plat: macos
-            arch: arm64
-            archive: tar.zst
-            nix: false
-          - os: macos-26
-            plat: macos
-            arch: arm64
-            archive: tar.zst
-            nix: true
-          - os: windows-2025-vs2026
-            plat: windows
-            arch: x64
-            archive: zip
-            nix: false
-
-    env:
-      COLORTERM: 256color
-      CC: clang
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          submodules: recursive
-          fetch-depth: 1
-
-      - name: Setup Build Environment
-        uses: ./.github/actions/setup-build
-        with:
-          nix: ${{ matrix.nix && 'true' || 'false' }}
-          os: ${{ runner.os }}
-          llvm-version: ${{ inputs.llvm_version }}
-
-      - name: Download Build Intermediates
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
-        with:
-          name: build-out-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}${{ matrix.nix && '-nix' || '' }}
-          path: out/build
-
-      - name: Run Tests
-        shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build
-
-      - name: Run e2e Acceptance
-        shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/check_e2e.py --build-subdir=build
-
-      - name: Check Runtime
-        shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/check_runtime.py --build-subdir=build
-
-      - name: Run exe Acceptance
-        shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/check_exe.py --build-subdir=build
-
-      - name: Verify Static Linkage
-        shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run python ./build/scripts/verify_static_linkage.py --build-dir=out/build
-
-      - name: Run Smoke Test
-        shell: bash
-        run: |
-          exe=""
-          if [[ "${{ matrix.plat }}" == "windows" ]]; then exe=".exe"; fi
-          bin="./out/build/alcy${exe}"
-
-          version_out=$(${{ matrix.nix && 'nix develop .#default --command ' || '' }}"$bin" --version)
-          echo "$version_out"
-
-          help_out=$(${{ matrix.nix && 'nix develop .#default --command ' || '' }}"$bin" --help)
-          echo "$help_out"
