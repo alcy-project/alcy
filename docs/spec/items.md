@@ -37,6 +37,9 @@
     legacy I/O intrinsics; they migrate to ordinary core functions
     once FFI lands, and remain callable with or without a
     declaration until then.
+  - `str_len(s: str) -> usize`, `str_byte(s: str, i: usize) -> u8`,
+    and `str_slice(s: str, start: usize, end: usize) -> str` are the
+    string primitives. Out-of-bounds `str_byte`/`str_slice` panic.
 - Calls to intrinsics check like ordinary calls. Intrinsics have no
   bodies to lower, borrow, or specialize; `comp` parameters on
   intrinsics are rejected.

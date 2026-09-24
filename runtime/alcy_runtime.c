@@ -37,25 +37,22 @@ static void write_all(int fd, const char* data, size_t len) {
   }
 }
 
-void alcy_print(const char* message) {
-  if (message == NULL) {
-    message = "";
-  }
-  write_all(STDOUT_FILENO, message, strlen(message));
+void alcy_print(const char* message, size_t len) {
+  write_all(STDOUT_FILENO, message == NULL ? "" : message, len);
 }
 
-void alcy_println(const char* message) {
+void alcy_println(const char* message, size_t len) {
   if (message == NULL) {
     message = "";
   }
-  write_all(STDOUT_FILENO, message, strlen(message));
+  write_all(STDOUT_FILENO, message, len);
   write_all(STDOUT_FILENO, "\n", 1);
 }
 
-void alcy_panic(const char* message) {
+void alcy_panic(const char* message, size_t len) {
   if (message == NULL) {
     message = "";
   }
-  write_all(STDERR_FILENO, message, strlen(message));
+  write_all(STDERR_FILENO, message, len);
   abort();
 }

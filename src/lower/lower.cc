@@ -466,7 +466,7 @@ class Lowerer {
       case CompValue::Tag::Str:
         key += "s" + std::to_string(value.str_value.size()) + ":";
         key += value.str_value;
-        key += ";";
+        key.push_back(';');
         return;
       case CompValue::Tag::Tuple:
         key += "t(";
@@ -1372,6 +1372,170 @@ class Lowerer {
                 {use_value(dst), use_value(src), use_value(len)});
       return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
     }
+    if (name == "str_len" || name == "str_byte" || name == "str_slice") {
+      return lower_str_intrinsic(expr, name);
+    }
+    internal(node.span, "unknown intrinsic");
+    return Val{size_one, error_type(), false, false};
+  }
+
+  ir::TypeIdx usize_type() {
+    return builder.primitive(width == ir::PointerWidth::W64 ? ir::TypeTag::U64
+                                                            : ir::TypeTag::U32);
+  }
+
+  // Extracts the (bytes, len) pair from a materialized str value.
+  bool str_parts(Val str, ir::OperandIdx& bytes_out, ir::OperandIdx& len_out) {
+    const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+    const ir::TypeIdx usize_ty = usize_type();
+    const ir::RegisterIdx bytes =
+        emit(ir::Opcode::ExtractValue, ptr_ty, {str.op, index_operand(0)});
+    if (failed) {
+      return false;
+    }
+    const ir::RegisterIdx len =
+        emit(ir::Opcode::ExtractValue, usize_ty, {str.op, index_operand(1)});
+    if (failed) {
+      return false;
+    }
+    bytes_out = to_operand(bytes, ptr_ty);
+    len_out = to_operand(len, usize_ty);
+    return true;
+  }
+
+  // Advances a byte pointer by an integer offset through int
+  // arithmetic: GEP only tracks alloca sites, never derived pointers.
+  ir::OperandIdx advance_ptr(ir::OperandIdx ptr,
+                             ir::OperandIdx offset,
+                             diag::Span span) {
+    const ir::TypeIdx usize_ty = usize_type();
+    const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+    const ir::RegisterIdx as_int = emit(ir::Opcode::TypeCast, usize_ty, {ptr});
+    if (failed) {
+      return ir::OperandIdx(base::kInvalidIdx);
+    }
+    const ir::RegisterIdx sum = emit(ir::Opcode::IntAdd, usize_ty,
+                                     {to_operand(as_int, usize_ty), offset});
+    if (failed) {
+      return ir::OperandIdx(base::kInvalidIdx);
+    }
+    const ir::RegisterIdx bumped =
+        emit(ir::Opcode::TypeCast, ptr_ty, {to_operand(sum, usize_ty)});
+    if (failed) {
+      return ir::OperandIdx(base::kInvalidIdx);
+    }
+    (void)span;
+    return to_operand(bumped, ptr_ty);
+  }
+
+  Val lower_str_intrinsic(ast::ExprIdx expr, std::string_view name) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    if (call.args.empty()) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::TypeIdx str_ty = builder.primitive(ir::TypeTag::Str);
+    const ir::TypeIdx usize_ty = usize_type();
+    const ir::TypeIdx u8_ty = builder.primitive(ir::TypeTag::U8);
+    const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+    Val receiver = lower_expr(call.args[0], &str_ty);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const Val material = materialize(receiver);
+    ir::OperandIdx bytes = ir::OperandIdx::invalid();
+    ir::OperandIdx len = ir::OperandIdx::invalid();
+    if (!str_parts(material, bytes, len)) {
+      return Val{size_one, error_type(), false, false};
+    }
+    if (name == "str_len") {
+      return Val{len, usize_ty, false, false};
+    }
+    auto lower_index = [&](ast::ExprIdx arg, ir::OperandIdx& out) {
+      Val value = lower_expr(arg, &usize_ty);
+      if (failed) {
+        return false;
+      }
+      out = use_value(value);
+      return true;
+    };
+    if (name == "str_byte") {
+      if (call.args.size() != 2) {
+        internal(node.span, "intrinsic arity");
+        return Val{size_one, error_type(), false, false};
+      }
+      ir::OperandIdx index = ir::OperandIdx::invalid();
+      if (!lower_index(call.args[1], index)) {
+        return Val{size_one, error_type(), false, false};
+      }
+      const ir::RegisterIdx in_bounds =
+          emit(ir::Opcode::Lt, boolean, {index, len});
+      const ir::BlockIdx ok_block = reserve_block();
+      const ir::BlockIdx bad_block = reserve_block();
+      emit_cond_br(to_operand(in_bounds, boolean), ok_block, bad_block);
+      switch_to(bad_block);
+      emit_panic(str_operand("index out of bounds"));
+      switch_to(ok_block);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      const ir::OperandIdx addr = advance_ptr(bytes, index, node.span);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      const ir::RegisterIdx loaded = emit(ir::Opcode::Load, u8_ty, {addr});
+      return Val{to_operand(loaded, u8_ty), u8_ty, false, false};
+    }
+    if (name == "str_slice") {
+      if (call.args.size() != 3) {
+        internal(node.span, "intrinsic arity");
+        return Val{size_one, error_type(), false, false};
+      }
+      ir::OperandIdx start = ir::OperandIdx::invalid();
+      if (!lower_index(call.args[1], start)) {
+        return Val{size_one, error_type(), false, false};
+      }
+      ir::OperandIdx end = ir::OperandIdx::invalid();
+      if (!lower_index(call.args[2], end)) {
+        return Val{size_one, error_type(), false, false};
+      }
+      const ir::RegisterIdx ordered =
+          emit(ir::Opcode::Gt, boolean, {start, end});
+      const ir::RegisterIdx bounded = emit(ir::Opcode::Gt, boolean, {end, len});
+      const ir::RegisterIdx bad =
+          emit(ir::Opcode::Or, boolean,
+               {to_operand(ordered, boolean), to_operand(bounded, boolean)});
+      const ir::BlockIdx ok_block = reserve_block();
+      const ir::BlockIdx bad_block = reserve_block();
+      emit_cond_br(to_operand(bad, boolean), bad_block, ok_block);
+      switch_to(bad_block);
+      emit_panic(str_operand("slice out of bounds"));
+      switch_to(ok_block);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      const ir::OperandIdx sub = advance_ptr(bytes, start, node.span);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      const ir::RegisterIdx width =
+          emit(ir::Opcode::IntSub, usize_ty, {end, start});
+      const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, str_ty, {size_one});
+      const ir::RegisterIdx field0 =
+          emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::Ptr),
+               {to_operand(addr, str_ty), zero_i32, index_operand(0)});
+      emit_void(ir::Opcode::Store,
+                {sub, to_operand(field0, builder.primitive(ir::TypeTag::Ptr))});
+      const ir::RegisterIdx field1 =
+          emit(ir::Opcode::GetElementPtr, usize_ty,
+               {to_operand(addr, str_ty), zero_i32, index_operand(1)});
+      emit_void(ir::Opcode::Store,
+                {to_operand(width, usize_ty), to_operand(field1, usize_ty)});
+      const ir::RegisterIdx loaded =
+          emit(ir::Opcode::Load, str_ty, {to_operand(addr, str_ty)});
+      return Val{to_operand(loaded, str_ty), str_ty, false, false};
+    }
     internal(node.span, "unknown intrinsic");
     return Val{size_one, error_type(), false, false};
   }
@@ -1388,25 +1552,34 @@ class Lowerer {
       return Val{size_one, error_type(), false, false};
     }
     const Val material = materialize(arg);
-    const ir::TypeIdx ptr = builder.primitive(ir::TypeTag::Ptr);
+    // Fat strings cross the ABI as (bytes, len).
+    const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+    const ir::TypeIdx usize_ty = builder.primitive(
+        width == ir::PointerWidth::W64 ? ir::TypeTag::U64 : ir::TypeTag::U32);
+    const ir::RegisterIdx bytes =
+        emit(ir::Opcode::ExtractValue, ptr_ty, {material.op, index_operand(0)});
+    const ir::RegisterIdx len = emit(ir::Opcode::ExtractValue, usize_ty,
+                                     {material.op, index_operand(1)});
 
     bool is_panic = false;
     ir::ExternalFunctionIdx ext(0);
     if (name == "print") {
       ext = declare_external("alcy_print", builder.primitive(ir::TypeTag::Void),
-                             {ptr});
+                             {ptr_ty, usize_ty});
 
     } else if (name == "println") {
-      ext = declare_external("alcy_println",
-                             builder.primitive(ir::TypeTag::Void), {ptr});
+      ext =
+          declare_external("alcy_println", builder.primitive(ir::TypeTag::Void),
+                           {ptr_ty, usize_ty});
     } else if (name == "panic") {
       is_panic = true;
-      ext = declare_external("alcy_panic", builder.never_type(), {ptr});
+      ext = declare_external("alcy_panic", builder.never_type(),
+                             {ptr_ty, usize_ty});
     }
     emit_void(ir::Opcode::Call,
               {builder.operand(ir::Operand::from_external_function(
                    ext, builder.primitive(ir::TypeTag::Function))),
-               material.op});
+               to_operand(bytes, ptr_ty), to_operand(len, usize_ty)});
     if (is_panic) {
       emit_void(ir::Opcode::Unreachable, {});
       return Val{size_one, builder.never_type(), false, false};
@@ -1527,13 +1700,19 @@ class Lowerer {
   }
 
   void emit_panic(ir::OperandIdx message) {
-    const ir::TypeIdx ptr = builder.primitive(ir::TypeTag::Ptr);
-    const ir::ExternalFunctionIdx ext =
-        declare_external("alcy_panic", builder.never_type(), {ptr});
+    const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+    const ir::TypeIdx usize_ty = builder.primitive(
+        width == ir::PointerWidth::W64 ? ir::TypeTag::U64 : ir::TypeTag::U32);
+    const ir::RegisterIdx bytes =
+        emit(ir::Opcode::ExtractValue, ptr_ty, {message, index_operand(0)});
+    const ir::RegisterIdx len =
+        emit(ir::Opcode::ExtractValue, usize_ty, {message, index_operand(1)});
+    const ir::ExternalFunctionIdx ext = declare_external(
+        "alcy_panic", builder.never_type(), {ptr_ty, usize_ty});
     emit_void(ir::Opcode::Call,
               {builder.operand(ir::Operand::from_external_function(
                    ext, builder.primitive(ir::TypeTag::Function))),
-               message});
+               to_operand(bytes, ptr_ty), to_operand(len, usize_ty)});
     emit_void(ir::Opcode::Unreachable, {});
   }
 
@@ -2861,7 +3040,7 @@ class Lowerer {
         for (usize i = scope.frames.size(); i-- > 0;) {
           for (auto& binding : scope.frames[i]) {
             if (binding.first == segments[0].name) {
-              binding.second = value;
+              binding.second = std::move(value);
               out.kind = CompFlow::Kind::Value;
               return true;
             }
@@ -2872,7 +3051,7 @@ class Lowerer {
                const_cast<std::vector<std::pair<std::string_view, CompVal>>&>(
                    *scope.outer)) {
             if (binding.first == segments[0].name) {
-              binding.second = value;
+              binding.second = std::move(value);
               out.kind = CompFlow::Kind::Value;
               return true;
             }
@@ -3020,6 +3199,71 @@ class Lowerer {
                        call.args, scope, node.span, out);
   }
 
+  // Native compile-time evaluation for string intrinsics. Other
+  // intrinsics touch runtime state and never evaluate.
+  bool comp_eval_intrinsic(u32 mod,
+                           const analyzer::CheckedModule::FnSig& sig,
+                           const std::span<const ast::ExprIdx>& args,
+                           CompScope& scope,
+                           diag::Span span,
+                           CompVal& out) {
+    const ast::ItemIntrinsic& intrinsic =
+        ast.items[sig.item].payload.get<ast::ItemIntrinsic>();
+    const std::string_view name = intrinsic.name.name;
+    if (name != "str_len" && name != "str_byte" && name != "str_slice") {
+      return comp_fail(span, "intrinsic is not comp-evaluable");
+    }
+    CompVal receiver;
+    if (!comp_eval_expr(mod, args[0], scope, receiver)) {
+      return false;
+    }
+    if (receiver.value.tag != CompValue::Tag::Str) {
+      return comp_fail(span, "string without value");
+    }
+    const std::string& bytes = receiver.value.str_value;
+    const ir::TypeIdx usize_ty = builder.primitive(
+        width == ir::PointerWidth::W64 ? ir::TypeTag::U64 : ir::TypeTag::U32);
+    if (name == "str_len") {
+      out.type = usize_ty;
+      out.value.tag = CompValue::Tag::Int;
+      out.value.int_value = static_cast<u64>(bytes.size());
+      return true;
+    }
+    CompVal first;
+    if (!comp_eval_expr(mod, args[1], scope, first)) {
+      return false;
+    }
+    if (first.value.tag != CompValue::Tag::Int) {
+      return comp_fail(span, "index without value");
+    }
+    const u64 index = first.value.int_value;
+    if (name == "str_byte") {
+      if (index >= bytes.size()) {
+        return comp_fail(span, "index out of bounds");
+      }
+      out.type = builder.primitive(ir::TypeTag::U8);
+      out.value.tag = CompValue::Tag::Int;
+      out.value.int_value = static_cast<u8>(bytes[static_cast<usize>(index)]);
+      return true;
+    }
+    CompVal second;
+    if (!comp_eval_expr(mod, args[2], scope, second)) {
+      return false;
+    }
+    if (second.value.tag != CompValue::Tag::Int) {
+      return comp_fail(span, "index without value");
+    }
+    const u64 end = second.value.int_value;
+    if (index > end || end > bytes.size()) {
+      return comp_fail(span, "slice out of bounds");
+    }
+    out.type = receiver.type;
+    out.value.tag = CompValue::Tag::Str;
+    out.value.str_value = bytes.substr(static_cast<usize>(index),
+                                       static_cast<usize>(end - index));
+    return true;
+  }
+
   bool comp_eval_call(u32 mod,
                       ast::ExprIdx expr,
                       CompScope& scope,
@@ -3074,6 +3318,9 @@ class Lowerer {
       return comp_fail(node.span, "callee without target");
     }
     const analyzer::CheckedModule::FnSig& sig = def.functions[target->index];
+    if (ast.items[sig.item].kind == ast::ItemKind::Intrinsic) {
+      return comp_eval_intrinsic(mod, sig, call.args, scope, node.span, out);
+    }
     return comp_run_fn(target->module, sig.item, sig.params, sig.ret, mod,
                        call.args, scope, node.span, out);
   }

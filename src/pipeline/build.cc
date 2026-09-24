@@ -65,7 +65,7 @@ bool emit_package_object(PipelineContext& ctx,
   (void)optimize;
   auto module = std::make_unique<llvm::Module>("alcy_module", context);
   codegen_llvm::LlvmIrEmitter emitter(module.get(), std::move(package.storage),
-                                      &ctx.strings);
+                                      &ctx.strings, kTargetWidth);
   std::move(emitter).emit();
   base::Result<std::vector<u8>, codegen_llvm::ObjectEmitError> emitted =
       codegen_llvm::emit_object(*module, "");

@@ -12,3 +12,9 @@ pub intrinsic fn print(msg: str);
 pub intrinsic fn println(msg: str);
 
 pub intrinsic fn panic(msg: str) -> !;
+
+pub intrinsic fn str_len(s: str) -> usize;
+
+pub intrinsic fn str_byte(s: str, i: usize) -> u8;
+
+pub intrinsic fn str_slice(s: str, start: usize, end: usize) -> str;

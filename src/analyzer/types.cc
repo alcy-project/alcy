@@ -509,7 +509,8 @@ class Checker {
   // until core provides them; `memcopy` requires one.
   static bool is_known_intrinsic(std::string_view name) {
     return name == "memcopy" || name == "print" || name == "println" ||
-           name == "panic";
+           name == "panic" || name == "str_len" || name == "str_byte" ||
+           name == "str_slice";
   }
 
   // Verifies a declared intrinsic signature against its canonical
@@ -519,20 +520,33 @@ class Checker {
                                  const std::vector<ir::TypeIdx>& params,
                                  ir::TypeIdx ret) {
     const std::string_view name = intrinsic.name.name;
+    const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
+    const ir::TypeIdx u8 = builder.primitive(ir::TypeTag::U8);
+    const ir::TypeIdx usize_ty = builder.primitive(
+        width == ir::PointerWidth::W64 ? ir::TypeTag::U64 : ir::TypeTag::U32);
     std::vector<ir::TypeIdx> expected;
     ir::TypeIdx expected_ret = builder.primitive(ir::TypeTag::Void);
     if (name == "memcopy") {
-      const ir::TypeIdx u8 = builder.primitive(ir::TypeTag::U8);
-      const ir::TypeIdx usize = builder.primitive(
-          width == ir::PointerWidth::W64 ? ir::TypeTag::U64 : ir::TypeTag::U32);
       expected.push_back(builder.reference_type(u8, true));
       expected.push_back(builder.reference_type(u8, false));
-      expected.push_back(usize);
+      expected.push_back(usize_ty);
     } else if (name == "print" || name == "println") {
-      expected.push_back(builder.primitive(ir::TypeTag::Str));
+      expected.push_back(str);
     } else if (name == "panic") {
-      expected.push_back(builder.primitive(ir::TypeTag::Str));
+      expected.push_back(str);
       expected_ret = builder.never_type();
+    } else if (name == "str_len") {
+      expected.push_back(str);
+      expected_ret = usize_ty;
+    } else if (name == "str_byte") {
+      expected.push_back(str);
+      expected.push_back(usize_ty);
+      expected_ret = u8;
+    } else if (name == "str_slice") {
+      expected.push_back(str);
+      expected.push_back(usize_ty);
+      expected.push_back(usize_ty);
+      expected_ret = str;
     } else {
       return false;
     }

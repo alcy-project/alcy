@@ -26,6 +26,7 @@
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/storage.h"
+#include "ir/type.h"
 #include "ir/type_util.h"
 #include "ir/verifier.h"
 
@@ -37,11 +38,13 @@ namespace codegen_llvm {
 
 LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
                              ir::Storage&& storage,
-                             str::StringInterner* interner)
+                             str::StringInterner* interner,
+                             ir::PointerWidth width)
     : module_(module),
       storage_(std::move(storage)),
       builder_(std::make_unique<IRBuilder>(module_->getContext())),
-      interner_(interner) {}
+      interner_(interner),
+      width_(width) {}
 
 void LlvmIrEmitter::check_state() {
   // DCHECK_MSG(storage_, "IR Storage is null");
@@ -73,7 +76,15 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
     // case T::I128: return builder_->getInt128Ty();
     case T::F32: return builder_->getFloatTy();
     case T::F64: return builder_->getDoubleTy();
-    case T::Str: return builder_->getPtrTy();
+    case T::Str: {
+      // Fat pointer: {bytes, len}. Length rides the target width;
+      // storage may carry a trailing NUL, which the length excludes.
+      llvm::Type* len_ty = width_ == ir::PointerWidth::W64
+                               ? builder_->getInt64Ty()
+                               : builder_->getInt32Ty();
+      return llvm::StructType::get(module_->getContext(),
+                                   {builder_->getPtrTy(), len_ty});
+    }
     case T::Ptr: return builder_->getPtrTy();
     case T::Ref: return builder_->getPtrTy();
     case T::MutRef: return builder_->getPtrTy();
@@ -490,10 +501,20 @@ void LlvmIrEmitter::setup_immutables() {
     } else if (tag == ir::TypeTag::Str) {
       const std::string_view str_val =
           interner_->get(immutable.data.str_id_value);
-      // DLOG("str_val: {}", str_val);
-      llvm::Constant* str_const = builder_->CreateGlobalString(
+      llvm::GlobalVariable* global = builder_->CreateGlobalString(
           llvm::StringRef(str_val), "", 0, module_);
-      values_.add_immutable(immutable_idx, str_const);
+      llvm::Constant* zero = llvm::ConstantInt::get(builder_->getInt32Ty(), 0);
+      llvm::SmallVector<llvm::Value*, 2> indices{zero, zero};
+      llvm::Constant* ptr = llvm::ConstantExpr::getGetElementPtr(
+          global->getValueType(), global, indices);
+      llvm::Type* len_ty = width_ == ir::PointerWidth::W64
+                               ? builder_->getInt64Ty()
+                               : builder_->getInt32Ty();
+      llvm::Constant* len = llvm::ConstantInt::get(len_ty, str_val.size());
+      llvm::StructType* str_ty =
+          llvm::cast<llvm::StructType>(type(immutable.type));
+      values_.add_immutable(immutable_idx,
+                            llvm::ConstantStruct::get(str_ty, {ptr, len}));
     } else {
       DCHECK_MSG(false, "Currently unsupported type found");
       UNREACHABLE();
@@ -553,12 +574,22 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
     builder_->SetInsertPoint(ok_block);
     builder_->CreateRet(llvm::ConstantInt::get(builder_->getInt32Ty(), 0));
     builder_->SetInsertPoint(err_block);
+    llvm::Type* len_ty = width_ == ir::PointerWidth::W64
+                             ? builder_->getInt64Ty()
+                             : builder_->getInt32Ty();
     llvm::FunctionCallee panic = module_->getOrInsertFunction(
-        "alcy_panic", llvm::FunctionType::get(builder_->getVoidTy(),
-                                              {builder_->getPtrTy()}, false));
-    llvm::Value* message =
+        "alcy_panic",
+        llvm::FunctionType::get(builder_->getVoidTy(),
+                                {builder_->getPtrTy(), len_ty}, false));
+    llvm::GlobalVariable* message =
         builder_->CreateGlobalString("main returned Err", "", 0, module_);
-    builder_->CreateCall(panic, {message});
+    llvm::Value* zero = llvm::ConstantInt::get(builder_->getInt32Ty(), 0);
+    llvm::SmallVector<llvm::Value*, 2> indices{zero, zero};
+    llvm::Value* bytes =
+        builder_->CreateInBoundsGEP(message->getValueType(), message, indices);
+    llvm::Value* len = llvm::ConstantInt::get(
+        len_ty, llvm::StringRef("main returned Err").size());
+    builder_->CreateCall(panic, {bytes, len});
     builder_->CreateUnreachable();
     return;
   }

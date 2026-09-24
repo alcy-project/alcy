@@ -2,16 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // Runtime surface linked into every alcy program. `str` values are
-// pointers to NUL-terminated bytes (matching the globals codegen
-// emits); both entry points treat a null pointer as an empty string.
+// length-driven (ptr, len) pairs matching the fat-pointer layout the
+// compiler emits; messages need no NUL terminator.
 
 #pragma once
 
-// Writes the message to stdout.
-void alcy_print(const char* message);
+#include <stddef.h>
 
-// Writes the message plus a trailing newline to stdout.
-void alcy_println(const char* message);
+// Writes exactly `len` bytes of the message to stdout.
+void alcy_print(const char* message, size_t len);
 
-// Writes the message plus a trailing newline to stderr, then aborts.
-void alcy_panic(const char* message);
+// Writes exactly `len` bytes of the message plus a trailing newline
+// to stdout.
+void alcy_println(const char* message, size_t len);
+
+// Writes exactly `len` bytes of the message to stderr, then aborts.
+void alcy_panic(const char* message, size_t len);

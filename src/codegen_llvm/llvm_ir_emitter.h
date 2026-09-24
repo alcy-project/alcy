@@ -12,6 +12,7 @@
 #include "ir/common.h"
 #include "ir/function.h"
 #include "ir/storage.h"
+#include "ir/type.h"
 
 namespace codegen_llvm {
 
@@ -22,7 +23,8 @@ class LlvmIrEmitter {
 
   LlvmIrEmitter(llvm::Module* module,
                 ir::Storage&& storage,
-                str::StringInterner* interner);
+                str::StringInterner* interner,
+                ir::PointerWidth width);
   ~LlvmIrEmitter() = default;
 
   LlvmIrEmitter(const LlvmIrEmitter&) = delete;
@@ -66,6 +68,7 @@ class LlvmIrEmitter {
   ir::Storage storage_;
   std::unique_ptr<IRBuilder> builder_;
   str::StringInterner* interner_;
+  ir::PointerWidth width_;
   LlvmIrStorage values_;
 
   static constexpr usize kFunctionArgsSooSize = 8;

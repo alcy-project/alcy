@@ -1278,4 +1278,42 @@ TEST_CASE("Check resolves prelude calls without imports") {
   CHECK(result.package.has_value());
 }
 
+TEST_CASE("Check accepts string intrinsic declarations") {
+  io::TempDir dir("alcy_types_str_intrinsic_test");
+  const bool setup = write_all(
+      dir,
+      {{"main.al",
+        "intrinsic fn str_len(s: str) -> usize;\n"
+        "intrinsic fn str_byte(s: str, i: usize) -> u8;\n"
+        "intrinsic fn str_slice(s: str, start: usize, end: usize) -> str;\n"
+        "fn main() {\n"
+        "  s := \"hi\"\n"
+        "  _ := str_len(s)\n"
+        "  _ := str_byte(s, 0)\n"
+        "  _ := str_slice(s, 0, 2)\n"
+        "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects mistyped string intrinsic signatures") {
+  io::TempDir dir("alcy_types_str_intrinsic_sig_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "intrinsic fn str_len(s: str) -> i32;\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 }  // namespace analyzer

@@ -69,9 +69,9 @@ def main():
         (tmpdir / "print_main.c").write_text(
             '#include "alcy_runtime.h"\n'
             "int main(void) {\n"
-            '  alcy_print("hi\\n");\n'
-            '  alcy_print("a:b\\n");\n'
-            '  alcy_println("see you");\n'
+            '  alcy_print("hi\\n", 3);\n'
+            '  alcy_print("a:b\\n", 4);\n'
+            '  alcy_println("see you", 7);\n'
             "  return 0;\n"
             "}\n"
         )
@@ -100,7 +100,7 @@ def main():
         (tmpdir / "panic_main.c").write_text(
             '#include "alcy_runtime.h"\n'
             "int main(void) {\n"
-            '  alcy_panic("boom\\n");\n'
+            '  alcy_panic("boom\\n", 5);\n'
             "  return 0;\n"
             "}\n"
         )

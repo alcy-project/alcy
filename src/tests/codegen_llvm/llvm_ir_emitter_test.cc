@@ -61,12 +61,29 @@ ir::Storage hello_world_ir(str::StringInterner* interner) {
   builder.reg(
       {.type = ir::primitive_idx(ir::TypeTag::I32), .def_idx = inst_sub});
 
-  const ir::RegisterIdx ret_register(1);
+  // Fat strings cross as structs; extract the byte pointer first.
+  const ir::ImmutableIdx imm_zero = builder.immutable(
+      {.type = ir::primitive_idx(ir::TypeTag::I32), .data = {.i32_value = 0}});
+  ir::OperandSeq extract_args;
+  extract_args.push(builder.operand(ir::Operand::from_immutable(
+      imm_hello, ir::primitive_idx(ir::TypeTag::Str))));
+  extract_args.push(builder.operand(ir::Operand::from_immutable(
+      imm_zero, ir::primitive_idx(ir::TypeTag::I32))));
+  const ir::InstructionIdx inst_extract = builder.instr({
+      .op = ir::Opcode::ExtractValue,
+      .flags = {},
+      .dst = ir::RegisterIdx(1),
+      .operands = extract_args.finish(),
+  });
+  builder.reg(
+      {.type = ir::primitive_idx(ir::TypeTag::Ptr), .def_idx = inst_extract});
+
+  const ir::RegisterIdx ret_register(2);
   ir::OperandSeq call_args;
   call_args.push(builder.operand(ir::Operand::from_external_function(
       func_puts, ir::primitive_idx(ir::TypeTag::Function))));
-  call_args.push(builder.operand(ir::Operand::from_immutable(
-      imm_hello, ir::primitive_idx(ir::TypeTag::Str))));
+  call_args.push(builder.operand(ir::Operand::from_register(
+      ir::RegisterIdx(1), ir::primitive_idx(ir::TypeTag::Ptr))));
   const ir::InstructionIdx inst_call = builder.instr({
       .op = ir::Opcode::Call,
       .flags = {},
@@ -87,6 +104,7 @@ ir::Storage hello_world_ir(str::StringInterner* interner) {
 
   ir::InstrSeq instrs;
   instrs.push(inst_sub);
+  instrs.push(inst_extract);
   instrs.push(inst_call);
   instrs.push(inst_ret);
   const ir::BlockIdx block = builder.block({
@@ -111,7 +129,8 @@ TEST_CASE("Emit Hello World") {
 
   str::StringInterner interner(mem::page_size());
   ir::Storage storage = hello_world_ir(&interner);
-  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner);
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
+                        ir::PointerWidth::W64);
 
   std::move(emitter).emit();
 
@@ -216,7 +235,8 @@ TEST_CASE("Emit struct and array calls") {
   });
 
   ir::Storage storage = std::move(builder).build();
-  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner);
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
+                        ir::PointerWidth::W64);
 
   std::move(emitter).emit();
 
@@ -364,7 +384,8 @@ TEST_CASE("Emit compute instructions") {
   });
 
   ir::Storage storage = std::move(builder).build();
-  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner);
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
+                        ir::PointerWidth::W64);
 
   std::move(emitter).emit();
 
@@ -497,7 +518,8 @@ TEST_CASE("Emit control flow") {
   });
 
   ir::Storage storage = std::move(builder).build();
-  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner);
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
+                        ir::PointerWidth::W64);
 
   std::move(emitter).emit();
 
@@ -703,7 +725,8 @@ TEST_CASE("Emit memory instructions") {
   });
 
   ir::Storage storage = std::move(builder).build();
-  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner);
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
+                        ir::PointerWidth::W64);
 
   std::move(emitter).emit();
 
@@ -771,7 +794,8 @@ TEST_CASE("Emit ignores Drop markers") {
   });
 
   ir::Storage storage = std::move(builder).build();
-  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner);
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
+                        ir::PointerWidth::W64);
 
   std::move(emitter).emit();
 
