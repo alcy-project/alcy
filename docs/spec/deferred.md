@@ -35,6 +35,6 @@ relied upon by MVP programs or by the MVP compiler implementation.
 
 ## Keywords reserved for the above
 
-`async`, `await`, `union`, `register`, `comp`, `extern`,
+`async`, `await`, `union`, `register`, `extern`,
 `unsafe`, `for`, `in`, `where`, `dyn`. The MVP keyword set is
 frozen in `keywords.md`; additions require a specification update.

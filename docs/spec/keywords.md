@@ -19,8 +19,12 @@ Primitive types: `i8`, `i16`, `i32`, `i64`, `isize`, `u8`,
 
 ## Reserved (parsed, rejected with guidance)
 
-`async`, `await`, `union`, `register`, `comp`, `extern`,
+`async`, `await`, `union`, `register`, `extern`,
 `unsafe`, `for`, `in`, `where`, `dyn`
+
+## Bootstrap
+
+`comp` (see `comp.md`)
 
 ## Literals, operators, delimiters, comments
 

@@ -4,6 +4,8 @@ Normative keywords (MUST, SHOULD, MAY) follow RFC 2119 throughout
 `docs/spec/`. Every section carries a staging label:
 
 - **MVP**: required for the first self-contained compiler milestone.
+- **Bootstrap**: post-MVP compiler work toward self-hosting (see
+  `comp.md`).
 - **Post-MVP**: explicitly out of MVP scope; described only to reserve
   decision space, never as a promise of a particular design.
 
