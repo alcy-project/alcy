@@ -21,6 +21,7 @@
 #include "pipeline/pipeline_context.h"
 #include "pipeline/runtime_stage.h"
 #include "pipeline/spawn.h"
+#include "pipeline/std_stage.h"
 #include "pipeline/target.h"
 #include "source/source.h"
 
@@ -80,8 +81,9 @@ RunResult run_single_file(PipelineContext& ctx,
   }
   const source::FileId root = std::move(file).unwrap();
   const analyzer::ModuleInput single_input{"", root};
-  diag::Fallible<analyzer::ModuleTree> tree = analyzer::resolve_modules(
-      root, {&single_input, 1}, "", ctx.sources, ctx.ast, ctx.bag);
+  diag::Fallible<analyzer::ModuleTree> tree =
+      analyzer::resolve_modules(root, {&single_input, 1}, "", ctx.sources,
+                                ctx.ast, ctx.bag, std_prelude(ctx));
   if (tree.is_err() || ctx.bag.has_errors()) {
     return RunResult{false, 0};
   }

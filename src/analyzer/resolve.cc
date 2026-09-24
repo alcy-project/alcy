@@ -558,6 +558,7 @@ class Resolver {
     tree.modules = ast::copy_to_arena(
         ast.spans, std::vector<ModuleNode*>(modules.begin(), modules.end()));
     tree.root = root_index;
+    tree.prelude_modules = static_cast<u32>(prelude_modules.size());
     return tree;
   }
 };

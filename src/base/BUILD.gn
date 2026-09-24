@@ -1,6 +1,5 @@
 source_set("base") {
   sources = [
-    "lib.cc",
     "logger.cc",
     "logger.h",
   ]

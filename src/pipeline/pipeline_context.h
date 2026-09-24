@@ -3,11 +3,15 @@
 
 #pragma once
 
+#include <optional>
 #include <string_view>
+#include <vector>
 
+#include "analyzer/resolve.h"
 #include "ast/ast.h"
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
+#include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
 #include "fpag/str/string_interner.h"
 #include "source/source.h"
@@ -29,6 +33,11 @@ struct PipelineContext {
   // Long-lived string pool for lowering and codegen (function names,
   // string literals). Must outlive every phase that reads its ids.
   str::StringInterner strings;
+  // Staged standard library, populated once by std_prelude and kept
+  // alive for the command. Inputs borrow the scratch paths.
+  bool std_staged = false;
+  std::optional<io::TempDir> std_scratch;
+  std::vector<analyzer::ModuleInput> std_inputs;
 
   PipelineContext();
 };

@@ -1,8 +1,10 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <span>
 #include <string>
 
+#include "analyzer/resolve.h"
 #include "config/build_config.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
@@ -11,10 +13,23 @@
 #include "path/path.h"
 #include "pipeline/build.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_stage.h"
+#include "source/source.h"
 
 namespace pipeline {
 
 #if !BUILD_FLAG(IS_OS_ASMJS)
+TEST_CASE("Pipeline stages the standard library prelude") {
+  PipelineContext ctx;
+  const std::span<const analyzer::ModuleInput> prelude = std_prelude(ctx);
+  CHECK(!prelude.empty());
+  CHECK(!ctx.bag.has_errors());
+  if (prelude.empty()) {
+    return;
+  }
+  CHECK(prelude[0].name == "core");
+  CHECK(prelude[0].id != source::kUnknownFile);
+}
 TEST_CASE("Pipeline build produces object file") {
   io::TempDir dir("pipeline_build_object_test");
   const bool setup =

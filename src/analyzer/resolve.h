@@ -45,6 +45,8 @@ struct ModuleNode {
 struct ModuleTree {
   std::span<ModuleNode* const> modules;
   u32 root;
+  // Standalone prelude modules appended after package modules.
+  u32 prelude_modules = 0;
 };
 
 // Builds the module tree for one package and resolves its imports.

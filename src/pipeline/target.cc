@@ -17,6 +17,7 @@
 #include "path/path.h"
 #include "pipeline/pipeline.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_stage.h"
 #include "pkg/manifest.h"
 #include "pkg/modules.h"
 #include "source/source.h"
@@ -144,8 +145,9 @@ diag::Fallible<BinTarget> resolve_bin_target(
     return base::make_err(diag::Fatal{});
   }
 
-  diag::Fallible<analyzer::ModuleTree> tree = analyzer::resolve_modules(
-      bin_file, inputs, manifest.name, ctx.sources, ctx.ast, ctx.bag);
+  diag::Fallible<analyzer::ModuleTree> tree =
+      analyzer::resolve_modules(bin_file, inputs, manifest.name, ctx.sources,
+                                ctx.ast, ctx.bag, std_prelude(ctx));
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Fatal{});
   }

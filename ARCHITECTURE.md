@@ -101,6 +101,9 @@ runtime polymorphism.
   compiler flags (`build/config/`), and helper scripts (`build/scripts/`).
 - `third_party/` - vendored dependencies as submodules (`llvm`, `fpag`,
   `fmt`, `doctest`, `xxhash`), each wrapped with a `BUILD.gn`.
+- `lib/` - the toolchain standard library as source suites
+  (`lib/std/<member>/`); embedded into the compiler binary and
+  injected as prelude modules, never built as separate packages.
 - `docs/` - detailed documentation and architecture decision records
   (`docs/adr/`).
 

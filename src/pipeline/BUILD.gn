@@ -13,14 +13,28 @@ action("embed_runtime") {
   ]
 }
 
+action("embed_std") {
+  script = "//build/scripts/embed_std.py"
+  inputs = [ "//lib/std/core/main.al" ]
+  outputs = [ "$target_gen_dir/embedded_std.cc" ]
+  args = [
+    "--std-dir",
+    rebase_path("//lib/std", root_build_dir),
+    "--output",
+    rebase_path("$target_gen_dir/embedded_std.cc", root_build_dir),
+  ]
+}
+
 source_set("pipeline") {
   sources = [
     "$target_gen_dir/embedded_runtime.cc",
+    "$target_gen_dir/embedded_std.cc",
     "build.cc",
     "build.h",
     "check.cc",
     "check.h",
     "embedded_runtime.h",
+    "embedded_std.h",
     "new.cc",
     "new.h",
     "pipeline.cc",
@@ -33,11 +47,14 @@ source_set("pipeline") {
     "runtime_stage.h",
     "spawn.cc",
     "spawn.h",
+    "std_stage.cc",
+    "std_stage.h",
     "target.cc",
     "target.h",
   ]
   deps = [
     ":embed_runtime",
+    ":embed_std",
     "//src:base_modules",
     "//src:modules",
   ]

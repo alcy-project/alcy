@@ -17,6 +17,7 @@
 #include "lower/lower.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_stage.h"
 #include "pipeline/target.h"
 #include "source/source.h"
 
@@ -55,7 +56,11 @@ CheckResult finish_check(PipelineContext& ctx,
     return err(file_count, 0, 0);
   } else {
     analyzer::CheckedPackage package = std::move(checked).unwrap();
-    module_count = package.modules.size();
+    // Prelude modules check with the package but read as toolchain
+    // sources, so reported counts exclude them.
+    module_count = package.modules.size() > tree.prelude_modules
+                       ? package.modules.size() - tree.prelude_modules
+                       : 0;
     diag::Fallible<lower::LoweredPackage> lowered = lower::lower_package(
         std::move(package), kTargetWidth, ctx.ast, ctx.strings, ctx.bag);
     if (lowered.is_err()) {
@@ -85,8 +90,9 @@ CheckResult check_single_file(PipelineContext& ctx, std::string_view target) {
   }
   const source::FileId root = std::move(file).unwrap();
   const analyzer::ModuleInput single_input{"", root};
-  diag::Fallible<analyzer::ModuleTree> tree = analyzer::resolve_modules(
-      root, {&single_input, 1}, "", ctx.sources, ctx.ast, ctx.bag);
+  diag::Fallible<analyzer::ModuleTree> tree =
+      analyzer::resolve_modules(root, {&single_input, 1}, "", ctx.sources,
+                                ctx.ast, ctx.bag, std_prelude(ctx));
   if (tree.is_err()) {
     return err(1, 0, 0);
   }
