@@ -75,7 +75,8 @@ Notes:
   repository-specific conventions.
 - **Explicitness:** Keep significant behavior visible at the call site. Do not use operator
   overloads for domain-specific or non-trivial behavior; use named functions instead. Avoid
-  implicit conversions that obscure control flow, ownership, or cost.
+  implicit conversions that obscure control flow, ownership, or cost. Avoid hardcoded values
+  (unnamed numbers or strings) in domain logic; bind them to meaningful constants.
 - **Ownership:** Make ownership and lifetime explicit in APIs. Prefer non-owning views for
   non-owning relationships and owning types only where ownership is part of the contract.
 - **Dependencies:** Respect the dependency direction defined by `ARCHITECTURE.md`. Do not
