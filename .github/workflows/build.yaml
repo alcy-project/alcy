@@ -81,12 +81,25 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/build.py --target=all --mode=${{ inputs.build_type }} --build-subdir=build
 
-      - name: Upload Intermediates for Debug
+      - name: Package & Generate Checksum
+        shell: bash
+        run: |
+          ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run python ./build/scripts/package.py \
+            --plat="${{ matrix.plat }}" \
+            --arch="${{ matrix.arch }}" \
+            --mode="${{ inputs.build_type }}" \
+            --role="${{ inputs.role }}" \
+            --archive="${{ matrix.archive }}" \
+            ${{ matrix.nix && '--nix' || '' }}
+
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: build-out-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}${{ matrix.nix && '-nix' || '' }}
-          path: out/build/
-          retention-days: 1
+          name: ${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}${{ matrix.nix && '-nix' || '' }}
+          path: |
+            *.${{ matrix.archive }}
+            *.sha256
+          if-no-files-found: error
 
       - name: Run Tests
         shell: bash
@@ -120,23 +133,3 @@ jobs:
 
           help_out=$(${{ matrix.nix && 'nix develop .#default --command ' || '' }}"$bin" --help)
           echo "$help_out"
-
-      - name: Package & Generate Checksum
-        shell: bash
-        run: |
-          ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run python ./build/scripts/package.py \
-            --plat="${{ matrix.plat }}" \
-            --arch="${{ matrix.arch }}" \
-            --mode="${{ inputs.build_type }}" \
-            --role="${{ inputs.role }}" \
-            --archive="${{ matrix.archive }}" \
-            ${{ matrix.nix && '--nix' || '' }}
-
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: ${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}${{ matrix.nix && '-nix' || '' }}
-          path: |
-            *.${{ matrix.archive }}
-            *.sha256
-          if-no-files-found: error

@@ -72,10 +72,6 @@ jobs:
           path: out/build/
           retention-days: 1
 
-      - name: Run Tests
-        shell: bash
-        run: uv run ./build/scripts/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build --target-os=emscripten
-
       - name: Package & Generate Checksum
         shell: bash
         run: |
@@ -94,3 +90,7 @@ jobs:
             *.tar.zst
             *.sha256
           if-no-files-found: error
+
+      - name: Run Tests
+        shell: bash
+        run: uv run ./build/scripts/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build --target-os=emscripten
