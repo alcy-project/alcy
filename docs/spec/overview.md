@@ -29,7 +29,7 @@ checkable contracts here.
 ## Non-goals for MVP
 
 - Generic types and functions, except the blessed `Result<T, E>` and
-  `Option<T>` (see `errors.md`).
+  `Optional<T>` (see `errors.md`).
 - Trait objects, closures, async, compile-time evaluation beyond
   constant items.
 - Unsafe code, raw pointers, FFI (reserved; see `ffi.md`).

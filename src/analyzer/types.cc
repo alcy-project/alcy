@@ -135,7 +135,7 @@ class Checker {
           name = node.payload.get<ast::ItemEnum>().name.name;
           span = node.payload.get<ast::ItemEnum>().name.span;
         }
-        if (name == "Result" || name == "Option") {
+        if (name == "Result" || name == "Optional") {
           const u32 index =
               bag.emit(diag::Severity::Error, kAnalyzerReservedName, span,
                        "'{}' is reserved for the blessed type", name);
@@ -321,7 +321,7 @@ class Checker {
           builder.enum_variant(interner.intern(second), empty.finish()));
     }
     ir::TypeIdx type = builder.enum_type(
-        interner.intern(is_result ? "Result" : "Option"), variants.finish());
+        interner.intern(is_result ? "Result" : "Optional"), variants.finish());
     blessed.push_back(BlessedEntry{is_result, args, type});
     return type;
   }
@@ -445,7 +445,7 @@ class Checker {
             }
             return *self;
           }
-          if (name == "Result" || name == "Option") {
+          if (name == "Result" || name == "Optional") {
             const bool is_result = name == "Result";
             const usize want = is_result ? 2 : 1;
             if (node.payload.get<ast::TypePath>().args.size() != want) {
@@ -818,7 +818,7 @@ class Checker {
     }
     for (const BlessedEntry& entry : blessed) {
       if (entry.type.idx == idx.idx) {
-        return entry.is_result ? "Result" : "Option";
+        return entry.is_result ? "Result" : "Optional";
       }
     }
     return "type";
@@ -1478,7 +1478,7 @@ class Checker {
           }
         }
       }
-      if ((head == "Result" || head == "Option") &&
+      if ((head == "Result" || head == "Optional") &&
           resolve_blessed_ctor(member, out)) {
         return true;
       }
@@ -1579,7 +1579,7 @@ class Checker {
           }
         }
       }
-      if ((head == "Result" || head == "Option") &&
+      if ((head == "Result" || head == "Optional") &&
           (member == "Ok" || member == "Err" || member == "Some" ||
            member == "None")) {
         const bool want_result = head == "Result";
@@ -2425,7 +2425,7 @@ class Checker {
           const u32 index =
               bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, span,
                        "'{}' is not a variant of '{}'", resolved.ctor_name,
-                       entry->is_result ? "Option" : "Result");
+                       entry->is_result ? "Optional" : "Result");
           (void)index;
           return error_type();
         }
@@ -2780,7 +2780,7 @@ class Checker {
     const BlessedEntry* scrutinee = blessed_find(inner);
     if (scrutinee == nullptr) {
       const u32 index = bag.emit(diag::Severity::Error, kAnalyzerBadQuestion,
-                                 node.span, "'?' needs Result or Option");
+                                 node.span, "'?' needs Result or Optional");
       (void)index;
       return error_type();
     }
@@ -2788,7 +2788,7 @@ class Checker {
     if (enclosing == nullptr) {
       const u32 index =
           bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, node.span,
-                   "'?' needs an enclosing Result or Option function");
+                   "'?' needs an enclosing Result or Optional function");
       (void)index;
       return error_type();
     }
@@ -3707,7 +3707,7 @@ class Checker {
         if (is_must_use(type)) {
           const u32 index = bag.emit(
               diag::Severity::Warning, kAnalyzerMustUse, span,
-              "unused Result/Option value; bind or discard it explicitly");
+              "unused Result/Optional value; bind or discard it explicitly");
           (void)index;
           return;
         }

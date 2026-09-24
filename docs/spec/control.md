@@ -14,7 +14,7 @@
   only.
 - Expression statements silently discard `()` values. Discarding a
   non-`()` value SHOULD be explicit (`_ := ...`); `Result` and
-  `Option` values are hardcoded `must_use` and produce a warning
+  `Optional` values are hardcoded `must_use` and produce a warning
   diagnostic when discarded.
 - A non-`()` trailing expression where `()` is expected is a type
   error suggesting explicit discard.

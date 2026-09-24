@@ -273,7 +273,7 @@ TEST_CASE("Check instantiates blessed types with dedup") {
   io::TempDir dir("alcy_types_blessed_test");
   const bool setup =
       write_all(dir, {{"main.al",
-                       "fn f(a: Result<i32, bool>) -> Option<i32> {\n"
+                       "fn f(a: Result<i32, bool>) -> Optional<i32> {\n"
                        "  ret None\n"
                        "}\n"
                        "fn g(b: Result<i32, bool>) -> i32 {\n"
@@ -494,7 +494,7 @@ TEST_CASE("Check exposes blessed shapes in the registry") {
   io::TempDir dir("alcy_types_registry_test");
   const bool setup =
       write_all(dir, {{"main.al",
-                       "fn f(a: Result<i32, bool>) -> Option<i32> {\n"
+                       "fn f(a: Result<i32, bool>) -> Optional<i32> {\n"
                        "  ret None\n"
                        "}\n"}});
   CHECK(setup);
@@ -828,7 +828,7 @@ TEST_CASE("Check match exhaustiveness") {
   {
     io::TempDir dir("alcy_match_option_ok_test");
     const bool setup = write_all(dir, {{"main.al",
-                                        "fn f(o: Option<i32>) -> i32 {\n"
+                                        "fn f(o: Optional<i32>) -> i32 {\n"
                                         "  ret match o {\n"
                                         "    Some(x) => x,\n"
                                         "    None => 0,\n"
@@ -845,7 +845,7 @@ TEST_CASE("Check match exhaustiveness") {
   {
     io::TempDir dir("alcy_match_option_bad_test");
     const bool setup = write_all(dir, {{"main.al",
-                                        "fn f(o: Option<i32>) -> i32 {\n"
+                                        "fn f(o: Optional<i32>) -> i32 {\n"
                                         "  ret match o {\n"
                                         "    Some(x) => x,\n"
                                         "  }\n"
