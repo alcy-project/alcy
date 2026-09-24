@@ -17,12 +17,10 @@
 namespace pipeline {
 
 // Source discovery convention: `<dir>/**/*.al`, walked recursively and
-// sorted lexically for deterministic builds. Subdirectories containing
-// alcy.toml are nested packages and skipped (their sources belong to that
-// package). `alcy new` creates `<name>/main.al`, which this rule picks
-// up naturally.
-constexpr std::string_view kSourceExtension = ".al";
-
+// sorted lexically for deterministic builds. The extension lives in
+// path::kSourceExtension; subdirectories containing alcy.toml are nested
+// packages and skipped (their sources belong to that package). `alcy new`
+// creates `<name>/main.al`, which this rule picks up naturally.
 struct DiscoveredSources {
   // Directory as given (not canonicalized).
   std::string root;

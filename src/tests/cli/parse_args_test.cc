@@ -41,7 +41,8 @@ TEST_CASE("Parse build subcommand") {
                             .subcommand = Subcommand::Build,
                             .release = true,
                             .target_dir = "mydir",
-                            .output = ""});
+                            .output = "",
+                            .linker = ""});
 }
 
 TEST_CASE("Parse build output flag") {
@@ -50,6 +51,13 @@ TEST_CASE("Parse build output flag") {
   CHECK(config.subcommand == Subcommand::Build);
   CHECK(config.target_dir == "main.al");
   CHECK(config.output == "main.o");
+}
+
+TEST_CASE("Parse build linker flag") {
+  const std::string_view args[] = {"alcy", "build", "--linker", "clang++"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.subcommand == Subcommand::Build);
+  CHECK(config.linker == "clang++");
 }
 
 TEST_CASE("Parse build defaults") {

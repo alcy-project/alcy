@@ -11,13 +11,13 @@
 #include "analyzer/types.h"
 #include "borrow/borrow.h"
 #include "diag/bag.h"
+#include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "lower/lower.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/target.h"
-#include "pkg/manifest.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -74,20 +74,31 @@ CheckResult finish_check(PipelineContext& ctx,
   }
 }
 
+CheckResult check_single_file(PipelineContext& ctx, std::string_view target) {
+  base::Result<source::FileId, source::SourceError> file =
+      ctx.sources.load(target);
+  if (file.is_err()) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineIoError,
+                                   "cannot read '{}'", target);
+    (void)index;
+    return err(1, 0, 0);
+  }
+  const source::FileId root = std::move(file).unwrap();
+  const analyzer::ModuleInput single_input{"", root};
+  diag::Fallible<analyzer::ModuleTree> tree = analyzer::resolve_modules(
+      root, {&single_input, 1}, "", ctx.sources, ctx.ast, ctx.bag);
+  if (tree.is_err()) {
+    return err(1, 0, 0);
+  }
+  return finish_check(ctx, std::move(tree).unwrap(), 1);
+}
+
 CheckResult check_package(PipelineContext& ctx,
                           const path::Path& root,
                           source::FileId manifest_file,
                           std::string_view manifest_name) {
-  diag::Fallible<pkg::PackageManifest> parsed =
-      pkg::parse_manifest(ctx.sources.bytes(manifest_file), manifest_name,
-                          manifest_file, ctx.bag, ctx.arena);
-  if (parsed.is_err()) {
-    return err(0, 0, 0);
-  }
-  const pkg::PackageManifest manifest = std::move(parsed).unwrap();
-
   diag::Fallible<BinTarget> target =
-      resolve_bin_target(ctx, root, manifest, manifest_name);
+      resolve_package_target(ctx, root, manifest_file, manifest_name);
   if (target.is_err() || ctx.bag.has_errors()) {
     return err(0, 0, 0);
   }

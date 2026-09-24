@@ -3,7 +3,6 @@
 
 #include "pipeline/build.h"
 
-#include <cstdlib>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -16,6 +15,7 @@
 #include "codegen_llvm/common.h"
 #include "codegen_llvm/llvm_ir_emitter.h"
 #include "codegen_llvm/llvm_object_emitter.h"
+#include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
@@ -28,7 +28,6 @@
 #include "pipeline/runtime_stage.h"
 #include "pipeline/spawn.h"
 #include "pipeline/target.h"
-#include "pkg/manifest.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -84,20 +83,16 @@ bool emit_package_object(PipelineContext& ctx,
 }
 
 // Links one object plus the staged runtime into an executable
-// through the system compiler cli.
+// through the system linker. Empty selects the default toolchain driver.
 bool link_executable(PipelineContext& ctx,
+                     std::string_view linker,
                      const std::string& object_path,
                      const std::string& runtime_path,
                      const std::string& exe_path) {
-  const char* system_linker = nullptr;
-  if (const char* env = std::getenv("CC"); env && *env) {
-    system_linker = env;
-  } else {
-    system_linker = "clang";
-  }
+  const std::string driver = linker.empty() ? "clang" : std::string(linker);
 
   base::Result<i32, SpawnError> linked =
-      run_command({system_linker, object_path, runtime_path, "-o", exe_path});
+      run_command({driver, object_path, runtime_path, "-o", exe_path});
   if (linked.is_err()) {
     const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineLinkError,
                                    "cannot run the system compiler");
@@ -122,7 +117,8 @@ bool link_executable(PipelineContext& ctx,
 BuildResult build_single_file(PipelineContext& ctx,
                               std::string_view target,
                               std::string_view output,
-                              bool optimize) {
+                              bool optimize,
+                              std::string_view linker) {
   base::Result<source::FileId, source::SourceError> file =
       ctx.sources.load(target);
   if (file.is_err()) {
@@ -151,6 +147,7 @@ BuildResult build_single_file(PipelineContext& ctx,
   if (output.empty()) {
     // The target spells a source file, so an extension is present.
     const usize dot = output_path.rfind('.');
+    DCHECK(dot != std::string::npos);
     output_path.replace(dot, std::string::npos, exe_suffix());
   }
   const bool want_object = output_path.size() >= 2 &&
@@ -159,7 +156,6 @@ BuildResult build_single_file(PipelineContext& ctx,
     if (!emit_package_object(ctx, lowered, optimize, output_path)) {
       return base::make_err(0);
     }
-    // base::logger.wo_prefix("built {} to {}", target, output_path);
     return base::make_ok();
   }
   io::TempDir scratch("alcy_build");
@@ -169,10 +165,9 @@ BuildResult build_single_file(PipelineContext& ctx,
     return base::make_err(0);
   }
   const std::string runtime_path = scratch.join(runtime_source_name());
-  if (!link_executable(ctx, object_path, runtime_path, output_path)) {
+  if (!link_executable(ctx, linker, object_path, runtime_path, output_path)) {
     return base::make_err(0);
   }
-  // base::logger.wo_prefix("built {} to {}", target, output_path);
   return base::make_ok();
 }
 
@@ -181,17 +176,10 @@ BuildResult build_package(PipelineContext& ctx,
                           source::FileId manifest_file,
                           std::string_view manifest_name,
                           std::string_view output,
-                          bool optimize) {
-  diag::Fallible<pkg::PackageManifest> parsed =
-      pkg::parse_manifest(ctx.sources.bytes(manifest_file), manifest_name,
-                          manifest_file, ctx.bag, ctx.arena);
-  if (parsed.is_err()) {
-    return base::make_err(0);
-  }
-  const pkg::PackageManifest manifest = std::move(parsed).unwrap();
-
+                          bool optimize,
+                          std::string_view linker) {
   diag::Fallible<BinTarget> target =
-      resolve_bin_target(ctx, root, manifest, manifest_name);
+      resolve_package_target(ctx, root, manifest_file, manifest_name);
   if (target.is_err() || ctx.bag.has_errors()) {
     return base::make_err(0);
   }
@@ -219,10 +207,9 @@ BuildResult build_package(PipelineContext& ctx,
     return base::make_err(0);
   }
   const std::string runtime_path = scratch.join(runtime_source_name());
-  if (!link_executable(ctx, object_path, runtime_path, exe_path)) {
+  if (!link_executable(ctx, linker, object_path, runtime_path, exe_path)) {
     return base::make_err(0);
   }
-  // base::logger.wo_prefix("built {} to {}", manifest.name, exe_path);
   return base::make_ok();
 }
 

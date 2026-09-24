@@ -24,6 +24,8 @@ CheckResult finish_check(PipelineContext& ctx,
                          analyzer::ModuleTree tree,
                          usize file_count);
 
+CheckResult check_single_file(PipelineContext& ctx, std::string_view target);
+
 CheckResult check_package(PipelineContext& ctx,
                           const path::Path& root,
                           source::FileId manifest_file,

@@ -14,12 +14,11 @@ namespace cli {
 ResultCode run_new(std::string_view target_dir) {
   pipeline::PipelineContext ctx;
   pipeline::NewResult result = pipeline::create_new_package(ctx, target_dir);
-  if (result.is_ok()) {
+  if (result.is_ok() && !ctx.bag.has_errors()) {
     return ResultCode::Success;
-  } else {
-    pipeline::report(ctx.bag, ctx.sources);
-    return ResultCode::NewFailed;
   }
+  pipeline::report(ctx.bag, ctx.sources);
+  return ResultCode::NewFailed;
 }
 
 }  // namespace cli

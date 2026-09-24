@@ -93,12 +93,24 @@ def run_case(alcy: Path, case_dir: Path):
         if proc.returncode != 0:
             return False, (
                 f"alcy build failed: exit={proc.returncode}\n"
-                f"--- output ---\n{proc.stdout + proc.stderr}"
+                f"--- build stdout ---\n{proc.stdout}"
+                f"--- build stderr ---\n{proc.stderr}"
             )
 
-        proc = subprocess.run(
-            [str(work / exe_name)], capture_output=True, text=True, cwd=work
-        )
+        exe_path = work / exe_name
+        if not exe_path.is_file():
+            return False, (
+                f"alcy build succeeded but '{exe_name}' is missing\n"
+                f"--- build stdout ---\n{proc.stdout}"
+                f"--- build stderr ---\n{proc.stderr}"
+            )
+
+        try:
+            proc = subprocess.run(
+                [str(exe_path)], capture_output=True, text=True, cwd=work
+            )
+        except OSError as e:
+            return False, f"cannot execute '{exe_name}': {e}"
 
         if isinstance(expected_exit, str) and expected_exit.lower() in (
             "non-zero",

@@ -18,6 +18,7 @@
 #include "fpag/base/result.h"
 #include "fpag/io/file_handle.h"
 #include "path/path.h"
+#include "pipeline/pipeline_context.h"
 #include "pkg/manifest.h"
 #include "pkg/resolve.h"
 #include "source/source.h"
@@ -36,14 +37,12 @@ namespace pipeline {
 
 namespace {
 
-// Diagnostic codes 2200-2299 are reserved for the pipeline.
-constexpr u32 kPipelineIoError = 2200;
-
 bool has_source_extension(std::string_view path) {
-  if (path.size() < kSourceExtension.size()) {
+  if (path.size() < path::kSourceExtension.size()) {
     return false;
   }
-  return path.substr(path.size() - kSourceExtension.size()) == kSourceExtension;
+  return path.substr(path.size() - path::kSourceExtension.size()) ==
+         path::kSourceExtension;
 }
 
 // A directory containing alcy.toml is a nested package: its sources belong
@@ -181,8 +180,8 @@ diag::Fallible<ProjectBuild> compile_project(
     if (discovered.is_err()) {
       return base::make_err(diag::Fatal{});
     }
-    build.files_loaded +=
-        static_cast<u32>(std::move(discovered).unwrap().files.size());
+    const DiscoveredSources found = std::move(discovered).unwrap();
+    build.files_loaded += static_cast<u32>(found.files.size());
     ++build.packages;
   }
   return base::make_ok(build);

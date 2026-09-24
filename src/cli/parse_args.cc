@@ -43,6 +43,7 @@ CliConfig extract_from_matches(arg::Matches&& matches) {
   }
   c.release = matches.get<bool>("release").unwrap_or(false);
   c.output = matches.get<std::string_view>("output").unwrap_or(c.output);
+  c.linker = matches.get<std::string_view>("linker").unwrap_or(c.linker);
 
   const std::span<const std::string_view> positionals = matches.positionals();
   if (!positionals.empty()) {
@@ -103,6 +104,10 @@ arg::Parser build_parser() {
           .add_arg(arg::ArgBuilder("output")
                        .short_name('o')
                        .help("Object output path for single-file builds.")
+                       .default_value("")
+                       .build())
+          .add_arg(arg::ArgBuilder("linker")
+                       .help("System linker driver for executable builds.")
                        .default_value("")
                        .build())
           .build());

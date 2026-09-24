@@ -79,9 +79,10 @@ bool valid_package_name(std::string_view name) {
 NewResult create_new_package(PipelineContext& ctx,
                              std::string_view target_dir) {
   if (!valid_package_name(target_dir)) {
-    // TODO: Add non-file diagnostic support.
-    // base::logger.wo_prefix("invalid package name '{}'; use [A-Za-z0-9_-]
-    // only", target_dir);
+    const u32 index = ctx.bag.emit(
+        diag::Severity::Error, kPipelineIoError,
+        "invalid package name '{}'; use [A-Za-z0-9_-] only", target_dir);
+    (void)index;
     return base::make_err(0);
   }
 
@@ -128,7 +129,6 @@ path = "main.al")",
     (void)index;
     return base::make_err(0);
   }
-  // base::logger.wo_prefix("created package '{}'", package_dir.as_view());
   return base::make_ok();
 }
 

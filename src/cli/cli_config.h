@@ -31,6 +31,9 @@ struct CliConfig {
   // Object output path for single-file builds (empty selects next to the
   // input with a .o suffix). Borrows argv storage like target_dir.
   std::string_view output;
+  // System linker driver for executable builds (empty selects the default
+  // toolchain driver). Borrows argv storage like target_dir.
+  std::string_view linker;
 
   constexpr bool operator==(const CliConfig&) const = default;
 };

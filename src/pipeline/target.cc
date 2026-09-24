@@ -4,6 +4,7 @@
 #include "pipeline/target.h"
 
 #include <cstdlib>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -21,6 +22,44 @@
 #include "source/source.h"
 
 namespace pipeline {
+
+base::Result<ManifestProbe, path::PathError> find_package_manifest(
+    PipelineContext& ctx,
+    std::string_view raw) {
+  base::Result<path::Path, path::PathError> dir = path::Path::from_native(raw);
+  if (dir.is_err()) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineIoError,
+                                   "invalid target '{}'", raw);
+    (void)index;
+    return base::make_err(std::move(dir).unwrap_err());
+  }
+  path::Path root = std::move(dir).unwrap();
+  const path::Path manifest_path = root.join(pkg::kManifestFileName);
+  base::Result<source::FileId, source::SourceError> manifest =
+      ctx.sources.load(manifest_path.as_view());
+  if (manifest.is_err()) {
+    return base::make_ok(
+        ManifestProbe{false, std::move(root), source::kUnknownFile, {}});
+  }
+  const source::FileId loaded = std::move(manifest).unwrap();
+  return base::make_ok(ManifestProbe{true, std::move(root), loaded,
+                                     std::string(manifest_path.as_view())});
+}
+
+diag::Fallible<BinTarget> resolve_package_target(
+    PipelineContext& ctx,
+    const path::Path& root,
+    source::FileId manifest_file,
+    std::string_view manifest_name) {
+  diag::Fallible<pkg::PackageManifest> parsed =
+      pkg::parse_manifest(ctx.sources.bytes(manifest_file), manifest_name,
+                          manifest_file, ctx.bag, ctx.arena);
+  if (parsed.is_err()) {
+    return base::make_err(diag::Fatal{});
+  }
+  const pkg::PackageManifest manifest = std::move(parsed).unwrap();
+  return resolve_bin_target(ctx, root, manifest, manifest_name);
+}
 
 diag::Fallible<BinTarget> resolve_bin_target(
     PipelineContext& ctx,

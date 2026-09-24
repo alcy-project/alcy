@@ -33,8 +33,8 @@ TEST_CASE("Pipeline build produces object file") {
   }
 
   const std::string obj_path = std::string(dir.path()) + "/main.o";
-  auto res =
-      pipeline::build_single_file(ctx, dir.join("main.al"), obj_path, false);
+  auto res = pipeline::build_single_file(ctx, dir.join("main.al"), obj_path,
+                                         false, "");
   CHECK(res.is_ok());
   pipeline::report(ctx.bag, ctx.sources);
 }
@@ -50,8 +50,8 @@ TEST_CASE("Pipeline build produces executable") {
 
   PipelineContext ctx;
   const std::string exe_path = std::string(dir.path()) + "/main_exe";
-  auto res =
-      pipeline::build_single_file(ctx, dir.join("main.al"), exe_path, false);
+  auto res = pipeline::build_single_file(ctx, dir.join("main.al"), exe_path,
+                                         false, "");
   CHECK(res.is_ok());
   if (res.is_err()) {
     pipeline::report(ctx.bag, ctx.sources);
@@ -68,8 +68,8 @@ TEST_CASE("Pipeline build creates nonexistent directory") {
 
   PipelineContext ctx;
   const std::string bad_path = std::string(dir.path()) + "/no-such-dir/main.o";
-  auto res =
-      pipeline::build_single_file(ctx, dir.join("main.al"), bad_path, false);
+  auto res = pipeline::build_single_file(ctx, dir.join("main.al"), bad_path,
+                                         false, "");
   CHECK(res.is_ok());
   CHECK(!ctx.bag.has_errors());
 }
