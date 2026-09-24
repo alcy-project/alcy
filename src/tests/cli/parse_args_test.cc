@@ -42,7 +42,8 @@ TEST_CASE("Parse build subcommand") {
                             .release = true,
                             .target_dir = "mydir",
                             .output = "",
-                            .linker = ""});
+                            .linker = "",
+                            .program_args = {}});
 }
 
 TEST_CASE("Parse build output flag") {
@@ -69,15 +70,26 @@ TEST_CASE("Parse build defaults") {
 }
 
 TEST_CASE("Parse other subcommands") {
-  const std::string_view test[] = {"alcy", "test"};
   const std::string_view run[] = {"alcy", "run"};
   const std::string_view created[] = {"alcy", "new", "mypkg"};
+  const std::string_view init[] = {"alcy", "init", "existing"};
   const std::string_view check[] = {"alcy", "check"};
-  CHECK(parse_ok(test).subcommand == Subcommand::Test);
   CHECK(parse_ok(run).subcommand == Subcommand::Run);
   CHECK(parse_ok(created).subcommand == Subcommand::New);
   CHECK(parse_ok(created).target_dir == "mypkg");
+  CHECK(parse_ok(init).subcommand == Subcommand::Init);
+  CHECK(parse_ok(init).target_dir == "existing");
   CHECK(parse_ok(check).subcommand == Subcommand::Check);
+}
+
+TEST_CASE("Parse run forwards trailing positionals") {
+  const std::string_view args[] = {"alcy", "run", ".", "hello", "world"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.subcommand == Subcommand::Run);
+  CHECK(config.target_dir == ".");
+  CHECK(config.program_args.size() == 2);
+  CHECK(config.program_args[0] == "hello");
+  CHECK(config.program_args[1] == "world");
 }
 
 TEST_CASE("Parse global flags around subcommands") {

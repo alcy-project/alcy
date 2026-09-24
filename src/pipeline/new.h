@@ -17,4 +17,8 @@ using NewResult = base::Result<void, i32>;
 
 NewResult create_new_package(PipelineContext& ctx, std::string_view target_dir);
 
+// Creates alcy.toml and main.al inside an existing directory,
+// deriving the package name from the directory itself.
+NewResult init_package(PipelineContext& ctx, std::string_view target_dir);
+
 }  // namespace pipeline

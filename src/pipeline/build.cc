@@ -32,13 +32,10 @@
 
 namespace pipeline {
 
-namespace {
-
 // Runs type checking, lowering, and borrow checking over a
 // resolved tree.
-diag::Fallible<lower::LoweredPackage> compile_tree_to_ir(
-    PipelineContext& ctx,
-    analyzer::ModuleTree tree) {
+diag::Fallible<lower::LoweredPackage> compile_tree(PipelineContext& ctx,
+                                                   analyzer::ModuleTree tree) {
   diag::Fallible<analyzer::CheckedPackage> checked =
       analyzer::check_package(tree, kTargetWidth, ctx.ast, ctx.bag);
   if (checked.is_err() || ctx.bag.has_errors()) {
@@ -109,8 +106,6 @@ bool link_executable(PipelineContext& ctx,
   return true;
 }
 
-}  // namespace
-
 // Single-file executable build (package builds stay on
 // discovery until wires them). Runs the full frontend plus
 // borrow checking, then lowers and emits one relocatable object.
@@ -135,7 +130,7 @@ BuildResult build_single_file(PipelineContext& ctx,
     return base::make_err(0);
   }
   diag::Fallible<lower::LoweredPackage> package =
-      compile_tree_to_ir(ctx, std::move(tree).unwrap());
+      compile_tree(ctx, std::move(tree).unwrap());
   if (package.is_err() || ctx.bag.has_errors()) {
     return base::make_err(0);
   }
@@ -185,7 +180,7 @@ BuildResult build_package(PipelineContext& ctx,
   }
   BinTarget resolved = std::move(target).unwrap();
   diag::Fallible<lower::LoweredPackage> package =
-      compile_tree_to_ir(ctx, resolved.tree);
+      compile_tree(ctx, resolved.tree);
   if (package.is_err() || ctx.bag.has_errors()) {
     return base::make_err(0);
   }

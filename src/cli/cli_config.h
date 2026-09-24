@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string_view>
+#include <vector>
 
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
@@ -13,9 +14,9 @@ namespace cli {
 enum class Subcommand : u8 {
   None,
   Build,
-  Test,
   Run,
   New,
+  Init,
   Check,
 };
 
@@ -34,6 +35,9 @@ struct CliConfig {
   // System linker driver for executable builds (empty selects the default
   // toolchain driver). Borrows argv storage like target_dir.
   std::string_view linker;
+  // Trailing positionals after the target, passed to the program by
+  // `run`. Views borrow argv storage like target_dir.
+  std::vector<std::string_view> program_args;
 
   constexpr bool operator==(const CliConfig&) const = default;
 };

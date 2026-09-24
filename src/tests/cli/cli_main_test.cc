@@ -10,6 +10,7 @@
 #include "config/build_config.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
+#include "fpag/io/file_handle.h"
 #include "fpag/io/temp_dir.h"
 
 namespace cli {
@@ -128,6 +129,80 @@ TEST_CASE("Build creates nonexistent directory") {
     return;
   }
   CHECK(run_build_on(dir, "main.al", "no-such-dir/main.o") == 0);
+}
+
+i32 run_run_on(io::TempDir& dir,
+               std::string_view rel,
+               const std::vector<std::string>& extra = {}) {
+  const std::string target = dir.join(rel);
+  std::vector<std::string> storage{"alcy", "run", target};
+  storage.insert(storage.end(), extra.begin(), extra.end());
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  return cli_main(static_cast<i32>(argv.size()), argv.data());
+}
+
+i32 run_init_on(io::TempDir& dir, std::string_view rel) {
+  const std::string target = dir.join(rel);
+  std::vector<std::string> storage{"alcy", "init", target};
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  return cli_main(static_cast<i32>(argv.size()), argv.data());
+}
+
+TEST_CASE("Run executes a single file and forwards its exit code") {
+  io::TempDir dir("alcy_cli_run_exit_test");
+  const bool setup = write_all(dir, "main.al",
+                               "fn main() -> i32 {\n"
+                               "  ret 3\n"
+                               "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CHECK(run_run_on(dir, "main.al") == 3);
+}
+
+TEST_CASE("Run tolerates program arguments") {
+  io::TempDir dir("alcy_cli_run_args_test");
+  const bool setup = write_all(dir, "main.al",
+                               "fn main() -> i32 {\n"
+                               "  ret 0\n"
+                               "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CHECK(run_run_on(dir, "main.al", {"hello", "world"}) == 0);
+}
+
+TEST_CASE("Run fails on a mistyped file") {
+  io::TempDir dir("alcy_cli_run_bad_test");
+  const bool setup = write_all(dir, "bad.al",
+                               "fn main() {\n"
+                               "  x: u8 := 42i32\n"
+                               "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CHECK(run_run_on(dir, "bad.al") != 0);
+}
+
+TEST_CASE("Init creates a package in an existing directory") {
+  io::TempDir dir("alcy_cli_init_test");
+  CHECK(run_init_on(dir, "proj") == 0);
+  io::FileHandle manifest;
+  CHECK(manifest.open(dir.join("proj/alcy.toml"), io::FileAccess::Read));
+  io::FileHandle main;
+  CHECK(main.open(dir.join("proj/main.al"), io::FileAccess::Read));
+  CHECK(run_init_on(dir, "proj") != 0);
 }
 #endif
 

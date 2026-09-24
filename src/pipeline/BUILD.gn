@@ -27,6 +27,8 @@ source_set("pipeline") {
     "pipeline.h",
     "pipeline_context.cc",
     "pipeline_context.h",
+    "run.cc",
+    "run.h",
     "runtime_stage.cc",
     "runtime_stage.h",
     "spawn.cc",

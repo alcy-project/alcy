@@ -32,12 +32,12 @@ CliConfig extract_from_matches(arg::Matches&& matches) {
   const std::string_view selected = matches.selected_command();
   if (selected == "build") {
     c.subcommand = Subcommand::Build;
-  } else if (selected == "test") {
-    c.subcommand = Subcommand::Test;
   } else if (selected == "run") {
     c.subcommand = Subcommand::Run;
   } else if (selected == "new") {
     c.subcommand = Subcommand::New;
+  } else if (selected == "init") {
+    c.subcommand = Subcommand::Init;
   } else if (selected == "check") {
     c.subcommand = Subcommand::Check;
   }
@@ -48,6 +48,7 @@ CliConfig extract_from_matches(arg::Matches&& matches) {
   const std::span<const std::string_view> positionals = matches.positionals();
   if (!positionals.empty()) {
     c.target_dir = positionals[0];
+    c.program_args.assign(positionals.begin() + 1, positionals.end());
   }
 
   return c;
@@ -111,10 +112,22 @@ arg::Parser build_parser() {
                        .default_value("")
                        .build())
           .build());
-  builder.add_subcommand(build_subcommand("test", "Run tests").build());
-  builder.add_subcommand(build_subcommand("run", "Run a package").build());
+  builder.add_subcommand(
+      build_subcommand("run", "Build and run a package or source file")
+          .add_arg(arg::ArgBuilder("release")
+                       .help("Build with optimizations.")
+                       .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("linker")
+                       .help("System linker driver for executable builds.")
+                       .default_value("")
+                       .build())
+          .build());
   builder.add_subcommand(
       build_subcommand("new", "Create a new package").build());
+  builder.add_subcommand(
+      build_subcommand("init", "Create a package in an existing directory")
+          .build());
   builder.add_subcommand(
       build_subcommand("check", "Check a package without emitting code")
           .build());

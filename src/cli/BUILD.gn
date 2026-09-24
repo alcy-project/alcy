@@ -8,6 +8,8 @@ source_set("cli") {
     "cli_main.cc",
     "cli_main.h",
     "converters.h",
+    "init_command.cc",
+    "init_command.h",
     "init_handler.cc",
     "init_handler.h",
     "new_command.cc",
@@ -17,6 +19,8 @@ source_set("cli") {
     "parse_output.cc",
     "parse_output.h",
     "result_code.h",
+    "run_command.cc",
+    "run_command.h",
   ]
   deps = [ "//src/pipeline" ]
   defines = [

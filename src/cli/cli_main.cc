@@ -12,11 +12,13 @@
 #include "cli/build_command.h"
 #include "cli/check_command.h"
 #include "cli/cli_config.h"
+#include "cli/init_command.h"
 #include "cli/init_handler.h"
 #include "cli/new_command.h"
 #include "cli/parse_args.h"
 #include "cli/parse_output.h"
 #include "cli/result_code.h"
+#include "cli/run_command.h"
 #include "debug/fatal.h"
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
@@ -27,18 +29,13 @@ namespace cli {
 
 namespace {
 
-ResultCode not_implemented(std::string_view subcommand) {
-  base::logger.error("'alcy {}' is not implemented yet", subcommand);
-  return ResultCode::NotImplemented;
-}
-
-ResultCode dispatch(const CliConfig& config) {
+i32 dispatch(const CliConfig& config) {
   switch (config.subcommand) {
-    case Subcommand::Build: return run_build(config);
-    case Subcommand::New: return run_new(config.target_dir);
-    case Subcommand::Test: return not_implemented("test");
-    case Subcommand::Run: return not_implemented("run");
-    case Subcommand::Check: return run_check(config);
+    case Subcommand::Build: return result_code(run_build(config));
+    case Subcommand::Run: return run_run(config);
+    case Subcommand::New: return result_code(run_new(config.target_dir));
+    case Subcommand::Init: return result_code(run_init(config));
+    case Subcommand::Check: return result_code(run_check(config));
     case Subcommand::None: break;
   }
   // parse_args maps a missing subcommand to NoSubcommand/UnknownSubcommand,
@@ -69,16 +66,17 @@ i32 cli_main(i32 argc, char** argv) {
   arg::Parser parser = build_parser();
   ParseOutcome outcome = parse_args(parser, argc, argv);
 
-  ResultCode result = ResultCode::Success;
+  i32 exit_code = result_code(ResultCode::Success);
   if (const std::optional<ResultCode> code = interruption_exit_code(outcome)) {
-    result = run_interruption(parser, outcome, *code, argc, argv);
+    exit_code =
+        result_code(run_interruption(parser, outcome, *code, argc, argv));
   } else {
     const CliConfig& config = outcome.get<CliConfig>();
     base::init_logger(
         term::console_color_style(term::Stream::Stdout, config.color_mode));
-    result = dispatch(config);
+    exit_code = dispatch(config);
   }
-  return result_code(result);
+  return exit_code;
 }
 
 }  // namespace cli

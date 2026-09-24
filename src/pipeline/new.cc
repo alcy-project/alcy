@@ -13,6 +13,7 @@
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/io/file_handle.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
 #include "pkg/manifest.h"
@@ -21,6 +22,7 @@
 #include <direct.h>
 #else
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace pipeline {
@@ -76,31 +78,26 @@ bool valid_package_name(std::string_view name) {
   return true;
 }
 
-NewResult create_new_package(PipelineContext& ctx,
-                             std::string_view target_dir) {
-  if (!valid_package_name(target_dir)) {
-    const u32 index = ctx.bag.emit(
-        diag::Severity::Error, kPipelineIoError,
-        "invalid package name '{}'; use [A-Za-z0-9_-] only", target_dir);
-    (void)index;
-    return base::make_err(0);
-  }
-
-  base::Result<path::Path, path::PathError> root =
-      path::Path::from_native(target_dir);
-  if (root.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineIoError,
-                                   "cannot create package '{}'", target_dir);
-    (void)index;
-    return base::make_err(0);
-  }
-  const path::Path package_dir = std::move(root).unwrap();
+// Writes alcy.toml and main.al for a validated package directory.
+// Refuses to overwrite existing package files.
+NewResult write_package_files(PipelineContext& ctx,
+                              const path::Path& package_dir,
+                              std::string_view name) {
   const path::Path manifest_path = package_dir.join(pkg::kManifestFileName);
   const path::Path main_path = package_dir.join("main.al");
+  for (const path::Path& path : {manifest_path, main_path}) {
+    io::FileHandle probe;
+    if (probe.open(path.c_str(), io::FileAccess::Read)) {
+      const u32 index = ctx.bag.emit(
+          diag::Severity::Error, kPipelineIoError,
+          "'{}' already exists; refusing to overwrite", path.as_view());
+      (void)index;
+      return base::make_err(0);
+    }
+  }
 
   // TODO: Add `include = ["*"]` syntax support.
-  const std::string manifest_template =
-      fmt::format(R"([package]
+  const std::string manifest_template = fmt::format(R"([package]
 name = "{}"
 version = "0.1.0"
 
@@ -110,7 +107,7 @@ include = ["main"]
 [[bin]]
 name = "{}"
 path = "main.al")",
-                  package_dir.as_view(), package_dir.as_view());
+                                                    name, name);
   static constexpr std::string_view kMainText =
       "fn main() {\n  // Write your code here.\n}\n";
 
@@ -130,6 +127,88 @@ path = "main.al")",
     return base::make_err(0);
   }
   return base::make_ok();
+}
+
+// Last canonical segment, for package naming. Empty for roots and ".".
+std::string_view dir_basename(std::string_view dir) {
+  if (dir.empty() || dir == "." || dir == "..") {
+    return {};
+  }
+  const usize slash = dir.rfind(path::kDefaultPathSeparator);
+  if (slash == std::string_view::npos) {
+    return dir;
+  }
+  return dir.substr(slash + 1);
+}
+
+// Basename of the process working directory, for `init` without a
+// nameable target. Empty when the directory cannot be read.
+std::string current_dir_basename() {
+  char buffer[4096];
+#if BUILD_FLAG(IS_OS_WIN)
+  if (::_getcwd(buffer, sizeof(buffer)) == nullptr) {
+    return {};
+  }
+#else
+  if (::getcwd(buffer, sizeof(buffer)) == nullptr) {
+    return {};
+  }
+#endif
+  const std::string_view path(buffer);
+  const usize slash = path.find_last_of("/\\");
+  if (slash == std::string_view::npos) {
+    return std::string(path);
+  }
+  return std::string(path.substr(slash + 1));
+}
+
+NewResult create_new_package(PipelineContext& ctx,
+                             std::string_view target_dir) {
+  if (!valid_package_name(target_dir)) {
+    const u32 index = ctx.bag.emit(
+        diag::Severity::Error, kPipelineIoError,
+        "invalid package name '{}'; use [A-Za-z0-9_-] only", target_dir);
+    (void)index;
+    return base::make_err(0);
+  }
+
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(target_dir);
+  if (root.is_err()) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineIoError,
+                                   "cannot create package '{}'", target_dir);
+    (void)index;
+    return base::make_err(0);
+  }
+  const path::Path package_dir = std::move(root).unwrap();
+  return write_package_files(ctx, package_dir, target_dir);
+}
+
+NewResult init_package(PipelineContext& ctx, std::string_view target_dir) {
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(target_dir);
+  if (root.is_err()) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineIoError,
+                                   "cannot init package '{}'", target_dir);
+    (void)index;
+    return base::make_err(0);
+  }
+  const path::Path package_dir = std::move(root).unwrap();
+  std::string_view name = dir_basename(package_dir.as_view());
+  std::string fallback;
+  if (name.empty()) {
+    fallback = current_dir_basename();
+    name = fallback;
+  }
+  if (!valid_package_name(name)) {
+    const u32 index = ctx.bag.emit(
+        diag::Severity::Error, kPipelineIoError,
+        "cannot derive a package name from '{}'; use [A-Za-z0-9_-] only",
+        target_dir);
+    (void)index;
+    return base::make_err(0);
+  }
+  return write_package_files(ctx, package_dir, name);
 }
 
 }  // namespace pipeline
