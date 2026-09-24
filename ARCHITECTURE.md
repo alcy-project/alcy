@@ -131,6 +131,32 @@ state between stages beyond the data explicitly passed along.
 
 Supporting targets include `tests` and `benchmarks`.
 
+```mermaid
+flowchart TD
+    cli([cli]) --> pipeline([pipeline])
+
+    subgraph Frontend
+        lexer --> parser
+        parser --> ast
+        ast --> analyzer
+        analyzer --> ir
+        ir --> lower
+        lower --> borrow
+    end
+
+    subgraph Backend
+        borrow --> codegen[native]
+        borrow --> codegen_llvm
+        codegen_llvm --> llvm
+    end
+
+    subgraph Subsystems
+        pipeline --> pkg
+        pipeline --> lexer
+        pkg --> toml++
+    end
+```
+
 ## Dependency direction
 
 Dependency direction is part of the architecture, not merely a build-system
