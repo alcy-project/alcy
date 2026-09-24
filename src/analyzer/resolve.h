@@ -55,16 +55,24 @@ struct ModuleTree {
 // from source items, so no new files enter the compilation. Value
 // and type expressions are NOT resolved here; that is later
 // semantic work over ModuleNode::items.
+//
+// `prelude` lists additional source files resolved as standalone
+// modules outside the package tree. Every other module implicitly
+// imports their public items (locals and explicit uses win
+// silently); this is where toolchain-provided core sources will
+// attach once they exist.
 struct ModuleInput {
   std::string_view name;
   source::FileId id = source::kUnknownFile;
 };
 
-diag::Fallible<ModuleTree> resolve_modules(source::FileId root,
-                                           std::span<const ModuleInput> modules,
-                                           std::string_view package_name,
-                                           source::SourceManager& sources,
-                                           ast::AstArena& ast,
-                                           diag::DiagBag& bag);
+diag::Fallible<ModuleTree> resolve_modules(
+    source::FileId root,
+    std::span<const ModuleInput> modules,
+    std::string_view package_name,
+    source::SourceManager& sources,
+    ast::AstArena& ast,
+    diag::DiagBag& bag,
+    std::span<const ModuleInput> prelude = {});
 
 }  // namespace analyzer

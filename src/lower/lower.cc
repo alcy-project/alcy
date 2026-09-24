@@ -1227,6 +1227,9 @@ class Lowerer {
     }
     const analyzer::CheckedModule& def = pkg.modules[target->module];
     const analyzer::CheckedModule::FnSig& sig = def.functions[target->index];
+    if (ast.items[sig.item].kind == ast::ItemKind::Intrinsic) {
+      return lower_intrinsic_call(expr, sig.name);
+    }
     const std::vector<u32> comp = comp_positions(sig.item);
     std::vector<CompVal> comp_args;
     for (u32 pos : comp) {
@@ -1337,6 +1340,40 @@ class Lowerer {
     }
     const ir::RegisterIdx dst = emit(ir::Opcode::Call, info.ret, ops);
     return Val{to_operand(dst, info.ret), info.ret, false, false};
+  }
+
+  // Calls through an intrinsic declaration: known names map to
+  // runtime hooks or IR operations. Undeclared legacy names
+  // (print/println/panic) still arrive through lower_intrinsic.
+  Val lower_intrinsic_call(ast::ExprIdx expr, std::string_view name) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    if (name == "print" || name == "println" || name == "panic") {
+      return lower_intrinsic(expr, name);
+    }
+    if (name == "memcopy") {
+      const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+      if (call.args.size() != 3) {
+        internal(node.span, "intrinsic arity");
+        return Val{size_one, error_type(), false, false};
+      }
+      Val dst = lower_expr(call.args[0], nullptr);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      Val src = lower_expr(call.args[1], nullptr);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      Val len = lower_expr(call.args[2], nullptr);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      emit_void(ir::Opcode::Memcpy,
+                {use_value(dst), use_value(src), use_value(len)});
+      return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+    }
+    internal(node.span, "unknown intrinsic");
+    return Val{size_one, error_type(), false, false};
   }
 
   Val lower_intrinsic(ast::ExprIdx expr, std::string_view name) {
@@ -4140,7 +4177,8 @@ class Lowerer {
     // matches lowering order, so indexes line up with storage.
     for (u32 m = 0; m < static_cast<u32>(pkg.modules.size()); ++m) {
       for (const auto& sig : pkg.modules[m].functions) {
-        if (!sig.item.is_valid() || !comp_positions(sig.item).empty()) {
+        if (!sig.item.is_valid() || !comp_positions(sig.item).empty() ||
+            ast.items[sig.item].kind == ast::ItemKind::Intrinsic) {
           continue;
         }
         fn_index(m, sig.item, sig.name, sig.params, sig.ret, {});

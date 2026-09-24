@@ -15,6 +15,7 @@ namespace lexer {
 enum class TokenKind : u8 {
   // Declarations.
   Fn,
+  Intrinsic,
   Struct,
   Enum,
   Impl,

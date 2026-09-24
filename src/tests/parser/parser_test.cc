@@ -509,4 +509,35 @@ TEST_CASE("Parser rejects misplaced comp with guidance") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Parser accepts intrinsic declarations") {
+  Fixture f;
+  const ParseResult result =
+      parse("intrinsic fn memcopy(dst: &mut u8, src: &u8, n: usize);", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemNode& item = f.ast.items[result.items[0]];
+  CHECK(item.kind == ast::ItemKind::Intrinsic);
+  const ast::ItemIntrinsic& intrinsic = item.payload.get<ast::ItemIntrinsic>();
+  CHECK(intrinsic.name.name == "memcopy");
+  CHECK(intrinsic.params.size() == 3);
+  CHECK(!intrinsic.return_type.is_valid());
+}
+
+TEST_CASE("Parser rejects intrinsic declarations with bodies") {
+  Fixture f;
+  const ParseResult result = parse("intrinsic fn memcopy(dst: &mut u8) { }", f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Parser rejects intrinsic methods") {
+  Fixture f;
+  const ParseResult result =
+      parse("struct S { x: i32 }\nimpl S { intrinsic fn f(); }", f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
 }  // namespace parser

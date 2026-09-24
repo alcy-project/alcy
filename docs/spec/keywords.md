@@ -24,7 +24,7 @@ Primitive types: `i8`, `i16`, `i32`, `i64`, `isize`, `u8`,
 
 ## Bootstrap
 
-`comp` (see `comp.md`)
+`comp` (see `comp.md`), `intrinsic` (see `items.md`)
 
 ## Literals, operators, delimiters, comments
 

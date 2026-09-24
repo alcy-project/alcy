@@ -146,6 +146,17 @@ class Desugar {
         pop_scope();
         break;
       }
+      case ast::ItemKind::Intrinsic: {
+        // Bodiless signatures: rename parameter patterns for
+        // uniformity, though nothing references them.
+        push_scope();
+        for (const ast::ItemFnParam& param :
+             node.payload.get<ast::ItemIntrinsic>().params) {
+          visit_pattern(param.pattern);
+        }
+        pop_scope();
+        break;
+      }
       case ast::ItemKind::Static: {
         push_scope();
         visit_expr(node.payload.get<ast::ItemStatic>().init);

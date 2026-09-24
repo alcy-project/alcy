@@ -277,6 +277,7 @@ ast::ItemIdx Parser::parse_item() {
   const bool is_pub = match(lexer::TokenKind::Pub);
   switch (peek_kind()) {
     case lexer::TokenKind::Fn: return parse_fn(is_pub);
+    case lexer::TokenKind::Intrinsic: return parse_intrinsic_fn(is_pub);
     case lexer::TokenKind::Struct: return parse_struct(is_pub);
     case lexer::TokenKind::Enum: return parse_enum(is_pub);
     case lexer::TokenKind::Impl: return parse_impl(is_pub);
@@ -354,28 +355,8 @@ ast::ItemIdx Parser::parse_fn(bool is_pub) {
     return ast::ItemIdx::invalid();
   }
   std::vector<ast::ItemFnParam> params;
-  if (!check(lexer::TokenKind::RParen)) {
-    while (true) {
-      const bool is_comp = match(lexer::TokenKind::Comp);
-      ast::PatternIdx pattern = parse_pattern();
-      if (!pattern.is_valid()) {
-        return ast::ItemIdx::invalid();
-      }
-      if (!expect(lexer::TokenKind::Colon, "`:`")) {
-        return ast::ItemIdx::invalid();
-      }
-      ast::TypeIdx type = parse_closed_type();
-      if (!type.is_valid()) {
-        return ast::ItemIdx::invalid();
-      }
-      params.push_back(ast::ItemFnParam{pattern, type, is_comp});
-      if (!match(lexer::TokenKind::Comma)) {
-        break;
-      }
-      if (check(lexer::TokenKind::RParen)) {
-        break;
-      }
-    }
+  if (!parse_fn_params(params)) {
+    return ast::ItemIdx::invalid();
   }
   if (!expect(lexer::TokenKind::RParen, "`)`")) {
     return ast::ItemIdx::invalid();
@@ -400,6 +381,78 @@ ast::ItemIdx Parser::parse_fn(bool is_pub) {
       .params = ast::copy_to_arena(ast_.spans, params),
       .return_type = return_type,
       .body = body,
+  });
+  return ast_.items.push_back(node);
+}
+
+bool Parser::parse_fn_params(std::vector<ast::ItemFnParam>& params) {
+  if (!check(lexer::TokenKind::RParen)) {
+    while (true) {
+      const bool is_comp = match(lexer::TokenKind::Comp);
+      ast::PatternIdx pattern = parse_pattern();
+      if (!pattern.is_valid()) {
+        return false;
+      }
+      if (!expect(lexer::TokenKind::Colon, "`:`")) {
+        return false;
+      }
+      ast::TypeIdx type = parse_closed_type();
+      if (!type.is_valid()) {
+        return false;
+      }
+      params.push_back(ast::ItemFnParam{pattern, type, is_comp});
+      if (!match(lexer::TokenKind::Comma)) {
+        break;
+      }
+      if (check(lexer::TokenKind::RParen)) {
+        break;
+      }
+    }
+  }
+  return true;
+}
+
+ast::ItemIdx Parser::parse_intrinsic_fn(bool is_pub) {
+  const usize mark = pos_;
+  if (!expect(lexer::TokenKind::Intrinsic, "`intrinsic`")) {
+    return ast::ItemIdx::invalid();
+  }
+  if (!expect(lexer::TokenKind::Fn, "function")) {
+    return ast::ItemIdx::invalid();
+  }
+  base::Result<ast::Ident, diag::Fatal> name = parse_ident("function name");
+  if (name.is_err()) {
+    return ast::ItemIdx::invalid();
+  }
+  if (!expect(lexer::TokenKind::LParen, "`(`")) {
+    return ast::ItemIdx::invalid();
+  }
+  std::vector<ast::ItemFnParam> params;
+  if (!parse_fn_params(params)) {
+    return ast::ItemIdx::invalid();
+  }
+  if (!expect(lexer::TokenKind::RParen, "`)`")) {
+    return ast::ItemIdx::invalid();
+  }
+  ast::TypeIdx return_type = ast::TypeIdx::invalid();
+  if (match(lexer::TokenKind::Arrow)) {
+    return_type = parse_closed_type();
+    if (!return_type.is_valid()) {
+      return ast::ItemIdx::invalid();
+    }
+  }
+  // Intrinsic declarations carry no body: the signature ends here.
+  if (!expect(lexer::TokenKind::Semicolon, "`;`")) {
+    return ast::ItemIdx::invalid();
+  }
+  ast::ItemNode node;
+  node.kind = ast::ItemKind::Intrinsic;
+  node.span = span_from(mark);
+  node.is_pub = is_pub;
+  node.payload.set(ast::ItemIntrinsic{
+      .name = std::move(name).unwrap(),
+      .params = ast::copy_to_arena(ast_.spans, params),
+      .return_type = return_type,
   });
   return ast_.items.push_back(node);
 }

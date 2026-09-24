@@ -25,6 +25,22 @@
   expressions in MVP (full const evaluation arrives with `comp fn`,
   post-MVP). Binding-position `const` does not exist.
 
+## Intrinsic declarations (Bootstrap)
+
+- `intrinsic fn name(params) (-> ret)?;` declares a compiler-provided
+  function: a signature without a body, terminated by `;`. Only free
+  functions may be intrinsic; `intrinsic` methods are rejected.
+- The compiler knows a closed set, enumerated here. Declaring any
+  other name is a compile-time error:
+  - `memcopy(dst: &mut u8, src: &u8, n: usize)` copies `n` bytes.
+  - `print(msg: str)`, `println(msg: str)`, `panic(msg: str)` are the
+    legacy I/O intrinsics; they migrate to ordinary core functions
+    once FFI lands, and remain callable with or without a
+    declaration until then.
+- Calls to intrinsics check like ordinary calls. Intrinsics have no
+  bodies to lower, borrow, or specialize; `comp` parameters on
+  intrinsics are rejected.
+
 ## Structs and enums
 
 - Structs have named fields only and no constructors.

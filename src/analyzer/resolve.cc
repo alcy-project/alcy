@@ -67,6 +67,11 @@ class Resolver {
   std::string_view package_name;
   source::FileId root = source::kUnknownFile;
   std::vector<FileData> file_data;
+  // Prelude sources: lexed and parsed like package files but attached
+  // as standalone modules, never into the package tree.
+  std::vector<FileData> prelude_data;
+  std::vector<std::string> prelude_names;
+  std::vector<u32> prelude_modules;
   std::vector<ModuleNode*> modules;
   std::vector<u32> parents;
   std::vector<std::vector<NameEntry>> local_types;
@@ -226,6 +231,7 @@ class Resolver {
             break;
           }
           case I::Fn:
+          case I::Intrinsic:
           case I::Static:
           case I::Const: {
             local_values[m].push_back(NameEntry{name});
@@ -237,6 +243,59 @@ class Resolver {
       }
       for (u32 child : module_children[m]) {
         local_modules[m].push_back(NameEntry{module_name(child)});
+      }
+    }
+  }
+
+  // Injects implicit imports of every public prelude item into
+  // every non-prelude module. Locals and explicit uses win silently;
+  // the imports never re-export (is_pub false).
+  void inject_prelude() {
+    for (u32 prelude : prelude_modules) {
+      for (ast::ItemIdx item : modules[prelude]->items) {
+        const ast::ItemNode& node = ast.items[item];
+        if (!node.is_pub) {
+          continue;
+        }
+        const std::string_view name = node.name();
+        using I = ast::ItemKind;
+        const Namespace namespaces[] = {Namespace::Type, Namespace::Value,
+                                        Namespace::Module};
+        for (Namespace ns : namespaces) {
+          const bool declared =
+              (ns == Namespace::Type &&
+               (node.kind == I::Struct || node.kind == I::Enum)) ||
+              (ns == Namespace::Value &&
+               (node.kind == I::Struct || node.kind == I::Enum ||
+                node.kind == I::Fn || node.kind == I::Intrinsic ||
+                node.kind == I::Static || node.kind == I::Const));
+          if (!declared) {
+            continue;
+          }
+          for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+            if (m == prelude) {
+              continue;
+            }
+            const std::vector<NameEntry>& locals =
+                ns == Namespace::Type    ? local_types[m]
+                : ns == Namespace::Value ? local_values[m]
+                                         : local_modules[m];
+            if (has_name(locals, name)) {
+              continue;
+            }
+            bool imported = false;
+            for (const Import& prior : module_imports[m]) {
+              if (prior.ns == ns && prior.name == name) {
+                imported = true;
+                break;
+              }
+            }
+            if (!imported) {
+              module_imports[m].push_back(
+                  Import{name, ns, prelude, name, false});
+            }
+          }
+        }
       }
     }
   }
@@ -434,7 +493,8 @@ class Resolver {
 
   ModuleTree run(source::FileId root_id,
                  std::span<const ModuleInput> inputs,
-                 std::string_view package_name_in) {
+                 std::string_view package_name_in,
+                 std::span<const ModuleInput> prelude = {}) {
     package_name = package_name_in;
     root = root_id;
     file_data.reserve(inputs.size());
@@ -451,11 +511,36 @@ class Resolver {
       module_inputs.emplace_back(input.name);
       file_data.emplace_back(input.id, std::move(path));
     }
+    for (const ModuleInput& input : prelude) {
+      base::Result<path::Path, path::PathError> canonical =
+          path::Path::from_native(sources.name(input.id));
+      if (canonical.is_err()) {
+        const u32 index = bag.emit(diag::Severity::Error, kAnalyzerInvalidPath,
+                                   "invalid source path for file");
+        (void)index;
+        continue;
+      }
+      path::Path path = std::move(canonical).unwrap();
+      prelude_names.emplace_back(input.name);
+      prelude_data.emplace_back(input.id, std::move(path));
+    }
     for (FileData& file : file_data) {
       lex_parse_file(file);
     }
+    for (FileData& file : prelude_data) {
+      lex_parse_file(file);
+    }
     build_tree();
+    for (usize i = 0; i < prelude_data.size(); ++i) {
+      const std::string path =
+          prelude_names[i].empty() ? "prelude" : prelude_names[i];
+      const u32 module = add_module(path, prelude_data[i].id,
+                                    prelude_data[i].items, kNoModule);
+      prelude_data[i].module = module;
+      prelude_modules.push_back(module);
+    }
     collect_locals();
+    inject_prelude();
     for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
       resolve_exports(m);
     }
@@ -479,14 +564,16 @@ class Resolver {
 
 }  // namespace
 
-diag::Fallible<ModuleTree> resolve_modules(source::FileId root,
-                                           std::span<const ModuleInput> modules,
-                                           std::string_view package_name,
-                                           source::SourceManager& sources,
-                                           ast::AstArena& ast,
-                                           diag::DiagBag& bag) {
+diag::Fallible<ModuleTree> resolve_modules(
+    source::FileId root,
+    std::span<const ModuleInput> modules,
+    std::string_view package_name,
+    source::SourceManager& sources,
+    ast::AstArena& ast,
+    diag::DiagBag& bag,
+    std::span<const ModuleInput> prelude) {
   Resolver resolver{sources, ast, bag};
-  return base::make_ok(resolver.run(root, modules, package_name));
+  return base::make_ok(resolver.run(root, modules, package_name, prelude));
 }
 
 }  // namespace analyzer

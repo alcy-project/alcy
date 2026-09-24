@@ -328,6 +328,25 @@ VerifyResult verify_storage(const Storage& storage) {
           return err(VerifyErrorKind::InvalidBorrow, iidx.idx);
         }
       }
+      if (instr.op == Opcode::Memcpy) {
+        // operands = [dst_ptr, src_ptr, len(integer)]; discarded value.
+        if (instr.operands.size() != 3 || instr.dst.is_valid()) {
+          return err(VerifyErrorKind::InvalidMemcpy, iidx.idx);
+        }
+        for (u32 offset = 0; offset < 2; ++offset) {
+          const Operand& ptr =
+              storage.operands()[instr.operands.head() + offset];
+          const TypeTag tag = storage.types()[ptr.type.idx].tag;
+          if (tag != TypeTag::Ref && tag != TypeTag::MutRef &&
+              tag != TypeTag::Ptr) {
+            return err(VerifyErrorKind::InvalidMemcpy, iidx.idx);
+          }
+        }
+        const Operand& len = storage.operands()[instr.operands.head() + 2];
+        if (!is_integer_type(storage.types()[len.type.idx].tag)) {
+          return err(VerifyErrorKind::InvalidMemcpy, iidx.idx);
+        }
+      }
       if (instr.op == Opcode::ExtractValue || instr.op == Opcode::InsertValue) {
         // Extract: [aggregate, index(imm)...]; Insert: [aggregate, value,
         // index(imm)...]. Indexes must be integer immediates.

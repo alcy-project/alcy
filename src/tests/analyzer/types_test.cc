@@ -6,6 +6,7 @@
 #include <initializer_list>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -51,11 +52,14 @@ struct CheckCase {
   std::optional<CheckedPackage> package;
 };
 
-CheckCase check_case(io::TempDir& dir,
-                     std::string_view root_rel,
-                     std::initializer_list<std::string_view> rels,
-                     Fixture& f,
-                     ir::PointerWidth width = ir::PointerWidth::W64) {
+CheckCase check_case(
+    io::TempDir& dir,
+    std::string_view root_rel,
+    std::initializer_list<std::string_view> rels,
+    Fixture& f,
+    ir::PointerWidth width = ir::PointerWidth::W64,
+    std::initializer_list<std::pair<std::string_view, std::string_view>>
+        prelude = {}) {
   std::vector<ModuleInput> inputs;
   source::FileId root = source::kUnknownFile;
   for (std::string_view rel : rels) {
@@ -78,8 +82,20 @@ CheckCase check_case(io::TempDir& dir,
       inputs.push_back({name, id});
     }
   }
-  diag::Fallible<ModuleTree> tree_result =
-      resolve_modules(root, inputs, "testpkg", f.sources, f.ast, f.bag);
+  std::vector<std::string> prelude_storage;
+  std::vector<ModuleInput> prelude_inputs;
+  for (const auto& [name, rel] : prelude) {
+    base::Result<source::FileId, source::SourceError> loaded =
+        f.sources.load(dir.join(rel));
+    if (loaded.is_err()) {
+      continue;
+    }
+    prelude_storage.emplace_back(name);
+    prelude_inputs.push_back(
+        {prelude_storage.back(), std::move(loaded).unwrap()});
+  }
+  diag::Fallible<ModuleTree> tree_result = resolve_modules(
+      root, inputs, "testpkg", f.sources, f.ast, f.bag, prelude_inputs);
   if (tree_result.is_err() || f.bag.has_errors()) {
     return {std::nullopt};
   }
@@ -1173,6 +1189,93 @@ TEST_CASE("Check rejects print inside comp blocks") {
   const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check accepts memcopy intrinsic declarations") {
+  io::TempDir dir("alcy_types_intrinsic_ok_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "intrinsic fn memcopy(dst: &mut u8, "
+                                      "src: &u8, n: usize);\n"
+                                      "fn main() {\n"
+                                      "  mut a := 1u8\n"
+                                      "  b := 2u8\n"
+                                      "  memcopy(&mut a, &b, 1)\n"
+                                      "  _ := a\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects unknown intrinsics") {
+  io::TempDir dir("alcy_types_intrinsic_unknown_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "intrinsic fn frobnicate(x: i32);\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects mistyped intrinsic signatures") {
+  io::TempDir dir("alcy_types_intrinsic_sig_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "intrinsic fn memcopy(x: i32);\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects comp parameters on intrinsics") {
+  io::TempDir dir("alcy_types_intrinsic_comp_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "intrinsic fn memcopy(dst: &mut u8, "
+                                      "src: &u8, comp n: usize);\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check resolves prelude calls without imports") {
+  io::TempDir dir("alcy_types_prelude_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  _ := help()\n"
+                                      "}\n"},
+                                     {"core.al",
+                                      "pub fn help() -> i32 {\n"
+                                      "  ret 1\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(result.package.has_value());
 }
 
 }  // namespace analyzer

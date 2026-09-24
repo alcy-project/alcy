@@ -456,4 +456,115 @@ TEST_CASE("Resolve reports re-export cycles") {
   CHECK(f.bag.has_errors());
 }
 
+ResolveCase resolve_case_with_prelude(
+    io::TempDir& dir,
+    std::string_view root_rel,
+    std::initializer_list<std::string_view> rels,
+    std::initializer_list<std::pair<std::string_view, std::string_view>>
+        prelude,
+    Fixture& f) {
+  std::vector<ModuleInput> inputs;
+  source::FileId root = source::kUnknownFile;
+  for (std::string_view rel : rels) {
+    base::Result<source::FileId, source::SourceError> loaded =
+        f.sources.load(dir.join(rel));
+    if (loaded.is_err()) {
+      continue;
+    }
+    const source::FileId id = std::move(loaded).unwrap();
+    if (rel == root_rel) {
+      root = id;
+      inputs.push_back({"", id});
+    } else {
+      inputs.push_back({rel, id});
+    }
+  }
+  std::vector<std::string> prelude_storage;
+  std::vector<ModuleInput> prelude_inputs;
+  for (const auto& [name, rel] : prelude) {
+    base::Result<source::FileId, source::SourceError> loaded =
+        f.sources.load(dir.join(rel));
+    if (loaded.is_err()) {
+      continue;
+    }
+    prelude_storage.emplace_back(name);
+    prelude_inputs.push_back(
+        {prelude_storage.back(), std::move(loaded).unwrap()});
+  }
+  diag::Fallible<ModuleTree> result = resolve_modules(
+      root, inputs, "testpkg", f.sources, f.ast, f.bag, prelude_inputs);
+  if (result.is_err()) {
+    ModuleTree empty;
+    empty.modules = {};
+    empty.root = 0;
+    return {empty, false};
+  }
+  ModuleTree tree = std::move(result).unwrap();
+  return {tree, !f.bag.has_errors()};
+}
+
+TEST_CASE("Resolve injects prelude imports") {
+  io::TempDir dir("alcy_analyzer_prelude_test");
+  const bool setup = write_all(dir, {
+                                        {"main.al", "fn main() {}\n"},
+                                        {"core.al", "pub fn help() {}\n"},
+                                    });
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const ResolveCase result = resolve_case_with_prelude(
+      dir, "main.al", {"main.al"}, {{"core", "core.al"}}, f);
+  CHECK(result.ok);
+  if (!result.ok) {
+    return;
+  }
+  const ModuleNode* root = find_module(result.tree, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  bool found = false;
+  for (const Import& import : root->imports) {
+    if (import.ns == Namespace::Value && import.name == "help" &&
+        import.member == "help") {
+      found = true;
+    }
+  }
+  CHECK(found);
+  const ModuleNode* core = find_module(result.tree, "core");
+  CHECK(core != nullptr);
+}
+
+TEST_CASE("Resolve prefers locals over prelude imports") {
+  io::TempDir dir("alcy_analyzer_prelude_shadow_test");
+  const bool setup =
+      write_all(dir, {
+                         {"main.al", "fn help() {}\nfn main() {}\n"},
+                         {"core.al", "pub fn help() {}\n"},
+                     });
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const ResolveCase result = resolve_case_with_prelude(
+      dir, "main.al", {"main.al"}, {{"core", "core.al"}}, f);
+  CHECK(result.ok);
+  if (!result.ok) {
+    return;
+  }
+  const ModuleNode* root = find_module(result.tree, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  for (const Import& import : root->imports) {
+    CHECK(!(import.ns == Namespace::Value && import.name == "help"));
+  }
+}
+
 }  // namespace analyzer

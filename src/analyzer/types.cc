@@ -51,6 +51,7 @@ constexpr u32 kAnalyzerBreakOutsideLoop = 4230;
 constexpr u32 kAnalyzerUnsupportedExpr = 4231;
 constexpr u32 kAnalyzerNotCompKnown = 4232;
 constexpr u32 kAnalyzerInvalidComp = 4233;
+constexpr u32 kAnalyzerUnknownIntrinsic = 4234;
 
 // Name-interning map capacity (power of two, fixed: the table never
 // resizes and traps on overflow, so size for programs, not tests).
@@ -503,6 +504,59 @@ class Checker {
     }
   }
 
+  // Closed compiler-known intrinsic set (see docs/spec/items.md).
+  // `print`/`println`/`panic` stay callable without a declaration
+  // until core provides them; `memcopy` requires one.
+  static bool is_known_intrinsic(std::string_view name) {
+    return name == "memcopy" || name == "print" || name == "println" ||
+           name == "panic";
+  }
+
+  // Verifies a declared intrinsic signature against its canonical
+  // shape; declarations are documentation-checked, never trusted.
+  bool check_intrinsic_signature(u32 module,
+                                 const ast::ItemIntrinsic& intrinsic,
+                                 const std::vector<ir::TypeIdx>& params,
+                                 ir::TypeIdx ret) {
+    const std::string_view name = intrinsic.name.name;
+    std::vector<ir::TypeIdx> expected;
+    ir::TypeIdx expected_ret = builder.primitive(ir::TypeTag::Void);
+    if (name == "memcopy") {
+      const ir::TypeIdx u8 = builder.primitive(ir::TypeTag::U8);
+      const ir::TypeIdx usize = builder.primitive(
+          width == ir::PointerWidth::W64 ? ir::TypeTag::U64 : ir::TypeTag::U32);
+      expected.push_back(builder.reference_type(u8, true));
+      expected.push_back(builder.reference_type(u8, false));
+      expected.push_back(usize);
+    } else if (name == "print" || name == "println") {
+      expected.push_back(builder.primitive(ir::TypeTag::Str));
+    } else if (name == "panic") {
+      expected.push_back(builder.primitive(ir::TypeTag::Str));
+      expected_ret = builder.never_type();
+    } else {
+      return false;
+    }
+    if (params.size() != expected.size() || ret.idx != expected_ret.idx) {
+      const u32 index = bag.emit(
+          diag::Severity::Error, kAnalyzerInvalidOperation, intrinsic.name.span,
+          "intrinsic '{}' has the wrong signature", name);
+      (void)index;
+      return false;
+    }
+    for (usize i = 0; i < params.size(); ++i) {
+      if (params[i].idx != expected[i].idx) {
+        const u32 index =
+            bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                     intrinsic.name.span,
+                     "intrinsic '{}' has the wrong signature", name);
+        (void)index;
+        return false;
+      }
+    }
+    (void)module;
+    return true;
+  }
+
   void process_module(u32 module) {
     for (ast::ItemIdx item : tree.modules[module]->items) {
       const ast::ItemNode& node = ast.items[item];
@@ -552,6 +606,40 @@ class Checker {
           modules[module].functions.push_back(
               {node.payload.get<ast::ItemFn>().name.name, std::move(params),
                ret, item});
+          break;
+        }
+        case ast::ItemKind::Intrinsic: {
+          const ast::ItemIntrinsic& intrinsic =
+              node.payload.get<ast::ItemIntrinsic>();
+          if (!is_known_intrinsic(intrinsic.name.name)) {
+            const u32 index =
+                bag.emit(diag::Severity::Error, kAnalyzerUnknownIntrinsic,
+                         intrinsic.name.span, "unknown intrinsic '{}'",
+                         intrinsic.name.name);
+            (void)index;
+            break;
+          }
+          std::vector<ir::TypeIdx> params;
+          for (const ast::ItemFnParam& param : intrinsic.params) {
+            if (param.is_comp) {
+              const u32 index =
+                  bag.emit(diag::Severity::Error, kAnalyzerInvalidComp,
+                           ast.patterns[param.pattern].span,
+                           "`comp` parameters on intrinsics are not supported");
+              (void)index;
+              break;
+            }
+            params.push_back(resolve_type(module, param.type, nullptr));
+          }
+          ir::TypeIdx ret = builder.primitive(ir::TypeTag::Void);
+          if (intrinsic.return_type.is_valid()) {
+            ret = resolve_type(module, intrinsic.return_type, nullptr);
+          }
+          if (!check_intrinsic_signature(module, intrinsic, params, ret)) {
+            break;
+          }
+          modules[module].functions.push_back(
+              {intrinsic.name.name, std::move(params), ret, item});
           break;
         }
         case ast::ItemKind::Static:

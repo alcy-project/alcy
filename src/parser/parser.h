@@ -5,6 +5,7 @@
 
 #include <span>
 #include <string_view>
+#include <vector>
 
 #include "ast/ast.h"
 #include "diag/bag.h"
@@ -61,6 +62,8 @@ class Parser {
   // Items.
   ast::ItemIdx parse_item();
   ast::ItemIdx parse_fn(bool is_pub);
+  ast::ItemIdx parse_intrinsic_fn(bool is_pub);
+  bool parse_fn_params(std::vector<ast::ItemFnParam>& params);
   ast::ItemIdx parse_struct(bool is_pub);
   ast::ItemIdx parse_enum(bool is_pub);
   ast::ItemIdx parse_impl(bool is_pub);

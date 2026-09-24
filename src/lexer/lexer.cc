@@ -137,6 +137,7 @@ constexpr Keyword kKeywords[] = {
     {"if", TokenKind::If},
     {"impl", TokenKind::Impl},
     {"in", TokenKind::In},
+    {"intrinsic", TokenKind::Intrinsic},
     {"isize", TokenKind::Isize},
     {"loop", TokenKind::Loop},
     {"match", TokenKind::Match},

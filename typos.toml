@@ -11,3 +11,5 @@ extend-exclude = [
 [default.extend-words]
 restat = "restat"
 OLT = "OLT"
+# LLVM API name (llvm::IRBuilderBase::CreateMemCpy)
+Cpy = "Cpy"

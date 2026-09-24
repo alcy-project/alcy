@@ -729,6 +729,7 @@ struct ExprStmt : Stmt {
 
 enum class ItemKind : u8 {
   Fn,
+  Intrinsic,
   Struct,
   Enum,
   Impl,
@@ -754,6 +755,15 @@ struct ItemFn {
   std::span<const ItemFnParam> params;
   TypeIdx return_type = TypeIdx::invalid();
   BlockIdx body = BlockIdx::invalid();
+};
+
+// A compiler-provided function: signature without a body. Calls
+// check like ordinary calls; lowering maps known names to runtime
+// hooks or IR operations.
+struct ItemIntrinsic {
+  Ident name;
+  std::span<const ItemFnParam> params;
+  TypeIdx return_type = TypeIdx::invalid();
 };
 
 struct ItemStructField {
@@ -818,6 +828,7 @@ struct ItemNode {
   // Leaves members uninitialized; parsers set the active member
   // before pushing the node.
   using ItemPayload = base::Union<ItemFn,
+                                  ItemIntrinsic,
                                   ItemStruct,
                                   ItemEnum,
                                   ItemImpl,
@@ -832,6 +843,7 @@ struct ItemNode {
       case I::Struct: return payload.get<ItemStruct>().name.name;
       case I::Enum: return payload.get<ItemEnum>().name.name;
       case I::Fn: return payload.get<ItemFn>().name.name;
+      case I::Intrinsic: return payload.get<ItemIntrinsic>().name.name;
       case I::Static: return payload.get<ItemStatic>().name.name;
       case I::Const: return payload.get<ItemConst>().name.name;
       case I::Use:   // return item.get<ItemUse>().name.name;

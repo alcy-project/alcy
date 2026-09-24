@@ -93,6 +93,17 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       }
       break;
     }
+    case Op::Memcpy: {
+      DCHECK(ops.size() == 3);
+      DCHECK(!i.dst.is_valid());
+      builder_->CreateMemCpy(
+          resolve_operand_value(storage_.operands()[ops.head()]),
+          llvm::MaybeAlign(1),
+          resolve_operand_value(storage_.operands()[ops.head() + 1]),
+          llvm::MaybeAlign(1),
+          resolve_operand_value(storage_.operands()[ops.head() + 2]));
+      break;
+    }
     case Op::GetElementPtr: {
       // operands = [base_ptr, index...]. The element type is recovered from
       // the base pointer's Alloca site; pointers from elsewhere are

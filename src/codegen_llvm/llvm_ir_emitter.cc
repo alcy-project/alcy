@@ -62,10 +62,14 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
       // here (noreturn externals), where LLVM expects void.
       return builder_->getVoidTy();
     case T::I1: return builder_->getInt1Ty();
-    case T::I8: return builder_->getInt8Ty();
-    case T::I16: return builder_->getInt16Ty();
-    case T::I32: return builder_->getInt32Ty();
-    case T::I64: return builder_->getInt64Ty();
+    case T::I8:
+    case T::U8: return builder_->getInt8Ty();
+    case T::I16:
+    case T::U16: return builder_->getInt16Ty();
+    case T::I32:
+    case T::U32: return builder_->getInt32Ty();
+    case T::I64:
+    case T::U64: return builder_->getInt64Ty();
     // case T::I128: return builder_->getInt128Ty();
     case T::F32: return builder_->getFloatTy();
     case T::F64: return builder_->getDoubleTy();
@@ -264,11 +268,13 @@ void LlvmIrEmitter::emit_instruction(const ir::Instruction& instr) {
     case Op::TypeCast:
     case Op::Select:
     case Op::Move:
+    case Op::Borrow:
     case Op::Drop: emit_compute(instr); break;
 
     case Op::Alloca:
     case Op::Load:
     case Op::Store:
+    case Op::Memcpy:
     case Op::GetElementPtr:
     case Op::ExtractValue:
     case Op::InsertValue:
