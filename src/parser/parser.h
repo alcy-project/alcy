@@ -98,6 +98,7 @@ class Parser {
   ast::ExprIdx parse_loop();
   ast::ExprIdx parse_while();
   ast::ExprIdx parse_block_expr();
+  ast::ExprIdx parse_comp_block();
   ast::BlockIdx parse_block();
 
   // Statements (recover at boundaries).

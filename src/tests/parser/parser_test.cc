@@ -458,4 +458,55 @@ TEST_CASE("Parser rejects struct field assignment syntax") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Parser accepts comp parameters") {
+  Fixture f;
+  const ParseResult result =
+      parse("fn repeat(comp n: i32, x: i32) -> i32 { ret x }", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  CHECK(fn.params.size() == 2);
+  CHECK(fn.params[0].is_comp);
+  CHECK(!fn.params[1].is_comp);
+}
+
+TEST_CASE("Parser accepts comp declarations") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { comp n := 3\n _ := n }", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  const ast::Block& block = f.ast.blocks[fn.body];
+  CHECK(block.statements.size() == 2);
+  const ast::StmtNode& stmt = f.ast.stmts[block.statements[0]];
+  CHECK(stmt.kind == ast::StmtKind::Decl);
+  CHECK(stmt.payload.get<ast::StmtDecl>().is_comp);
+}
+
+TEST_CASE("Parser accepts comp blocks") {
+  Fixture f;
+  const ParseResult result = parse("fn f() -> i32 { ret comp { 1 + 2 } }", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  const ast::Block& block = f.ast.blocks[fn.body];
+  const ast::ExprReturn& ret = as_return(block.value, f);
+  const ast::ExprNode& inner = f.ast.exprs[ret.value];
+  CHECK(inner.kind == ast::ExprKind::Block);
+  CHECK(inner.payload.get<ast::ExprBlock>().is_comp);
+}
+
+TEST_CASE("Parser rejects misplaced comp with guidance") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { _ := comp + 1 }", f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
 }  // namespace parser

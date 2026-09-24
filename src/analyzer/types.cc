@@ -49,6 +49,8 @@ constexpr u32 kAnalyzerBadReturn = 4228;
 constexpr u32 kAnalyzerBadAssignment = 4229;
 constexpr u32 kAnalyzerBreakOutsideLoop = 4230;
 constexpr u32 kAnalyzerUnsupportedExpr = 4231;
+constexpr u32 kAnalyzerNotCompKnown = 4232;
+constexpr u32 kAnalyzerInvalidComp = 4233;
 
 // Name-interning map capacity (power of two, fixed: the table never
 // resizes and traps on overflow, so size for programs, not tests).
@@ -99,11 +101,18 @@ class Checker {
     std::string_view name;
     ir::TypeIdx type;
     bool is_mut;
+    bool comp_known = false;
   };
   bool in_fn = false;
 
   std::vector<std::vector<Local>> scopes;
   u32 loop_depth = 0;
+  // Nonzero while checking comp evaluation contexts (comp block
+  // contents and comp declaration initializers).
+  u32 comp_depth = 0;
+  // Verifies comp-known-ness while block scopes are still alive
+  // (comp blocks and their nested bodies).
+  bool verify_comp_known = false;
   ir::TypeIdx fn_ret = ir::TypeIdx(0);
 
   // Pass 1: registers every nominal definition, diagnosing duplicates
@@ -1610,16 +1619,23 @@ class Checker {
 
   // Binds a pattern against a type, declaring locals. Returns true
   // when the pattern is refutable (declarations reject those).
+  // `bind_comp_known` marks the declared locals comp-known for `comp`
+  // parameters and declarations; anything bound while checking comp
+  // evaluation contexts counts as comp-known as well.
+  bool bind_comp_known = false;
   bool bind_pattern(u32 module, ast::PatternIdx pattern, ir::TypeIdx type) {
+    const bool comp = bind_comp_known || comp_depth > 0;
     const ast::PatternNode& node = ast.patterns[pattern];
     switch (node.kind) {
       case ast::PatternKind::Wildcard: return false;
       case ast::PatternKind::Ident: {
-        scopes.back().push_back({node.payload.ident.name.name, type, false});
+        scopes.back().push_back(
+            {node.payload.ident.name.name, type, false, comp});
         return false;
       }
       case ast::PatternKind::MutIdent: {
-        scopes.back().push_back({node.payload.mut_ident.name.name, type, true});
+        scopes.back().push_back(
+            {node.payload.mut_ident.name.name, type, true, comp});
         return false;
       }
       case ast::PatternKind::Literal: {
@@ -1808,6 +1824,186 @@ class Checker {
     return true;
   }
 
+  // Structural comp-known-ness over checked expressions: literals,
+  // comp-known locals and literal consts, and pure combinations
+  // thereof. Calls count when their arguments are comp-known and the
+  // callee is not an intrinsic (print/panic never are).
+  bool expr_comp_known(u32 module, ast::ExprIdx expr) const {
+    const ast::ExprNode& node = ast.exprs[expr];
+    switch (node.kind) {
+      case ast::ExprKind::Literal: {
+        const ast::Literal& value =
+            ast.literals[node.payload.get<ast::ExprLiteral>().value];
+        return value.kind == ast::LiteralKind::Integer ||
+               value.kind == ast::LiteralKind::Bool ||
+               value.kind == ast::LiteralKind::String;
+      }
+      case ast::ExprKind::Path: {
+        const ast::PathIdx path = node.payload.get<ast::ExprPath>().idx;
+        const std::span<const ast::Ident> segments = ast.paths[path].segments;
+        if (segments.size() != 1) {
+          return false;
+        }
+        if (const Local* local = lookup_local(segments[0].name)) {
+          return local->comp_known;
+        }
+        return is_literal_const(module, path);
+      }
+      case ast::ExprKind::Unary:
+        return expr_comp_known(module,
+                               node.payload.get<ast::ExprUnary>().inner);
+      case ast::ExprKind::Borrow:
+        return expr_comp_known(module,
+                               node.payload.get<ast::ExprBorrow>().inner);
+      case ast::ExprKind::Binary:
+        return expr_comp_known(module,
+                               node.payload.get<ast::ExprBinary>().lhs) &&
+               expr_comp_known(module, node.payload.get<ast::ExprBinary>().rhs);
+      case ast::ExprKind::Cast:
+        return expr_comp_known(module, node.payload.get<ast::ExprCast>().inner);
+      case ast::ExprKind::Tuple: {
+        for (ast::ExprIdx element :
+             node.payload.get<ast::ExprTuple>().elements) {
+          if (!expr_comp_known(module, element)) {
+            return false;
+          }
+        }
+        return true;
+      }
+      case ast::ExprKind::Struct: {
+        for (const ast::ExprFieldInit& field :
+             node.payload.get<ast::ExprStruct>().init) {
+          if (!expr_comp_known(module, field.value)) {
+            return false;
+          }
+        }
+        return !node.payload.get<ast::ExprStruct>().base_expr.is_valid() ||
+               expr_comp_known(module,
+                               node.payload.get<ast::ExprStruct>().base_expr);
+      }
+      case ast::ExprKind::Field:
+        return expr_comp_known(module,
+                               node.payload.get<ast::ExprField>().receiver);
+      case ast::ExprKind::Index:
+        // Fixed arrays are outside the comp domain for now.
+        return false;
+      case ast::ExprKind::Call: {
+        for (ast::ExprIdx arg : node.payload.get<ast::ExprCall>().args) {
+          if (!expr_comp_known(module, arg)) {
+            return false;
+          }
+        }
+        const ast::ExprIdx callee = node.payload.get<ast::ExprCall>().callee;
+        if (ast.exprs[callee].kind != ast::ExprKind::Path) {
+          return false;
+        }
+        const ast::PathIdx path =
+            ast.exprs[callee].payload.get<ast::ExprPath>().idx;
+        const std::span<const ast::Ident> segments = ast.paths[path].segments;
+        if (segments.size() == 1) {
+          const std::string_view name = segments[0].name;
+          if (name == "print" || name == "println" || name == "panic") {
+            return false;
+          }
+        }
+        return true;
+      }
+      case ast::ExprKind::MethodCall: {
+        if (!expr_comp_known(
+                module, node.payload.get<ast::ExprMethodCall>().receiver)) {
+          return false;
+        }
+        for (ast::ExprIdx arg : node.payload.get<ast::ExprMethodCall>().args) {
+          if (!expr_comp_known(module, arg)) {
+            return false;
+          }
+        }
+        return true;
+      }
+      case ast::ExprKind::Question:
+        return expr_comp_known(module,
+                               node.payload.get<ast::ExprQuestion>().inner);
+      case ast::ExprKind::If: {
+        const ast::Cond& cond = ast.conds[node.payload.get<ast::ExprIf>().cond];
+        if (cond.is_pattern || !expr_comp_known(module, cond.value)) {
+          return false;
+        }
+        if (!expr_comp_known_block(
+                module, node.payload.get<ast::ExprIf>().then_block) ||
+            (node.payload.get<ast::ExprIf>().else_block.is_valid() &&
+             !expr_comp_known_block(
+                 module, node.payload.get<ast::ExprIf>().else_block))) {
+          return false;
+        }
+        return true;
+      }
+      case ast::ExprKind::Match: {
+        if (!expr_comp_known(module,
+                             node.payload.get<ast::ExprMatch>().scrutinee)) {
+          return false;
+        }
+        for (const ast::ExprMatchArm& arm :
+             node.payload.get<ast::ExprMatch>().arms) {
+          if (!expr_comp_known(module, arm.body)) {
+            return false;
+          }
+        }
+        return true;
+      }
+      case ast::ExprKind::Block:
+        return expr_comp_known_block(module,
+                                     node.payload.get<ast::ExprBlock>().block);
+      case ast::ExprKind::Loop:
+        return expr_comp_known_block(module,
+                                     node.payload.get<ast::ExprLoop>().body);
+      case ast::ExprKind::While: {
+        const ast::Cond& cond =
+            ast.conds[node.payload.get<ast::ExprWhile>().cond];
+        if (cond.is_pattern || !expr_comp_known(module, cond.value)) {
+          return false;
+        }
+        return expr_comp_known_block(module,
+                                     node.payload.get<ast::ExprWhile>().body);
+      }
+      case ast::ExprKind::Break:
+      case ast::ExprKind::Continue: return true;
+      case ast::ExprKind::Return:
+      case ast::ExprKind::Range: return false;
+    }
+  }
+
+  bool expr_comp_known_block(u32 module, ast::BlockIdx block) const {
+    const ast::Block& node = ast.blocks[block];
+    for (ast::StmtIdx stmt : node.statements) {
+      const ast::StmtNode& stmt_node = ast.stmts[stmt];
+      if (stmt_node.kind == ast::StmtKind::Decl) {
+        if (!expr_comp_known(module,
+                             stmt_node.payload.get<ast::StmtDecl>().init)) {
+          return false;
+        }
+        continue;
+      }
+      if (stmt_node.kind == ast::StmtKind::Reassign) {
+        const ast::StmtReassign& reassign =
+            stmt_node.payload.get<ast::StmtReassign>();
+        if (ast.exprs[reassign.place].kind != ast::ExprKind::Path ||
+            !expr_comp_known(module, reassign.value)) {
+          return false;
+        }
+        continue;
+      }
+      if (stmt_node.kind == ast::StmtKind::Expr) {
+        const ast::ExprKind kind =
+            ast.exprs[stmt_node.payload.get<ast::StmtExpr>().value].kind;
+        if (kind == ast::ExprKind::Break || kind == ast::ExprKind::Continue) {
+          continue;
+        }
+      }
+      return false;
+    }
+    return !node.value.is_valid() || expr_comp_known(module, node.value);
+  }
+
   // Checks operands of a binary operator: same-type numerics, with
   // bare integer literals coerced to the other side (so `x + 42`
   // works for any integer x without an annotation).
@@ -1845,6 +2041,7 @@ class Checker {
   void check_call_args(u32 module,
                        std::span<const ast::ExprIdx> args,
                        const std::vector<ir::TypeIdx>& params,
+                       const std::vector<bool>& comp_params,
                        diag::Span span,
                        std::string_view what,
                        bool skip_first) {
@@ -1860,7 +2057,64 @@ class Checker {
       const ir::TypeIdx param = params[fixed + i];
       const ir::TypeIdx actual = check_expr(module, args[i], &param);
       unify(param, actual, ast.exprs[args[i]].span, "argument");
+      const bool comp_required =
+          comp_depth > 0 ||
+          (fixed + i < comp_params.size() && comp_params[fixed + i]);
+      if (comp_required && !comp_checked_in_scope(args[i]) &&
+          !expr_comp_known(module, args[i])) {
+        if (comp_depth > 0) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+                       ast.exprs[args[i]].span,
+                       "comp evaluation argument must be comp-known");
+          (void)index;
+        } else {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+                       ast.exprs[args[i]].span,
+                       "argument for `comp` parameter must be comp-known");
+          (void)index;
+        }
+      }
     }
+  }
+
+  // Comp flags of a resolved function item, in parameter order.
+  std::vector<bool> comp_param_flags(ast::ItemIdx item) const {
+    std::vector<bool> flags;
+    if (!item.is_valid()) {
+      return flags;
+    }
+    const ast::ItemNode& node = ast.items[item];
+    if (node.kind != ast::ItemKind::Fn) {
+      return flags;
+    }
+    for (const ast::ItemFnParam& param :
+         node.payload.get<ast::ItemFn>().params) {
+      flags.push_back(param.is_comp);
+    }
+    return flags;
+  }
+
+  // Comp blocks verify their contents in-scope while checking;
+  // re-checking them afterwards would see popped scopes. Only
+  // non-block initializers need the post-check here.
+  bool comp_checked_in_scope(ast::ExprIdx init) const {
+    return ast.exprs[init].kind == ast::ExprKind::Block &&
+           ast.exprs[init].payload.get<ast::ExprBlock>().is_comp;
+  }
+
+  // Literal consts (inline constants) are readable in comp
+  // evaluation; anything else with storage is not.
+  bool is_literal_const(u32 module, ast::PathIdx path) const {
+    const std::span<const ast::Ident> segments = ast.paths[path].segments;
+    if (segments.size() != 1) {
+      return false;
+    }
+    const CheckedModule::StaticInfo* info =
+        lookup_static(module, segments[0].name);
+    return info != nullptr && info->is_const && info->init.is_valid() &&
+           ast.exprs[info->init].kind == ast::ExprKind::Literal;
   }
 
   ir::TypeIdx check_path_expr(u32 module,
@@ -1875,6 +2129,14 @@ class Checker {
       case PathValue::Kind::Local:
       case PathValue::Kind::Static:
       case PathValue::Kind::UnitVariant: {
+        if (resolved.kind == PathValue::Kind::Static && comp_depth > 0 &&
+            !is_literal_const(module, path)) {
+          const u32 index = bag.emit(
+              diag::Severity::Error, kAnalyzerInvalidComp, span,
+              "statics with storage cannot be read in comp evaluation");
+          (void)index;
+          return error_type();
+        }
         if (resolved.kind == PathValue::Kind::UnitVariant) {
           modules[module].variants.push_back(
               {path, false, true, resolved.type, resolved.variant});
@@ -1957,6 +2219,13 @@ class Checker {
         lookup_function(module, segments[0].name) == nullptr) {
       const std::string_view name = segments[0].name;
       if (name == "print" || name == "println") {
+        if (comp_depth > 0) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerInvalidComp, span,
+                       "'{}' is not allowed in comp evaluation", name);
+          (void)index;
+          return error_type();
+        }
         if (args.size() != 1) {
           const u32 index =
               bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
@@ -1974,6 +2243,13 @@ class Checker {
         return unit;
       }
       if (name == "panic") {
+        if (comp_depth > 0) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerInvalidComp, span,
+                       "'panic' is not allowed in comp evaluation");
+          (void)index;
+          return error_type();
+        }
         if (args.size() != 1) {
           const u32 index =
               bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
@@ -1997,7 +2273,8 @@ class Checker {
     if (resolved.kind == PathValue::Kind::Function) {
       const CheckedModule::FnSig* fn = resolved.function;
       record_call(module, callee, fn);
-      check_call_args(module, args, fn->params, span, fn->name, false);
+      check_call_args(module, args, fn->params, comp_param_flags(fn->item),
+                      span, fn->name, false);
       if (expected != nullptr) {
         return unify(*expected, fn->ret, span, "call");
       }
@@ -2007,7 +2284,9 @@ class Checker {
       const CheckedModule::MethodInfo* method = resolved.method;
       record_call(module, callee, method);
       // Associated functions take no receiver; params map 1:1.
-      check_call_args(module, args, method->params, span, method->name, false);
+      check_call_args(module, args, method->params,
+                      comp_param_flags(method->item), span, method->name,
+                      false);
       if (expected != nullptr) {
         return unify(*expected, method->ret, span, "call");
       }
@@ -2074,6 +2353,14 @@ class Checker {
       for (usize i = 0; i < args.size(); ++i) {
         const ir::TypeIdx actual = check_expr(module, args[i], &payloads[i]);
         unify(payloads[i], actual, ast.exprs[args[i]].span, "variant argument");
+        if (comp_depth > 0 && !comp_checked_in_scope(args[i]) &&
+            !expr_comp_known(module, args[i])) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+                       ast.exprs[args[i]].span,
+                       "comp evaluation argument must be comp-known");
+          (void)index;
+        }
       }
       if (expected != nullptr) {
         return unify(*expected, enum_type, span, "call");
@@ -2207,8 +2494,14 @@ class Checker {
     }
     std::vector<ir::TypeIdx> rest(method->params.begin() + 1,
                                   method->params.end());
+    std::vector<bool> comp_flags = comp_param_flags(method->item);
+    // The receiver has no call-site argument; drop its flag with it.
+    std::vector<bool> rest_flags;
+    if (comp_flags.size() == method->params.size() && !comp_flags.empty()) {
+      rest_flags.assign(comp_flags.begin() + 1, comp_flags.end());
+    }
     check_call_args(module, node.payload.get<ast::ExprMethodCall>().args, rest,
-                    span, name, false);
+                    rest_flags, span, name, false);
     if (expected != nullptr) {
       return unify(*expected, method->ret, span, "method call");
     }
@@ -2492,11 +2785,26 @@ class Checker {
       scopes.emplace_back();
       binds = true;
       bind_pattern(module, node.pattern, init);
+      if (verify_comp_known && !comp_checked_in_scope(node.init) &&
+          !expr_comp_known(module, node.init)) {
+        const u32 index =
+            bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+                     ast.exprs[node.init].span,
+                     "comp condition initializer is not comp-known");
+        (void)index;
+      }
       return;
     }
     const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
     const ir::TypeIdx actual = check_expr(module, node.value, &boolean);
     unify(boolean, actual, ast.exprs[node.value].span, "condition");
+    if (verify_comp_known && !comp_checked_in_scope(node.value) &&
+        !expr_comp_known(module, node.value)) {
+      const u32 index = bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+                                 ast.exprs[node.value].span,
+                                 "comp condition is not comp-known");
+      (void)index;
+    }
   }
 
   ir::TypeIdx check_if(u32 module,
@@ -2769,8 +3077,16 @@ class Checker {
                           ast::ExprIdx expr,
                           const ir::TypeIdx* expected) {
     const ast::ExprNode& node = ast.exprs[expr];
-    const ir::TypeIdx scrutinee = check_expr(
-        module, node.payload.get<ast::ExprMatch>().scrutinee, nullptr);
+    const ast::ExprIdx scrutinee_expr =
+        node.payload.get<ast::ExprMatch>().scrutinee;
+    const ir::TypeIdx scrutinee = check_expr(module, scrutinee_expr, nullptr);
+    if (verify_comp_known && !comp_checked_in_scope(scrutinee_expr) &&
+        !expr_comp_known(module, scrutinee_expr)) {
+      const u32 index = bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+                                 ast.exprs[scrutinee_expr].span,
+                                 "comp match scrutinee is not comp-known");
+      (void)index;
+    }
     ir::TypeIdx result = error_type();
     bool first = true;
     for (const ast::ExprMatchArm& arm :
@@ -3027,10 +3343,26 @@ class Checker {
         return unit;
       }
       case ast::ExprKind::Block: {
-        return check_block(module, node.payload.get<ast::ExprBlock>().block,
-                           expected);
+        const ast::ExprBlock& block = node.payload.get<ast::ExprBlock>();
+        if (!block.is_comp) {
+          return check_block(module, block.block, expected);
+        }
+        ++comp_depth;
+        const bool was_verifying = verify_comp_known;
+        verify_comp_known = true;
+        const ir::TypeIdx type = check_block(module, block.block, expected);
+        verify_comp_known = was_verifying;
+        --comp_depth;
+        return type;
       }
       case ast::ExprKind::Return: {
+        if (comp_depth > 0) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerInvalidComp, node.span,
+                       "'ret' must not cross a comp block boundary");
+          (void)index;
+          return error_type();
+        }
         if (!in_fn) {
           const u32 index = bag.emit(diag::Severity::Error, kAnalyzerBadReturn,
                                      node.span, "'ret' outside of a function");
@@ -3091,6 +3423,12 @@ class Checker {
       if (expected != nullptr) {
         result = unify(*expected, result, ast.exprs[node.value].span, "block");
       }
+      if (verify_comp_known && !expr_comp_known(module, node.value)) {
+        const u32 index = bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+                                   ast.exprs[node.value].span,
+                                   "comp block value is not comp-known");
+        (void)index;
+      }
     } else if (expected != nullptr) {
       result = unify(*expected, result, node.span, "block");
     }
@@ -3122,6 +3460,13 @@ class Checker {
           const u32 index =
               bag.emit(diag::Severity::Error, kAnalyzerBadAssignment, node.span,
                        "cannot assign to an immutable binding");
+          (void)index;
+          return error_type();
+        }
+        if (verify_comp_known && !local->comp_known) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown, node.span,
+                       "comp assignment place is not comp-known");
           (void)index;
           return error_type();
         }
@@ -3160,35 +3505,80 @@ class Checker {
     const ast::StmtNode& node = ast.stmts[stmt];
     switch (node.kind) {
       case ast::StmtKind::Decl: {
+        const ast::StmtDecl& decl = node.payload.get<ast::StmtDecl>();
         const ir::TypeIdx* expected = nullptr;
         ir::TypeIdx ascribed = error_type();
-        if (node.payload.get<ast::StmtDecl>().type.is_valid()) {
-          ascribed = resolve_type(
-              module, node.payload.get<ast::StmtDecl>().type, nullptr);
+        if (decl.type.is_valid()) {
+          ascribed = resolve_type(module, decl.type, nullptr);
           expected = &ascribed;
         }
-        const ir::TypeIdx init = check_expr(
-            module, node.payload.get<ast::StmtDecl>().init, expected);
-        if (expected != nullptr) {
-          unify(*expected, init,
-                ast.exprs[node.payload.get<ast::StmtDecl>().init].span,
-                "declaration");
+        bool entered_comp = false;
+        if (decl.is_comp) {
+          ++comp_depth;
+          entered_comp = true;
         }
-        if (bind_pattern(module, node.payload.get<ast::StmtDecl>().pattern,
-                         init)) {
-          const u32 index = bag.emit(
-              diag::Severity::Error, kAnalyzerRefutableLet,
-              ast.patterns[node.payload.get<ast::StmtDecl>().pattern].span,
-              "refutable pattern in declaration; use match");
+        const ir::TypeIdx init = check_expr(module, decl.init, expected);
+        if (expected != nullptr) {
+          unify(*expected, init, ast.exprs[decl.init].span, "declaration");
+        }
+        if ((decl.is_comp || verify_comp_known) &&
+            !comp_checked_in_scope(decl.init) &&
+            !expr_comp_known(module, decl.init)) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+                       ast.exprs[decl.init].span,
+                       "comp declaration initializer is not comp-known");
+          (void)index;
+        }
+        bind_comp_known = decl.is_comp;
+        const bool refutable = bind_pattern(module, decl.pattern, init);
+        bind_comp_known = false;
+        if (entered_comp) {
+          --comp_depth;
+        }
+        if (refutable) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerRefutableLet,
+                       ast.patterns[decl.pattern].span,
+                       "refutable pattern in declaration; use match");
           (void)index;
         }
         return;
       }
       case ast::StmtKind::Reassign: {
-        const ir::TypeIdx place =
-            check_place(module, node.payload.get<ast::StmtReassign>().place);
+        const ast::StmtReassign& reassign =
+            node.payload.get<ast::StmtReassign>();
+        if (comp_depth == 0 &&
+            ast.exprs[reassign.place].kind == ast::ExprKind::Path) {
+          const ast::PathIdx path =
+              ast.exprs[reassign.place].payload.get<ast::ExprPath>().idx;
+          const std::span<const ast::Ident> segments = ast.paths[path].segments;
+          if (segments.size() == 1) {
+            if (const Local* local = lookup_local(segments[0].name)) {
+              if (local->comp_known) {
+                const u32 index = bag.emit(
+                    diag::Severity::Error, kAnalyzerInvalidComp, node.span,
+                    "cannot reassign a comp binding at runtime");
+                (void)index;
+                return;
+              }
+            }
+          }
+        }
+        const ir::TypeIdx place = check_place(module, reassign.place);
         const ir::TypeIdx value = check_expr(
             module, node.payload.get<ast::StmtReassign>().value, &place);
+        if (verify_comp_known &&
+            !comp_checked_in_scope(
+                node.payload.get<ast::StmtReassign>().value) &&
+            !expr_comp_known(module,
+                             node.payload.get<ast::StmtReassign>().value)) {
+          const u32 index = bag.emit(
+              diag::Severity::Error, kAnalyzerNotCompKnown,
+              ast.exprs[node.payload.get<ast::StmtReassign>().value].span,
+              "comp assignment value is not comp-known");
+          (void)index;
+        }
         if (node.payload.get<ast::StmtReassign>().compound) {
           const ir::TypeTag tag = tag_of(place);
           if (!is_integer_tag(tag) && !is_float_tag(tag)) {
@@ -3294,7 +3684,10 @@ class Checker {
     for (const ast::ItemFnParam& param :
          node.payload.get<ast::ItemFn>().params) {
       const ir::TypeIdx type = resolve_type(module, param.type, self);
-      if (bind_pattern(module, param.pattern, type)) {
+      bind_comp_known = param.is_comp;
+      const bool refutable = bind_pattern(module, param.pattern, type);
+      bind_comp_known = false;
+      if (refutable) {
         const u32 index = bag.emit(diag::Severity::Error, kAnalyzerRefutableLet,
                                    ast.patterns[param.pattern].span,
                                    "refutable pattern in function parameter");

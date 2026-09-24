@@ -1085,4 +1085,94 @@ TEST_CASE("Check borrow expressions") {
   }
 }
 
+TEST_CASE("Check accepts comp declarations and blocks") {
+  io::TempDir dir("alcy_types_comp_ok_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn double(comp n: i32) -> i32 {\n"
+                                      "  ret n * 2\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  comp k := 21\n"
+                                      "  _ := double(k)\n"
+                                      "  _ := comp { 1 + 2 }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects runtime arguments for comp parameters") {
+  io::TempDir dir("alcy_types_comp_arg_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn double(comp n: i32) -> i32 {\n"
+                                      "  ret n * 2\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  x := 21\n"
+                                      "  _ := double(x)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects non-comp-known comp initializers") {
+  io::TempDir dir("alcy_types_comp_init_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  x := 1\n"
+                                      "  comp k := x\n"
+                                      "  _ := k\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects ret inside comp blocks") {
+  io::TempDir dir("alcy_types_comp_ret_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  ret comp { ret 1 }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects print inside comp blocks") {
+  io::TempDir dir("alcy_types_comp_io_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  _ := comp { print(\"hi\") }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 }  // namespace analyzer

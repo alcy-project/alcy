@@ -31,7 +31,6 @@ bool is_reserved(lexer::TokenKind kind) {
     case lexer::TokenKind::Await:
     case lexer::TokenKind::Union:
     case lexer::TokenKind::Register:
-    case lexer::TokenKind::Comp:
     case lexer::TokenKind::Extern:
     case lexer::TokenKind::Unsafe:
     case lexer::TokenKind::For:
@@ -357,6 +356,7 @@ ast::ItemIdx Parser::parse_fn(bool is_pub) {
   std::vector<ast::ItemFnParam> params;
   if (!check(lexer::TokenKind::RParen)) {
     while (true) {
+      const bool is_comp = match(lexer::TokenKind::Comp);
       ast::PatternIdx pattern = parse_pattern();
       if (!pattern.is_valid()) {
         return ast::ItemIdx::invalid();
@@ -368,7 +368,7 @@ ast::ItemIdx Parser::parse_fn(bool is_pub) {
       if (!type.is_valid()) {
         return ast::ItemIdx::invalid();
       }
-      params.push_back(ast::ItemFnParam{pattern, type});
+      params.push_back(ast::ItemFnParam{pattern, type, is_comp});
       if (!match(lexer::TokenKind::Comma)) {
         break;
       }
@@ -1690,6 +1690,9 @@ ast::ExprIdx Parser::parse_primary() {
     case lexer::TokenKind::LBrace: {
       return parse_block_expr();
     }
+    case lexer::TokenKind::Comp: {
+      return parse_comp_block();
+    }
     case lexer::TokenKind::If: return parse_if();
     case lexer::TokenKind::Match: return parse_match();
     case lexer::TokenKind::Loop: return parse_loop();
@@ -2015,6 +2018,32 @@ ast::ExprIdx Parser::parse_block_expr() {
   return ast_.exprs.push_back(node);
 }
 
+ast::ExprIdx Parser::parse_comp_block() {
+  const usize mark = pos_;
+  if (!match(lexer::TokenKind::Comp)) {
+    return ast::ExprIdx::invalid();
+  }
+  if (!check(lexer::TokenKind::LBrace)) {
+    const u32 index = bag_.emit(
+        diag::Severity::Error, kParserUnexpectedToken, peek().span,
+        "`comp` is only allowed on parameters, declarations, and blocks");
+    (void)index;
+    return ast::ExprIdx::invalid();
+  }
+  const ast::BlockIdx block = parse_block();
+  if (!block.is_valid()) {
+    return ast::ExprIdx::invalid();
+  }
+  ast::ExprNode node;
+  node.kind = ast::ExprKind::Block;
+  node.span = span_from(mark);
+  node.payload.set(ast::ExprBlock{
+      .block = block,
+      .is_comp = true,
+  });
+  return ast_.exprs.push_back(node);
+}
+
 ast::BlockIdx Parser::parse_block() {
   const usize mark = pos_;
   if (!expect(lexer::TokenKind::LBrace, "`{`")) {
@@ -2068,6 +2097,7 @@ ast::StmtIdx Parser::parse_stmt() {
     default: break;
   }
   if (lead == StmtLead::Decl) {
+    const bool is_comp = match(lexer::TokenKind::Comp);
     const ast::PatternIdx pattern = parse_pattern();
     if (!pattern.is_valid()) {
       return ast::StmtIdx::invalid();
@@ -2093,6 +2123,7 @@ ast::StmtIdx Parser::parse_stmt() {
         .pattern = pattern,
         .type = type,
         .init = init,
+        .is_comp = is_comp,
     });
     return ast_.stmts.push_back(node);
   }

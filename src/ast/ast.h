@@ -456,6 +456,7 @@ struct ExprWhile {
 
 struct ExprBlock {
   BlockIdx block = BlockIdx::invalid();
+  bool is_comp = false;
 };
 
 struct ExprReturn {
@@ -674,6 +675,7 @@ struct StmtDecl {
   PatternIdx pattern = PatternIdx::invalid();
   TypeIdx type = TypeIdx::invalid();
   ExprIdx init = ExprIdx::invalid();
+  bool is_comp = false;
 };
 
 struct StmtReassign {
@@ -744,6 +746,7 @@ struct Item {
 struct ItemFnParam {
   PatternIdx pattern = PatternIdx::invalid();
   TypeIdx type = TypeIdx::invalid();
+  bool is_comp = false;
 };
 
 struct ItemFn {
