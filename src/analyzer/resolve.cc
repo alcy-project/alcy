@@ -536,6 +536,7 @@ class Resolver {
           prelude_names[i].empty() ? "prelude" : prelude_names[i];
       const u32 module = add_module(path, prelude_data[i].id,
                                     prelude_data[i].items, kNoModule);
+      modules[module]->is_prelude = true;
       prelude_data[i].module = module;
       prelude_modules.push_back(module);
     }

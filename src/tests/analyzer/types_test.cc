@@ -1366,4 +1366,56 @@ TEST_CASE("Check rejects oversized array repeats") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Check rejects fmt arity mismatches") {
+  io::TempDir dir("alcy_types_fmt_arity_test");
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "fn main() {\n"
+             "  mut buf := [0u8; 8]\n"
+             "  _ := write(\"a={} b={}\", &mut buf, (1i32,))\n"
+             "}\n"},
+            {"core.al",
+             "pub struct WriteOutcome { written: usize, total: usize }\n"
+             "pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ()) -> "
+             "WriteOutcome {\n"
+             "  panic(\"x\")\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects non-tuple fmt arguments") {
+  io::TempDir dir("alcy_types_fmt_tuple_test");
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "fn main() {\n"
+             "  mut buf := [0u8; 8]\n"
+             "  _ := write(\"a={}\", &mut buf, 1i32)\n"
+             "}\n"},
+            {"core.al",
+             "pub struct WriteOutcome { written: usize, total: usize }\n"
+             "pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ()) -> "
+             "WriteOutcome {\n"
+             "  panic(\"x\")\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 }  // namespace analyzer

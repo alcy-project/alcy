@@ -270,7 +270,10 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
         result = builder_->CreateFPCast(value, dst_ty);
       } else if (ir::is_integer_type(src_tag) && dst_tag == ir::TypeTag::Ptr) {
         result = builder_->CreateIntToPtr(value, dst_ty);
-      } else if (src_tag == ir::TypeTag::Ptr && ir::is_integer_type(dst_tag)) {
+      } else if ((src_tag == ir::TypeTag::Ptr || src_tag == ir::TypeTag::Ref ||
+                  src_tag == ir::TypeTag::MutRef) &&
+                 ir::is_integer_type(dst_tag)) {
+        // References ride as pointers; casts read the address.
         result = builder_->CreatePtrToInt(value, dst_ty);
       } else if (value->getType()->isPointerTy() &&
                  (dst_tag == ir::TypeTag::Struct ||

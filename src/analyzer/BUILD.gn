@@ -1,5 +1,6 @@
 source_set("analyzer") {
   sources = [
+    "fmt.h",
     "resolve.cc",
     "resolve.h",
     "types.cc",

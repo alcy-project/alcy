@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/fmt.h"
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
 #include "diag/bag.h"
@@ -2200,6 +2201,25 @@ class Checker {
     }
   }
 
+  // The core prelude `write`: resolved through the prelude, never
+  // through a user module (locals shadow the prelude first).
+  bool is_core_write(const CheckedModule::FnSig* fn) const {
+    if (fn->name != "write") {
+      return false;
+    }
+    for (const ModuleNode* module : tree.modules) {
+      if (!module->is_prelude) {
+        continue;
+      }
+      for (ast::ItemIdx item : module->items) {
+        if (item == fn->item) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   // Comp flags of a resolved function item, in parameter order.
   std::vector<bool> comp_param_flags(ast::ItemIdx item) const {
     std::vector<bool> flags;
@@ -2311,6 +2331,120 @@ class Checker {
     }
   }
 
+  // Checks a core `fmt::write` call like the print intrinsics:
+  // shapes here, literal content in lowering (which holds the bytes).
+  ir::TypeIdx check_fmt_write(u32 module,
+                              ast::ExprIdx expr,
+                              const ir::TypeIdx* expected,
+                              const CheckedModule::FnSig* fn) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const std::span<const ast::ExprIdx> args =
+        node.payload.get<ast::ExprCall>().args;
+    const diag::Span span = node.span;
+    if (comp_depth > 0) {
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerInvalidComp, span,
+                   "'write' is not allowed in comp evaluation");
+      (void)index;
+      return error_type();
+    }
+    if (args.size() != 3) {
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
+                   "'write' expects 3 arguments, found {}", args.size());
+      (void)index;
+      return error_type();
+    }
+    const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
+    const ir::TypeIdx fmt_type = check_expr(module, args[0], &str);
+    unify(str, fmt_type, ast.exprs[args[0]].span, "format string");
+    if (!expr_comp_known(module, args[0])) {
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+                   ast.exprs[args[0]].span, "format string must be comp-known");
+      (void)index;
+      return error_type();
+    }
+    const ir::TypeIdx buf_type = check_expr(module, args[1], nullptr);
+    bool buf_ok = false;
+    if (!is_error(buf_type) && tag_of(buf_type) == ir::TypeTag::MutRef) {
+      const ir::TypeIdx pointee =
+          builder.ref_types()[builder.types()[buf_type].as_ref()].pointee;
+      if (tag_of(pointee) == ir::TypeTag::Array) {
+        const ir::ArrayType& shape =
+            builder.array_types()[builder.types()[pointee].as_array()];
+        buf_ok = tag_of(shape.element) == ir::TypeTag::U8;
+      }
+    }
+    if (!buf_ok) {
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch,
+                   ast.exprs[args[1]].span, "buffer must be `&mut [u8]`");
+      (void)index;
+      return error_type();
+    }
+    const ir::TypeIdx args_type = check_expr(module, args[2], nullptr);
+    if (!is_error(args_type) && tag_of(args_type) != ir::TypeTag::Tuple) {
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch,
+                   ast.exprs[args[2]].span, "arguments must be a tuple");
+      (void)index;
+      return error_type();
+    }
+    // Literal format strings verify fully here; other comp-known
+    // strings verify in lowering, which holds the bytes.
+    if (!is_error(args_type) &&
+        ast.exprs[args[0]].kind == ast::ExprKind::Literal) {
+      const ast::Literal& literal =
+          ast.literals
+              [ast.exprs[args[0]].payload.get<ast::ExprLiteral>().value];
+      if (literal.kind == ast::LiteralKind::String) {
+        const FmtParse parsed =
+            parse_format_string(unescape_format_string(literal.spelling));
+        if (parsed.error != FmtError::None) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                       ast.exprs[args[0]].span, "invalid format string");
+          (void)index;
+          return error_type();
+        }
+        const ir::TupleType& shape =
+            builder.tuple_types()[builder.types()[args_type].as_tuple()];
+        if (parsed.placeholders != shape.elements.size()) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerArityError,
+                       ast.exprs[args[0]].span,
+                       "format string has {} placeholders for {} arguments",
+                       parsed.placeholders, shape.elements.size());
+          (void)index;
+          return error_type();
+        }
+        for (ir::TypeIdx element : shape.elements) {
+          if (!is_formattable_tag(tag_of(element))) {
+            const u32 index = bag.emit(
+                diag::Severity::Error, kAnalyzerInvalidOperation,
+                ast.exprs[args[2]].span, "argument is not formattable");
+            (void)index;
+            return error_type();
+          }
+        }
+      }
+    }
+    record_call(module, node.payload.get<ast::ExprCall>().callee, fn);
+    NominalEntry* outcome = find_nominal_in_scope(module, "WriteOutcome");
+    if (outcome == nullptr) {
+      const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownType,
+                                 span, "'WriteOutcome' is not in scope");
+      (void)index;
+      return error_type();
+    }
+    const ir::TypeIdx result = intern_nominal(*outcome);
+    if (expected != nullptr) {
+      return unify(*expected, result, span, "call");
+    }
+    return result;
+  }
+
   // Calls through a resolved callee path: free and associated
   // functions, tuple variant constructors (user and blessed), and
   // the `print` intrinsic.
@@ -2393,6 +2527,9 @@ class Checker {
     }
     if (resolved.kind == PathValue::Kind::Function) {
       const CheckedModule::FnSig* fn = resolved.function;
+      if (is_core_write(fn)) {
+        return check_fmt_write(module, expr, expected, fn);
+      }
       record_call(module, callee, fn);
       check_call_args(module, args, fn->params, comp_param_flags(fn->item),
                       span, fn->name, false);

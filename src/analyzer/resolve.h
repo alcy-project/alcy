@@ -40,6 +40,8 @@ struct ModuleNode {
   std::span<const ast::ItemIdx> items;
   std::span<ModuleNode* const> children;
   std::span<const Import> imports;
+  // Toolchain prelude sources; user modules never set this.
+  bool is_prelude = false;
 };
 
 struct ModuleTree {
