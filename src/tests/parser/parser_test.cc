@@ -509,6 +509,54 @@ TEST_CASE("Parser rejects misplaced comp with guidance") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Parser reads array types and literals") {
+  Fixture f;
+  const ParseResult result =
+      parse("fn f(a: [u8; 4]) -> [i32; 2] { ret [1i32, 2i32] }", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  CHECK(fn.params.size() == 1);
+  const ast::TypeNode& param_type = f.ast.types[fn.params[0].type];
+  CHECK(param_type.kind == ast::TypeKind::Array);
+  CHECK(param_type.payload.get<ast::TypeArray>().count == 4);
+  CHECK(fn.return_type.is_valid());
+  const ast::Block& block = f.ast.blocks[fn.body];
+  const ast::ExprNode& ret = f.ast.exprs[block.value];
+  CHECK(ret.kind == ast::ExprKind::Return);
+  const ast::ExprNode& value =
+      f.ast.exprs[ret.payload.get<ast::ExprReturn>().value];
+  CHECK(value.kind == ast::ExprKind::Array);
+  CHECK(value.payload.get<ast::ExprArray>().elements.size() == 2);
+}
+
+TEST_CASE("Parser reads array repeats") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { _ := [0u8; 4] }", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  const ast::Block& block = f.ast.blocks[fn.body];
+  const ast::StmtNode& stmt = f.ast.stmts[block.statements[0]];
+  const ast::ExprNode& init =
+      f.ast.exprs[stmt.payload.get<ast::StmtDecl>().init];
+  CHECK(init.kind == ast::ExprKind::Array);
+  const ast::ExprArray& array = init.payload.get<ast::ExprArray>();
+  CHECK(array.repeat.is_valid());
+  CHECK(array.count == 4);
+}
+
+TEST_CASE("Parser rejects empty array literals") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { _ := [] }", f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Parser accepts intrinsic declarations") {
   Fixture f;
   const ParseResult result =

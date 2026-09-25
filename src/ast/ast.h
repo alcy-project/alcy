@@ -112,6 +112,7 @@ enum class TypeKind : u8 {
   Never,
   Str,
   Tuple,
+  Array,
   Path,
   Ref,
 };
@@ -127,6 +128,11 @@ struct TypePrimitive {
 
 struct TypeTuple {
   std::span<const TypeIdx> elements;
+};
+
+struct TypeArray {
+  TypeIdx element = TypeIdx::invalid();
+  u64 count = 0;
 };
 
 struct TypePath {
@@ -153,7 +159,8 @@ struct TypeNode {
 
   // Leaves members uninitialized; parsers set the active member
   // before pushing the node.
-  using TypePayload = base::Union<TypePrimitive, TypeTuple, TypePath, TypeRef>;
+  using TypePayload =
+      base::Union<TypePrimitive, TypeTuple, TypeArray, TypePath, TypeRef>;
   TypePayload payload;
 };
 
@@ -335,6 +342,7 @@ enum class ExprKind : u8 {
   Path,
   Struct,
   Tuple,
+  Array,
   Unary,
   Borrow,
   Binary,
@@ -381,6 +389,14 @@ struct ExprStruct {
 
 struct ExprTuple {
   std::span<const ExprIdx> elements;
+};
+
+// Fixed array literal: a list `[a, b, c]`, or a repeat `[e; N]`
+// with an invalid `repeat` for lists and zero count.
+struct ExprArray {
+  std::span<const ExprIdx> elements;
+  ExprIdx repeat = ExprIdx::invalid();
+  u64 count = 0;
 };
 
 struct ExprUnary {
@@ -503,6 +519,7 @@ struct ExprNode {
                                   ExprPath,
                                   ExprStruct,
                                   ExprTuple,
+                                  ExprArray,
                                   ExprUnary,
                                   ExprBorrow,
                                   ExprBinary,

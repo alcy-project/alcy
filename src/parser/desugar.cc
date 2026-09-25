@@ -383,6 +383,16 @@ class Desugar {
         }
         break;
       }
+      case ast::ExprKind::Array: {
+        const ast::ExprArray& array = node.payload.get<ast::ExprArray>();
+        for (ast::ExprIdx element : array.elements) {
+          visit_expr(element);
+        }
+        if (array.repeat.is_valid()) {
+          visit_expr(array.repeat);
+        }
+        break;
+      }
       case ast::ExprKind::Unary: {
         visit_expr(node.payload.get<ast::ExprUnary>().inner);
         break;

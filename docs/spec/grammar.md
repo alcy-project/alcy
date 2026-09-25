@@ -56,9 +56,10 @@ Methods take explicit receivers: `self`, `&self`, `&mut self`.
 ## Types
 
 ```
-type := primitive | "()" | "!" | "str" | tuple_type | path_type | ref_type
+type := primitive | "()" | "!" | "str" | tuple_type | array_type | path_type | ref_type
 primitive := integer | float | "bool"
 tuple_type := "(" type ("," type)+ ","? ")"
+array_type := "[" type ";" integer "]"   # fixed-size array, decimal length
 ref_type  := "&" type | "&" "mut" type
 path_type := path ("<" type ("," type)* ">")?   # blessed generics only
             # Closing ">>" splits into two ">" (dangling halves error).
@@ -109,12 +110,14 @@ field     := "." ident | "." integer        # tuple ".0" access
 method    := "." ident "(" (expr ("," expr)*)? ")"
             # the receiver is the postfix base, not listed
 index     := "[" expr "]"                    # builtin fixed-array index
-primary   := literal | path | struct_expr | tuple_expr | paren_expr
-             | block_like
+primary   := literal | path | struct_expr | tuple_expr | array_expr
+             | paren_expr | block_like
 paren_expr  := "(" expr ")"
 struct_expr := path "{" field_init ("," field_init)* ","? (".." expr)? "}"
 field_init  := ident ":" expr
 tuple_expr  := "(" expr "," expr ("," expr)* ","? ")" | "()"
+array_expr  := "[" expr ("," expr)* ","? "]" | "[" expr ";" integer "]"
+              # list literal, or repeat with a decimal count
 block_like  := block | if_expr | match_expr | loop_expr | while_expr
 ```
 

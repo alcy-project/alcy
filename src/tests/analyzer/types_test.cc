@@ -1316,4 +1316,54 @@ TEST_CASE("Check rejects mistyped string intrinsic signatures") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Check accepts array construction and indexing") {
+  io::TempDir dir("alcy_types_array_ok_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  mut buf := [0u8; 4]\n"
+                                      "  buf[0] = 1u8\n"
+                                      "  _ := buf[0]\n"
+                                      "  _ := [1i32, 2i32]\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects heterogeneous array literals") {
+  io::TempDir dir("alcy_types_array_hetero_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  _ := [1i32, true]\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects oversized array repeats") {
+  io::TempDir dir("alcy_types_array_huge_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  _ := [0u8; 9999999999]\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 }  // namespace analyzer

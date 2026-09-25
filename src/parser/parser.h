@@ -102,6 +102,7 @@ class Parser {
   ast::ExprIdx parse_while();
   ast::ExprIdx parse_block_expr();
   ast::ExprIdx parse_comp_block();
+  ast::ExprIdx parse_array_literal();
   ast::BlockIdx parse_block();
 
   // Statements (recover at boundaries).
@@ -109,6 +110,9 @@ class Parser {
 
   // Small pieces.
   base::Result<ast::Ident, diag::Fatal> parse_ident(std::string_view what);
+  // Parses a decimal integer literal (digits and `_`) for array
+  // lengths; the token must already be checked as Integer.
+  bool parse_decimal_u64(u64* out);
   ast::PathIdx parse_path();
   ast::CondIdx parse_cond();
   bool consume_gt();

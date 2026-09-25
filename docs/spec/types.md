@@ -17,6 +17,14 @@
   in MVP): construction, `.0` access, and destructuring. The unit
   type `()` is the empty tuple.
 
+## Fixed arrays
+
+- Array types `[T; N]` are fixed-size and homogeneous; `N` is a
+  decimal length. Literals are lists (`[a, b]`) or repeats (`[e; N]`,
+  evaluated once); empty literals are rejected.
+- Indexing reads and writes through places with panic-on-out-of-bounds
+  semantics. Arrays are `Copy` if and only if their element is.
+
 ## Text (staged)
 
 - The compiler-known text type is `str`: byte sequences backing

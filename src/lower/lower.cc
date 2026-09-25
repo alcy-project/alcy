@@ -89,6 +89,7 @@ class Lowerer {
       Bool,
       Str,
       Tuple,
+      Array,
       Struct,
       Enum,
       Blessed,
@@ -475,6 +476,13 @@ class Lowerer {
         }
         key += ");";
         return;
+      case CompValue::Tag::Array:
+        key += "A(";
+        for (const CompValue& field : value.fields) {
+          comp_key_into(key, field);
+        }
+        key += ");";
+        return;
       case CompValue::Tag::Struct:
         key += "S(";
         for (const CompValue& field : value.fields) {
@@ -781,10 +789,68 @@ class Lowerer {
         return field_addr(base, node.payload.get<ast::ExprField>().name.name,
                           node.span);
       }
+      case ast::ExprKind::Index: {
+        const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
+        Val base = place_addr(index.receiver);
+        if (failed) {
+          return base;
+        }
+        Val position = lower_expr(index.index, nullptr);
+        if (failed) {
+          return Val{size_one, error_type(), true, false};
+        }
+        return checked_index_addr(base, position, node.span);
+      }
       default:
         unsupported(node.span, "borrowed temporary");
         return Val{size_one, error_type(), true, false};
     }
+  }
+
+  // Bounds-checked address of base[position]: panics out of bounds.
+  // The base must be a direct array address; indexing through a
+  // reference cannot project through codegen's alloca tracking.
+  Val checked_index_addr(Val base, Val position, diag::Span span) {
+    if (!base.address || tag_of(base.type) != ir::TypeTag::Array) {
+      unsupported(span, "index through reference");
+      return Val{size_one, error_type(), true, false};
+    }
+    const ir::ArrayType& shape =
+        builder.state()
+            .array_types[builder.state().types[base.type].as_array()];
+    const ir::TypeIdx usize_ty = usize_type();
+    Val wide = position;
+    if (tag_of(position.type) != tag_of(usize_ty)) {
+      const ir::RegisterIdx casted =
+          emit(ir::Opcode::TypeCast, usize_ty, {use_value(position)});
+      if (failed) {
+        return Val{size_one, error_type(), true, false};
+      }
+      wide = Val{to_operand(casted, usize_ty), usize_ty, false, false};
+    }
+    const ir::TypeIdx count_ty = usize_ty;
+    ir::Immutable imm{.type = count_ty, .data = {}};
+    if (tag_of(count_ty) == ir::TypeTag::U64) {
+      imm.data.u64_value = shape.count;
+    } else {
+      imm.data.u32_value = static_cast<u32>(shape.count);
+    }
+    const ir::OperandIdx count = to_operand(builder.immutable(imm), count_ty);
+    const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+    const ir::RegisterIdx in_bounds =
+        emit(ir::Opcode::Lt, boolean, {use_value(wide), count});
+    const ir::BlockIdx ok_block = reserve_block();
+    const ir::BlockIdx bad_block = reserve_block();
+    emit_cond_br(to_operand(in_bounds, boolean), ok_block, bad_block);
+    switch_to(bad_block);
+    emit_panic(str_operand("index out of bounds"));
+    switch_to(ok_block);
+    if (failed) {
+      return Val{size_one, error_type(), true, false};
+    }
+    const ir::RegisterIdx gep = emit(ir::Opcode::GetElementPtr, shape.element,
+                                     {base.op, zero_i32, use_value(wide)});
+    return Val{to_operand(gep, shape.element), shape.element, true, base.place};
   }
 
   ir::OperandIdx index_operand(u32 index) {
@@ -1990,6 +2056,59 @@ class Lowerer {
       return Val{size_one, error_type(), false, false};
     }
     return Val{to_operand(addr, tuple_type), tuple_type, true, false};
+  }
+
+  Val lower_array(ast::ExprIdx expr) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ast::ExprArray& array = node.payload.get<ast::ExprArray>();
+    const ir::TypeIdx array_type = expr_type(expr);
+    if (tag_of(array_type) != ir::TypeTag::Array) {
+      internal(node.span, "array without type");
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::ArrayType& shape =
+        builder.state()
+            .array_types[builder.state().types[array_type].as_array()];
+    const ir::RegisterIdx addr =
+        emit(ir::Opcode::Alloca, array_type, {size_one});
+    if (array.repeat.is_valid()) {
+      if (shape.count == 0) {
+        return Val{to_operand(addr, array_type), array_type, true, false};
+      }
+      Val value = lower_expr(array.repeat, &shape.element);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      const ir::OperandIdx stored = use_value(value);
+      for (u64 i = 0; i < shape.count && !failed; ++i) {
+        const ir::RegisterIdx gep =
+            emit(ir::Opcode::GetElementPtr, shape.element,
+                 {to_operand(addr, array_type), zero_i32,
+                  index_operand(static_cast<u32>(i))});
+        emit_void(ir::Opcode::Store, {stored, to_operand(gep, shape.element)});
+      }
+    } else {
+      if (shape.count != array.elements.size()) {
+        internal(node.span, "array arity");
+        return Val{size_one, error_type(), false, false};
+      }
+      for (u32 i = 0; i < static_cast<u32>(array.elements.size()) && !failed;
+           ++i) {
+        Val value = lower_expr(array.elements[i], &shape.element);
+        if (failed) {
+          return Val{size_one, error_type(), false, false};
+        }
+        const ir::RegisterIdx gep =
+            emit(ir::Opcode::GetElementPtr, shape.element,
+                 {to_operand(addr, array_type), zero_i32, index_operand(i)});
+        emit_void(ir::Opcode::Store,
+                  {use_value(value), to_operand(gep, shape.element)});
+      }
+    }
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(addr, array_type), array_type, true, false};
   }
 
   ir::Opcode int_binop(ast::BinaryOp op, ir::TypeTag tag) {
@@ -3456,6 +3575,30 @@ class Lowerer {
         }
         return Val{to_operand(addr, value.type), value.type, true, false};
       }
+      case CompValue::Tag::Array: {
+        const ir::ArrayType& shape =
+            builder.state()
+                .array_types[builder.state().types[value.type].as_array()];
+        if (shape.count != value.value.fields.size()) {
+          internal(span, "comp array arity");
+          return Val{size_one, error_type(), false, false};
+        }
+        const ir::RegisterIdx addr =
+            emit(ir::Opcode::Alloca, value.type, {size_one});
+        for (u32 i = 0; i < static_cast<u32>(shape.count); ++i) {
+          const CompVal field{value.value.fields[i], shape.element};
+          Val lowered = materialize_comp_value(field, span);
+          if (failed) {
+            return Val{size_one, error_type(), false, false};
+          }
+          const ir::RegisterIdx gep =
+              emit(ir::Opcode::GetElementPtr, shape.element,
+                   {to_operand(addr, value.type), zero_i32, index_operand(i)});
+          emit_void(ir::Opcode::Store,
+                    {use_value(lowered), to_operand(gep, shape.element)});
+        }
+        return Val{to_operand(addr, value.type), value.type, true, false};
+      }
       case CompValue::Tag::Struct: {
         const auto* info = struct_info(value.type);
         if (info == nullptr ||
@@ -3707,8 +3850,6 @@ class Lowerer {
         }
         return comp_fail(node.span, "field without value");
       }
-      case ast::ExprKind::Index:
-        return comp_fail(node.span, "indexing is not comp-evaluable");
       case ast::ExprKind::Question: {
         const ast::ExprQuestion& question =
             node.payload.get<ast::ExprQuestion>();
@@ -3836,6 +3977,51 @@ class Lowerer {
           }
           out.value.fields.push_back(std::move(field.value));
         }
+        return true;
+      }
+      case ast::ExprKind::Array: {
+        const ast::ExprArray& array = node.payload.get<ast::ExprArray>();
+        out.type = expr_type_in(mod, expr);
+        out.value.tag = CompValue::Tag::Array;
+        if (array.repeat.is_valid()) {
+          CompVal element;
+          if (!comp_eval_expr(mod, array.repeat, scope, element)) {
+            return false;
+          }
+          for (u64 i = 0; i < array.count; ++i) {
+            out.value.fields.push_back(element.value);
+          }
+          return true;
+        }
+        for (ast::ExprIdx element : array.elements) {
+          CompVal field;
+          if (!comp_eval_expr(mod, element, scope, field)) {
+            return false;
+          }
+          out.value.fields.push_back(std::move(field.value));
+        }
+        return true;
+      }
+      case ast::ExprKind::Index: {
+        const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
+        CompVal base;
+        if (!comp_eval_expr(mod, index.receiver, scope, base)) {
+          return false;
+        }
+        CompVal position;
+        if (!comp_eval_expr(mod, index.index, scope, position)) {
+          return false;
+        }
+        if (base.value.tag != CompValue::Tag::Array ||
+            position.value.tag != CompValue::Tag::Int) {
+          return comp_fail(node.span, "index without value");
+        }
+        if (position.value.int_value >= base.value.fields.size()) {
+          return comp_fail(node.span, "index out of bounds");
+        }
+        out.type = expr_type_in(mod, expr);
+        out.value =
+            base.value.fields[static_cast<usize>(position.value.int_value)];
         return true;
       }
       case ast::ExprKind::Struct:
@@ -4035,6 +4221,9 @@ class Lowerer {
       case ast::ExprKind::Tuple: {
         return lower_tuple(expr);
       }
+      case ast::ExprKind::Array: {
+        return lower_array(expr);
+      }
       case ast::ExprKind::Unary: {
         const ast::ExprUnary& unary = node.payload.get<ast::ExprUnary>();
         Val inner = lower_expr(unary.inner, nullptr);
@@ -4138,7 +4327,25 @@ class Lowerer {
         emit_br(continue_targets_.back());
         return Val{size_one, builder.never_type(), false, false};
       }
-      case ast::ExprKind::Index:
+      case ast::ExprKind::Index: {
+        const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
+        Val base = lower_expr(index.receiver, nullptr);
+        if (failed) {
+          return Val{size_one, error_type(), false, false};
+        }
+        if (!base.address) {
+          base = address_of(base);
+        }
+        Val position = lower_expr(index.index, nullptr);
+        if (failed) {
+          return Val{size_one, error_type(), false, false};
+        }
+        Val addr = checked_index_addr(base, position, node.span);
+        if (failed) {
+          return Val{size_one, error_type(), false, false};
+        }
+        return materialize(addr);
+      }
       case ast::ExprKind::Range:
         unsupported(node.span, "control flow in lowering");
         return Val{size_one, error_type(), false, false};

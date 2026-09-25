@@ -724,6 +724,26 @@ bool Parser::consume_gt() {
   return false;
 }
 
+bool Parser::parse_decimal_u64(u64* out) {
+  const diag::Span span = peek().span;
+  const std::string_view spelling = bytes_.substr(span.offset, span.length);
+  u64 value = 0;
+  for (char c : spelling) {
+    if (c == '_') {
+      continue;
+    }
+    if (c < '0' || c > '9') {
+      const u32 index = bag_.emit(diag::Severity::Error, kParserUnexpectedToken,
+                                  span, "array length must be decimal");
+      (void)index;
+      return false;
+    }
+    value = value * 10 + static_cast<u64>(c - '0');
+  }
+  *out = value;
+  return true;
+}
+
 ast::TypeIdx Parser::parse_type() {
   const usize mark = pos_;
   switch (peek_kind()) {
@@ -797,6 +817,36 @@ ast::TypeIdx Parser::parse_type() {
       ast::TypeNode node;
       node.kind = ast::TypeKind::Str;
       node.span = span_from(mark);
+      return ast_.types.push_back(node);
+    }
+    case T::LBracket: {
+      advance();
+      ast::TypeIdx element = parse_type();
+      if (!element.is_valid()) {
+        return ast::TypeIdx::invalid();
+      }
+      if (!expect(T::Semicolon, "`;`")) {
+        return ast::TypeIdx::invalid();
+      }
+      if (peek_kind() != T::Integer) {
+        expect(T::Integer, "array length");
+        return ast::TypeIdx::invalid();
+      }
+      u64 count = 0;
+      if (!parse_decimal_u64(&count)) {
+        return ast::TypeIdx::invalid();
+      }
+      advance();
+      if (!expect(T::RBracket, "`]`")) {
+        return ast::TypeIdx::invalid();
+      }
+      ast::TypeNode node;
+      node.kind = ast::TypeKind::Array;
+      node.span = span_from(mark);
+      node.payload.set(ast::TypeArray{
+          .element = element,
+          .count = count,
+      });
       return ast_.types.push_back(node);
     }
     case T::I8:
@@ -1743,6 +1793,9 @@ ast::ExprIdx Parser::parse_primary() {
     case lexer::TokenKind::LBrace: {
       return parse_block_expr();
     }
+    case lexer::TokenKind::LBracket: {
+      return parse_array_literal();
+    }
     case lexer::TokenKind::Comp: {
       return parse_comp_block();
     }
@@ -2067,6 +2120,72 @@ ast::ExprIdx Parser::parse_block_expr() {
   node.span = span_from(mark);
   node.payload.set(ast::ExprBlock{
       .block = block,
+  });
+  return ast_.exprs.push_back(node);
+}
+
+ast::ExprIdx Parser::parse_array_literal() {
+  const usize mark = pos_;
+  if (!expect(lexer::TokenKind::LBracket, "`[`")) {
+    return ast::ExprIdx::invalid();
+  }
+  if (check(lexer::TokenKind::RBracket)) {
+    const u32 index =
+        bag_.emit(diag::Severity::Error, kParserUnexpectedToken, peek().span,
+                  "array literal needs elements or a repeat count");
+    (void)index;
+    return ast::ExprIdx::invalid();
+  }
+  ast::ExprIdx first = parse_expr();
+  if (!first.is_valid()) {
+    return ast::ExprIdx::invalid();
+  }
+  if (match(lexer::TokenKind::Semicolon)) {
+    if (peek_kind() != lexer::TokenKind::Integer) {
+      expect(lexer::TokenKind::Integer, "array repeat count");
+      return ast::ExprIdx::invalid();
+    }
+    u64 count = 0;
+    if (!parse_decimal_u64(&count)) {
+      return ast::ExprIdx::invalid();
+    }
+    advance();
+    if (!expect(lexer::TokenKind::RBracket, "`]`")) {
+      return ast::ExprIdx::invalid();
+    }
+    ast::ExprNode node;
+    node.kind = ast::ExprKind::Array;
+    node.span = span_from(mark);
+    node.payload.set(ast::ExprArray{
+        .elements = {},
+        .repeat = first,
+        .count = count,
+    });
+    return ast_.exprs.push_back(node);
+  }
+  std::vector<ast::ExprIdx> elements;
+  elements.push_back(first);
+  while (!check(lexer::TokenKind::RBracket) && !at_end()) {
+    if (!match(lexer::TokenKind::Comma)) {
+      break;
+    }
+    if (check(lexer::TokenKind::RBracket)) {
+      break;
+    }
+    ast::ExprIdx element = parse_expr();
+    if (!element.is_valid()) {
+      return ast::ExprIdx::invalid();
+    }
+    elements.push_back(element);
+  }
+  if (!expect(lexer::TokenKind::RBracket, "`]`")) {
+    return ast::ExprIdx::invalid();
+  }
+  ast::ExprNode node;
+  node.kind = ast::ExprKind::Array;
+  node.span = span_from(mark);
+  node.payload.set(ast::ExprArray{
+      .elements = ast::copy_to_arena(ast_.spans, elements),
   });
   return ast_.exprs.push_back(node);
 }

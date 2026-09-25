@@ -208,6 +208,14 @@ struct NameCollector {
         }
         break;
       }
+      case ast::ExprKind::Array: {
+        const ast::ExprArray& array = expr.payload.get<ast::ExprArray>();
+        for (ast::ExprIdx element_idx : array.elements) {
+          visit_expr(element_idx);
+        }
+        visit_expr(array.repeat);
+        break;
+      }
       case ast::ExprKind::Unary: {
         const ast::ExprUnary& unary = expr.payload.get<ast::ExprUnary>();
         visit_expr(unary.inner);

@@ -417,6 +417,11 @@ class Checker {
         }
         return builder.tuple_type(seq.finish());
       }
+      case ast::TypeKind::Array: {
+        const ast::TypeArray& array = node.payload.get<ast::TypeArray>();
+        const ir::TypeIdx element = resolve_type(module, array.element, self);
+        return builder.array_type(element, array.count);
+      }
       case ast::TypeKind::Ref: {
         ir::TypeIdx pointee =
             resolve_type(module, node.payload.get<ast::TypeRef>().inner, self);
@@ -1972,6 +1977,18 @@ class Checker {
         }
         return true;
       }
+      case ast::ExprKind::Array: {
+        const ast::ExprArray& array = node.payload.get<ast::ExprArray>();
+        if (array.repeat.is_valid()) {
+          return expr_comp_known(module, array.repeat);
+        }
+        for (ast::ExprIdx element : array.elements) {
+          if (!expr_comp_known(module, element)) {
+            return false;
+          }
+        }
+        return true;
+      }
       case ast::ExprKind::Struct: {
         for (const ast::ExprFieldInit& field :
              node.payload.get<ast::ExprStruct>().init) {
@@ -1987,8 +2004,10 @@ class Checker {
         return expr_comp_known(module,
                                node.payload.get<ast::ExprField>().receiver);
       case ast::ExprKind::Index:
-        // Fixed arrays are outside the comp domain for now.
-        return false;
+        return expr_comp_known(module,
+                               node.payload.get<ast::ExprIndex>().receiver) &&
+               expr_comp_known(module,
+                               node.payload.get<ast::ExprIndex>().index);
       case ast::ExprKind::Call: {
         for (ast::ExprIdx arg : node.payload.get<ast::ExprCall>().args) {
           if (!expr_comp_known(module, arg)) {
@@ -3224,6 +3243,79 @@ class Checker {
     return type;
   }
 
+  ir::TypeIdx check_array(u32 module,
+                          ast::ExprIdx expr,
+                          const ir::TypeIdx* expected) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    const ast::ExprArray& array = node.payload.get<ast::ExprArray>();
+    // Bounds compiler-time expansion: repeat counts are unbounded
+    // literals, and lowering stores per element.
+    static constexpr u64 kMaxArrayElements = 1u << 20;
+    const ir::TypeIdx* element_expected = nullptr;
+    ir::TypeIdx expected_element = error_type();
+    u64 expected_count = 0;
+    bool has_expected_count = false;
+    if (expected != nullptr && tag_of(*expected) == ir::TypeTag::Array) {
+      const ir::ArrayType& shape =
+          builder.array_types()[builder.types()[*expected].as_array()];
+      expected_element = shape.element;
+      element_expected = &expected_element;
+      expected_count = shape.count;
+      has_expected_count = true;
+    }
+    if (array.repeat.is_valid()) {
+      if (array.count > kMaxArrayElements) {
+        const u32 index =
+            bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                     node.span, "array repeat count {} exceeds the limit of {}",
+                     array.count, kMaxArrayElements);
+        (void)index;
+        return error_type();
+      }
+      const ir::TypeIdx element =
+          check_expr(module, array.repeat, element_expected);
+      if (has_expected_count && expected_count != array.count) {
+        const u32 index =
+            bag.emit(diag::Severity::Error, kAnalyzerArityError, node.span,
+                     "array expects {} elements, found repeat of {}",
+                     expected_count, array.count);
+        (void)index;
+        return error_type();
+      }
+      const ir::TypeIdx type = builder.array_type(element, array.count);
+      if (expected != nullptr) {
+        return unify(*expected, type, node.span, "array");
+      }
+      return type;
+    }
+    if (array.elements.empty()) {
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerArityError, node.span,
+                   "array literal needs elements or a repeat count");
+      (void)index;
+      return error_type();
+    }
+    if (has_expected_count && expected_count != array.elements.size()) {
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerArityError, node.span,
+                   "array expects {} elements, found {}", expected_count,
+                   array.elements.size());
+      (void)index;
+      return error_type();
+    }
+    ir::TypeIdx element =
+        check_expr(module, array.elements[0], element_expected);
+    for (usize i = 1; i < array.elements.size(); ++i) {
+      const ir::TypeIdx next = check_expr(module, array.elements[i], &element);
+      unify(element, next, ast.exprs[array.elements[i]].span, "array element");
+    }
+    const ir::TypeIdx type = builder.array_type(element, array.elements.size());
+    if (expected != nullptr) {
+      return unify(*expected, type, node.span, "array");
+    }
+    return type;
+  }
+
   ir::TypeIdx check_expr_inner(u32 module,
                                ast::ExprIdx expr,
                                const ir::TypeIdx* expected) {
@@ -3278,6 +3370,9 @@ class Checker {
           return unify(*expected, type, node.span, "tuple");
         }
         return type;
+      }
+      case ast::ExprKind::Array: {
+        return check_array(module, expr, expected);
       }
       case ast::ExprKind::Unary: {
         const ir::TypeIdx inner = check_expr(
