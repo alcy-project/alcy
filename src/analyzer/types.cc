@@ -294,6 +294,18 @@ ir::TypeIdx Checker::storage_copy(ir::TypeIdx type) {
   return copy;
 }
 
+// Key of a type in the shared instantiation numbering, which is what
+// lowering side tables are keyed by. Returns kNoInst for a type that
+// is not a generic instantiation.
+u32 Checker::inst_index(ir::TypeIdx type) const {
+  for (u32 i = 0; i < static_cast<u32>(inst_numbering.size()); ++i) {
+    if (inst_numbering[i].idx == type.idx) {
+      return i;
+    }
+  }
+  return kNoInst;
+}
+
 // Storage copies chain: a copy's origin can itself be a copy, so the
 // chain is followed to the type the first copy was made from.
 ir::TypeIdx Checker::type_origin(ir::TypeIdx type) const {
@@ -1967,10 +1979,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     // Nested instantiations append during the body check; keep the
     // entry this call owns.
     CheckedModule::MethodInfo* entry = &modules[impl_module].methods.back();
-    const GenericInstance* found = generic_find(self_type);
-    const u32 inst = found == nullptr
-                         ? kNoInst
-                         : static_cast<u32>(found - generic_instances.data());
+    const u32 inst = inst_index(self_type);
     const ir::TypeIdx saved_ret = fn_ret;
     const u32 saved_loop = loop_depth;
     const bool saved_in_fn = in_fn;
@@ -2020,6 +2029,7 @@ void Checker::record_call(u32 module,
 // can report "found type" instead of "unknown".
 bool Checker::resolve_value_path(u32 module,
                                  ast::PathIdx path,
+                                 std::span<const ast::TypeIdx> type_args,
                                  PathValue& out) {
   const ast::Path& node = ast.paths[path];
   if (node.segments.empty()) {
@@ -2138,19 +2148,43 @@ bool Checker::resolve_value_path(u32 module,
       }
     }
     if (nominal != nullptr) {
-      const ast::ItemNode& nominal_node = ast.items[nominal->item];
-      const bool generic_owner =
-          nominal_node.kind == ast::ItemKind::Enum &&
-          !nominal_node.payload.get<ast::ItemEnum>().params.empty();
-      if (!generic_owner) {
-        const ir::TypeIdx self = intern_nominal(*nominal);
-        if (const CheckedModule::MethodInfo* method =
-                lookup_method(self, member, module, node.span)) {
-          if (method->receiver == CheckedModule::ReceiverKind::None) {
-            out.kind = PathValue::Kind::AssocFunction;
-            out.method = method;
-            return true;
-          }
+      const bool generic_owner = !nominal_params(*nominal).empty();
+      ir::TypeIdx self = error_type();
+      if (generic_owner) {
+        // `Name::<T>::member` names the member of one instantiation.
+        if (type_args.empty()) {
+          const u32 index = bag.emit(
+              diag::Severity::Error, kAnalyzerGenericArguments, node.span,
+              "'{}' needs type arguments to name an associated "
+              "function; write '{}::<T>::{}'",
+              head, head, member);
+          (void)index;
+          return false;
+        }
+        std::vector<ir::TypeIdx> args;
+        for (ast::TypeIdx arg : type_args) {
+          args.push_back(resolve_type(module, arg, nullptr));
+        }
+        self = instantiate_generic(static_cast<u32>(nominal - nominals.data()),
+                                   args, node.span);
+        if (is_error(self)) {
+          return false;
+        }
+      } else if (type_args.empty()) {
+        self = intern_nominal(*nominal);
+      } else {
+        const u32 index =
+            bag.emit(diag::Severity::Error, kAnalyzerGenericArguments,
+                     node.span, "'{}' takes no type arguments", head);
+        (void)index;
+        return false;
+      }
+      if (const CheckedModule::MethodInfo* method =
+              lookup_method(self, member, module, node.span)) {
+        if (method->receiver == CheckedModule::ReceiverKind::None) {
+          out.kind = PathValue::Kind::AssocFunction;
+          out.method = method;
+          return true;
         }
       }
     }

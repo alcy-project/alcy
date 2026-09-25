@@ -309,7 +309,7 @@ base::Result<ast::Ident, diag::Fatal> Parser::parse_ident(
   return base::make_ok(id);
 }
 
-ast::PathIdx Parser::parse_path() {
+ast::PathIdx Parser::parse_path(std::vector<ast::TypeIdx>* type_args) {
   const usize mark = pos_;
   std::vector<ast::Ident> segments;
   while (true) {
@@ -327,10 +327,31 @@ ast::PathIdx Parser::parse_path() {
     if (peek_kind() != lexer::TokenKind::ColonColon) {
       break;
     }
-    // `::<` begins a turbofish type-argument list, not another
-    // segment; the caller parses the arguments.
-    if (pos_ + 1 < tokens_.size() &&
-        tokens_[pos_ + 1].kind == lexer::TokenKind::Less) {
+    // `::<` is a turbofish type-argument list rather than another
+    // segment. Only an expression path can carry one, so a type path
+    // stops here and its caller reads the arguments.
+    if (pos_ + 1 >= tokens_.size() ||
+        tokens_[pos_ + 1].kind != lexer::TokenKind::Less) {
+      advance();
+      if (at_end()) {
+        expect(lexer::TokenKind::Ident, "path segment");
+        return ast::PathIdx::invalid();
+      }
+      continue;
+    }
+    if (type_args == nullptr || !type_args->empty()) {
+      break;
+    }
+    advance();
+    if (!match(lexer::TokenKind::Less)) {
+      expect(lexer::TokenKind::Less, "`<`");
+      return ast::PathIdx::invalid();
+    }
+    if (!parse_turbofish(*type_args)) {
+      return ast::PathIdx::invalid();
+    }
+    // `Name::<T>::member` continues with the member segment.
+    if (peek_kind() != lexer::TokenKind::ColonColon) {
       break;
     }
     advance();
@@ -343,6 +364,32 @@ ast::PathIdx Parser::parse_path() {
   path.segments = ast::copy_to_arena(ast_.spans, segments);
   path.span = span_from(mark);
   return ast_.paths.push_back(path);
+}
+
+// Reads a turbofish argument list; the `::` and the opening `<` are
+// already consumed.
+bool Parser::parse_turbofish(std::vector<ast::TypeIdx>& type_args) {
+  while (!check(lexer::TokenKind::Greater) &&
+         !check(lexer::TokenKind::GreaterGreater) && !at_end()) {
+    ast::TypeIdx arg = parse_type();
+    if (!arg.is_valid()) {
+      return false;
+    }
+    type_args.push_back(arg);
+    // A nested generic argument absorbs the `>` that closes the list as
+    // part of its own `>>`; `consume_gt` drains the banked one.
+    if (banked_gt_ > 0) {
+      break;
+    }
+    if (!match(lexer::TokenKind::Comma)) {
+      break;
+    }
+  }
+  if (!consume_gt()) {
+    expect(lexer::TokenKind::Greater, "`>`");
+    return false;
+  }
+  return true;
 }
 
 ast::ItemIdx Parser::parse_fn(bool is_pub) {

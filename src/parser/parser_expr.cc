@@ -432,36 +432,13 @@ ast::ExprIdx Parser::parse_postfix() {
     return ast::ExprIdx::invalid();
   }
   while (true) {
-    // Turbofish: `f::<T>(...)` supplies explicit type arguments.
+    // A turbofish on the base path (`f::<T>(...)`) belongs to the call
+    // that follows it.
     std::vector<ast::TypeIdx> type_args;
-    if (check(lexer::TokenKind::ColonColon)) {
-      const usize save = pos_;
-      advance();
-      if (!match(lexer::TokenKind::Less)) {
-        pos_ = save;
-      } else {
-        while (!check(lexer::TokenKind::Greater) &&
-               !check(lexer::TokenKind::GreaterGreater) && !at_end()) {
-          ast::TypeIdx arg = parse_type();
-          if (!arg.is_valid()) {
-            return ast::ExprIdx::invalid();
-          }
-          type_args.push_back(arg);
-          // A nested generic argument absorbs the `>` that closes the
-          // turbofish as part of its own `>>`; `consume_gt` drains the
-          // banked one.
-          if (banked_gt_ > 0) {
-            break;
-          }
-          if (!match(lexer::TokenKind::Comma)) {
-            break;
-          }
-        }
-        if (!consume_gt()) {
-          expect(lexer::TokenKind::Greater, "`>`");
-          return ast::ExprIdx::invalid();
-        }
-      }
+    if (ast_.exprs[base].kind == ast::ExprKind::Path) {
+      const std::span<const ast::TypeIdx> parsed =
+          ast_.exprs[base].payload.get<ast::ExprPath>().type_args;
+      type_args.assign(parsed.begin(), parsed.end());
     }
     if (match(lexer::TokenKind::LParen)) {
       std::vector<ast::ExprIdx> args;
@@ -701,7 +678,8 @@ ast::ExprIdx Parser::parse_primary() {
     }
     default: break;
   }
-  ast::PathIdx path = parse_path();
+  std::vector<ast::TypeIdx> type_args;
+  ast::PathIdx path = parse_path(&type_args);
   if (!path.is_valid()) {
     return ast::ExprIdx::invalid();
   }
@@ -730,13 +708,14 @@ ast::ExprIdx Parser::parse_primary() {
     callee_node.span = ast_.paths[path].span;
     callee_node.payload.set(ast::ExprPath{
         .idx = path,
+        .type_args = ast::copy_to_arena(ast_.spans, type_args),
     });
     ast::ExprNode call_node;
     call_node.kind = ast::ExprKind::Call;
     call_node.span = span_from(mark);
     call_node.payload.set(ast::ExprCall{
         .callee = ast_.exprs.push_back(callee_node),
-        .type_args = {},
+        .type_args = ast::copy_to_arena(ast_.spans, type_args),
         .args = ast::copy_to_arena(ast_.spans, args),
     });
     return ast_.exprs.push_back(call_node);
@@ -792,6 +771,7 @@ ast::ExprIdx Parser::parse_primary() {
   path_node.span = span_from(mark);
   path_node.payload.set(ast::ExprPath{
       .idx = path,
+      .type_args = ast::copy_to_arena(ast_.spans, type_args),
   });
   return ast_.exprs.push_back(path_node);
 }

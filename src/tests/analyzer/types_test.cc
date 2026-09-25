@@ -2079,4 +2079,53 @@ TEST_CASE("Check rejects assignment through a shared reference") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Check resolves an associated function of a generic type") {
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_assoc_generic_test_");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Box<T> { item: T }\n"
+                                      "impl<T> Box<T> {\n"
+                                      "  fn empty() -> Box<T> {\n"
+                                      "    ret Box { item: 0i32 }\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  b := Box::<i32>::empty()\n"
+                                      "  ret b.item\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE(
+    "Check rejects an associated function of a generic type without "
+    "type arguments") {
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_assoc_no_args_test_");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Box<T> { item: T }\n"
+                                      "impl<T> Box<T> {\n"
+                                      "  fn empty() -> Box<T> {\n"
+                                      "    ret Box { item: 0i32 }\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  b := Box::empty()\n"
+                                      "  ret b.item\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 }  // namespace analyzer

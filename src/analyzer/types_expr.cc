@@ -632,11 +632,12 @@ bool Checker::is_literal_const(u32 module, ast::PathIdx path) const {
 }
 
 ir::TypeIdx Checker::check_path_expr(u32 module,
+                                     std::span<const ast::TypeIdx> type_args,
                                      ast::PathIdx path,
                                      const ir::TypeIdx* expected,
                                      diag::Span span) {
   PathValue resolved;
-  if (!resolve_value_path(module, path, resolved)) {
+  if (!resolve_value_path(module, path, type_args, resolved)) {
     return error_type();
   }
   switch (resolved.kind) {
@@ -980,7 +981,9 @@ ir::TypeIdx Checker::check_call(u32 module,
     }
   }
   PathValue resolved;
-  if (!resolve_value_path(module, path, resolved)) {
+  if (!resolve_value_path(
+          module, path,
+          ast.exprs[callee].payload.get<ast::ExprPath>().type_args, resolved)) {
     for (ast::ExprIdx arg : args) {
       check_expr(module, arg, nullptr);
     }
@@ -1914,8 +1917,9 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
                            expected);
     }
     case ast::ExprKind::Path: {
-      return check_path_expr(module, node.payload.get<ast::ExprPath>().idx,
-                             expected, node.span);
+      return check_path_expr(
+          module, node.payload.get<ast::ExprPath>().type_args,
+          node.payload.get<ast::ExprPath>().idx, expected, node.span);
     }
     case ast::ExprKind::Struct: {
       return check_struct_expr(module, expr, expected);
@@ -2251,7 +2255,9 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
     case ast::ExprKind::Path: {
       const ast::PathIdx path = node.payload.get<ast::ExprPath>().idx;
       PathValue resolved;
-      if (!resolve_value_path(module, path, resolved)) {
+      if (!resolve_value_path(module, path,
+                              node.payload.get<ast::ExprPath>().type_args,
+                              resolved)) {
         return error_type();
       }
       if (resolved.kind != PathValue::Kind::Local) {

@@ -361,6 +361,8 @@ class Desugar {
             renamed.span = ast.paths[path].span;
             ast.exprs[expr].payload.set(ast::ExprPath{
                 .idx = ast.paths.push_back(renamed),
+                .type_args =
+                    ast.exprs[expr].payload.get<ast::ExprPath>().type_args,
             });
           }
         }

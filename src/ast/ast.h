@@ -376,6 +376,8 @@ struct ExprLiteral {
 
 struct ExprPath {
   PathIdx idx = PathIdx::invalid();
+  // Turbofish arguments from `Name::<T>::member`; empty otherwise.
+  std::span<const TypeIdx> type_args;
 };
 
 struct ExprFieldInit {

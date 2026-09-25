@@ -119,7 +119,11 @@ class Parser {
   // Parses a decimal integer literal (digits and `_`) for array
   // lengths; the token must already be checked as Integer.
   bool parse_decimal_u64(u64* out);
-  ast::PathIdx parse_path();
+  // Parses a dotted path. When `type_args` is given, a `::<...>` inside
+  // the path is read as a turbofish and the path continues past it.
+  ast::PathIdx parse_path(std::vector<ast::TypeIdx>* type_args = nullptr);
+  // Reads a turbofish argument list; `<` and its `::` are consumed.
+  bool parse_turbofish(std::vector<ast::TypeIdx>& type_args);
   ast::CondIdx parse_cond();
   bool consume_gt();
 

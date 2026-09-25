@@ -140,6 +140,9 @@ class Checker {
   ir::TypeIdx intern_uninit(ir::TypeIdx payload);
   // Payload of a `MaybeUninit<T>` wrapper; invalid for any other type.
   ir::TypeIdx uninit_payload(ir::TypeIdx type) const;
+  // Key of a type in the shared instantiation numbering, matching what
+  // lowering side tables use; kNoInst for a non-instantiation.
+  u32 inst_index(ir::TypeIdx type) const;
   // Declared type parameters of a function or method item.
   std::span<const ast::Ident> fn_generic_params(ast::ItemIdx item) const;
   // Item name for diagnostics.
@@ -293,7 +296,11 @@ class Checker {
     ast::ItemIdx generic_item = ast::ItemIdx::invalid();
     u32 variant = 0;
   };
-  bool resolve_value_path(u32 module, ast::PathIdx path, PathValue& out);
+  // `type_args` carries a turbofish from the enclosing expression path.
+  bool resolve_value_path(u32 module,
+                          ast::PathIdx path,
+                          std::span<const ast::TypeIdx> type_args,
+                          PathValue& out);
   bool resolve_variant_path(u32 module, ast::PathIdx path, PathValue& out);
   std::vector<ir::TypeIdx> variant_payloads(const PathValue& resolved,
                                             ir::TypeIdx enum_type,
@@ -338,6 +345,7 @@ class Checker {
   bool comp_checked_in_scope(ast::ExprIdx init) const;
   bool is_literal_const(u32 module, ast::PathIdx path) const;
   ir::TypeIdx check_path_expr(u32 module,
+                              std::span<const ast::TypeIdx> type_args,
                               ast::PathIdx path,
                               const ir::TypeIdx* expected,
                               diag::Span span);

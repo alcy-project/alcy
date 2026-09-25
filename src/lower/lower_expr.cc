@@ -594,9 +594,15 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     if (const auto* info = lookup_static(module, name)) {
       if (info->is_const && info->init.is_valid() &&
           ast.exprs[info->init].kind == ast::ExprKind::Literal) {
+        // The declared type wins over the context: a `const` read is
+        // always the type it was declared with.
+        const ir::TypeIdx want =
+            info->type.is_valid()
+                ? info->type
+                : (expected != nullptr ? *expected : error_type());
         return lower_literal(
             ast.exprs[info->init].payload.get<ast::ExprLiteral>().value,
-            expected);
+            info->type.is_valid() ? &want : expected);
       }
       unsupported(node.span, "static item in lowering");
       return Val{size_one, error_type(), false, false};
