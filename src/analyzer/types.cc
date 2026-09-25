@@ -62,6 +62,15 @@ void Checker::register_nominals() {
           break;
         }
       }
+      if (!duplicate && name == "MaybeUninit") {
+        // The wrapper is compiler-owned; a declaration under the same
+        // name would make the spelling resolve two ways.
+        const u32 index =
+            bag.emit(diag::Severity::Error, kAnalyzerDuplicateDefinition, span,
+                     "'{}' is a built-in type", name);
+        (void)index;
+        continue;
+      }
       if (duplicate) {
         const u32 index =
             bag.emit(diag::Severity::Error, kAnalyzerDuplicateDefinition, span,
@@ -159,6 +168,46 @@ CheckedModule::ReceiverKind Checker::classify_receiver(ir::TypeIdx first,
 
 // Interns a registered nominal, reserving its index first so recursive
 // references resolve to it. A post-pass rejects uninhabited cycles.
+
+// `MaybeUninit<T>` is a compiler-owned one-field struct standing for
+// storage that holds a `T` nobody has written yet. It has the payload's
+// layout and lowers transparently to it, so the wrapper costs nothing;
+// its purpose is to keep the unwritten value out of reach until
+// `uninit_assume` releases it.
+ir::TypeIdx Checker::intern_uninit(ir::TypeIdx payload) {
+  // Wrappers are keyed on the type the payload was copied from, so a
+  // payload reached through a chain of storage copies resolves to the
+  // same wrapper as the type it came from.
+  const ir::TypeIdx key = type_origin(payload);
+  for (const auto& [wrapper, cached] : uninit_types_) {
+    if (cached == key) {
+      return wrapper;
+    }
+  }
+  const ir::TypeIdx wrapper = builder.struct_type(uninit_name_id, [&] {
+    ir::TypeSeq seq;
+    seq.push(storage_copy(key));
+    return seq.finish();
+  }());
+  uninit_types_.emplace_back(wrapper, key);
+  return wrapper;
+}
+
+// Payload of a `MaybeUninit<T>` wrapper, or an invalid index for any
+// other type.
+ir::TypeIdx Checker::uninit_payload(ir::TypeIdx type) const {
+  if (tag_of(type) != ir::TypeTag::Struct) {
+    return ir::TypeIdx::invalid();
+  }
+  const ir::StructType& shape =
+      builder.struct_types()[builder.types()[type.idx].as_struct()];
+  if (shape.name.offset != uninit_name_id.offset ||
+      shape.name.length != uninit_name_id.length) {
+    return ir::TypeIdx::invalid();
+  }
+  return shape.fields.size() == 1 ? shape.fields[0] : ir::TypeIdx::invalid();
+}
+
 ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
   if (entry.complete || entry.started) {
     return entry.type;
@@ -245,13 +294,24 @@ ir::TypeIdx Checker::storage_copy(ir::TypeIdx type) {
   return copy;
 }
 
+// Storage copies chain: a copy's origin can itself be a copy, so the
+// chain is followed to the type the first copy was made from.
 ir::TypeIdx Checker::type_origin(ir::TypeIdx type) const {
-  for (usize i = type_origins_.size(); i > 0; --i) {
-    if (type_origins_[i - 1].first.idx == type.idx) {
-      return type_origins_[i - 1].second;
+  ir::TypeIdx current = type;
+  for (u32 depth = 0; depth <= type_origins_.size(); ++depth) {
+    const std::pair<ir::TypeIdx, ir::TypeIdx>* found = nullptr;
+    for (usize i = type_origins_.size(); i > 0; --i) {
+      if (type_origins_[i - 1].first.idx == current.idx) {
+        found = &type_origins_[i - 1];
+        break;
+      }
     }
+    if (found == nullptr) {
+      return current;
+    }
+    current = found->second;
   }
-  return type;
+  return current;
 }
 
 // Parameter names of a nominal declaration, whether struct or enum.
@@ -552,6 +612,17 @@ ir::TypeIdx Checker::resolve_type(u32 module,
             return type_params[i - 1].second;
           }
         }
+        if (name == "MaybeUninit") {
+          const auto& args = node.payload.get<ast::TypePath>().args;
+          if (args.size() != 1) {
+            const u32 index =
+                bag.emit(diag::Severity::Error, kAnalyzerGenericArguments,
+                         node.span, "'MaybeUninit' takes one type argument");
+            (void)index;
+            return error_type();
+          }
+          return intern_uninit(resolve_type(module, args[0], self));
+        }
       }
       u32 target_module = kNoModule;
       std::string_view target_name;
@@ -620,7 +691,8 @@ bool Checker::is_known_intrinsic(std::string_view name) {
          name == "panic" || name == "str_len" || name == "str_byte" ||
          name == "str_slice" || name == "sys_write" ||
          name == "str_from_parts" || name == "alloc" || name == "dealloc" ||
-         name == "elem_ptr" || name == "size_of" || name == "align_of";
+         name == "elem_ptr" || name == "size_of" || name == "align_of" ||
+         name == "uninit_write" || name == "uninit_assume";
 }
 
 // Verifies a declared intrinsic signature against its canonical
@@ -652,15 +724,25 @@ bool Checker::check_intrinsic_signature(u32 module,
   // Generic intrinsics leave their type parameters free, so their
   // shapes are checked structurally rather than against fixed types.
   const auto or_wrong = [&](bool ok) { return ok ? true : wrong(); };
+  // Buffer element types are `MaybeUninit<T>`, so the heap intrinsics
+  // agree on the wrapper rather than on a concrete element type.
+  const auto uninit_slot = [&](ir::TypeIdx type) {
+    return builder.types()[type.idx].tag == ir::TypeTag::MutRef &&
+           uninit_payload(pointee(type)).is_valid();
+  };
+  // A wrapper's payload is a storage copy, so comparing it against a
+  // declared type compares the types the copies came from.
+  const auto same = [&](ir::TypeIdx a, ir::TypeIdx b) {
+    return type_origin(a).idx == type_origin(b).idx;
+  };
   if (name == "alloc") {
-    // `alloc<T>(count: usize) -> &mut T`.
+    // `alloc<T>(count: usize) -> &mut MaybeUninit<T>`.
     return or_wrong(params.size() == 1 && is_usize(params[0]) &&
                     builder.types()[ret.idx].tag == ir::TypeTag::MutRef);
   }
   if (name == "dealloc") {
-    // `dealloc<T>(ptr: &mut T, count: usize)`.
-    return or_wrong(params.size() == 2 &&
-                    builder.types()[params[0].idx].tag == ir::TypeTag::MutRef &&
+    // `dealloc<T>(ptr: &mut MaybeUninit<T>, count: usize)`.
+    return or_wrong(params.size() == 2 && uninit_slot(params[0]) &&
                     is_usize(params[1]) &&
                     builder.types()[ret.idx].tag == ir::TypeTag::Void);
   }
@@ -668,12 +750,24 @@ bool Checker::check_intrinsic_signature(u32 module,
     return or_wrong(params.empty() && is_usize(ret));
   }
   if (name == "elem_ptr") {
-    // `elem_ptr<T>(ptr: &mut T, index: usize) -> &mut T`.
-    return or_wrong(params.size() == 2 &&
-                    builder.types()[params[0].idx].tag == ir::TypeTag::MutRef &&
+    // `elem_ptr<T>(ptr: &mut MaybeUninit<T>, index: usize) -> &mut
+    // MaybeUninit<T>`.
+    return or_wrong(params.size() == 2 && uninit_slot(params[0]) &&
                     is_usize(params[1]) &&
                     builder.types()[ret.idx].tag == ir::TypeTag::MutRef &&
                     pointee(params[0]).idx == pointee(ret).idx);
+  }
+  if (name == "uninit_write") {
+    // `uninit_write<T>(slot: &mut MaybeUninit<T>, value: T)`.
+    return or_wrong(params.size() == 2 && uninit_slot(params[0]) &&
+                    same(uninit_payload(pointee(params[0])), params[1]) &&
+                    builder.types()[ret.idx].tag == ir::TypeTag::Void);
+  }
+  if (name == "uninit_assume") {
+    // `uninit_assume<T>(slot: &mut MaybeUninit<T>) -> &mut T`.
+    return or_wrong(params.size() == 1 && uninit_slot(params[0]) &&
+                    builder.types()[ret.idx].tag == ir::TypeTag::MutRef &&
+                    same(uninit_payload(pointee(params[0])), pointee(ret)));
   }
   if (name == "memcopy") {
     expected.push_back(builder.reference_type(u8, true));
@@ -1154,6 +1248,21 @@ ir::TypeIdx Checker::unify(ir::TypeIdx expected,
   }
   if (is_never(actual)) {
     return expected;
+  }
+  // An unwritten slot is the one mismatch with an obvious fix, so it
+  // gets its own message instead of two type names.
+  const ir::TypeIdx uninit_side = uninit_payload(expected).is_valid() ? expected
+                                  : uninit_payload(actual).is_valid()
+                                      ? actual
+                                      : ir::TypeIdx::invalid();
+  if (uninit_side.is_valid()) {
+    const u32 index = bag.emit(
+        diag::Severity::Error, kAnalyzerTypeMismatch, span,
+        "uninitialized value used as '{}'; release it with "
+        "'uninit_assume' once written",
+        pretty_tag(tag_of(uninit_side == expected ? actual : expected)));
+    (void)index;
+    return error_type();
   }
   const u32 index =
       bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, span,
@@ -1639,25 +1748,29 @@ static u32 param_slot(std::span<const ast::Ident> params,
 Checker::DeclaredBinding Checker::declared_binding(
     std::span<const ast::Ident> params,
     const ast::TypeNode& declared) const {
-  const DeclaredBinding none{static_cast<u32>(params.size()), false};
+  const DeclaredBinding none{static_cast<u32>(params.size()), false, false};
   if (declared.kind == ast::TypeKind::Ref) {
-    // `&mut T` pins `T` from the argument's pointee.
     const DeclaredBinding inner = declared_binding(
         params, ast.types[declared.payload.get<ast::TypeRef>().inner]);
-    return DeclaredBinding{inner.slot, true};
+    return DeclaredBinding{inner.slot, true, inner.through_uninit};
   }
   if (declared.kind != ast::TypeKind::Path) {
     return none;
   }
   const ast::TypePath& type_path = declared.payload.get<ast::TypePath>();
-  if (!type_path.args.empty()) {
-    return none;
-  }
   const ast::Path& path = ast.paths[type_path.path];
-  if (path.segments.size() != 1) {
+  if (path.segments.size() == 1 && path.segments[0].name == "MaybeUninit" &&
+      type_path.args.size() == 1) {
+    // `MaybeUninit<T>` pins `T` from the wrapper's payload.
+    const DeclaredBinding inner =
+        declared_binding(params, ast.types[type_path.args[0]]);
+    return DeclaredBinding{inner.slot, inner.through_ref, true};
+  }
+  if (!type_path.args.empty() || path.segments.size() != 1) {
     return none;
   }
-  return DeclaredBinding{param_slot(params, path.segments[0].name), false};
+  return DeclaredBinding{param_slot(params, path.segments[0].name), false,
+                         false};
 }
 
 // Instantiates a generic function or intrinsic against `args` and
@@ -1771,8 +1884,21 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
       (void)index;
       return nullptr;
     }
-    bound[declared.slot] =
+    ir::TypeIdx bound_type =
         builder.ref_types()[builder.types()[actual.idx].as_ref()].pointee;
+    if (declared.through_uninit) {
+      bound_type = uninit_payload(bound_type);
+      if (!bound_type.is_valid()) {
+        const u32 index =
+            bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
+                     "'{}' needs uninitialized storage to bind its type "
+                     "argument",
+                     fn_name(item));
+        (void)index;
+        return nullptr;
+      }
+    }
+    bound[declared.slot] = bound_type;
   }
   for (const ir::TypeIdx arg : bound) {
     if (!arg.is_valid()) {
@@ -2404,6 +2530,7 @@ diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
                                              ast::AstArena& ast,
                                              diag::DiagBag& bag) {
   Checker checker{tree, width, ast, bag};
+  checker.uninit_name_id = checker.interner.intern("MaybeUninit");
   checker.register_nominals();
   checker.parents.assign(tree.modules.size(), kNoModule);
   for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {

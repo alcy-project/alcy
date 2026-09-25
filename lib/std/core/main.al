@@ -14,13 +14,12 @@ pub intrinsic fn panic(msg: str) -> !;
 
 // Heap allocation. `alloc<T>(count)` reserves room for `count`
 // elements of `T`, using `T`'s own size and alignment. The returned
-// reference uniquely owns uninitialized elements and must be released
-// with `dealloc<T>(ptr, count)`. `T` is fixed by the call's turbofish,
-// so a call admits one instantiation.
-pub intrinsic fn alloc<T>(count: usize) -> &mut T;
+// reference uniquely owns the block and must be released with
+// `dealloc<T>(ptr, count)`. `T` is fixed by the call's turbofish, so a
+// call admits one instantiation.
+pub intrinsic fn alloc<T>(count: usize) -> &mut MaybeUninit<T>;
 
-pub intrinsic fn dealloc<T>(ptr: &mut T, count: usize);
-
+pub intrinsic fn dealloc<T>(ptr: &mut MaybeUninit<T>, count: usize);
 
 // Allocation size of `T` in bytes; the space one element occupies.
 pub intrinsic fn size_of<T>() -> usize;
@@ -32,7 +31,16 @@ pub intrinsic fn align_of<T>() -> usize;
 // buffer `ptr` addresses, and is in bounds exactly when the caller
 // keeps `index` within the buffer's length. Element type `T` is fixed
 // by the pointee of `ptr`, so the call admits one instantiation.
-pub intrinsic fn elem_ptr<T>(ptr: &mut T, index: usize) -> &mut T;
+pub intrinsic fn elem_ptr<T>(ptr: &mut MaybeUninit<T>, index: usize) -> &mut MaybeUninit<T>;
+
+// Writes `value` into an uninitialized slot. Moving the value in leaves
+// the slot initialized, so a later `uninit_assume` on it is sound.
+pub intrinsic fn uninit_write<T>(slot: &mut MaybeUninit<T>, value: T);
+
+// Releases a slot as a mutable reference to its value. Reading through
+// the result before anything was written yields whatever the allocator
+// returned.
+pub intrinsic fn uninit_assume<T>(slot: &mut MaybeUninit<T>) -> &mut T;
 
 intrinsic fn sys_write(fd: i32, buf: str);
 

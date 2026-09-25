@@ -97,6 +97,10 @@ class Checker {
   // range stays contiguous. This maps each copy back to the type it
   // was copied from, so owner lookups accept both indexes.
   std::vector<std::pair<ir::TypeIdx, ir::TypeIdx>> type_origins_;
+  // `MaybeUninit<T>` wrappers interned so far, as (wrapper, payload).
+  std::vector<std::pair<ir::TypeIdx, ir::TypeIdx>> uninit_types_;
+  // Interned name every `MaybeUninit` wrapper carries.
+  str::StringPoolId uninit_name_id = str::kInvalidStringPoolId;
   // Active type-parameter scope: innermost last. Pushed while
   // instantiating a generic enum or checking its members.
   std::vector<std::pair<std::string_view, ir::TypeIdx>> type_params;
@@ -132,16 +136,23 @@ class Checker {
   CheckedModule::ReceiverKind classify_receiver(ir::TypeIdx first,
                                                 ir::TypeIdx self);
   ir::TypeIdx intern_nominal(NominalEntry& entry);
+  // `MaybeUninit<T>` wrapper for `payload`, interned per payload.
+  ir::TypeIdx intern_uninit(ir::TypeIdx payload);
+  // Payload of a `MaybeUninit<T>` wrapper; invalid for any other type.
+  ir::TypeIdx uninit_payload(ir::TypeIdx type) const;
   // Declared type parameters of a function or method item.
   std::span<const ast::Ident> fn_generic_params(ast::ItemIdx item) const;
   // Item name for diagnostics.
   std::string_view fn_name(ast::ItemIdx item) const;
   // A type parameter a declared parameter type pins on its own. The
-  // `through_ref` flag reports that the argument's pointee supplies the
-  // binding, which is how a generic intrinsic recovers `T` from `&mut T`.
+  // flags say where in the argument the bound type sits: `through_ref`
+  // takes the pointee, `through_uninit` then unwraps the `MaybeUninit`
+  // wrapper, which is how a generic intrinsic recovers `T` from a
+  // `&mut MaybeUninit<T>` parameter.
   struct DeclaredBinding {
     u32 slot = 0;
     bool through_ref = false;
+    bool through_uninit = false;
   };
   DeclaredBinding declared_binding(std::span<const ast::Ident> params,
                                    const ast::TypeNode& declared) const;

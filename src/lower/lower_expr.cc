@@ -1040,6 +1040,35 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     }
     return Val{to_operand(result, sig.ret), sig.ret, false, false};
   }
+  if (name == "uninit_write" || name == "uninit_assume") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    const usize arity = name == "uninit_write" ? 2 : 1;
+    if (call.args.size() != arity) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    Val slot = lower_expr(call.args[0], &sig.params[0]);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::OperandIdx slot_op = arg_for(slot, sig.params[0]);
+    if (name == "uninit_assume") {
+      // The wrapper is representation-transparent, so releasing the
+      // value is a relabel of the same address.
+      const ir::RegisterIdx held =
+          emit(ir::Opcode::TypeCast, sig.ret, {slot_op});
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      return Val{to_operand(held, sig.ret), sig.ret, false, false};
+    }
+    Val value = lower_expr(call.args[1], &sig.params[1]);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    emit_void(ir::Opcode::Store, {use_value(value), slot_op});
+    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+  }
   if (name == "size_of" || name == "align_of") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
     if (!call.args.empty() || type_args.size() != 1) {

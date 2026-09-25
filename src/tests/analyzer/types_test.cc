@@ -1951,25 +1951,31 @@ TEST_CASE("Check rejects uninferable generic call arguments") {
 
 TEST_CASE("Check accepts typed heap intrinsics") {
   io::TempDir dir = io::TempDir::create_unique("alcy_types_typed_heap_test_");
-  const bool setup = write_all(dir, {{"main.al",
-                                      "pub intrinsic fn alloc<T>(count: "
-                                      "usize) -> &mut T;\n"
-                                      "pub intrinsic fn dealloc<T>(ptr: &mut "
-                                      "T, count: usize);\n"
-                                      "pub intrinsic fn size_of<T>() -> "
-                                      "usize;\n"
-                                      "pub intrinsic fn align_of<T>() -> "
-                                      "usize;\n"
-                                      "pub intrinsic fn elem_ptr<T>(ptr: &mut "
-                                      "T, index: usize) -> &mut T;\n"
-                                      "fn main() {\n"
-                                      "  data := alloc::<i32>(4)\n"
-                                      "  mut slot := elem_ptr(data, 0)\n"
-                                      "  *slot = 1\n"
-                                      "  _ := size_of::<i32>()\n"
-                                      "  _ := align_of::<i32>()\n"
-                                      "  dealloc(data, 4)\n"
-                                      "}\n"}});
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "pub intrinsic fn alloc<T>(count: "
+                       "usize) -> &mut MaybeUninit<T>;\n"
+                       "pub intrinsic fn dealloc<T>(ptr: &mut "
+                       "MaybeUninit<T>, count: usize);\n"
+                       "pub intrinsic fn size_of<T>() -> "
+                       "usize;\n"
+                       "pub intrinsic fn align_of<T>() -> "
+                       "usize;\n"
+                       "pub intrinsic fn elem_ptr<T>(ptr: &mut "
+                       "MaybeUninit<T>, index: usize) -> &mut "
+                       "MaybeUninit<T>;\n"
+                       "pub intrinsic fn uninit_write<T>(slot: "
+                       "&mut MaybeUninit<T>, value: T);\n"
+                       "pub intrinsic fn uninit_assume<T>(slot: "
+                       "&mut MaybeUninit<T>) -> &mut T;\n"
+                       "fn main() {\n"
+                       "  data := alloc::<i32>(4)\n"
+                       "  uninit_write(elem_ptr(data, 0), 1i32)\n"
+                       "  _ := *uninit_assume(elem_ptr(data, 0))\n"
+                       "  _ := size_of::<i32>()\n"
+                       "  _ := align_of::<i32>()\n"
+                       "  dealloc(data, 4)\n"
+                       "}\n"}});
   CHECK(setup);
   if (!setup) {
     return;
@@ -1979,12 +1985,53 @@ TEST_CASE("Check accepts typed heap intrinsics") {
   CHECK(result.package.has_value());
 }
 
+TEST_CASE("Check rejects reading an uninitialized slot") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_uninit_read_test_");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "pub intrinsic fn alloc<T>(count: "
+                                      "usize) -> &mut MaybeUninit<T>;\n"
+                                      "pub intrinsic fn elem_ptr<T>(ptr: &mut "
+                                      "MaybeUninit<T>, index: usize) -> &mut "
+                                      "MaybeUninit<T>;\n"
+                                      "fn main() -> i32 {\n"
+                                      "  data := alloc::<i32>(1)\n"
+                                      "  ret *elem_ptr(data, 0)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects declaring MaybeUninit") {
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_uninit_shadow_test_");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct MaybeUninit<T> { value: T }\n"
+                                      "fn main() {\n"
+                                      "  _ := MaybeUninit { value: 1i32 }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Check rejects an intrinsic declared with the wrong shape") {
   io::TempDir dir =
       io::TempDir::create_unique("alcy_types_intrinsic_shape_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "pub intrinsic fn elem_ptr<T>(ptr: "
-                                      "&T, index: usize) -> &T;\n"
+                                      "&MaybeUninit<T>, index: usize) -> "
+                                      "&MaybeUninit<T>;\n"
                                       "fn main() {\n"
                                       "}\n"}});
   CHECK(setup);
