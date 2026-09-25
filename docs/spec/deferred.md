@@ -12,11 +12,13 @@ relied upon by MVP programs or by the MVP compiler implementation.
   inference binds only a parameter a declared parameter type pins on
   its own, so a call whose parameters cannot be recovered that way
   needs the turbofish.
-- Reborrowing: a `&mut T` used where a shorter `&mut T` or a `&T` is
-  expected, including as a method receiver. Without it a method taking
-  `&self` cannot be called through a `&mut` binding, and a `&mut`
-  field cannot be read through a shared borrow of its owner. A growable
-  container therefore has no read-only element accessor.
+- Reborrowing, and the coercions that go with it: `&mut T` used where a
+  shorter `&mut T` or a `&T` is expected, including as a method
+  receiver. Without it a method taking `&self` cannot be called through
+  a `&mut` binding. A growable container therefore has no read-only
+  element accessor, and its mutable accessors take `&mut Self`. The
+  rules are settled and the extent is non-lexical; see
+  `docs/adr/0012`.
 - `spec` (trait) definitions and dispatch, coherence rules, and
   monomorphization beyond per-instantiation enum, struct, and method
   specialization.
@@ -33,6 +35,8 @@ relied upon by MVP programs or by the MVP compiler implementation.
   grapheme semantics in core (see `types.md`).
 - `Range` iteration, stepping, and `for` loops (representation and
   endpoint-marking frozen in `types.md`).
+- Two-phase borrows, so `v.push(v.len())` resolves the receiver before
+  the arguments; see `docs/adr/0012`.
 - Interior mutability; mutable statics; `const`-position extensions.
 - Attribute system in full (`#[repr(C)]` and beyond).
 

@@ -46,6 +46,10 @@ checkable contracts here.
 These tracks shape reserved decision space in this specification but
 impose no MVP implementation burden.
 
+`PRINCIPLES.md` states where the language is going and the properties
+that get it there. Where two designs are both defensible, the one that
+serves more of them wins.
+
 ## Reading guide
 
 Start with `values.md`, then `ownership.md` and `summaries.md`
