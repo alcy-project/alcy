@@ -131,6 +131,12 @@ state between stages beyond the data explicitly passed along.
 
 Supporting targets include `tests` and `benchmarks`.
 
+Diagnostic presentation is resolved by the `cli` module from the invocation's
+`--color` setting. The `diag` renderer receives explicit rendering options and
+never probes the terminal; the shared `term` facility owns terminal capability
+detection and the base ANSI sequences. The `pipeline` module owns diagnostic
+production and storage, while the `cli` module owns diagnostic emission.
+
 ```mermaid
 flowchart TD
     cli([cli]) --> pipeline([pipeline])

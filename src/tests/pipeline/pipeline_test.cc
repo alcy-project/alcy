@@ -33,6 +33,14 @@ struct Fixture {
   Fixture() { arena.reserve(1u << 20); }
 };
 
+diag::SourceText fetch_source(source::FileId id, const void* ctx) {
+  const auto* sources = static_cast<const source::SourceManager*>(ctx);
+  if (id >= sources->file_count()) {
+    return {};
+  }
+  return {sources->name(id), sources->bytes(id)};
+}
+
 }  // namespace
 
 TEST_CASE("Discover finds nested sources in sorted order") {
@@ -106,7 +114,7 @@ TEST_CASE("Compile project loads every package") {
   CHECK(build.files_loaded == 2);
 }
 
-TEST_CASE("Fetch adapter feeds the renderer") {
+TEST_CASE("Source fetch feeds the renderer") {
   io::TempDir dir("alcy_pipeline_fetch_test");
   const bool setup = dir.write_file("b.al", "let y = 2;\n");
   CHECK(setup);

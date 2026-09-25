@@ -13,7 +13,6 @@
 #include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
-#include "diag/render.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/file_handle.h"
@@ -116,14 +115,6 @@ bool walk_sources(const path::Path& dir, std::vector<path::Path>& paths) {
 }
 
 }  // namespace
-
-diag::SourceText fetch_source(source::FileId id, const void* ctx) {
-  const auto* sources = static_cast<const source::SourceManager*>(ctx);
-  if (id >= sources->file_count()) {
-    return {};
-  }
-  return {sources->name(id), sources->bytes(id)};
-}
 
 diag::Fallible<DiscoveredSources> discover_sources(
     std::string_view dir,

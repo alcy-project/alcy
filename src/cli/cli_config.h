@@ -22,6 +22,7 @@ enum class Subcommand : u8 {
 
 struct CliConfig {
   bool time_trace = false;
+  // Presentation preference; cli resolves terminal capability before dispatch.
   term::ColorMode color_mode = term::ColorMode::Auto;
   Subcommand subcommand = Subcommand::None;
   bool release = false;

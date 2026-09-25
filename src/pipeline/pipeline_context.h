@@ -45,7 +45,4 @@ struct PipelineContext {
 // Returns ".exe" on Windows or else ""
 std::string_view exe_suffix();
 
-// Renders every diagnostic in the bag through the logger.
-void report(const diag::DiagBag& bag, const source::SourceManager& sources);
-
 }  // namespace pipeline

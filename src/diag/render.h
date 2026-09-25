@@ -23,6 +23,8 @@ struct SourceText {
 // file is unknown. Must never allocate.
 using SourceFetch = SourceText (*)(source::FileId file_id, const void* ctx);
 
+// Presentation choices supplied by the output layer. The renderer does not
+// inspect the terminal or environment.
 struct RenderOptions {
   bool color = false;
 };

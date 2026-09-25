@@ -8,6 +8,7 @@
 
 #include "base/logger.h"
 #include "cli/cli_config.h"
+#include "cli/diagnostic_output.h"
 #include "cli/result_code.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -20,7 +21,8 @@
 
 namespace cli {
 
-ResultCode run_build(const CliConfig& config) {
+ResultCode run_build(const CliConfig& config,
+                     const diag::RenderOptions& options) {
   pipeline::PipelineContext ctx;
   const std::string_view raw_dir =
       config.target_dir.empty() ? "." : config.target_dir;
@@ -31,7 +33,7 @@ ResultCode run_build(const CliConfig& config) {
     auto res = pipeline::build_single_file(ctx, raw_dir, config.output,
                                            config.release, config.linker);
     if (!res.is_ok() || ctx.bag.has_errors()) {
-      pipeline::report(ctx.bag, ctx.sources);
+      report_diagnostics(ctx.bag, ctx.sources, options);
       return ResultCode::BuildFailed;
     }
     base::logger.wo_prefix("built successfully");
@@ -41,7 +43,7 @@ ResultCode run_build(const CliConfig& config) {
   base::Result<pipeline::ManifestProbe, path::PathError> probe =
       pipeline::find_package_manifest(ctx, raw_dir);
   if (probe.is_err()) {
-    pipeline::report(ctx.bag, ctx.sources);
+    report_diagnostics(ctx.bag, ctx.sources, options);
     return ResultCode::BuildFailed;
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
@@ -50,7 +52,7 @@ ResultCode run_build(const CliConfig& config) {
                                        found.manifest_name, config.output,
                                        config.release, config.linker);
     if (!res.is_ok() || ctx.bag.has_errors()) {
-      pipeline::report(ctx.bag, ctx.sources);
+      report_diagnostics(ctx.bag, ctx.sources, options);
       return ResultCode::BuildFailed;
     }
     base::logger.wo_prefix("built successfully");
@@ -63,7 +65,7 @@ ResultCode run_build(const CliConfig& config) {
       diag::Severity::Error, pipeline::kPipelineNoManifest,
       "no manifest found at '{}'; build a file or add alcy.toml", raw_dir);
   (void)index;
-  pipeline::report(ctx.bag, ctx.sources);
+  report_diagnostics(ctx.bag, ctx.sources, options);
   return ResultCode::BuildFailed;
 }
 

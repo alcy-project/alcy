@@ -6,9 +6,16 @@
 #include "cli/cli_config.h"
 #include "cli/result_code.h"
 
+namespace diag {
+
+struct RenderOptions;
+
+}  // namespace diag
+
 namespace cli {
 
-ResultCode run_build(const CliConfig& config);
+ResultCode run_build(const CliConfig& config,
+                     const diag::RenderOptions& options);
 
 }  // namespace cli
 

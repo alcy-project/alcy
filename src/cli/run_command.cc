@@ -7,9 +7,11 @@
 #include <string_view>
 #include <utility>
 
-#include "base/logger.h"
 #include "cli/cli_config.h"
+#include "cli/diagnostic_output.h"
 #include "cli/result_code.h"
+#include "diag/bag.h"
+#include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "path/path.h"
@@ -19,7 +21,7 @@
 
 namespace cli {
 
-i32 run_run(const CliConfig& config) {
+i32 run_run(const CliConfig& config, const diag::RenderOptions& options) {
   pipeline::PipelineContext ctx;
   const std::string_view raw_dir =
       config.target_dir.empty() ? "." : config.target_dir;
@@ -31,7 +33,7 @@ i32 run_run(const CliConfig& config) {
     const pipeline::RunResult result = pipeline::run_single_file(
         ctx, raw_dir, config.release, config.linker, args);
     if (!result.ok) {
-      pipeline::report(ctx.bag, ctx.sources);
+      report_diagnostics(ctx.bag, ctx.sources, options);
       return result_code(ResultCode::RunFailed);
     }
     return result.exit_code;
@@ -40,20 +42,23 @@ i32 run_run(const CliConfig& config) {
   base::Result<pipeline::ManifestProbe, path::PathError> probe =
       pipeline::find_package_manifest(ctx, raw_dir);
   if (probe.is_err()) {
-    pipeline::report(ctx.bag, ctx.sources);
+    report_diagnostics(ctx.bag, ctx.sources, options);
     return result_code(ResultCode::RunFailed);
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
   if (!found.found) {
-    base::logger.error("no manifest found at '{}'; run a file or add alcy.toml",
-                       raw_dir);
+    const u32 index = ctx.bag.emit(
+        diag::Severity::Error, pipeline::kPipelineNoManifest,
+        "no manifest found at '{}'; run a file or add alcy.toml", raw_dir);
+    (void)index;
+    report_diagnostics(ctx.bag, ctx.sources, options);
     return result_code(ResultCode::RunFailed);
   }
   const pipeline::RunResult result = pipeline::run_package(
       ctx, found.root, found.manifest, found.manifest_name, config.release,
       config.linker, args);
   if (!result.ok) {
-    pipeline::report(ctx.bag, ctx.sources);
+    report_diagnostics(ctx.bag, ctx.sources, options);
     return result_code(ResultCode::RunFailed);
   }
   return result.exit_code;

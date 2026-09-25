@@ -20,6 +20,7 @@
 #include "cli/result_code.h"
 #include "cli/run_command.h"
 #include "debug/fatal.h"
+#include "diag/render.h"
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_style.h"
@@ -29,13 +30,14 @@ namespace cli {
 
 namespace {
 
-i32 dispatch(const CliConfig& config) {
+i32 dispatch(const CliConfig& config, const diag::RenderOptions& options) {
   switch (config.subcommand) {
-    case Subcommand::Build: return result_code(run_build(config));
-    case Subcommand::Run: return run_run(config);
-    case Subcommand::New: return result_code(run_new(config.target_dir));
-    case Subcommand::Init: return result_code(run_init(config));
-    case Subcommand::Check: return result_code(run_check(config));
+    case Subcommand::Build: return result_code(run_build(config, options));
+    case Subcommand::Run: return run_run(config, options);
+    case Subcommand::New:
+      return result_code(run_new(config.target_dir, options));
+    case Subcommand::Init: return result_code(run_init(config, options));
+    case Subcommand::Check: return result_code(run_check(config, options));
     case Subcommand::None: break;
   }
   // parse_args maps a missing subcommand to NoSubcommand/UnknownSubcommand,
@@ -72,9 +74,13 @@ i32 cli_main(i32 argc, char** argv) {
         result_code(run_interruption(parser, outcome, *code, argc, argv));
   } else {
     const CliConfig& config = outcome.get<CliConfig>();
-    base::init_logger(
-        term::console_color_style(term::Stream::Stdout, config.color_mode));
-    exit_code = dispatch(config);
+    const term::ColorStyle style =
+        term::console_color_style(term::Stream::Stdout, config.color_mode);
+    base::init_logger(style);
+    const diag::RenderOptions options{
+        .color = style != term::ColorStyle::Off,
+    };
+    exit_code = dispatch(config, options);
   }
   return exit_code;
 }

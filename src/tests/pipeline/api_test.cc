@@ -51,7 +51,6 @@ TEST_CASE("Pipeline build produces object file") {
   auto res = pipeline::build_single_file(ctx, dir.join("main.al"), obj_path,
                                          false, "");
   CHECK(res.is_ok());
-  pipeline::report(ctx.bag, ctx.sources);
 }
 
 TEST_CASE("Pipeline build produces executable") {
@@ -68,9 +67,6 @@ TEST_CASE("Pipeline build produces executable") {
   auto res = pipeline::build_single_file(ctx, dir.join("main.al"), exe_path,
                                          false, "");
   CHECK(res.is_ok());
-  if (res.is_err()) {
-    pipeline::report(ctx.bag, ctx.sources);
-  }
 }
 
 TEST_CASE("Pipeline build creates nonexistent directory") {

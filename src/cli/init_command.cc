@@ -7,13 +7,15 @@
 
 #include "base/logger.h"
 #include "cli/cli_config.h"
+#include "cli/diagnostic_output.h"
 #include "cli/result_code.h"
 #include "pipeline/new.h"
 #include "pipeline/pipeline_context.h"
 
 namespace cli {
 
-ResultCode run_init(const CliConfig& config) {
+ResultCode run_init(const CliConfig& config,
+                    const diag::RenderOptions& options) {
   pipeline::PipelineContext ctx;
   const std::string_view raw_dir =
       config.target_dir.empty() ? "." : config.target_dir;
@@ -22,7 +24,7 @@ ResultCode run_init(const CliConfig& config) {
     base::logger.wo_prefix("created package in '{}'", raw_dir);
     return ResultCode::Success;
   }
-  pipeline::report(ctx.bag, ctx.sources);
+  report_diagnostics(ctx.bag, ctx.sources, options);
   return ResultCode::NewFailed;
 }
 

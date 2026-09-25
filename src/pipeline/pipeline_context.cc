@@ -5,15 +5,8 @@
 
 #include <string_view>
 
-#include "base/logger.h"
 #include "config/build_config.h"
-#include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/render.h"
-#include "fmt/format.h"
 #include "fpag/mem/page_allocator.h"
-#include "pipeline/pipeline.h"
-#include "source/source.h"
 
 namespace pipeline {
 
@@ -28,14 +21,6 @@ std::string_view exe_suffix() {
 
 PipelineContext::PipelineContext() : bag(arena), strings(mem::page_size()) {
   arena.reserve(1u << 20);
-}
-
-void report(const diag::DiagBag& bag, const source::SourceManager& sources) {
-  bag.for_each([&](const diag::Diagnostic& diag) {
-    fmt::memory_buffer out;
-    diag::render(diag, out, {}, pipeline::fetch_source, &sources);
-    base::logger.wo_prefix("{}", std::string_view(out.data(), out.size()));
-  });
 }
 
 }  // namespace pipeline

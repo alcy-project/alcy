@@ -5,10 +5,17 @@
 
 #include "cli/result_code.h"
 
+namespace diag {
+
+struct RenderOptions;
+
+}  // namespace diag
+
 namespace cli {
 
 struct CliConfig;
 
-ResultCode run_init(const CliConfig& config);
+ResultCode run_init(const CliConfig& config,
+                    const diag::RenderOptions& options);
 
 }  // namespace cli

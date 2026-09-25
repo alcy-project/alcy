@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "diag/bag.h"
-#include "diag/render.h"
 #include "fpag/base/numeric.h"
 #include "pkg/resolve.h"
 #include "source/source.h"
@@ -26,11 +25,6 @@ struct DiscoveredSources {
   std::string root;
   std::vector<source::FileId> files;
 };
-
-// diag::SourceFetch adapter over a SourceManager: ctx must point to a live
-// SourceManager. Lives here (not on SourceManager) so the source module
-// stays free of diag includes.
-diag::SourceText fetch_source(source::FileId id, const void* ctx);
 
 struct ProjectBuild {
   u32 packages = 0;

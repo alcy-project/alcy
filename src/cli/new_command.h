@@ -7,9 +7,16 @@
 
 #include "cli/result_code.h"
 
+namespace diag {
+
+struct RenderOptions;
+
+}  // namespace diag
+
 namespace cli {
 
 // Scaffolds a new package directory.
-ResultCode run_new(std::string_view target_dir);
+ResultCode run_new(std::string_view target_dir,
+                   const diag::RenderOptions& options);
 
 }  // namespace cli

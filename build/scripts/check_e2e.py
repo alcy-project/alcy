@@ -16,6 +16,7 @@ An expect.toml file declares the outcome:
 
 `exit` is required (integer value or "non-zero"); `contains` lines must
 all appear in the combined output, `not_contains` lines must all be absent.
+An optional `args` list is inserted before the selected subcommand.
 """
 
 import argparse
@@ -40,28 +41,30 @@ def parse_expect(path: Path):
 
     contains = data.get("contains", [])
     not_contains = data.get("not_contains", [])
+    args = data.get("args", [])
+    if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+        sys.exit(f"{path}: 'args' must be a list of strings")
 
-    return expected_exit, contains, not_contains
+    return expected_exit, contains, not_contains, args
 
 
 def run_case(alcy: Path, case_dir: Path):
+    expect_path = case_dir / "expect.toml"
+    if not expect_path.is_file():
+        return False, "missing expect.toml"
+
+    expected_exit, contains, not_contains, extra_args = parse_expect(expect_path)
     if (case_dir / "alcy.toml").is_file():
-        argv = [str(alcy), "check", "."]
+        argv = [str(alcy), *extra_args, "check", "."]
         cwd = case_dir
     elif (case_dir / "main.al").is_file():
-        argv = [str(alcy), "check", str(case_dir / "main.al")]
+        argv = [str(alcy), *extra_args, "check", str(case_dir / "main.al")]
         cwd = project_root_dir
     else:
         return False, "no alcy.toml or main.al found"
 
     proc = subprocess.run(argv, capture_output=True, text=True, cwd=cwd)
     output = proc.stdout + proc.stderr
-    expect_path = case_dir / "expect.toml"
-
-    if not expect_path.is_file():
-        return False, "missing expect.toml"
-
-    expected_exit, contains, not_contains = parse_expect(expect_path)
     problems = []
 
     if isinstance(expected_exit, str) and expected_exit.lower() in (

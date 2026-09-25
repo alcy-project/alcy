@@ -87,7 +87,7 @@ arg::Parser build_parser() {
   builder.about(ALCY_COMMAND_ABOUT);
   builder.builtin_enabled(true);
   builder.add_arg(arg::ArgBuilder("color")
-                      .help("Color mode for logging")
+                      .help("Color mode for logging and diagnostics")
                       .default_value("auto")
                       .choices({"auto", "always", "never"})
                       .build());

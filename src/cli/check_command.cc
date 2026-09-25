@@ -8,6 +8,7 @@
 
 #include "base/logger.h"
 #include "cli/cli_config.h"
+#include "cli/diagnostic_output.h"
 #include "cli/result_code.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -30,21 +31,22 @@ void log_check_result(const pipeline::CheckResult& result) {
 
 }  // namespace
 
-ResultCode run_check(const CliConfig& config) {
+ResultCode run_check(const CliConfig& config,
+                     const diag::RenderOptions& options) {
   pipeline::PipelineContext ctx;
   const std::string_view raw_target =
       config.target_dir.empty() ? "." : config.target_dir;
   base::Result<pipeline::ManifestProbe, path::PathError> probe =
       pipeline::find_package_manifest(ctx, raw_target);
   if (probe.is_err()) {
-    pipeline::report(ctx.bag, ctx.sources);
+    report_diagnostics(ctx.bag, ctx.sources, options);
     return ResultCode::CheckFailed;
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
   if (found.found) {
     const pipeline::CheckResult result = pipeline::check_package(
         ctx, found.root, found.manifest, found.manifest_name);
-    pipeline::report(ctx.bag, ctx.sources);
+    report_diagnostics(ctx.bag, ctx.sources, options);
     log_check_result(result);
     return result.success ? ResultCode::Success : ResultCode::CheckFailed;
   }
@@ -58,12 +60,12 @@ ResultCode run_check(const CliConfig& config) {
         diag::Severity::Error, pipeline::kPipelineNoManifest,
         "no manifest found at '{}'; check a file or add alcy.toml", raw_target);
     (void)index;
-    pipeline::report(ctx.bag, ctx.sources);
+    report_diagnostics(ctx.bag, ctx.sources, options);
     return ResultCode::CheckFailed;
   }
   const pipeline::CheckResult result =
       pipeline::check_single_file(ctx, raw_target);
-  pipeline::report(ctx.bag, ctx.sources);
+  report_diagnostics(ctx.bag, ctx.sources, options);
   log_check_result(result);
   return result.success ? ResultCode::Success : ResultCode::CheckFailed;
 }

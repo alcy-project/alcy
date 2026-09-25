@@ -1,3 +1,4 @@
 exit = 4
-contains = ["must be comp-known"]
+args = ["--color=always"]
+contains = ["must be comp-known", "\u001b[31m"]
 not_contains = []
