@@ -11,16 +11,19 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+
 #if defined(_WIN32)
 #include <io.h>
+#include <malloc.h>
+#include <stdint.h>
 #define write _write
+typedef intptr_t ssize_t;
 #ifndef STDOUT_FILENO
 #define STDOUT_FILENO 1
 #endif
 #ifndef STDERR_FILENO
 #define STDERR_FILENO 2
 #endif
-typedef intptr_t ssize_t;
 #else
 #include <sys/types.h>
 #include <unistd.h>
@@ -78,7 +81,11 @@ void* alcy_alloc(size_t size, size_t align) {
   if (size % align != 0) {
     size += align - (size % align);
   }
+#if defined(_WIN32)
+  return _aligned_malloc(size, align);
+#else
   return aligned_alloc(align, size);
+#endif
 }
 
 void alcy_dealloc(void* ptr, size_t size, size_t align) {
