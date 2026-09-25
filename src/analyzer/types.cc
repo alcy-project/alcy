@@ -247,6 +247,106 @@ ir::TypeIdx Checker::intern_blessed(bool is_result,
   return type;
 }
 
+const GenericInstance* Checker::generic_find(ir::TypeIdx idx) const {
+  for (const GenericInstance& instance : generic_instances) {
+    if (instance.type.idx == idx.idx) {
+      return &instance;
+    }
+  }
+  return nullptr;
+}
+
+u32 Checker::nominal_index(const NominalEntry* entry) {
+  return static_cast<u32>(entry - nominals.data());
+}
+
+const GenericInstance* Checker::generic_instance_for(u32 nominal,
+                                                     ir::TypeIdx type) const {
+  const GenericInstance* instance = generic_find(type);
+  if (instance == nullptr || instance->nominal != nominal) {
+    return nullptr;
+  }
+  return instance;
+}
+
+usize Checker::push_generic_scope(const GenericInstance& instance) {
+  const usize kept = type_params.size();
+  const ast::ItemEnum& decl =
+      ast.items[nominals[instance.nominal].item].payload.get<ast::ItemEnum>();
+  for (usize i = 0; i < decl.params.size(); ++i) {
+    type_params.emplace_back(decl.params[i].name, instance.args[i]);
+  }
+  return kept;
+}
+
+void Checker::pop_generic_scope(usize kept) {
+  while (type_params.size() > kept) {
+    type_params.pop_back();
+  }
+}
+
+ir::TypeIdx Checker::variant_owner_type(NominalEntry* enom) {
+  const ast::ItemNode& decl = ast.items[enom->item];
+  if (decl.kind == ast::ItemKind::Enum &&
+      !decl.payload.get<ast::ItemEnum>().params.empty()) {
+    return error_type();
+  }
+  return intern_nominal(*enom);
+}
+
+// Interns one instantiation of a generic enum, substituting the
+// entry's parameters with `args`. The index reserves first so
+// recursive mentions of the same instantiation resolve to it.
+ir::TypeIdx Checker::instantiate_generic(u32 nominal,
+                                         const std::vector<ir::TypeIdx>& args,
+                                         diag::Span span) {
+  for (const GenericInstance& instance : generic_instances) {
+    if (instance.nominal == nominal && instance.args == args) {
+      return instance.type;
+    }
+  }
+  const NominalEntry& entry = nominals[nominal];
+  const ast::ItemEnum& decl =
+      ast.items[entry.item].payload.get<ast::ItemEnum>();
+  const str::StringPoolId name = interner.intern(entry.name);
+  const ir::TypeIdx reserved = builder.reserve_enum(name);
+  generic_instances.push_back(GenericInstance{nominal, args, reserved});
+  const usize pushed = type_params.size();
+  for (usize i = 0; i < decl.params.size(); ++i) {
+    type_params.emplace_back(decl.params[i].name, args[i]);
+  }
+  std::vector<std::vector<ir::TypeIdx>> payloads;
+  payloads.reserve(decl.variants.size());
+  for (const ast::ItemEnumVariant& variant : decl.variants) {
+    std::vector<ir::TypeIdx> fields;
+    fields.reserve(variant.fields.size());
+    for (ast::TypeIdx field : variant.fields) {
+      fields.push_back(resolve_type(entry.module, field, nullptr));
+    }
+    payloads.push_back(std::move(fields));
+  }
+  ir::EnumVariantTypeSeq variants;
+  u32 index = 0;
+  for (const ast::ItemEnumVariant& variant : decl.variants) {
+    ir::TypeSeq seq;
+    for (ir::TypeIdx field : payloads[index]) {
+      seq.push(builder.ref_type(field));
+    }
+    ++index;
+    variants.push(
+        builder.enum_variant(interner.intern(variant.name.name), seq.finish()));
+  }
+  builder.fill_enum(reserved, variants.finish());
+  while (type_params.size() > pushed) {
+    type_params.pop_back();
+  }
+  GenericInstance& instance = generic_instances.back();
+  instance.started = true;
+  instance.complete = true;
+  (void)span;
+  return reserved;
+}
+
 // Resolves a type path to its defining module and member name.
 // Resolves all path segments but the last to a module. Shared by
 // type and value paths; `what` names the namespace for diagnostics.
@@ -369,6 +469,19 @@ ir::TypeIdx Checker::resolve_type(u32 module,
           }
           return *self;
         }
+        // Type parameters shadow everything but `Self`.
+        for (usize i = type_params.size(); i > 0; --i) {
+          if (type_params[i - 1].first == name) {
+            if (!node.payload.get<ast::TypePath>().args.empty()) {
+              const u32 index =
+                  bag.emit(diag::Severity::Error, kAnalyzerGenericArguments,
+                           node.span, "generic arguments are not supported");
+              (void)index;
+              return error_type();
+            }
+            return type_params[i - 1].second;
+          }
+        }
         if (name == "Result" || name == "Option") {
           const bool is_result = name == "Result";
           const usize want = is_result ? 2 : 1;
@@ -386,13 +499,6 @@ ir::TypeIdx Checker::resolve_type(u32 module,
           }
           return intern_blessed(is_result, args);
         }
-      }
-      if (!node.payload.get<ast::TypePath>().args.empty()) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerGenericArguments,
-                     node.span, "generic arguments are not supported");
-        (void)index;
-        return error_type();
       }
       u32 target_module = kNoModule;
       std::string_view target_name;
@@ -422,7 +528,37 @@ ir::TypeIdx Checker::resolve_type(u32 module,
         (void)index;
         return error_type();
       }
-      return intern_nominal(*entry);
+      const ast::ItemNode& decl = ast.items[entry->item];
+      const usize param_count =
+          decl.kind == ast::ItemKind::Enum
+              ? decl.payload.get<ast::ItemEnum>().params.size()
+              : 0;
+      const usize arg_count = node.payload.get<ast::TypePath>().args.size();
+      if (param_count == 0) {
+        if (arg_count != 0) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerGenericArguments,
+                       node.span, "generic arguments are not supported");
+          (void)index;
+          return error_type();
+        }
+        return intern_nominal(*entry);
+      }
+      if (arg_count != param_count) {
+        const u32 index =
+            bag.emit(diag::Severity::Error, kAnalyzerArityMismatch, node.span,
+                     "'{}' expects {} argument{}", target_name, param_count,
+                     param_count == 1 ? "" : "s");
+        (void)index;
+        return error_type();
+      }
+      std::vector<ir::TypeIdx> args;
+      args.reserve(arg_count);
+      for (ast::TypeIdx arg : node.payload.get<ast::TypePath>().args) {
+        args.push_back(resolve_type(module, arg, self));
+      }
+      const u32 nominal = static_cast<u32>(entry - nominals.data());
+      return instantiate_generic(nominal, args, node.span);
     }
   }
 }
@@ -515,6 +651,12 @@ void Checker::process_module(u32 module) {
               find_nominal(module, node.payload.get<ast::ItemEnum>().name.name);
         }
         if (entry != nullptr) {
+          // Generic enums intern per instantiation on use; the bare
+          // declaration has no type of its own.
+          if (node.kind == ast::ItemKind::Enum &&
+              !node.payload.get<ast::ItemEnum>().params.empty()) {
+            break;
+          }
           const ir::TypeIdx resolved = intern_nominal(*entry);
           modules[module].types.push_back({entry->name, resolved});
           if (node.kind == ast::ItemKind::Struct) {
@@ -607,10 +749,14 @@ void Checker::process_module(u32 module) {
       case ast::ItemKind::Impl: {
         ir::TypeIdx self_type = error_type();
         bool self_ok = false;
+        // Generic impls instantiate per method call; their methods
+        // wait for instantiation-time checking.
+        bool generic_impl = !node.payload.get<ast::ItemImpl>().params.empty();
         const ast::TypeNode& self_node =
             ast.types[node.payload.get<ast::ItemImpl>().type];
         if (self_node.kind == ast::TypeKind::Path) {
-          if (!self_node.payload.get<ast::TypePath>().args.empty()) {
+          if (!self_node.payload.get<ast::TypePath>().args.empty() &&
+              node.payload.get<ast::ItemImpl>().params.empty()) {
             const u32 index = bag.emit(
                 diag::Severity::Error, kAnalyzerGenericArguments,
                 self_node.span, "generic impl blocks are not supported");
@@ -623,8 +769,19 @@ void Checker::process_module(u32 module) {
                                   target_module, target_name)) {
               NominalEntry* entry = find_nominal(target_module, target_name);
               if (entry != nullptr) {
-                self_type = intern_nominal(*entry);
-                self_ok = true;
+                const ast::ItemNode& target = ast.items[entry->item];
+                const bool generic_target =
+                    target.kind == ast::ItemKind::Enum &&
+                    !target.payload.get<ast::ItemEnum>().params.empty();
+                // Generic impls instantiate per method call; eager
+                // registration cannot resolve their parameters yet.
+                if (!generic_target &&
+                    node.payload.get<ast::ItemImpl>().params.empty()) {
+                  self_type = intern_nominal(*entry);
+                  self_ok = true;
+                } else {
+                  generic_impl = true;
+                }
               } else {
                 const u32 index = bag.emit(
                     diag::Severity::Error, kAnalyzerUnknownType, self_node.span,
@@ -640,6 +797,9 @@ void Checker::process_module(u32 module) {
           (void)index;
         }
         for (ast::ItemIdx method : node.payload.get<ast::ItemImpl>().methods) {
+          if (generic_impl) {
+            break;
+          }
           const ast::ItemNode& method_node = ast.items[method];
           std::vector<ir::TypeIdx> params;
           for (const ast::ItemFnParam& param :
@@ -1065,6 +1225,19 @@ void Checker::validate_cycles(const ir::Storage& storage) {
       (void)index;
     }
   }
+  for (const GenericInstance& instance : generic_instances) {
+    if (!instance.complete) {
+      continue;
+    }
+    std::vector<ir::TypeIdx> stack;
+    if (has_value_cycle(instance.type, stack, storage)) {
+      const u32 index = bag.emit(diag::Severity::Error, kAnalyzerRecursiveType,
+                                 nominals[instance.nominal].span,
+                                 "recursive type '{}' without indirection",
+                                 nominals[instance.nominal].name);
+      (void)index;
+    }
+  }
 }
 
 // Value namespace
@@ -1285,7 +1458,7 @@ bool Checker::resolve_value_path(u32 module,
       const ast::ItemNode& decl = ast.items[match.enom->item];
       out.enom = match.enom;
       out.variant = match.variant;
-      out.type = intern_nominal(*match.enom);
+      out.type = variant_owner_type(match.enom);
       if (decl.payload.get<ast::ItemEnum>()
               .variants[match.variant]
               .fields.empty()) {
@@ -1335,7 +1508,7 @@ bool Checker::resolve_value_path(u32 module,
         const ast::ItemNode& decl = ast.items[matches[0].enom->item];
         out.enom = matches[0].enom;
         out.variant = matches[0].variant;
-        out.type = intern_nominal(*matches[0].enom);
+        out.type = variant_owner_type(matches[0].enom);
         out.kind = decl.payload.get<ast::ItemEnum>()
                            .variants[matches[0].variant]
                            .fields.empty()
@@ -1361,7 +1534,7 @@ bool Checker::resolve_value_path(u32 module,
               member) {
             out.enom = nominal;
             out.variant = i;
-            out.type = intern_nominal(*nominal);
+            out.type = variant_owner_type(nominal);
             out.kind = nominal_node.payload.get<ast::ItemEnum>()
                                .variants[i]
                                .fields.empty()
@@ -1373,13 +1546,19 @@ bool Checker::resolve_value_path(u32 module,
       }
     }
     if (nominal != nullptr) {
-      const ir::TypeIdx self = intern_nominal(*nominal);
-      if (const CheckedModule::MethodInfo* method =
-              lookup_method(self, member)) {
-        if (method->receiver == CheckedModule::ReceiverKind::None) {
-          out.kind = PathValue::Kind::AssocFunction;
-          out.method = method;
-          return true;
+      const ast::ItemNode& nominal_node = ast.items[nominal->item];
+      const bool generic_owner =
+          nominal_node.kind == ast::ItemKind::Enum &&
+          !nominal_node.payload.get<ast::ItemEnum>().params.empty();
+      if (!generic_owner) {
+        const ir::TypeIdx self = intern_nominal(*nominal);
+        if (const CheckedModule::MethodInfo* method =
+                lookup_method(self, member)) {
+          if (method->receiver == CheckedModule::ReceiverKind::None) {
+            out.kind = PathValue::Kind::AssocFunction;
+            out.method = method;
+            return true;
+          }
         }
       }
     }
@@ -1432,7 +1611,7 @@ bool Checker::resolve_variant_path(u32 module,
       out.kind = PathValue::Kind::TupleVariant;
       out.enom = match.enom;
       out.variant = match.variant;
-      out.type = intern_nominal(*match.enom);
+      out.type = variant_owner_type(match.enom);
       return true;
     }
     if (name == "Ok" || name == "Err" || name == "Some" || name == "None") {
@@ -1461,7 +1640,7 @@ bool Checker::resolve_variant_path(u32 module,
         out.kind = PathValue::Kind::TupleVariant;
         out.enom = matches[0].enom;
         out.variant = matches[0].variant;
-        out.type = intern_nominal(*matches[0].enom);
+        out.type = variant_owner_type(matches[0].enom);
         return true;
       }
       return false;
@@ -1478,7 +1657,7 @@ bool Checker::resolve_variant_path(u32 module,
             out.kind = PathValue::Kind::TupleVariant;
             out.enom = nominal;
             out.variant = i;
-            out.type = intern_nominal(*nominal);
+            out.type = variant_owner_type(nominal);
             return true;
           }
         }
@@ -1697,6 +1876,11 @@ void Checker::check_bodies() {
           break;
         }
         case ast::ItemKind::Impl: {
+          // Generic impls instantiate per method call; their bodies
+          // wait for instantiation-time checking.
+          if (!node.payload.get<ast::ItemImpl>().params.empty()) {
+            break;
+          }
           ir::TypeIdx self = error_type();
           const ir::TypeIdx* self_ptr = nullptr;
           const ast::TypeNode& self_node =
@@ -1710,8 +1894,14 @@ void Checker::check_bodies() {
                                   target_module, target_name)) {
               if (NominalEntry* entry =
                       find_nominal(target_module, target_name)) {
-                self = intern_nominal(*entry);
-                self_ptr = &self;
+                const ast::ItemNode& target = ast.items[entry->item];
+                const bool generic_target =
+                    target.kind == ast::ItemKind::Enum &&
+                    !target.payload.get<ast::ItemEnum>().params.empty();
+                if (!generic_target) {
+                  self = intern_nominal(*entry);
+                  self_ptr = &self;
+                }
               }
             }
           }
@@ -1801,6 +1991,22 @@ diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
       tree, std::move(storage), std::move(checker.modules), {}};
   for (const BlessedEntry& entry : checker.blessed) {
     package.blessed.push_back({entry.is_result, entry.type, entry.args});
+  }
+  // Generic instantiations lower as ordinary enums; publish their
+  // variant names under the defining module for lowering lookups.
+  for (const GenericInstance& instance : checker.generic_instances) {
+    if (!instance.complete) {
+      continue;
+    }
+    const NominalEntry& nominal = checker.nominals[instance.nominal];
+    const ast::ItemEnum& decl =
+        ast.items[nominal.item].payload.get<ast::ItemEnum>();
+    std::vector<std::string_view> variants;
+    for (const ast::ItemEnumVariant& variant : decl.variants) {
+      variants.push_back(variant.name.name);
+    }
+    package.modules[nominal.module].enums.push_back(
+        {nominal.name, instance.type, std::move(variants)});
   }
   return base::make_ok(std::move(package));
 }

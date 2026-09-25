@@ -111,10 +111,30 @@ bool Checker::bind_pattern(u32 module,
           return true;
         }
         if (resolved.kind == PathValue::Kind::TupleVariant) {
-          unify(type, resolved.type, node.span, "tuple variant pattern");
+          if (!is_error(resolved.type)) {
+            unify(type, resolved.type, node.span, "tuple variant pattern");
+          }
         }
-        std::vector<ir::TypeIdx> payloads =
-            variant_payloads(resolved, type, node.span);
+        std::vector<ir::TypeIdx> payloads;
+        if (!is_error(resolved.type) ||
+            resolved.kind == PathValue::Kind::BlessedCtor) {
+          payloads = variant_payloads(resolved, type, node.span);
+        } else {
+          // Generic enum: the scrutinee selects the instantiation.
+          const GenericInstance* instance =
+              generic_instance_for(nominal_index(resolved.enom), type);
+          if (instance == nullptr) {
+            const u32 index = bag.emit(
+                diag::Severity::Error, kAnalyzerTypeMismatch, node.span,
+                "variant is not a member of the matched type");
+            (void)index;
+            bind_error_idents(module, pattern);
+            return true;
+          }
+          const usize kept = push_generic_scope(*instance);
+          payloads = variant_payloads(resolved, type, node.span);
+          pop_generic_scope(kept);
+        }
         const std::span<const ast::PatternIdx> elements =
             node.payload.tuple.elements;
         if (payloads.size() != elements.size()) {
@@ -616,8 +636,27 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
         return error_type();
       }
       if (resolved.kind == PathValue::Kind::UnitVariant) {
+        ir::TypeIdx owner = resolved.type;
+        if (is_error(owner)) {
+          // Generic enum: the expectation selects the instantiation.
+          const GenericInstance* instance =
+              expected != nullptr ? generic_find(*expected) : nullptr;
+          if (instance == nullptr ||
+              instance->nominal != nominal_index(resolved.enom)) {
+            const u32 index =
+                bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
+                         "cannot infer the generic type; add an annotation");
+            (void)index;
+            return error_type();
+          }
+          owner = *expected;
+        }
         modules[module].variants.push_back(
-            {path, false, true, resolved.type, resolved.variant});
+            {path, false, true, owner, resolved.variant});
+        if (expected != nullptr) {
+          return unify(*expected, owner, span, "path");
+        }
+        return owner;
       }
       if (expected != nullptr) {
         return unify(*expected, resolved.type, span, "path");
@@ -1020,8 +1059,27 @@ ir::TypeIdx Checker::check_call(u32 module,
       }
       enum_type = entry->type;
       payloads = variant_payloads(resolved, enum_type, span);
-    } else {
+    } else if (!is_error(enum_type)) {
       payloads = variant_payloads(resolved, enum_type, span);
+    } else {
+      // Generic enum: the expectation selects the instantiation.
+      const GenericInstance* instance =
+          expected != nullptr ? generic_find(*expected) : nullptr;
+      if (instance == nullptr ||
+          instance->nominal != nominal_index(resolved.enom)) {
+        const u32 index =
+            bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
+                     "cannot infer the generic type; add an annotation");
+        (void)index;
+        for (ast::ExprIdx arg : args) {
+          check_expr(module, arg, nullptr);
+        }
+        return error_type();
+      }
+      const usize kept = push_generic_scope(*instance);
+      payloads = variant_payloads(resolved, *expected, span);
+      pop_generic_scope(kept);
+      enum_type = *expected;
     }
     if (resolved.kind == PathValue::Kind::TupleVariant) {
       modules[module].variants.push_back(
@@ -1592,7 +1650,22 @@ void Checker::check_exhaustive(u32 module,
         (void)index;
         return;
       }
-      return;
+      // Generic instantiations share their nominal's declaration.
+      for (const GenericInstance& instance : generic_instances) {
+        if (instance.type.idx != scrutinee.idx) {
+          continue;
+        }
+        const ast::ItemNode& candidate =
+            ast.items[nominals[instance.nominal].item];
+        if (candidate.kind != ast::ItemKind::Enum) {
+          continue;
+        }
+        decl = &candidate;
+        break;
+      }
+      if (decl == nullptr) {
+        return;
+      }
     }
     std::vector<bool> covered(static_cast<usize>(enum_type.variants.size()),
                               false);

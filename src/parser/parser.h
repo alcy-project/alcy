@@ -71,6 +71,8 @@ class Parser {
   ast::ItemIdx parse_struct(bool is_pub);
   ast::ItemIdx parse_enum(bool is_pub);
   ast::ItemIdx parse_impl(bool is_pub);
+  // Parses an optional `<T, ...>` parameter list; empty when absent.
+  bool parse_generic_params(std::vector<ast::Ident>& params);
   ast::ItemIdx parse_static(bool is_pub);
   ast::ItemIdx parse_const(bool is_pub);
   ast::ItemIdx parse_use(bool is_pub);

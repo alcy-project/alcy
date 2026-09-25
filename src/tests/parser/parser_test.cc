@@ -217,6 +217,42 @@ TEST_CASE("Parser builds public methods and mut self receivers") {
   CHECK(f.ast.items[impl.methods[1]].is_pub);
 }
 
+TEST_CASE("Parser builds generic enum and impl params") {
+  Fixture f;
+  const ParseResult result = parse(
+      "enum Option<T> { Some(T), None }\n"
+      "impl<T> Option<T> {\n"
+      "  fn unwrap(self: Self) -> T { ret self }\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 2) {
+    return;
+  }
+  const ast::ItemNode& enum_node = f.ast.items[result.items[0]];
+  const ast::ItemEnum option = as_enum(result.items[0], f);
+  (void)enum_node;
+  CHECK(option.params.size() == 1);
+  if (option.params.size() != 1) {
+    return;
+  }
+  CHECK(option.params[0].name == "T");
+  CHECK(option.variants.size() == 2);
+  const ast::ItemImpl impl = as_impl(result.items[1], f);
+  CHECK(impl.params.size() == 1);
+  if (impl.params.size() != 1) {
+    return;
+  }
+  CHECK(impl.params[0].name == "T");
+  CHECK(impl.methods.size() == 1);
+}
+
+TEST_CASE("Parser rejects duplicate type parameters") {
+  Fixture f;
+  const ParseResult result = parse("enum Pair<T, T> { Both(T, T) }\n", f);
+  CHECK(!result.ok);
+}
+
 TEST_CASE("Parser rejects module declarations") {
   // Modules come from the manifest; `mod` is not an item.
   Fixture f;

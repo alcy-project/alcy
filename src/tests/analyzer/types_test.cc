@@ -235,6 +235,162 @@ TEST_CASE("Check resolves annotations and signatures") {
   CHECK(types.types()[root->statics[0].type].tag == ir::TypeTag::U64);
 }
 
+TEST_CASE("Check instantiates generic enums") {
+  io::TempDir dir("alcy_types_generic_enum_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Box<T> { Filled(T), Empty }\n"
+                                      "fn f(x: Box<i32>) -> Box<i32> {\n"
+                                      "  ret x\n"
+                                      "}\n"
+                                      "fn g(x: Box<Box<i32>>) -> i32 {\n"
+                                      "  ret 0\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr || root->functions.empty()) {
+    return;
+  }
+  const CheckedModule::FnSig& sig = root->functions[0];
+  CHECK(sig.name == "f");
+  const ir::Storage& types = result.package->types;
+  CHECK(types.types()[sig.params[0]].tag == ir::TypeTag::Enum);
+  CHECK(types.types()[sig.ret].tag == ir::TypeTag::Enum);
+  CHECK(sig.params[0].idx == sig.ret.idx);
+  if (root->functions.size() < 2) {
+    return;
+  }
+  const CheckedModule::FnSig& nested = root->functions[1];
+  CHECK(types.types()[nested.params[0]].tag == ir::TypeTag::Enum);
+  CHECK(nested.params[0].idx != sig.params[0].idx);
+}
+
+TEST_CASE("Check rejects generic arity mismatches") {
+  {
+    io::TempDir dir("alcy_types_generic_bare_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "enum Box<T> { Filled(T), Empty }\n"
+                                        "fn f(x: Box) -> i32 {\n"
+                                        "  ret 0\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+    CHECK(f.bag.has_errors());
+  }
+  {
+    io::TempDir dir("alcy_types_generic_many_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "enum Box<T> { Filled(T), Empty }\n"
+                                        "fn f(x: Box<i32, u8>) -> i32 {\n"
+                                        "  ret 0\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+    CHECK(f.bag.has_errors());
+  }
+  {
+    io::TempDir dir("alcy_types_param_scope_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(x: T) -> i32 {\n"
+                                        "  ret 0\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+    CHECK(f.bag.has_errors());
+  }
+}
+
+TEST_CASE("Check constructs generic enums from annotations") {
+  io::TempDir dir("alcy_types_generic_ctor_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Box<T> { Filled(T), Empty }\n"
+                                      "fn f(x: Box<i32>) -> i32 {\n"
+                                      "  ret match x {\n"
+                                      "    Box::Filled(v) => v,\n"
+                                      "    Box::Empty => 0,\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  b: Box<i32> := Box::Filled(41i32)\n"
+                                      "  ret f(b) - 41\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+}
+
+TEST_CASE("Check rejects uninferred generic constructors") {
+  io::TempDir dir("alcy_types_generic_infer_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Box<T> { Filled(T), Empty }\n"
+                                      "fn main() -> i32 {\n"
+                                      "  b := Box::Filled(41i32)\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check enforces generic match exhaustiveness") {
+  io::TempDir dir("alcy_types_generic_exh_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Box<T> { Filled(T), Empty }\n"
+                                      "fn f(x: Box<i32>) -> i32 {\n"
+                                      "  ret match x {\n"
+                                      "    Box::Filled(v) => v,\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Check resolves cross-module types") {
   io::TempDir dir("alcy_types_cross_test");
   const bool setup = write_all(

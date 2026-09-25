@@ -508,6 +508,10 @@ ast::ItemIdx Parser::parse_enum(bool is_pub) {
   if (name.is_err()) {
     return ast::ItemIdx::invalid();
   }
+  std::vector<ast::Ident> params;
+  if (!parse_generic_params(params)) {
+    return ast::ItemIdx::invalid();
+  }
   if (!expect(lexer::TokenKind::LBrace, "`{`")) {
     return ast::ItemIdx::invalid();
   }
@@ -555,14 +559,49 @@ ast::ItemIdx Parser::parse_enum(bool is_pub) {
   node.is_pub = is_pub;
   node.payload.set(ast::ItemEnum{
       .name = std::move(name).unwrap(),
+      .params = ast::copy_to_arena(ast_.spans, params),
       .variants = ast::copy_to_arena(ast_.spans, variants),
   });
   return ast_.items.push_back(node);
 }
 
+bool Parser::parse_generic_params(std::vector<ast::Ident>& params) {
+  if (!match(lexer::TokenKind::Less)) {
+    return true;
+  }
+  while (!check(lexer::TokenKind::Greater) && !at_end()) {
+    base::Result<ast::Ident, diag::Fatal> param = parse_ident("type parameter");
+    if (param.is_err()) {
+      return false;
+    }
+    ast::Ident name = std::move(param).unwrap();
+    for (const ast::Ident& existing : params) {
+      if (existing.name == name.name) {
+        const u32 index =
+            bag_.emit(diag::Severity::Error, kParserUnexpectedToken, name.span,
+                      "duplicate type parameter '{}'", name.name);
+        (void)index;
+        return false;
+      }
+    }
+    params.emplace_back(name);
+    if (!match(lexer::TokenKind::Comma)) {
+      break;
+    }
+  }
+  if (!expect(lexer::TokenKind::Greater, "`>`")) {
+    return false;
+  }
+  return true;
+}
+
 ast::ItemIdx Parser::parse_impl(bool is_pub) {
   const usize mark = pos_;
   if (!expect(lexer::TokenKind::Impl, "impl")) {
+    return ast::ItemIdx::invalid();
+  }
+  std::vector<ast::Ident> params;
+  if (!parse_generic_params(params)) {
     return ast::ItemIdx::invalid();
   }
   ast::TypeIdx type = parse_closed_type();
@@ -592,6 +631,7 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
   node.span = span_from(mark);
   node.is_pub = is_pub;
   node.payload.set(ast::ItemImpl{
+      .params = ast::copy_to_arena(ast_.spans, params),
       .type = type,
       .methods = ast::copy_to_arena(ast_.spans, methods),
   });

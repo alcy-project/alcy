@@ -69,6 +69,16 @@ struct BlessedEntry {
   ir::TypeIdx type;
 };
 
+// One instantiation of a generic enum: the checked shape of
+// `Nominal<args>`, interned once and shared by identity.
+struct GenericInstance {
+  u32 nominal = 0;
+  std::vector<ir::TypeIdx> args;
+  ir::TypeIdx type;
+  bool started = false;
+  bool complete = false;
+};
+
 class Checker {
  public:
   Checker(const ModuleTree& tree,
@@ -84,6 +94,10 @@ class Checker {
   str::StringInterner interner;
   std::vector<NominalEntry> nominals;
   std::vector<BlessedEntry> blessed;
+  std::vector<GenericInstance> generic_instances;
+  // Active type-parameter scope: innermost last. Pushed while
+  // instantiating a generic enum or checking its members.
+  std::vector<std::pair<std::string_view, ir::TypeIdx>> type_params;
   std::vector<CheckedModule> modules;
   std::vector<u32> parents;
 
@@ -113,6 +127,21 @@ class Checker {
   CheckedModule::ReceiverKind classify_receiver(ir::TypeIdx first,
                                                 ir::TypeIdx self);
   ir::TypeIdx intern_nominal(NominalEntry& entry);
+  ir::TypeIdx instantiate_generic(u32 nominal,
+                                  const std::vector<ir::TypeIdx>& args,
+                                  diag::Span span);
+  const GenericInstance* generic_find(ir::TypeIdx idx) const;
+  u32 nominal_index(const NominalEntry* entry);
+  // Instantiation of `nominal` matching `type`, or null. Callers push
+  // its substitution while resolving member types, then pop.
+  const GenericInstance* generic_instance_for(u32 nominal,
+                                              ir::TypeIdx type) const;
+  usize push_generic_scope(const GenericInstance& instance);
+  void pop_generic_scope(usize kept);
+  // Interns a variant owner's type. Generic enums defer: their
+  // instantiation is fixed later against the expectation, so the
+  // error type marks "resolve from context".
+  ir::TypeIdx variant_owner_type(NominalEntry* enom);
   ir::TypeIdx intern_blessed(bool is_result,
                              const std::vector<ir::TypeIdx>& args);
   bool walk_module_prefix(u32 module,

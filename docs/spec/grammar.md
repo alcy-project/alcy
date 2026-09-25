@@ -38,9 +38,9 @@ fn_item   := "fn" ident "(" params ")" ("->" type)? block
 params    := (pattern ":" type ("," pattern ":" type)* ","?)?
 struct_item := "struct" ident "{" field ("," field)* ","? "}"
 field     := ident ":" type
-enum_item := "enum" ident "{" variant ("," variant)* ","? "}"
+enum_item := "enum" ident ("<" ident ("," ident)* ">")? "{" variant ("," variant)* ","? "}"
 variant   := ident | ident "(" (type ("," type)*)? ")"
-impl_item := "impl" type "{" fn_item* "}"
+impl_item := "impl" ("<" ident ("," ident)* ">")? type "{" fn_item* "}"
             # methods take self, &self, or &mut self first; other
             # functions in the block are associated functions
 

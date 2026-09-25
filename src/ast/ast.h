@@ -800,10 +800,12 @@ struct ItemEnumVariant {
 
 struct ItemEnum {
   Ident name;
+  std::span<const Ident> params;
   std::span<const ItemEnumVariant> variants;
 };
 
 struct ItemImpl {
+  std::span<const Ident> params;
   TypeIdx type = TypeIdx::invalid();
   std::span<const ItemIdx> methods;
 };
