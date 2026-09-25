@@ -112,6 +112,8 @@ class Lowerer {
     std::string name;
     std::vector<ir::TypeIdx> params;
     ir::TypeIdx ret = ir::TypeIdx(base::kInvalidIdx);
+    // Generic instantiation lowered under (kNoInst for plain code).
+    u32 inst = analyzer::kNoInst;
     // Comp argument values in formal-parameter order.
     std::vector<CompVal> comp_args;
   };
@@ -126,6 +128,10 @@ class Lowerer {
   // Step budget per top-level comp evaluation; recursion depth guard.
   usize comp_budget_ = 0;
   u32 comp_call_depth_ = 0;
+  // Instantiation under lowering (runtime) and under comp
+  // evaluation; side-table lookups match these contexts.
+  u32 cur_inst_ = analyzer::kNoInst;
+  u32 comp_inst_ = analyzer::kNoInst;
 
   struct ExtEntry {
     std::string_view name;
@@ -202,7 +208,10 @@ class Lowerer {
                            std::string_view name,
                            const std::vector<ir::TypeIdx>& params,
                            ir::TypeIdx ret,
+                           u32 inst,
                            std::vector<CompVal> comp_args);
+  u32 callee_inst(const analyzer::CheckedModule::CallTarget* target) const;
+  u32 generic_inst_index(ir::TypeIdx type) const;
   const analyzer::CheckedModule::StructInfo* struct_info(ir::TypeIdx type);
   u64 parse_numeric_value(std::string_view spelling);
   ir::TypeTag literal_tag(ast::LiteralIdx value, const ir::TypeIdx* expected);
@@ -223,6 +232,8 @@ class Lowerer {
       const std::vector<ir::TypeIdx>& params);
   const analyzer::CheckedModule::VariantUse* variant_use(
       ast::PathIdx path) const;
+  const analyzer::CheckedModule::VariantUse* variant_use_in(ast::PathIdx path,
+                                                            u32 inst) const;
   const analyzer::CheckedModule::EnumInfo* enum_info(ir::TypeIdx type) const;
   const analyzer::CheckedPackage::BlessedType* blessed_entry(
       ir::TypeIdx type) const;
@@ -348,6 +359,7 @@ class Lowerer {
                    ast::ItemIdx item,
                    const std::vector<ir::TypeIdx>& params,
                    ir::TypeIdx ret,
+                   u32 inst,
                    u32 caller_module,
                    const std::span<const ast::ExprIdx>& args,
                    CompScope& caller_scope,

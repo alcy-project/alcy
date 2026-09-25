@@ -391,6 +391,104 @@ TEST_CASE("Check enforces generic match exhaustiveness") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Check instantiates generic methods") {
+  io::TempDir dir("alcy_types_generic_method_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Box<T> { Filled(T), Empty }\n"
+                                      "impl<T> Box<T> {\n"
+                                      "  fn is_filled(self: Self) -> bool {\n"
+                                      "    ret match self {\n"
+                                      "      Box::Filled(_) => true,\n"
+                                      "      Box::Empty => false,\n"
+                                      "    }\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  b: Box<i32> := Box::Filled(1i32)\n"
+                                      "  if b.is_filled() {\n"
+                                      "    ret 0\n"
+                                      "  }\n"
+                                      "  ret 1\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+}
+
+TEST_CASE("Check instantiates generic methods recursively") {
+  io::TempDir dir("alcy_types_generic_rec_test");
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "enum Box<T> { Filled(T), Empty }\n"
+                       "impl<T> Box<T> {\n"
+                       "  fn or(self: Self, d: T) -> T {\n"
+                       "    ret match self {\n"
+                       "      Box::Filled(v) => v,\n"
+                       "      Box::Empty => d,\n"
+                       "    }\n"
+                       "  }\n"
+                       "  fn rec(self: Self, n: i32, d: T) -> T {\n"
+                       "    if n <= 0 {\n"
+                       "      ret self.or(d)\n"
+                       "    }\n"
+                       "    ret self.rec(n - 1, d)\n"
+                       "  }\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  a: Box<i32> := Box::Filled(1i32)\n"
+                       "  b: Box<bool> := Box::Filled(true)\n"
+                       "  if a.rec(2, 0i32) != 1 {\n"
+                       "    ret 1\n"
+                       "  }\n"
+                       "  if b.rec(2, false) != true {\n"
+                       "    ret 2\n"
+                       "  }\n"
+                       "  ret 0\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+}
+
+TEST_CASE("Check rejects unknown generic methods") {
+  io::TempDir dir("alcy_types_generic_nomethod_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Box<T> { Filled(T), Empty }\n"
+                                      "impl<T> Box<T> {\n"
+                                      "  fn is_filled(self: Self) -> bool {\n"
+                                      "    ret true\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  b: Box<i32> := Box::Filled(1i32)\n"
+                                      "  ret b.missing()\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Check resolves cross-module types") {
   io::TempDir dir("alcy_types_cross_test");
   const bool setup = write_all(

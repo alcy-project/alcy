@@ -205,8 +205,8 @@ const analyzer::CheckedModule::StaticInfo* Lowerer::lookup_static(
 
 ir::TypeIdx Lowerer::expr_type(ast::ExprIdx expr) {
   for (const auto& entry : pkg.modules[module].expr_types) {
-    if (entry.first == expr) {
-      return entry.second;
+    if (entry.expr == expr && entry.inst == cur_inst_) {
+      return entry.type;
     }
   }
   return error_type();
@@ -215,7 +215,7 @@ ir::TypeIdx Lowerer::expr_type(ast::ExprIdx expr) {
 const analyzer::CheckedModule::CallTarget* Lowerer::call_target(
     ast::ExprIdx callee) const {
   for (const auto& entry : pkg.modules[module].call_targets) {
-    if (entry.callee == callee) {
+    if (entry.callee == callee && entry.inst == cur_inst_) {
       return &entry;
     }
   }
@@ -293,16 +293,22 @@ void Lowerer::comp_key_into(std::string& key, const CompValue& value) {
   }
 }
 
-// Finds or reserves the function index for (item, comp arguments),
-// enqueueing lowering work on first encounter. Recursive calls see
-// the reserved index, so bodies may reference themselves.
+// Finds or reserves the function index for (item, signature,
+// comp arguments), enqueueing lowering work on first encounter.
+// Recursive calls see the reserved index, so bodies may reference
+// themselves.
 ir::FunctionIdx Lowerer::fn_index(u32 mod,
                                   ast::ItemIdx item,
                                   std::string_view name,
                                   const std::vector<ir::TypeIdx>& params,
                                   ir::TypeIdx ret,
+                                  u32 inst,
                                   std::vector<CompVal> comp_args) {
   std::string key = std::to_string(item.idx) + "|";
+  for (ir::TypeIdx param : params) {
+    key += std::to_string(param.idx) + ",";
+  }
+  key += "|" + std::to_string(ret.idx) + "|";
   for (const CompVal& arg : comp_args) {
     comp_key_into(key, arg.value);
   }
@@ -325,10 +331,30 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   entry.name = std::string(name);
   entry.params = params;
   entry.ret = ret;
+  entry.inst = inst;
   entry.comp_args = std::move(comp_args);
   fns.push_back(std::move(entry));
   worklist_.push_back(fns.size() - 1);
   return idx;
+}
+
+// Index of a generic instantiation, or kNoInst when the type is not
+// a generic instantiation.
+u32 Lowerer::generic_inst_index(ir::TypeIdx type) const {
+  for (u32 i = 0; i < static_cast<u32>(pkg.generic_insts.size()); ++i) {
+    if (pkg.generic_insts[i].idx == type.idx) {
+      return i;
+    }
+  }
+  return analyzer::kNoInst;
+}
+
+// Lowering context of a call target: the checker recorded the
+// instantiation under which the callee body was checked; that is
+// exactly the context its body reads side tables in.
+u32 Lowerer::callee_inst(
+    const analyzer::CheckedModule::CallTarget* target) const {
+  return target == nullptr ? analyzer::kNoInst : target->inst;
 }
 
 const analyzer::CheckedModule::StructInfo* Lowerer::struct_info(
@@ -346,6 +372,8 @@ const analyzer::CheckedModule::StructInfo* Lowerer::struct_info(
 void Lowerer::lower_fn(const FnEntry& entry) {
   const u32 mod = entry.mod;
   module = mod;
+  cur_inst_ = entry.inst;
+  comp_inst_ = entry.inst;
   locals.clear();
   comp_scope_.clear();
   fn_blocks_.clear();
@@ -455,16 +483,40 @@ void Lowerer::run() {
     zero.data.i32_value = 0;
     zero_i32 = to_operand(builder.immutable(zero), i32);
   }
-  // Seed functions without comp parameters in declaration order;
-  // comp specializations reserve on first call. Reservation order
-  // matches lowering order, so indexes line up with storage.
+  // Seed every checked non-comp signature so bodies without call
+  // sites still reach codegen. A generic impl contributes one
+  // signature per instantiation, keyed by its self type.
   for (u32 m = 0; m < static_cast<u32>(pkg.modules.size()); ++m) {
-    for (const auto& sig : pkg.modules[m].functions) {
+    const analyzer::CheckedModule& checked = pkg.modules[m];
+    for (const auto& method : checked.methods) {
+      if (!method.item.is_valid() || !comp_positions(method.item).empty() ||
+          ast.items[method.item].kind == ast::ItemKind::Intrinsic) {
+        continue;
+      }
+      const u32 inst = generic_inst_index(method.self_type);
+      fn_index(m, method.item, method.name, method.params, method.ret, inst,
+               {});
+      if (failed) {
+        return;
+      }
+    }
+    for (const auto& sig : checked.functions) {
       if (!sig.item.is_valid() || !comp_positions(sig.item).empty() ||
           ast.items[sig.item].kind == ast::ItemKind::Intrinsic) {
         continue;
       }
-      fn_index(m, sig.item, sig.name, sig.params, sig.ret, {});
+      bool is_method_copy = false;
+      for (const auto& method : checked.methods) {
+        if (method.item == sig.item) {
+          is_method_copy = true;
+          break;
+        }
+      }
+      if (is_method_copy) {
+        continue;
+      }
+      fn_index(m, sig.item, sig.name, sig.params, sig.ret, analyzer::kNoInst,
+               {});
       if (failed) {
         return;
       }

@@ -65,8 +65,8 @@ bool Lowerer::comp_tick(diag::Span span) {
 
 ir::TypeIdx Lowerer::expr_type_in(u32 mod, ast::ExprIdx expr) {
   for (const auto& entry : pkg.modules[mod].expr_types) {
-    if (entry.first == expr) {
-      return entry.second;
+    if (entry.expr == expr && entry.inst == comp_inst_) {
+      return entry.type;
     }
   }
   return error_type();
@@ -76,7 +76,7 @@ const analyzer::CheckedModule::CallTarget* Lowerer::call_target_in(
     u32 mod,
     ast::ExprIdx callee) const {
   for (const auto& entry : pkg.modules[mod].call_targets) {
-    if (entry.callee == callee) {
+    if (entry.callee == callee && entry.inst == comp_inst_) {
       return &entry;
     }
   }
@@ -600,6 +600,7 @@ bool Lowerer::comp_run_fn(u32 def_module,
                           ast::ItemIdx item,
                           const std::vector<ir::TypeIdx>& params,
                           ir::TypeIdx ret,
+                          u32 inst,
                           u32 caller_module,
                           const std::span<const ast::ExprIdx>& args,
                           CompScope& caller_scope,
@@ -616,6 +617,8 @@ bool Lowerer::comp_run_fn(u32 def_module,
     return comp_fail(span, "comp call depth exhausted");
   }
   ++comp_call_depth_;
+  const u32 saved_inst = comp_inst_;
+  comp_inst_ = inst;
   CompScope callee_scope;
   callee_scope.frames.emplace_back();
   bool ok = true;
@@ -641,6 +644,7 @@ bool Lowerer::comp_run_fn(u32 def_module,
     }
   }
   --comp_call_depth_;
+  comp_inst_ = saved_inst;
   if (!ok) {
     return false;
   }
@@ -669,8 +673,9 @@ bool Lowerer::comp_eval_assoc_call(
   if (info.receiver != analyzer::CheckedModule::ReceiverKind::None) {
     return comp_fail(node.span, "method without receiver");
   }
-  return comp_run_fn(target->module, info.item, info.params, info.ret, mod,
-                     call.args, scope, node.span, out);
+  return comp_run_fn(target->module, info.item, info.params, info.ret,
+                     callee_inst(target), mod, call.args, scope, node.span,
+                     out);
 }
 
 // Native compile-time evaluation for string intrinsics. Other
@@ -759,7 +764,7 @@ bool Lowerer::comp_eval_call(u32 mod,
   const analyzer::CheckedModule::CallTarget* target =
       call_target_in(mod, call.callee);
   if (target == nullptr) {
-    if (const auto* use = variant_use(path)) {
+    if (const auto* use = variant_use_in(path, comp_inst_)) {
       const std::vector<ir::TypeIdx> payloads =
           variant_payload(use->enum_type, use->variant, use->blessed_first);
       if (call.args.size() != payloads.size()) {
@@ -795,8 +800,9 @@ bool Lowerer::comp_eval_call(u32 mod,
   if (ast.items[sig.item].kind == ast::ItemKind::Intrinsic) {
     return comp_eval_intrinsic(mod, sig, call.args, scope, node.span, out);
   }
-  return comp_run_fn(target->module, sig.item, sig.params, sig.ret, mod,
-                     call.args, scope, node.span, out);
+  return comp_run_fn(target->module, sig.item, sig.params, sig.ret,
+                     callee_inst(target), mod, call.args, scope, node.span,
+                     out);
 }
 
 bool Lowerer::comp_eval_method_call(u32 mod,
@@ -1071,7 +1077,7 @@ bool Lowerer::comp_eval_expr(u32 mod,
           }
         }
       }
-      if (const auto* use = variant_use(path)) {
+      if (const auto* use = variant_use_in(path, comp_inst_)) {
         const std::vector<ir::TypeIdx> payloads =
             variant_payload(use->enum_type, use->variant, use->blessed_first);
         if (!payloads.empty()) {

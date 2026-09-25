@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <deque>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -16,6 +17,10 @@
 #include "ir/type.h"
 
 namespace analyzer {
+
+// Sentinel for "no generic instantiation": table entries recorded
+// outside any instantiation-time checking carry this key.
+constexpr u32 kNoInst = 0xFFFFFFFFu;
 
 // Per-module type information for type checking and lowering. All TypeIdx
 // refer to the package Storage below; all views borrow source bytes.
@@ -48,10 +53,15 @@ struct CheckedModule {
     // Declaring item for body lowering (invalid for synthesized entries).
     ast::ItemIdx item;
   };
-  std::vector<FnSig> functions;
+  // Lazily-instantiated generic methods append signatures during body
+  // checking, so element addresses must stay stable: never
+  // reallocate-held.
+  std::deque<FnSig> functions;
   // Inherent methods per impl block, including associated functions
   // (receiver None). Mirrors the resolved signatures above so call
   // checking can match (self type, name) without re-walking AST.
+  // Lazily-instantiated generic methods append during body checking,
+  // so element addresses must stay stable: never reallocate-held.
   enum class ReceiverKind : u8 { None, ByValue, Shared, Exclusive };
   struct MethodInfo {
     ir::TypeIdx self_type;
@@ -61,7 +71,7 @@ struct CheckedModule {
     ReceiverKind receiver;
     ast::ItemIdx item;
   };
-  std::vector<MethodInfo> methods;
+  std::deque<MethodInfo> methods;
   struct StaticInfo {
     std::string_view name;
     ir::TypeIdx type;
@@ -72,13 +82,20 @@ struct CheckedModule {
   std::vector<StaticInfo> statics;
   // Lowering side tables: every checked expression records its type,
   // and every checked call records its callee, so lowering never
-  // re-resolves paths or re-derives types.
-  std::vector<std::pair<ast::ExprIdx, ir::TypeIdx>> expr_types;
+  // re-resolves paths or re-derives types. `inst` keys entries
+  // checked under a generic instantiation (kNoInst otherwise).
+  struct ExprType {
+    ast::ExprIdx expr;
+    ir::TypeIdx type;
+    u32 inst = kNoInst;
+  };
+  std::vector<ExprType> expr_types;
   struct CallTarget {
     ast::ExprIdx callee;
     bool is_method;
     u32 module;
     u32 index;
+    u32 inst = kNoInst;
   };
   std::vector<CallTarget> call_targets;
   // Variant resolution for lowering: every checked variant use records
@@ -91,6 +108,7 @@ struct CheckedModule {
     bool blessed_first = true;
     ir::TypeIdx enum_type;
     u32 variant = 0;
+    u32 inst = kNoInst;
   };
   std::vector<VariantUse> variants;
 };
@@ -110,6 +128,9 @@ struct CheckedPackage {
     std::vector<ir::TypeIdx> args;
   };
   std::vector<BlessedType> blessed;
+  // Every generic enum instantiation type, aligned with the
+  // checker's instantiation order; indexes key lowering tables.
+  std::vector<ir::TypeIdx> generic_insts;
 };
 
 // Resolves every type position in the package to interned TypeIdx:

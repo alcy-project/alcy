@@ -1369,15 +1369,167 @@ NominalEntry* Checker::find_nominal_in_scope(u32 module,
   return nullptr;
 }
 
-const CheckedModule::MethodInfo* Checker::lookup_method(
-    ir::TypeIdx self,
-    std::string_view name) const {
+const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
+                                                        std::string_view name,
+                                                        u32 module,
+                                                        diag::Span span) {
   for (const CheckedModule& checked : modules) {
     for (const CheckedModule::MethodInfo& method : checked.methods) {
       if (method.self_type.idx == self.idx && method.name == name) {
         return &method;
       }
     }
+  }
+  // Generic instantiation: match `impl<...> Nominal<...>` blocks.
+  const GenericInstance* instance = generic_find(self);
+  if (instance == nullptr) {
+    return nullptr;
+  }
+  const u32 nominal = instance->nominal;
+  const std::vector<ir::TypeIdx> args = instance->args;
+  for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
+    for (ast::ItemIdx item : tree.modules[m]->items) {
+      const ast::ItemNode& node = ast.items[item];
+      if (node.kind != ast::ItemKind::Impl) {
+        continue;
+      }
+      const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
+      if (impl.params.empty()) {
+        continue;
+      }
+      const ast::TypeNode& target = ast.types[impl.type];
+      if (target.kind != ast::TypeKind::Path) {
+        continue;
+      }
+      u32 target_module = kNoModule;
+      std::string_view target_name;
+      if (!resolve_type_path(m, target.payload.get<ast::TypePath>().path,
+                             target_module, target_name)) {
+        continue;
+      }
+      NominalEntry* target_entry = find_nominal(target_module, target_name);
+      if (target_entry == nullptr || nominal_index(target_entry) != nominal) {
+        continue;
+      }
+      const std::span<const ast::TypeIdx> target_args =
+          target.payload.get<ast::TypePath>().args;
+      const ast::ItemEnum& decl =
+          ast.items[nominals[nominal].item].payload.get<ast::ItemEnum>();
+      if (target_args.size() != decl.params.size()) {
+        continue;
+      }
+      // Target arguments must name impl parameters directly.
+      std::vector<std::pair<std::string_view, ir::TypeIdx>> scope;
+      bool shape_ok = true;
+      for (usize i = 0; i < target_args.size() && shape_ok; ++i) {
+        const ast::TypeNode& arg = ast.types[target_args[i]];
+        if (arg.kind != ast::TypeKind::Path) {
+          shape_ok = false;
+          break;
+        }
+        const ast::Path& path =
+            ast.paths[arg.payload.get<ast::TypePath>().path];
+        if (path.segments.size() != 1 ||
+            !arg.payload.get<ast::TypePath>().args.empty()) {
+          shape_ok = false;
+          break;
+        }
+        bool found = false;
+        for (usize p = 0; p < impl.params.size(); ++p) {
+          if (impl.params[p].name == path.segments[0].name) {
+            scope.emplace_back(impl.params[p].name, args[i]);
+            found = true;
+            break;
+          }
+        }
+        shape_ok = found;
+      }
+      if (!shape_ok) {
+        continue;
+      }
+      const CheckedModule::MethodInfo* method =
+          instantiate_method(m, self, scope, impl, name);
+      if (method != nullptr) {
+        return method;
+      }
+    }
+  }
+  (void)module;
+  (void)span;
+  return nullptr;
+}
+
+// Synthesizes one method entry for a generic instantiation and
+// checks its body under the substitution. Appends before checking
+// so recursive calls resolve to the in-progress entry.
+const CheckedModule::MethodInfo* Checker::instantiate_method(
+    u32 impl_module,
+    ir::TypeIdx self_type,
+    const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
+    const ast::ItemImpl& impl,
+    std::string_view name) {
+  for (ast::ItemIdx method_item : impl.methods) {
+    const ast::ItemNode& method_node = ast.items[method_item];
+    if (method_node.payload.get<ast::ItemFn>().name.name != name) {
+      continue;
+    }
+    for (const CheckedModule::MethodInfo& existing :
+         modules[impl_module].methods) {
+      if (existing.item == method_item &&
+          existing.self_type.idx == self_type.idx) {
+        return &existing;
+      }
+    }
+    // The callee resolves its own parameters only: the caller scope
+    // is hidden so a same-named parameter cannot leak through.
+    const std::vector<std::pair<std::string_view, ir::TypeIdx>> outer_scope =
+        std::move(type_params);
+    type_params.clear();
+    for (const auto& binding : scope) {
+      type_params.push_back(binding);
+    }
+    std::vector<ir::TypeIdx> params;
+    for (const ast::ItemFnParam& param :
+         method_node.payload.get<ast::ItemFn>().params) {
+      params.push_back(resolve_type(impl_module, param.type, &self_type));
+    }
+    ir::TypeIdx ret = builder.primitive(ir::TypeTag::Void);
+    if (method_node.payload.get<ast::ItemFn>().return_type.is_valid()) {
+      ret = resolve_type(impl_module,
+                         method_node.payload.get<ast::ItemFn>().return_type,
+                         &self_type);
+    }
+    CheckedModule::ReceiverKind receiver = CheckedModule::ReceiverKind::None;
+    if (!params.empty()) {
+      receiver = classify_receiver(params[0], self_type);
+    }
+    modules[impl_module].functions.push_back(
+        {method_node.payload.get<ast::ItemFn>().name.name, params, ret,
+         method_item});
+    modules[impl_module].methods.push_back(
+        {self_type, method_node.payload.get<ast::ItemFn>().name.name, params,
+         ret, receiver, method_item});
+    // Nested instantiations append during the body check; keep the
+    // entry this call owns.
+    CheckedModule::MethodInfo* entry = &modules[impl_module].methods.back();
+    const GenericInstance* found = generic_find(self_type);
+    const u32 inst = found == nullptr
+                         ? kNoInst
+                         : static_cast<u32>(found - generic_instances.data());
+    const ir::TypeIdx saved_ret = fn_ret;
+    const u32 saved_loop = loop_depth;
+    const bool saved_in_fn = in_fn;
+    const bool saved_bind = bind_comp_known;
+    const u32 saved_inst = cur_inst;
+    cur_inst = inst;
+    check_fn(impl_module, method_item, &self_type);
+    cur_inst = saved_inst;
+    fn_ret = saved_ret;
+    loop_depth = saved_loop;
+    in_fn = saved_in_fn;
+    bind_comp_known = saved_bind;
+    type_params = std::move(outer_scope);
+    return entry;
   }
   return nullptr;
 }
@@ -1388,7 +1540,7 @@ void Checker::record_call(u32 module,
   for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
     for (u32 i = 0; i < static_cast<u32>(modules[m].functions.size()); ++i) {
       if (&modules[m].functions[i] == fn) {
-        modules[module].call_targets.push_back({callee, false, m, i});
+        modules[module].call_targets.push_back({callee, false, m, i, cur_inst});
         return;
       }
     }
@@ -1401,7 +1553,7 @@ void Checker::record_call(u32 module,
   for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
     for (u32 i = 0; i < static_cast<u32>(modules[m].methods.size()); ++i) {
       if (&modules[m].methods[i] == method) {
-        modules[module].call_targets.push_back({callee, true, m, i});
+        modules[module].call_targets.push_back({callee, true, m, i, cur_inst});
         return;
       }
     }
@@ -1553,7 +1705,7 @@ bool Checker::resolve_value_path(u32 module,
       if (!generic_owner) {
         const ir::TypeIdx self = intern_nominal(*nominal);
         if (const CheckedModule::MethodInfo* method =
-                lookup_method(self, member)) {
+                lookup_method(self, member, module, node.span)) {
           if (method->receiver == CheckedModule::ReceiverKind::None) {
             out.kind = PathValue::Kind::AssocFunction;
             out.method = method;
@@ -1988,13 +2140,15 @@ diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
   ir::Storage storage = std::move(checker.builder).build();
   checker.validate_cycles(storage);
   CheckedPackage package{
-      tree, std::move(storage), std::move(checker.modules), {}};
+      tree, std::move(storage), std::move(checker.modules), {}, {}};
   for (const BlessedEntry& entry : checker.blessed) {
     package.blessed.push_back({entry.is_result, entry.type, entry.args});
   }
   // Generic instantiations lower as ordinary enums; publish their
   // variant names under the defining module for lowering lookups.
+  // Their types publish in instantiation order for table keying.
   for (const GenericInstance& instance : checker.generic_instances) {
+    package.generic_insts.push_back(instance.type);
     if (!instance.complete) {
       continue;
     }

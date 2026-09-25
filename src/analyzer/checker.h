@@ -98,6 +98,9 @@ class Checker {
   // Active type-parameter scope: innermost last. Pushed while
   // instantiating a generic enum or checking its members.
   std::vector<std::pair<std::string_view, ir::TypeIdx>> type_params;
+  // Index into generic_instances while checking an instantiated
+  // method body (kNoInst otherwise); keys the lowering side tables.
+  u32 cur_inst = kNoInst;
   std::vector<CheckedModule> modules;
   std::vector<u32> parents;
 
@@ -204,8 +207,18 @@ class Checker {
                     diag::Span span,
                     VariantMatch& out);
   NominalEntry* find_nominal_in_scope(u32 module, std::string_view name);
+  // Finds an inherent method, instantiating generic impls on demand
+  // (which checks the method body under the substitution).
   const CheckedModule::MethodInfo* lookup_method(ir::TypeIdx self,
-                                                 std::string_view name) const;
+                                                 std::string_view name,
+                                                 u32 module,
+                                                 diag::Span span);
+  const CheckedModule::MethodInfo* instantiate_method(
+      u32 impl_module,
+      ir::TypeIdx self_type,
+      const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
+      const ast::ItemImpl& impl,
+      std::string_view name);
   void record_call(u32 module,
                    ast::ExprIdx callee,
                    const CheckedModule::FnSig* fn);

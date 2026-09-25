@@ -632,9 +632,15 @@ ir::ExternalFunctionIdx Lowerer::declare_external(
 
 const analyzer::CheckedModule::VariantUse* Lowerer::variant_use(
     ast::PathIdx path) const {
+  return variant_use_in(path, cur_inst_);
+}
+
+const analyzer::CheckedModule::VariantUse* Lowerer::variant_use_in(
+    ast::PathIdx path,
+    u32 inst) const {
   for (const auto& checked : pkg.modules) {
     for (const auto& use : checked.variants) {
-      if (use.path == path) {
+      if (use.path == path && use.inst == inst) {
         return &use;
       }
     }
@@ -869,7 +875,7 @@ Val Lowerer::lower_call(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   }
   const ir::FunctionIdx fn =
       fn_index(target->module, sig.item, sig.name, sig.params, sig.ret,
-               std::move(comp_args));
+               analyzer::kNoInst, std::move(comp_args));
   if (!fn.is_valid()) {
     return Val{size_one, error_type(), false, false};
   }
@@ -935,7 +941,7 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
   }
   const ir::FunctionIdx fn =
       fn_index(target->module, info.item, info.name, info.params, info.ret,
-               std::move(comp_args));
+               callee_inst(target), std::move(comp_args));
   if (!fn.is_valid()) {
     internal(call.span, "call without function");
     return Val{size_one, error_type(), false, false};
@@ -1506,8 +1512,9 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     comp_args.push_back(std::move(arg));
   }
-  ir::FunctionIdx fn = fn_index(target->module, info.item, info.name,
-                                info.params, info.ret, std::move(comp_args));
+  ir::FunctionIdx fn =
+      fn_index(target->module, info.item, info.name, info.params, info.ret,
+               callee_inst(target), std::move(comp_args));
   if (!fn.is_valid()) {
     return Val{size_one, error_type(), false, false};
   }

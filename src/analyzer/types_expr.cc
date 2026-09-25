@@ -652,7 +652,7 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
           owner = *expected;
         }
         modules[module].variants.push_back(
-            {path, false, true, owner, resolved.variant});
+            {path, false, true, owner, resolved.variant, cur_inst});
         if (expected != nullptr) {
           return unify(*expected, owner, span, "path");
         }
@@ -686,7 +686,7 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
         if (const BlessedEntry* entry = blessed_find(*expected)) {
           if (!entry->is_result) {
             modules[module].variants.push_back(
-                {path, true, false, *expected, 0});
+                {path, true, false, *expected, 0, cur_inst});
             return *expected;
           }
         }
@@ -1083,10 +1083,10 @@ ir::TypeIdx Checker::check_call(u32 module,
     }
     if (resolved.kind == PathValue::Kind::TupleVariant) {
       modules[module].variants.push_back(
-          {path, false, true, enum_type, resolved.variant});
+          {path, false, true, enum_type, resolved.variant, cur_inst});
     } else {
       modules[module].variants.push_back(
-          {path, true, resolved.blessed_first, enum_type, 0});
+          {path, true, resolved.blessed_first, enum_type, 0, cur_inst});
     }
     if (args.size() != payloads.size()) {
       const u32 index = bag.emit(diag::Severity::Error, kAnalyzerArityError,
@@ -1196,7 +1196,8 @@ ir::TypeIdx Checker::check_method_call(u32 module,
   if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
     nominal = builder.ref_types()[builder.types()[receiver].as_ref()].pointee;
   }
-  const CheckedModule::MethodInfo* method = lookup_method(nominal, name);
+  const CheckedModule::MethodInfo* method =
+      lookup_method(nominal, name, module, node.span);
   if (method == nullptr) {
     const u32 index =
         bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
@@ -1217,8 +1218,8 @@ ir::TypeIdx Checker::check_method_call(u32 module,
     return error_type();
   }
   record_call(module, expr, method);
-  // No autoref/deref in MVP beyond this: an owned receiver coerces
-  // to the declared borrow; full borrow checking is a later stage.
+  // The receiver coerces to a declared borrow; coercion itself is
+  // erased at this level and materialized by lowering.
   const ir::TypeIdx declared = method->params[0];
   if (receiver.idx != declared.idx) {
     bool coerced = false;
@@ -1879,7 +1880,7 @@ ir::TypeIdx Checker::check_expr(u32 module,
                                 ast::ExprIdx expr,
                                 const ir::TypeIdx* expected) {
   const ir::TypeIdx type = check_expr_inner(module, expr, expected);
-  modules[module].expr_types.emplace_back(expr, type);
+  modules[module].expr_types.push_back({expr, type, cur_inst});
   return type;
 }
 
