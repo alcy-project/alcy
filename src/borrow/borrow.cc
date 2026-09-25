@@ -594,6 +594,16 @@ class Checker {
                       place);
     };
     switch (instr.op) {
+      case ir::Opcode::Load: {
+        // Reading a place is a use, so a read of a moved place is a
+        // use-after-move. Without this the only way a move was ever
+        // noticed was a second move of the same place.
+        Place place;
+        if (operand_place(0, place)) {
+          check_place_use(moved, place, span, "read");
+        }
+        break;
+      }
       case ir::Opcode::Move: {
         Place place;
         if (!operand_place(0, place)) {

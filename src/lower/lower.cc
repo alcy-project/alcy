@@ -207,8 +207,11 @@ void Lowerer::mark_move(Val v) {
 }
 
 ir::OperandIdx Lowerer::use_value(Val v) {
+  // Reading the value out is the read the move authorizes, so it has
+  // to be emitted before the marker that moves the place.
+  const ir::OperandIdx value = materialize(v).op;
   mark_move(v);
-  return materialize(v).op;
+  return value;
 }
 
 const Local* Lowerer::lookup_local(std::string_view name) const {

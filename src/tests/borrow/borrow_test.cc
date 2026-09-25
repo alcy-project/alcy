@@ -199,6 +199,53 @@ TEST_CASE("Borrow rejects use after move") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Borrow rejects a read after a by-value call move") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_call_move_test_");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct H { r: &mut i32 }\n"
+                                      "fn consume(h: H) -> i32 {\n"
+                                      "  ret *h.r\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  x := 1\n"
+                                      "  h := H { r: &mut x }\n"
+                                      "  n := consume(h)\n"
+                                      "  _ := n\n"
+                                      "  _ := h.r\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  CHECK(!check_case(dir, "main.al", {"main.al"}, f));
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Borrow reads a moved value into the call that moved it") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_move_read_test_");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct H { n: i32 }\n"
+                                      "fn consume(h: H) -> i32 {\n"
+                                      "  ret h.n\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  h := H { n: 1 }\n"
+                                      "  if consume(h) != 1 {\n"
+                                      "    panic(\"bad\")\n"
+                                      "  }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  CHECK(check_case(dir, "main.al", {"main.al"}, f));
+  CHECK(!f.bag.has_errors());
+}
+
 TEST_CASE("Borrow joins maybe-moves across branches") {
   io::TempDir dir = io::TempDir::create_unique("alcy_borrow_join_test_");
   const bool setup = write_all(dir, {{"main.al",
