@@ -1,9 +1,8 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 #include <span>
-#include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include "analyzer/checker.h"
@@ -15,9 +14,6 @@
 #include "diag/diagnostic.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
-#include "fpag/base/result.h"
-#include "fpag/str/string_interner.h"
-#include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
@@ -26,7 +22,7 @@
 
 namespace analyzer {
 
-// ---- Patterns ----
+// Patterns
 
 void Checker::collect_pattern_idents(ast::PatternIdx pattern,
                                      std::vector<std::string_view>& out) {
@@ -258,7 +254,7 @@ bool Checker::bind_pattern(u32 module,
   }
 }
 
-// ---- Expressions ----
+// Expressions
 
 bool Checker::is_bare_int_literal(ast::ExprIdx expr) const {
   const ast::ExprNode& node = ast.exprs[expr];
@@ -543,10 +539,10 @@ void Checker::check_call_args(u32 module,
   }
 }
 
-// The core prelude `write`: resolved through the prelude, never
-// through a user module (locals shadow the prelude first).
-bool Checker::is_core_write(const CheckedModule::FnSig* fn) const {
-  if (fn->name != "write") {
+// A core prelude formatting helper: resolved through the prelude,
+// never through a user module (locals shadow the prelude first).
+bool Checker::is_core_fmt(const CheckedModule::FnSig* fn) const {
+  if (fn->name != "write" && fn->name != "format") {
     return false;
   }
   for (const ModuleNode* module : tree.modules) {
@@ -672,6 +668,51 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
   }
 }
 
+// Verifies a literal format string against argument element types;
+// other comp-known strings verify in lowering, which holds the bytes.
+// Returns false after diagnosing.
+bool Checker::verify_fmt_literal(ast::ExprIdx fmt_expr,
+                                 ast::ExprIdx args_expr,
+                                 const std::vector<ir::TypeIdx>& elements,
+                                 diag::Span span) {
+  if (ast.exprs[fmt_expr].kind != ast::ExprKind::Literal) {
+    return true;
+  }
+  const ast::Literal& literal =
+      ast.literals[ast.exprs[fmt_expr].payload.get<ast::ExprLiteral>().value];
+  if (literal.kind != ast::LiteralKind::String) {
+    return true;
+  }
+  const FmtParse parsed =
+      parse_format_string(unescape_format_string(literal.spelling));
+  if (parsed.error != FmtError::None) {
+    const u32 index =
+        bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                 ast.exprs[fmt_expr].span, "invalid format string");
+    (void)index;
+    return false;
+  }
+  if (parsed.placeholders != elements.size()) {
+    const u32 index = bag.emit(
+        diag::Severity::Error, kAnalyzerArityError, ast.exprs[fmt_expr].span,
+        "format string has {} placeholders for {} arguments",
+        parsed.placeholders, elements.size());
+    (void)index;
+    return false;
+  }
+  for (ir::TypeIdx element : elements) {
+    if (!is_formattable_tag(tag_of(element))) {
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                   ast.exprs[args_expr].span, "argument is not formattable");
+      (void)index;
+      return false;
+    }
+  }
+  (void)span;
+  return true;
+}
+
 // Checks a core `fmt::write` call like the print intrinsics:
 // shapes here, literal content in lowering (which holds the bytes).
 ir::TypeIdx Checker::check_fmt_write(u32 module,
@@ -725,48 +766,28 @@ ir::TypeIdx Checker::check_fmt_write(u32 module,
     return error_type();
   }
   const ir::TypeIdx args_type = check_expr(module, args[2], nullptr);
-  if (!is_error(args_type) && tag_of(args_type) != ir::TypeTag::Tuple) {
+  // `()` reads as the empty tuple (see types.md).
+  const bool empty_args =
+      !is_error(args_type) && tag_of(args_type) == ir::TypeTag::Void;
+  if (!is_error(args_type) && !empty_args &&
+      tag_of(args_type) != ir::TypeTag::Tuple) {
     const u32 index =
         bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch,
                  ast.exprs[args[2]].span, "arguments must be a tuple");
     (void)index;
     return error_type();
   }
-  // Literal format strings verify fully here; other comp-known
-  // strings verify in lowering, which holds the bytes.
-  if (!is_error(args_type) &&
-      ast.exprs[args[0]].kind == ast::ExprKind::Literal) {
-    const ast::Literal& literal =
-        ast.literals[ast.exprs[args[0]].payload.get<ast::ExprLiteral>().value];
-    if (literal.kind == ast::LiteralKind::String) {
-      const FmtParse parsed =
-          parse_format_string(unescape_format_string(literal.spelling));
-      if (parsed.error != FmtError::None) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
-                     ast.exprs[args[0]].span, "invalid format string");
-        (void)index;
-        return error_type();
-      }
+  if (!is_error(args_type)) {
+    std::vector<ir::TypeIdx> elements;
+    if (!empty_args) {
       const ir::TupleType& shape =
           builder.tuple_types()[builder.types()[args_type].as_tuple()];
-      if (parsed.placeholders != shape.elements.size()) {
-        const u32 index = bag.emit(
-            diag::Severity::Error, kAnalyzerArityError, ast.exprs[args[0]].span,
-            "format string has {} placeholders for {} arguments",
-            parsed.placeholders, shape.elements.size());
-        (void)index;
-        return error_type();
-      }
       for (ir::TypeIdx element : shape.elements) {
-        if (!is_formattable_tag(tag_of(element))) {
-          const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
-                       ast.exprs[args[2]].span, "argument is not formattable");
-          (void)index;
-          return error_type();
-        }
+        elements.push_back(element);
       }
+    }
+    if (!verify_fmt_literal(args[0], args[2], elements, span)) {
+      return error_type();
     }
   }
   record_call(module, node.payload.get<ast::ExprCall>().callee, fn);
@@ -778,6 +799,78 @@ ir::TypeIdx Checker::check_fmt_write(u32 module,
     return error_type();
   }
   const ir::TypeIdx result = intern_nominal(*outcome);
+  if (expected != nullptr) {
+    return unify(*expected, result, span, "call");
+  }
+  return result;
+}
+
+// Checks a core `format` call: like `write` without the buffer.
+ir::TypeIdx Checker::check_fmt_format(u32 module,
+                                      ast::ExprIdx expr,
+                                      const ir::TypeIdx* expected,
+                                      const CheckedModule::FnSig* fn) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const std::span<const ast::ExprIdx> args =
+      node.payload.get<ast::ExprCall>().args;
+  const diag::Span span = node.span;
+  if (comp_depth > 0) {
+    const u32 index =
+        bag.emit(diag::Severity::Error, kAnalyzerInvalidComp, span,
+                 "'format' is not allowed in comp evaluation");
+    (void)index;
+    return error_type();
+  }
+  if (args.size() != 2) {
+    const u32 index =
+        bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
+                 "'format' expects 2 arguments, found {}", args.size());
+    (void)index;
+    return error_type();
+  }
+  const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
+  const ir::TypeIdx fmt_type = check_expr(module, args[0], &str);
+  unify(str, fmt_type, ast.exprs[args[0]].span, "format string");
+  if (!expr_comp_known(module, args[0])) {
+    const u32 index =
+        bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+                 ast.exprs[args[0]].span, "format string must be comp-known");
+    (void)index;
+    return error_type();
+  }
+  const ir::TypeIdx args_type = check_expr(module, args[1], nullptr);
+  const bool empty_args =
+      !is_error(args_type) && tag_of(args_type) == ir::TypeTag::Void;
+  if (!is_error(args_type) && !empty_args &&
+      tag_of(args_type) != ir::TypeTag::Tuple) {
+    const u32 index =
+        bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch,
+                 ast.exprs[args[1]].span, "arguments must be a tuple");
+    (void)index;
+    return error_type();
+  }
+  if (!is_error(args_type)) {
+    std::vector<ir::TypeIdx> elements;
+    if (!empty_args) {
+      const ir::TupleType& shape =
+          builder.tuple_types()[builder.types()[args_type].as_tuple()];
+      for (ir::TypeIdx element : shape.elements) {
+        elements.push_back(element);
+      }
+    }
+    if (!verify_fmt_literal(args[0], args[1], elements, span)) {
+      return error_type();
+    }
+  }
+  record_call(module, node.payload.get<ast::ExprCall>().callee, fn);
+  NominalEntry* string_type = find_nominal_in_scope(module, "String");
+  if (string_type == nullptr) {
+    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownType,
+                               span, "'String' is not in scope");
+    (void)index;
+    return error_type();
+  }
+  const ir::TypeIdx result = intern_nominal(*string_type);
   if (expected != nullptr) {
     return unify(*expected, result, span, "call");
   }
@@ -865,7 +958,10 @@ ir::TypeIdx Checker::check_call(u32 module,
   }
   if (resolved.kind == PathValue::Kind::Function) {
     const CheckedModule::FnSig* fn = resolved.function;
-    if (is_core_write(fn)) {
+    if (is_core_fmt(fn)) {
+      if (fn->name == "format") {
+        return check_fmt_format(module, expr, expected, fn);
+      }
       return check_fmt_write(module, expr, expected, fn);
     }
     record_call(module, callee, fn);

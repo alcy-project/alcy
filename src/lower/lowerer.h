@@ -8,6 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/fmt.h"
+#include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "diag/bag.h"
@@ -291,7 +293,7 @@ class Lowerer {
   Val lower_while(ast::ExprIdx expr);
   Val lower_question(ast::ExprIdx expr);
 
-  // ---- Compile-time evaluation ----
+  // Compile-time evaluation
 
   static constexpr usize kCompStepBudget = 1u << 20;
   static constexpr u32 kCompMaxCallDepth = 64;
@@ -382,8 +384,22 @@ class Lowerer {
                         CompScope& scope,
                         CompVal& out);
   static i64 comp_sign_extend(u64 bits, ir::TypeTag tag);
+  struct FmtState {
+    ir::RegisterIdx off_addr = ir::RegisterIdx::invalid();
+    ir::RegisterIdx tot_addr = ir::RegisterIdx::invalid();
+    ir::OperandIdx capacity = ir::OperandIdx::invalid();
+  };
+  bool emit_fmt_pieces(diag::Span span,
+                       const std::vector<analyzer::FmtPiece>& pieces,
+                       ir::OperandIdx tup_op,
+                       const std::vector<ir::TypeIdx>& elem_types,
+                       ir::OperandIdx dst_base,
+                       u64 capacity_value,
+                       FmtState& state);
   Val lower_fmt_write(ast::ExprIdx expr,
                       const analyzer::CheckedModule::FnSig& sig);
+  Val lower_fmt_format(ast::ExprIdx expr,
+                       const analyzer::CheckedModule::FnSig& sig);
   Val lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected);
   Val lower_literal_zero(ir::TypeIdx type, diag::Span span);
   void lower_stmt(ast::StmtIdx stmt);

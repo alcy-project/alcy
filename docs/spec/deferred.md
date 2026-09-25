@@ -7,7 +7,7 @@ relied upon by MVP programs or by the MVP compiler implementation.
 
 - User-defined generics and generic functions; `spec` (trait) definitions
   and dispatch, coherence rules, monomorphization strategy.
-- Closures and trait objects; higher-ranked region polymorphism beyond
+- Closures and spec objects; higher-ranked region polymorphism beyond
   struct projection; two-phase borrows.
 - `match` guards, string literal patterns.
 - Struct variants for enums; tuple struct declarations.

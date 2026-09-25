@@ -577,7 +577,7 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
     if (match(lexer::TokenKind::Semicolon)) {
       continue;
     }
-    ast::ItemIdx method = parse_fn(false);
+    ast::ItemIdx method = parse_fn(match(lexer::TokenKind::Pub));
     if (!method.is_valid()) {
       synchronize();
       continue;

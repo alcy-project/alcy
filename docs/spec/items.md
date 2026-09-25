@@ -41,6 +41,9 @@
   - `str_len(s: str) -> usize`, `str_byte(s: str, i: usize) -> u8`,
     and `str_slice(s: str, start: usize, end: usize) -> str` are the
     string primitives. Out-of-bounds `str_byte`/`str_slice` panic.
+  - `str_from_parts(ptr: &u8, len: usize) -> str` builds a view over
+    caller-provided bytes. Only core uses it, to expose `String` as
+    `str`; arbitrary pointers are the caller's responsibility.
 - `print(msg: str)` and `println(msg: str)` are ordinary core
   functions over `sys_write`. They remain callable with or without
   a declaration: without the prelude, the legacy name-based path

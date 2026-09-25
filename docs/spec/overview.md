@@ -30,7 +30,7 @@ checkable contracts here.
 
 - Generic types and functions, except the blessed `Result<T, E>` and
   `Option<T>` (see `errors.md`).
-- Trait objects, closures, async, compile-time evaluation beyond
+- Spec objects, closures, async, compile-time evaluation beyond
   constant items.
 - Unsafe code, raw pointers, FFI (reserved; see `ffi.md`).
 - Incremental or parallel compilation (see `deferred.md`).

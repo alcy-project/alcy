@@ -1542,70 +1542,15 @@ i64 Lowerer::comp_sign_extend(u64 bits, ir::TypeTag tag) {
 // Formats into a caller buffer by compile-time expansion: literal
 // pieces copy directly, arguments convert per type. Truncation is
 // silent; total reports the untruncated size.
-Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
-                             const analyzer::CheckedModule::FnSig& sig) {
-  const ast::ExprNode& node = ast.exprs[expr];
-  const std::span<const ast::ExprIdx> args =
-      node.payload.get<ast::ExprCall>().args;
-  if (args.size() != 3) {
-    internal(node.span, "call arity");
-    return Val{size_one, error_type(), false, false};
-  }
-  CompVal fmt_val;
-  if (!comp_evaluate(module, args[0], fmt_val) ||
-      fmt_val.value.tag != CompValue::Tag::Str) {
-    if (!failed) {
-      internal(node.span, "format string without value");
-    }
-    return Val{size_one, error_type(), false, false};
-  }
-  Val buf = lower_expr(args[1], nullptr);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
-  }
-  if (tag_of(buf.type) != ir::TypeTag::MutRef) {
-    internal(node.span, "buffer without address");
-    return Val{size_one, error_type(), false, false};
-  }
-  const ir::TypeIdx buf_pointee =
-      builder.ref_types()[builder.types()[buf.type].as_ref()].pointee;
-  if (tag_of(buf_pointee) != ir::TypeTag::Array) {
-    internal(node.span, "buffer without address");
-    return Val{size_one, error_type(), false, false};
-  }
-  const u64 capacity =
-      builder.array_types()[builder.types()[buf_pointee].as_array()].count;
-  Val tup = lower_expr(args[2], nullptr);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
-  }
-  if (!tup.address) {
-    tup = address_of(tup);
-  }
-  const ir::TypeIdx tup_type = expr_type(args[2]);
-  if (tag_of(tup_type) != ir::TypeTag::Tuple) {
-    internal(node.span, "arguments without tuple");
-    return Val{size_one, error_type(), false, false};
-  }
-  const ir::TupleType& shape =
-      builder.state().tuple_types[builder.state().types[tup_type].as_tuple()];
-  const analyzer::FmtParse parsed =
-      analyzer::parse_format_string(fmt_val.value.str_value);
-  if (parsed.error != analyzer::FmtError::None) {
-    unsupported(node.span, "invalid format string");
-    return Val{size_one, error_type(), false, false};
-  }
-  if (parsed.placeholders != shape.elements.size()) {
-    unsupported(node.span, "placeholder count does not match arguments");
-    return Val{size_one, error_type(), false, false};
-  }
-  for (ir::TypeIdx element : shape.elements) {
-    if (!analyzer::is_formattable_tag(tag_of(element))) {
-      unsupported(node.span, "argument is not formattable");
-      return Val{size_one, error_type(), false, false};
-    }
-  }
-  const std::vector<analyzer::FmtPiece>& pieces = parsed.pieces;
+// Emits one bounded piece copy per format piece into the
+// destination buffer, tracking written/total through the state.
+bool Lowerer::emit_fmt_pieces(diag::Span span,
+                              const std::vector<analyzer::FmtPiece>& pieces,
+                              ir::OperandIdx tup_op,
+                              const std::vector<ir::TypeIdx>& elem_types,
+                              ir::OperandIdx dst_base,
+                              u64 capacity_value,
+                              FmtState& state) {
   const ir::TypeIdx usize_ty = usize_type();
   const ir::TypeIdx u8_ty = builder.primitive(ir::TypeTag::U8);
   const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
@@ -1614,45 +1559,45 @@ Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
         builder.immutable({.type = usize_ty, .data = {.u64_value = value}}),
         usize_ty);
   };
-  const ir::OperandIdx capacity_op = usize_imm(capacity);
-  const ir::RegisterIdx off_addr =
-      emit(ir::Opcode::Alloca, usize_ty, {size_one});
-  emit_void(ir::Opcode::Store, {usize_imm(0), to_operand(off_addr, usize_ty)});
-  const ir::RegisterIdx total_addr =
-      emit(ir::Opcode::Alloca, usize_ty, {size_one});
+  state.capacity = usize_imm(capacity_value);
+  state.off_addr = emit(ir::Opcode::Alloca, usize_ty, {size_one});
   emit_void(ir::Opcode::Store,
-            {usize_imm(0), to_operand(total_addr, usize_ty)});
+            {usize_imm(0), to_operand(state.off_addr, usize_ty)});
+  state.tot_addr = emit(ir::Opcode::Alloca, usize_ty, {size_one});
+  emit_void(ir::Opcode::Store,
+            {usize_imm(0), to_operand(state.tot_addr, usize_ty)});
   auto advance = [&](ir::OperandIdx delta) {
-    const ir::RegisterIdx off =
-        emit(ir::Opcode::Load, usize_ty, {to_operand(off_addr, usize_ty)});
+    const ir::RegisterIdx off = emit(ir::Opcode::Load, usize_ty,
+                                     {to_operand(state.off_addr, usize_ty)});
     const ir::RegisterIdx grown =
         emit(ir::Opcode::IntAdd, usize_ty, {to_operand(off, usize_ty), delta});
-    emit_void(ir::Opcode::Store,
-              {to_operand(grown, usize_ty), to_operand(off_addr, usize_ty)});
+    emit_void(ir::Opcode::Store, {to_operand(grown, usize_ty),
+                                  to_operand(state.off_addr, usize_ty)});
   };
   auto accumulate = [&](ir::OperandIdx full) {
-    const ir::RegisterIdx total =
-        emit(ir::Opcode::Load, usize_ty, {to_operand(total_addr, usize_ty)});
+    const ir::RegisterIdx total = emit(ir::Opcode::Load, usize_ty,
+                                       {to_operand(state.tot_addr, usize_ty)});
     const ir::RegisterIdx grown =
         emit(ir::Opcode::IntAdd, usize_ty, {to_operand(total, usize_ty), full});
-    emit_void(ir::Opcode::Store,
-              {to_operand(grown, usize_ty), to_operand(total_addr, usize_ty)});
+    emit_void(ir::Opcode::Store, {to_operand(grown, usize_ty),
+                                  to_operand(state.tot_addr, usize_ty)});
   };
   // Copies [src, len), bounded by the buffer: only chunk reaches
   // the buffer, while full always accrues to the total.
   auto bounded_copy = [&](ir::OperandIdx src, ir::OperandIdx len,
                           ir::OperandIdx full) {
-    const ir::RegisterIdx off =
-        emit(ir::Opcode::Load, usize_ty, {to_operand(off_addr, usize_ty)});
-    const ir::RegisterIdx remaining = emit(
-        ir::Opcode::IntSub, usize_ty, {capacity_op, to_operand(off, usize_ty)});
+    const ir::RegisterIdx off = emit(ir::Opcode::Load, usize_ty,
+                                     {to_operand(state.off_addr, usize_ty)});
+    const ir::RegisterIdx remaining =
+        emit(ir::Opcode::IntSub, usize_ty,
+             {state.capacity, to_operand(off, usize_ty)});
     const ir::RegisterIdx fits =
         emit(ir::Opcode::Lt, boolean, {len, to_operand(remaining, usize_ty)});
     const ir::RegisterIdx chunk =
         emit(ir::Opcode::Select, usize_ty,
              {to_operand(fits, boolean), len, to_operand(remaining, usize_ty)});
     const ir::OperandIdx dst =
-        advance_ptr(buf.op, to_operand(off, usize_ty), node.span);
+        advance_ptr(dst_base, to_operand(off, usize_ty), span);
     if (failed) {
       return false;
     }
@@ -1686,23 +1631,23 @@ Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
   };
   for (const analyzer::FmtPiece& piece : pieces) {
     if (failed) {
-      return Val{size_one, error_type(), false, false};
+      return false;
     }
     if (!piece.is_arg) {
       ir::OperandIdx ptr = ir::OperandIdx::invalid();
       ir::OperandIdx len = ir::OperandIdx::invalid();
       if (!const_str(piece.literal, ptr, len)) {
-        return Val{size_one, error_type(), false, false};
+        return false;
       }
       if (!bounded_copy(ptr, len, len)) {
-        return Val{size_one, error_type(), false, false};
+        return false;
       }
       continue;
     }
-    const ir::TypeIdx elem_ty = shape.elements[piece.arg];
+    const ir::TypeIdx elem_ty = elem_types[piece.arg];
     const ir::RegisterIdx elem_addr =
         emit(ir::Opcode::GetElementPtr, elem_ty,
-             {tup.op, zero_i32, index_operand(piece.arg)});
+             {tup_op, zero_i32, index_operand(piece.arg)});
     const ir::TypeTag tag = tag_of(elem_ty);
     if (tag == ir::TypeTag::Str) {
       const ir::RegisterIdx loaded =
@@ -1715,7 +1660,7 @@ Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
                {to_operand(loaded, elem_ty), index_operand(1)});
       if (!bounded_copy(to_operand(ptr, builder.primitive(ir::TypeTag::Ptr)),
                         to_operand(len, usize_ty), to_operand(len, usize_ty))) {
-        return Val{size_one, error_type(), false, false};
+        return false;
       }
       continue;
     }
@@ -1728,7 +1673,7 @@ Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
       ir::OperandIdx false_len = ir::OperandIdx::invalid();
       if (!const_str("true", true_ptr, true_len) ||
           !const_str("false", false_ptr, false_len)) {
-        return Val{size_one, error_type(), false, false};
+        return false;
       }
       const ir::RegisterIdx ptr =
           emit(ir::Opcode::Select, builder.primitive(ir::TypeTag::Ptr),
@@ -1738,7 +1683,7 @@ Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
                {to_operand(loaded, elem_ty), true_len, false_len});
       if (!bounded_copy(to_operand(ptr, builder.primitive(ir::TypeTag::Ptr)),
                         to_operand(len, usize_ty), to_operand(len, usize_ty))) {
-        return Val{size_one, error_type(), false, false};
+        return false;
       }
       continue;
     }
@@ -1815,7 +1760,7 @@ Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
     emit_cond_br(to_operand(more, boolean), body, exit);
     switch_to(exit);
     if (failed) {
-      return Val{size_one, error_type(), false, false};
+      return false;
     }
     const ir::RegisterIdx digits =
         emit(ir::Opcode::Load, usize_ty, {to_operand(count_addr, usize_ty)});
@@ -1828,16 +1773,96 @@ Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
     if (!bounded_copy(to_operand(first, builder.primitive(ir::TypeTag::Ptr)),
                       to_operand(digits, usize_ty),
                       to_operand(digits, usize_ty))) {
+      return false;
+    }
+  }
+  return !failed;
+}
+
+Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
+                             const analyzer::CheckedModule::FnSig& sig) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const std::span<const ast::ExprIdx> args =
+      node.payload.get<ast::ExprCall>().args;
+  if (args.size() != 3) {
+    internal(node.span, "call arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  CompVal fmt_val;
+  if (!comp_evaluate(module, args[0], fmt_val) ||
+      fmt_val.value.tag != CompValue::Tag::Str) {
+    if (!failed) {
+      internal(node.span, "format string without value");
+    }
+    return Val{size_one, error_type(), false, false};
+  }
+  Val buf = lower_expr(args[1], nullptr);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  if (tag_of(buf.type) != ir::TypeTag::MutRef) {
+    internal(node.span, "buffer without address");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx buf_pointee =
+      builder.ref_types()[builder.types()[buf.type].as_ref()].pointee;
+  if (tag_of(buf_pointee) != ir::TypeTag::Array) {
+    internal(node.span, "buffer without address");
+    return Val{size_one, error_type(), false, false};
+  }
+  const u64 capacity =
+      builder.array_types()[builder.types()[buf_pointee].as_array()].count;
+  Val tup = lower_expr(args[2], nullptr);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx tup_type = expr_type(args[2]);
+  if (tag_of(tup_type) != ir::TypeTag::Tuple &&
+      tag_of(tup_type) != ir::TypeTag::Void) {
+    internal(node.span, "arguments without tuple");
+    return Val{size_one, error_type(), false, false};
+  }
+  if (!tup.address && tag_of(tup_type) == ir::TypeTag::Tuple) {
+    tup = address_of(tup);
+  }
+  std::vector<ir::TypeIdx> elem_types;
+  if (tag_of(tup_type) == ir::TypeTag::Tuple) {
+    const ir::TupleType& shape =
+        builder.state().tuple_types[builder.state().types[tup_type].as_tuple()];
+    elem_types.reserve(shape.elements.size());
+    for (ir::TypeIdx element : shape.elements) {
+      elem_types.push_back(element);
+    }
+  }
+  const analyzer::FmtParse parsed =
+      analyzer::parse_format_string(fmt_val.value.str_value);
+  if (parsed.error != analyzer::FmtError::None) {
+    unsupported(node.span, "invalid format string");
+    return Val{size_one, error_type(), false, false};
+  }
+  if (parsed.placeholders != elem_types.size()) {
+    unsupported(node.span, "placeholder count does not match arguments");
+    return Val{size_one, error_type(), false, false};
+  }
+  for (ir::TypeIdx element : elem_types) {
+    if (!analyzer::is_formattable_tag(tag_of(element))) {
+      unsupported(node.span, "argument is not formattable");
       return Val{size_one, error_type(), false, false};
     }
+  }
+  const ir::TypeIdx usize_ty = usize_type();
+  FmtState state;
+  if (!emit_fmt_pieces(node.span, parsed.pieces, tup.op, elem_types, buf.op,
+                       capacity, state)) {
+    return Val{size_one, error_type(), false, false};
   }
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
   const ir::RegisterIdx written =
-      emit(ir::Opcode::Load, usize_ty, {to_operand(off_addr, usize_ty)});
+      emit(ir::Opcode::Load, usize_ty, {to_operand(state.off_addr, usize_ty)});
   const ir::RegisterIdx total =
-      emit(ir::Opcode::Load, usize_ty, {to_operand(total_addr, usize_ty)});
+      emit(ir::Opcode::Load, usize_ty, {to_operand(state.tot_addr, usize_ty)});
   const ir::RegisterIdx slot = emit(ir::Opcode::Alloca, sig.ret, {size_one});
   const ir::TypeIdx outcome_written = field_type_of(sig.ret, 0, node.span);
   if (failed) {
@@ -1857,6 +1882,117 @@ Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
            {to_operand(slot, sig.ret), zero_i32, index_operand(1)});
   emit_void(ir::Opcode::Store, {to_operand(total, outcome_total),
                                 to_operand(field1, outcome_total)});
+  return Val{to_operand(slot, sig.ret), sig.ret, true, false};
+}
+
+Val Lowerer::lower_fmt_format(ast::ExprIdx expr,
+                              const analyzer::CheckedModule::FnSig& sig) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const std::span<const ast::ExprIdx> args =
+      node.payload.get<ast::ExprCall>().args;
+  if (args.size() != 2) {
+    internal(node.span, "call arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  CompVal fmt_val;
+  if (!comp_evaluate(module, args[0], fmt_val) ||
+      fmt_val.value.tag != CompValue::Tag::Str) {
+    if (!failed) {
+      internal(node.span, "format string without value");
+    }
+    return Val{size_one, error_type(), false, false};
+  }
+  Val tup = lower_expr(args[1], nullptr);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx tup_type = expr_type(args[1]);
+  ir::OperandIdx tup_op = size_one;
+  std::vector<ir::TypeIdx> elem_types;
+  if (tag_of(tup_type) == ir::TypeTag::Tuple) {
+    if (!tup.address) {
+      tup = address_of(tup);
+    }
+    tup_op = tup.op;
+    const ir::TupleType& shape =
+        builder.state().tuple_types[builder.state().types[tup_type].as_tuple()];
+    for (ir::TypeIdx element : shape.elements) {
+      elem_types.push_back(element);
+    }
+  } else if (tag_of(tup_type) != ir::TypeTag::Void) {
+    internal(node.span, "arguments without tuple");
+    return Val{size_one, error_type(), false, false};
+  }
+  const analyzer::FmtParse parsed =
+      analyzer::parse_format_string(fmt_val.value.str_value);
+  if (parsed.error != analyzer::FmtError::None) {
+    unsupported(node.span, "invalid format string");
+    return Val{size_one, error_type(), false, false};
+  }
+  if (parsed.placeholders != elem_types.size()) {
+    unsupported(node.span, "placeholder count does not match arguments");
+    return Val{size_one, error_type(), false, false};
+  }
+  for (ir::TypeIdx element : elem_types) {
+    if (!analyzer::is_formattable_tag(tag_of(element))) {
+      unsupported(node.span, "argument is not formattable");
+      return Val{size_one, error_type(), false, false};
+    }
+  }
+  const ir::TypeIdx usize_ty = usize_type();
+  const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+  u32 buf_field = 0;
+  u32 len_field = 1;
+  if (!struct_field_index(sig.ret, "buf", buf_field) ||
+      !struct_field_index(sig.ret, "len", len_field)) {
+    internal(node.span, "string without fields");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx buf_field_ty = field_type_of(sig.ret, buf_field, node.span);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::ArrayType& buf_shape =
+      builder.state()
+          .array_types[builder.state().types[buf_field_ty].as_array()];
+  const ir::RegisterIdx slot = emit(ir::Opcode::Alloca, sig.ret, {size_one});
+  const ir::RegisterIdx buf_addr =
+      emit(ir::Opcode::GetElementPtr, buf_field_ty,
+           {to_operand(slot, sig.ret), zero_i32, index_operand(buf_field)});
+  FmtState state;
+  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+  if (!emit_fmt_pieces(node.span, parsed.pieces, tup_op, elem_types,
+                       to_operand(buf_addr, ptr_ty), buf_shape.count, state)) {
+    return Val{size_one, error_type(), false, false};
+  }
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::RegisterIdx written =
+      emit(ir::Opcode::Load, usize_ty, {to_operand(state.off_addr, usize_ty)});
+  const ir::RegisterIdx total =
+      emit(ir::Opcode::Load, usize_ty, {to_operand(state.tot_addr, usize_ty)});
+  const ir::RegisterIdx truncated =
+      emit(ir::Opcode::Ne, boolean,
+           {to_operand(written, usize_ty), to_operand(total, usize_ty)});
+  const ir::BlockIdx ok_block = reserve_block();
+  const ir::BlockIdx bad_block = reserve_block();
+  emit_cond_br(to_operand(truncated, boolean), bad_block, ok_block);
+  switch_to(bad_block);
+  emit_panic(str_operand("format output truncated"));
+  switch_to(ok_block);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx len_ty = field_type_of(sig.ret, len_field, node.span);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::RegisterIdx len_addr =
+      emit(ir::Opcode::GetElementPtr, len_ty,
+           {to_operand(slot, sig.ret), zero_i32, index_operand(len_field)});
+  emit_void(ir::Opcode::Store,
+            {to_operand(written, len_ty), to_operand(len_addr, len_ty)});
   return Val{to_operand(slot, sig.ret), sig.ret, true, false};
 }
 }  // namespace lower

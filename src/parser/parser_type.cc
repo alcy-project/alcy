@@ -270,6 +270,17 @@ ast::PatternIdx Parser::parse_primary_pattern() {
     }
     case lexer::TokenKind::Mut: {
       advance();
+      // `mut self` receivers spell the name with the module keyword;
+      // accept it like an identifier.
+      if (peek_kind() == lexer::TokenKind::Self) {
+        const diag::Span span = peek().span;
+        advance();
+        ast::PatternNode node;
+        node.kind = ast::PatternKind::MutIdent;
+        node.span = span_from(mark);
+        node.payload.mut_ident.name = ast::Ident{"self", span};
+        return ast_.patterns.push_back(node);
+      }
       base::Result<ast::Ident, diag::Fatal> name = parse_ident("pattern name");
       if (name.is_err()) {
         return ast::PatternIdx::invalid();

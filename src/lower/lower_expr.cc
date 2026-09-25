@@ -855,6 +855,9 @@ Val Lowerer::lower_call(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   if (sig.name == "write" && pkg.tree.modules[target->module]->is_prelude) {
     return lower_fmt_write(expr, sig);
   }
+  if (sig.name == "format" && pkg.tree.modules[target->module]->is_prelude) {
+    return lower_fmt_format(expr, sig);
+  }
   const std::vector<u32> comp = comp_positions(sig.item);
   std::vector<CompVal> comp_args;
   for (u32 pos : comp) {
@@ -1029,6 +1032,35 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr, std::string_view name) {
   }
   if (name == "str_len" || name == "str_byte" || name == "str_slice") {
     return lower_str_intrinsic(expr, name);
+  }
+  if (name == "str_from_parts") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    if (call.args.size() != 2) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    Val ptr = lower_expr(call.args[0], nullptr);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    Val len = lower_expr(call.args[1], nullptr);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::TypeIdx str_ty = builder.primitive(ir::TypeTag::Str);
+    const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+    const ir::TypeIdx usize_ty = usize_type();
+    const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, str_ty, {size_one});
+    const ir::RegisterIdx field0 =
+        emit(ir::Opcode::GetElementPtr, ptr_ty,
+             {to_operand(addr, str_ty), zero_i32, index_operand(0)});
+    emit_void(ir::Opcode::Store, {use_value(ptr), to_operand(field0, ptr_ty)});
+    const ir::RegisterIdx field1 =
+        emit(ir::Opcode::GetElementPtr, usize_ty,
+             {to_operand(addr, str_ty), zero_i32, index_operand(1)});
+    emit_void(ir::Opcode::Store,
+              {use_value(len), to_operand(field1, usize_ty)});
+    return Val{to_operand(addr, str_ty), str_ty, true, false};
   }
   internal(node.span, "unknown intrinsic");
   return Val{size_one, error_type(), false, false};

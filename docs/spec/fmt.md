@@ -52,4 +52,3 @@ because the language cannot name varying sizes and arities yet.
 
 - Numbered/indexed placeholders and format specifiers.
 - Float formatting, user-defined formattability, width/precision.
-- A `format` convenience returning allocated strings (needs `alloc`).

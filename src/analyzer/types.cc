@@ -1,5 +1,6 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 #include "analyzer/types.h"
 
 #include <span>
@@ -432,7 +433,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
 bool Checker::is_known_intrinsic(std::string_view name) {
   return name == "memcopy" || name == "print" || name == "println" ||
          name == "panic" || name == "str_len" || name == "str_byte" ||
-         name == "str_slice" || name == "sys_write";
+         name == "str_slice" || name == "sys_write" || name == "str_from_parts";
 }
 
 // Verifies a declared intrinsic signature against its canonical
@@ -472,6 +473,10 @@ bool Checker::check_intrinsic_signature(u32 module,
   } else if (name == "sys_write") {
     expected.push_back(builder.primitive(ir::TypeTag::I32));
     expected.push_back(str);
+  } else if (name == "str_from_parts") {
+    expected.push_back(builder.reference_type(u8, false));
+    expected.push_back(usize_ty);
+    expected_ret = str;
   } else {
     return false;
   }
@@ -745,7 +750,7 @@ std::string_view Checker::nominal_name(ir::TypeIdx idx) const {
   return "type";
 }
 
-// ---- Expression checking ----
+// Expression checking
 
 ir::TypeTag Checker::tag_of(ir::TypeIdx idx) const {
   return builder.types()[idx].tag;
@@ -1062,7 +1067,7 @@ void Checker::validate_cycles(const ir::Storage& storage) {
   }
 }
 
-// ---- Value namespace ----
+// Value namespace
 
 const CheckedModule::StaticInfo* Checker::lookup_static(
     u32 module,

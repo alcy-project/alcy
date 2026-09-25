@@ -28,6 +28,45 @@ pub intrinsic fn str_slice(s: str, start: usize, end: usize) -> str;
 
 pub struct WriteOutcome { written: usize, total: usize }
 
+intrinsic fn str_from_parts(ptr: &u8, len: usize) -> str;
+
+pub struct String { buf: [u8; 256], len: usize }
+
+impl String {
+  pub fn new() -> String {
+    ret String { buf: [0u8; 256], len: 0 }
+  }
+
+  pub fn len(self: &Self) -> usize {
+    ret self.len
+  }
+
+  pub fn push(mut self: &mut Self, b: u8) {
+    if self.len >= 256 {
+      panic("String is full")
+    }
+    self.buf[self.len] = b
+    self.len = self.len + 1
+  }
+
+  pub fn as_str(self: &Self) -> str {
+    ret str_from_parts(&self.buf[0], self.len)
+  }
+}
+
+// Formats `args` into an owned string; see docs/spec/fmt.md.
+// Outputs longer than the internal buffer abort rather than
+// truncating silently.
+pub fn format(comp fmt: str, args: ()) -> String {
+  mut out := String::new()
+  result := write(fmt, &mut out.buf, args)
+  if result.total != result.written {
+    panic("format output truncated")
+  }
+  out.len = result.written
+  ret out
+}
+
 // Formats `args` into `buf` by compile-time expansion; see
 // docs/spec/fmt.md. Calls check and expand through compiler support
 // (like the print intrinsics); the body never executes, and reaching

@@ -106,13 +106,24 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
     }
     case Op::GetElementPtr: {
       // operands = [base_ptr, index...]. The element type is recovered from
-      // the base pointer's Alloca site; pointers from elsewhere are
-      // unsupported in MVP.
+      // the base pointer's tracked site; nested projections (which have
+      // no site of their own) carry it as their register type.
       DCHECK(ops.size() >= 2);
       const ir::Operand& base_op = storage_.operands()[ops.head()];
       DCHECK(base_op.is<ir::RegisterIdx>());
       const ir::RegisterIdx base_reg = base_op.as_register();
       llvm::Type* elem_ty = values_.alloca_type(base_reg);
+      if (elem_ty == nullptr) {
+        // Nested projections carry the pointee as their register
+        // type; dereference reference tags once to reach it.
+        ir::TypeIdx base_ty = storage_.registers()[base_reg].type;
+        ir::TypeTag tag = storage_.types()[base_ty.idx].tag;
+        if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
+          base_ty = storage_.ref_types()[storage_.types()[base_ty.idx].as_ref()]
+                        .pointee;
+        }
+        elem_ty = type(base_ty);
+      }
       DCHECK_MSG(elem_ty, "GetElementPtr of untracked pointer");
       llvm::SmallVector<llvm::Value*, kFunctionArgsSooSize> indices;
       for (u32 idx = 1; idx < ops.size(); ++idx) {

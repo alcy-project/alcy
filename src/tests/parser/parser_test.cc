@@ -195,6 +195,28 @@ TEST_CASE("Parser builds module items") {
   CHECK(impl.methods.size() == 1);
 }
 
+TEST_CASE("Parser builds public methods and mut self receivers") {
+  Fixture f;
+  const ParseResult result = parse(
+      "struct S { x: i32 }\n"
+      "impl S {\n"
+      "  pub fn get(self: &Self) -> i32 { ret 0 }\n"
+      "  pub fn set(mut self: &mut Self, v: i32) { }\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 2) {
+    return;
+  }
+  const ast::ItemImpl& impl = as_impl(result.items[1], f);
+  CHECK(impl.methods.size() == 2);
+  if (impl.methods.size() != 2) {
+    return;
+  }
+  CHECK(f.ast.items[impl.methods[0]].is_pub);
+  CHECK(f.ast.items[impl.methods[1]].is_pub);
+}
+
 TEST_CASE("Parser rejects module declarations") {
   // Modules come from the manifest; `mod` is not an item.
   Fixture f;

@@ -1,5 +1,6 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 #pragma once
 
 #include <span>
@@ -237,7 +238,7 @@ class Checker {
                        diag::Span span,
                        std::string_view what,
                        bool skip_first);
-  bool is_core_write(const CheckedModule::FnSig* fn) const;
+  bool is_core_fmt(const CheckedModule::FnSig* fn) const;
   std::vector<bool> comp_param_flags(ast::ItemIdx item) const;
   bool comp_checked_in_scope(ast::ExprIdx init) const;
   bool is_literal_const(u32 module, ast::PathIdx path) const;
@@ -249,6 +250,14 @@ class Checker {
                               ast::ExprIdx expr,
                               const ir::TypeIdx* expected,
                               const CheckedModule::FnSig* fn);
+  bool verify_fmt_literal(ast::ExprIdx fmt_expr,
+                          ast::ExprIdx args_expr,
+                          const std::vector<ir::TypeIdx>& elements,
+                          diag::Span span);
+  ir::TypeIdx check_fmt_format(u32 module,
+                               ast::ExprIdx expr,
+                               const ir::TypeIdx* expected,
+                               const CheckedModule::FnSig* fn);
   ir::TypeIdx check_call(u32 module,
                          ast::ExprIdx expr,
                          const ir::TypeIdx* expected);
