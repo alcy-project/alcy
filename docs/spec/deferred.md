@@ -5,9 +5,13 @@ relied upon by MVP programs or by the MVP compiler implementation.
 
 ## Language
 
-- Generic structs are MVP: they intern per instantiation alongside
-  generic enums, and `impl<T> Name<T>` methods specialize per
-  instantiation. Generic free functions are deferred; see `errors.md`.
+- Generic structs, generic enums, generic free functions, and generic
+  intrinsics are MVP: they intern per instantiation, and `impl<T>
+  Name<T>` methods specialize per instantiation. A generic call takes
+  its type arguments from a turbofish or from the argument types;
+  inference binds only a parameter a declared parameter type pins on
+  its own, so a call whose parameters cannot be recovered that way
+  needs the turbofish.
 - `spec` (trait) definitions and dispatch, coherence rules, and
   monomorphization beyond per-instantiation enum, struct, and method
   specialization.

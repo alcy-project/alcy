@@ -338,6 +338,8 @@ bool Checker::expr_comp_known(u32 module, ast::ExprIdx expr) const {
       return expr_comp_known(module, node.payload.get<ast::ExprUnary>().inner);
     case ast::ExprKind::Borrow:
       return expr_comp_known(module, node.payload.get<ast::ExprBorrow>().inner);
+    case ast::ExprKind::Deref:
+      return expr_comp_known(module, node.payload.get<ast::ExprDeref>().inner);
     case ast::ExprKind::Binary:
       return expr_comp_known(module, node.payload.get<ast::ExprBinary>().lhs) &&
              expr_comp_known(module, node.payload.get<ast::ExprBinary>().rhs);
@@ -678,6 +680,7 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
       return resolved.type;
     }
     case PathValue::Kind::Function:
+    case PathValue::Kind::GenericFn:
     case PathValue::Kind::AssocFunction:
     case PathValue::Kind::TupleVariant: {
       const u32 index =
@@ -982,6 +985,24 @@ ir::TypeIdx Checker::check_call(u32 module,
       check_expr(module, arg, nullptr);
     }
     return error_type();
+  }
+  if (resolved.kind == PathValue::Kind::GenericFn) {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    const CheckedModule::FnSig* fn = resolve_generic_fn(
+        module, resolved.generic_item, call.args, call.type_args, span);
+    if (fn == nullptr) {
+      for (ast::ExprIdx arg : call.args) {
+        check_expr(module, arg, nullptr);
+      }
+      return error_type();
+    }
+    record_call(module, callee, fn);
+    check_call_args(module, call.args, fn->params, comp_param_flags(fn->item),
+                    span, fn->name, false);
+    if (expected != nullptr) {
+      return unify(*expected, fn->ret, span, "call");
+    }
+    return fn->ret;
   }
   if (resolved.kind == PathValue::Kind::Function) {
     const CheckedModule::FnSig* fn = resolved.function;
@@ -1995,6 +2016,30 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
       }
       return type;
     }
+    case ast::ExprKind::Deref: {
+      // The place a reference addresses. Assignment through a shared
+      // reference would need a second reference alive, so the
+      // mutability of the operand is preserved.
+      const ir::TypeIdx inner =
+          check_expr(module, node.payload.get<ast::ExprDeref>().inner, nullptr);
+      if (is_error(inner)) {
+        return error_type();
+      }
+      const ir::TypeTag tag = tag_of(inner);
+      if (tag != ir::TypeTag::Ref && tag != ir::TypeTag::MutRef) {
+        const u32 index = bag.emit(
+            diag::Severity::Error, kAnalyzerInvalidOperation, node.span,
+            "cannot dereference '{}'", pretty_tag(tag_of(inner)));
+        (void)index;
+        return error_type();
+      }
+      const ir::TypeIdx pointee =
+          builder.ref_types()[builder.types()[inner.idx].as_ref()].pointee;
+      if (expected != nullptr) {
+        return unify(*expected, pointee, node.span, "dereference");
+      }
+      return pointee;
+    }
     case ast::ExprKind::Binary: {
       if (node.payload.get<ast::ExprBinary>().op == ast::BinaryOp::And ||
           node.payload.get<ast::ExprBinary>().op == ast::BinaryOp::Or) {
@@ -2254,6 +2299,21 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
         return error_type();
       }
       return check_index(module, place, nullptr);
+    }
+    case ast::ExprKind::Deref: {
+      const ir::TypeIdx inner =
+          check_place(module, node.payload.get<ast::ExprDeref>().inner);
+      if (is_error(inner)) {
+        return error_type();
+      }
+      if (tag_of(inner) != ir::TypeTag::MutRef) {
+        const u32 index =
+            bag.emit(diag::Severity::Error, kAnalyzerBadAssignment, node.span,
+                     "cannot assign through a shared reference");
+        (void)index;
+        return error_type();
+      }
+      return builder.ref_types()[builder.types()[inner.idx].as_ref()].pointee;
     }
     default: {
       const u32 index = bag.emit(diag::Severity::Error, kAnalyzerBadAssignment,

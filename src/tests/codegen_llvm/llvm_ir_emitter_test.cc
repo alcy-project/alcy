@@ -56,6 +56,7 @@ ir::Storage hello_world_ir(str::StringInterner* interner) {
       .op = ir::Opcode::IntSub,
       .flags = {},
       .dst = ir::RegisterIdx(0),
+      .measure = ir::TypeIdx::invalid(),
       .operands = sub_args.finish(),
   });
   builder.reg(
@@ -73,6 +74,7 @@ ir::Storage hello_world_ir(str::StringInterner* interner) {
       .op = ir::Opcode::ExtractValue,
       .flags = {},
       .dst = ir::RegisterIdx(1),
+      .measure = ir::TypeIdx::invalid(),
       .operands = extract_args.finish(),
   });
   builder.reg(
@@ -88,6 +90,7 @@ ir::Storage hello_world_ir(str::StringInterner* interner) {
       .op = ir::Opcode::Call,
       .flags = {},
       .dst = ret_register,
+      .measure = ir::TypeIdx::invalid(),
       .operands = call_args.finish(),
   });
   builder.reg(
@@ -99,6 +102,7 @@ ir::Storage hello_world_ir(str::StringInterner* interner) {
       .op = ir::Opcode::Ret,
       .flags = {},
       .dst = ir::RegisterIdx(base::kInvalidIdx),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {reg_op, 1},
   });
 
@@ -177,6 +181,7 @@ TEST_CASE("Emit struct and array calls") {
       .op = ir::Opcode::Call,
       .flags = {},
       .dst = ir::RegisterIdx(0),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {mkpair_op, 1},
   });
   builder.reg({.type = pair, .def_idx = inst_call});
@@ -186,6 +191,7 @@ TEST_CASE("Emit struct and array calls") {
       .op = ir::Opcode::Ret,
       .flags = {},
       .dst = ir::RegisterIdx(base::kInvalidIdx),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {ret_op, 1},
   });
   ir::InstrSeq instrs;
@@ -209,6 +215,7 @@ TEST_CASE("Emit struct and array calls") {
       .op = ir::Opcode::Call,
       .flags = {},
       .dst = ir::RegisterIdx(1),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {mkarr_op, 1},
   });
   builder.reg({.type = arr4, .def_idx = inst_call2});
@@ -218,6 +225,7 @@ TEST_CASE("Emit struct and array calls") {
       .op = ir::Opcode::Ret,
       .flags = {},
       .dst = ir::RegisterIdx(base::kInvalidIdx),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {ret_op2, 1},
   });
   ir::InstrSeq instrs2;
@@ -282,8 +290,12 @@ TEST_CASE("Emit compute instructions") {
     ir::OperandSeq args;
     args.push(builder.operand(ir::Operand::from_register(lhs, operand_ty)));
     args.push(builder.operand(ir::Operand::from_register(rhs, operand_ty)));
-    const ir::InstructionIdx inst = builder.instr(
-        {.op = op, .flags = {}, .dst = dst, .operands = args.finish()});
+    const ir::InstructionIdx inst =
+        builder.instr({.op = op,
+                       .flags = {},
+                       .dst = dst,
+                       .measure = ir::TypeIdx::invalid(),
+                       .operands = args.finish()});
     instrs.push(inst);
     return inst;
   };
@@ -308,6 +320,7 @@ TEST_CASE("Emit compute instructions") {
       builder.instr({.op = ir::Opcode::TypeCast,
                      .flags = {},
                      .dst = ir::RegisterIdx(5),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = {cast_arg, 1}});
   instrs.push(inst_cast);
   builder.reg({.type = i32, .def_idx = inst_cast});
@@ -322,6 +335,7 @@ TEST_CASE("Emit compute instructions") {
       builder.instr({.op = ir::Opcode::Select,
                      .flags = {},
                      .dst = ir::RegisterIdx(6),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = sel_args.finish()});
   instrs.push(inst_sel);
   builder.reg({.type = i32, .def_idx = inst_sel});
@@ -332,10 +346,12 @@ TEST_CASE("Emit compute instructions") {
   builder.reg({.type = i32, .def_idx = inst_add});
   const ir::OperandIdx not_arg =
       builder.operand(ir::Operand::from_register(ir::RegisterIdx(7), i32));
-  const ir::InstructionIdx inst_not = builder.instr({.op = ir::Opcode::Not,
-                                                     .flags = {},
-                                                     .dst = ir::RegisterIdx(8),
-                                                     .operands = {not_arg, 1}});
+  const ir::InstructionIdx inst_not =
+      builder.instr({.op = ir::Opcode::Not,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(8),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = {not_arg, 1}});
   instrs.push(inst_not);
   builder.reg({.type = i32, .def_idx = inst_not});
   const ir::OperandIdx rev_arg =
@@ -344,15 +360,18 @@ TEST_CASE("Emit compute instructions") {
       builder.instr({.op = ir::Opcode::BitReverse,
                      .flags = {},
                      .dst = ir::RegisterIdx(9),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = {rev_arg, 1}});
   instrs.push(inst_rev);
   builder.reg({.type = i32, .def_idx = inst_rev});
   const ir::OperandIdx mov_arg =
       builder.operand(ir::Operand::from_register(ir::RegisterIdx(9), i32));
-  const ir::InstructionIdx inst_mov = builder.instr({.op = ir::Opcode::Move,
-                                                     .flags = {},
-                                                     .dst = ir::RegisterIdx(10),
-                                                     .operands = {mov_arg, 1}});
+  const ir::InstructionIdx inst_mov =
+      builder.instr({.op = ir::Opcode::Move,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(10),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = {mov_arg, 1}});
   instrs.push(inst_mov);
   builder.reg({.type = i32, .def_idx = inst_mov});
   const ir::OperandIdx drop_arg =
@@ -361,6 +380,7 @@ TEST_CASE("Emit compute instructions") {
       builder.instr({.op = ir::Opcode::Drop,
                      .flags = {},
                      .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = {drop_arg, 1}});
   instrs.push(inst_drop);
   const ir::OperandIdx ret_arg =
@@ -369,6 +389,7 @@ TEST_CASE("Emit compute instructions") {
       builder.instr({.op = ir::Opcode::Ret,
                      .flags = {},
                      .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = {ret_arg, 1}});
   instrs.push(inst_ret);
 
@@ -438,6 +459,7 @@ TEST_CASE("Emit control flow") {
         builder.instr({.op = ir::Opcode::Ret,
                        .flags = {},
                        .dst = ir::RegisterIdx(base::kInvalidIdx),
+                       .measure = ir::TypeIdx::invalid(),
                        .operands = args.finish()});
     ir::InstrSeq instrs;
     instrs.push(inst);
@@ -460,6 +482,7 @@ TEST_CASE("Emit control flow") {
       builder.instr({.op = ir::Opcode::CondBr,
                      .flags = {},
                      .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = cond_args.finish()});
   ir::InstrSeq entry_instrs;
   entry_instrs.push(inst_condbr);
@@ -496,6 +519,7 @@ TEST_CASE("Emit control flow") {
       builder.instr({.op = ir::Opcode::Switch,
                      .flags = {},
                      .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = sw_args.finish()});
   ir::InstrSeq sw_instrs;
   sw_instrs.push(inst_sw);
@@ -569,8 +593,12 @@ TEST_CASE("Emit memory instructions") {
                    ir::TypeIdx dst_ty) {
     ir::OperandSeq args;
     args.push(arg);
-    const ir::InstructionIdx inst = builder.instr(
-        {.op = op, .flags = {}, .dst = dst, .operands = args.finish()});
+    const ir::InstructionIdx inst =
+        builder.instr({.op = op,
+                       .flags = {},
+                       .dst = dst,
+                       .measure = ir::TypeIdx::invalid(),
+                       .operands = args.finish()});
     instrs.push(inst);
     builder.reg({.type = dst_ty, .def_idx = inst});
     return inst;
@@ -581,6 +609,7 @@ TEST_CASE("Emit memory instructions") {
       builder.instr({.op = ir::Opcode::Alloca,
                      .flags = {},
                      .dst = ir::RegisterIdx(0),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = {imm_op(one, i32), 1}});
   instrs.push(inst_alloc);
   builder.reg({.type = i32, .def_idx = inst_alloc});
@@ -591,6 +620,7 @@ TEST_CASE("Emit memory instructions") {
   instrs.push(builder.instr({.op = ir::Opcode::Store,
                              .flags = {},
                              .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .measure = ir::TypeIdx::invalid(),
                              .operands = store_args.finish()}));
   unary(ir::Opcode::Load,
         reg_op(ir::RegisterIdx(0), ir::primitive_idx(ir::TypeTag::Ptr)),
@@ -604,6 +634,7 @@ TEST_CASE("Emit memory instructions") {
   instrs.push(builder.instr({.op = ir::Opcode::AtomicStore,
                              .flags = {},
                              .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .measure = ir::TypeIdx::invalid(),
                              .operands = astore_args.finish()}));
   unary(ir::Opcode::AtomicLoad,
         reg_op(ir::RegisterIdx(0), ir::primitive_idx(ir::TypeTag::Ptr)),
@@ -616,6 +647,7 @@ TEST_CASE("Emit memory instructions") {
       builder.instr({.op = ir::Opcode::AtomicRmw,
                      .flags = {.rmw_op = ir::AtomicRmwOp::Add},
                      .dst = ir::RegisterIdx(3),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = rmw_args.finish()});
   instrs.push(inst_rmw);
   builder.reg({.type = i32, .def_idx = inst_rmw});
@@ -635,12 +667,14 @@ TEST_CASE("Emit memory instructions") {
       builder.instr({.op = ir::Opcode::AtomicCompareExchange,
                      .flags = {},
                      .dst = ir::RegisterIdx(4),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = cmpxchg_args.finish()});
   instrs.push(inst_cmpxchg);
   builder.reg({.type = pair_i1, .def_idx = inst_cmpxchg});
   instrs.push(builder.instr({.op = ir::Opcode::Fence,
                              .flags = {},
                              .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .measure = ir::TypeIdx::invalid(),
                              .operands = {}}));
 
   // ps = alloca Pair; p1 = gep [ps, 0, 1]; store r1 -> [p1]; f1 = load [p1]
@@ -648,6 +682,7 @@ TEST_CASE("Emit memory instructions") {
       builder.instr({.op = ir::Opcode::Alloca,
                      .flags = {},
                      .dst = ir::RegisterIdx(5),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = {imm_op(one, i32), 1}});
   instrs.push(inst_alloc_struct);
   builder.reg({.type = pair, .def_idx = inst_alloc_struct});
@@ -660,6 +695,7 @@ TEST_CASE("Emit memory instructions") {
       builder.instr({.op = ir::Opcode::GetElementPtr,
                      .flags = {},
                      .dst = ir::RegisterIdx(6),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = gep_args.finish()});
   instrs.push(inst_gep);
   builder.reg(
@@ -671,6 +707,7 @@ TEST_CASE("Emit memory instructions") {
   instrs.push(builder.instr({.op = ir::Opcode::Store,
                              .flags = {},
                              .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .measure = ir::TypeIdx::invalid(),
                              .operands = field_store_args.finish()}));
   unary(ir::Opcode::Load,
         reg_op(ir::RegisterIdx(6), ir::primitive_idx(ir::TypeTag::Ptr)),
@@ -684,6 +721,7 @@ TEST_CASE("Emit memory instructions") {
       builder.instr({.op = ir::Opcode::ExtractValue,
                      .flags = {},
                      .dst = ir::RegisterIdx(8),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = ext_args.finish()});
   instrs.push(inst_ext);
   builder.reg({.type = i32, .def_idx = inst_ext});
@@ -695,6 +733,7 @@ TEST_CASE("Emit memory instructions") {
       builder.instr({.op = ir::Opcode::InsertValue,
                      .flags = {},
                      .dst = ir::RegisterIdx(9),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = ins_args.finish()});
   instrs.push(inst_ins);
   builder.reg({.type = pair_i1, .def_idx = inst_ins});
@@ -705,6 +744,7 @@ TEST_CASE("Emit memory instructions") {
       builder.instr({.op = ir::Opcode::ExtractValue,
                      .flags = {},
                      .dst = ir::RegisterIdx(10),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = ext_args2.finish()});
   instrs.push(inst_ext2);
   builder.reg({.type = i32, .def_idx = inst_ext2});
@@ -713,6 +753,7 @@ TEST_CASE("Emit memory instructions") {
       builder.instr({.op = ir::Opcode::Ret,
                      .flags = {},
                      .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = {reg_op(ir::RegisterIdx(10), i32), 1}});
   instrs.push(inst_ret);
   const ir::BlockIdx block =
@@ -767,6 +808,7 @@ TEST_CASE("Emit ignores Drop markers") {
       builder.instr({.op = ir::Opcode::Alloca,
                      .flags = {},
                      .dst = ir::RegisterIdx(0),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = {imm_op(one, i32), 1}});
   instrs.push(inst_alloc);
   builder.reg({.type = i32, .def_idx = inst_alloc});
@@ -777,11 +819,13 @@ TEST_CASE("Emit ignores Drop markers") {
   instrs.push(builder.instr({.op = ir::Opcode::Drop,
                              .flags = {},
                              .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .measure = ir::TypeIdx::invalid(),
                              .operands = drop_args.finish()}));
   const ir::InstructionIdx inst_ret =
       builder.instr({.op = ir::Opcode::Ret,
                      .flags = {},
                      .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = {}});
   instrs.push(inst_ret);
   const ir::BlockIdx block =

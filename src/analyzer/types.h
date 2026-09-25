@@ -51,6 +51,9 @@ struct CheckedModule {
     ir::TypeIdx ret;
     // Declaring item for body lowering (invalid for synthesized entries).
     ast::ItemIdx item;
+    // Instantiation this signature was checked under; kNoInst for
+    // non-generic functions. Lowering keys the callee body by it.
+    u32 inst = kNoInst;
   };
   // Lazily-instantiated generic methods append signatures during body
   // checking, so element addresses must stay stable: never
@@ -109,6 +112,20 @@ struct CheckedModule {
   std::vector<VariantUse> variants;
 };
 
+// One instantiation of a generic function or intrinsic: the type
+// arguments it bound plus the index of the `FnSig` it registered.
+struct FnInstance {
+  ast::ItemIdx item;
+  // Module the signature registered in; `sig_index` indexes its
+  // `functions`.
+  u32 module = 0;
+  std::vector<ir::TypeIdx> args;
+  u32 sig_index = 0;
+  // Key into the shared instantiation numbering that keys lowering
+  // side tables; kNoInst for a function whose body needed no context.
+  u32 inst = kNoInst;
+};
+
 struct CheckedPackage {
   ModuleTree tree;
   ir::Storage types;
@@ -117,6 +134,9 @@ struct CheckedPackage {
   // Every generic enum instantiation type, aligned with the
   // checker's instantiation order; indexes key lowering tables.
   std::vector<ir::TypeIdx> generic_insts;
+  // Type arguments bound to each generic function or intrinsic, in the
+  // same instantiation order as the signature they registered.
+  std::vector<FnInstance> fn_insts;
   // Maps a struct/enum field storage copy back to the type it was
   // copied from, as (copy, origin) pairs. Lowering follows these so a
   // field's copied type resolves to its declaring nominal.

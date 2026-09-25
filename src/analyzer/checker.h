@@ -87,6 +87,12 @@ class Checker {
   str::StringInterner interner;
   std::vector<NominalEntry> nominals;
   std::vector<GenericInstance> generic_instances;
+  std::vector<FnInstance> fn_instances;
+  // Shared instantiation numbering that keys lowering side tables.
+  // Holds each generic enum/struct instance type in creation order and
+  // an invalid placeholder per generic function body, so both kinds
+  // draw keys from one space.
+  std::vector<ir::TypeIdx> inst_numbering;
   // `ref_type` appends a storage copy of a type so a struct's field
   // range stays contiguous. This maps each copy back to the type it
   // was copied from, so owner lookups accept both indexes.
@@ -126,6 +132,37 @@ class Checker {
   CheckedModule::ReceiverKind classify_receiver(ir::TypeIdx first,
                                                 ir::TypeIdx self);
   ir::TypeIdx intern_nominal(NominalEntry& entry);
+  // Declared type parameters of a function or method item.
+  std::span<const ast::Ident> fn_generic_params(ast::ItemIdx item) const;
+  // Item name for diagnostics.
+  std::string_view fn_name(ast::ItemIdx item) const;
+  // A type parameter a declared parameter type pins on its own. The
+  // `through_ref` flag reports that the argument's pointee supplies the
+  // binding, which is how a generic intrinsic recovers `T` from `&mut T`.
+  struct DeclaredBinding {
+    u32 slot = 0;
+    bool through_ref = false;
+  };
+  DeclaredBinding declared_binding(std::span<const ast::Ident> params,
+                                   const ast::TypeNode& declared) const;
+  // Declared parameters of a function or intrinsic item.
+  std::span<const ast::ItemFnParam> fn_params(ast::ItemIdx item) const;
+  // Declared return type of a function or intrinsic item; invalid when
+  // the item declares none, which means `()`.
+  ast::TypeIdx fn_return_type(ast::ItemIdx item) const;
+  // Binds a generic free function's type parameters from explicit
+  // turbofish arguments or from arguments whose declared type is a
+  // parameter, then instantiates. Returns null after diagnosing.
+  const CheckedModule::FnSig* resolve_generic_fn(
+      u32 module,
+      ast::ItemIdx item,
+      const std::span<const ast::ExprIdx>& args,
+      const std::span<const ast::TypeIdx>& explicit_args,
+      diag::Span span);
+  const CheckedModule::FnSig* instantiate_fn(
+      u32 module,
+      ast::ItemIdx item,
+      const std::vector<ir::TypeIdx>& args);
   ir::TypeIdx instantiate_generic(u32 nominal,
                                   const std::vector<ir::TypeIdx>& args,
                                   diag::Span span);
@@ -192,6 +229,8 @@ class Checker {
                                                  std::string_view name) const;
   const CheckedModule::FnSig* lookup_function(u32 module,
                                               std::string_view name) const;
+  // Generic free function item in scope, by name; invalid if absent.
+  ast::ItemIdx lookup_generic_fn(u32 module, std::string_view name);
 
   struct VariantMatch {
     NominalEntry* enom = nullptr;
@@ -230,6 +269,7 @@ class Checker {
       Static,
       Function,
       AssocFunction,
+      GenericFn,
       UnitVariant,
       TupleVariant,
       Type,
@@ -239,6 +279,7 @@ class Checker {
     const CheckedModule::FnSig* function = nullptr;
     const CheckedModule::MethodInfo* method = nullptr;
     NominalEntry* enom = nullptr;
+    ast::ItemIdx generic_item = ast::ItemIdx::invalid();
     u32 variant = 0;
   };
   bool resolve_value_path(u32 module, ast::PathIdx path, PathValue& out);

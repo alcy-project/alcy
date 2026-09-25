@@ -15,6 +15,10 @@ struct Instruction {
 
   RegisterIdx dst;
 
+  // Type an opcode measures rather than takes as an operand, as
+  // `TypeSizeOf` and `TypeAlignOf` do. Invalid otherwise.
+  TypeIdx measure;
+
   OperandIdxRange operands;
 };
 

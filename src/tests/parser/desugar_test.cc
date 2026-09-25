@@ -330,6 +330,10 @@ struct NameCollector {
         visit_expr(borrow.inner);
         break;
       }
+      case ast::ExprKind::Deref: {
+        visit_expr(expr.payload.get<ast::ExprDeref>().inner);
+        break;
+      }
       case ast::ExprKind::Break:
       case ast::ExprKind::Continue: break;
     }

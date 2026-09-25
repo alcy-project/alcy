@@ -364,6 +364,7 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   const ir::TypeIdx reserved =
       is_struct ? builder.reserve_struct(name) : builder.reserve_enum(name);
   generic_instances.push_back(GenericInstance{nominal, args, reserved});
+  inst_numbering.push_back(reserved);
   const usize pushed = type_params.size();
   if (is_struct) {
     const std::span<const ast::Ident> params =
@@ -618,7 +619,8 @@ bool Checker::is_known_intrinsic(std::string_view name) {
   return name == "memcopy" || name == "print" || name == "println" ||
          name == "panic" || name == "str_len" || name == "str_byte" ||
          name == "str_slice" || name == "sys_write" ||
-         name == "str_from_parts" || name == "alloc" || name == "dealloc";
+         name == "str_from_parts" || name == "alloc" || name == "dealloc" ||
+         name == "elem_ptr" || name == "size_of" || name == "align_of";
 }
 
 // Verifies a declared intrinsic signature against its canonical
@@ -634,6 +636,45 @@ bool Checker::check_intrinsic_signature(u32 module,
       width == ir::PointerWidth::W64 ? ir::TypeTag::U64 : ir::TypeTag::U32);
   std::vector<ir::TypeIdx> expected;
   ir::TypeIdx expected_ret = builder.primitive(ir::TypeTag::Void);
+  const auto wrong = [&]() {
+    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                               intrinsic.name.span,
+                               "intrinsic '{}' has the wrong signature", name);
+    (void)index;
+    return false;
+  };
+  const auto is_usize = [&](ir::TypeIdx type) {
+    return builder.types()[type.idx].tag == builder.types()[usize_ty.idx].tag;
+  };
+  const auto pointee = [&](ir::TypeIdx type) {
+    return builder.ref_types()[builder.types()[type.idx].as_ref()].pointee;
+  };
+  // Generic intrinsics leave their type parameters free, so their
+  // shapes are checked structurally rather than against fixed types.
+  const auto or_wrong = [&](bool ok) { return ok ? true : wrong(); };
+  if (name == "alloc") {
+    // `alloc<T>(count: usize) -> &mut T`.
+    return or_wrong(params.size() == 1 && is_usize(params[0]) &&
+                    builder.types()[ret.idx].tag == ir::TypeTag::MutRef);
+  }
+  if (name == "dealloc") {
+    // `dealloc<T>(ptr: &mut T, count: usize)`.
+    return or_wrong(params.size() == 2 &&
+                    builder.types()[params[0].idx].tag == ir::TypeTag::MutRef &&
+                    is_usize(params[1]) &&
+                    builder.types()[ret.idx].tag == ir::TypeTag::Void);
+  }
+  if (name == "size_of" || name == "align_of") {
+    return or_wrong(params.empty() && is_usize(ret));
+  }
+  if (name == "elem_ptr") {
+    // `elem_ptr<T>(ptr: &mut T, index: usize) -> &mut T`.
+    return or_wrong(params.size() == 2 &&
+                    builder.types()[params[0].idx].tag == ir::TypeTag::MutRef &&
+                    is_usize(params[1]) &&
+                    builder.types()[ret.idx].tag == ir::TypeTag::MutRef &&
+                    pointee(params[0]).idx == pointee(ret).idx);
+  }
   if (name == "memcopy") {
     expected.push_back(builder.reference_type(u8, true));
     expected.push_back(builder.reference_type(u8, false));
@@ -662,31 +703,15 @@ bool Checker::check_intrinsic_signature(u32 module,
     expected.push_back(builder.reference_type(u8, false));
     expected.push_back(usize_ty);
     expected_ret = str;
-  } else if (name == "alloc") {
-    expected.push_back(usize_ty);
-    expected.push_back(usize_ty);
-    expected_ret = builder.reference_type(u8, true);
-  } else if (name == "dealloc") {
-    expected.push_back(builder.reference_type(u8, true));
-    expected.push_back(usize_ty);
-    expected.push_back(usize_ty);
   } else {
-    return false;
+    return wrong();
   }
   if (params.size() != expected.size() || ret.idx != expected_ret.idx) {
-    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
-                               intrinsic.name.span,
-                               "intrinsic '{}' has the wrong signature", name);
-    (void)index;
-    return false;
+    return wrong();
   }
   for (usize i = 0; i < params.size(); ++i) {
     if (params[i].idx != expected[i].idx) {
-      const u32 index = bag.emit(
-          diag::Severity::Error, kAnalyzerInvalidOperation, intrinsic.name.span,
-          "intrinsic '{}' has the wrong signature", name);
-      (void)index;
-      return false;
+      return wrong();
     }
   }
   (void)module;
@@ -734,6 +759,11 @@ void Checker::process_module(u32 module) {
         }
       } break;
       case ast::ItemKind::Fn: {
+        // Generic functions register per instantiation at their call
+        // sites; eager registration cannot bind their parameters.
+        if (!node.payload.get<ast::ItemFn>().generic.empty()) {
+          break;
+        }
         std::vector<ir::TypeIdx> params;
         for (const ast::ItemFnParam& param :
              node.payload.get<ast::ItemFn>().params) {
@@ -758,6 +788,29 @@ void Checker::process_module(u32 module) {
                        intrinsic.name.span, "unknown intrinsic '{}'",
                        intrinsic.name.name);
           (void)index;
+          break;
+        }
+        // A generic intrinsic registers per instantiation at its call
+        // sites, but its shape is still checked here: binding each
+        // parameter to a placeholder resolves the declaration to a
+        // concrete signature the structural check can read.
+        if (!intrinsic.generic.empty()) {
+          const auto& kept = type_params;
+          type_params.clear();
+          for (const ast::Ident& param : intrinsic.generic) {
+            type_params.emplace_back(param.name,
+                                     builder.primitive(ir::TypeTag::U8));
+          }
+          std::vector<ir::TypeIdx> shape_params;
+          for (const ast::ItemFnParam& param : intrinsic.params) {
+            shape_params.push_back(resolve_type(module, param.type, nullptr));
+          }
+          ir::TypeIdx shape_ret = builder.primitive(ir::TypeTag::Void);
+          if (intrinsic.return_type.is_valid()) {
+            shape_ret = resolve_type(module, intrinsic.return_type, nullptr);
+          }
+          type_params = kept;
+          check_intrinsic_signature(module, intrinsic, shape_params, shape_ret);
           break;
         }
         std::vector<ir::TypeIdx> params;
@@ -1306,11 +1359,35 @@ const CheckedModule::StaticInfo* Checker::lookup_static(
   return nullptr;
 }
 
+// A generic free function item in scope, by name. Returns null when
+// the name is not a generic function here or in an import.
+ast::ItemIdx Checker::lookup_generic_fn(u32 module, std::string_view name) {
+  for (ast::ItemIdx item : tree.modules[module]->items) {
+    if (fn_name(item) == name && !fn_generic_params(item).empty()) {
+      return item;
+    }
+  }
+  for (const Import& import : tree.modules[module]->imports) {
+    if (import.ns != Namespace::Value || import.name != name) {
+      continue;
+    }
+    for (ast::ItemIdx item : tree.modules[import.target_module]->items) {
+      if (fn_name(item) == import.member && !fn_generic_params(item).empty()) {
+        return item;
+      }
+    }
+  }
+  return ast::ItemIdx::invalid();
+}
+
 const CheckedModule::FnSig* Checker::lookup_function(
     u32 module,
     std::string_view name) const {
   for (const CheckedModule::FnSig& fn : modules[module].functions) {
-    if (fn.name == name) {
+    // A generic function's registered signatures are per
+    // instantiation; the name still resolves through
+    // lookup_generic_fn so each call rebinds its parameters.
+    if (fn.name == name && fn_generic_params(fn.item).empty()) {
       return &fn;
     }
   }
@@ -1320,7 +1397,7 @@ const CheckedModule::FnSig* Checker::lookup_function(
     }
     for (const CheckedModule::FnSig& fn :
          modules[import.target_module].functions) {
-      if (fn.name == import.member) {
+      if (fn.name == import.member && fn_generic_params(fn.item).empty()) {
         return &fn;
       }
     }
@@ -1499,6 +1576,218 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
   return nullptr;
 }
 
+std::string_view Checker::fn_name(ast::ItemIdx item) const {
+  const ast::ItemNode& node = ast.items[item];
+  if (node.kind == ast::ItemKind::Fn) {
+    return node.payload.get<ast::ItemFn>().name.name;
+  }
+  if (node.kind == ast::ItemKind::Intrinsic) {
+    return node.payload.get<ast::ItemIntrinsic>().name.name;
+  }
+  return "<fn>";
+}
+
+std::span<const ast::Ident> Checker::fn_generic_params(
+    ast::ItemIdx item) const {
+  const ast::ItemNode& node = ast.items[item];
+  if (node.kind == ast::ItemKind::Fn) {
+    return node.payload.get<ast::ItemFn>().generic;
+  }
+  if (node.kind == ast::ItemKind::Intrinsic) {
+    return node.payload.get<ast::ItemIntrinsic>().generic;
+  }
+  return {};
+}
+
+// Declared parameters of a function or intrinsic item.
+std::span<const ast::ItemFnParam> Checker::fn_params(ast::ItemIdx item) const {
+  const ast::ItemNode& node = ast.items[item];
+  if (node.kind == ast::ItemKind::Fn) {
+    return node.payload.get<ast::ItemFn>().params;
+  }
+  if (node.kind == ast::ItemKind::Intrinsic) {
+    return node.payload.get<ast::ItemIntrinsic>().params;
+  }
+  return {};
+}
+
+// Declared return type of a function or intrinsic item; invalid when
+// the item declares none, which means `()`.
+ast::TypeIdx Checker::fn_return_type(ast::ItemIdx item) const {
+  const ast::ItemNode& node = ast.items[item];
+  if (node.kind == ast::ItemKind::Fn) {
+    return node.payload.get<ast::ItemFn>().return_type;
+  }
+  if (node.kind == ast::ItemKind::Intrinsic) {
+    return node.payload.get<ast::ItemIntrinsic>().return_type;
+  }
+  return ast::TypeIdx::invalid();
+}
+
+// Index of a type parameter in a declaration's parameter list, or the
+// parameter count when the name is not a parameter.
+static u32 param_slot(std::span<const ast::Ident> params,
+                      std::string_view name) {
+  for (u32 i = 0; i < static_cast<u32>(params.size()); ++i) {
+    if (params[i].name == name) {
+      return i;
+    }
+  }
+  return static_cast<u32>(params.size());
+}
+
+Checker::DeclaredBinding Checker::declared_binding(
+    std::span<const ast::Ident> params,
+    const ast::TypeNode& declared) const {
+  const DeclaredBinding none{static_cast<u32>(params.size()), false};
+  if (declared.kind == ast::TypeKind::Ref) {
+    // `&mut T` pins `T` from the argument's pointee.
+    const DeclaredBinding inner = declared_binding(
+        params, ast.types[declared.payload.get<ast::TypeRef>().inner]);
+    return DeclaredBinding{inner.slot, true};
+  }
+  if (declared.kind != ast::TypeKind::Path) {
+    return none;
+  }
+  const ast::TypePath& type_path = declared.payload.get<ast::TypePath>();
+  if (!type_path.args.empty()) {
+    return none;
+  }
+  const ast::Path& path = ast.paths[type_path.path];
+  if (path.segments.size() != 1) {
+    return none;
+  }
+  return DeclaredBinding{param_slot(params, path.segments[0].name), false};
+}
+
+// Instantiates a generic function or intrinsic against `args` and
+// checks its body. Returns null when the signature does not match the
+// intrinsic's canonical shape.
+const CheckedModule::FnSig* Checker::instantiate_fn(
+    u32 module,
+    ast::ItemIdx item,
+    const std::vector<ir::TypeIdx>& args) {
+  for (const FnInstance& instance : fn_instances) {
+    if (instance.module == module && instance.item == item &&
+        instance.args == args) {
+      return &modules[module].functions[instance.sig_index];
+    }
+  }
+  const bool is_intrinsic = ast.items[item].kind == ast::ItemKind::Intrinsic;
+  const std::span<const ast::Ident> params = fn_generic_params(item);
+  const auto& kept_outer = type_params;
+  type_params.clear();
+  for (usize i = 0; i < params.size() && i < args.size(); ++i) {
+    type_params.emplace_back(params[i].name, args[i]);
+  }
+  std::vector<ir::TypeIdx> sig_params;
+  for (const ast::ItemFnParam& param : fn_params(item)) {
+    sig_params.push_back(resolve_type(module, param.type, nullptr));
+  }
+  ir::TypeIdx ret = builder.primitive(ir::TypeTag::Void);
+  const ast::TypeIdx declared_ret = fn_return_type(item);
+  if (declared_ret.is_valid()) {
+    ret = resolve_type(module, declared_ret, nullptr);
+  }
+  if (is_intrinsic &&
+      !check_intrinsic_signature(
+          module, ast.items[item].payload.get<ast::ItemIntrinsic>(), sig_params,
+          ret)) {
+    type_params = kept_outer;
+    return nullptr;
+  }
+  modules[module].functions.push_back(
+      {fn_name(item), sig_params, ret, item, kNoInst});
+  const u32 sig_index = static_cast<u32>(modules[module].functions.size()) - 1;
+  // Claim a slot in the shared instantiation numbering before checking
+  // the body, so recursive calls key the same context.
+  fn_instances.push_back(FnInstance{item, module, args, sig_index, kNoInst});
+  const u32 inst = static_cast<u32>(inst_numbering.size());
+  inst_numbering.emplace_back(base::kInvalidIdx);
+  fn_instances.back().inst = inst;
+  modules[module].functions[sig_index].inst = inst;
+
+  if (!is_intrinsic) {
+    const ir::TypeIdx saved_ret = fn_ret;
+    const u32 saved_loop = loop_depth;
+    const bool saved_in_fn = in_fn;
+    const bool saved_bind = bind_comp_known;
+    const u32 saved_inst = cur_inst;
+    cur_inst = inst;
+    check_fn(module, item, nullptr);
+    cur_inst = saved_inst;
+    fn_ret = saved_ret;
+    loop_depth = saved_loop;
+    in_fn = saved_in_fn;
+    bind_comp_known = saved_bind;
+  }
+  type_params = kept_outer;
+  return &modules[module].functions[sig_index];
+}
+
+// Binds a generic function or intrinsic's type parameters, then
+// instantiates. Explicit turbofish arguments win; otherwise a parameter
+// a declared parameter type pins on its own binds from that argument.
+const CheckedModule::FnSig* Checker::resolve_generic_fn(
+    u32 module,
+    ast::ItemIdx item,
+    const std::span<const ast::ExprIdx>& args,
+    const std::span<const ast::TypeIdx>& explicit_args,
+    diag::Span span) {
+  const std::span<const ast::Ident> params = fn_generic_params(item);
+  if (explicit_args.size() != params.size() && !explicit_args.empty()) {
+    const u32 index =
+        bag.emit(diag::Severity::Error, kAnalyzerArityMismatch, span,
+                 "'{}' expects {} type argument{}", fn_name(item),
+                 params.size(), params.size() == 1 ? "" : "s");
+    (void)index;
+    return nullptr;
+  }
+  std::vector<ir::TypeIdx> bound(params.size(), ir::TypeIdx(base::kInvalidIdx));
+  for (usize i = 0; i < explicit_args.size(); ++i) {
+    bound[i] = resolve_type(module, explicit_args[i], nullptr);
+  }
+  for (usize i = 0; i < fn_params(item).size() && i < args.size(); ++i) {
+    const DeclaredBinding declared =
+        declared_binding(params, ast.types[fn_params(item)[i].type]);
+    if (declared.slot >= params.size() || bound[declared.slot].is_valid()) {
+      continue;
+    }
+    const ir::TypeIdx actual = check_expr(module, args[i], nullptr);
+    if (is_error(actual)) {
+      return nullptr;
+    }
+    if (!declared.through_ref) {
+      bound[declared.slot] = actual;
+      continue;
+    }
+    const ir::TypeTag tag = builder.types()[actual.idx].tag;
+    if (tag != ir::TypeTag::Ref && tag != ir::TypeTag::MutRef) {
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
+                   "'{}' needs a reference to bind its type "
+                   "argument",
+                   fn_name(item));
+      (void)index;
+      return nullptr;
+    }
+    bound[declared.slot] =
+        builder.ref_types()[builder.types()[actual.idx].as_ref()].pointee;
+  }
+  for (const ir::TypeIdx arg : bound) {
+    if (!arg.is_valid()) {
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
+                   "cannot infer the type arguments of '{}'; add them with "
+                   "'{}::<T>(...)'",
+                   fn_name(item), fn_name(item));
+      (void)index;
+      return nullptr;
+    }
+  }
+  return instantiate_fn(module, item, bound);
+}
+
 // Synthesizes one method entry for a generic instantiation and
 // checks its body under the substitution. Appends before checking
 // so recursive calls resolve to the in-progress entry.
@@ -1625,6 +1914,12 @@ bool Checker::resolve_value_path(u32 module,
     if (const CheckedModule::FnSig* fn = lookup_function(module, name)) {
       out.kind = PathValue::Kind::Function;
       out.function = fn;
+      return true;
+    }
+    if (ast::ItemIdx generic = lookup_generic_fn(module, name);
+        generic.is_valid()) {
+      out.kind = PathValue::Kind::GenericFn;
+      out.generic_item = generic;
       return true;
     }
     VariantMatch match;
@@ -2010,7 +2305,11 @@ void Checker::check_bodies() {
       const ast::ItemNode& node = ast.items[item];
       switch (node.kind) {
         case ast::ItemKind::Fn: {
-          check_fn(m, item, nullptr);
+          // Generic bodies are checked per instantiation at their call
+          // sites, where the type parameters are bound.
+          if (node.payload.get<ast::ItemFn>().generic.empty()) {
+            check_fn(m, item, nullptr);
+          }
           if (m == tree.root &&
               node.payload.get<ast::ItemFn>().name.name == "main") {
             check_main(m, item);
@@ -2128,13 +2427,13 @@ diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
   CheckedPackage package{tree,
                          std::move(storage),
                          std::move(checker.modules),
-                         {},
+                         std::move(checker.inst_numbering),
+                         std::move(checker.fn_instances),
                          std::move(checker.type_origins_)};
   // Generic instantiations lower as ordinary nominals; publish their
   // field or variant names under the defining module for lowering
   // lookups. Their types publish in instantiation order for keying.
   for (const GenericInstance& instance : checker.generic_instances) {
-    package.generic_insts.push_back(instance.type);
     if (!instance.complete) {
       continue;
     }

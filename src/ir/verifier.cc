@@ -316,6 +316,28 @@ VerifyResult verify_storage(const Storage& storage) {
           }
         }
       }
+      if (instr.op == Opcode::ElemOffset) {
+        // operands = [base_ptr(register), index(integer)]; dst carries
+        // the element reference type.
+        const ir::OperandIdx base = instr.operands.head();
+        if (instr.operands.size() != 2 ||
+            !storage.operands()[base].is<RegisterIdx>() ||
+            !is_integer_type(
+                storage
+                    .types()[storage.operands()[ir::OperandIdx(base.idx + 1)]
+                                 .type.idx]
+                    .tag) ||
+            !instr.dst.is_valid()) {
+          return err(VerifyErrorKind::InvalidGetElementPtr, iidx.idx);
+        }
+      }
+      if (instr.op == Opcode::TypeSizeOf || instr.op == Opcode::TypeAlignOf) {
+        // No operands; the measured type rides on the instruction.
+        if (!instr.operands.empty() || !instr.measure.is_valid() ||
+            !instr.dst.is_valid()) {
+          return err(VerifyErrorKind::InvalidTypeQuery, iidx.idx);
+        }
+      }
       if (instr.op == Opcode::Borrow) {
         // operands = [place(register)]; dst carries Ref/MutRef type.
         if (instr.operands.size() != 1) {

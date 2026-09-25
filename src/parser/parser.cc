@@ -324,9 +324,16 @@ ast::PathIdx Parser::parse_path() {
     segments.push_back(
         ast::Ident{bytes_.substr(span.offset, span.length), span});
     advance();
-    if (!match(lexer::TokenKind::ColonColon)) {
+    if (peek_kind() != lexer::TokenKind::ColonColon) {
       break;
     }
+    // `::<` begins a turbofish type-argument list, not another
+    // segment; the caller parses the arguments.
+    if (pos_ + 1 < tokens_.size() &&
+        tokens_[pos_ + 1].kind == lexer::TokenKind::Less) {
+      break;
+    }
+    advance();
     if (at_end()) {
       expect(lexer::TokenKind::Ident, "path segment");
       return ast::PathIdx::invalid();
@@ -345,6 +352,10 @@ ast::ItemIdx Parser::parse_fn(bool is_pub) {
   }
   base::Result<ast::Ident, diag::Fatal> name = parse_ident("function name");
   if (name.is_err()) {
+    return ast::ItemIdx::invalid();
+  }
+  std::vector<ast::Ident> generic;
+  if (!parse_generic_params(generic)) {
     return ast::ItemIdx::invalid();
   }
   if (!expect(lexer::TokenKind::LParen, "`(`")) {
@@ -374,6 +385,7 @@ ast::ItemIdx Parser::parse_fn(bool is_pub) {
   node.is_pub = is_pub;
   node.payload.set(ast::ItemFn{
       .name = std::move(name).unwrap(),
+      .generic = ast::copy_to_arena(ast_.spans, generic),
       .params = ast::copy_to_arena(ast_.spans, params),
       .return_type = return_type,
       .body = body,
@@ -420,6 +432,10 @@ ast::ItemIdx Parser::parse_intrinsic_fn(bool is_pub) {
   if (name.is_err()) {
     return ast::ItemIdx::invalid();
   }
+  std::vector<ast::Ident> generic;
+  if (!parse_generic_params(generic)) {
+    return ast::ItemIdx::invalid();
+  }
   if (!expect(lexer::TokenKind::LParen, "`(`")) {
     return ast::ItemIdx::invalid();
   }
@@ -447,6 +463,7 @@ ast::ItemIdx Parser::parse_intrinsic_fn(bool is_pub) {
   node.is_pub = is_pub;
   node.payload.set(ast::ItemIntrinsic{
       .name = std::move(name).unwrap(),
+      .generic = ast::copy_to_arena(ast_.spans, generic),
       .params = ast::copy_to_arena(ast_.spans, params),
       .return_type = return_type,
   });

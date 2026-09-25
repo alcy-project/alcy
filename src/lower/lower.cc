@@ -115,12 +115,49 @@ ir::RegisterIdx Lowerer::emit(ir::Opcode op,
   }
   const ir::OperandIdxRange range = {head, static_cast<u32>(ops.size())};
   const ir::InstructionIdx instr =
-      builder.instr({.op = op, .flags = {}, .dst = dst, .operands = range});
+      builder.instr({.op = op,
+                     .flags = {},
+                     .dst = dst,
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = range});
   builder.reg({.type = type, .def_idx = instr});
   streams_[at(cur_)].push(instr);
   stream_last_[at(cur_)] = instr;
   instr_spans_.push_back(cur_span_);
   return dst;
+}
+
+// Emits a type query, which measures a type instead of consuming
+// operands: the measured type rides on the instruction.
+ir::RegisterIdx Lowerer::emit_type_query(ir::Opcode op, ir::TypeIdx measure) {
+  if (failed) {
+    return ir::RegisterIdx(base::kInvalidIdx);
+  }
+  const ir::TypeIdx usize_ty = usize_type();
+  const ir::RegisterIdx dst = claim_reg();
+  const ir::OperandIdx head =
+      ir::OperandIdx(static_cast<u32>(builder.state().operands.size()));
+  const ir::InstructionIdx instr = builder.instr({.op = op,
+                                                  .flags = {},
+                                                  .dst = dst,
+                                                  .measure = measure,
+                                                  .operands = {head, 0}});
+  builder.reg({.type = usize_ty, .def_idx = instr});
+  streams_[at(cur_)].push(instr);
+  stream_last_[at(cur_)] = instr;
+  instr_spans_.push_back(cur_span_);
+  return dst;
+}
+
+const std::vector<ir::TypeIdx>& Lowerer::fn_instance_args(u32 module,
+                                                          u32 sig_index) const {
+  static const std::vector<ir::TypeIdx> kNone;
+  for (const analyzer::FnInstance& instance : pkg.fn_insts) {
+    if (instance.module == module && instance.sig_index == sig_index) {
+      return instance.args;
+    }
+  }
+  return kNone;
 }
 
 void Lowerer::emit_void(ir::Opcode op, const std::vector<ir::OperandIdx>& ops) {
@@ -134,6 +171,7 @@ void Lowerer::emit_void(ir::Opcode op, const std::vector<ir::OperandIdx>& ops) {
       builder.instr({.op = op,
                      .flags = {},
                      .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = range});
   streams_[at(cur_)].push(void_instr);
   stream_last_[at(cur_)] = void_instr;
@@ -345,9 +383,28 @@ u32 Lowerer::generic_inst_index(ir::TypeIdx type) const {
 // Lowering context of a call target: the checker recorded the
 // instantiation under which the callee body was checked; that is
 // exactly the context its body reads side tables in.
+// Lowering context of a call target: the instantiation the callee
+// body was checked under. Methods derive it from the receiver's
+// instance type; free functions carry it on their signature. The
+// target's own `inst` records the *caller's* context, so it cannot
+// answer this.
 u32 Lowerer::callee_inst(
     const analyzer::CheckedModule::CallTarget* target) const {
-  return target == nullptr ? analyzer::kNoInst : target->inst;
+  if (target == nullptr) {
+    return analyzer::kNoInst;
+  }
+  if (target->is_method) {
+    const analyzer::CheckedModule& def = pkg.modules[target->module];
+    if (target->index >= def.methods.size()) {
+      return analyzer::kNoInst;
+    }
+    return generic_inst_index(def.methods[target->index].self_type);
+  }
+  const analyzer::CheckedModule& def = pkg.modules[target->module];
+  if (target->index >= def.functions.size()) {
+    return analyzer::kNoInst;
+  }
+  return def.functions[target->index].inst;
 }
 
 ir::TypeIdx Lowerer::type_origin(ir::TypeIdx type) const {
@@ -516,6 +573,13 @@ void Lowerer::run() {
         }
       }
       if (is_method_copy) {
+        continue;
+      }
+      // Generic free functions reserve per instantiation on first
+      // call, like comp specializations; seeding them here would
+      // lower one body under the wrong instantiation key.
+      if (ast.items[sig.item].kind == ast::ItemKind::Fn &&
+          !ast.items[sig.item].payload.get<ast::ItemFn>().generic.empty()) {
         continue;
       }
       fn_index(m, sig.item, sig.name, sig.params, sig.ret, analyzer::kNoInst,

@@ -301,6 +301,20 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
       values_.add_register(i.dst, result);
       break;
     }
+    case Op::TypeSizeOf:
+    case Op::TypeAlignOf: {
+      DCHECK(i.measure.is_valid());
+      llvm::Type* measured = type(i.measure);
+      const llvm::DataLayout& layout = module_->getDataLayout();
+      const u64 amount = i.op == Op::TypeSizeOf
+                             ? layout.getTypeAllocSize(measured).getFixedValue()
+                             : layout.getABITypeAlign(measured).value();
+      llvm::Type* dst_ty = type(storage_.registers()[i.dst].type);
+      values_.add_register(
+          i.dst, llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(dst_ty),
+                                        amount));
+      break;
+    }
     case Op::Select: {
       DCHECK(ops.size() == 3);
       llvm::Value* cond =

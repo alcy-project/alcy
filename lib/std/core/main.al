@@ -12,13 +12,27 @@ pub intrinsic fn memcopy(dst: &mut u8, src: &u8, n: usize);
 
 pub intrinsic fn panic(msg: str) -> !;
 
-// Heap allocation. `align` must be a power of two; a zero `size`
-// still yields a distinct freeable pointer. The returned reference
-// uniquely owns uninitialized bytes and must be released with
-// `dealloc` using the same `size` and `align`.
-pub intrinsic fn alloc(size: usize, align: usize) -> &mut u8;
+// Heap allocation. `alloc<T>(count)` reserves room for `count`
+// elements of `T`, using `T`'s own size and alignment. The returned
+// reference uniquely owns uninitialized elements and must be released
+// with `dealloc<T>(ptr, count)`. `T` is fixed by the call's turbofish,
+// so a call admits one instantiation.
+pub intrinsic fn alloc<T>(count: usize) -> &mut T;
 
-pub intrinsic fn dealloc(ptr: &mut u8, size: usize, align: usize);
+pub intrinsic fn dealloc<T>(ptr: &mut T, count: usize);
+
+
+// Allocation size of `T` in bytes; the space one element occupies.
+pub intrinsic fn size_of<T>() -> usize;
+
+// Required alignment of `T` in bytes.
+pub intrinsic fn align_of<T>() -> usize;
+
+// Typed element offset. The result points at element `index` of the
+// buffer `ptr` addresses, and is in bounds exactly when the caller
+// keeps `index` within the buffer's length. Element type `T` is fixed
+// by the pointee of `ptr`, so the call admits one instantiation.
+pub intrinsic fn elem_ptr<T>(ptr: &mut T, index: usize) -> &mut T;
 
 intrinsic fn sys_write(fd: i32, buf: str);
 

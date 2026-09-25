@@ -346,6 +346,7 @@ enum class ExprKind : u8 {
   Array,
   Unary,
   Borrow,
+  Deref,
   Binary,
   Cast,
   Call,
@@ -410,6 +411,11 @@ struct ExprBorrow {
   ExprIdx inner = ExprIdx::invalid();
 };
 
+// `*place`, the place a reference addresses.
+struct ExprDeref {
+  ExprIdx inner = ExprIdx::invalid();
+};
+
 struct ExprBinary {
   BinaryOp op;
   ExprIdx lhs = ExprIdx::invalid();
@@ -423,6 +429,9 @@ struct ExprCast {
 
 struct ExprCall {
   ExprIdx callee = ExprIdx::invalid();
+  // Explicit type arguments from turbofish syntax `f::<T>(...)`;
+  // empty when the call relies on inference.
+  std::span<const TypeIdx> type_args;
   std::span<const ExprIdx> args;
 };
 
@@ -523,6 +532,7 @@ struct ExprNode {
                                   ExprArray,
                                   ExprUnary,
                                   ExprBorrow,
+                                  ExprDeref,
                                   ExprBinary,
                                   ExprCast,
                                   ExprCall,
@@ -770,6 +780,8 @@ struct ItemFnParam {
 
 struct ItemFn {
   Ident name;
+  // Type parameters; empty for a non-generic function.
+  std::span<const Ident> generic;
   std::span<const ItemFnParam> params;
   TypeIdx return_type = TypeIdx::invalid();
   BlockIdx body = BlockIdx::invalid();
@@ -780,6 +792,10 @@ struct ItemFn {
 // hooks or IR operations.
 struct ItemIntrinsic {
   Ident name;
+  // Type parameters; empty for a non-generic intrinsic. A generic
+  // intrinsic must admit exactly one binding per call, so its
+  // parameters are recoverable from the argument types alone.
+  std::span<const Ident> generic;
   std::span<const ItemFnParam> params;
   TypeIdx return_type = TypeIdx::invalid();
 };

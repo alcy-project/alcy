@@ -14,6 +14,11 @@ enum class Opcode : u8 {
   Load,
   Store,
   GetElementPtr,
+  // Typed element offset over a pointer of any provenance:
+  // operands = [base_ptr, index(integer)]. The destination register
+  // carries the element type, so codegen emits a typed GEP without
+  // needing an alloca site. Backs `elem_ptr`.
+  ElemOffset,
   ExtractValue,
   InsertValue,
   // Copies `len` bytes from `src` to `dst`:
@@ -50,6 +55,11 @@ enum class Opcode : u8 {
   Gt,
 
   TypeCast,
+  // `TypeSizeOf` and `TypeAlignOf` take no operands and set the
+  // destination to the allocation size or alignment of `measure`, the
+  // type recorded on the instruction.
+  TypeSizeOf,
+  TypeAlignOf,
 
   Select,
 
@@ -89,6 +99,7 @@ constexpr const char* opcode_to_str(const Opcode opcode) {
     case O::Load: return "Load";
     case O::Store: return "Store";
     case O::GetElementPtr: return "GetElementPtr";
+    case O::ElemOffset: return "ElemOffset";
     case O::ExtractValue: return "ExtractValue";
     case O::InsertValue: return "InsertValue";
     case O::Memcopy: return "Memcopy";
@@ -123,6 +134,8 @@ constexpr const char* opcode_to_str(const Opcode opcode) {
     case O::Gt: return "Gt";
 
     case O::TypeCast: return "TypeCast";
+    case O::TypeSizeOf: return "TypeSizeOf";
+    case O::TypeAlignOf: return "TypeAlignOf";
 
     case O::Select: return "Select";
 

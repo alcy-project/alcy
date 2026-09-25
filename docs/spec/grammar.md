@@ -33,8 +33,9 @@ rejected with guidance diagnostics.
 item      := vis? (fn_item | struct_item | enum_item | impl_item |
                    static_item | const_item | use_item)
 vis       := "pub"
-fn_item   := "fn" ident "(" params ")" ("->" type)? block
+fn_item   := "fn" ident type_params? "(" params ")" ("->" type)? block
             # omitted return type means "()"
+type_params := "<" ident ("," ident)* ">"   # free functions only
 params    := (pattern ":" type ("," pattern ":" type)* ","?)?
 struct_item := "struct" ident ("<" ident ("," ident)* ">")? "{" field ("," field)* ","? "}"
 field     := ident ":" type
@@ -102,10 +103,12 @@ add_expr  := mul_expr (("+" | "-") mul_expr)*
 mul_expr  := pow_expr (("*" | "/" | "%") pow_expr)*
 pow_expr  := cast_expr ("**" pow_expr)?      # right associative
 cast_expr := unary_expr ("as" type)?
-unary_expr := ("-" | "!" | "~" | "&" | "&" "mut") unary_expr | question_expr
+unary_expr := ("-" | "!" | "~" | "&" | "&" "mut" | "*") unary_expr
+             | question_expr
 question_expr := postfix_expr "?"?
 postfix_expr := primary (call | field | method | index)*
-call      := "(" (expr ("," expr)*)? ")"
+call      := turbofish? "(" (expr ("," expr)*)? ")"
+turbofish := "::" "<" type ("," type)* ">"   # explicit type arguments
 field     := "." ident | "." integer        # tuple ".0" access
 method    := "." ident "(" (expr ("," expr)*)? ")"
             # the receiver is the postfix base, not listed
@@ -122,7 +125,10 @@ block_like  := block | if_expr | match_expr | loop_expr | while_expr
 ```
 
 - `?` binds tighter than all binary operators.
-- Unary `*` (dereference) does not exist: no raw pointers in MVP.
+- Unary `*` dereferences a reference into the place it names.
+  Assignment through it needs a `&mut` reference.
+- A turbofish supplies explicit type arguments to a generic call;
+  without one, the parameters bind from the argument types.
 - Array indexing is builtin with panic-on-out-of-bounds semantics.
 - Calls to `panic(...)` diverge with type `!`.
 - Closures do not exist; `||` is logical-or only.
@@ -140,7 +146,8 @@ block  := "{" statement* expr? "}"
 statement := decl_stmt | expr_stmt
 decl_stmt  := pattern (":" type)? ":=" expr
 reassign   := place "=" expr           # existing mut binding only
-place      := path (field | index)*    # no dereference in MVP
+place      := deref (field | index)*
+deref     := "*" unary_expr | path
 expr_stmt  := expr
 ```
 

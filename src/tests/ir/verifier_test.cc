@@ -39,6 +39,7 @@ Storage valid_storage() {
       .op = Opcode::Alloca,
       .flags = {},
       .dst = ret_reg,
+      .measure = ir::TypeIdx::invalid(),
       .operands = {alloc_arg, 1},
   });
   instrs.push(inst_alloc);
@@ -50,6 +51,7 @@ Storage valid_storage() {
       .op = Opcode::Ret,
       .flags = {},
       .dst = RegisterIdx(base::kInvalidIdx),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {ret_arg, 1},
   });
   instrs.push(inst_ret);
@@ -96,6 +98,7 @@ TEST_CASE("Verify unterminated block") {
       .op = Opcode::Alloca,
       .flags = {},
       .dst = RegisterIdx(0),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {arg, 1},
   });
   builder.reg({.type = primitive_idx(TypeTag::I32), .def_idx = inst});
@@ -122,6 +125,7 @@ TEST_CASE("Verify misplaced terminator") {
       .op = Opcode::Alloca,
       .flags = {},
       .dst = RegisterIdx(0),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {alloc_arg, 1},
   });
   instrs.push(inst_alloc);
@@ -132,6 +136,7 @@ TEST_CASE("Verify misplaced terminator") {
       .op = Opcode::Ret,
       .flags = {},
       .dst = RegisterIdx(base::kInvalidIdx),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {ret_arg, 1},
   });
   instrs.push(inst_ret1);
@@ -141,6 +146,7 @@ TEST_CASE("Verify misplaced terminator") {
       .op = Opcode::Ret,
       .flags = {},
       .dst = RegisterIdx(base::kInvalidIdx),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {ret_arg2, 1},
   });
   instrs.push(inst_ret2);
@@ -164,6 +170,7 @@ TEST_CASE("Verify unknown operand tag") {
       .op = Opcode::Ret,
       .flags = {},
       .dst = RegisterIdx(base::kInvalidIdx),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {oidx, 1},
   });
   const BlockIdx block = builder.block({
@@ -191,6 +198,7 @@ TEST_CASE("Verify undefined register") {
       .op = Opcode::Ret,
       .flags = {},
       .dst = RegisterIdx(base::kInvalidIdx),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {arg, 1},
   });
   const BlockIdx block = builder.block({
@@ -218,6 +226,7 @@ TEST_CASE("Verify redefined register") {
       .op = Opcode::Alloca,
       .flags = {},
       .dst = RegisterIdx(0),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {arg, 1},
   });
   instrs.push(inst1);
@@ -227,6 +236,7 @@ TEST_CASE("Verify redefined register") {
       .op = Opcode::Alloca,
       .flags = {},
       .dst = RegisterIdx(0),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {arg2, 1},
   });
   instrs.push(inst2);
@@ -237,6 +247,7 @@ TEST_CASE("Verify redefined register") {
       .op = Opcode::Ret,
       .flags = {},
       .dst = RegisterIdx(base::kInvalidIdx),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {ret_arg, 1},
   });
   instrs.push(inst_ret);
@@ -263,6 +274,7 @@ TEST_CASE("Verify invalid callee") {
       .op = Opcode::Call,
       .flags = {},
       .dst = RegisterIdx(base::kInvalidIdx),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {head, 1},
   });
   instrs.push(inst);
@@ -272,6 +284,7 @@ TEST_CASE("Verify invalid callee") {
       .op = Opcode::Ret,
       .flags = {},
       .dst = RegisterIdx(base::kInvalidIdx),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {ret_arg, 1},
   });
   instrs.push(inst_ret);
@@ -301,6 +314,7 @@ TEST_CASE("Verify invalid branch target") {
       .op = Opcode::Br,
       .flags = {},
       .dst = RegisterIdx(base::kInvalidIdx),
+      .measure = ir::TypeIdx::invalid(),
       .operands = {head, 1},
   });
   const BlockIdx block = builder.block({
@@ -325,6 +339,7 @@ TEST_CASE("Verify out of range indexes") {
         .op = Opcode::Ret,
         .flags = {},
         .dst = RegisterIdx(base::kInvalidIdx),
+        .measure = ir::TypeIdx::invalid(),
         .operands = {arg, 4},
     });
     const BlockIdx block = builder.block({
@@ -349,6 +364,7 @@ TEST_CASE("Verify out of range indexes") {
         .op = Opcode::Alloca,
         .flags = {},
         .dst = RegisterIdx(7),
+        .measure = ir::TypeIdx::invalid(),
         .operands = {arg, 1},
     });
     builder.reg({.type = primitive_idx(TypeTag::I32), .def_idx = inst});
@@ -390,6 +406,7 @@ TEST_CASE("Verify struct and array types") {
         .op = Opcode::Alloca,
         .flags = {},
         .dst = RegisterIdx(0),
+        .measure = ir::TypeIdx::invalid(),
         .operands = {alloc_arg, 1},
     });
     instrs.push(inst_alloc);
@@ -401,6 +418,7 @@ TEST_CASE("Verify struct and array types") {
         .op = Opcode::Ret,
         .flags = {},
         .dst = RegisterIdx(base::kInvalidIdx),
+        .measure = ir::TypeIdx::invalid(),
         .operands = {ret_arg, 1},
     });
     instrs.push(inst_ret);
@@ -500,6 +518,7 @@ TEST_CASE("Verify CondBr shapes") {
           builder.instr({.op = Opcode::Ret,
                          .flags = {},
                          .dst = RegisterIdx(base::kInvalidIdx),
+                         .measure = ir::TypeIdx::invalid(),
                          .operands = args.finish()});
       InstrSeq instrs;
       instrs.push(inst);
@@ -523,6 +542,7 @@ TEST_CASE("Verify CondBr shapes") {
         builder.instr({.op = Opcode::CondBr,
                        .flags = {},
                        .dst = RegisterIdx(base::kInvalidIdx),
+                       .measure = ir::TypeIdx::invalid(),
                        .operands = args.finish()});
     InstrSeq instrs;
     instrs.push(inst);
@@ -558,6 +578,7 @@ TEST_CASE("Verify CondBr shapes") {
         builder.instr({.op = Opcode::CondBr,
                        .flags = {},
                        .dst = RegisterIdx(base::kInvalidIdx),
+                       .measure = ir::TypeIdx::invalid(),
                        .operands = args.finish()});
     InstrSeq instrs;
     instrs.push(inst);
@@ -592,6 +613,7 @@ TEST_CASE("Verify Switch shapes") {
         builder.instr({.op = Opcode::Ret,
                        .flags = {},
                        .dst = RegisterIdx(base::kInvalidIdx),
+                       .measure = ir::TypeIdx::invalid(),
                        .operands = ret_args.finish()});
     InstrSeq ret_instrs;
     ret_instrs.push(inst_ret);
@@ -607,6 +629,7 @@ TEST_CASE("Verify Switch shapes") {
         builder.instr({.op = Opcode::Switch,
                        .flags = {},
                        .dst = RegisterIdx(base::kInvalidIdx),
+                       .measure = ir::TypeIdx::invalid(),
                        .operands = args.finish()});
     InstrSeq instrs;
     instrs.push(inst);
@@ -629,15 +652,19 @@ TEST_CASE("Verify Switch shapes") {
     const ImmutableIdx one =
         builder.immutable({.type = i32, .data = {.i32_value = 1}});
     const OperandIdx size = builder.operand(Operand::from_immutable(one, i32));
-    const InstructionIdx inst_alloc0 = builder.instr({.op = Opcode::Alloca,
-                                                      .flags = {},
-                                                      .dst = RegisterIdx(0),
-                                                      .operands = {size, 1}});
+    const InstructionIdx inst_alloc0 =
+        builder.instr({.op = Opcode::Alloca,
+                       .flags = {},
+                       .dst = RegisterIdx(0),
+                       .measure = ir::TypeIdx::invalid(),
+                       .operands = {size, 1}});
     builder.reg({.type = i32, .def_idx = inst_alloc0});
-    const InstructionIdx inst_alloc1 = builder.instr({.op = Opcode::Alloca,
-                                                      .flags = {},
-                                                      .dst = RegisterIdx(1),
-                                                      .operands = {size, 1}});
+    const InstructionIdx inst_alloc1 =
+        builder.instr({.op = Opcode::Alloca,
+                       .flags = {},
+                       .dst = RegisterIdx(1),
+                       .measure = ir::TypeIdx::invalid(),
+                       .operands = {size, 1}});
     builder.reg({.type = i32, .def_idx = inst_alloc1});
     const BlockIdx entry = builder.block({{}, {}});
     OperandSeq args;
@@ -649,6 +676,7 @@ TEST_CASE("Verify Switch shapes") {
         builder.instr({.op = Opcode::Switch,
                        .flags = {},
                        .dst = RegisterIdx(base::kInvalidIdx),
+                       .measure = ir::TypeIdx::invalid(),
                        .operands = args.finish()});
     InstrSeq instrs;
     instrs.push(inst_alloc0);
@@ -673,10 +701,12 @@ TEST_CASE("Verify memory shapes") {
     const ImmutableIdx one =
         builder.immutable({.type = i32, .data = {.i32_value = 1}});
     const OperandIdx size = builder.operand(Operand::from_immutable(one, i32));
-    const InstructionIdx inst_alloc = builder.instr({.op = Opcode::Alloca,
-                                                     .flags = {},
-                                                     .dst = RegisterIdx(0),
-                                                     .operands = {size, 1}});
+    const InstructionIdx inst_alloc =
+        builder.instr({.op = Opcode::Alloca,
+                       .flags = {},
+                       .dst = RegisterIdx(0),
+                       .measure = ir::TypeIdx::invalid(),
+                       .operands = {size, 1}});
     builder.reg({.type = i32, .def_idx = inst_alloc});
     const BlockIdx entry = builder.block({{}, {}});
     OperandSeq args;
@@ -685,6 +715,7 @@ TEST_CASE("Verify memory shapes") {
         builder.instr({.op = Opcode::GetElementPtr,
                        .flags = {},
                        .dst = RegisterIdx(base::kInvalidIdx),
+                       .measure = ir::TypeIdx::invalid(),
                        .operands = args.finish()});
     const OperandIdx gep_ret_arg =
         builder.operand(Operand::from_immutable(one, i32));
@@ -692,6 +723,7 @@ TEST_CASE("Verify memory shapes") {
         builder.instr({.op = Opcode::Ret,
                        .flags = {},
                        .dst = RegisterIdx(base::kInvalidIdx),
+                       .measure = ir::TypeIdx::invalid(),
                        .operands = {gep_ret_arg, 1}});
     InstrSeq instrs;
     instrs.push(inst_alloc);
@@ -714,18 +746,22 @@ TEST_CASE("Verify memory shapes") {
     const ImmutableIdx one =
         builder.immutable({.type = i32, .data = {.i32_value = 1}});
     const OperandIdx size = builder.operand(Operand::from_immutable(one, i32));
-    const InstructionIdx inst_alloc = builder.instr({.op = Opcode::Alloca,
-                                                     .flags = {},
-                                                     .dst = RegisterIdx(0),
-                                                     .operands = {size, 1}});
+    const InstructionIdx inst_alloc =
+        builder.instr({.op = Opcode::Alloca,
+                       .flags = {},
+                       .dst = RegisterIdx(0),
+                       .measure = ir::TypeIdx::invalid(),
+                       .operands = {size, 1}});
     builder.reg({.type = i32, .def_idx = inst_alloc});
     const BlockIdx entry = builder.block({{}, {}});
     OperandSeq args;
     args.push(builder.operand(Operand::from_register(RegisterIdx(0), i32)));
-    const InstructionIdx inst = builder.instr({.op = Opcode::ExtractValue,
-                                               .flags = {},
-                                               .dst = RegisterIdx(1),
-                                               .operands = args.finish()});
+    const InstructionIdx inst =
+        builder.instr({.op = Opcode::ExtractValue,
+                       .flags = {},
+                       .dst = RegisterIdx(1),
+                       .measure = ir::TypeIdx::invalid(),
+                       .operands = args.finish()});
     builder.reg({.type = i32, .def_idx = inst});
     const OperandIdx ext_ret_arg =
         builder.operand(Operand::from_immutable(one, i32));
@@ -733,6 +769,7 @@ TEST_CASE("Verify memory shapes") {
         builder.instr({.op = Opcode::Ret,
                        .flags = {},
                        .dst = RegisterIdx(base::kInvalidIdx),
+                       .measure = ir::TypeIdx::invalid(),
                        .operands = {ext_ret_arg, 1}});
     InstrSeq instrs;
     instrs.push(inst_alloc);
@@ -765,6 +802,7 @@ TEST_CASE("Verify call arity") {
       builder.instr({.op = Opcode::Call,
                      .flags = {},
                      .dst = RegisterIdx(base::kInvalidIdx),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = {head, 1}});
   const ImmutableIdx zero =
       builder.immutable({.type = i32, .data = {.i32_value = 0}});
@@ -774,6 +812,7 @@ TEST_CASE("Verify call arity") {
       builder.instr({.op = Opcode::Ret,
                      .flags = {},
                      .dst = RegisterIdx(base::kInvalidIdx),
+                     .measure = ir::TypeIdx::invalid(),
                      .operands = {ret_arg, 1}});
   const BlockIdx entry = builder.block({{}, {}});
   InstrSeq instrs;

@@ -137,6 +137,26 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       }
       break;
     }
+    case Op::ElemOffset: {
+      // operands = [base_ptr, index(integer)]. The destination register
+      // carries the element reference type, so the pointee is the
+      // element type regardless of the base pointer's provenance.
+      DCHECK(ops.size() == 2);
+      const ir::Operand& base_op = storage_.operands()[ops.head()];
+      DCHECK(base_op.is<ir::RegisterIdx>());
+      DCHECK(i.dst.is_valid());
+      const ir::TypeIdx dst_ty = storage_.registers()[i.dst].type;
+      const ir::TypeTag dst_tag = storage_.types()[dst_ty.idx].tag;
+      DCHECK(dst_tag == ir::TypeTag::Ref || dst_tag == ir::TypeTag::MutRef);
+      llvm::Type* elem_ty = type(
+          storage_.ref_types()[storage_.types()[dst_ty.idx].as_ref()].pointee);
+      llvm::SmallVector<llvm::Value*, 1> indices{
+          resolve_operand_value(storage_.operands()[ops.head() + 1])};
+      values_.add_register(
+          i.dst, builder_->CreateGEP(elem_ty, resolve_operand_value(base_op),
+                                     indices));
+      break;
+    }
     case Op::ExtractValue: {
       // operands = [aggregate, index...]; indexes are integer immediates.
       DCHECK(ops.size() >= 2);

@@ -1887,4 +1887,130 @@ TEST_CASE("Check rejects non-tuple fmt arguments") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Check accepts generic free functions and turbofish arguments") {
+  io::TempDir dir("alcy_types_generic_fn_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn id<T>(x: T) -> T {\n"
+                                      "  ret x\n"
+                                      "}\n"
+                                      "fn pair<T>(a: T, b: T) -> T {\n"
+                                      "  ret a\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  a := id(1i32)\n"
+                                      "  b := id::<i32>(2i32)\n"
+                                      "  c := pair(3i32, 4i32)\n"
+                                      "  _ := id(true)\n"
+                                      "  ret a + b + c - 10\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects uninferable generic call arguments") {
+  io::TempDir dir("alcy_types_generic_fn_unbound_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn make<T>() -> T {\n"
+                                      "  panic(\"x\")\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  _ := make()\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check accepts typed heap intrinsics") {
+  io::TempDir dir("alcy_types_typed_heap_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "pub intrinsic fn alloc<T>(count: "
+                                      "usize) -> &mut T;\n"
+                                      "pub intrinsic fn dealloc<T>(ptr: &mut "
+                                      "T, count: usize);\n"
+                                      "pub intrinsic fn size_of<T>() -> "
+                                      "usize;\n"
+                                      "pub intrinsic fn align_of<T>() -> "
+                                      "usize;\n"
+                                      "pub intrinsic fn elem_ptr<T>(ptr: &mut "
+                                      "T, index: usize) -> &mut T;\n"
+                                      "fn main() {\n"
+                                      "  data := alloc::<i32>(4)\n"
+                                      "  mut slot := elem_ptr(data, 0)\n"
+                                      "  *slot = 1\n"
+                                      "  _ := size_of::<i32>()\n"
+                                      "  _ := align_of::<i32>()\n"
+                                      "  dealloc(data, 4)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects an intrinsic declared with the wrong shape") {
+  io::TempDir dir("alcy_types_intrinsic_shape_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "pub intrinsic fn elem_ptr<T>(ptr: "
+                                      "&T, index: usize) -> &T;\n"
+                                      "fn main() {\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects dereferencing a non-reference") {
+  io::TempDir dir("alcy_types_deref_value_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  x := 1i32\n"
+                                      "  _ := *x\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects assignment through a shared reference") {
+  io::TempDir dir("alcy_types_deref_shared_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn bump(p: &i32) {\n"
+                                      "  *p = 1\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 }  // namespace analyzer

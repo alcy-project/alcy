@@ -362,6 +362,23 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
       }
       return checked_index_addr(base, position, node.span);
     }
+    case ast::ExprKind::Deref: {
+      // A reference local is a place that holds the address; the place
+      // `*p` names is the one that address points at.
+      Val inner = materialize(
+          lower_expr(node.payload.get<ast::ExprDeref>().inner, nullptr));
+      if (failed) {
+        return Val{size_one, error_type(), true, false};
+      }
+      const ir::TypeTag tag = tag_of(inner.type);
+      if (tag != ir::TypeTag::Ref && tag != ir::TypeTag::MutRef) {
+        internal(node.span, "dereference of a non-reference");
+        return Val{size_one, error_type(), true, false};
+      }
+      const ir::TypeIdx pointee =
+          builder.ref_types()[builder.types()[inner.type.idx].as_ref()].pointee;
+      return Val{inner.op, pointee, true, true};
+    }
     default:
       unsupported(node.span, "borrowed temporary");
       return Val{size_one, error_type(), true, false};
@@ -816,7 +833,8 @@ Val Lowerer::lower_call(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   const analyzer::CheckedModule& def = pkg.modules[target->module];
   const analyzer::CheckedModule::FnSig& sig = def.functions[target->index];
   if (ast.items[sig.item].kind == ast::ItemKind::Intrinsic) {
-    return lower_intrinsic_call(expr, sig.name);
+    return lower_intrinsic_call(
+        expr, sig, fn_instance_args(target->module, target->index));
   }
   if (sig.name == "write" && pkg.tree.modules[target->module]->is_prelude) {
     return lower_fmt_write(expr, sig);
@@ -835,7 +853,7 @@ Val Lowerer::lower_call(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   }
   const ir::FunctionIdx fn =
       fn_index(target->module, sig.item, sig.name, sig.params, sig.ret,
-               analyzer::kNoInst, std::move(comp_args));
+               callee_inst(target), std::move(comp_args));
   if (!fn.is_valid()) {
     return Val{size_one, error_type(), false, false};
   }
@@ -938,8 +956,11 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
 // Calls through an intrinsic declaration: known names map to
 // runtime hooks or IR operations. Undeclared legacy names
 // (print/println/panic) still arrive through lower_intrinsic.
-Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr, std::string_view name) {
+Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
+                                  const analyzer::CheckedModule::FnSig& sig,
+                                  const std::vector<ir::TypeIdx>& type_args) {
   const ast::ExprNode& node = ast.exprs[expr];
+  const std::string_view name = sig.name;
   if (name == "print" || name == "println" || name == "panic") {
     return lower_intrinsic(expr, name);
   }
@@ -999,29 +1020,74 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr, std::string_view name) {
   if (name == "str_len" || name == "str_byte" || name == "str_slice") {
     return lower_str_intrinsic(expr, name);
   }
+  if (name == "elem_ptr") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    if (call.args.size() != 2) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    std::vector<ir::OperandIdx> args;
+    for (usize i = 0; i < 2; ++i) {
+      Val arg = lower_expr(call.args[i], &sig.params[i]);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      args.push_back(arg_for(arg, sig.params[i]));
+    }
+    const ir::RegisterIdx result = emit(ir::Opcode::ElemOffset, sig.ret, args);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(result, sig.ret), sig.ret, false, false};
+  }
+  if (name == "size_of" || name == "align_of") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    if (!call.args.empty() || type_args.size() != 1) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::RegisterIdx measured = emit_type_query(
+        name == "size_of" ? ir::Opcode::TypeSizeOf : ir::Opcode::TypeAlignOf,
+        type_args[0]);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(measured, usize_type()), usize_type(), false, false};
+  }
   if (name == "alloc" || name == "dealloc") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    const usize arity = name == "alloc" ? 2 : 3;
-    if (call.args.size() != arity) {
+    const usize arity = name == "alloc" ? 1 : 2;
+    if (call.args.size() != arity || type_args.size() != 1) {
       internal(node.span, "intrinsic arity");
       return Val{size_one, error_type(), false, false};
     }
     const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
     const ir::TypeIdx usize_ty = usize_type();
-    const ir::TypeIdx byte_ref =
-        builder.reference_type(builder.primitive(ir::TypeTag::U8), true);
-    const std::vector<ir::TypeIdx> param_types =
-        name == "alloc"
-            ? std::vector<ir::TypeIdx>{usize_ty, usize_ty}
-            : std::vector<ir::TypeIdx>{byte_ref, usize_ty, usize_ty};
     std::vector<ir::OperandIdx> args;
-    for (usize i = 0; i < param_types.size(); ++i) {
-      Val arg = lower_expr(call.args[i], &param_types[i]);
+    for (usize i = 0; i < arity; ++i) {
+      Val arg = lower_expr(call.args[i], &sig.params[i]);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
-      args.push_back(arg_for(arg, param_types[i]));
+      args.push_back(arg_for(arg, sig.params[i]));
     }
+    // The runtime counts bytes; the compiler supplies the element size
+    // and alignment it reserved them at.
+    const ir::RegisterIdx bytes =
+        emit_type_query(ir::Opcode::TypeSizeOf, type_args[0]);
+    const ir::RegisterIdx align =
+        emit_type_query(ir::Opcode::TypeAlignOf, type_args[0]);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::RegisterIdx total =
+        emit(ir::Opcode::IntMul, usize_ty,
+             {to_operand(bytes, usize_ty), args[name == "alloc" ? 0 : 1]});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::OperandIdx size_op = to_operand(total, usize_ty);
+    const ir::OperandIdx align_op = to_operand(align, usize_ty);
     if (name == "dealloc") {
       const ir::ExternalFunctionIdx ext =
           declare_external("alcy_dealloc", builder.primitive(ir::TypeTag::Void),
@@ -1029,7 +1095,7 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr, std::string_view name) {
       emit_void(ir::Opcode::Call,
                 {builder.operand(ir::Operand::from_external_function(
                      ext, builder.primitive(ir::TypeTag::Function))),
-                 args[0], args[1], args[2]});
+                 args[0], size_op, align_op});
       return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
     }
     const ir::ExternalFunctionIdx ext =
@@ -1038,18 +1104,18 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr, std::string_view name) {
         emit(ir::Opcode::Call, ptr_ty,
              {builder.operand(ir::Operand::from_external_function(
                   ext, builder.primitive(ir::TypeTag::Function))),
-              args[0], args[1]});
+              size_op, align_op});
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    // The intrinsic's `&u8` return is a reference; the runtime
-    // pointer needs its pointee label for later field projections.
+    // The intrinsic's `&mut T` return is a reference; the runtime
+    // pointer needs its pointee label for later element offsets.
     const ir::RegisterIdx labelled =
-        emit(ir::Opcode::TypeCast, byte_ref, {to_operand(result, ptr_ty)});
+        emit(ir::Opcode::TypeCast, sig.ret, {to_operand(result, ptr_ty)});
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    return Val{to_operand(labelled, byte_ref), byte_ref, false, false};
+    return Val{to_operand(labelled, sig.ret), sig.ret, false, false};
   }
   if (name == "str_from_parts") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
@@ -2345,6 +2411,9 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
         return Val{size_one, error_type(), false, false};
       }
       return materialize(field_addr(base, field.name.name, node.span));
+    }
+    case ast::ExprKind::Deref: {
+      return materialize(place_addr(expr));
     }
     case ast::ExprKind::Question: {
       return lower_question(expr);

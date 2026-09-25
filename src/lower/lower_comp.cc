@@ -1072,6 +1072,7 @@ bool Lowerer::comp_eval_expr(u32 mod,
       return comp_eval_expr(mod, node.payload.get<ast::ExprBorrow>().inner,
                             scope, out);
     }
+    case ast::ExprKind::Deref: return false;
     case ast::ExprKind::Binary: return comp_eval_binary(mod, expr, scope, out);
     case ast::ExprKind::Cast: {
       const ast::ExprCast& cast = node.payload.get<ast::ExprCast>();

@@ -277,6 +277,8 @@ void LlvmIrEmitter::emit_instruction(const ir::Instruction& instr) {
     case Op::Ge:
     case Op::Gt:
     case Op::TypeCast:
+    case Op::TypeSizeOf:
+    case Op::TypeAlignOf:
     case Op::Select:
     case Op::Move:
     case Op::Borrow:
@@ -287,6 +289,7 @@ void LlvmIrEmitter::emit_instruction(const ir::Instruction& instr) {
     case Op::Store:
     case Op::Memcopy:
     case Op::GetElementPtr:
+    case Op::ElemOffset:
     case Op::ExtractValue:
     case Op::InsertValue:
     case Op::AtomicLoad:

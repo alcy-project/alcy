@@ -1,9 +1,9 @@
-// Exercises the heap intrinsics: allocation, unique ownership, a
+// Exercises the heap intrinsics: typed allocation, unique ownership, a
 // round trip through a function boundary, and release.
 struct Buf { data: &mut u8, cap: usize }
 
 fn make(cap: usize) -> Buf {
-  ret Buf { data: alloc(cap, 8), cap: cap }
+  ret Buf { data: alloc::<u8>(cap), cap: cap }
 }
 
 fn main() -> i32 {
@@ -12,7 +12,7 @@ fn main() -> i32 {
   if a.cap != 16 {
     bad = 1
   }
-  dealloc(a.data, a.cap, 8)
+  dealloc(a.data, a.cap)
 
   b := make(32)
   c := make(64)
@@ -25,11 +25,11 @@ fn main() -> i32 {
   if b.data == c.data {
     bad = 4
   }
-  dealloc(b.data, b.cap, 8)
-  dealloc(c.data, c.cap, 8)
+  dealloc(b.data, b.cap)
+  dealloc(c.data, c.cap)
 
   // A zero-size request still yields a distinct freeable pointer.
   z := make(0)
-  dealloc(z.data, 8, 8)
+  dealloc(z.data, 0)
   ret bad
 }

@@ -180,6 +180,13 @@ class Lowerer {
                        ir::TypeIdx type,
                        const std::vector<ir::OperandIdx>& ops);
   void emit_void(ir::Opcode op, const std::vector<ir::OperandIdx>& ops);
+  // Emits a type query, which measures a type instead of consuming
+  // operands: the measured type rides on the instruction.
+  ir::RegisterIdx emit_type_query(ir::Opcode op, ir::TypeIdx measure);
+  // Type arguments the checker bound to a generic function or
+  // intrinsic, or empty for a non-generic item.
+  const std::vector<ir::TypeIdx>& fn_instance_args(u32 module,
+                                                   u32 sig_index) const;
 
   struct SpanGuard {
     Lowerer* lowerer;
@@ -247,7 +254,9 @@ class Lowerer {
   ir::OperandIdx disc_operand(u32 discriminant);
   Val lower_call(ast::ExprIdx expr, const ir::TypeIdx* expected);
   Val lower_associated_call(ast::ExprIdx expr);
-  Val lower_intrinsic_call(ast::ExprIdx expr, std::string_view name);
+  Val lower_intrinsic_call(ast::ExprIdx expr,
+                           const analyzer::CheckedModule::FnSig& sig,
+                           const std::vector<ir::TypeIdx>& type_args);
   ir::TypeIdx usize_type();
   bool str_parts(Val str, ir::OperandIdx& bytes_out, ir::OperandIdx& len_out);
   ir::OperandIdx advance_ptr(ir::OperandIdx ptr,

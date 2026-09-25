@@ -401,6 +401,10 @@ class Desugar {
         visit_expr(node.payload.get<ast::ExprBorrow>().inner);
         break;
       }
+      case ast::ExprKind::Deref: {
+        visit_expr(node.payload.get<ast::ExprDeref>().inner);
+        break;
+      }
       case ast::ExprKind::Binary: {
         visit_expr(node.payload.get<ast::ExprBinary>().lhs);
         visit_expr(node.payload.get<ast::ExprBinary>().rhs);

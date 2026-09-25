@@ -46,16 +46,30 @@
   - `str_from_parts(ptr: &u8, len: usize) -> str` builds a view over
     caller-provided bytes. Only core uses it, to expose `String` as
     `str`; arbitrary pointers are the caller's responsibility.
-  - `alloc(size: usize, align: usize) -> &mut u8` reserves `size`
-    bytes aligned to `align` (a power of two) and returns the unique
-    owning reference. Bytes are uninitialized. A zero `size` still
-    yields a distinct, freeable pointer. A null result on allocation
-    failure is a runtime condition the caller must handle.
-  - `dealloc(ptr: &mut u8, size: usize, align: usize)` releases a
-    block, consuming the reference. `size` and `align` must match the
-    values passed to `alloc`. There is no garbage collector; dropping
-    an owned reference is not a runtime operation, so a leaked block
-    leaks.
+  - `alloc<T>(count: usize) -> &mut T` reserves room for `count`
+    elements of `T` at `T`'s own size and alignment, and returns the
+    unique owning reference. Elements are uninitialized. A zero
+    `count` still yields a distinct, freeable pointer. A null result
+    on allocation failure is a runtime condition the caller must
+    handle.
+  - `dealloc<T>(ptr: &mut T, count: usize)` releases a block,
+    consuming the reference. `count` must match the value passed to
+    `alloc`. There is no garbage collector; dropping an owned
+    reference is not a runtime operation, so a leaked block leaks.
+  - `size_of<T>() -> usize` and `align_of<T>() -> usize` report the
+    allocation size and the required alignment of `T`.
+  - `elem_ptr<T>(ptr: &mut T, index: usize) -> &mut T` offsets a
+    pointer by whole elements. It is unchecked: the result is in
+    bounds exactly when the caller keeps `index` within the buffer's
+    length, so the growable containers perform the bounds check before
+    calling it.
+  - The four allocation intrinsics are generic. `elem_ptr` and
+    `dealloc` recover `T` from the pointee of their reference
+    argument, so a call admits one instantiation; `alloc`, `size_of`,
+    and `align_of` have no argument to recover it from and take `T`
+    from a turbofish. A generic intrinsic's declared shape is still
+    checked against the canonical one, with each type parameter bound
+    to a placeholder.
   - `&u8` and `&mut u8` are not indexable. Element access through a
     heap pointer arrives with the growable containers, which own the
     bounds check.
@@ -66,6 +80,8 @@
 - Calls to intrinsics check like ordinary calls. Intrinsics have no
   bodies to lower, borrow, or specialize; `comp` parameters on
   intrinsics are rejected.
+- An intrinsic may be generic. Generic intrinsics register one
+  signature per instantiation, resolved at their call sites.
 
 ## Structs and enums
 

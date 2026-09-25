@@ -33,7 +33,7 @@ TEST_CASE("Static assertion for IR elements") {
   static_assert(sizeof(FunctionMeta) == 20);
 
   static_assert(sizeof(Immutable) == 16);
-  static_assert(sizeof(Instruction) == 16);
+  static_assert(sizeof(Instruction) == 20);
   static_assert(sizeof(InstructionFlags) == 1);
   static_assert(sizeof(Opcode) == 1);
   static_assert(sizeof(Operand) == 12);
