@@ -62,12 +62,6 @@ struct NominalEntry {
   bool complete = false;
 };
 
-struct BlessedEntry {
-  bool is_result;
-  std::vector<ir::TypeIdx> args;
-  ir::TypeIdx type;
-};
-
 // One instantiation of a generic enum: the checked shape of
 // `Nominal<args>`, interned once and shared by identity.
 struct GenericInstance {
@@ -92,7 +86,6 @@ class Checker {
   ir::StorageBuilder builder;
   str::StringInterner interner;
   std::vector<NominalEntry> nominals;
-  std::vector<BlessedEntry> blessed;
   std::vector<GenericInstance> generic_instances;
   // Active type-parameter scope: innermost last. Pushed while
   // instantiating a generic enum or checking its members.
@@ -144,8 +137,6 @@ class Checker {
   // instantiation is fixed later against the expectation, so the
   // error type marks "resolve from context".
   ir::TypeIdx variant_owner_type(NominalEntry* enom);
-  ir::TypeIdx intern_blessed(bool is_result,
-                             const std::vector<ir::TypeIdx>& args);
   bool walk_module_prefix(u32 module,
                           ast::PathIdx path,
                           std::string_view what,
@@ -176,8 +167,6 @@ class Checker {
   static const char* pretty_tag(ir::TypeTag tag);
   bool types_equal(ir::TypeIdx a, ir::TypeIdx b);
   bool types_equal_inner(ir::TypeIdx a, ir::TypeIdx b, std::vector<u64>& seen);
-  const BlessedEntry* blessed_find(ir::TypeIdx idx) const;
-  bool is_must_use(ir::TypeIdx idx) const;
   ir::TypeIdx unify(ir::TypeIdx expected,
                     ir::TypeIdx actual,
                     diag::Span span,
@@ -233,7 +222,6 @@ class Checker {
       AssocFunction,
       UnitVariant,
       TupleVariant,
-      BlessedCtor,
       Type,
     };
     Kind kind = Kind::Type;
@@ -242,16 +230,20 @@ class Checker {
     const CheckedModule::MethodInfo* method = nullptr;
     NominalEntry* enom = nullptr;
     u32 variant = 0;
-    const BlessedEntry* blessed = nullptr;
-    bool blessed_first = true;
-    std::string_view ctor_name;
   };
-  bool resolve_blessed_ctor(std::string_view name, PathValue& out);
   bool resolve_value_path(u32 module, ast::PathIdx path, PathValue& out);
   bool resolve_variant_path(u32 module, ast::PathIdx path, PathValue& out);
   std::vector<ir::TypeIdx> variant_payloads(const PathValue& resolved,
                                             ir::TypeIdx enum_type,
                                             diag::Span span);
+  // Binds type parameters from constructor arguments when a field's
+  // declared type is exactly a parameter. Returns null when any
+  // parameter stays unbound.
+  const GenericInstance* infer_from_payload_args(
+      u32 module,
+      u32 nominal,
+      const PathValue& resolved,
+      std::span<const ast::ExprIdx> args);
   NominalEntry* resolve_struct_path(u32 module, ast::PathIdx path);
   void collect_pattern_idents(ast::PatternIdx pattern,
                               std::vector<std::string_view>& out);
@@ -334,9 +326,6 @@ class Checker {
   void mark_variant_covered(ast::PatternIdx pattern,
                             std::span<const ast::ItemEnumVariant> variants,
                             std::vector<bool>& covered);
-  void mark_blessed_covered(u32 module,
-                            ast::PatternIdx pattern,
-                            bool covered[2]);
   ir::TypeIdx check_match(u32 module,
                           ast::ExprIdx expr,
                           const ir::TypeIdx* expected);

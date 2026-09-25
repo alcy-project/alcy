@@ -55,13 +55,6 @@ void Checker::register_nominals() {
         name = node.payload.get<ast::ItemEnum>().name.name;
         span = node.payload.get<ast::ItemEnum>().name.span;
       }
-      if (name == "Result" || name == "Option") {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerReservedName, span,
-                     "'{}' is reserved for the blessed type", name);
-        (void)index;
-        continue;
-      }
       bool duplicate = false;
       for (const NominalEntry& entry : nominals) {
         if (entry.module == m && entry.name == name) {
@@ -223,30 +216,6 @@ ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
   return entry.type;
 }
 
-ir::TypeIdx Checker::intern_blessed(bool is_result,
-                                    const std::vector<ir::TypeIdx>& args) {
-  for (const BlessedEntry& entry : blessed) {
-    if (entry.is_result == is_result && entry.args == args) {
-      return entry.type;
-    }
-  }
-  const char* first = is_result ? "Ok" : "Some";
-  const char* second = is_result ? "Err" : "None";
-  ir::EnumVariantTypeSeq variants;
-  variants.push(builder.enum_variant(interner.intern(first), {args[0], 1}));
-  if (is_result) {
-    variants.push(builder.enum_variant(interner.intern(second), {args[1], 1}));
-  } else {
-    ir::TypeSeq empty;
-    variants.push(
-        builder.enum_variant(interner.intern(second), empty.finish()));
-  }
-  ir::TypeIdx type = builder.enum_type(
-      interner.intern(is_result ? "Result" : "Option"), variants.finish());
-  blessed.push_back(BlessedEntry{is_result, args, type});
-  return type;
-}
-
 const GenericInstance* Checker::generic_find(ir::TypeIdx idx) const {
   for (const GenericInstance& instance : generic_instances) {
     if (instance.type.idx == idx.idx) {
@@ -292,6 +261,63 @@ ir::TypeIdx Checker::variant_owner_type(NominalEntry* enom) {
     return error_type();
   }
   return intern_nominal(*enom);
+}
+
+// Infers a generic instantiation from constructor arguments: a field
+// whose declared type is exactly `T` binds `T` to that argument's type.
+// The caller re-checks each argument against the resolved payloads, so
+// this pass only reads types and never commits to a payload check.
+const GenericInstance* Checker::infer_from_payload_args(
+    u32 module,
+    u32 nominal,
+    const PathValue& resolved,
+    std::span<const ast::ExprIdx> args) {
+  const ast::ItemEnum& decl =
+      ast.items[nominals[nominal].item].payload.get<ast::ItemEnum>();
+  const std::span<const ast::TypeIdx> fields =
+      decl.variants[resolved.variant].fields;
+  if (args.size() != fields.size()) {
+    return nullptr;
+  }
+  std::vector<ir::TypeIdx> bound(decl.params.size(),
+                                 ir::TypeIdx(base::kInvalidIdx));
+  for (usize i = 0; i < fields.size(); ++i) {
+    const ast::TypeNode& field = ast.types[fields[i]];
+    if (field.kind != ast::TypeKind::Path ||
+        !field.payload.get<ast::TypePath>().args.empty()) {
+      continue;
+    }
+    const ast::Path& path = ast.paths[field.payload.get<ast::TypePath>().path];
+    if (path.segments.size() != 1) {
+      continue;
+    }
+    u32 slot = decl.params.size();
+    for (u32 p = 0; p < decl.params.size(); ++p) {
+      if (decl.params[p].name == path.segments[0].name) {
+        slot = p;
+        break;
+      }
+    }
+    if (slot == decl.params.size()) {
+      continue;
+    }
+    const ir::TypeIdx actual = check_expr(module, args[i], nullptr);
+    if (is_error(actual)) {
+      return nullptr;
+    }
+    if (bound[slot].is_valid() && bound[slot].idx != actual.idx) {
+      // Conflicting bindings need full unification variables; leave
+      // the case to the annotation path.
+      return nullptr;
+    }
+    bound[slot] = actual;
+  }
+  for (const ir::TypeIdx arg : bound) {
+    if (!arg.is_valid()) {
+      return nullptr;
+    }
+  }
+  return generic_find(instantiate_generic(nominal, bound, diag::Span{}));
 }
 
 // Interns one instantiation of a generic enum, substituting the
@@ -481,23 +507,6 @@ ir::TypeIdx Checker::resolve_type(u32 module,
             }
             return type_params[i - 1].second;
           }
-        }
-        if (name == "Result" || name == "Option") {
-          const bool is_result = name == "Result";
-          const usize want = is_result ? 2 : 1;
-          if (node.payload.get<ast::TypePath>().args.size() != want) {
-            const u32 index = bag.emit(
-                diag::Severity::Error, kAnalyzerArityMismatch, node.span,
-                "'{}' expects {} argument{}", name, want, want == 1 ? "" : "s");
-            (void)index;
-            return error_type();
-          }
-          std::vector<ir::TypeIdx> args;
-          args.reserve(node.payload.get<ast::TypePath>().args.size());
-          for (ast::TypeIdx arg : node.payload.get<ast::TypePath>().args) {
-            args.push_back(resolve_type(module, arg, self));
-          }
-          return intern_blessed(is_result, args);
         }
       }
       u32 target_module = kNoModule;
@@ -902,9 +911,9 @@ std::string_view Checker::nominal_name(ir::TypeIdx idx) const {
       return entry.name;
     }
   }
-  for (const BlessedEntry& entry : blessed) {
-    if (entry.type.idx == idx.idx) {
-      return entry.is_result ? "Result" : "Option";
+  for (const GenericInstance& instance : generic_instances) {
+    if (instance.type.idx == idx.idx) {
+      return nominals[instance.nominal].name;
     }
   }
   return "type";
@@ -1022,19 +1031,6 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
     case ir::TypeTag::Enum: return false;
     default: return true;
   }
-}
-
-const BlessedEntry* Checker::blessed_find(ir::TypeIdx idx) const {
-  for (const BlessedEntry& entry : blessed) {
-    if (entry.type.idx == idx.idx) {
-      return &entry;
-    }
-  }
-  return nullptr;
-}
-
-bool Checker::is_must_use(ir::TypeIdx idx) const {
-  return blessed_find(idx) != nullptr;
 }
 
 // Unifies actual against expected, emitting a mismatch diagnostic.
@@ -1435,9 +1431,9 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
           break;
         }
         bool found = false;
-        for (usize p = 0; p < impl.params.size(); ++p) {
-          if (impl.params[p].name == path.segments[0].name) {
-            scope.emplace_back(impl.params[p].name, args[i]);
+        for (const auto& param : impl.params) {
+          if (param.name == path.segments[0].name) {
+            scope.emplace_back(param.name, args[i]);
             found = true;
             break;
           }
@@ -1482,7 +1478,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     }
     // The callee resolves its own parameters only: the caller scope
     // is hidden so a same-named parameter cannot leak through.
-    const std::vector<std::pair<std::string_view, ir::TypeIdx>> outer_scope =
+    std::vector<std::pair<std::string_view, ir::TypeIdx>> outer_scope =
         std::move(type_params);
     type_params.clear();
     for (const auto& binding : scope) {
@@ -1560,24 +1556,6 @@ void Checker::record_call(u32 module,
   }
 }
 
-bool Checker::resolve_blessed_ctor(std::string_view name, PathValue& out) {
-  const bool want_result = name == "Ok" || name == "Err";
-  const bool want_option = name == "Some" || name == "None";
-  if (!want_result && !want_option) {
-    return false;
-  }
-  for (const BlessedEntry& entry : blessed) {
-    if (entry.is_result == want_result) {
-      out.kind = PathValue::Kind::BlessedCtor;
-      out.blessed = &entry;
-      out.blessed_first = (name == "Ok" || name == "Some");
-      out.ctor_name = name;
-      return true;
-    }
-  }
-  return false;
-}
-
 // Resolves an expression path to its value meaning. Locals shadow
 // everything; nominal type names resolve to Kind::Type so callers
 // can report "found type" instead of "unknown".
@@ -1618,9 +1596,6 @@ bool Checker::resolve_value_path(u32 module,
       } else {
         out.kind = PathValue::Kind::TupleVariant;
       }
-      return true;
-    }
-    if (resolve_blessed_ctor(name, out)) {
       return true;
     }
     if (find_nominal_in_scope(module, name) != nullptr) {
@@ -1714,10 +1689,6 @@ bool Checker::resolve_value_path(u32 module,
         }
       }
     }
-    if ((head == "Result" || head == "Option") &&
-        resolve_blessed_ctor(member, out)) {
-      return true;
-    }
     const u32 index =
         bag.emit(diag::Severity::Error, kAnalyzerUnknownValue, node.span,
                  "unresolved value '{}::{}'", head, member);
@@ -1746,9 +1717,9 @@ bool Checker::resolve_value_path(u32 module,
 }
 
 // Resolves a pattern/callee path to an enum variant: a bare name
-// in scope, `Enum::Variant`, `module::Variant`, or a blessed
-// constructor (`Ok`, `Err`, `Some`, `None`; the instantiation is
-// fixed later against the scrutinee type, so blessed stays null).
+// in scope, `Enum::Variant`, or `module::Variant`. A generic owner's
+// type is left unresolved here; the scrutinee or the call
+// expectation fixes the instantiation later.
 bool Checker::resolve_variant_path(u32 module,
                                    ast::PathIdx path,
                                    PathValue& out) {
@@ -1764,13 +1735,6 @@ bool Checker::resolve_variant_path(u32 module,
       out.enom = match.enom;
       out.variant = match.variant;
       out.type = variant_owner_type(match.enom);
-      return true;
-    }
-    if (name == "Ok" || name == "Err" || name == "Some" || name == "None") {
-      out.kind = PathValue::Kind::BlessedCtor;
-      out.blessed = nullptr;
-      out.blessed_first = (name == "Ok" || name == "Some");
-      out.ctor_name = name;
       return true;
     }
     return false;
@@ -1815,58 +1779,30 @@ bool Checker::resolve_variant_path(u32 module,
         }
       }
     }
-    if ((head == "Result" || head == "Option") &&
-        (member == "Ok" || member == "Err" || member == "Some" ||
-         member == "None")) {
-      const bool want_result = head == "Result";
-      const bool first = (member == "Ok" || member == "Some");
-      if ((want_result && (member == "Ok" || member == "Err")) ||
-          (!want_result && (member == "Some" || member == "None"))) {
-        out.kind = PathValue::Kind::BlessedCtor;
-        out.blessed = nullptr;
-        out.blessed_first = first;
-        out.ctor_name = member;
-        return true;
-      }
-    }
     return false;
   }
   return false;
 }
 
 // Payload types of a resolved variant against a known enum type.
+// Callers push the owner's type-parameter substitution first when
+// the owner is a generic instantiation, so `resolve_type` sees `T`.
 std::vector<ir::TypeIdx> Checker::variant_payloads(const PathValue& resolved,
                                                    ir::TypeIdx enum_type,
                                                    diag::Span span) {
-  if (is_error(enum_type)) {
+  if (is_error(enum_type) || resolved.enom == nullptr) {
     return {};
   }
-  if (resolved.kind != PathValue::Kind::BlessedCtor) {
-    const ast::ItemNode& decl = ast.items[resolved.enom->item];
-    const std::span<const ast::ItemEnumVariant>& variants =
-        decl.payload.get<ast::ItemEnum>().variants;
-    std::vector<ir::TypeIdx> payloads;
-    payloads.reserve(variants[resolved.variant].fields.size());
-    for (ast::TypeIdx field : variants[resolved.variant].fields) {
-      payloads.push_back(resolve_type(resolved.enom->module, field, nullptr));
-    }
-    return payloads;
+  (void)span;
+  const ast::ItemNode& decl = ast.items[resolved.enom->item];
+  const std::span<const ast::ItemEnumVariant>& variants =
+      decl.payload.get<ast::ItemEnum>().variants;
+  std::vector<ir::TypeIdx> payloads;
+  payloads.reserve(variants[resolved.variant].fields.size());
+  for (ast::TypeIdx field : variants[resolved.variant].fields) {
+    payloads.push_back(resolve_type(resolved.enom->module, field, nullptr));
   }
-  const BlessedEntry* entry = blessed_find(enum_type);
-  if (entry == nullptr) {
-    const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, span,
-                 "blessed constructor on a non-blessed type");
-    (void)index;
-    return {};
-  }
-  if (resolved.blessed_first) {
-    return {entry->args[0]};
-  }
-  if (entry->is_result) {
-    return {entry->args[1]};
-  }
-  return {};
+  return payloads;
 }
 
 NominalEntry* Checker::resolve_struct_path(u32 module, ast::PathIdx path) {
@@ -2003,14 +1939,24 @@ void Checker::check_main(u32 module, ast::ItemIdx fn) {
   if (tag == ir::TypeTag::Void || tag == ir::TypeTag::I32) {
     return;
   }
-  if (const BlessedEntry* entry = blessed_find(ret)) {
-    if (entry->is_result && is_void(entry->args[0])) {
-      return;
+  // An enum return is accepted structurally: the first variant must
+  // carry exactly one `()` payload, so the entry thunk can map the
+  // first discriminant to exit code 0. See docs/adr/0009.
+  if (tag == ir::TypeTag::Enum) {
+    const ir::EnumType& shape =
+        builder.enum_types()[builder.types()[ret].as_enum()];
+    if (shape.variants.size() == 2) {
+      const ir::EnumVariantType& first =
+          builder.enum_variant_types()[shape.variants.head()];
+      if (first.fields.size() == 1 && is_void(first.fields.head())) {
+        return;
+      }
     }
   }
   const u32 index =
       bag.emit(diag::Severity::Error, kAnalyzerBadReturn, node.span,
-               "'main' must return '()', 'i32', or 'Result<(), E>'");
+               "'main' must return '()', 'i32', or a two-variant enum "
+               "whose first variant holds '()'");
   (void)index;
 }
 
@@ -2140,10 +2086,7 @@ diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
   ir::Storage storage = std::move(checker.builder).build();
   checker.validate_cycles(storage);
   CheckedPackage package{
-      tree, std::move(storage), std::move(checker.modules), {}, {}};
-  for (const BlessedEntry& entry : checker.blessed) {
-    package.blessed.push_back({entry.is_result, entry.type, entry.args});
-  }
+      tree, std::move(storage), std::move(checker.modules), {}};
   // Generic instantiations lower as ordinary enums; publish their
   // variant names under the defining module for lowering lookups.
   // Their types publish in instantiation order for table keying.

@@ -101,8 +101,7 @@ bool Checker::bind_pattern(u32 module,
           bind_error_idents(module, pattern);
           return true;
         }
-        if (resolved.kind != PathValue::Kind::TupleVariant &&
-            resolved.kind != PathValue::Kind::BlessedCtor) {
+        if (resolved.kind != PathValue::Kind::TupleVariant) {
           const u32 index =
               bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, node.span,
                        "not a tuple variant");
@@ -110,14 +109,9 @@ bool Checker::bind_pattern(u32 module,
           bind_error_idents(module, pattern);
           return true;
         }
-        if (resolved.kind == PathValue::Kind::TupleVariant) {
-          if (!is_error(resolved.type)) {
-            unify(type, resolved.type, node.span, "tuple variant pattern");
-          }
-        }
         std::vector<ir::TypeIdx> payloads;
-        if (!is_error(resolved.type) ||
-            resolved.kind == PathValue::Kind::BlessedCtor) {
+        if (!is_error(resolved.type)) {
+          unify(type, resolved.type, node.span, "tuple variant pattern");
           payloads = variant_payloads(resolved, type, node.span);
         } else {
           // Generic enum: the scrutinee selects the instantiation.
@@ -652,7 +646,7 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
           owner = *expected;
         }
         modules[module].variants.push_back(
-            {path, false, true, owner, resolved.variant, cur_inst});
+            {path, owner, resolved.variant, cur_inst});
         if (expected != nullptr) {
           return unify(*expected, owner, span, "path");
         }
@@ -669,31 +663,6 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
       const u32 index =
           bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
                    "callee needs arguments");
-      (void)index;
-      return error_type();
-    }
-    case PathValue::Kind::BlessedCtor: {
-      // Only `None` stands alone as a value; payload constructors
-      // need call syntax. The expectation selects the instantiation.
-      if (resolved.ctor_name != "None") {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
-                     "callee needs arguments");
-        (void)index;
-        return error_type();
-      }
-      if (expected != nullptr) {
-        if (const BlessedEntry* entry = blessed_find(*expected)) {
-          if (!entry->is_result) {
-            modules[module].variants.push_back(
-                {path, true, false, *expected, 0, cur_inst});
-            return *expected;
-          }
-        }
-      }
-      const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
-                   "cannot infer the blessed type; add an annotation");
       (void)index;
       return error_type();
     }
@@ -917,8 +886,7 @@ ir::TypeIdx Checker::check_fmt_format(u32 module,
 }
 
 // Calls through a resolved callee path: free and associated
-// functions, tuple variant constructors (user and blessed), and
-// the `print` intrinsic.
+// functions, tuple variant constructors, and the `print` intrinsic.
 ir::TypeIdx Checker::check_call(u32 module,
                                 ast::ExprIdx expr,
                                 const ir::TypeIdx* expected) {
@@ -1022,51 +990,22 @@ ir::TypeIdx Checker::check_call(u32 module,
     }
     return method->ret;
   }
-  if (resolved.kind == PathValue::Kind::TupleVariant ||
-      resolved.kind == PathValue::Kind::BlessedCtor) {
+  if (resolved.kind == PathValue::Kind::TupleVariant) {
     ir::TypeIdx enum_type = resolved.type;
     std::vector<ir::TypeIdx> payloads;
-    if (resolved.kind == PathValue::Kind::BlessedCtor) {
-      // The annotation (or other expectation) selects the
-      // instantiation; any already-interned same-kind entry is only
-      // a fallback for inference-free positions.
-      const BlessedEntry* entry = nullptr;
-      if (expected != nullptr) {
-        entry = blessed_find(*expected);
-      }
-      if (entry == nullptr) {
-        entry = resolved.blessed;
-      }
-      if (entry == nullptr) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
-                     "cannot infer the blessed type; add an annotation");
-        (void)index;
-        for (ast::ExprIdx arg : args) {
-          check_expr(module, arg, nullptr);
-        }
-        return error_type();
-      }
-      const bool wants_result =
-          resolved.ctor_name == "Ok" || resolved.ctor_name == "Err";
-      if (wants_result != entry->is_result) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, span,
-                     "'{}' is not a variant of '{}'", resolved.ctor_name,
-                     entry->is_result ? "Option" : "Result");
-        (void)index;
-        return error_type();
-      }
-      enum_type = entry->type;
-      payloads = variant_payloads(resolved, enum_type, span);
-    } else if (!is_error(enum_type)) {
+    if (!is_error(enum_type)) {
       payloads = variant_payloads(resolved, enum_type, span);
     } else {
-      // Generic enum: the expectation selects the instantiation.
+      // Generic enum: the expectation selects the instantiation. With
+      // no expectation, a payload whose declared type is exactly a type
+      // parameter binds that parameter to the argument's type.
+      const u32 nominal = nominal_index(resolved.enom);
       const GenericInstance* instance =
           expected != nullptr ? generic_find(*expected) : nullptr;
-      if (instance == nullptr ||
-          instance->nominal != nominal_index(resolved.enom)) {
+      if (instance == nullptr || instance->nominal != nominal) {
+        instance = infer_from_payload_args(module, nominal, resolved, args);
+      }
+      if (instance == nullptr) {
         const u32 index =
             bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
                      "cannot infer the generic type; add an annotation");
@@ -1077,17 +1016,12 @@ ir::TypeIdx Checker::check_call(u32 module,
         return error_type();
       }
       const usize kept = push_generic_scope(*instance);
-      payloads = variant_payloads(resolved, *expected, span);
+      payloads = variant_payloads(resolved, instance->type, span);
       pop_generic_scope(kept);
-      enum_type = *expected;
+      enum_type = instance->type;
     }
-    if (resolved.kind == PathValue::Kind::TupleVariant) {
-      modules[module].variants.push_back(
-          {path, false, true, enum_type, resolved.variant, cur_inst});
-    } else {
-      modules[module].variants.push_back(
-          {path, true, resolved.blessed_first, enum_type, 0, cur_inst});
-    }
+    modules[module].variants.push_back(
+        {path, enum_type, resolved.variant, cur_inst});
     if (args.size() != payloads.size()) {
       const u32 index = bag.emit(diag::Severity::Error, kAnalyzerArityError,
                                  span, "variant expects {} arguments, found {}",
@@ -1139,58 +1073,6 @@ ir::TypeIdx Checker::check_method_call(u32 module,
   const std::string_view name =
       node.payload.get<ast::ExprMethodCall>().name.name;
   const diag::Span span = node.span;
-  if (const BlessedEntry* entry = blessed_find(receiver)) {
-    const ir::TypeIdx ok = entry->args[0];
-    if (name == "unwrap") {
-      if (!node.payload.get<ast::ExprMethodCall>().args.empty()) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
-                     "'unwrap' expects 0 arguments, found {}",
-                     node.payload.get<ast::ExprMethodCall>().args.size());
-        (void)index;
-        return error_type();
-      }
-      if (expected != nullptr) {
-        return unify(*expected, ok, span, "method call");
-      }
-      return ok;
-    }
-    if (name == "expect") {
-      if (node.payload.get<ast::ExprMethodCall>().args.size() != 1) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
-                     "'expect' expects 1 argument, found {}",
-                     node.payload.get<ast::ExprMethodCall>().args.size());
-        (void)index;
-        return error_type();
-      }
-      const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
-      const ir::TypeIdx actual = check_expr(
-          module, node.payload.get<ast::ExprMethodCall>().args[0], &str);
-      unify(str, actual,
-            ast.exprs[node.payload.get<ast::ExprMethodCall>().args[0]].span,
-            "expect argument");
-      if (expected != nullptr) {
-        return unify(*expected, ok, span, "method call");
-      }
-      return ok;
-    }
-    if (name == "is_ok" || name == "is_err") {
-      if (!node.payload.get<ast::ExprMethodCall>().args.empty()) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
-                     "'{}' expects 0 arguments, found {}", name,
-                     node.payload.get<ast::ExprMethodCall>().args.size());
-        (void)index;
-        return error_type();
-      }
-      const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
-      if (expected != nullptr) {
-        return unify(*expected, boolean, span, "method call");
-      }
-      return boolean;
-    }
-  }
   ir::TypeIdx nominal = receiver;
   const ir::TypeTag tag = tag_of(receiver);
   if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
@@ -1417,48 +1299,59 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
   return struct_type;
 }
 
+// `?` propagates within one enum type: the scrutinee and the enclosing
+// return type must be the same type. The first variant yields its
+// first payload; any other variant returns the scrutinee unchanged.
+// See docs/adr/0009.
 ir::TypeIdx Checker::check_question(u32 module,
                                     ast::ExprIdx expr,
                                     const ir::TypeIdx* expected) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ir::TypeIdx inner =
       check_expr(module, node.payload.get<ast::ExprQuestion>().inner, nullptr);
-  const BlessedEntry* scrutinee = blessed_find(inner);
-  if (scrutinee == nullptr) {
+  if (tag_of(inner) != ir::TypeTag::Enum) {
     const u32 index = bag.emit(diag::Severity::Error, kAnalyzerBadQuestion,
-                               node.span, "'?' needs Result or Option");
+                               node.span, "'?' needs an enum operand");
     (void)index;
     return error_type();
   }
-  const BlessedEntry* enclosing = blessed_find(fn_ret);
-  if (enclosing == nullptr) {
+  if (tag_of(fn_ret) != ir::TypeTag::Enum) {
     const u32 index =
         bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, node.span,
-                 "'?' needs an enclosing Result or Option function");
+                 "'?' needs an enclosing function returning the same enum");
     (void)index;
     return error_type();
   }
-  if (scrutinee->is_result != enclosing->is_result ||
-      scrutinee->args.size() != enclosing->args.size()) {
+  if (inner.idx != fn_ret.idx) {
     const u32 index =
         bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, node.span,
                  "'?' type does not match the function return type");
     (void)index;
     return error_type();
   }
-  for (usize i = 0; i < scrutinee->args.size(); ++i) {
-    if (!types_equal(scrutinee->args[i], enclosing->args[i])) {
-      const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, node.span,
-                   "'?' type does not match the function return type");
-      (void)index;
-      return error_type();
-    }
+  const ir::EnumType& shape =
+      builder.enum_types()[builder.types()[inner].as_enum()];
+  if (shape.variants.size() < 2) {
+    const u32 index =
+        bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, node.span,
+                 "'?' needs an enum with a success and a failure variant");
+    (void)index;
+    return error_type();
   }
+  const ir::EnumVariantType& first =
+      builder.enum_variant_types()[shape.variants.head()];
+  if (first.fields.empty()) {
+    const u32 index =
+        bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, node.span,
+                 "'?' needs a first variant carrying a value");
+    (void)index;
+    return error_type();
+  }
+  const ir::TypeIdx ok = first.fields.head();
   if (expected != nullptr) {
-    return unify(*expected, scrutinee->args[0], node.span, "'?'");
+    return unify(*expected, ok, node.span, "'?'");
   }
-  return scrutinee->args[0];
+  return ok;
 }
 
 ir::TypeIdx Checker::check_cast(u32 module,
@@ -1591,6 +1484,7 @@ void Checker::check_exhaustive(u32 module,
                                ir::TypeIdx scrutinee,
                                std::span<const ast::ExprMatchArm> arms,
                                diag::Span span) {
+  (void)module;
   bool wildcard = false;
   std::vector<bool> covered_bool{false, false};
   for (const ast::ExprMatchArm& arm : arms) {
@@ -1630,27 +1524,6 @@ void Checker::check_exhaustive(u32 module,
       break;
     }
     if (decl == nullptr) {
-      for (const BlessedEntry& entry : blessed) {
-        if (entry.type.idx != scrutinee.idx) {
-          continue;
-        }
-        // Blessed constructors cover by side: Ok/Some is variant 0,
-        // Err/None is variant 1. Unconditional patterns cover both.
-        bool covered[2] = {false, false};
-        for (const ast::ExprMatchArm& arm : arms) {
-          mark_blessed_covered(module, arm.pattern, covered);
-        }
-        if (covered[0] && covered[1]) {
-          return;
-        }
-        const char* missing = covered[0] ? (entry.is_result ? "Err" : "None")
-                                         : (entry.is_result ? "Ok" : "Some");
-        const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerNonExhaustiveMatch, span,
-                     "non-exhaustive match: '{}' not covered", missing);
-        (void)index;
-        return;
-      }
       // Generic instantiations share their nominal's declaration.
       for (const GenericInstance& instance : generic_instances) {
         if (instance.type.idx != scrutinee.idx) {
@@ -1797,38 +1670,6 @@ void Checker::mark_variant_covered(
     case ast::PatternKind::Or: {
       for (ast::PatternIdx alt : node.payload.or_pat.alternatives) {
         mark_variant_covered(alt, variants, covered);
-      }
-      return;
-    }
-    default: return;
-  }
-}
-
-void Checker::mark_blessed_covered(u32 module,
-                                   ast::PatternIdx pattern,
-                                   bool covered[2]) {
-  const ast::PatternNode& node = ast.patterns[pattern];
-  switch (node.kind) {
-    case ast::PatternKind::Wildcard:
-    case ast::PatternKind::Ident:
-    case ast::PatternKind::MutIdent: return;
-    case ast::PatternKind::Tuple: {
-      if (!node.payload.tuple.path.is_valid()) {
-        return;
-      }
-      PathValue resolved;
-      if (!resolve_variant_path(module, node.payload.tuple.path, resolved)) {
-        return;
-      }
-      if (resolved.kind != PathValue::Kind::BlessedCtor) {
-        return;
-      }
-      covered[resolved.blessed_first ? 0 : 1] = true;
-      return;
-    }
-    case ast::PatternKind::Or: {
-      for (ast::PatternIdx alt : node.payload.or_pat.alternatives) {
-        mark_blessed_covered(module, alt, covered);
       }
       return;
     }
@@ -2430,20 +2271,12 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
     case ast::StmtKind::Expr: {
       const ir::TypeIdx type =
           check_expr(module, node.payload.get<ast::StmtExpr>().value, nullptr);
-      const diag::Span span =
-          ast.exprs[node.payload.get<ast::StmtExpr>().value].span;
       if (is_void(type) || is_error(type) || is_never(type)) {
         return;
       }
-      if (is_must_use(type)) {
-        const u32 index = bag.emit(
-            diag::Severity::Warning, kAnalyzerMustUse, span,
-            "unused Result/Option value; bind or discard it explicitly");
-        (void)index;
-        return;
-      }
       const u32 index = bag.emit(
-          diag::Severity::Warning, kAnalyzerMustUse, span,
+          diag::Severity::Warning, kAnalyzerMustUse,
+          ast.exprs[node.payload.get<ast::StmtExpr>().value].span,
           "unused non-() value; discard it explicitly with `_ := ...`");
       (void)index;
       return;

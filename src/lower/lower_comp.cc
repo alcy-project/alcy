@@ -297,28 +297,12 @@ bool Lowerer::comp_match_pattern(u32 mod,
           return false;
         }
         const std::vector<ir::TypeIdx> types =
-            variant_payload(value.type, variant, false);
+            variant_payload(value.type, variant);
         if (types.size() != value.value.fields.size()) {
           return comp_fail(span, "variant arity");
         }
         for (usize i = 0; i < types.size(); ++i) {
           payloads.push_back(CompVal{value.value.fields[i], types[i]});
-        }
-      } else if (value.value.tag == CompValue::Tag::Blessed) {
-        const auto* entry = blessed_entry(value.type);
-        if (entry == nullptr) {
-          return comp_fail(span, "pattern is not comp-evaluable");
-        }
-        bool first = false;
-        if (!blessed_ctor_side(name, entry->is_result, first) ||
-            first != value.value.blessed_ok) {
-          return false;
-        }
-        if (value.value.fields.size() > 1) {
-          return comp_fail(span, "variant arity");
-        }
-        for (const CompValue& field : value.value.fields) {
-          payloads.push_back(CompVal{field, entry->args[0]});
         }
       } else {
         return false;
@@ -766,18 +750,13 @@ bool Lowerer::comp_eval_call(u32 mod,
   if (target == nullptr) {
     if (const auto* use = variant_use_in(path, comp_inst_)) {
       const std::vector<ir::TypeIdx> payloads =
-          variant_payload(use->enum_type, use->variant, use->blessed_first);
+          variant_payload(use->enum_type, use->variant);
       if (call.args.size() != payloads.size()) {
         return comp_fail(node.span, "variant arity");
       }
       out.type = use->enum_type;
-      if (use->blessed) {
-        out.value.tag = CompValue::Tag::Blessed;
-        out.value.blessed_ok = use->blessed_first;
-      } else {
-        out.value.tag = CompValue::Tag::Enum;
-        out.value.variant = use->variant;
-      }
+      out.value.tag = CompValue::Tag::Enum;
+      out.value.variant = use->variant;
       for (ast::ExprIdx arg : call.args) {
         CompVal field;
         if (!comp_eval_expr(mod, arg, scope, field)) {
@@ -816,23 +795,6 @@ bool Lowerer::comp_eval_method_call(u32 mod,
     return false;
   }
   out.type = expr_type_in(mod, expr);
-  if (receiver.value.tag == CompValue::Tag::Blessed) {
-    if (method.name.name == "is_ok" || method.name.name == "is_err") {
-      out.value.tag = CompValue::Tag::Bool;
-      out.value.bool_value = method.name.name == "is_ok"
-                                 ? receiver.value.blessed_ok
-                                 : !receiver.value.blessed_ok;
-      return true;
-    }
-    if (method.name.name == "unwrap" || method.name.name == "expect") {
-      if (!receiver.value.blessed_ok || receiver.value.fields.empty()) {
-        return comp_fail(node.span, "comp evaluation hit Err/None");
-      }
-      out.value = receiver.value.fields[0];
-      return true;
-    }
-    return comp_fail(node.span, "method without value");
-  }
   const analyzer::CheckedModule::CallTarget* target = call_target_in(mod, expr);
   if (target == nullptr || !target->is_method) {
     return comp_fail(node.span, "method without target");
@@ -983,27 +945,12 @@ Val Lowerer::materialize_comp_value(const CompVal& value, diag::Span span) {
       }
       return Val{to_operand(addr, value.type), value.type, true, false};
     }
-    case CompValue::Tag::Enum:
-    case CompValue::Tag::Blessed: {
-      const bool blessed = value.value.tag == CompValue::Tag::Blessed;
-      const u32 discriminant =
-          blessed ? (value.value.blessed_ok ? 0 : 1) : value.value.variant;
-      std::vector<ir::TypeIdx> payloads;
-      if (blessed) {
-        const auto* entry = blessed_entry(value.type);
-        if (entry == nullptr) {
-          internal(span, "comp enum without declaration");
-          return Val{size_one, error_type(), false, false};
-        }
-        if (!value.value.fields.empty()) {
-          payloads.push_back(entry->args[0]);
-        }
-      } else {
-        payloads = variant_payload(value.type, value.value.variant, false);
-        if (payloads.size() != value.value.fields.size()) {
-          internal(span, "comp variant arity");
-          return Val{size_one, error_type(), false, false};
-        }
+    case CompValue::Tag::Enum: {
+      const std::vector<ir::TypeIdx> payloads =
+          variant_payload(value.type, value.value.variant);
+      if (payloads.size() != value.value.fields.size()) {
+        internal(span, "comp variant arity");
+        return Val{size_one, error_type(), false, false};
       }
       const ir::TypeIdx slot = enum_slot_type();
       const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, slot, {size_one});
@@ -1011,7 +958,7 @@ Val Lowerer::materialize_comp_value(const CompVal& value, diag::Span span) {
           emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
                {to_operand(addr, slot), zero_i32, index_operand(0)});
       emit_void(ir::Opcode::Store,
-                {disc_operand(discriminant), to_operand(tag_reg, slot)});
+                {disc_operand(value.value.variant), to_operand(tag_reg, slot)});
       if (!payloads.empty() && !is_unit_payload(payloads)) {
         const ir::TypeIdx payload_type = payload_tuple(payloads);
         const ir::RegisterIdx payload =
@@ -1079,18 +1026,13 @@ bool Lowerer::comp_eval_expr(u32 mod,
       }
       if (const auto* use = variant_use_in(path, comp_inst_)) {
         const std::vector<ir::TypeIdx> payloads =
-            variant_payload(use->enum_type, use->variant, use->blessed_first);
+            variant_payload(use->enum_type, use->variant);
         if (!payloads.empty()) {
           return comp_fail(node.span, "variant without call");
         }
         out.type = use->enum_type;
-        if (use->blessed) {
-          out.value.tag = CompValue::Tag::Blessed;
-          out.value.blessed_ok = use->blessed_first;
-        } else {
-          out.value.tag = CompValue::Tag::Enum;
-          out.value.variant = use->variant;
-        }
+        out.value.tag = CompValue::Tag::Enum;
+        out.value.variant = use->variant;
         return true;
       }
       return comp_fail(node.span, "path is not comp-evaluable");
@@ -1212,14 +1154,19 @@ bool Lowerer::comp_eval_expr(u32 mod,
         return false;
       }
       out.type = expr_type_in(mod, expr);
-      if (inner.value.tag == CompValue::Tag::Blessed) {
-        if (!inner.value.blessed_ok || inner.value.fields.empty()) {
-          return comp_fail(node.span, "comp evaluation hit Err/None");
-        }
-        out.value = inner.value.fields[0];
-        return true;
+      if (inner.value.tag != CompValue::Tag::Enum) {
+        return comp_fail(node.span, "'?' without value");
       }
-      return comp_fail(node.span, "'?' without value");
+      // Propagation escapes the comp evaluation, matching the runtime
+      // early return that `?` lowers to.
+      if (inner.value.variant != 0) {
+        return comp_fail(node.span, "comp evaluation propagated a failure");
+      }
+      if (inner.value.fields.empty()) {
+        return comp_fail(node.span, "'?' without a success payload");
+      }
+      out.value = inner.value.fields[0];
+      return true;
     }
     case ast::ExprKind::If: {
       const ast::ExprIf& if_node = node.payload.get<ast::ExprIf>();

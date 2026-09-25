@@ -473,7 +473,7 @@ TEST_CASE("Parser builds control flow") {
   CHECK(if_expr.kind == ast::ExprKind::If);
 }
 
-TEST_CASE("Parser reads generic blessed types") {
+TEST_CASE("Parser reads nested generic type arguments") {
   Fixture f;
   const ParseResult result =
       parse("fn f(x: Result<Option<i32>, bool>) -> i32 { ret 0 }", f);

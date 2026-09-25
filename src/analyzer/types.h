@@ -99,12 +99,9 @@ struct CheckedModule {
   std::vector<CallTarget> call_targets;
   // Variant resolution for lowering: every checked variant use records
   // its meaning so lowering never re-resolves paths. `variant` is the
-  // declaration-order index for user enums; blessed constructors use
-  // `blessed_first` (Ok/Some side) with the instantiation in `enum_type`.
+  // declaration-order index and doubles as the enum discriminant.
   struct VariantUse {
     ast::PathIdx path;
-    bool blessed = false;
-    bool blessed_first = true;
     ir::TypeIdx enum_type;
     u32 variant = 0;
     u32 inst = kNoInst;
@@ -117,25 +114,15 @@ struct CheckedPackage {
   ir::Storage types;
   // Aligned with tree.modules by index.
   std::vector<CheckedModule> modules;
-  // Every blessed instantiation in the package, in first-use order.
-  // Expression checking maps a TypeIdx here for `?`, construction,
-  // and must_use; identity is the interned index.
-  struct BlessedType {
-    bool is_result;
-    ir::TypeIdx type;
-    // [T, E] for Result, [T] for Option.
-    std::vector<ir::TypeIdx> args;
-  };
-  std::vector<BlessedType> blessed;
   // Every generic enum instantiation type, aligned with the
   // checker's instantiation order; indexes key lowering tables.
   std::vector<ir::TypeIdx> generic_insts;
 };
 
 // Resolves every type position in the package to interned TypeIdx:
-// nominal definitions (structs, enums), signatures, and blessed
-// instantiations. Reports unknown, duplicate, reserved, recursive,
-// and malformed types, then checks bodies.
+// nominal definitions (structs, enums), signatures, and generic
+// instantiations. Reports unknown, duplicate, recursive, and malformed
+// types, then checks bodies.
 diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
                                              ir::PointerWidth width,
                                              ast::AstArena& ast,

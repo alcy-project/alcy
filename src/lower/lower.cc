@@ -283,13 +283,6 @@ void Lowerer::comp_key_into(std::string& key, const CompValue& value) {
       }
       key += ");";
       return;
-    case CompValue::Tag::Blessed:
-      key += value.blessed_ok ? "B0(" : "B1(";
-      for (const CompValue& field : value.fields) {
-        comp_key_into(key, field);
-      }
-      key += ");";
-      return;
   }
 }
 

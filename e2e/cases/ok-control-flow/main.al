@@ -1,5 +1,8 @@
 enum Shape { Circle(i32), Square(i32), Rect }
 
+// Core's Option, declared locally so the case needs no prelude.
+enum Option<T> { Some(T), None }
+
 fn area(s: Shape) -> i32 {
   r := match s {
     Shape::Circle(x) | Shape::Square(x) => x,
@@ -22,7 +25,7 @@ fn search(limit: i32) -> i32 {
         continue
       }
     }
-    if Some(v) := Some(i) {
+    if Option::Some(v) := Option::Some(i) {
       found = found + v
     }
   }
@@ -31,7 +34,7 @@ fn search(limit: i32) -> i32 {
 
 fn calc(o: Option<i32>) -> Option<i32> {
   v := o?
-  ret Some(v + 1)
+  ret Option::Some(v + 1)
 }
 
 fn main() {
@@ -42,7 +45,7 @@ fn main() {
   } else {
     b
   }
-  o: Option<i32> := Some(v)
+  o: Option<i32> := Option::Some(v)
   r := calc(o)
   _ := r
 }

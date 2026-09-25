@@ -1,6 +1,6 @@
 # ADR-0003: Deferred Generics with Blessed Result and Option
 
-- Status: Accepted
+- Status: Superseded by ADR-0009
 - Date: 2026-09-18
 
 ## Context

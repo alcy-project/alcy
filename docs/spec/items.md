@@ -16,7 +16,9 @@
 - `fn` declares free functions. Signatures carry explicit types;
   bodies infer locals intraprocedurally (integer literals default to
   `i32`, float literals to `f64`).
-- Inherent `impl` blocks are MVP; they require no generics machinery.
+- Inherent `impl` blocks are MVP. A parameter list (`impl<T> ...`)
+  makes the block generic; its methods are checked and specialized per
+  receiver instantiation.
 - The compiler provides a `print(msg: str)` intrinsic, lowered
   directly to a write syscall. It migrates to an ordinary core
   function once FFI lands.

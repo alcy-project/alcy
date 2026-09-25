@@ -1,24 +1,28 @@
 # Errors, Panic, and Divergence (MVP)
 
-## Blessed generics
+## Error types in the standard library
 
-- `Result<T, E>` and `Option<T>` are the only generic types in MVP.
-  They are compiler-known and monomorphized. User-defined generics
-  are deferred (see `deferred.md`).
+- `Result<T, E>` and `Option<T>` are ordinary generic enums defined in
+  the `alcy/std/core` prelude. The compiler holds no knowledge of
+  their names, shapes, or methods; a user module may shadow either
+  name. See `docs/adr/0009`.
 - `Result` has variants `Ok(T)` and `Err(E)`; `Option` has `Some(T)`
   and `None`. Both compose as ordinary algebraic types for region
   purposes (field intersection and projection apply unchanged).
-- The compiler provides exactly `unwrap`, `expect`, `is_ok`, and
-  `is_err`. Combinators requiring closures (`map`, `and_then`) arrive
-  with closures, post-MVP.
+- Core provides `unwrap`, `expect`, `is_ok`, `is_err`, and `or` as
+  ordinary `impl` methods. Combinators requiring closures (`map`,
+  `and_then`) arrive with closures, post-MVP.
 
 ## The `?` operator
 
-- `?` propagates the error (or `None`) to the enclosing function,
-  which MUST return a matching `Result`/`Option` type.
-- Only identical error types propagate in MVP. Automatic conversion
-  (`From`-style) requires the spec system and is deferred; mismatched
-  error types are compile-time errors resolved by explicit mapping.
+- `?` is structural, not type-specific. It requires an enum operand
+  and an enclosing function whose return type is the *same* enum.
+- On the first declared variant the operator yields that variant's
+  first payload. On any other variant it returns the operand
+  unchanged, which makes the early return the propagation path.
+- Only identical types propagate. Converting between different error
+  types requires an explicit `match`; automatic conversion
+  (`From`-style) requires the spec system and is deferred.
 
 ## Panic and the never type
 
@@ -30,6 +34,15 @@
 
 ## Entry point
 
-- `fn main()` returns `()`, `i32`, or `Result<(), E>`. An `Err` from
-  `main` aborts with a fixed message and a nonzero exit status; `E`
-  is never printed (no `Debug` bound exists in MVP).
+- `fn main()` returns `()`, `i32`, or a two-variant enum whose first
+  variant carries a single `()`. `Result<(), E>` from core is the
+  intended form.
+- A nonzero discriminant from the entry enum aborts with a fixed
+  message and a nonzero exit status; the error payload is never
+  printed (no `Debug` bound exists in MVP).
+
+## Unused values
+
+- An expression statement whose value is neither `()` nor `!` warns.
+  Write `_ := expr` to discard deliberately. The rule is uniform
+  across all value types and does not special-case any type.

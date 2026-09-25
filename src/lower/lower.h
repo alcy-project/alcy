@@ -28,10 +28,10 @@ namespace lower {
 //
 // Supported input: straight-line functions - literals, locals, struct
 // and tuple construction, field access, arithmetic/comparison/cast,
-// calls (free, associated, methods, blessed-free), borrows, blocks,
-// `ret`. Control flow (`if`/`match`/loops), `?`, indexing, enums,
-// and statics diagnose `kLowerUnsupported` and fail the lowering
-// (fail fast: no dangling references).
+// calls (free, associated, and methods), borrows, blocks, control
+// flow, `?`, indexing, enums (including generic instantiations), and
+// statics. Anything outside that set diagnoses `kLowerUnsupported`
+// and fails the lowering (fail fast: no dangling references).
 //
 // Value model (uniform memory, required by codegen's GEP tracking):
 // every local and parameter owns an Alloca; aggregates live in memory

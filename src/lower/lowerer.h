@@ -78,7 +78,6 @@ class Lowerer {
       Array,
       Struct,
       Enum,
-      Blessed,
     };
     Tag tag = Tag::Void;
     u64 int_value = 0;
@@ -86,7 +85,6 @@ class Lowerer {
     std::string str_value;
     std::vector<CompValue> fields;
     u32 variant = 0;
-    bool blessed_ok = true;
   };
 
   struct CompVal {
@@ -235,15 +233,10 @@ class Lowerer {
   const analyzer::CheckedModule::VariantUse* variant_use_in(ast::PathIdx path,
                                                             u32 inst) const;
   const analyzer::CheckedModule::EnumInfo* enum_info(ir::TypeIdx type) const;
-  const analyzer::CheckedPackage::BlessedType* blessed_entry(
-      ir::TypeIdx type) const;
-  bool blessed_ctor_side(std::string_view name, bool is_result, bool& first);
   bool variant_index(ir::TypeIdx enum_type,
                      std::string_view name,
                      u32& index_out);
-  std::vector<ir::TypeIdx> variant_payload(ir::TypeIdx enum_type,
-                                           u32 variant,
-                                           bool blessed_first);
+  std::vector<ir::TypeIdx> variant_payload(ir::TypeIdx enum_type, u32 variant);
   ir::TypeIdx enum_slot_type();
 
   ir::TypeIdx enum_slot_type_ = ir::TypeIdx(base::kInvalidIdx);
@@ -266,9 +259,6 @@ class Lowerer {
   bool is_unit_payload(const std::vector<ir::TypeIdx>& payloads);
   Val void_value();
   ir::TypeIdx payload_tuple(const std::vector<ir::TypeIdx>& fields);
-  Val load_blessed_payload(Val slot_addr,
-                           u32 field,
-                           const std::vector<ir::TypeIdx>& fields);
   Val load_payload_field(Val slot_addr, ir::TypeIdx payload_type, u32 field);
   void emit_br(ir::BlockIdx target);
   void emit_cond_br(ir::OperandIdx cond,
@@ -277,10 +267,6 @@ class Lowerer {
   ir::OperandIdx bool_operand(bool value);
   void emit_panic(ir::OperandIdx message);
   ir::OperandIdx str_operand(std::string_view message);
-  Val lower_blessed_method(ast::ExprIdx expr,
-                           const analyzer::CheckedPackage::BlessedType* entry,
-                           Val receiver,
-                           const ir::TypeIdx* expected);
   Val lower_method_call(ast::ExprIdx expr, const ir::TypeIdx* expected);
   Val field_addr(Val base, std::string_view name, diag::Span span);
   Val lower_struct(ast::ExprIdx expr);

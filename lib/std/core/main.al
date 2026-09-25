@@ -79,3 +79,101 @@ pub fn format(comp fmt: str, args: ()) -> String {
 pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ()) -> WriteOutcome {
   panic("fmt::write must expand")
 }
+
+// A value that may be absent. `None` carries no payload, so
+// `Option<T>` is copyable for every `T`.
+//
+// The `?` operator propagates any non-`Some` variant of an identical
+// enclosing return type; see docs/adr/0009.
+pub enum Option<T> {
+  Some(T),
+  None,
+}
+
+impl<T> Option<T> {
+  pub fn is_some(self: Self) -> bool {
+    ret match self {
+      Option::Some(_) => true,
+      Option::None => false,
+    }
+  }
+
+  pub fn is_none(self: Self) -> bool {
+    ret match self {
+      Option::Some(_) => false,
+      Option::None => true,
+    }
+  }
+
+  // Panics on `None`. Prefer `is_some` or `?` where absence is
+  // expected rather than exceptional.
+  pub fn unwrap(self: Self) -> T {
+    ret match self {
+      Option::Some(v) => v,
+      Option::None => panic("called `Option::unwrap` on a `None` value"),
+    }
+  }
+
+  pub fn expect(self: Self, msg: str) -> T {
+    ret match self {
+      Option::Some(v) => v,
+      Option::None => panic(msg),
+    }
+  }
+
+  // Yields the contained value or `default` when absent.
+  pub fn or(self: Self, default: T) -> T {
+    ret match self {
+      Option::Some(v) => v,
+      Option::None => default,
+    }
+  }
+}
+
+// A computation that either succeeded with a `T` or failed with an
+// `E`. `main` may return `Result<(), E>`; the entry thunk maps `Ok` to
+// exit code 0 and aborts on `Err`.
+pub enum Result<T, E> {
+  Ok(T),
+  Err(E),
+}
+
+impl<T, E> Result<T, E> {
+  pub fn is_ok(self: Self) -> bool {
+    ret match self {
+      Result::Ok(_) => true,
+      Result::Err(_) => false,
+    }
+  }
+
+  pub fn is_err(self: Self) -> bool {
+    ret match self {
+      Result::Ok(_) => false,
+      Result::Err(_) => true,
+    }
+  }
+
+  // Panics on `Err`, discarding the payload. Prefer `is_ok` or `?`
+  // where failure is expected rather than exceptional.
+  pub fn unwrap(self: Self) -> T {
+    ret match self {
+      Result::Ok(v) => v,
+      Result::Err(_) => panic("called `Result::unwrap` on an `Err` value"),
+    }
+  }
+
+  pub fn expect(self: Self, msg: str) -> T {
+    ret match self {
+      Result::Ok(v) => v,
+      Result::Err(_) => panic(msg),
+    }
+  }
+
+  // Yields the contained value or `default` on failure.
+  pub fn or(self: Self, default: T) -> T {
+    ret match self {
+      Result::Ok(v) => v,
+      Result::Err(_) => default,
+    }
+  }
+}

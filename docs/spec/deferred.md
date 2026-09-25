@@ -5,8 +5,11 @@ relied upon by MVP programs or by the MVP compiler implementation.
 
 ## Language
 
-- User-defined generics and generic functions; `spec` (trait) definitions
-  and dispatch, coherence rules, monomorphization strategy.
+- Generic structs and generic free functions. Generic enums and generic
+  inherent methods are MVP; see `errors.md`.
+- `spec` (trait) definitions and dispatch, coherence rules, and
+  monomorphization beyond per-instantiation enum and method
+  specialization.
 - Closures and spec objects; higher-ranked region polymorphism beyond
   struct projection; two-phase borrows.
 - `match` guards, string literal patterns.

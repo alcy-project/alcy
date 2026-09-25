@@ -222,7 +222,17 @@ TEST_CASE("Lower lowers enums matches and question propagation") {
                        "  _ := a\n"
                        "  _ := y\n"
                        "  _ := calc(o)\n"
-                       "}\n"}});
+                       "}\n"
+                       "enum Option<T> { Some(T), None }\n"
+                       "impl<T> Option<T> {\n"
+                       "  fn unwrap(self: Self) -> T {\n"
+                       "    ret match self {\n"
+                       "      Option::Some(v) => v,\n"
+                       "      Option::None => panic(\"unreachable\"),\n"
+                       "    }\n"
+                       "  }\n"
+                       "}\n"
+                       "intrinsic fn panic(msg: str) -> !;\n"}});
   CHECK(setup);
   if (!setup) {
     return;
@@ -379,8 +389,9 @@ TEST_CASE("Lower wraps all main forms in a C entry") {
        "  ret 3\n"
        "}\n"},
       {"alcy_entry_result_test",
+       "enum Result<T, E> { Ok(T), Err(E) }\n"
        "fn main() -> Result<(), i32> {\n"
-       "  ret Ok(if true {\n"
+       "  ret Result::Ok(if true {\n"
        "  } else {\n"
        "  })\n"
        "}\n"},
@@ -534,7 +545,17 @@ TEST_CASE("Lower emits verifiable LLVM IR for enums and calls") {
                        "  _ := a\n"
                        "  _ := y\n"
                        "  _ := calc(o)\n"
-                       "}\n"}});
+                       "}\n"
+                       "enum Option<T> { Some(T), None }\n"
+                       "impl<T> Option<T> {\n"
+                       "  fn unwrap(self: Self) -> T {\n"
+                       "    ret match self {\n"
+                       "      Option::Some(v) => v,\n"
+                       "      Option::None => panic(\"unreachable\"),\n"
+                       "    }\n"
+                       "  }\n"
+                       "}\n"
+                       "intrinsic fn panic(msg: str) -> !;\n"}});
   CHECK(setup);
   if (!setup) {
     return;

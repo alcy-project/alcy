@@ -174,7 +174,8 @@ struct TupleType : Type {
 
 struct PathType : Type {
   const Path* path;
-  // Empty without "<...>" arguments (blessed generics only).
+  // Empty without "<...>" arguments; the count must match the
+  // declaration's parameter list for a generic type.
   std::span<Type* const> args;
 };
 

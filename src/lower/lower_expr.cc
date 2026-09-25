@@ -588,20 +588,18 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     // Unit values stand alone; payload constructors need call syntax
     // (checking enforced this).
     const std::vector<ir::TypeIdx> payloads =
-        variant_payload(use->enum_type, use->variant, use->blessed_first);
+        variant_payload(use->enum_type, use->variant);
     if (!payloads.empty()) {
       internal(node.span, "variant without call");
       return Val{size_one, error_type(), false, false};
     }
     const ir::TypeIdx slot = enum_slot_type();
     const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, slot, {size_one});
-    const u32 discriminant =
-        use->blessed ? (use->blessed_first ? 0 : 1) : use->variant;
     const ir::RegisterIdx tag =
         emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
              {to_operand(addr, slot), zero_i32, index_operand(0)});
     emit_void(ir::Opcode::Store,
-              {disc_operand(discriminant), to_operand(tag, slot)});
+              {disc_operand(use->variant), to_operand(tag, slot)});
     return Val{to_operand(addr, slot), use->enum_type, true, false};
   }
   internal(node.span, "path without lowering");
@@ -660,64 +658,27 @@ const analyzer::CheckedModule::EnumInfo* Lowerer::enum_info(
   return nullptr;
 }
 
-const analyzer::CheckedPackage::BlessedType* Lowerer::blessed_entry(
-    ir::TypeIdx type) const {
-  for (const auto& entry : pkg.blessed) {
-    if (entry.type.idx == type.idx) {
-      return &entry;
-    }
-  }
-  return nullptr;
-}
-
-bool Lowerer::blessed_ctor_side(std::string_view name,
-                                bool is_result,
-                                bool& first) {
-  if (name != "Ok" && name != "Err" && name != "Some" && name != "None") {
-    return false;
-  }
-  first = (name == "Ok" || name == "Some");
-  return (name == "Ok" || name == "Err") == is_result;
-}
-
 // Variant index by trailing name against a known enum type, for
 // patterns (checking validated the match).
 bool Lowerer::variant_index(ir::TypeIdx enum_type,
                             std::string_view name,
                             u32& index_out) {
-  if (const auto* info = enum_info(enum_type)) {
-    for (u32 i = 0; i < static_cast<u32>(info->variants.size()); ++i) {
-      if (info->variants[i] == name) {
-        index_out = i;
-        return true;
-      }
-    }
+  const auto* info = enum_info(enum_type);
+  if (info == nullptr) {
     return false;
   }
-  if (const auto* entry = blessed_entry(enum_type)) {
-    bool first = true;
-    if (!blessed_ctor_side(name, entry->is_result, first)) {
-      return false;
+  for (u32 i = 0; i < static_cast<u32>(info->variants.size()); ++i) {
+    if (info->variants[i] == name) {
+      index_out = i;
+      return true;
     }
-    index_out = first ? 0 : 1;
-    return true;
   }
   return false;
 }
 
 // Payload field types of one variant, in order.
 std::vector<ir::TypeIdx> Lowerer::variant_payload(ir::TypeIdx enum_type,
-                                                  u32 variant,
-                                                  bool blessed_first) {
-  if (const auto* entry = blessed_entry(enum_type)) {
-    if (blessed_first) {
-      return {entry->args[0]};
-    }
-    if (entry->is_result) {
-      return {entry->args[1]};
-    }
-    return {};
-  }
+                                                  u32 variant) {
   const ir::EnumType& enum_ty =
       builder.state().enum_types[builder.state().types[enum_type].as_enum()];
   std::vector<ir::TypeIdx> payloads;
@@ -746,20 +707,18 @@ Val Lowerer::lower_variant_construct(
     const analyzer::CheckedModule::VariantUse* use) {
   const ast::ExprNode& call = ast.exprs[expr];
   const std::vector<ir::TypeIdx> payloads =
-      variant_payload(use->enum_type, use->variant, use->blessed_first);
+      variant_payload(use->enum_type, use->variant);
   if (call.payload.get<ast::ExprCall>().args.size() != payloads.size()) {
     internal(call.span, "variant arity");
     return Val{size_one, error_type(), false, false};
   }
   const ir::TypeIdx slot = enum_slot_type();
   const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, slot, {size_one});
-  const u32 discriminant =
-      use->blessed ? (use->blessed_first ? 0 : 1) : use->variant;
   const ir::RegisterIdx tag =
       emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
            {to_operand(addr, slot), zero_i32, index_operand(0)});
   emit_void(ir::Opcode::Store,
-            {disc_operand(discriminant), to_operand(tag, slot)});
+            {disc_operand(use->variant), to_operand(tag, slot)});
   if (is_unit_payload(payloads)) {
     // Lower for effects; nothing is stored.
     for (usize i = 0; i < payloads.size(); ++i) {
@@ -1340,15 +1299,6 @@ ir::TypeIdx Lowerer::payload_tuple(const std::vector<ir::TypeIdx>& fields) {
 // Value of payload field i of the enum at slot_addr. The payload
 // pointer is type-erased in the slot, so it reinterprets through
 // the variant payload type before projecting the field.
-Val Lowerer::load_blessed_payload(Val slot_addr,
-                                  u32 field,
-                                  const std::vector<ir::TypeIdx>& fields) {
-  if (is_unit_payload(fields)) {
-    return void_value();
-  }
-  return load_payload_field(slot_addr, payload_tuple(fields), field);
-}
-
 Val Lowerer::load_payload_field(Val slot_addr,
                                 ir::TypeIdx payload_type,
                                 u32 field) {
@@ -1419,76 +1369,12 @@ ir::OperandIdx Lowerer::str_operand(std::string_view message) {
   return to_operand(imm, str);
 }
 
-Val Lowerer::lower_blessed_method(
-    ast::ExprIdx expr,
-    const analyzer::CheckedPackage::BlessedType* entry,
-    Val receiver,
-    const ir::TypeIdx* expected) {
-  const ast::ExprNode& method = ast.exprs[expr];
-  const std::string_view name =
-      method.payload.get<ast::ExprMethodCall>().name.name;
-  const bool is_ok = name == "is_ok";
-  if (name != "unwrap" && name != "expect" && !is_ok && name != "is_err") {
-    internal(method.span, "blessed method without lowering");
-    return Val{size_one, error_type(), false, false};
-  }
-  Val slot = enum_addr(receiver);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
-  }
-  if (name == "unwrap" || name == "expect") {
-    mark_move(slot);
-  }
-  Val tag = load_disc(slot);
-  const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
-  if (is_ok || name == "is_err") {
-    const ir::RegisterIdx dst =
-        emit(ir::Opcode::Eq, boolean,
-             {tag.op, is_ok ? disc_operand(0) : disc_operand(1)});
-    Val result{to_operand(dst, boolean), boolean, false, false};
-    if (expected != nullptr) {
-      (void)expected;
-    }
-    return result;
-  }
-  // unwrap / expect: Ok payload on tag 0, else diverge.
-  ir::OperandIdx failure = str_operand("unwrap");
-  if (name == "expect") {
-    if (method.payload.get<ast::ExprMethodCall>().args.size() != 1) {
-      internal(method.span, "expect without message");
-      return Val{size_one, error_type(), false, false};
-    }
-    Val message =
-        lower_expr(method.payload.get<ast::ExprMethodCall>().args[0], nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    failure = materialize(message).op;
-  }
-  ir::BlockIdx ok_block = reserve_block();
-  ir::BlockIdx bad_block = reserve_block();
-  ir::BlockIdx join_block = reserve_block();
-  const ir::RegisterIdx test =
-      emit(ir::Opcode::Eq, boolean, {tag.op, disc_operand(0)});
-  emit_cond_br(to_operand(test, boolean), ok_block, bad_block);
-  switch_to(bad_block);
-  emit_panic(failure);
-  switch_to(ok_block);
-  Val payload = load_blessed_payload(slot, 0, {entry->args[0]});
-  emit_br(join_block);
-  switch_to(join_block);
-  return payload;
-}
-
 Val Lowerer::lower_method_call(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   const ast::ExprNode& method = ast.exprs[expr];
   Val receiver =
       lower_expr(method.payload.get<ast::ExprMethodCall>().receiver, nullptr);
   if (failed) {
     return Val{size_one, error_type(), false, false};
-  }
-  if (const auto* entry = blessed_entry(receiver.type)) {
-    return lower_blessed_method(expr, entry, receiver, expected);
   }
   const analyzer::CheckedModule::CallTarget* target = call_target(expr);
   if (target == nullptr || !target->is_method) {
@@ -1954,7 +1840,7 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
       emit_cond_br(to_operand(test, boolean), bind_block, fail_block);
       switch_to(bind_block);
       const std::vector<ir::TypeIdx> payloads =
-          variant_payload(scrut_type, variant, variant == 0);
+          variant_payload(scrut_type, variant);
       const std::span<const ast::PatternIdx> elements =
           node.payload.tuple.elements;
       if (payloads.size() != elements.size()) {
@@ -2269,6 +2155,9 @@ Val Lowerer::lower_while(ast::ExprIdx expr) {
   return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
 }
 
+// `?` on an enum: the first variant yields its first payload, any
+// other variant returns the scrutinee unchanged. Checking guarantees
+// the scrutinee and the enclosing return type are the same enum.
 Val Lowerer::lower_question(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprQuestion& question = node.payload.get<ast::ExprQuestion>();
@@ -2279,38 +2168,27 @@ Val Lowerer::lower_question(ast::ExprIdx expr) {
   Val addr = address_of(scrut);
   mark_move(addr);
   const ir::TypeIdx scrut_type = expr_type(question.inner);
-  const auto* entry = blessed_entry(scrut_type);
-  if (entry == nullptr) {
-    internal(node.span, "question without blessed type");
+  const std::vector<ir::TypeIdx> first = variant_payload(scrut_type, 0);
+  if (first.empty()) {
+    internal(node.span, "question without a success variant");
     return Val{size_one, error_type(), false, false};
   }
-  Val tag = load_disc(addr);
+  const Val tag = load_disc(addr);
   const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
-  ir::BlockIdx ok_block = reserve_block();
-  ir::BlockIdx err_block = reserve_block();
-  ir::BlockIdx join_block = reserve_block();
+  const ir::BlockIdx ok_block = reserve_block();
+  const ir::BlockIdx err_block = reserve_block();
+  const ir::BlockIdx join_block = reserve_block();
   const ir::RegisterIdx test =
       emit(ir::Opcode::Eq, boolean, {tag.op, disc_operand(0)});
   emit_cond_br(to_operand(test, boolean), ok_block, err_block);
   switch_to(err_block);
-  if (entry->is_result) {
-    Val payload = load_blessed_payload(addr, 0, {entry->args[1]});
-    emit_void(ir::Opcode::Ret, {use_value(payload)});
-  } else {
-    // Propagate None by constructing it in the enclosing return type.
-    const ir::TypeIdx slot = enum_slot_type();
-    const ir::RegisterIdx none_addr =
-        emit(ir::Opcode::Alloca, slot, {size_one});
-    const ir::RegisterIdx none_tag =
-        emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
-             {to_operand(none_addr, slot), zero_i32, index_operand(0)});
-    emit_void(ir::Opcode::Store, {disc_operand(1), to_operand(none_tag, slot)});
-    const ir::RegisterIdx none_loaded =
-        emit(ir::Opcode::Load, scrut_type, {to_operand(none_addr, slot)});
-    emit_void(ir::Opcode::Ret, {to_operand(none_loaded, scrut_type)});
-  }
+  // Propagating keeps the original value, so the payload slot still
+  // holds a valid scrutinee to return by value.
+  const ir::RegisterIdx propagate =
+      emit(ir::Opcode::Load, scrut_type, {addr.op});
+  emit_void(ir::Opcode::Ret, {to_operand(propagate, scrut_type)});
   switch_to(ok_block);
-  Val payload = load_blessed_payload(addr, 0, {entry->args[0]});
+  const Val payload = load_payload_field(addr, payload_tuple(first), 0);
   emit_br(join_block);
   switch_to(join_block);
   return payload;

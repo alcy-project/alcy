@@ -561,8 +561,9 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
     return;
   }
   if (ret == ir::TypeTag::Enum) {
-    // Blessed `Result` slots return by value; a nonzero discriminant
-    // aborts through the panic path with a generic message.
+    // A two-variant enum whose first variant holds `()` returns by
+    // value; a nonzero discriminant aborts through the panic path with
+    // a generic message.
     llvm::Value* tag = builder_->CreateExtractValue(result, 0);
     llvm::Value* is_ok = builder_->CreateICmpEQ(
         tag, llvm::ConstantInt::get(builder_->getInt32Ty(), 0));

@@ -127,6 +127,26 @@ const CheckedModule::NamedType* find_type(const CheckedModule& module,
   return nullptr;
 }
 
+// `Option` and `Result` live in the core prelude since ADR-0009, so
+// tests that mention them inject a matching declaration set.
+constexpr std::string_view kCorePrelude =
+    R"(pub intrinsic fn panic(msg: str) -> !;
+pub enum Option<T> { Some(T), None }
+pub enum Result<T, E> { Ok(T), Err(E) }
+)";
+
+constexpr std::string_view kCorePreludeFile = "core.al";
+
+// Static storage keeps the returned initializer_list valid for the
+// caller's use; an initializer_list of temporaries would dangle.
+const std::initializer_list<std::pair<std::string_view, std::string_view>>&
+core_prelude() {
+  static const std::initializer_list<
+      std::pair<std::string_view, std::string_view>>
+      kPrelude = {{"core", kCorePreludeFile}};
+  return kPrelude;
+}
+
 }  // namespace
 
 TEST_CASE("Check interns structs with named fields") {
@@ -353,12 +373,32 @@ TEST_CASE("Check constructs generic enums from annotations") {
   }
 }
 
-TEST_CASE("Check rejects uninferred generic constructors") {
+TEST_CASE("Check infers generic constructors from payload arguments") {
   io::TempDir dir("alcy_types_generic_infer_test");
   const bool setup = write_all(dir, {{"main.al",
                                       "enum Box<T> { Filled(T), Empty }\n"
                                       "fn main() -> i32 {\n"
                                       "  b := Box::Filled(41i32)\n"
+                                      "  ret match b {\n"
+                                      "    Box::Filled(v) => v - 41,\n"
+                                      "    Box::Empty => 1,\n"
+                                      "  }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects generic constructors with no binding argument") {
+  io::TempDir dir("alcy_types_generic_infer_bad_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Box<T> { Filled(T), Empty }\n"
+                                      "fn main() -> i32 {\n"
+                                      "  b := Box::Empty\n"
                                       "  ret 0\n"
                                       "}\n"}});
   CHECK(setup);
@@ -523,23 +563,25 @@ TEST_CASE("Check resolves cross-module types") {
   CHECK(result.package->types.is_copy_type(holder->type));
 }
 
-TEST_CASE("Check instantiates blessed types with dedup") {
-  io::TempDir dir("alcy_types_blessed_test");
+TEST_CASE("Check instantiates core generic types with dedup") {
+  io::TempDir dir("alcy_types_core_generic_test");
   const bool setup =
       write_all(dir, {{"main.al",
                        "fn f(a: Result<i32, bool>) -> Option<i32> {\n"
-                       "  ret None\n"
+                       "  ret Option::None\n"
                        "}\n"
                        "fn g(b: Result<i32, bool>) -> i32 {\n"
                        "  ret 0\n"
-                       "}\n"}});
+                       "}\n"},
+                      {kCorePreludeFile, kCorePrelude}});
   CHECK(setup);
   if (!setup) {
     return;
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                      ir::PointerWidth::W64, core_prelude());
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -554,6 +596,31 @@ TEST_CASE("Check instantiates blessed types with dedup") {
   CHECK(types.types()[root->functions[0].ret].tag == ir::TypeTag::Enum);
   // Identical instantiations share one index.
   CHECK(root->functions[0].params[0].idx == root->functions[1].params[0].idx);
+  CHECK(root->functions[0].ret.idx != root->functions[0].params[0].idx);
+}
+
+TEST_CASE("Check lets user code define Result and Option") {
+  io::TempDir dir("alcy_types_shadow_core_test");
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "pub enum Option<T> { Only(T), Never }\n"
+                       "pub enum Result<T, E> { Yes(T), No(E) }\n"
+                       "fn main() -> i32 {\n"
+                       "  o: Option<i32> := Option::Only(1i32)\n"
+                       "  ret match o {\n"
+                       "    Option::Only(v) => v - 1,\n"
+                       "    Option::Never => 1,\n"
+                       "  }\n"
+                       "}\n"},
+                      {kCorePreludeFile, kCorePrelude}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                      ir::PointerWidth::W64, core_prelude());
+  CHECK(result.package.has_value());
 }
 
 TEST_CASE("Check maps pointer widths for sized integers") {
@@ -652,36 +719,20 @@ TEST_CASE("Check accepts reference cycles") {
   CHECK(result.package.has_value());
 }
 
-TEST_CASE("Check rejects duplicate and reserved definitions") {
-  {
-    io::TempDir dir("alcy_types_dup_test");
-    const bool setup = write_all(dir, {{"main.al",
-                                        "struct Foo { x: i32 }\n"
-                                        "struct Foo { y: bool }\n"
-                                        "fn main() {}\n"}});
-    CHECK(setup);
-    if (!setup) {
-      return;
-    }
-    Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
-    CHECK(!result.package.has_value());
-    CHECK(f.bag.has_errors());
+TEST_CASE("Check rejects duplicate definitions") {
+  io::TempDir dir("alcy_types_dup_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Foo { x: i32 }\n"
+                                      "struct Foo { y: bool }\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
   }
-  {
-    io::TempDir dir("alcy_types_reserved_test");
-    const bool setup = write_all(dir, {{"main.al",
-                                        "struct Result { x: i32 }\n"
-                                        "fn main() {}\n"}});
-    CHECK(setup);
-    if (!setup) {
-      return;
-    }
-    Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
-    CHECK(!result.package.has_value());
-    CHECK(f.bag.has_errors());
-  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
 }
 
 TEST_CASE("Check rejects malformed generics") {
@@ -690,13 +741,15 @@ TEST_CASE("Check rejects malformed generics") {
     const bool setup = write_all(dir, {{"main.al",
                                         "fn f(x: Result<i32>) -> i32 {\n"
                                         "  ret 0\n"
-                                        "}\n"}});
+                                        "}\n"},
+                                       {kCorePreludeFile, kCorePrelude}});
     CHECK(setup);
     if (!setup) {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
     CHECK(!result.package.has_value());
     CHECK(f.bag.has_errors());
   }
@@ -744,52 +797,57 @@ TEST_CASE("Check accepts mutable reference fields as move-only") {
   CHECK(!result.package->types.is_copy_type(holder->type));
 }
 
-TEST_CASE("Check exposes blessed shapes in the registry") {
+TEST_CASE("Check exposes core generic shapes through the IR") {
   io::TempDir dir("alcy_types_registry_test");
   const bool setup =
       write_all(dir, {{"main.al",
                        "fn f(a: Result<i32, bool>) -> Option<i32> {\n"
-                       "  ret None\n"
-                       "}\n"}});
+                       "  ret Option::None\n"
+                       "}\n"},
+                      {kCorePreludeFile, kCorePrelude}});
   CHECK(setup);
   if (!setup) {
     return;
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                      ir::PointerWidth::W64, core_prelude());
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
   }
-  CHECK(result.package->blessed.size() == 2);
-  if (result.package->blessed.size() != 2) {
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr || root->functions.empty()) {
     return;
   }
   const ir::Storage& types = result.package->types;
-  for (const CheckedPackage::BlessedType& entry : result.package->blessed) {
-    CHECK(types.types()[entry.type].tag == ir::TypeTag::Enum);
-    const ir::EnumType& enum_type =
-        types.enum_types()[types.types()[entry.type].as_enum()];
-    CHECK(enum_type.variants.size() == 2);
-    const ir::EnumVariantType& first =
-        types.enum_variant_types()[enum_type.variants.head()];
-    const ir::EnumVariantType& second =
-        types.enum_variant_types()[ir::EnumVariantTypeIdx(
-            enum_type.variants.head().idx + 1)];
-    if (entry.is_result) {
-      CHECK(entry.args.size() == 2);
-      CHECK(first.fields.size() == 1);
-      CHECK(second.fields.size() == 1);
-      CHECK(types.types()[first.fields[0]].tag == ir::TypeTag::I32);
-      CHECK(types.types()[second.fields[0]].tag == ir::TypeTag::I1);
-    } else {
-      CHECK(entry.args.size() == 1);
-      CHECK(first.fields.size() == 1);
-      CHECK(second.fields.empty());
-      CHECK(types.types()[first.fields[0]].tag == ir::TypeTag::I32);
-    }
-  }
+  const ir::TypeIdx result_ty = root->functions[0].params[0];
+  const ir::TypeIdx option_ty = root->functions[0].ret;
+  const ir::EnumType& result_shape =
+      types.enum_types()[types.types()[result_ty].as_enum()];
+  const ir::EnumType& option_shape =
+      types.enum_types()[types.types()[option_ty].as_enum()];
+  CHECK(result_shape.variants.size() == 2);
+  CHECK(option_shape.variants.size() == 2);
+  const ir::EnumVariantType& ok =
+      types.enum_variant_types()[result_shape.variants.head()];
+  const ir::EnumVariantType& err =
+      types.enum_variant_types()[ir::EnumVariantTypeIdx(
+          result_shape.variants.head().idx + 1)];
+  CHECK(ok.fields.size() == 1);
+  CHECK(err.fields.size() == 1);
+  CHECK(types.types()[ok.fields[0]].tag == ir::TypeTag::I32);
+  CHECK(types.types()[err.fields[0]].tag == ir::TypeTag::I1);
+  const ir::EnumVariantType& some =
+      types.enum_variant_types()[option_shape.variants.head()];
+  const ir::EnumVariantType& none =
+      types.enum_variant_types()[ir::EnumVariantTypeIdx(
+          option_shape.variants.head().idx + 1)];
+  CHECK(some.fields.size() == 1);
+  CHECK(none.fields.empty());
+  CHECK(types.types()[some.fields[0]].tag == ir::TypeTag::I32);
 }
 
 TEST_CASE("Check judges Copy structurally") {
@@ -944,55 +1002,90 @@ TEST_CASE("Check question-mark propagation") {
     io::TempDir dir("alcy_question_ok_test");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn get() -> Result<i32, bool> {\n"
-                                        "  ret Ok(1)\n"
+                                        "  ret Result::Ok(1i32)\n"
                                         "}\n"
                                         "fn caller() -> Result<i32, bool> {\n"
                                         "  x := get()?\n"
-                                        "  ret Ok(x + 1)\n"
-                                        "}\n"}});
+                                        "  ret Result::Ok(x + 1i32)\n"
+                                        "}\n"},
+                                       {kCorePreludeFile, kCorePrelude}});
     CHECK(setup);
     if (!setup) {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
     CHECK(result.package.has_value());
   }
   {
     io::TempDir dir("alcy_question_mismatch_test");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn get() -> Result<i32, bool> {\n"
-                                        "  ret Ok(1)\n"
+                                        "  ret Result::Ok(1i32)\n"
                                         "}\n"
                                         "fn caller() -> Result<i32, str> {\n"
                                         "  x := get()?\n"
-                                        "  ret Ok(x + 1)\n"
-                                        "}\n"}});
+                                        "  ret Result::Ok(x + 1i32)\n"
+                                        "}\n"},
+                                       {kCorePreludeFile, kCorePrelude}});
     CHECK(setup);
     if (!setup) {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
     CHECK(!result.package.has_value());
   }
   {
     io::TempDir dir("alcy_question_plain_test");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn get() -> Result<i32, bool> {\n"
-                                        "  ret Ok(1)\n"
+                                        "  ret Result::Ok(1i32)\n"
                                         "}\n"
                                         "fn caller() -> i32 {\n"
                                         "  ret get()?\n"
-                                        "}\n"}});
+                                        "}\n"},
+                                       {kCorePreludeFile, kCorePrelude}});
     CHECK(setup);
     if (!setup) {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
     CHECK(!result.package.has_value());
   }
+}
+
+TEST_CASE("Check question-mark works on any enum") {
+  io::TempDir dir("alcy_question_user_enum_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Early<T> { Value(T), Stop }\n"
+                                      "fn lookup(x: i32) -> Early<i32> {\n"
+                                      "  if x > 0 {\n"
+                                      "    ret Early::Value(x)\n"
+                                      "  }\n"
+                                      "  ret Early::Stop\n"
+                                      "}\n"
+                                      "fn caller(x: i32) -> Early<i32> {\n"
+                                      "  v := lookup(x)?\n"
+                                      "  ret Early::Value(v + 1i32)\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  ret match caller(1i32) {\n"
+                                      "    Early::Value(v) => v - 2i32,\n"
+                                      "    Early::Stop => 1i32,\n"
+                                      "  }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
 }
 
 TEST_CASE("Check match exhaustiveness") {
@@ -1084,16 +1177,18 @@ TEST_CASE("Check match exhaustiveness") {
     const bool setup = write_all(dir, {{"main.al",
                                         "fn f(o: Option<i32>) -> i32 {\n"
                                         "  ret match o {\n"
-                                        "    Some(x) => x,\n"
-                                        "    None => 0,\n"
+                                        "    Option::Some(x) => x,\n"
+                                        "    Option::None => 0,\n"
                                         "  }\n"
-                                        "}\n"}});
+                                        "}\n"},
+                                       {kCorePreludeFile, kCorePrelude}});
     CHECK(setup);
     if (!setup) {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
     CHECK(result.package.has_value());
   }
   {
@@ -1101,15 +1196,17 @@ TEST_CASE("Check match exhaustiveness") {
     const bool setup = write_all(dir, {{"main.al",
                                         "fn f(o: Option<i32>) -> i32 {\n"
                                         "  ret match o {\n"
-                                        "    Some(x) => x,\n"
+                                        "    Option::Some(x) => x,\n"
                                         "  }\n"
-                                        "}\n"}});
+                                        "}\n"},
+                                       {kCorePreludeFile, kCorePrelude}});
     CHECK(setup);
     if (!setup) {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
     CHECK(!result.package.has_value());
   }
   {
@@ -1170,30 +1267,60 @@ TEST_CASE("Check or-patterns bind shared names") {
   }
 }
 
-TEST_CASE("Check methods and blessed methods") {
+TEST_CASE("Check inherent and core generic methods") {
   {
     io::TempDir dir("alcy_method_ok_test");
-    const bool setup = write_all(dir, {{"main.al",
-                                        "struct Point { x: i32 }\n"
-                                        "impl Point {\n"
-                                        "  fn get(self: &Self) -> i32 {\n"
-                                        "    ret self.x\n"
-                                        "  }\n"
-                                        "}\n"
-                                        "fn f(r: Result<i32, bool>) -> i32 {\n"
-                                        "  p := Point { x: 1 }\n"
-                                        "  v := r.unwrap()\n"
-                                        "  ok := r.is_ok()\n"
-                                        "  _ := ok\n"
-                                        "  ret p.get() + v\n"
-                                        "}\n"}});
+    const bool setup =
+        write_all(dir, {{"main.al",
+                         "struct Point { x: i32 }\n"
+                         "impl Point {\n"
+                         "  fn get(self: &Self) -> i32 {\n"
+                         "    ret self.x\n"
+                         "  }\n"
+                         "}\n"
+                         "fn f(r: Result<i32, bool>) -> i32 {\n"
+                         "  p := Point { x: 1 }\n"
+                         "  v := r.unwrap()\n"
+                         "  ok := r.is_ok()\n"
+                         "  _ := ok\n"
+                         "  ret p.get() + v\n"
+                         "}\n"},
+                        {kCorePreludeFile,
+                         R"(pub intrinsic fn panic(msg: str) -> !;
+pub enum Option<T> { Some(T), None }
+pub enum Result<T, E> { Ok(T), Err(E) }
+impl<T, E> Result<T, E> {
+  fn is_ok(self: Self) -> bool { ret true }
+  fn is_err(self: Self) -> bool { ret false }
+  fn unwrap(self: Self) -> T { ret panic("stub") }
+  fn expect(self: Self, msg: str) -> T { ret panic(msg) }
+}
+)"}});
     CHECK(setup);
     if (!setup) {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
     CHECK(result.package.has_value());
+  }
+  {
+    io::TempDir dir("alcy_method_missing_core_test");
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(r: Result<i32, bool>) -> i32 {\n"
+                                        "  ret r.no_such_method()\n"
+                                        "}\n"},
+                                       {kCorePreludeFile, kCorePrelude}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
+    CHECK(!result.package.has_value());
+    CHECK(f.bag.has_errors());
   }
   {
     io::TempDir dir("alcy_method_bad_test");
@@ -1213,23 +1340,35 @@ TEST_CASE("Check methods and blessed methods") {
   }
 }
 
-TEST_CASE("Check must_use warnings") {
+TEST_CASE("Check unused-value warnings") {
   io::TempDir dir("alcy_mustuse_test");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn get() -> Result<i32, bool> {\n"
-                                      "  ret Ok(1)\n"
+                                      "  ret Result::Ok(1i32)\n"
+                                      "}\n"
+                                      "fn plain() -> i32 {\n"
+                                      "  ret 1\n"
+                                      "}\n"
+                                      "fn side() {\n"
                                       "}\n"
                                       "fn main() {\n"
-                                      "  get();\n"
-                                      "}\n"}});
+                                      "  _ := get()\n"
+                                      "  _ := plain()\n"
+                                      "  get()\n"
+                                      "  side()\n"
+                                      "}\n"},
+                                     {kCorePreludeFile, kCorePrelude}});
   CHECK(setup);
   if (!setup) {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                      ir::PointerWidth::W64, core_prelude());
   CHECK(result.package.has_value());
-  CHECK(f.bag.warning_count() > 0);
+  // The bare `get()` statement warns; `_ :=` discards and `()`
+  // statements do not.
+  CHECK(f.bag.warning_count() == 1);
 }
 
 TEST_CASE("Check items enforce entry and initializer rules") {

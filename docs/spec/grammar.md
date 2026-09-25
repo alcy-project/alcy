@@ -61,7 +61,7 @@ primitive := integer | float | "bool"
 tuple_type := "(" type ("," type)+ ","? ")"
 array_type := "[" type ";" integer "]"   # fixed-size array, decimal length
 ref_type  := "&" type | "&" "mut" type
-path_type := path ("<" type ("," type)* ">")?   # blessed generics only
+path_type := path ("<" type ("," type)* ">")?   # generic enums only
             # Closing ">>" splits into two ">" (dangling halves error).
 ```
 

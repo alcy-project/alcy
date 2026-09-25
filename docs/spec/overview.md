@@ -28,8 +28,9 @@ checkable contracts here.
 
 ## Non-goals for MVP
 
-- Generic types and functions, except the blessed `Result<T, E>` and
-  `Option<T>` (see `errors.md`).
+- Generic structs and generic free functions. Generic enums and
+  generic inherent methods are supported and monomorphized per
+  instantiation (see `errors.md` and `docs/adr/0009`).
 - Spec objects, closures, async, compile-time evaluation beyond
   constant items.
 - Unsafe code, raw pointers, FFI (reserved; see `ffi.md`).
