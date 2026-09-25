@@ -17,6 +17,10 @@
 
 namespace parser {
 
+// Diagnostic codes 4100-4199 are reserved for the parser.
+inline constexpr u32 kParserUnexpectedToken = 4100;
+inline constexpr u32 kParserReservedWord = 4101;
+
 // Hand-written recursive-descent parser over a token stream. Parsing is
 // error-tolerant: failures report a diagnostic and synchronize at item,
 // statement, or arm boundaries, so one bad construct never hides the

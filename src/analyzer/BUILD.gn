@@ -1,10 +1,12 @@
 source_set("analyzer") {
   sources = [
+    "checker.h",
     "fmt.h",
     "resolve.cc",
     "resolve.h",
     "types.cc",
     "types.h",
+    "types_expr.cc",
   ]
   deps = [
     "//src:base_modules",

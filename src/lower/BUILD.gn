@@ -5,6 +5,9 @@ source_set("lower") {
   sources = [
     "lower.cc",
     "lower.h",
+    "lower_comp.cc",
+    "lower_expr.cc",
+    "lowerer.h",
   ]
   deps = [
     "//src:base_modules",
@@ -12,6 +15,7 @@ source_set("lower") {
     "//src/ast",
     "//src/diag",
     "//src/ir",
+    "//src/source",
   ]
   configs += [ "//src:alcy_config" ]
 }
