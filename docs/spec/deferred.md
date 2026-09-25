@@ -17,9 +17,6 @@ relied upon by MVP programs or by the MVP compiler implementation.
   `&self` cannot be called through a `&mut` binding, and a `&mut`
   field cannot be read through a shared borrow of its owner. A growable
   container therefore has no read-only element accessor.
-- Symbol mangling. Emitted symbols are the source names, so a
-  function named after a C library entry point (`free`, `write`,
-  `read`, `exit`) collides with it at link time.
 - `spec` (trait) definitions and dispatch, coherence rules, and
   monomorphization beyond per-instantiation enum, struct, and method
   specialization.

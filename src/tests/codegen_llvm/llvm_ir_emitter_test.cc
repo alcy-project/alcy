@@ -15,6 +15,7 @@
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 #include "ir/external_function.h"
+#include "ir/function.h"
 #include "ir/instruction_flags.h"
 #include "ir/opcode.h"
 #include "ir/seq_builder.h"
@@ -42,7 +43,10 @@ ir::Storage hello_world_ir(str::StringInterner* interner) {
   const ir::ExternalFunctionIdx func_puts = builder.external_function({
       .meta = {.return_type = ir::primitive_idx(ir::TypeTag::I32),
                .param_types = {puts_param_type_id, 1},
-               .name = puts_str},
+               .name = puts_str,
+               .path = str::kEmptyStringId,
+               .kind = ir::SymbolKind::Foreign,
+               .generics = ir::TypeIdxRange{}},
       .calling_conv = ir::CallingConvention::C,
   });
 
@@ -119,7 +123,10 @@ ir::Storage hello_world_ir(str::StringInterner* interner) {
   builder.function({
       .meta = {.return_type = ir::primitive_idx(ir::TypeTag::I32),
                .param_types = {},
-               .name = main_str},
+               .name = main_str,
+               .path = str::kEmptyStringId,
+               .kind = ir::SymbolKind::Foreign,
+               .generics = ir::TypeIdxRange{}},
       .blocks = {block, 1},
   });
 
@@ -157,20 +164,26 @@ TEST_CASE("Emit struct and array calls") {
   ir::TypeSeq fields;
   fields.push(builder.ref_type(i32));
   fields.push(builder.ref_type(i32));
-  const ir::TypeIdx pair =
-      builder.struct_type(interner.intern("Pair"), fields.finish());
+  const ir::TypeIdx pair = builder.struct_type(
+      interner.intern("Pair"), fields.finish(), ir::TypeIdxRange{});
   const ir::TypeIdx arr4 = builder.array_type(i32, 4);
 
   const ir::ExternalFunctionIdx func_mkpair = builder.external_function({
       .meta = {.return_type = pair,
                .param_types = {},
-               .name = interner.intern("makepair")},
+               .name = interner.intern("makepair"),
+               .path = str::kEmptyStringId,
+               .kind = ir::SymbolKind::Foreign,
+               .generics = ir::TypeIdxRange{}},
       .calling_conv = ir::CallingConvention::C,
   });
   const ir::ExternalFunctionIdx func_mkarr = builder.external_function({
       .meta = {.return_type = arr4,
                .param_types = {},
-               .name = interner.intern("mkarr")},
+               .name = interner.intern("mkarr"),
+               .path = str::kEmptyStringId,
+               .kind = ir::SymbolKind::Foreign,
+               .generics = ir::TypeIdxRange{}},
       .calling_conv = ir::CallingConvention::C,
   });
 
@@ -204,7 +217,10 @@ TEST_CASE("Emit struct and array calls") {
   builder.function({
       .meta = {.return_type = pair,
                .param_types = {},
-               .name = interner.intern("testpair")},
+               .name = interner.intern("testpair"),
+               .path = str::kEmptyStringId,
+               .kind = ir::SymbolKind::Foreign,
+               .generics = ir::TypeIdxRange{}},
       .blocks = {block, 1},
   });
 
@@ -238,7 +254,10 @@ TEST_CASE("Emit struct and array calls") {
   builder.function({
       .meta = {.return_type = arr4,
                .param_types = {},
-               .name = interner.intern("testarr")},
+               .name = interner.intern("testarr"),
+               .path = str::kEmptyStringId,
+               .kind = ir::SymbolKind::Foreign,
+               .generics = ir::TypeIdxRange{}},
       .blocks = {block2, 1},
   });
 
@@ -400,7 +419,10 @@ TEST_CASE("Emit compute instructions") {
   builder.function({
       .meta = {.return_type = i32,
                .param_types = params.finish(),
-               .name = interner.intern("arith")},
+               .name = interner.intern("arith"),
+               .path = str::kEmptyStringId,
+               .kind = ir::SymbolKind::Foreign,
+               .generics = ir::TypeIdxRange{}},
       .blocks = {block, 1},
   });
 
@@ -497,7 +519,10 @@ TEST_CASE("Emit control flow") {
   builder.function({
       .meta = {.return_type = i32,
                .param_types = cond_params.finish(),
-               .name = interner.intern("condbr")},
+               .name = interner.intern("condbr"),
+               .path = str::kEmptyStringId,
+               .kind = ir::SymbolKind::Foreign,
+               .generics = ir::TypeIdxRange{}},
       .blocks = cond_blocks.finish(),
   });
 
@@ -537,7 +562,10 @@ TEST_CASE("Emit control flow") {
   builder.function({
       .meta = {.return_type = i32,
                .param_types = sw_fn_params.finish(),
-               .name = interner.intern("sw")},
+               .name = interner.intern("sw"),
+               .path = str::kEmptyStringId,
+               .kind = ir::SymbolKind::Foreign,
+               .generics = ir::TypeIdxRange{}},
       .blocks = sw_blocks.finish(),
   });
 
@@ -569,8 +597,8 @@ TEST_CASE("Emit memory instructions") {
   ir::TypeSeq pair_fields;
   pair_fields.push(builder.ref_type(i32));
   pair_fields.push(builder.ref_type(i32));
-  const ir::TypeIdx pair =
-      builder.struct_type(interner.intern("Pair"), pair_fields.finish());
+  const ir::TypeIdx pair = builder.struct_type(
+      interner.intern("Pair"), pair_fields.finish(), ir::TypeIdxRange{});
 
   auto imm_op = [&](ir::ImmutableIdx imm, ir::TypeIdx ty) {
     return builder.operand(ir::Operand::from_immutable(imm, ty));
@@ -656,8 +684,9 @@ TEST_CASE("Emit memory instructions") {
   ir::TypeSeq cmpxchg_fields;
   cmpxchg_fields.push(builder.ref_type(i32));
   cmpxchg_fields.push(builder.ref_type(builder.primitive(ir::TypeTag::I1)));
-  const ir::TypeIdx pair_i1 = builder.struct_type(interner.intern("CmpXchgRes"),
-                                                  cmpxchg_fields.finish());
+  const ir::TypeIdx pair_i1 =
+      builder.struct_type(interner.intern("CmpXchgRes"),
+                          cmpxchg_fields.finish(), ir::TypeIdxRange{});
   ir::OperandSeq cmpxchg_args;
   cmpxchg_args.push(
       reg_op(ir::RegisterIdx(0), ir::primitive_idx(ir::TypeTag::Ptr)));
@@ -761,7 +790,10 @@ TEST_CASE("Emit memory instructions") {
   builder.function({
       .meta = {.return_type = i32,
                .param_types = {},
-               .name = interner.intern("memtest")},
+               .name = interner.intern("memtest"),
+               .path = str::kEmptyStringId,
+               .kind = ir::SymbolKind::Foreign,
+               .generics = ir::TypeIdxRange{}},
       .blocks = {block, 1},
   });
 
@@ -833,7 +865,10 @@ TEST_CASE("Emit ignores Drop markers") {
   builder.function({
       .meta = {.return_type = builder.primitive(ir::TypeTag::Void),
                .param_types = {},
-               .name = interner.intern("markertest")},
+               .name = interner.intern("markertest"),
+               .path = str::kEmptyStringId,
+               .kind = ir::SymbolKind::Foreign,
+               .generics = ir::TypeIdxRange{}},
       .blocks = {block, 1},
   });
 

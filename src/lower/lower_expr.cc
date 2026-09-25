@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 #include <cstdlib>
-#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -14,14 +14,13 @@
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "fmt/format.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
-#include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 #include "ir/external_function.h"
+#include "ir/function.h"
 #include "ir/immutable.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
@@ -643,10 +642,14 @@ ir::ExternalFunctionIdx Lowerer::declare_external(
   for (ir::TypeIdx param : params) {
     seq.push(builder.ref_type(param));
   }
+  // A C entry point keeps its own name: it is not ours to encode.
   const ir::ExternalFunctionIdx idx =
       builder.external_function({.meta = {.return_type = ret,
                                           .param_types = seq.finish(),
-                                          .name = strings.intern(name)},
+                                          .name = strings.intern(name),
+                                          .path = str::kEmptyStringId,
+                                          .kind = ir::SymbolKind::Foreign,
+                                          .generics = ir::TypeIdxRange{}},
                                  .calling_conv = ir::CallingConvention::C});
   exts.push_back({name, idx});
   return idx;
@@ -923,9 +926,9 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
     }
     comp_args.push_back(std::move(arg));
   }
-  const ir::FunctionIdx fn =
-      fn_index(target->module, info.item, info.name, info.params, info.ret,
-               callee_inst(target), std::move(comp_args));
+  const ir::FunctionIdx fn = fn_index(
+      target->module, info.item, info.name, info.params, info.ret,
+      callee_inst(target), std::move(comp_args), ir::SymbolKind::Assoc);
   if (!fn.is_valid()) {
     internal(call.span, "call without function");
     return Val{size_one, error_type(), false, false};
@@ -1552,9 +1555,9 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     comp_args.push_back(std::move(arg));
   }
-  ir::FunctionIdx fn =
-      fn_index(target->module, info.item, info.name, info.params, info.ret,
-               callee_inst(target), std::move(comp_args));
+  ir::FunctionIdx fn = fn_index(target->module, info.item, info.name,
+                                info.params, info.ret, callee_inst(target),
+                                std::move(comp_args), ir::SymbolKind::Method);
   if (!fn.is_valid()) {
     return Val{size_one, error_type(), false, false};
   }

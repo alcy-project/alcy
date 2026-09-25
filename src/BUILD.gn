@@ -37,6 +37,7 @@ group("modules") {
     "path",
     "pkg",
     "source",
+    "symbol",
   ]
 }
 

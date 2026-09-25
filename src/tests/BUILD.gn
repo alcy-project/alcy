@@ -31,6 +31,7 @@ executable("tests") {
     "pkg/modules_test.cc",
     "pkg/resolve_test.cc",
     "source/source_test.cc",
+    "symbol/mangle_test.cc",
     "test_main.cc",
     "util/test_util.cc",
     "util/test_util.h",

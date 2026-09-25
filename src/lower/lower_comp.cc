@@ -1,5 +1,6 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 #include <cstdlib>
 #include <ranges>
 #include <span>
@@ -12,10 +13,8 @@
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "diag/span.h"
-#include "fmt/format.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
-#include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"

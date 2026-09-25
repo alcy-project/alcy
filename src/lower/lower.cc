@@ -25,8 +25,8 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"
-#include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
+#include "ir/function.h"
 #include "ir/immutable.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
@@ -334,7 +334,8 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
                                   const std::vector<ir::TypeIdx>& params,
                                   ir::TypeIdx ret,
                                   u32 inst,
-                                  std::vector<CompVal> comp_args) {
+                                  std::vector<CompVal> comp_args,
+                                  ir::SymbolKind kind) {
   std::string key = std::to_string(item.idx) + "|";
   for (ir::TypeIdx param : params) {
     key += std::to_string(param.idx) + ",";
@@ -363,10 +364,53 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   entry.params = params;
   entry.ret = ret;
   entry.inst = inst;
+  entry.kind = kind;
+  // A generic body is named by the arguments it was instantiated with.
+  // A method's arguments come from the type it was instantiated on; a
+  // generic free function's from the signature it registered.
+  if (inst != analyzer::kNoInst && inst < pkg.generic_insts.size()) {
+    const ir::TypeIdx self = pkg.generic_insts[inst];
+    if (self.is_valid()) {
+      entry.generics = nominal_arguments(self);
+    }
+  }
+  if (entry.generics.empty()) {
+    entry.generics = fn_args_for(item);
+  }
   entry.comp_args = std::move(comp_args);
   fns.push_back(std::move(entry));
   worklist_.push_back(fns.size() - 1);
   return idx;
+}
+
+// Type arguments of a nominal type, empty for a plain declaration.
+std::vector<ir::TypeIdx> Lowerer::nominal_arguments(ir::TypeIdx type) const {
+  const ir::TypeNode& node = builder.state().types[type.idx];
+  ir::TypeIdxRange params{};
+  if (node.tag == ir::TypeTag::Struct) {
+    params = builder.state().struct_types[node.as_struct()].params;
+  } else if (node.tag == ir::TypeTag::Enum) {
+    params = builder.state().enum_types[node.as_enum()].params;
+  } else {
+    return {};
+  }
+  std::vector<ir::TypeIdx> args;
+  args.reserve(params.size());
+  for (u32 i = 0; i < params.size(); ++i) {
+    args.emplace_back(params.head().idx + i);
+  }
+  return args;
+}
+
+// Type arguments a generic free function or intrinsic bound, for the
+// symbol that names it.
+std::vector<ir::TypeIdx> Lowerer::fn_args_for(ast::ItemIdx item) const {
+  for (const analyzer::FnInstance& instance : pkg.fn_insts) {
+    if (instance.item == item) {
+      return instance.args;
+    }
+  }
+  return {};
 }
 
 // Index of a generic instantiation, or kNoInst when the type is not
@@ -554,8 +598,15 @@ void Lowerer::run() {
         continue;
       }
       const u32 inst = generic_inst_index(method.self_type);
-      fn_index(m, method.item, method.name, method.params, method.ret, inst,
-               {});
+      // The kind comes from the receiver, not from which call site
+      // reserved the body first, so a symbol does not depend on
+      // lowering order.
+      const ir::SymbolKind kind =
+          method.receiver == analyzer::CheckedModule::ReceiverKind::None
+              ? ir::SymbolKind::Assoc
+              : ir::SymbolKind::Method;
+      fn_index(m, method.item, method.name, method.params, method.ret, inst, {},
+               kind);
       if (failed) {
         return;
       }
@@ -639,9 +690,17 @@ void Lowerer::run() {
     }
     ir::BlockIdxRange range{entry.blocks.front(),
                             static_cast<u32>(entry.blocks.size())};
+    ir::TypeSeq generics;
+    for (const ir::TypeIdx arg : entry.entry.generics) {
+      generics.push(builder.ref_type(arg));
+    }
     builder.function({.meta = {.return_type = entry.entry.ret,
                                .param_types = params.finish(),
-                               .name = strings.intern(entry.entry.name)},
+                               .name = strings.intern(entry.entry.name),
+                               .path = strings.intern(
+                                   pkg.tree.modules[entry.entry.mod]->path),
+                               .kind = entry.entry.kind,
+                               .generics = generics.finish()},
                       .blocks = range});
   }
 }

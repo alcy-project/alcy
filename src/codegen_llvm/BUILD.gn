@@ -20,6 +20,7 @@ source_set("codegen_llvm") {
   ]
   public_deps = [
     "//src/ir",
+    "//src/symbol",
     "//third_party/llvm",
   ]
 

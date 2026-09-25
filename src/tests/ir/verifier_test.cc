@@ -63,7 +63,10 @@ Storage valid_storage() {
   builder.function({
       .meta = {.return_type = primitive_idx(TypeTag::I32),
                .param_types = {},
-               .name = str::kEmptyStringId},
+               .name = str::kEmptyStringId,
+               .path = str::kEmptyStringId,
+               .kind = SymbolKind::Foreign,
+               .generics = TypeIdxRange{}},
       .blocks = {block, 1},
   });
   return std::move(builder).build();
@@ -72,7 +75,10 @@ Storage valid_storage() {
 FunctionMeta void_meta() {
   return FunctionMeta{.return_type = primitive_idx(TypeTag::Void),
                       .param_types = {},
-                      .name = str::kEmptyStringId};
+                      .name = str::kEmptyStringId,
+                      .path = str::kEmptyStringId,
+                      .kind = SymbolKind::Foreign,
+                      .generics = TypeIdxRange{}};
 }
 
 VerifyErrorKind check(Storage&& storage) {
@@ -208,7 +214,10 @@ TEST_CASE("Verify undefined register") {
   builder.function({
       .meta = {.return_type = primitive_idx(TypeTag::I32),
                .param_types = {},
-               .name = str::kEmptyStringId},
+               .name = str::kEmptyStringId,
+               .path = str::kEmptyStringId,
+               .kind = SymbolKind::Foreign,
+               .generics = TypeIdxRange{}},
       .blocks = {block, 1},
   });
   CHECK(check(std::move(builder).build()) ==
@@ -391,8 +400,8 @@ TEST_CASE("Verify struct and array types") {
     const TypeIdx i32 = builder.primitive(TypeTag::I32);
     fields.push(builder.ref_type(i32));
     fields.push(builder.ref_type(i32));
-    const TypeIdx st =
-        builder.struct_type(str::kEmptyStringId, fields.finish());
+    const TypeIdx st = builder.struct_type(str::kEmptyStringId, fields.finish(),
+                                           ir::TypeIdxRange{});
     const TypeIdx arr = builder.array_type(i32, 4);
     TypeSeq params;
     params.push(builder.ref_type(st));
@@ -429,7 +438,10 @@ TEST_CASE("Verify struct and array types") {
     builder.function({
         .meta = {.return_type = i32,
                  .param_types = params.finish(),
-                 .name = str::kEmptyStringId},
+                 .name = str::kEmptyStringId,
+                 .path = str::kEmptyStringId,
+                 .kind = SymbolKind::Foreign,
+                 .generics = TypeIdxRange{}},
         .blocks = {block, 1},
     });
     Storage storage = std::move(builder).build();
@@ -438,7 +450,8 @@ TEST_CASE("Verify struct and array types") {
   // Struct field range exceeds the types storage.
   {
     StorageBuilder builder;
-    builder.struct_type(str::kEmptyStringId, {TypeIdx(99), 1});
+    builder.struct_type(str::kEmptyStringId, {TypeIdx(99), 1},
+                        ir::TypeIdxRange{});
     CHECK(check(std::move(builder).build()) ==
           VerifyErrorKind::StructFieldsOutOfRange);
   }
@@ -465,7 +478,8 @@ TEST_CASE("Verify enum types") {
     EnumVariantTypeSeq variants;
     variants.push(builder.enum_variant(str::kEmptyStringId, {}));
     variants.push(builder.enum_variant(str::kEmptyStringId, payload.finish()));
-    builder.enum_type(str::kEmptyStringId, variants.finish());
+    builder.enum_type(str::kEmptyStringId, variants.finish(),
+                      ir::TypeIdxRange{});
     Storage storage = std::move(builder).build();
     CHECK(verify_storage(storage).is_ok());
   }
@@ -475,6 +489,7 @@ TEST_CASE("Verify enum types") {
     state.enum_types.emplace_back(EnumType{
         .name = str::kEmptyStringId,
         .variants = {EnumVariantTypeIdx(7), 1},
+        .params = {TypeIdx(0), 0},
     });
     TypeNode bad{};
     bad.tag = TypeTag::Enum;
@@ -494,6 +509,7 @@ TEST_CASE("Verify enum types") {
     state.enum_types.emplace_back(EnumType{
         .name = str::kEmptyStringId,
         .variants = {EnumVariantTypeIdx(0), 1},
+        .params = {TypeIdx(0), 0},
     });
     TypeNode bad{};
     bad.tag = TypeTag::Enum;
@@ -558,7 +574,10 @@ TEST_CASE("Verify CondBr shapes") {
     builder.function({
         .meta = {.return_type = i32,
                  .param_types = {},
-                 .name = str::kEmptyStringId},
+                 .name = str::kEmptyStringId,
+                 .path = str::kEmptyStringId,
+                 .kind = SymbolKind::Foreign,
+                 .generics = TypeIdxRange{}},
         .blocks = blocks.finish(),
     });
     CHECK(check(std::move(builder).build()) == VerifyErrorKind::InvalidCondBr);
@@ -589,7 +608,10 @@ TEST_CASE("Verify CondBr shapes") {
     builder.function({
         .meta = {.return_type = i1,
                  .param_types = {},
-                 .name = str::kEmptyStringId},
+                 .name = str::kEmptyStringId,
+                 .path = str::kEmptyStringId,
+                 .kind = SymbolKind::Foreign,
+                 .generics = TypeIdxRange{}},
         .blocks = {entry, 1},
     });
     CHECK(check(std::move(builder).build()) == VerifyErrorKind::InvalidCondBr);
@@ -640,7 +662,10 @@ TEST_CASE("Verify Switch shapes") {
     builder.function({
         .meta = {.return_type = i32,
                  .param_types = {},
-                 .name = str::kEmptyStringId},
+                 .name = str::kEmptyStringId,
+                 .path = str::kEmptyStringId,
+                 .kind = SymbolKind::Foreign,
+                 .generics = TypeIdxRange{}},
         .blocks = {entry, 1},
     });
     CHECK(check(std::move(builder).build()) == VerifyErrorKind::InvalidSwitch);
@@ -686,7 +711,10 @@ TEST_CASE("Verify Switch shapes") {
     builder.function({
         .meta = {.return_type = i32,
                  .param_types = {},
-                 .name = str::kEmptyStringId},
+                 .name = str::kEmptyStringId,
+                 .path = str::kEmptyStringId,
+                 .kind = SymbolKind::Foreign,
+                 .generics = TypeIdxRange{}},
         .blocks = {entry, 1},
     });
     CHECK(check(std::move(builder).build()) == VerifyErrorKind::InvalidSwitch);
@@ -733,7 +761,10 @@ TEST_CASE("Verify memory shapes") {
     builder.function({
         .meta = {.return_type = i32,
                  .param_types = {},
-                 .name = str::kEmptyStringId},
+                 .name = str::kEmptyStringId,
+                 .path = str::kEmptyStringId,
+                 .kind = SymbolKind::Foreign,
+                 .generics = TypeIdxRange{}},
         .blocks = {entry, 1},
     });
     CHECK(check(std::move(builder).build()) ==
@@ -779,7 +810,10 @@ TEST_CASE("Verify memory shapes") {
     builder.function({
         .meta = {.return_type = i32,
                  .param_types = {},
-                 .name = str::kEmptyStringId},
+                 .name = str::kEmptyStringId,
+                 .path = str::kEmptyStringId,
+                 .kind = SymbolKind::Foreign,
+                 .generics = TypeIdxRange{}},
         .blocks = {entry, 1},
     });
     CHECK(check(std::move(builder).build()) ==
@@ -794,7 +828,10 @@ TEST_CASE("Verify call arity") {
   const ExternalFunctionIdx callee =
       builder.external_function({.meta = {.return_type = i32,
                                           .param_types = {p0, 1},
-                                          .name = str::kEmptyStringId},
+                                          .name = str::kEmptyStringId,
+                                          .path = str::kEmptyStringId,
+                                          .kind = SymbolKind::Foreign,
+                                          .generics = TypeIdxRange{}},
                                  .calling_conv = CallingConvention::C});
   const OperandIdx head = builder.operand(Operand::from_external_function(
       callee, primitive_idx(TypeTag::Function)));
@@ -822,7 +859,10 @@ TEST_CASE("Verify call arity") {
   builder.function({
       .meta = {.return_type = i32,
                .param_types = {},
-               .name = str::kEmptyStringId},
+               .name = str::kEmptyStringId,
+               .path = str::kEmptyStringId,
+               .kind = SymbolKind::Foreign,
+               .generics = TypeIdxRange{}},
       .blocks = {entry, 1},
   });
   // One declared parameter but zero call arguments.

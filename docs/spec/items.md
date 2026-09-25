@@ -88,6 +88,20 @@
 - An intrinsic may be generic. Generic intrinsics register one
   signature per instantiation, resolved at their call sites.
 
+## Linkable symbols
+
+- Every symbol the compiler defines is derived from the signature it
+  names: the module path, the item name, what the item is (free
+  function, associated function, or method), and the type arguments of
+  the instantiation. A source name never reaches the linker, so no
+  program can collide with a C library entry point or with another
+  alcy item. See `docs/adr/0011`.
+- The encoding is deterministic: the same signature yields the same
+  symbol in any lowering order, so a profiler, a debugger, and a
+  backtrace all read the same name.
+- A C entry point is not encoded. It keeps the name it was declared
+  with, because it is not ours to rewrite.
+
 ## Structs and enums
 
 - Structs have named fields only and no constructors.

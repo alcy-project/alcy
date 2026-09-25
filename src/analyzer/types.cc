@@ -184,11 +184,14 @@ ir::TypeIdx Checker::intern_uninit(ir::TypeIdx payload) {
       return wrapper;
     }
   }
-  const ir::TypeIdx wrapper = builder.struct_type(uninit_name_id, [&] {
-    ir::TypeSeq seq;
-    seq.push(storage_copy(key));
-    return seq.finish();
-  }());
+  const ir::TypeIdx wrapper = builder.struct_type(
+      uninit_name_id,
+      [&] {
+        ir::TypeSeq seq;
+        seq.push(storage_copy(key));
+        return seq.finish();
+      }(),
+      ir::TypeIdxRange{});
   uninit_types_.emplace_back(wrapper, key);
   return wrapper;
 }
@@ -233,7 +236,7 @@ ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
     for (ir::TypeIdx field : fields) {
       seq.push(storage_copy(field));
     }
-    builder.fill_struct(entry.type, seq.finish());
+    builder.fill_struct(entry.type, seq.finish(), ir::TypeIdxRange{});
   } else {
     // Payloads resolve first so variant nodes append back-to-back.
     std::vector<std::vector<ir::TypeIdx>> payloads;
@@ -259,7 +262,7 @@ ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
       variants.push(builder.enum_variant(interner.intern(variant.name.name),
                                          seq.finish()));
     }
-    builder.fill_enum(entry.type, variants.finish());
+    builder.fill_enum(entry.type, variants.finish(), ir::TypeIdxRange{});
   }
   entry.complete = true;
   return entry.type;
@@ -437,6 +440,12 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
       is_struct ? builder.reserve_struct(name) : builder.reserve_enum(name);
   generic_instances.push_back(GenericInstance{nominal, args, reserved});
   inst_numbering.push_back(reserved);
+  // A sequence must be contiguous in the type table, and the arguments
+  // are arbitrary existing nodes, so each is copied in.
+  ir::TypeSeq args_seq;
+  for (ir::TypeIdx arg : args) {
+    args_seq.push(builder.ref_type(arg));
+  }
   const usize pushed = type_params.size();
   if (is_struct) {
     const std::span<const ast::Ident> params =
@@ -449,7 +458,7 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
          node.payload.get<ast::ItemStruct>().fields) {
       seq.push(storage_copy(resolve_type(entry.module, field.type, nullptr)));
     }
-    builder.fill_struct(reserved, seq.finish());
+    builder.fill_struct(reserved, seq.finish(), args_seq.finish());
   } else {
     const ast::ItemEnum& decl = node.payload.get<ast::ItemEnum>();
     for (usize i = 0; i < decl.params.size(); ++i) {
@@ -477,7 +486,7 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
       variants.push(builder.enum_variant(interner.intern(variant.name.name),
                                          seq.finish()));
     }
-    builder.fill_enum(reserved, variants.finish());
+    builder.fill_enum(reserved, variants.finish(), args_seq.finish());
   }
   while (type_params.size() > pushed) {
     type_params.pop_back();

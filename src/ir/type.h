@@ -74,6 +74,10 @@ struct StructType {
   str::StringPoolId name;
   // Field types in declaration order.
   TypeIdxRange fields;
+  // Generic arguments this instantiation was built with, empty for a
+  // non-generic declaration. A symbol names the arguments, so a type
+  // has to carry its own.
+  TypeIdxRange params;
 };
 
 struct ArrayType {
@@ -91,6 +95,8 @@ struct EnumType {
   str::StringPoolId name;
   // Variants in declaration order; the index doubles as the discriminant.
   EnumVariantTypeIdxRange variants;
+  // Generic arguments, as for StructType.
+  TypeIdxRange params;
 };
 
 // Pointee of a Ref or MutRef node. Reference nodes are structurally

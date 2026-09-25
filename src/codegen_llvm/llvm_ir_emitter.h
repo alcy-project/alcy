@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 
 #include "codegen_llvm/declaration.h"
 #include "codegen_llvm/llvm_ir_storage.h"
@@ -51,6 +52,8 @@ class LlvmIrEmitter {
   void emit_control(const ir::Instruction& instr);
 
   llvm::Function* create_function(const ir::FunctionMeta& function_meta) const;
+  // The linker-visible name of a function.
+  std::string linkable_name(const ir::FunctionMeta& function_meta) const;
 
   llvm::Value* resolve_operand_value(const ir::Operand& operand) const;
   llvm::Function* resolve_operand_function(const ir::Operand& operand) const;

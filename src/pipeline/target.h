@@ -14,6 +14,7 @@
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
 #include "pkg/manifest.h"
+#include "source/source.h"
 
 namespace pipeline {
 

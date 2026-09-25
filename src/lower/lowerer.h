@@ -112,6 +112,11 @@ class Lowerer {
     ir::TypeIdx ret = ir::TypeIdx(base::kInvalidIdx);
     // Generic instantiation lowered under (kNoInst for plain code).
     u32 inst = analyzer::kNoInst;
+    // What the symbol names. A method and an associated function share
+    // an item, so the kind comes from the signature, not the item.
+    ir::SymbolKind kind = ir::SymbolKind::Free;
+    // Type arguments of the instantiation, for the symbol.
+    std::vector<ir::TypeIdx> generics;
     // Comp argument values in formal-parameter order.
     std::vector<CompVal> comp_args;
   };
@@ -208,14 +213,22 @@ class Lowerer {
       ast::ExprIdx callee) const;
   std::vector<u32> comp_positions(ast::ItemIdx item) const;
   static void comp_key_into(std::string& key, const CompValue& value);
+  // Reserves (or finds) the IR function for one instantiation. `kind`
+  // says what the symbol names, because a method and an associated
+  // function share an item.
   ir::FunctionIdx fn_index(u32 mod,
                            ast::ItemIdx item,
                            std::string_view name,
                            const std::vector<ir::TypeIdx>& params,
                            ir::TypeIdx ret,
                            u32 inst,
-                           std::vector<CompVal> comp_args);
+                           std::vector<CompVal> comp_args,
+                           ir::SymbolKind kind = ir::SymbolKind::Free);
   u32 callee_inst(const analyzer::CheckedModule::CallTarget* target) const;
+  // Type arguments of a nominal type, empty for a plain declaration.
+  std::vector<ir::TypeIdx> nominal_arguments(ir::TypeIdx type) const;
+  // Type arguments a generic free function or intrinsic bound.
+  std::vector<ir::TypeIdx> fn_args_for(ast::ItemIdx item) const;
   u32 generic_inst_index(ir::TypeIdx type) const;
   const analyzer::CheckedModule::StructInfo* struct_info(ir::TypeIdx type);
   // Follows a field storage copy back to the type it was copied from.

@@ -5,7 +5,6 @@
 
 #include <optional>
 #include <span>
-#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -13,6 +12,7 @@
 #include "analyzer/resolve.h"
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
 #include "pipeline/embedded_std.h"
 #include "pipeline/pipeline_context.h"

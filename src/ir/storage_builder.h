@@ -147,11 +147,13 @@ class StorageBuilder {
     return primitive_idx(tag);
   }
 
-  TypeIdx struct_type(str::StringPoolId name, TypeIdxRange fields) {
+  TypeIdx struct_type(str::StringPoolId name,
+                      TypeIdxRange fields,
+                      TypeIdxRange params) {
     TypeNode node{};
     node.tag = TypeTag::Struct;
     node.data.set(state_.struct_types.emplace_back(
-        StructType{.name = name, .fields = fields}));
+        StructType{.name = name, .fields = fields, .params = params}));
     return state_.types.emplace_back(node);
   }
 
@@ -163,16 +165,17 @@ class StorageBuilder {
   TypeIdx reserve_struct(str::StringPoolId name) {
     TypeNode node{};
     node.tag = TypeTag::Struct;
-    node.data.set(state_.struct_types.emplace_back(
-        StructType{.name = name, .fields = {TypeIdx(0), 0}}));
+    node.data.set(state_.struct_types.emplace_back(StructType{
+        .name = name, .fields = {TypeIdx(0), 0}, .params = {TypeIdx(0), 0}}));
     return state_.types.emplace_back(node);
   }
 
-  void fill_struct(TypeIdx idx, TypeIdxRange fields) {
+  void fill_struct(TypeIdx idx, TypeIdxRange fields, TypeIdxRange params) {
     DCHECK(idx.idx < state_.types.size());
     TypeNode& node = state_.types[idx];
     DCHECK(node.tag == TypeTag::Struct);
     state_.struct_types[node.as_struct()].fields = fields;
+    state_.struct_types[node.as_struct()].params = params;
   }
 
   TypeIdx array_type(TypeIdx element, u64 count) {
@@ -287,22 +290,29 @@ class StorageBuilder {
     TypeNode node{};
     node.tag = TypeTag::Enum;
     node.data.set(state_.enum_types.emplace_back(
-        EnumType{.name = name, .variants = {EnumVariantTypeIdx(0), 0}}));
+        EnumType{.name = name,
+                 .variants = {EnumVariantTypeIdx(0), 0},
+                 .params = {TypeIdx(0), 0}}));
     return state_.types.emplace_back(node);
   }
 
-  void fill_enum(TypeIdx idx, EnumVariantTypeIdxRange variants) {
+  void fill_enum(TypeIdx idx,
+                 EnumVariantTypeIdxRange variants,
+                 TypeIdxRange params) {
     DCHECK(idx.idx < state_.types.size());
     TypeNode& node = state_.types[idx];
     DCHECK(node.tag == TypeTag::Enum);
     state_.enum_types[node.as_enum()].variants = variants;
+    state_.enum_types[node.as_enum()].params = params;
   }
 
-  TypeIdx enum_type(str::StringPoolId name, EnumVariantTypeIdxRange variants) {
+  TypeIdx enum_type(str::StringPoolId name,
+                    EnumVariantTypeIdxRange variants,
+                    TypeIdxRange params) {
     TypeNode node{};
     node.tag = TypeTag::Enum;
     node.data.set(state_.enum_types.emplace_back(
-        EnumType{.name = name, .variants = variants}));
+        EnumType{.name = name, .variants = variants, .params = params}));
     return state_.types.emplace_back(node);
   }
 

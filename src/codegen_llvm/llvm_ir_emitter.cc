@@ -4,6 +4,7 @@
 #include "codegen_llvm/llvm_ir_emitter.h"
 
 #include <memory>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -29,6 +30,7 @@
 #include "ir/type.h"
 #include "ir/type_util.h"
 #include "ir/verifier.h"
+#include "symbol/mangle.h"
 
 #if BUILD_FLAG(IS_DEBUG)
 #include "ir/formatter.h"  // IWYU pragma: keep
@@ -425,6 +427,36 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
   }
 }
 
+// The linker-visible name of a function. A signature encodes to a
+// symbol; a foreign one keeps the name it was declared with.
+std::string LlvmIrEmitter::linkable_name(
+    const ir::FunctionMeta& function_meta) const {
+  if (function_meta.kind == ir::SymbolKind::Foreign) {
+    return std::string(interner_->get(function_meta.name));
+  }
+  symbol::Signature signature;
+  signature.path = std::string(interner_->get(function_meta.path));
+  signature.name = std::string(interner_->get(function_meta.name));
+  switch (function_meta.kind) {
+    case ir::SymbolKind::Free:
+      signature.kind = symbol::Signature::Kind::Free;
+      break;
+    case ir::SymbolKind::Assoc:
+      signature.kind = symbol::Signature::Kind::Assoc;
+      break;
+    case ir::SymbolKind::Method:
+      signature.kind = symbol::Signature::Kind::Method;
+      break;
+    case ir::SymbolKind::Foreign: break;
+  }
+  const ir::TypeIdxRange generics = function_meta.generics;
+  signature.generics.reserve(generics.size());
+  for (u32 i = 0; i < generics.size(); ++i) {
+    signature.generics.emplace_back(generics.head().idx + i);
+  }
+  return symbol::mangle(signature, storage_, *interner_);
+}
+
 llvm::Function* LlvmIrEmitter::create_function(
     const ir::FunctionMeta& function_meta) const {
   llvm::SmallVector<llvm::Type*, kFunctionArgsSooSize> parameter_types;
@@ -440,9 +472,10 @@ llvm::Function* LlvmIrEmitter::create_function(
       type(function_meta.return_type),
       llvm::ArrayRef<llvm::Type*>(parameter_types), false);
 
-  const std::string_view func_name = interner_->get(function_meta.name);
-
-  // DLOG("Generated LLVM FTy NumParams: {}", func_type->getNumParams());
+  // A symbol is derived from the signature, so a source name can never
+  // reach the linker. A C entry point keeps the name it was declared
+  // with, and the synthesized program entry is named below.
+  const std::string func_name = linkable_name(function_meta);
 
   llvm::Function* llvm_function = llvm::Function::Create(
       func_type, llvm::Function::ExternalLinkage, func_name, module_);
