@@ -22,6 +22,7 @@
 #endif
 typedef intptr_t ssize_t;
 #else
+#include <sys/types.h>
 #include <unistd.h>
 #endif
 

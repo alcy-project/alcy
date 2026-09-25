@@ -10,7 +10,6 @@
 #include "ast/ast.h"
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
-#include "fpag/mem/arena.h"
 #include "source/source.h"
 
 namespace analyzer {

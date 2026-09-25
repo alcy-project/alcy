@@ -1,3 +1,6 @@
+// Copyright 2026 The Alcy Project Authors
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 // Toolchain standard library, core member.
 //
 // This file ships inside the compiler binary and is injected as a

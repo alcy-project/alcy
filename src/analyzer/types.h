@@ -5,7 +5,6 @@
 
 #include <deque>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include "analyzer/resolve.h"
