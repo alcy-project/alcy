@@ -1059,7 +1059,7 @@ ast::PatternIdx Parser::parse_primary_pattern() {
   }
   const std::span<const ast::Ident> segments = ast_.paths[path].segments;
   // A lone lowercase identifier binds a variable; anything else names a
-  // unit variant (uppercase `None`, qualified `Optional::None`). Name
+  // unit variant (uppercase `None`, qualified `Option::None`). Name
   // resolution refines this, but the parser must commit to a shape.
   if (segments.size() == 1) {
     const std::string_view name = segments[0].name;

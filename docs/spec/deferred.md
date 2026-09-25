@@ -13,7 +13,7 @@ relied upon by MVP programs or by the MVP compiler implementation.
 - Struct variants for enums; tuple struct declarations.
 - `async`, parallel constructs, `union` types, `register` operations.
 - `From`-style error conversion; `Debug` printing; combinators
-  (`map`, `and_then`) on `Result`/`Optional`.
+  (`map`, `and_then`) on `Result`/`Option`.
 - `break` with a value; `main` returning richer types.
 - `pub(...)` restricted visibility; glob imports.
 - `f16`, 128-bit integers, posit, and decimal types; `Char`/`Ascii`/

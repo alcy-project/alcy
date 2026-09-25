@@ -8,7 +8,7 @@ fn area(s: Shape) -> i32 {
   ret r
 }
 
-fn pick(n: i32) -> Optional<i32> {
+fn pick(n: i32) -> Option<i32> {
   if n <= 0 {
     ret None
   }

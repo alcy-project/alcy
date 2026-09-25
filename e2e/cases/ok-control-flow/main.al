@@ -29,7 +29,7 @@ fn search(limit: i32) -> i32 {
   ret found
 }
 
-fn calc(o: Optional<i32>) -> Optional<i32> {
+fn calc(o: Option<i32>) -> Option<i32> {
   v := o?
   ret Some(v + 1)
 }
@@ -42,7 +42,7 @@ fn main() {
   } else {
     b
   }
-  o: Optional<i32> := Some(v)
+  o: Option<i32> := Some(v)
   r := calc(o)
   _ := r
 }

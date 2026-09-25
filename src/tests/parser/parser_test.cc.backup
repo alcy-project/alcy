@@ -384,7 +384,7 @@ TEST_CASE("Parser builds control flow") {
 TEST_CASE("Parser reads generic blessed types") {
   Fixture f;
   const ParseResult result =
-      parse("fn f(x: Result<Optional<i32>, bool>) -> i32 { ret 0 }", f);
+      parse("fn f(x: Result<Option<i32>, bool>) -> i32 { ret 0 }", f);
   CHECK(result.ok);
   if (!result.ok) {
     return;

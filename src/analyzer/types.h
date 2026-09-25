@@ -106,7 +106,7 @@ struct CheckedPackage {
   struct BlessedType {
     bool is_result;
     ir::TypeIdx type;
-    // [T, E] for Result, [T] for Optional.
+    // [T, E] for Result, [T] for Option.
     std::vector<ir::TypeIdx> args;
   };
   std::vector<BlessedType> blessed;

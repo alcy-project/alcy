@@ -2,10 +2,10 @@
 
 ## Blessed generics
 
-- `Result<T, E>` and `Optional<T>` are the only generic types in MVP.
+- `Result<T, E>` and `Option<T>` are the only generic types in MVP.
   They are compiler-known and monomorphized. User-defined generics
   are deferred (see `deferred.md`).
-- `Result` has variants `Ok(T)` and `Err(E)`; `Optional` has `Some(T)`
+- `Result` has variants `Ok(T)` and `Err(E)`; `Option` has `Some(T)`
   and `None`. Both compose as ordinary algebraic types for region
   purposes (field intersection and projection apply unchanged).
 - The compiler provides exactly `unwrap`, `expect`, `is_ok`, and
@@ -15,7 +15,7 @@
 ## The `?` operator
 
 - `?` propagates the error (or `None`) to the enclosing function,
-  which MUST return a matching `Result`/`Optional` type.
+  which MUST return a matching `Result`/`Option` type.
 - Only identical error types propagate in MVP. Automatic conversion
   (`From`-style) requires the spec system and is deferred; mismatched
   error types are compile-time errors resolved by explicit mapping.
