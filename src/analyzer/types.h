@@ -117,6 +117,10 @@ struct CheckedPackage {
   // Every generic enum instantiation type, aligned with the
   // checker's instantiation order; indexes key lowering tables.
   std::vector<ir::TypeIdx> generic_insts;
+  // Maps a struct/enum field storage copy back to the type it was
+  // copied from, as (copy, origin) pairs. Lowering follows these so a
+  // field's copied type resolves to its declaring nominal.
+  std::vector<std::pair<ir::TypeIdx, ir::TypeIdx>> type_origins;
 };
 
 // Resolves every type position in the package to interned TypeIdx:

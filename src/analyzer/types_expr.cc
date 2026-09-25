@@ -181,10 +181,28 @@ bool Checker::bind_pattern(u32 module,
         bind_error_idents(module, pattern);
         return false;
       }
-      unify(type, intern_nominal(*nominal), node.span, "struct pattern");
+      ir::TypeIdx struct_type = error_type();
+      usize kept = type_params.size();
+      if (nominal_params(*nominal).empty()) {
+        struct_type = intern_nominal(*nominal);
+      } else {
+        const GenericInstance* instance =
+            generic_instance_for(nominal_index(nominal), type);
+        if (instance == nullptr) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, node.span,
+                       "struct is not a member of the matched type");
+          (void)index;
+          bind_error_idents(module, pattern);
+          return false;
+        }
+        struct_type = instance->type;
+        kept = push_generic_scope(*instance);
+      }
+      unify(type, struct_type, node.span, "struct pattern");
       const ast::ItemNode& decl = ast.items[nominal->item];
-      const ir::StructType& struct_type =
-          builder.struct_types()[builder.types()[nominal->type].as_struct()];
+      const ir::StructType& struct_type_shape =
+          builder.struct_types()[builder.types()[struct_type].as_struct()];
       bool refutable = false;
       for (const ast::FieldPattern& field : node.payload.strukt.fields) {
         u32 index = 0;
@@ -205,10 +223,12 @@ bool Checker::bind_pattern(u32 module,
           bind_error_idents(module, field.pattern);
           continue;
         }
-        if (bind_pattern(module, field.pattern, struct_type.fields[index])) {
+        if (bind_pattern(module, field.pattern,
+                         struct_type_shape.fields[index])) {
           refutable = true;
         }
       }
+      pop_generic_scope(kept);
       return refutable;
     }
     case ast::PatternKind::Ref: {
@@ -1161,8 +1181,11 @@ ir::TypeIdx Checker::check_field(u32 module,
         builder.struct_types()[builder.types()[receiver].as_struct()];
     NominalEntry* owner = nullptr;
     u32 field_index = 0;
+    // A field's type is a storage copy of the declared type, so owner
+    // lookup follows the copy back to its origin.
+    const ir::TypeIdx origin = type_origin(receiver);
     for (NominalEntry& entry : nominals) {
-      if (!entry.complete || entry.type.idx != receiver.idx) {
+      if (!entry.complete || entry.type.idx != origin.idx) {
         continue;
       }
       const ast::ItemNode& owner_node = ast.items[entry.item];
@@ -1184,6 +1207,44 @@ ir::TypeIdx Checker::check_field(u32 module,
       }
     }
     if (owner == nullptr) {
+      // A generic struct instance carries no NominalEntry; its
+      // declaration lives on the owning nominal.
+      for (const GenericInstance& instance : generic_instances) {
+        if (instance.type.idx != origin.idx) {
+          continue;
+        }
+        owner = &nominals[instance.nominal];
+        break;
+      }
+      if (owner != nullptr) {
+        u32 i = 0;
+        for (const ast::ItemStructField& decl_field :
+             ast.items[owner->item].payload.get<ast::ItemStruct>().fields) {
+          if (decl_field.name.name == field_name.name) {
+            field_index = i;
+            break;
+          }
+          ++i;
+        }
+      }
+    }
+    if (owner == nullptr) {
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
+                   field_name.span, "unknown field '{}'", field_name.name);
+      (void)index;
+      return error_type();
+    }
+    // A missing name on a resolved owner must not index past the end.
+    bool named = false;
+    for (const ast::ItemStructField& decl_field :
+         ast.items[owner->item].payload.get<ast::ItemStruct>().fields) {
+      if (decl_field.name.name == field_name.name) {
+        named = true;
+        break;
+      }
+    }
+    if (!named) {
       const u32 index =
           bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
                    field_name.span, "unknown field '{}'", field_name.name);
@@ -1245,7 +1306,29 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
     }
     return error_type();
   }
-  const ir::TypeIdx struct_type = intern_nominal(*nominal);
+  ir::TypeIdx struct_type = error_type();
+  const GenericInstance* instance = nullptr;
+  if (nominal_params(*nominal).empty()) {
+    struct_type = intern_nominal(*nominal);
+  } else {
+    // A generic struct takes its instantiation from the expectation;
+    // there is no path-level type argument to carry it.
+    instance = expected != nullptr ? generic_find(*expected) : nullptr;
+    if (instance == nullptr || instance->nominal != nominal_index(nominal)) {
+      const u32 index =
+          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, node.span,
+                   "cannot infer the generic type; add an annotation");
+      (void)index;
+      for (const ast::ExprFieldInit& field :
+           node.payload.get<ast::ExprStruct>().init) {
+        check_expr(module, field.value, nullptr);
+      }
+      return error_type();
+    }
+    struct_type = instance->type;
+  }
+  const usize kept =
+      instance == nullptr ? type_params.size() : push_generic_scope(*instance);
   const ast::ItemNode& decl = ast.items[nominal->item];
   const ir::StructType& fields =
       builder.struct_types()[builder.types()[struct_type].as_struct()];
@@ -1294,8 +1377,12 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
     }
   }
   if (expected != nullptr) {
-    return unify(*expected, struct_type, node.span, "struct");
+    const ir::TypeIdx result =
+        unify(*expected, struct_type, node.span, "struct");
+    pop_generic_scope(kept);
+    return result;
   }
+  pop_generic_scope(kept);
   return struct_type;
 }
 

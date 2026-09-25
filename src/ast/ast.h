@@ -791,6 +791,7 @@ struct ItemStructField {
 
 struct ItemStruct {
   Ident name;
+  std::span<const Ident> params;
   std::span<const ItemStructField> fields;
 };
 

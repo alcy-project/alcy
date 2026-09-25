@@ -216,8 +216,10 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
             rhs_val);
       } else if (ir::is_float_type(tag)) {
         result = builder_->CreateFCmp(float_predicate(i.op), lhs_val, rhs_val);
-      } else if (tag == ir::TypeTag::Ptr &&
+      } else if ((tag == ir::TypeTag::Ptr || tag == ir::TypeTag::Ref ||
+                  tag == ir::TypeTag::MutRef) &&
                  (i.op == Op::Eq || i.op == Op::Ne)) {
+        // References and raw pointers compare by address.
         result =
             builder_->CreateICmp(int_predicate(i.op, false), lhs_val, rhs_val);
       } else {
@@ -285,6 +287,12 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
         // type so later element access resolves it.
         result = value;
         values_.add_alloca_type(i.dst, dst_ty);
+      } else if (value->getType()->isPointerTy() &&
+                 (dst_tag == ir::TypeTag::Ref ||
+                  dst_tag == ir::TypeTag::MutRef)) {
+        // Relabelling a raw pointer as a reference: the address is
+        // unchanged, and the destination carries the pointee type.
+        result = value;
       } else {
         DLOG("Unsupported cast");
         DCHECK(false);

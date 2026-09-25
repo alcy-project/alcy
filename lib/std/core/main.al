@@ -12,6 +12,14 @@ pub intrinsic fn memcopy(dst: &mut u8, src: &u8, n: usize);
 
 pub intrinsic fn panic(msg: str) -> !;
 
+// Heap allocation. `align` must be a power of two; a zero `size`
+// still yields a distinct freeable pointer. The returned reference
+// uniquely owns uninitialized bytes and must be released with
+// `dealloc` using the same `size` and `align`.
+pub intrinsic fn alloc(size: usize, align: usize) -> &mut u8;
+
+pub intrinsic fn dealloc(ptr: &mut u8, size: usize, align: usize);
+
 intrinsic fn sys_write(fd: i32, buf: str);
 
 pub fn print(msg: str) {

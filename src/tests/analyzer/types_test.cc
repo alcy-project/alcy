@@ -214,6 +214,82 @@ TEST_CASE("Check interns enums with payloads") {
   CHECK(result.package->types.is_copy_type(choice->type));
 }
 
+TEST_CASE("Check instantiates generic structs") {
+  io::TempDir dir("alcy_types_generic_struct_test");
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct Pair<A, B> { a: A, b: B }\n"
+                       "fn f(x: Pair<i32, str>) -> Pair<i32, str> {\n"
+                       "  ret x\n"
+                       "}\n"
+                       "fn g(x: Pair<str, i32>) -> i32 {\n"
+                       "  ret 0\n"
+                       "}\n"
+                       "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr || root->functions.size() < 2) {
+    return;
+  }
+  const ir::Storage& types = result.package->types;
+  const ir::TypeIdx pair_i_s = root->functions[0].params[0];
+  CHECK(types.types()[pair_i_s].tag == ir::TypeTag::Struct);
+  // Identical instantiations share one index; different ones do not.
+  CHECK(pair_i_s.idx == root->functions[0].ret.idx);
+  CHECK(pair_i_s.idx != root->functions[1].params[0].idx);
+}
+
+TEST_CASE("Check instantiates generic struct methods") {
+  io::TempDir dir("alcy_types_generic_struct_method_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Pair<A, B> { a: A, b: B }\n"
+                                      "impl<A, B> Pair<A, B> {\n"
+                                      "  fn first(self: Self) -> A {\n"
+                                      "    ret self.a\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn f(p: Pair<i32, bool>) -> i32 {\n"
+                                      "  ret p.first()\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects arity mismatch on generic structs") {
+  io::TempDir dir("alcy_types_generic_struct_arity_test");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Pair<A, B> { a: A, b: B }\n"
+                                      "fn f(x: Pair<i32>) -> i32 {\n"
+                                      "  ret 0\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Check resolves annotations and signatures") {
   io::TempDir dir("alcy_types_sig_test");
   const bool setup =

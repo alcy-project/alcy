@@ -87,6 +87,10 @@ class Checker {
   str::StringInterner interner;
   std::vector<NominalEntry> nominals;
   std::vector<GenericInstance> generic_instances;
+  // `ref_type` appends a storage copy of a type so a struct's field
+  // range stays contiguous. This maps each copy back to the type it
+  // was copied from, so owner lookups accept both indexes.
+  std::vector<std::pair<ir::TypeIdx, ir::TypeIdx>> type_origins_;
   // Active type-parameter scope: innermost last. Pushed while
   // instantiating a generic enum or checking its members.
   std::vector<std::pair<std::string_view, ir::TypeIdx>> type_params;
@@ -133,10 +137,16 @@ class Checker {
                                               ir::TypeIdx type) const;
   usize push_generic_scope(const GenericInstance& instance);
   void pop_generic_scope(usize kept);
-  // Interns a variant owner's type. Generic enums defer: their
-  // instantiation is fixed later against the expectation, so the
+  // Parameter names of a nominal declaration, whether struct or enum.
+  std::span<const ast::Ident> nominal_params(const NominalEntry& entry);
+  // Appends a storage copy of `type` and records its origin.
+  ir::TypeIdx storage_copy(ir::TypeIdx type);
+  // Follows storage copies back to the type they were made from.
+  ir::TypeIdx type_origin(ir::TypeIdx type) const;
+  // Interns a nominal's type. Generic declarations defer: their type
+  // is fixed later against the expectation or the scrutinee, so the
   // error type marks "resolve from context".
-  ir::TypeIdx variant_owner_type(NominalEntry* enom);
+  ir::TypeIdx nominal_owner_type(NominalEntry* entry);
   bool walk_module_prefix(u32 module,
                           ast::PathIdx path,
                           std::string_view what,

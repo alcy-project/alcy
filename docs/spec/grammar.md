@@ -36,7 +36,7 @@ vis       := "pub"
 fn_item   := "fn" ident "(" params ")" ("->" type)? block
             # omitted return type means "()"
 params    := (pattern ":" type ("," pattern ":" type)* ","?)?
-struct_item := "struct" ident "{" field ("," field)* ","? "}"
+struct_item := "struct" ident ("<" ident ("," ident)* ">")? "{" field ("," field)* ","? "}"
 field     := ident ":" type
 enum_item := "enum" ident ("<" ident ("," ident)* ">")? "{" variant ("," variant)* ","? "}"
 variant   := ident | ident "(" (type ("," type)*)? ")"
@@ -61,7 +61,7 @@ primitive := integer | float | "bool"
 tuple_type := "(" type ("," type)+ ","? ")"
 array_type := "[" type ";" integer "]"   # fixed-size array, decimal length
 ref_type  := "&" type | "&" "mut" type
-path_type := path ("<" type ("," type)* ">")?   # generic enums only
+path_type := path ("<" type ("," type)* ">")?   # generic enums and structs only
             # Closing ">>" splits into two ">" (dangling halves error).
 ```
 

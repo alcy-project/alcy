@@ -247,6 +247,23 @@ TEST_CASE("Parser builds generic enum and impl params") {
   CHECK(impl.methods.size() == 1);
 }
 
+TEST_CASE("Parser builds generic struct params") {
+  Fixture f;
+  const ParseResult result = parse("struct Pair<A, B> { a: A, b: B }\n", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemStruct pair = as_struct(result.items[0], f);
+  CHECK(pair.params.size() == 2);
+  if (pair.params.size() != 2) {
+    return;
+  }
+  CHECK(pair.params[0].name == "A");
+  CHECK(pair.params[1].name == "B");
+  CHECK(pair.fields.size() == 2);
+}
+
 TEST_CASE("Parser rejects duplicate type parameters") {
   Fixture f;
   const ParseResult result = parse("enum Pair<T, T> { Both(T, T) }\n", f);

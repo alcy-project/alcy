@@ -64,3 +64,29 @@ void alcy_panic(const char* message, size_t len) {
 void alcy_sys_write(int fd, const char* buf, size_t len) {
   write_all(fd, buf == NULL ? "" : buf, len);
 }
+
+// Alignment must be a power of two and the size a multiple of it for
+// `aligned_alloc`. A zero-size request still returns a distinct,
+// freeable pointer so callers can round-trip it.
+void* alcy_alloc(size_t size, size_t align) {
+  if (align == 0) {
+    return NULL;
+  }
+  if (size == 0) {
+    size = align;
+  }
+  if (size % align != 0) {
+    size += align - (size % align);
+  }
+  return aligned_alloc(align, size);
+}
+
+void alcy_dealloc(void* ptr, size_t size, size_t align) {
+  if (ptr == NULL) {
+    return;
+  }
+  if (size == 0) {
+    size = align;
+  }
+  free(ptr);
+}

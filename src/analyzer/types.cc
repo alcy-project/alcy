@@ -182,7 +182,7 @@ ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
     }
     ir::TypeSeq seq;
     for (ir::TypeIdx field : fields) {
-      seq.push(builder.ref_type(field));
+      seq.push(storage_copy(field));
     }
     builder.fill_struct(entry.type, seq.finish());
   } else {
@@ -204,7 +204,7 @@ ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
          node.payload.get<ast::ItemEnum>().variants) {
       ir::TypeSeq seq;
       for (ir::TypeIdx field : payloads[index]) {
-        seq.push(builder.ref_type(field));
+        seq.push(storage_copy(field));
       }
       ++index;
       variants.push(builder.enum_variant(interner.intern(variant.name.name),
@@ -238,12 +238,37 @@ const GenericInstance* Checker::generic_instance_for(u32 nominal,
   return instance;
 }
 
+// Appends a storage copy of `type` and records its origin.
+ir::TypeIdx Checker::storage_copy(ir::TypeIdx type) {
+  const ir::TypeIdx copy = builder.ref_type(type);
+  type_origins_.emplace_back(copy, type);
+  return copy;
+}
+
+ir::TypeIdx Checker::type_origin(ir::TypeIdx type) const {
+  for (usize i = type_origins_.size(); i > 0; --i) {
+    if (type_origins_[i - 1].first.idx == type.idx) {
+      return type_origins_[i - 1].second;
+    }
+  }
+  return type;
+}
+
+// Parameter names of a nominal declaration, whether struct or enum.
+std::span<const ast::Ident> Checker::nominal_params(const NominalEntry& entry) {
+  const ast::ItemNode& node = ast.items[entry.item];
+  if (node.kind == ast::ItemKind::Struct) {
+    return node.payload.get<ast::ItemStruct>().params;
+  }
+  return node.payload.get<ast::ItemEnum>().params;
+}
+
 usize Checker::push_generic_scope(const GenericInstance& instance) {
   const usize kept = type_params.size();
-  const ast::ItemEnum& decl =
-      ast.items[nominals[instance.nominal].item].payload.get<ast::ItemEnum>();
-  for (usize i = 0; i < decl.params.size(); ++i) {
-    type_params.emplace_back(decl.params[i].name, instance.args[i]);
+  const std::span<const ast::Ident> params =
+      nominal_params(nominals[instance.nominal]);
+  for (usize i = 0; i < params.size(); ++i) {
+    type_params.emplace_back(params[i].name, instance.args[i]);
   }
   return kept;
 }
@@ -254,13 +279,14 @@ void Checker::pop_generic_scope(usize kept) {
   }
 }
 
-ir::TypeIdx Checker::variant_owner_type(NominalEntry* enom) {
-  const ast::ItemNode& decl = ast.items[enom->item];
-  if (decl.kind == ast::ItemKind::Enum &&
-      !decl.payload.get<ast::ItemEnum>().params.empty()) {
+// Interns a nominal's type. A generic declaration defers: its type is
+// fixed later against the expectation or the scrutinee, so the error
+// type marks "resolve from context".
+ir::TypeIdx Checker::nominal_owner_type(NominalEntry* entry) {
+  if (!nominal_params(*entry).empty()) {
     return error_type();
   }
-  return intern_nominal(*enom);
+  return intern_nominal(*entry);
 }
 
 // Infers a generic instantiation from constructor arguments: a field
@@ -332,37 +358,54 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
     }
   }
   const NominalEntry& entry = nominals[nominal];
-  const ast::ItemEnum& decl =
-      ast.items[entry.item].payload.get<ast::ItemEnum>();
+  const ast::ItemNode& node = ast.items[entry.item];
   const str::StringPoolId name = interner.intern(entry.name);
-  const ir::TypeIdx reserved = builder.reserve_enum(name);
+  const bool is_struct = node.kind == ast::ItemKind::Struct;
+  const ir::TypeIdx reserved =
+      is_struct ? builder.reserve_struct(name) : builder.reserve_enum(name);
   generic_instances.push_back(GenericInstance{nominal, args, reserved});
   const usize pushed = type_params.size();
-  for (usize i = 0; i < decl.params.size(); ++i) {
-    type_params.emplace_back(decl.params[i].name, args[i]);
-  }
-  std::vector<std::vector<ir::TypeIdx>> payloads;
-  payloads.reserve(decl.variants.size());
-  for (const ast::ItemEnumVariant& variant : decl.variants) {
-    std::vector<ir::TypeIdx> fields;
-    fields.reserve(variant.fields.size());
-    for (ast::TypeIdx field : variant.fields) {
-      fields.push_back(resolve_type(entry.module, field, nullptr));
+  if (is_struct) {
+    const std::span<const ast::Ident> params =
+        node.payload.get<ast::ItemStruct>().params;
+    for (usize i = 0; i < params.size(); ++i) {
+      type_params.emplace_back(params[i].name, args[i]);
     }
-    payloads.push_back(std::move(fields));
-  }
-  ir::EnumVariantTypeSeq variants;
-  u32 index = 0;
-  for (const ast::ItemEnumVariant& variant : decl.variants) {
     ir::TypeSeq seq;
-    for (ir::TypeIdx field : payloads[index]) {
-      seq.push(builder.ref_type(field));
+    for (const ast::ItemStructField& field :
+         node.payload.get<ast::ItemStruct>().fields) {
+      seq.push(storage_copy(resolve_type(entry.module, field.type, nullptr)));
     }
-    ++index;
-    variants.push(
-        builder.enum_variant(interner.intern(variant.name.name), seq.finish()));
+    builder.fill_struct(reserved, seq.finish());
+  } else {
+    const ast::ItemEnum& decl = node.payload.get<ast::ItemEnum>();
+    for (usize i = 0; i < decl.params.size(); ++i) {
+      type_params.emplace_back(decl.params[i].name, args[i]);
+    }
+    // Payloads resolve first so variant nodes append back-to-back.
+    std::vector<std::vector<ir::TypeIdx>> payloads;
+    payloads.reserve(decl.variants.size());
+    for (const ast::ItemEnumVariant& variant : decl.variants) {
+      std::vector<ir::TypeIdx> fields;
+      fields.reserve(variant.fields.size());
+      for (ast::TypeIdx field : variant.fields) {
+        fields.push_back(resolve_type(entry.module, field, nullptr));
+      }
+      payloads.push_back(std::move(fields));
+    }
+    ir::EnumVariantTypeSeq variants;
+    u32 index = 0;
+    for (const ast::ItemEnumVariant& variant : decl.variants) {
+      ir::TypeSeq seq;
+      for (ir::TypeIdx field : payloads[index]) {
+        seq.push(storage_copy(field));
+      }
+      ++index;
+      variants.push(builder.enum_variant(interner.intern(variant.name.name),
+                                         seq.finish()));
+    }
+    builder.fill_enum(reserved, variants.finish());
   }
-  builder.fill_enum(reserved, variants.finish());
   while (type_params.size() > pushed) {
     type_params.pop_back();
   }
@@ -537,11 +580,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
         (void)index;
         return error_type();
       }
-      const ast::ItemNode& decl = ast.items[entry->item];
-      const usize param_count =
-          decl.kind == ast::ItemKind::Enum
-              ? decl.payload.get<ast::ItemEnum>().params.size()
-              : 0;
+      const usize param_count = nominal_params(*entry).size();
       const usize arg_count = node.payload.get<ast::TypePath>().args.size();
       if (param_count == 0) {
         if (arg_count != 0) {
@@ -578,7 +617,8 @@ ir::TypeIdx Checker::resolve_type(u32 module,
 bool Checker::is_known_intrinsic(std::string_view name) {
   return name == "memcopy" || name == "print" || name == "println" ||
          name == "panic" || name == "str_len" || name == "str_byte" ||
-         name == "str_slice" || name == "sys_write" || name == "str_from_parts";
+         name == "str_slice" || name == "sys_write" ||
+         name == "str_from_parts" || name == "alloc" || name == "dealloc";
 }
 
 // Verifies a declared intrinsic signature against its canonical
@@ -622,6 +662,14 @@ bool Checker::check_intrinsic_signature(u32 module,
     expected.push_back(builder.reference_type(u8, false));
     expected.push_back(usize_ty);
     expected_ret = str;
+  } else if (name == "alloc") {
+    expected.push_back(usize_ty);
+    expected.push_back(usize_ty);
+    expected_ret = builder.reference_type(u8, true);
+  } else if (name == "dealloc") {
+    expected.push_back(builder.reference_type(u8, true));
+    expected.push_back(usize_ty);
+    expected.push_back(usize_ty);
   } else {
     return false;
   }
@@ -660,10 +708,9 @@ void Checker::process_module(u32 module) {
               find_nominal(module, node.payload.get<ast::ItemEnum>().name.name);
         }
         if (entry != nullptr) {
-          // Generic enums intern per instantiation on use; the bare
-          // declaration has no type of its own.
-          if (node.kind == ast::ItemKind::Enum &&
-              !node.payload.get<ast::ItemEnum>().params.empty()) {
+          // Generic declarations intern per instantiation on use; the
+          // bare declaration has no type of its own.
+          if (!nominal_params(*entry).empty()) {
             break;
           }
           const ir::TypeIdx resolved = intern_nominal(*entry);
@@ -778,13 +825,9 @@ void Checker::process_module(u32 module) {
                                   target_module, target_name)) {
               NominalEntry* entry = find_nominal(target_module, target_name);
               if (entry != nullptr) {
-                const ast::ItemNode& target = ast.items[entry->item];
-                const bool generic_target =
-                    target.kind == ast::ItemKind::Enum &&
-                    !target.payload.get<ast::ItemEnum>().params.empty();
                 // Generic impls instantiate per method call; eager
                 // registration cannot resolve their parameters yet.
-                if (!generic_target &&
+                if (nominal_params(*entry).empty() &&
                     node.payload.get<ast::ItemImpl>().params.empty()) {
                   self_type = intern_nominal(*entry);
                   self_ok = true;
@@ -971,10 +1014,13 @@ const char* Checker::pretty_tag(ir::TypeTag tag) {
 // consecutive fresh nodes), so index equality under-compares:
 // primitives compare by tag, references/tuples/arrays recurse, and
 // nominals (struct/enum) compare by index only. Every cycle passes
-// through a nominal, but a seen-pair set guards regardless.
+// through a nominal, but a seen-pair set guards regardless. Field
+// slots hold storage copies, so both sides normalize to their origin
+// before comparison; that makes a copied field type equal to the
+// nominal it was copied from.
 bool Checker::types_equal(ir::TypeIdx a, ir::TypeIdx b) {
   std::vector<u64> seen;
-  return types_equal_inner(a, b, seen);
+  return types_equal_inner(type_origin(a), type_origin(b), seen);
 }
 
 bool Checker::types_equal_inner(ir::TypeIdx a,
@@ -1409,9 +1455,7 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
       }
       const std::span<const ast::TypeIdx> target_args =
           target.payload.get<ast::TypePath>().args;
-      const ast::ItemEnum& decl =
-          ast.items[nominals[nominal].item].payload.get<ast::ItemEnum>();
-      if (target_args.size() != decl.params.size()) {
+      if (target_args.size() != nominal_params(nominals[nominal]).size()) {
         continue;
       }
       // Target arguments must name impl parameters directly.
@@ -1588,7 +1632,7 @@ bool Checker::resolve_value_path(u32 module,
       const ast::ItemNode& decl = ast.items[match.enom->item];
       out.enom = match.enom;
       out.variant = match.variant;
-      out.type = variant_owner_type(match.enom);
+      out.type = nominal_owner_type(match.enom);
       if (decl.payload.get<ast::ItemEnum>()
               .variants[match.variant]
               .fields.empty()) {
@@ -1635,7 +1679,7 @@ bool Checker::resolve_value_path(u32 module,
         const ast::ItemNode& decl = ast.items[matches[0].enom->item];
         out.enom = matches[0].enom;
         out.variant = matches[0].variant;
-        out.type = variant_owner_type(matches[0].enom);
+        out.type = nominal_owner_type(matches[0].enom);
         out.kind = decl.payload.get<ast::ItemEnum>()
                            .variants[matches[0].variant]
                            .fields.empty()
@@ -1661,7 +1705,7 @@ bool Checker::resolve_value_path(u32 module,
               member) {
             out.enom = nominal;
             out.variant = i;
-            out.type = variant_owner_type(nominal);
+            out.type = nominal_owner_type(nominal);
             out.kind = nominal_node.payload.get<ast::ItemEnum>()
                                .variants[i]
                                .fields.empty()
@@ -1734,7 +1778,7 @@ bool Checker::resolve_variant_path(u32 module,
       out.kind = PathValue::Kind::TupleVariant;
       out.enom = match.enom;
       out.variant = match.variant;
-      out.type = variant_owner_type(match.enom);
+      out.type = nominal_owner_type(match.enom);
       return true;
     }
     return false;
@@ -1756,7 +1800,7 @@ bool Checker::resolve_variant_path(u32 module,
         out.kind = PathValue::Kind::TupleVariant;
         out.enom = matches[0].enom;
         out.variant = matches[0].variant;
-        out.type = variant_owner_type(matches[0].enom);
+        out.type = nominal_owner_type(matches[0].enom);
         return true;
       }
       return false;
@@ -1773,7 +1817,7 @@ bool Checker::resolve_variant_path(u32 module,
             out.kind = PathValue::Kind::TupleVariant;
             out.enom = nominal;
             out.variant = i;
-            out.type = variant_owner_type(nominal);
+            out.type = nominal_owner_type(nominal);
             return true;
           }
         }
@@ -1992,11 +2036,7 @@ void Checker::check_bodies() {
                                   target_module, target_name)) {
               if (NominalEntry* entry =
                       find_nominal(target_module, target_name)) {
-                const ast::ItemNode& target = ast.items[entry->item];
-                const bool generic_target =
-                    target.kind == ast::ItemKind::Enum &&
-                    !target.payload.get<ast::ItemEnum>().params.empty();
-                if (!generic_target) {
+                if (nominal_params(*entry).empty()) {
                   self = intern_nominal(*entry);
                   self_ptr = &self;
                 }
@@ -2085,25 +2125,38 @@ diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
   checker.check_bodies();
   ir::Storage storage = std::move(checker.builder).build();
   checker.validate_cycles(storage);
-  CheckedPackage package{
-      tree, std::move(storage), std::move(checker.modules), {}};
-  // Generic instantiations lower as ordinary enums; publish their
-  // variant names under the defining module for lowering lookups.
-  // Their types publish in instantiation order for table keying.
+  CheckedPackage package{tree,
+                         std::move(storage),
+                         std::move(checker.modules),
+                         {},
+                         std::move(checker.type_origins_)};
+  // Generic instantiations lower as ordinary nominals; publish their
+  // field or variant names under the defining module for lowering
+  // lookups. Their types publish in instantiation order for keying.
   for (const GenericInstance& instance : checker.generic_instances) {
     package.generic_insts.push_back(instance.type);
     if (!instance.complete) {
       continue;
     }
     const NominalEntry& nominal = checker.nominals[instance.nominal];
-    const ast::ItemEnum& decl =
-        ast.items[nominal.item].payload.get<ast::ItemEnum>();
-    std::vector<std::string_view> variants;
-    for (const ast::ItemEnumVariant& variant : decl.variants) {
-      variants.push_back(variant.name.name);
+    const ast::ItemNode& node = ast.items[nominal.item];
+    if (node.kind == ast::ItemKind::Struct) {
+      std::vector<std::string_view> fields;
+      for (const ast::ItemStructField& field :
+           node.payload.get<ast::ItemStruct>().fields) {
+        fields.push_back(field.name.name);
+      }
+      package.modules[nominal.module].structs.push_back(
+          {instance.type, std::move(fields)});
+    } else {
+      std::vector<std::string_view> variants;
+      for (const ast::ItemEnumVariant& variant :
+           node.payload.get<ast::ItemEnum>().variants) {
+        variants.push_back(variant.name.name);
+      }
+      package.modules[nominal.module].enums.push_back(
+          {nominal.name, instance.type, std::move(variants)});
     }
-    package.modules[nominal.module].enums.push_back(
-        {nominal.name, instance.type, std::move(variants)});
   }
   return base::make_ok(std::move(package));
 }

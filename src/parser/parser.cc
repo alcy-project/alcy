@@ -462,6 +462,10 @@ ast::ItemIdx Parser::parse_struct(bool is_pub) {
   if (name.is_err()) {
     return ast::ItemIdx::invalid();
   }
+  std::vector<ast::Ident> params;
+  if (!parse_generic_params(params)) {
+    return ast::ItemIdx::invalid();
+  }
   if (!expect(lexer::TokenKind::LBrace, "`{`")) {
     return ast::ItemIdx::invalid();
   }
@@ -494,6 +498,7 @@ ast::ItemIdx Parser::parse_struct(bool is_pub) {
   node.is_pub = is_pub;
   node.payload.set(ast::ItemStruct{
       .name = std::move(name).unwrap(),
+      .params = ast::copy_to_arena(ast_.spans, params),
       .fields = ast::copy_to_arena(ast_.spans, fields),
   });
   return ast_.items.push_back(node);

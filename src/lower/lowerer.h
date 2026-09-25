@@ -211,6 +211,8 @@ class Lowerer {
   u32 callee_inst(const analyzer::CheckedModule::CallTarget* target) const;
   u32 generic_inst_index(ir::TypeIdx type) const;
   const analyzer::CheckedModule::StructInfo* struct_info(ir::TypeIdx type);
+  // Follows a field storage copy back to the type it was copied from.
+  ir::TypeIdx type_origin(ir::TypeIdx type) const;
   u64 parse_numeric_value(std::string_view spelling);
   ir::TypeTag literal_tag(ast::LiteralIdx value, const ir::TypeIdx* expected);
   Val lower_literal(ast::LiteralIdx lit_idx, const ir::TypeIdx* expected);

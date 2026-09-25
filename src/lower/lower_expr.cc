@@ -423,9 +423,10 @@ ir::OperandIdx Lowerer::index_operand(u32 index) {
 bool Lowerer::struct_field_index(ir::TypeIdx type,
                                  std::string_view name,
                                  u32& index_out) {
+  const ir::TypeIdx origin = type_origin(type);
   for (const auto& checked : pkg.modules) {
     for (const auto& info : checked.structs) {
-      if (info.type.idx != type.idx) {
+      if (info.type.idx != origin.idx) {
         continue;
       }
       for (u32 i = 0; i < static_cast<u32>(info.fields.size()); ++i) {
@@ -997,6 +998,58 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr, std::string_view name) {
   }
   if (name == "str_len" || name == "str_byte" || name == "str_slice") {
     return lower_str_intrinsic(expr, name);
+  }
+  if (name == "alloc" || name == "dealloc") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    const usize arity = name == "alloc" ? 2 : 3;
+    if (call.args.size() != arity) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+    const ir::TypeIdx usize_ty = usize_type();
+    const ir::TypeIdx byte_ref =
+        builder.reference_type(builder.primitive(ir::TypeTag::U8), true);
+    const std::vector<ir::TypeIdx> param_types =
+        name == "alloc"
+            ? std::vector<ir::TypeIdx>{usize_ty, usize_ty}
+            : std::vector<ir::TypeIdx>{byte_ref, usize_ty, usize_ty};
+    std::vector<ir::OperandIdx> args;
+    for (usize i = 0; i < param_types.size(); ++i) {
+      Val arg = lower_expr(call.args[i], &param_types[i]);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      args.push_back(arg_for(arg, param_types[i]));
+    }
+    if (name == "dealloc") {
+      const ir::ExternalFunctionIdx ext =
+          declare_external("alcy_dealloc", builder.primitive(ir::TypeTag::Void),
+                           {ptr_ty, usize_ty, usize_ty});
+      emit_void(ir::Opcode::Call,
+                {builder.operand(ir::Operand::from_external_function(
+                     ext, builder.primitive(ir::TypeTag::Function))),
+                 args[0], args[1], args[2]});
+      return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+    }
+    const ir::ExternalFunctionIdx ext =
+        declare_external("alcy_alloc", ptr_ty, {usize_ty, usize_ty});
+    const ir::RegisterIdx result =
+        emit(ir::Opcode::Call, ptr_ty,
+             {builder.operand(ir::Operand::from_external_function(
+                  ext, builder.primitive(ir::TypeTag::Function))),
+              args[0], args[1]});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    // The intrinsic's `&u8` return is a reference; the runtime
+    // pointer needs its pointee label for later field projections.
+    const ir::RegisterIdx labelled =
+        emit(ir::Opcode::TypeCast, byte_ref, {to_operand(result, ptr_ty)});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(labelled, byte_ref), byte_ref, false, false};
   }
   if (name == "str_from_parts") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();

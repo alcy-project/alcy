@@ -350,11 +350,21 @@ u32 Lowerer::callee_inst(
   return target == nullptr ? analyzer::kNoInst : target->inst;
 }
 
+ir::TypeIdx Lowerer::type_origin(ir::TypeIdx type) const {
+  for (usize i = pkg.type_origins.size(); i > 0; --i) {
+    if (pkg.type_origins[i - 1].first.idx == type.idx) {
+      return pkg.type_origins[i - 1].second;
+    }
+  }
+  return type;
+}
+
 const analyzer::CheckedModule::StructInfo* Lowerer::struct_info(
     ir::TypeIdx type) {
+  const ir::TypeIdx origin = type_origin(type);
   for (const auto& checked : pkg.modules) {
     for (const auto& info : checked.structs) {
-      if (info.type.idx == type.idx) {
+      if (info.type.idx == origin.idx) {
         return &info;
       }
     }

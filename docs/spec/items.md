@@ -46,6 +46,19 @@
   - `str_from_parts(ptr: &u8, len: usize) -> str` builds a view over
     caller-provided bytes. Only core uses it, to expose `String` as
     `str`; arbitrary pointers are the caller's responsibility.
+  - `alloc(size: usize, align: usize) -> &mut u8` reserves `size`
+    bytes aligned to `align` (a power of two) and returns the unique
+    owning reference. Bytes are uninitialized. A zero `size` still
+    yields a distinct, freeable pointer. A null result on allocation
+    failure is a runtime condition the caller must handle.
+  - `dealloc(ptr: &mut u8, size: usize, align: usize)` releases a
+    block, consuming the reference. `size` and `align` must match the
+    values passed to `alloc`. There is no garbage collector; dropping
+    an owned reference is not a runtime operation, so a leaked block
+    leaks.
+  - `&u8` and `&mut u8` are not indexable. Element access through a
+    heap pointer arrives with the growable containers, which own the
+    bounds check.
 - `print(msg: str)` and `println(msg: str)` are ordinary core
   functions over `sys_write`. They remain callable with or without
   a declaration: without the prelude, the legacy name-based path
