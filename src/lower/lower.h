@@ -71,6 +71,9 @@ struct LoweredPackage {
     bool is_param = false;
   };
   std::vector<AddrInfo> addr_names;
+  // Lowered functions from prelude modules. Reported counts exclude
+  // them, matching files and modules.
+  usize prelude_functions = 0;
 };
 
 diag::Fallible<LoweredPackage> lower_package(analyzer::CheckedPackage package,

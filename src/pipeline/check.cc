@@ -67,7 +67,11 @@ CheckResult finish_check(PipelineContext& ctx,
       return err(file_count, module_count, 0);
     } else {
       lower::LoweredPackage package_ir = std::move(lowered).unwrap();
-      function_count = package_ir.storage.functions().size();
+      function_count =
+          package_ir.storage.functions().size() > package_ir.prelude_functions
+              ? package_ir.storage.functions().size() -
+                    package_ir.prelude_functions
+              : 0;
       borrow::check_borrows(package_ir, ctx.bag);
     }
   }

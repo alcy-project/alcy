@@ -7,11 +7,18 @@
 
 pub intrinsic fn memcopy(dst: &mut u8, src: &u8, n: usize);
 
-pub intrinsic fn print(msg: str);
-
-pub intrinsic fn println(msg: str);
-
 pub intrinsic fn panic(msg: str) -> !;
+
+intrinsic fn sys_write(fd: i32, buf: str);
+
+pub fn print(msg: str) {
+  sys_write(1, msg)
+}
+
+pub fn println(msg: str) {
+  sys_write(1, msg)
+  sys_write(1, "\n")
+}
 
 pub intrinsic fn str_len(s: str) -> usize;
 

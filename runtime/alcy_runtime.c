@@ -56,3 +56,10 @@ void alcy_panic(const char* message, size_t len) {
   write_all(STDERR_FILENO, message, len);
   abort();
 }
+
+// Raw file-descriptor write backing core `print`. Retries short
+// writes like the legacy helpers; gives up (rather than spinning)
+// when the descriptor stops accepting bytes.
+void alcy_sys_write(int fd, const char* buf, size_t len) {
+  write_all(fd, buf == NULL ? "" : buf, len);
+}

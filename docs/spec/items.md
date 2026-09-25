@@ -33,13 +33,18 @@
 - The compiler knows a closed set, enumerated here. Declaring any
   other name is a compile-time error:
   - `memcopy(dst: &mut u8, src: &u8, n: usize)` copies `n` bytes.
-  - `print(msg: str)`, `println(msg: str)`, `panic(msg: str)` are the
-    legacy I/O intrinsics; they migrate to ordinary core functions
-    once FFI lands, and remain callable with or without a
-    declaration until then.
+  - `panic(msg: str)` diverges through the runtime abort.
+  - `sys_write(fd: i32, buf: str)` writes `buf` to the file
+    descriptor. Backs the ordinary `print`/`println` below; user
+    code cannot name file descriptors portably, so this stays
+    intrinsic.
   - `str_len(s: str) -> usize`, `str_byte(s: str, i: usize) -> u8`,
     and `str_slice(s: str, start: usize, end: usize) -> str` are the
     string primitives. Out-of-bounds `str_byte`/`str_slice` panic.
+- `print(msg: str)` and `println(msg: str)` are ordinary core
+  functions over `sys_write`. They remain callable with or without
+  a declaration: without the prelude, the legacy name-based path
+  lowers them directly.
 - Calls to intrinsics check like ordinary calls. Intrinsics have no
   bodies to lower, borrow, or specialize; `comp` parameters on
   intrinsics are rejected.

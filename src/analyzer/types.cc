@@ -516,7 +516,7 @@ class Checker {
   static bool is_known_intrinsic(std::string_view name) {
     return name == "memcopy" || name == "print" || name == "println" ||
            name == "panic" || name == "str_len" || name == "str_byte" ||
-           name == "str_slice";
+           name == "str_slice" || name == "sys_write";
   }
 
   // Verifies a declared intrinsic signature against its canonical
@@ -553,6 +553,9 @@ class Checker {
       expected.push_back(usize_ty);
       expected.push_back(usize_ty);
       expected_ret = str;
+    } else if (name == "sys_write") {
+      expected.push_back(builder.primitive(ir::TypeTag::I32));
+      expected.push_back(str);
     } else {
       return false;
     }

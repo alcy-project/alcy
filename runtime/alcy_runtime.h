@@ -18,3 +18,6 @@ void alcy_println(const char* message, size_t len);
 
 // Writes exactly `len` bytes of the message to stderr, then aborts.
 void alcy_panic(const char* message, size_t len);
+
+// Writes exactly `len` bytes to `fd`. Backs core I/O.
+void alcy_sys_write(int fd, const char* buf, size_t len);

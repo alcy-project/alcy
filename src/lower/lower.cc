@@ -136,6 +136,8 @@ class Lowerer {
   std::vector<usize> worklist_;
   // Per-function comp bindings (comp parameters); cleared per body.
   std::vector<std::pair<std::string_view, CompVal>> comp_scope_;
+  // Lowered prelude functions, excluded from reported counts.
+  usize prelude_functions_ = 0;
   // Step budget per top-level comp evaluation; recursion depth guard.
   usize comp_budget_ = 0;
   u32 comp_call_depth_ = 0;
@@ -1419,6 +1421,37 @@ class Lowerer {
     const ast::ExprNode& node = ast.exprs[expr];
     if (name == "print" || name == "println" || name == "panic") {
       return lower_intrinsic(expr, name);
+    }
+    if (name == "sys_write") {
+      const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+      if (call.args.size() != 2) {
+        internal(node.span, "intrinsic arity");
+        return Val{size_one, error_type(), false, false};
+      }
+      Val fd = lower_expr(call.args[0], nullptr);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      Val buf = lower_expr(call.args[1], nullptr);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      const Val material = materialize(buf);
+      const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+      const ir::TypeIdx usize_ty = usize_type();
+      const ir::RegisterIdx bytes = emit(ir::Opcode::ExtractValue, ptr_ty,
+                                         {material.op, index_operand(0)});
+      const ir::RegisterIdx len = emit(ir::Opcode::ExtractValue, usize_ty,
+                                       {material.op, index_operand(1)});
+      const ir::ExternalFunctionIdx ext = declare_external(
+          "alcy_sys_write", builder.primitive(ir::TypeTag::Void),
+          {builder.primitive(ir::TypeTag::I32), ptr_ty, usize_ty});
+      emit_void(ir::Opcode::Call,
+                {builder.operand(ir::Operand::from_external_function(
+                     ext, builder.primitive(ir::TypeTag::Function))),
+                 use_value(fd), to_operand(bytes, ptr_ty),
+                 to_operand(len, usize_ty)});
+      return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
     }
     if (name == "memcopy") {
       const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
@@ -5040,6 +5073,11 @@ class Lowerer {
       return;
     }
     for (const Done& entry : done) {
+      if (pkg.tree.modules[entry.entry.mod]->is_prelude) {
+        ++prelude_functions_;
+      }
+    }
+    for (const Done& entry : done) {
       const std::vector<u32> comp = comp_positions(entry.entry.item);
       ir::TypeSeq params;
       usize comp_at = 0;
@@ -5079,6 +5117,7 @@ diag::Fallible<LoweredPackage> lower_package(analyzer::CheckedPackage package,
   // Tables leave before the builder moves; aggregate init stays whole.
   std::vector<diag::Span> spans = std::move(lowerer.instr_spans_);
   std::vector<LoweredPackage::AddrInfo> addrs = std::move(lowerer.addr_names_);
+  const usize prelude_functions = lowerer.prelude_functions_;
   ir::Storage storage = std::move(lowerer).finish();
   if (base::Result<void, ir::VerifyError> result = ir::verify_storage(storage);
       result.is_err()) {
@@ -5094,8 +5133,8 @@ diag::Fallible<LoweredPackage> lower_package(analyzer::CheckedPackage package,
     return base::make_err(diag::Fatal{});
   }
   // Tables outlive the builder move above; the Lowerer shell is empty.
-  LoweredPackage lowered{std::move(storage), std::move(spans),
-                         std::move(addrs)};
+  LoweredPackage lowered{std::move(storage), std::move(spans), std::move(addrs),
+                         prelude_functions};
   return base::make_ok(std::move(lowered));
 }
 
