@@ -18,7 +18,7 @@ namespace pipeline {
 namespace {
 
 TEST_CASE("Stage writes embedded runtime sources") {
-  io::TempDir dir("alcy_runtime_stage_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_runtime_stage_test_");
   CHECK(stage_runtime(dir));
 
   mem::Arena arena;

@@ -113,7 +113,7 @@ LowerCase lower_case(io::TempDir& dir,
 }  // namespace
 
 TEST_CASE("Lower straight-line arithmetic") {
-  io::TempDir dir("alcy_lower_arith_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_lower_arith_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn add(a: i32, b: i32) -> i32 {\n"
                                       "  ret a + b * 2\n"
@@ -138,7 +138,7 @@ TEST_CASE("Lower straight-line arithmetic") {
 }
 
 TEST_CASE("Lower structs tuples fields and borrows") {
-  io::TempDir dir("alcy_lower_aggregate_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_lower_aggregate_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "struct Point { x: i32, y: i32 }\n"
                                       "fn get(p: &Point) -> i32 {\n"
@@ -165,7 +165,7 @@ TEST_CASE("Lower structs tuples fields and borrows") {
 }
 
 TEST_CASE("Lower lowers control flow to verifiable blocks") {
-  io::TempDir dir("alcy_lower_control_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_lower_control_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn f(b: bool) -> i32 {\n"
                                       "  r := match b {\n"
@@ -200,7 +200,7 @@ TEST_CASE("Lower lowers control flow to verifiable blocks") {
 }
 
 TEST_CASE("Lower lowers enums matches and question propagation") {
-  io::TempDir dir("alcy_lower_enum_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_lower_enum_test_");
   const bool setup =
       write_all(dir, {{"main.al",
                        "enum Shape { Circle(i32), Rect }\n"
@@ -249,7 +249,7 @@ TEST_CASE("Lower lowers enums matches and question propagation") {
 }
 
 TEST_CASE("Lower emits verifiable LLVM IR") {
-  io::TempDir dir("alcy_lower_emit_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_lower_emit_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn add(a: i32, b: i32) -> i32 {\n"
                                       "  ret a + b\n"
@@ -280,7 +280,7 @@ TEST_CASE("Lower emits verifiable LLVM IR") {
 }
 
 TEST_CASE("Lower emits verifiable LLVM IR for print") {
-  io::TempDir dir("alcy_lower_emit_print_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_lower_emit_print_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  print(\"hi\")\n"
@@ -317,7 +317,7 @@ TEST_CASE("Lower emits verifiable LLVM IR for print") {
 
 #if !defined(OS_ASMJS)
 TEST_CASE("Lower emits relocatable objects") {
-  io::TempDir dir("alcy_lower_emit_object_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_lower_emit_object_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn add(a: i32, b: i32) -> i32 {\n"
                                       "  ret a + b\n"
@@ -431,7 +431,7 @@ TEST_CASE("Lower wraps all main forms in a C entry") {
 }
 
 TEST_CASE("Lower warns on unreachable statements") {
-  io::TempDir dir("alcy_lower_unreachable_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_lower_unreachable_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  ret\n"
@@ -449,7 +449,7 @@ TEST_CASE("Lower warns on unreachable statements") {
 }
 
 TEST_CASE("Lowering emits no Drop markers") {
-  io::TempDir dir("alcy_lower_no_drop_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_lower_no_drop_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "struct H { r: &mut i32 }\n"
                                       "fn main() {\n"
@@ -481,7 +481,7 @@ TEST_CASE("Lowering emits no Drop markers") {
 }
 
 TEST_CASE("Lower emits verifiable LLVM IR for control flow") {
-  io::TempDir dir("alcy_lower_emit_control_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_lower_emit_control_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn f(b: bool) -> i32 {\n"
                                       "  r := match b {\n"
@@ -523,7 +523,7 @@ TEST_CASE("Lower emits verifiable LLVM IR for control flow") {
 }
 
 TEST_CASE("Lower emits verifiable LLVM IR for enums and calls") {
-  io::TempDir dir("alcy_lower_emit_enum_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_lower_emit_enum_test_");
   const bool setup =
       write_all(dir, {{"main.al",
                        "enum Shape { Circle(i32), Rect }\n"

@@ -27,7 +27,7 @@ TEST_CASE("Invalid package names") {
 }
 
 TEST_CASE("Init derives the package name from the directory") {
-  io::TempDir dir("alcy_init_name_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_init_name_test_");
   PipelineContext ctx;
   const std::string target = dir.join("myproj");
   CHECK(init_package(ctx, target).is_ok());
@@ -38,7 +38,7 @@ TEST_CASE("Init derives the package name from the directory") {
 }
 
 TEST_CASE("Init refuses to overwrite an existing package") {
-  io::TempDir dir("alcy_init_overwrite_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_init_overwrite_test_");
   PipelineContext ctx;
   const std::string target = dir.join("myproj");
   CHECK(init_package(ctx, target).is_ok());

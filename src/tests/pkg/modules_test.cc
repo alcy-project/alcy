@@ -94,7 +94,7 @@ TEST_CASE("Manifest rejects duplicate module entries") {
 }
 
 TEST_CASE("Modules resolve explicit entries to files") {
-  io::TempDir dir("alcy_modules_explicit_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_modules_explicit_test_");
   const bool setup =
       write_all(dir, "main.al", "fn main() {}\n") &&
       write_all(dir, "util.al", "fn double(x: i32) -> i32 {\n  ret x\n}\n") &&
@@ -138,7 +138,7 @@ TEST_CASE("Modules resolve explicit entries to files") {
 }
 
 TEST_CASE("Modules resolve wildcards by relative path") {
-  io::TempDir dir("alcy_modules_wildcard_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_modules_wildcard_test_");
   const bool setup = write_all(dir, "main.al", "fn main() {}\n") &&
                      dir.make_dir("io") &&
                      write_all(dir, "io/util.al", "fn helper() {}\n");
@@ -176,7 +176,7 @@ TEST_CASE("Modules resolve wildcards by relative path") {
 }
 
 TEST_CASE("Modules reject missing include files") {
-  io::TempDir dir("alcy_modules_missing_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_modules_missing_test_");
   const bool setup = write_all(dir, "main.al", "fn main() {}\n");
   CHECK(setup);
   if (!setup) {

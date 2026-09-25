@@ -101,7 +101,7 @@ const ModuleNode* find_module(const ModuleTree& tree, std::string_view path) {
 }  // namespace
 
 TEST_CASE("Resolve builds nested module trees") {
-  io::TempDir dir("alcy_analyzer_tree_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_tree_test_");
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
                                         {"a.al", "struct Point { x: i32 }\n"},
@@ -138,7 +138,7 @@ TEST_CASE("Resolve builds nested module trees") {
 }
 
 TEST_CASE("Resolve attaches deeply nested modules") {
-  io::TempDir dir("alcy_analyzer_deep_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_deep_test_");
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
                                         {"x/y/z.al", "fn deep() {}\n"},
@@ -159,7 +159,7 @@ TEST_CASE("Resolve attaches deeply nested modules") {
 }
 
 TEST_CASE("Resolve reports duplicate module declarations") {
-  io::TempDir dir("alcy_analyzer_dup_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_dup_test_");
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
                                         {"a.al", "fn x() {}\n"},
@@ -195,7 +195,8 @@ TEST_CASE("Resolve reports duplicate module declarations") {
 }
 
 TEST_CASE("Resolve attaches unreferenced files as modules") {
-  io::TempDir dir("alcy_analyzer_unreachable_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_analyzer_unreachable_test_");
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
                                         {"stray.al", "fn stray() {}\n"},
@@ -215,7 +216,7 @@ TEST_CASE("Resolve attaches unreferenced files as modules") {
 }
 
 TEST_CASE("Resolve resolves imports across modules") {
-  io::TempDir dir("alcy_analyzer_use_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_use_test_");
   const bool setup = write_all(
       dir, {
                {"main.al",
@@ -285,7 +286,7 @@ TEST_CASE("Resolve resolves imports across modules") {
 }
 
 TEST_CASE("Resolve handles super imports from nested modules") {
-  io::TempDir dir("alcy_analyzer_super_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_super_test_");
   const bool setup =
       write_all(dir, {
                          {"main.al", "fn main() {}\n"},
@@ -313,7 +314,8 @@ TEST_CASE("Resolve handles super imports from nested modules") {
 }
 
 TEST_CASE("Resolve reports bad imports") {
-  io::TempDir dir("alcy_analyzer_unresolved_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_analyzer_unresolved_test_");
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
                                         {"a.al", "struct Point { x: i32 }\n"},
@@ -369,7 +371,7 @@ TEST_CASE("Resolve reports bad imports") {
 }
 
 TEST_CASE("Resolve reports conflicting imports") {
-  io::TempDir dir("alcy_analyzer_ambiguous_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_ambiguous_test_");
   const bool setup = write_all(
       dir, {
                {"main.al", "use a::Thing;\nuse b::Thing;\nfn main() {}\n"},
@@ -389,7 +391,7 @@ TEST_CASE("Resolve reports conflicting imports") {
 }
 
 TEST_CASE("Resolve follows public re-exports") {
-  io::TempDir dir("alcy_analyzer_reexport_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_reexport_test_");
   const bool setup =
       write_all(dir, {
                          {"main.al", "use a::Thing;\nfn main() {}\n"},
@@ -438,7 +440,7 @@ TEST_CASE("Resolve follows public re-exports") {
 }
 
 TEST_CASE("Resolve reports re-export cycles") {
-  io::TempDir dir("alcy_analyzer_cycle_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_cycle_test_");
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
                                         {"a.al", "pub use b::Thing;\n"},
@@ -504,7 +506,7 @@ ResolveCase resolve_case_with_prelude(
 }
 
 TEST_CASE("Resolve injects prelude imports") {
-  io::TempDir dir("alcy_analyzer_prelude_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_prelude_test_");
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
                                         {"core.al", "pub fn help() {}\n"},
@@ -539,7 +541,8 @@ TEST_CASE("Resolve injects prelude imports") {
 }
 
 TEST_CASE("Resolve prefers locals over prelude imports") {
-  io::TempDir dir("alcy_analyzer_prelude_shadow_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_analyzer_prelude_shadow_test_");
   const bool setup =
       write_all(dir, {
                          {"main.al", "fn help() {}\nfn main() {}\n"},

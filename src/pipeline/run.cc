@@ -36,7 +36,7 @@ RunResult link_and_run(PipelineContext& ctx,
                        bool optimize,
                        std::string_view linker,
                        std::span<const std::string_view> args) {
-  io::TempDir scratch("alcy_run");
+  io::TempDir scratch = io::TempDir::create_unique("alcy_run_");
   const std::string object_path = scratch.join("main.o");
   if (!emit_package_object(ctx, lowered, optimize, object_path) ||
       !stage_runtime(scratch)) {

@@ -31,7 +31,7 @@ TEST_CASE("Pipeline stages the standard library prelude") {
   CHECK(prelude[0].id != source::kUnknownFile);
 }
 TEST_CASE("Pipeline build produces object file") {
-  io::TempDir dir("pipeline_build_object_test");
+  io::TempDir dir = io::TempDir::create_unique("pipeline_build_object_test_");
   const bool setup =
       dir.write_file("main.al", "fn main() {\n  print(\"hi\")\n}\n");
   CHECK(setup);
@@ -54,7 +54,7 @@ TEST_CASE("Pipeline build produces object file") {
 }
 
 TEST_CASE("Pipeline build produces executable") {
-  io::TempDir dir("pipeline_build_exe_test");
+  io::TempDir dir = io::TempDir::create_unique("pipeline_build_exe_test_");
   const bool setup =
       dir.write_file("main.al", "fn main() -> i32 {\n  ret 3\n}\n");
   CHECK(setup);
@@ -70,7 +70,7 @@ TEST_CASE("Pipeline build produces executable") {
 }
 
 TEST_CASE("Pipeline build creates nonexistent directory") {
-  io::TempDir dir("pipeline_build_bad_output");
+  io::TempDir dir = io::TempDir::create_unique("pipeline_build_bad_output_");
   const bool setup = dir.write_file("main.al", "fn main() {\n}\n");
   CHECK(setup);
   if (!setup) {

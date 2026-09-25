@@ -31,7 +31,7 @@ struct Fixture {
 }  // namespace
 
 TEST_CASE("Lockfile round-trips through resolve output") {
-  io::TempDir dir("alcy_lock_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_lock_test_");
   constexpr std::string_view manifest =
       "[package]\n"
       "name = \"app\"\n"

@@ -44,7 +44,7 @@ diag::SourceText fetch_source(source::FileId id, const void* ctx) {
 }  // namespace
 
 TEST_CASE("Discover finds nested sources in sorted order") {
-  io::TempDir dir("alcy_pipeline_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_pipeline_test_");
   const bool setup = dir.write_file("main.al", "fn main() {}\n") &&
                      dir.write_file("util.al", "") &&
                      dir.write_file("README.md", "not source\n") &&
@@ -80,7 +80,7 @@ TEST_CASE("Discover reports missing directories") {
 }
 
 TEST_CASE("Compile project loads every package") {
-  io::TempDir dir("alcy_pipeline_project_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_pipeline_project_test_");
   const bool setup =
       dir.write_file("root/alcy.toml",
                      "[package]\nname = \"root\"\nversion = \"0.1.0\"\n"
@@ -115,7 +115,7 @@ TEST_CASE("Compile project loads every package") {
 }
 
 TEST_CASE("Source fetch feeds the renderer") {
-  io::TempDir dir("alcy_pipeline_fetch_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_pipeline_fetch_test_");
   const bool setup = dir.write_file("b.al", "let y = 2;\n");
   CHECK(setup);
   if (!setup) {

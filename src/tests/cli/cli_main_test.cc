@@ -35,7 +35,7 @@ i32 run_check_on(io::TempDir& dir, std::string_view rel) {
 }  // namespace
 
 TEST_CASE("Check accepts a well-typed file") {
-  io::TempDir dir("alcy_cli_check_ok_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_check_ok_test_");
   const bool setup = write_all(dir, "ok.al",
                                "struct Point { x: i32, y: i32 }\n"
                                "fn main() {\n"
@@ -50,7 +50,7 @@ TEST_CASE("Check accepts a well-typed file") {
 }
 
 TEST_CASE("Check rejects a mistyped file") {
-  io::TempDir dir("alcy_cli_check_bad_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_check_bad_test_");
   const bool setup = write_all(dir, "bad.al",
                                "fn main() {\n"
                                "  x: u8 := 42i32\n"
@@ -63,7 +63,7 @@ TEST_CASE("Check rejects a mistyped file") {
 }
 
 TEST_CASE("Check rejects a non-exhaustive match") {
-  io::TempDir dir("alcy_cli_check_match_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_check_match_test_");
   const bool setup = write_all(dir, "bad.al",
                                "enum Choice { Yes, No(i32) }\n"
                                "fn f(c: Choice) -> i32 {\n"
@@ -94,7 +94,7 @@ i32 run_build_on(io::TempDir& dir,
 
 #if !BUILD_FLAG(IS_OS_ASMJS)
 TEST_CASE("Build emits an object file") {
-  io::TempDir dir("alcy_cli_build_object_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_object_test_");
   const bool setup = write_all(dir, "main.al",
                                "fn main() {\n"
                                "  print(\"hi\")\n"
@@ -107,7 +107,7 @@ TEST_CASE("Build emits an object file") {
 }
 
 TEST_CASE("Build links an executable") {
-  io::TempDir dir("alcy_cli_build_exe_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_exe_test_");
   const bool setup = write_all(dir, "main.al",
                                "fn main() -> i32 {\n"
                                "  ret 3\n"
@@ -120,7 +120,8 @@ TEST_CASE("Build links an executable") {
 }
 
 TEST_CASE("Build creates nonexistent directory") {
-  io::TempDir dir("alcy_cli_build_bad_output_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_cli_build_bad_output_test_");
   const bool setup = write_all(dir, "main.al",
                                "fn main() {\n"
                                "}\n");
@@ -157,7 +158,7 @@ i32 run_init_on(io::TempDir& dir, std::string_view rel) {
 }
 
 TEST_CASE("Run executes a single file and forwards its exit code") {
-  io::TempDir dir("alcy_cli_run_exit_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_exit_test_");
   const bool setup = write_all(dir, "main.al",
                                "fn main() -> i32 {\n"
                                "  ret 3\n"
@@ -170,7 +171,7 @@ TEST_CASE("Run executes a single file and forwards its exit code") {
 }
 
 TEST_CASE("Run tolerates program arguments") {
-  io::TempDir dir("alcy_cli_run_args_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_args_test_");
   const bool setup = write_all(dir, "main.al",
                                "fn main() -> i32 {\n"
                                "  ret 0\n"
@@ -183,7 +184,7 @@ TEST_CASE("Run tolerates program arguments") {
 }
 
 TEST_CASE("Run fails on a mistyped file") {
-  io::TempDir dir("alcy_cli_run_bad_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_bad_test_");
   const bool setup = write_all(dir, "bad.al",
                                "fn main() {\n"
                                "  x: u8 := 42i32\n"
@@ -196,7 +197,7 @@ TEST_CASE("Run fails on a mistyped file") {
 }
 
 TEST_CASE("Init creates a package in an existing directory") {
-  io::TempDir dir("alcy_cli_init_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_init_test_");
   CHECK(run_init_on(dir, "proj") == 0);
   io::FileHandle manifest;
   CHECK(manifest.open(dir.join("proj/alcy.toml"), io::FileAccess::Read));

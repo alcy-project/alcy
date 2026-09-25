@@ -13,7 +13,7 @@
 namespace source {
 
 TEST_CASE("SourceManager loads files and dedups by path") {
-  io::TempDir dir("alcy_source_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_source_test_");
   const bool written = dir.write_file("a.al", "let x = 1;\n");
   CHECK(written);
   if (!written) {
@@ -52,7 +52,7 @@ TEST_CASE("SourceManager reports missing files") {
 }
 
 TEST_CASE("SourceManager loads empty files") {
-  io::TempDir dir("alcy_source_empty_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_source_empty_test_");
   const bool written = dir.write_file("empty.al", "");
   CHECK(written);
   if (!written) {

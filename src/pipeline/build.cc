@@ -155,7 +155,7 @@ BuildResult build_single_file(PipelineContext& ctx,
     }
     return base::make_ok();
   }
-  io::TempDir scratch("alcy_build");
+  io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
   const std::string object_path = scratch.join("main.o");
   if (!emit_package_object(ctx, lowered, optimize, object_path) ||
       !stage_runtime(scratch)) {
@@ -197,7 +197,7 @@ BuildResult build_package(PipelineContext& ctx,
   } else {
     exe_path = std::string(output);
   }
-  io::TempDir scratch("alcy_build");
+  io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
   const std::string object_path = scratch.join("main.o");
   if (!emit_package_object(ctx, lowered, optimize, object_path) ||
       !stage_runtime(scratch)) {

@@ -150,7 +150,7 @@ core_prelude() {
 }  // namespace
 
 TEST_CASE("Check interns structs with named fields") {
-  io::TempDir dir("alcy_types_struct_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_struct_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "struct Point { x: i32, y: i32 }\n"
                                       "fn main() {}\n"}});
@@ -188,7 +188,7 @@ TEST_CASE("Check interns structs with named fields") {
 }
 
 TEST_CASE("Check interns enums with payloads") {
-  io::TempDir dir("alcy_types_enum_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_enum_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "enum Choice { Yes, No(i32) }\n"
                                       "fn main() {}\n"}});
@@ -215,7 +215,8 @@ TEST_CASE("Check interns enums with payloads") {
 }
 
 TEST_CASE("Check instantiates generic structs") {
-  io::TempDir dir("alcy_types_generic_struct_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_generic_struct_test_");
   const bool setup =
       write_all(dir, {{"main.al",
                        "struct Pair<A, B> { a: A, b: B }\n"
@@ -251,7 +252,8 @@ TEST_CASE("Check instantiates generic structs") {
 }
 
 TEST_CASE("Check instantiates generic struct methods") {
-  io::TempDir dir("alcy_types_generic_struct_method_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_generic_struct_method_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "struct Pair<A, B> { a: A, b: B }\n"
                                       "impl<A, B> Pair<A, B> {\n"
@@ -273,7 +275,8 @@ TEST_CASE("Check instantiates generic struct methods") {
 }
 
 TEST_CASE("Check rejects arity mismatch on generic structs") {
-  io::TempDir dir("alcy_types_generic_struct_arity_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_generic_struct_arity_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "struct Pair<A, B> { a: A, b: B }\n"
                                       "fn f(x: Pair<i32>) -> i32 {\n"
@@ -291,7 +294,7 @@ TEST_CASE("Check rejects arity mismatch on generic structs") {
 }
 
 TEST_CASE("Check resolves annotations and signatures") {
-  io::TempDir dir("alcy_types_sig_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_sig_test_");
   const bool setup =
       write_all(dir, {{"main.al",
                        "fn f(a: i32, b: &i32, c: (i32, bool), d: !) -> str {\n"
@@ -332,7 +335,7 @@ TEST_CASE("Check resolves annotations and signatures") {
 }
 
 TEST_CASE("Check instantiates generic enums") {
-  io::TempDir dir("alcy_types_generic_enum_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_generic_enum_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "enum Box<T> { Filled(T), Empty }\n"
                                       "fn f(x: Box<i32>) -> Box<i32> {\n"
@@ -374,7 +377,8 @@ TEST_CASE("Check instantiates generic enums") {
 
 TEST_CASE("Check rejects generic arity mismatches") {
   {
-    io::TempDir dir("alcy_types_generic_bare_test");
+    io::TempDir dir =
+        io::TempDir::create_unique("alcy_types_generic_bare_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "enum Box<T> { Filled(T), Empty }\n"
                                         "fn f(x: Box) -> i32 {\n"
@@ -390,7 +394,8 @@ TEST_CASE("Check rejects generic arity mismatches") {
     CHECK(f.bag.has_errors());
   }
   {
-    io::TempDir dir("alcy_types_generic_many_test");
+    io::TempDir dir =
+        io::TempDir::create_unique("alcy_types_generic_many_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "enum Box<T> { Filled(T), Empty }\n"
                                         "fn f(x: Box<i32, u8>) -> i32 {\n"
@@ -406,7 +411,8 @@ TEST_CASE("Check rejects generic arity mismatches") {
     CHECK(f.bag.has_errors());
   }
   {
-    io::TempDir dir("alcy_types_param_scope_test");
+    io::TempDir dir =
+        io::TempDir::create_unique("alcy_types_param_scope_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn f(x: T) -> i32 {\n"
                                         "  ret 0\n"
@@ -423,7 +429,7 @@ TEST_CASE("Check rejects generic arity mismatches") {
 }
 
 TEST_CASE("Check constructs generic enums from annotations") {
-  io::TempDir dir("alcy_types_generic_ctor_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_generic_ctor_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "enum Box<T> { Filled(T), Empty }\n"
                                       "fn f(x: Box<i32>) -> i32 {\n"
@@ -450,7 +456,8 @@ TEST_CASE("Check constructs generic enums from annotations") {
 }
 
 TEST_CASE("Check infers generic constructors from payload arguments") {
-  io::TempDir dir("alcy_types_generic_infer_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_generic_infer_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "enum Box<T> { Filled(T), Empty }\n"
                                       "fn main() -> i32 {\n"
@@ -470,7 +477,8 @@ TEST_CASE("Check infers generic constructors from payload arguments") {
 }
 
 TEST_CASE("Check rejects generic constructors with no binding argument") {
-  io::TempDir dir("alcy_types_generic_infer_bad_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_generic_infer_bad_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "enum Box<T> { Filled(T), Empty }\n"
                                       "fn main() -> i32 {\n"
@@ -488,7 +496,7 @@ TEST_CASE("Check rejects generic constructors with no binding argument") {
 }
 
 TEST_CASE("Check enforces generic match exhaustiveness") {
-  io::TempDir dir("alcy_types_generic_exh_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_generic_exh_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "enum Box<T> { Filled(T), Empty }\n"
                                       "fn f(x: Box<i32>) -> i32 {\n"
@@ -508,7 +516,8 @@ TEST_CASE("Check enforces generic match exhaustiveness") {
 }
 
 TEST_CASE("Check instantiates generic methods") {
-  io::TempDir dir("alcy_types_generic_method_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_generic_method_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "enum Box<T> { Filled(T), Empty }\n"
                                       "impl<T> Box<T> {\n"
@@ -540,7 +549,7 @@ TEST_CASE("Check instantiates generic methods") {
 }
 
 TEST_CASE("Check instantiates generic methods recursively") {
-  io::TempDir dir("alcy_types_generic_rec_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_generic_rec_test_");
   const bool setup =
       write_all(dir, {{"main.al",
                        "enum Box<T> { Filled(T), Empty }\n"
@@ -583,7 +592,8 @@ TEST_CASE("Check instantiates generic methods recursively") {
 }
 
 TEST_CASE("Check rejects unknown generic methods") {
-  io::TempDir dir("alcy_types_generic_nomethod_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_generic_nomethod_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "enum Box<T> { Filled(T), Empty }\n"
                                       "impl<T> Box<T> {\n"
@@ -606,7 +616,7 @@ TEST_CASE("Check rejects unknown generic methods") {
 }
 
 TEST_CASE("Check resolves cross-module types") {
-  io::TempDir dir("alcy_types_cross_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_cross_test_");
   const bool setup = write_all(
       dir,
       {
@@ -640,7 +650,7 @@ TEST_CASE("Check resolves cross-module types") {
 }
 
 TEST_CASE("Check instantiates core generic types with dedup") {
-  io::TempDir dir("alcy_types_core_generic_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_core_generic_test_");
   const bool setup =
       write_all(dir, {{"main.al",
                        "fn f(a: Result<i32, bool>) -> Option<i32> {\n"
@@ -676,7 +686,7 @@ TEST_CASE("Check instantiates core generic types with dedup") {
 }
 
 TEST_CASE("Check lets user code define Result and Option") {
-  io::TempDir dir("alcy_types_shadow_core_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_shadow_core_test_");
   const bool setup =
       write_all(dir, {{"main.al",
                        "pub enum Option<T> { Only(T), Never }\n"
@@ -700,7 +710,7 @@ TEST_CASE("Check lets user code define Result and Option") {
 }
 
 TEST_CASE("Check maps pointer widths for sized integers") {
-  io::TempDir dir("alcy_types_width_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_width_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "struct W { a: isize, b: usize }\n"
                                       "fn main() {}\n"}});
@@ -747,7 +757,7 @@ TEST_CASE("Check maps pointer widths for sized integers") {
 }
 
 TEST_CASE("Check rejects unknown types") {
-  io::TempDir dir("alcy_types_unknown_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_unknown_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "struct Holder { p: Nope }\n"
                                       "fn main() {}\n"}});
@@ -763,7 +773,7 @@ TEST_CASE("Check rejects unknown types") {
 }
 
 TEST_CASE("Check rejects value-recursive types") {
-  io::TempDir dir("alcy_types_recursive_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_recursive_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "struct A { b: B }\n"
                                       "struct B { a: A }\n"
@@ -780,7 +790,7 @@ TEST_CASE("Check rejects value-recursive types") {
 }
 
 TEST_CASE("Check accepts reference cycles") {
-  io::TempDir dir("alcy_types_refcycle_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_refcycle_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "struct A { r: &B }\n"
                                       "struct B { r: &A }\n"
@@ -796,7 +806,7 @@ TEST_CASE("Check accepts reference cycles") {
 }
 
 TEST_CASE("Check rejects duplicate definitions") {
-  io::TempDir dir("alcy_types_dup_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_dup_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "struct Foo { x: i32 }\n"
                                       "struct Foo { y: bool }\n"
@@ -813,7 +823,7 @@ TEST_CASE("Check rejects duplicate definitions") {
 
 TEST_CASE("Check rejects malformed generics") {
   {
-    io::TempDir dir("alcy_types_arity_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_types_arity_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn f(x: Result<i32>) -> i32 {\n"
                                         "  ret 0\n"
@@ -830,7 +840,7 @@ TEST_CASE("Check rejects malformed generics") {
     CHECK(f.bag.has_errors());
   }
   {
-    io::TempDir dir("alcy_types_generic_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_types_generic_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "struct Box { x: i32 }\n"
                                         "fn f(x: Box<i32>) -> i32 {\n"
@@ -848,7 +858,7 @@ TEST_CASE("Check rejects malformed generics") {
 }
 
 TEST_CASE("Check accepts mutable reference fields as move-only") {
-  io::TempDir dir("alcy_types_mutfield_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_mutfield_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "struct Holder { r: &mut i32, s: &i32 }\n"
                                       "fn main() {}\n"}});
@@ -874,7 +884,7 @@ TEST_CASE("Check accepts mutable reference fields as move-only") {
 }
 
 TEST_CASE("Check exposes core generic shapes through the IR") {
-  io::TempDir dir("alcy_types_registry_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_registry_test_");
   const bool setup =
       write_all(dir, {{"main.al",
                        "fn f(a: Result<i32, bool>) -> Option<i32> {\n"
@@ -927,7 +937,7 @@ TEST_CASE("Check exposes core generic shapes through the IR") {
 }
 
 TEST_CASE("Check judges Copy structurally") {
-  io::TempDir dir("alcy_types_copy_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_copy_test_");
   const bool setup =
       write_all(dir, {{"main.al",
                        "struct AllCopy { a: i32, b: &i32, c: (bool, str) }\n"
@@ -965,7 +975,7 @@ TEST_CASE("Check judges Copy structurally") {
 }
 
 TEST_CASE("Check expressions accept well-typed programs") {
-  io::TempDir dir("alcy_expr_ok_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_expr_ok_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "struct Point { x: i32, y: i32 }\n"
                                       "fn add(a: i32, b: i32) -> i32 {\n"
@@ -997,7 +1007,7 @@ TEST_CASE("Check expressions accept well-typed programs") {
 
 TEST_CASE("Check expressions reject mismatches") {
   {
-    io::TempDir dir("alcy_expr_suffix_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_expr_suffix_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn main() {\n"
                                         "  x: u8 := 42i32\n"
@@ -1011,7 +1021,7 @@ TEST_CASE("Check expressions reject mismatches") {
     CHECK(!result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_expr_binop_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_expr_binop_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn main() {\n"
                                         "  x := 1 + true\n"
@@ -1025,7 +1035,7 @@ TEST_CASE("Check expressions reject mismatches") {
     CHECK(!result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_expr_ret_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_expr_ret_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn f() -> i32 {\n"
                                         "  ret true\n"
@@ -1039,7 +1049,7 @@ TEST_CASE("Check expressions reject mismatches") {
     CHECK(!result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_expr_call_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_expr_call_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn add(a: i32, b: i32) -> i32 {\n"
                                         "  ret a + b\n"
@@ -1056,7 +1066,7 @@ TEST_CASE("Check expressions reject mismatches") {
     CHECK(!result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_expr_field_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_expr_field_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "struct Point { x: i32 }\n"
                                         "fn main() {\n"
@@ -1075,7 +1085,7 @@ TEST_CASE("Check expressions reject mismatches") {
 
 TEST_CASE("Check question-mark propagation") {
   {
-    io::TempDir dir("alcy_question_ok_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_question_ok_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn get() -> Result<i32, bool> {\n"
                                         "  ret Result::Ok(1i32)\n"
@@ -1095,7 +1105,8 @@ TEST_CASE("Check question-mark propagation") {
     CHECK(result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_question_mismatch_test");
+    io::TempDir dir =
+        io::TempDir::create_unique("alcy_question_mismatch_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn get() -> Result<i32, bool> {\n"
                                         "  ret Result::Ok(1i32)\n"
@@ -1115,7 +1126,7 @@ TEST_CASE("Check question-mark propagation") {
     CHECK(!result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_question_plain_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_question_plain_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn get() -> Result<i32, bool> {\n"
                                         "  ret Result::Ok(1i32)\n"
@@ -1136,7 +1147,7 @@ TEST_CASE("Check question-mark propagation") {
 }
 
 TEST_CASE("Check question-mark works on any enum") {
-  io::TempDir dir("alcy_question_user_enum_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_question_user_enum_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "enum Early<T> { Value(T), Stop }\n"
                                       "fn lookup(x: i32) -> Early<i32> {\n"
@@ -1166,7 +1177,7 @@ TEST_CASE("Check question-mark works on any enum") {
 
 TEST_CASE("Check match exhaustiveness") {
   {
-    io::TempDir dir("alcy_match_bool_ok_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_match_bool_ok_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn f(b: bool) -> i32 {\n"
                                         "  ret match b {\n"
@@ -1183,7 +1194,7 @@ TEST_CASE("Check match exhaustiveness") {
     CHECK(result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_match_bool_bad_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_match_bool_bad_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn f(b: bool) -> i32 {\n"
                                         "  ret match b {\n"
@@ -1198,7 +1209,7 @@ TEST_CASE("Check match exhaustiveness") {
     CHECK(!result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_match_enum_ok_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_match_enum_ok_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "enum Choice { Yes, No(i32) }\n"
                                         "fn f(c: Choice) -> i32 {\n"
@@ -1216,7 +1227,7 @@ TEST_CASE("Check match exhaustiveness") {
     CHECK(result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_match_enum_bad_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_match_enum_bad_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "enum Choice { Yes, No(i32) }\n"
                                         "fn f(c: Choice) -> i32 {\n"
@@ -1232,7 +1243,7 @@ TEST_CASE("Check match exhaustiveness") {
     CHECK(!result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_match_int_wild_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_match_int_wild_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn f(x: i32) -> i32 {\n"
                                         "  ret match x {\n"
@@ -1249,7 +1260,7 @@ TEST_CASE("Check match exhaustiveness") {
     CHECK(result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_match_option_ok_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_match_option_ok_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn f(o: Option<i32>) -> i32 {\n"
                                         "  ret match o {\n"
@@ -1268,7 +1279,7 @@ TEST_CASE("Check match exhaustiveness") {
     CHECK(result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_match_option_bad_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_match_option_bad_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn f(o: Option<i32>) -> i32 {\n"
                                         "  ret match o {\n"
@@ -1286,7 +1297,7 @@ TEST_CASE("Check match exhaustiveness") {
     CHECK(!result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_match_int_bad_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_match_int_bad_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn f(x: i32) -> i32 {\n"
                                         "  ret match x {\n"
@@ -1304,7 +1315,7 @@ TEST_CASE("Check match exhaustiveness") {
 
 TEST_CASE("Check or-patterns bind shared names") {
   {
-    io::TempDir dir("alcy_or_same_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_or_same_test_");
     const bool setup =
         write_all(dir, {{"main.al",
                          "enum Shape { Circle(i32), Square(i32), Rect }\n"
@@ -1323,7 +1334,7 @@ TEST_CASE("Check or-patterns bind shared names") {
     CHECK(result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_or_mismatch_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_or_mismatch_test_");
     const bool setup =
         write_all(dir, {{"main.al",
                          "enum Shape { Circle(i32), Square(i32), Rect }\n"
@@ -1345,7 +1356,7 @@ TEST_CASE("Check or-patterns bind shared names") {
 
 TEST_CASE("Check inherent and core generic methods") {
   {
-    io::TempDir dir("alcy_method_ok_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_method_ok_test_");
     const bool setup =
         write_all(dir, {{"main.al",
                          "struct Point { x: i32 }\n"
@@ -1382,7 +1393,8 @@ impl<T, E> Result<T, E> {
     CHECK(result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_method_missing_core_test");
+    io::TempDir dir =
+        io::TempDir::create_unique("alcy_method_missing_core_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn f(r: Result<i32, bool>) -> i32 {\n"
                                         "  ret r.no_such_method()\n"
@@ -1399,7 +1411,7 @@ impl<T, E> Result<T, E> {
     CHECK(f.bag.has_errors());
   }
   {
-    io::TempDir dir("alcy_method_bad_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_method_bad_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "struct Point { x: i32 }\n"
                                         "fn f() {\n"
@@ -1417,7 +1429,7 @@ impl<T, E> Result<T, E> {
 }
 
 TEST_CASE("Check unused-value warnings") {
-  io::TempDir dir("alcy_mustuse_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_mustuse_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn get() -> Result<i32, bool> {\n"
                                       "  ret Result::Ok(1i32)\n"
@@ -1449,7 +1461,7 @@ TEST_CASE("Check unused-value warnings") {
 
 TEST_CASE("Check items enforce entry and initializer rules") {
   {
-    io::TempDir dir("alcy_main_bad_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_main_bad_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn main() -> bool {\n"
                                         "  ret true\n"
@@ -1463,7 +1475,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
     CHECK(!result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_static_mut_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_static_mut_test_");
     const bool setup =
         write_all(dir, {{"main.al", "static r: &mut i32 = 0\n"}});
     CHECK(setup);
@@ -1475,7 +1487,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
     CHECK(!result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_const_call_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_const_call_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn one() -> i32 {\n"
                                         "  ret 1\n"
@@ -1490,7 +1502,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
     CHECK(!result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_let_refutable_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_let_refutable_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn main() {\n"
                                         "  0 := 1\n"
@@ -1504,7 +1516,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
     CHECK(!result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_range_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_range_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn main() {\n"
                                         "  _ := 1..10\n"
@@ -1518,7 +1530,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
     CHECK(!result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_break_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_break_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn main() {\n"
                                         "  break\n"
@@ -1535,7 +1547,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
 
 TEST_CASE("Check borrow expressions") {
   {
-    io::TempDir dir("alcy_borrow_ok_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_borrow_ok_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn main() {\n"
                                         "  x := 1\n"
@@ -1553,7 +1565,7 @@ TEST_CASE("Check borrow expressions") {
     CHECK(result.package.has_value());
   }
   {
-    io::TempDir dir("alcy_borrow_mismatch_test");
+    io::TempDir dir = io::TempDir::create_unique("alcy_borrow_mismatch_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn main() {\n"
                                         "  x := 1\n"
@@ -1571,7 +1583,7 @@ TEST_CASE("Check borrow expressions") {
 }
 
 TEST_CASE("Check accepts comp declarations and blocks") {
-  io::TempDir dir("alcy_types_comp_ok_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_comp_ok_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn double(comp n: i32) -> i32 {\n"
                                       "  ret n * 2\n"
@@ -1591,7 +1603,7 @@ TEST_CASE("Check accepts comp declarations and blocks") {
 }
 
 TEST_CASE("Check rejects runtime arguments for comp parameters") {
-  io::TempDir dir("alcy_types_comp_arg_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_comp_arg_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn double(comp n: i32) -> i32 {\n"
                                       "  ret n * 2\n"
@@ -1611,7 +1623,7 @@ TEST_CASE("Check rejects runtime arguments for comp parameters") {
 }
 
 TEST_CASE("Check rejects non-comp-known comp initializers") {
-  io::TempDir dir("alcy_types_comp_init_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_comp_init_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  x := 1\n"
@@ -1629,7 +1641,7 @@ TEST_CASE("Check rejects non-comp-known comp initializers") {
 }
 
 TEST_CASE("Check rejects ret inside comp blocks") {
-  io::TempDir dir("alcy_types_comp_ret_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_comp_ret_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() -> i32 {\n"
                                       "  ret comp { ret 1 }\n"
@@ -1645,7 +1657,7 @@ TEST_CASE("Check rejects ret inside comp blocks") {
 }
 
 TEST_CASE("Check rejects print inside comp blocks") {
-  io::TempDir dir("alcy_types_comp_io_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_comp_io_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  _ := comp { print(\"hi\") }\n"
@@ -1661,7 +1673,7 @@ TEST_CASE("Check rejects print inside comp blocks") {
 }
 
 TEST_CASE("Check accepts memcopy intrinsic declarations") {
-  io::TempDir dir("alcy_types_intrinsic_ok_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_intrinsic_ok_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "intrinsic fn memcopy(dst: &mut u8, "
                                       "src: &u8, n: usize);\n"
@@ -1681,7 +1693,8 @@ TEST_CASE("Check accepts memcopy intrinsic declarations") {
 }
 
 TEST_CASE("Check rejects unknown intrinsics") {
-  io::TempDir dir("alcy_types_intrinsic_unknown_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_intrinsic_unknown_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "intrinsic fn frobnicate(x: i32);\n"
                                       "fn main() {}\n"}});
@@ -1696,7 +1709,8 @@ TEST_CASE("Check rejects unknown intrinsics") {
 }
 
 TEST_CASE("Check rejects mistyped intrinsic signatures") {
-  io::TempDir dir("alcy_types_intrinsic_sig_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_intrinsic_sig_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "intrinsic fn memcopy(x: i32);\n"
                                       "fn main() {}\n"}});
@@ -1711,7 +1725,8 @@ TEST_CASE("Check rejects mistyped intrinsic signatures") {
 }
 
 TEST_CASE("Check rejects comp parameters on intrinsics") {
-  io::TempDir dir("alcy_types_intrinsic_comp_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_intrinsic_comp_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "intrinsic fn memcopy(dst: &mut u8, "
                                       "src: &u8, comp n: usize);\n"
@@ -1727,7 +1742,7 @@ TEST_CASE("Check rejects comp parameters on intrinsics") {
 }
 
 TEST_CASE("Check resolves prelude calls without imports") {
-  io::TempDir dir("alcy_types_prelude_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_prelude_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  _ := help()\n"
@@ -1748,7 +1763,8 @@ TEST_CASE("Check resolves prelude calls without imports") {
 }
 
 TEST_CASE("Check accepts string intrinsic declarations") {
-  io::TempDir dir("alcy_types_str_intrinsic_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_str_intrinsic_test_");
   const bool setup = write_all(
       dir,
       {{"main.al",
@@ -1771,7 +1787,8 @@ TEST_CASE("Check accepts string intrinsic declarations") {
 }
 
 TEST_CASE("Check rejects mistyped string intrinsic signatures") {
-  io::TempDir dir("alcy_types_str_intrinsic_sig_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_str_intrinsic_sig_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "intrinsic fn str_len(s: str) -> i32;\n"
                                       "fn main() {}\n"}});
@@ -1786,7 +1803,7 @@ TEST_CASE("Check rejects mistyped string intrinsic signatures") {
 }
 
 TEST_CASE("Check accepts array construction and indexing") {
-  io::TempDir dir("alcy_types_array_ok_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_array_ok_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  mut buf := [0u8; 4]\n"
@@ -1804,7 +1821,7 @@ TEST_CASE("Check accepts array construction and indexing") {
 }
 
 TEST_CASE("Check rejects heterogeneous array literals") {
-  io::TempDir dir("alcy_types_array_hetero_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_array_hetero_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  _ := [1i32, true]\n"
@@ -1820,7 +1837,7 @@ TEST_CASE("Check rejects heterogeneous array literals") {
 }
 
 TEST_CASE("Check rejects oversized array repeats") {
-  io::TempDir dir("alcy_types_array_huge_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_array_huge_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  _ := [0u8; 9999999999]\n"
@@ -1836,7 +1853,7 @@ TEST_CASE("Check rejects oversized array repeats") {
 }
 
 TEST_CASE("Check rejects fmt arity mismatches") {
-  io::TempDir dir("alcy_types_fmt_arity_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_fmt_arity_test_");
   const bool setup = write_all(
       dir, {{"main.al",
              "fn main() {\n"
@@ -1862,7 +1879,7 @@ TEST_CASE("Check rejects fmt arity mismatches") {
 }
 
 TEST_CASE("Check rejects non-tuple fmt arguments") {
-  io::TempDir dir("alcy_types_fmt_tuple_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_fmt_tuple_test_");
   const bool setup = write_all(
       dir, {{"main.al",
              "fn main() {\n"
@@ -1888,7 +1905,7 @@ TEST_CASE("Check rejects non-tuple fmt arguments") {
 }
 
 TEST_CASE("Check accepts generic free functions and turbofish arguments") {
-  io::TempDir dir("alcy_types_generic_fn_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_generic_fn_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn id<T>(x: T) -> T {\n"
                                       "  ret x\n"
@@ -1913,7 +1930,8 @@ TEST_CASE("Check accepts generic free functions and turbofish arguments") {
 }
 
 TEST_CASE("Check rejects uninferable generic call arguments") {
-  io::TempDir dir("alcy_types_generic_fn_unbound_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_generic_fn_unbound_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn make<T>() -> T {\n"
                                       "  panic(\"x\")\n"
@@ -1932,7 +1950,7 @@ TEST_CASE("Check rejects uninferable generic call arguments") {
 }
 
 TEST_CASE("Check accepts typed heap intrinsics") {
-  io::TempDir dir("alcy_types_typed_heap_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_typed_heap_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "pub intrinsic fn alloc<T>(count: "
                                       "usize) -> &mut T;\n"
@@ -1962,7 +1980,8 @@ TEST_CASE("Check accepts typed heap intrinsics") {
 }
 
 TEST_CASE("Check rejects an intrinsic declared with the wrong shape") {
-  io::TempDir dir("alcy_types_intrinsic_shape_test");
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_types_intrinsic_shape_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "pub intrinsic fn elem_ptr<T>(ptr: "
                                       "&T, index: usize) -> &T;\n"
@@ -1979,7 +1998,7 @@ TEST_CASE("Check rejects an intrinsic declared with the wrong shape") {
 }
 
 TEST_CASE("Check rejects dereferencing a non-reference") {
-  io::TempDir dir("alcy_types_deref_value_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_deref_value_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  x := 1i32\n"
@@ -1996,7 +2015,7 @@ TEST_CASE("Check rejects dereferencing a non-reference") {
 }
 
 TEST_CASE("Check rejects assignment through a shared reference") {
-  io::TempDir dir("alcy_types_deref_shared_test");
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_deref_shared_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "fn bump(p: &i32) {\n"
                                       "  *p = 1\n"
