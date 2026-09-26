@@ -6,8 +6,8 @@
 """Standalone check for the program runtime.
 
 Compiles runtime/alcy_runtime.c with the system C compiler, links
-print/panic driver programs against it, and asserts stdout content,
-stderr content, and the abort exit status.
+print/panic/allocator driver programs against it, and asserts their
+output, exit status, and allocation invariants.
 """
 
 import os
@@ -26,7 +26,6 @@ def system_cc():
     if cc:
         return cc
     for compiler in ["clang", "gcc", "cc"]:
-
         if shutil.which(compiler):
             return compiler
     return "cc"
@@ -136,11 +135,88 @@ def main():
                 f"stderr={proc.stderr!r}"
             )
 
+        (tmpdir / "alloc_main.c").write_text(
+            '#include "alcy_runtime.h"\n'
+            "#include <stdint.h>\n"
+            "#include <stdio.h>\n"
+            "#include <string.h>\n"
+            "\n"
+            "static int check_block(size_t size, size_t align, unsigned char value) {\n"
+            "  unsigned char* ptr = (unsigned char*)alcy_alloc(size, align);\n"
+            "  if (ptr == NULL) {\n"
+            '    fprintf(stderr, "alloc(%zu, %zu) returned NULL\\n", size, align);\n'
+            "    return 1;\n"
+            "  }\n"
+            "  if (((uintptr_t)ptr % align) != 0) {\n"
+            '    fprintf(stderr, "alloc(%zu, %zu) returned a misaligned pointer\\n", size, align);\n'
+            "    alcy_dealloc(ptr, size, align);\n"
+            "    return 1;\n"
+            "  }\n"
+            "  if (size != 0) {\n"
+            "    memset(ptr, value, size);\n"
+            "    if (ptr[0] != value || ptr[size - 1] != value) {\n"
+            '      fprintf(stderr, "alloc(%zu, %zu) memory was not writable\\n", size, align);\n'
+            "      alcy_dealloc(ptr, size, align);\n"
+            "      return 1;\n"
+            "    }\n"
+            "  }\n"
+            "  alcy_dealloc(ptr, size, align);\n"
+            "  return 0;\n"
+            "}\n"
+            "\n"
+            "static int check_distinct(size_t size, size_t align) {\n"
+            "  void* first = alcy_alloc(size, align);\n"
+            "  void* second = alcy_alloc(size, align);\n"
+            "  int bad = 0;\n"
+            "  if (first == NULL || second == NULL) {\n"
+            '    fprintf(stderr, "distinct alloc(%zu, %zu) returned NULL\\n", size, align);\n'
+            "    bad = 1;\n"
+            "  } else if (first == second) {\n"
+            '    fprintf(stderr, "distinct alloc(%zu, %zu) returned the same pointer\\n", size, align);\n'
+            "    bad = 1;\n"
+            "  }\n"
+            "  alcy_dealloc(first, size, align);\n"
+            "  alcy_dealloc(second, size, align);\n"
+            "  return bad;\n"
+            "}\n"
+            "\n"
+            "int main(void) {\n"
+            "  int bad = 0;\n"
+            "  bad += check_block(32, 1, 0x11);\n"
+            "  bad += check_block(16, 4, 0x22);\n"
+            "  bad += check_block(0, 1, 0);\n"
+            "  bad += check_distinct(32, 1);\n"
+            "  bad += check_distinct(0, 1);\n"
+            "  return bad == 0 ? 0 : 1;\n"
+            "}\n"
+        )
+        alloc_exe = tmpdir / executable("alloc_test")
+        proc = run(
+            [
+                cc,
+                str(tmpdir / "alloc_main.c"),
+                str(runtime_obj),
+                "-I",
+                str(runtime_dir),
+                "-o",
+                str(alloc_exe),
+            ]
+        )
+        if proc.returncode != 0:
+            print(f"FAIL link alloc driver:\n{proc.stderr}")
+            return 1
+        proc = run([str(alloc_exe)])
+        if proc.returncode != 0:
+            failures.append(
+                f"alloc: exit={proc.returncode} stdout={proc.stdout!r} "
+                f"stderr={proc.stderr!r}"
+            )
+
     if failures:
         for failure in failures:
             print(f"FAIL {failure}")
         return 1
-    print("runtime: print/panic checks passed")
+    print("runtime: print/panic/alloc checks passed")
     return 0
 
 

@@ -6,6 +6,10 @@
 // libc's unbuffered wrapper; this migrates to an ordinary core
 // function once FFI lands.
 
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200112L
+#endif
+
 #include "alcy_runtime.h"
 
 #include <stddef.h>
@@ -68,32 +72,42 @@ void alcy_sys_write(int fd, const char* buf, size_t len) {
   write_all(fd, buf == NULL ? "" : buf, len);
 }
 
-// Alignment must be a power of two and the size a multiple of it for
-// `aligned_alloc`. A zero-size request still returns a distinct,
-// freeable pointer so callers can round-trip it.
+// The requested alignment must be a power of two. POSIX allocators
+// require at least pointer-sized alignment, so small type alignments are
+// promoted before calling `posix_memalign`. A zero-size request still
+// returns a distinct, freeable pointer so callers can round-trip it.
 void* alcy_alloc(size_t size, size_t align) {
-  if (align == 0) {
+  if (align == 0 || (align & (align - 1)) != 0) {
     return NULL;
   }
+#if defined(_WIN32)
   if (size == 0) {
     size = align;
   }
-  if (size % align != 0) {
-    size += align - (size % align);
-  }
-#if defined(_WIN32)
   return _aligned_malloc(size, align);
 #else
-  return aligned_alloc(align, size);
+  const size_t min_align = sizeof(void*);
+  const size_t effective_align = align < min_align ? min_align : align;
+  if (size == 0) {
+    size = effective_align;
+  }
+  void* ptr = NULL;
+  if (posix_memalign(&ptr, effective_align, size) != 0) {
+    return NULL;
+  }
+  return ptr;
 #endif
 }
 
 void alcy_dealloc(void* ptr, size_t size, size_t align) {
+  (void)size;
+  (void)align;
   if (ptr == NULL) {
     return;
   }
-  if (size == 0) {
-    size = align;
-  }
+#if defined(_WIN32)
+  _aligned_free(ptr);
+#else
   free(ptr);
+#endif
 }
