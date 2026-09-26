@@ -1,6 +1,6 @@
 # ADR-0013: Destructors consume their value
 
-- Status: accepted
+- Status: Accepted
 - Date: 2026-09-26
 
 ## Context

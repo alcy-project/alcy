@@ -118,42 +118,63 @@ A `Vec<T>` was written against these rules to find out how far a
 container can get without them. Every operation is correct in
 isolation: `push` grows and copies, `at_mut` bounds-checks, `pop`
 returns the last element, and the destructor releases the buffer. But a
-`Vec<T>` is the first type that derives `&mut T` from its own `&mut
-MaybeUninit<T>` field by way of `elem_ptr` and `uninit_assume`, and
-hands that reference to a caller. Once it does, some sequences of
-operations read the wrong element:
+sequence of operations reads the wrong element:
 
 ```
 mut v := Vec::<i32>::new()
 v.push(1i32)
 v.push(2i32)
 v.push(3i32)
-show("at2_none", if v.at_mut(2 as usize).is_none() { 1 } else { 0 })
-show("e0", *v.at_mut(0 as usize).unwrap())
-show("e2", *v.at_mut(2 as usize).unwrap())
-last := v.pop()          // 0, not 3
+show("at2", if v.at_mut(2 as usize).is_none() { 1 } else { 0 })
+last := v.pop()
+show(last.unwrap())
 ```
 
-Removing any one of the `at_mut` lines, or popping without binding the
-result first, gives the right answer. So the container is not usable
-today, and the reason is this gap rather than the shape of its API.
+The first conclusion drawn from this was that the container was blocked
+here, on the reference model. **That was wrong.** Reducing the case
+removed `Vec` altogether and left a much smaller fault:
 
-The underlying cause is narrower than "references are not modelled".
-The checker's `Place` is a root register plus a field path, so a place
-reached *through* a reference has no representation: a borrow of `*b`
-and a store to `*b` both resolve to `b` itself, and a store through a
-dereference is not checked against a live loan at all. That is why the
-first container to lean on derived references reads the wrong element,
-and it is the same missing machinery rule 1 and the region solver
-describe. `Vec` is therefore blocked here, not on ergonomics.
+```
+enum E { A(i32), B }
+fn mk(x: i32) -> E { ret E::A(x) }
+fn get(e: E) -> i32 { ret match e { E::A(v) => v, E::B => 0 } }
+fn sink(e: E) { _ := get(e) }
+fn main() { e := mk(42i32); sink(mk(7i32)); sink(mk(9i32)); show(get(e)) }
+```
+
+`get(e)` yields `0`, not `42`. A callee builds an enum payload in its
+own frame and returns a pointer to it, so the payload dangles as soon
+as the call returns. What looks like a container bug is a returned
+payload outliving the frame that made it, and it has nothing to do with
+reborrowing. `docs/adr/0014-enum-payload-layout.md` records the layout
+decision, and it is the real blocker: `Option<T>` is the enum every
+container accessor returns.
+
+The reference model is separately incomplete, and the reason a write
+through a dereference goes unchecked is still worth stating plainly:
+
+```
+fn g(mut b: &mut i32) -> i32 {
+  x := &*b      // a shared reborrow of the referent
+  *b = 1        // a write through the same referent, not checked
+  ret *x
+}
+```
+
+This compiles and is unsound. The checker's `Place` is a root register
+plus a field path, so a place reached *through* a reference has no
+representation: a borrow of `*b` and a store to `*b` both resolve to
+`b` itself. That is the missing machinery rule 1 and the region solver
+describe, and it is why a container still has no read-only accessor. It
+is a real gap, but a different one from the fault above.
 
 ## Consequences
 
 - The unsoundness is understood and located, and the naive fix is known
   not to work, so the real work is not at risk of repeating it.
-- `Vec` is blocked, not merely narrowed. A container that reads the
-  wrong element is worse than no container, so nothing of it ships until
-  the referent is representable.
+- A container is blocked on the enum payload layout rather than on the
+  shape of its API. That is the first thing to fix, and it is smaller
+  than the region work.
 - The rules are recorded before implementation, so the coercions, the
   elision, and the extent computation are designed together rather than
   arriving as three patches that disagree.
