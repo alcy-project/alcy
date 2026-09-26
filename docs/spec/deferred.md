@@ -22,10 +22,14 @@ relied upon by MVP programs or by the MVP compiler implementation.
 - Reborrowing, and the coercions that go with it: `&mut T` used where a
   shorter `&mut T` or a `&T` is expected, including as a method
   receiver. Without it a method taking `&self` cannot be called through
-  a `&mut` binding. A growable container therefore has no read-only
-  element accessor, and its mutable accessors take `&mut Self`. The
-  rules are settled and the extent is non-lexical; see
-  `docs/adr/0012`.
+  a `&mut` binding. A place reached through a reference has no
+  representation in the borrow checker, whose places are a root
+  register plus a field path, so a borrow of `*b` and a store to `*b`
+  both resolve to `b` and a store through a dereference is not checked
+  against a live loan. A container derives `&mut T` from its own
+  buffer and hands it to callers, and then reads the wrong element, so
+  `Vec` is blocked here rather than on the shape of its API. The rules
+  are settled and the extent is non-lexical; see `docs/adr/0012`.
 - `spec` (trait) definitions and dispatch, coherence rules, and
   monomorphization beyond per-instantiation enum, struct, and method
   specialization.

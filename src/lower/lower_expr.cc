@@ -2079,9 +2079,6 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     return Val{size_one, error_type(), false, false};
   }
   Val addr = address_of(scrut);
-  // By-value matches consume a non-Copy scrutinee; payload bindings
-  // copy out of the moved value.
-  mark_move(addr);
   const ir::TypeIdx scrut_type = expr_type(match.scrutinee);
   const ir::TypeIdx result_type = expr_type(expr);
   Val slot{size_one, result_type, false, false};
@@ -2139,6 +2136,13 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   emit_void(ir::Opcode::Unreachable, {});
   if (join.is_valid()) {
     switch_to(join);
+    // A by-value match consumes a non-Copy scrutinee, and the arms read
+    // it to do so: its discriminant, and the payload each binding
+    // pattern takes. The move belongs after the arms rather than before
+    // them, so those reads are reads of a value that has not left yet.
+    // Every arm reaches the join, so this marks the scrutinee moved on
+    // every path that finishes the match.
+    mark_move(addr);
   }
   if (has_slot) {
     return materialize(slot);
