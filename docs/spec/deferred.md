@@ -72,11 +72,13 @@ relied upon by MVP programs or by the MVP compiler implementation.
   std item rather than the one its `prelude.al` re-exports. The manifest
   schema change to `dependencies = ["alcy/std"]`, per-package selection,
   export enforcement and cross-package `use` are all still to come.
-- A std package is one entry module today. Splitting a package into
-  several modules behind a `prelude.al` facade needs the prelude
-  injection to build a nested module tree: each staged source is added as
-  an independent root, so a facade's `use mem::{...}` has no sibling to
-  resolve against. The layout and the manifests do not depend on it.
+- A std package is one entry module today, so its facade holds the
+  definitions and the split is organizational. The nested prelude tree
+  that a real split needs has landed (ADR-0016), but populating it
+  segfaults in the attach path, so the split is not done: a staged
+  `core/prelude.al` plus `core/mem.al` crashes before analysis rather
+  than resolving the facade's `use mem::{...}`. The layout and the
+  manifests do not depend on the split.
 
 
 - Summary-carrying package artifacts (`[lib]` targets, cross-package
