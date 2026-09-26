@@ -1157,6 +1157,10 @@ ir::TypeIdx Checker::check_method_call(u32 module,
               receiver.idx) {
         coerced = true;
       }
+    } else if (coerces_to_shared(declared, receiver)) {
+      // `&mut T` reaching a `&Self` receiver is a shared reborrow, the
+      // same coercion an argument position gets.
+      coerced = true;
     }
     if (!coerced) {
       const u32 index = bag.emit(

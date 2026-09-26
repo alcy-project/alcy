@@ -33,6 +33,11 @@ pub intrinsic fn align_of<T>() -> usize;
 // by the pointee of `ptr`, so the call admits one instantiation.
 pub intrinsic fn elem_ptr<T>(ptr: &mut MaybeUninit<T>, index: usize) -> &mut MaybeUninit<T>;
 
+// Shared counterpart of `elem_ptr`, so a buffer is readable through a
+// shared borrow of the value that owns it. `&mut T` coerces to `&T`, so
+// the argument may name the buffer either way.
+pub intrinsic fn elem_ref<T>(ptr: &MaybeUninit<T>, index: usize) -> &MaybeUninit<T>;
+
 // Writes `value` into an uninitialized slot. Moving the value in leaves
 // the slot initialized, so a later `uninit_assume` on it is sound.
 pub intrinsic fn uninit_write<T>(slot: &mut MaybeUninit<T>, value: T);
@@ -41,6 +46,11 @@ pub intrinsic fn uninit_write<T>(slot: &mut MaybeUninit<T>, value: T);
 // the result before anything was written yields whatever the allocator
 // returned.
 pub intrinsic fn uninit_assume<T>(slot: &mut MaybeUninit<T>) -> &mut T;
+
+// Shared counterpart of `uninit_assume`, with the same caveat: reading
+// through the result before anything was written yields whatever the
+// allocator returned.
+pub intrinsic fn uninit_ref<T>(slot: &MaybeUninit<T>) -> &T;
 
 intrinsic fn sys_write(fd: i32, buf: str);
 
@@ -118,9 +128,10 @@ pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ()) -> WriteOutcome {
 // movable by assignment, which is what lets a reallocation move an
 // element from the old buffer to the new one.
 //
-// Accessors take `&mut Self`. A read-only accessor needs a shared
-// reborrow of `*self`, which the language does not have yet; see
-// docs/adr/0012.
+// `at` takes `&Self` and hands out `&T`; the mutating accessors take
+// `&mut Self`. A shared reborrow of `*self` reaches the buffer field,
+// so a read-only view is a shared loan of the referent, not a copy of
+// the pointer. See docs/adr/0012.
 pub struct Vec<T> {
   buf: &mut MaybeUninit<T>,
   len: usize,
@@ -138,15 +149,15 @@ impl<T> Vec<T> {
     ret Vec { buf: alloc::<T>(n), len: 0, cap: n }
   }
 
-  pub fn len(mut self: &mut Self) -> usize {
+  pub fn len(self: &Self) -> usize {
     ret self.len
   }
 
-  pub fn capacity(mut self: &mut Self) -> usize {
+  pub fn capacity(self: &Self) -> usize {
     ret self.cap
   }
 
-  pub fn is_empty(mut self: &mut Self) -> bool {
+  pub fn is_empty(self: &Self) -> bool {
     ret self.len == 0
   }
 
@@ -180,7 +191,16 @@ impl<T> Vec<T> {
     self.cap = next
   }
 
-  // The element at `index`, or `None` when `index` is past the end.
+  // The element at `index`, or `None` when `index` is past the end. A
+  // shared borrow of the vector, so it stays readable while the result
+  // is live.
+  pub fn at(self: &Self, index: usize) -> Option<&T> {
+    if index >= self.len {
+      ret Option::None
+    }
+    ret Option::Some(uninit_ref(elem_ref(self.buf, index)))
+  }
+
   pub fn at_mut(mut self: &mut Self, index: usize) -> Option<&mut T> {
     if index >= self.len {
       ret Option::None

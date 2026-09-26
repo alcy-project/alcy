@@ -236,6 +236,7 @@ class Checker {
   static const char* pretty_tag(ir::TypeTag tag);
   bool types_equal(ir::TypeIdx a, ir::TypeIdx b);
   bool types_equal_inner(ir::TypeIdx a, ir::TypeIdx b, std::vector<u64>& seen);
+  bool coerces_to_shared(ir::TypeIdx expected, ir::TypeIdx actual);
   ir::TypeIdx unify(ir::TypeIdx expected,
                     ir::TypeIdx actual,
                     diag::Span span,

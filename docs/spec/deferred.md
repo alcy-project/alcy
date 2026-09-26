@@ -21,15 +21,15 @@ relied upon by MVP programs or by the MVP compiler implementation.
   inference binds only a parameter a declared parameter type pins on
   its own, so a call whose parameters cannot be recovered that way
   needs the turbofish.
-- Reborrowing, and the coercions that go with it: `&mut T` used where a
-  shorter `&mut T` or a `&T` is expected, including as a method
-  receiver. Without it a method taking `&self` cannot be called through
-  a `&mut` binding. A place reached through a reference has no
-  representation in the borrow checker, whose places are a root
-  register plus a field path, so a borrow of `*b` and a store to `*b`
-  both resolve to `b` and a write through a dereference is not checked
-  against a live loan. The rules are settled and the extent is
-  non-lexical; see `docs/adr/0012`.
+- A loan's extent is still the span from its birth to the last use of
+  anything derived from it, rather than a region solved for. Reborrowing
+  lands: a place reached through a reference is named by a dereference
+  step, `&mut T` coerces to `&T` at an argument and at a receiver, and
+  `elem_ref` and `uninit_ref` let a buffer be read through a shared
+  owner, so `Vec<T>` has a read-only `at`. What is left is the
+  non-lexical extent, which is the region solver's input, then the
+  return-position elision for a reborrow that escapes through a call.
+  See `docs/adr/0012`.
 - `spec` (trait) definitions and dispatch, coherence rules, and
   monomorphization beyond per-instantiation enum, struct, and method
   specialization.

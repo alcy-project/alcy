@@ -1084,7 +1084,7 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
   if (name == "str_len" || name == "str_byte" || name == "str_slice") {
     return lower_str_intrinsic(expr, name);
   }
-  if (name == "elem_ptr") {
+  if (name == "elem_ptr" || name == "elem_ref") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
     if (call.args.size() != 2) {
       internal(node.span, "intrinsic arity");
@@ -1104,7 +1104,8 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     }
     return Val{to_operand(result, sig.ret), sig.ret, false, false};
   }
-  if (name == "uninit_write" || name == "uninit_assume") {
+  if (name == "uninit_write" || name == "uninit_assume" ||
+      name == "uninit_ref") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
     const usize arity = name == "uninit_write" ? 2 : 1;
     if (call.args.size() != arity) {
@@ -1116,7 +1117,7 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{size_one, error_type(), false, false};
     }
     const ir::OperandIdx slot_op = arg_for(slot, sig.params[0]);
-    if (name == "uninit_assume") {
+    if (name == "uninit_assume" || name == "uninit_ref") {
       // The wrapper is representation-transparent, so releasing the
       // value is a relabel of the same address.
       const ir::RegisterIdx held =

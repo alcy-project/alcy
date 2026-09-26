@@ -714,8 +714,9 @@ bool Checker::is_known_intrinsic(std::string_view name) {
          name == "panic" || name == "str_len" || name == "str_byte" ||
          name == "str_slice" || name == "sys_write" ||
          name == "str_from_parts" || name == "alloc" || name == "dealloc" ||
-         name == "elem_ptr" || name == "size_of" || name == "align_of" ||
-         name == "uninit_write" || name == "uninit_assume";
+         name == "elem_ptr" || name == "elem_ref" || name == "size_of" ||
+         name == "align_of" || name == "uninit_write" ||
+         name == "uninit_assume" || name == "uninit_ref";
 }
 
 // Verifies a declared intrinsic signature against its canonical
@@ -753,6 +754,12 @@ bool Checker::check_intrinsic_signature(u32 module,
     return builder.types()[type.idx].tag == ir::TypeTag::MutRef &&
            uninit_payload(pointee(type)).is_valid();
   };
+  // A shared borrow of a wrapper slot: what `elem_ref` and `uninit_ref`
+  // take, so a buffer is readable through a shared owner.
+  const auto shared_uninit_slot = [&](ir::TypeIdx type) {
+    return builder.types()[type.idx].tag == ir::TypeTag::Ref &&
+           uninit_payload(pointee(type)).is_valid();
+  };
   // A wrapper's payload is a storage copy, so comparing it against a
   // declared type compares the types the copies came from.
   const auto same = [&](ir::TypeIdx a, ir::TypeIdx b) {
@@ -779,6 +786,23 @@ bool Checker::check_intrinsic_signature(u32 module,
                     is_usize(params[1]) &&
                     builder.types()[ret.idx].tag == ir::TypeTag::MutRef &&
                     pointee(params[0]).idx == pointee(ret).idx);
+  }
+  if (name == "elem_ref") {
+    // `elem_ref<T>(ptr: &MaybeUninit<T>, index: usize) -> &
+    // MaybeUninit<T>`. The shared counterpart of `elem_ptr`, so a buffer
+    // is readable through a shared borrow of its owner.
+    return or_wrong(params.size() == 2 && shared_uninit_slot(params[0]) &&
+                    is_usize(params[1]) &&
+                    builder.types()[ret.idx].tag == ir::TypeTag::Ref &&
+                    same(pointee(params[0]), pointee(ret)));
+  }
+  if (name == "uninit_ref") {
+    // `uninit_ref<T>(slot: &MaybeUninit<T>) -> &T`. The shared
+    // counterpart of `uninit_assume`, with the same caveat: reading
+    // before anything was written yields whatever was there.
+    return or_wrong(params.size() == 1 && shared_uninit_slot(params[0]) &&
+                    builder.types()[ret.idx].tag == ir::TypeTag::Ref &&
+                    same(uninit_payload(pointee(params[0])), pointee(ret)));
   }
   if (name == "uninit_write") {
     // `uninit_write<T>(slot: &mut MaybeUninit<T>, value: T)`.
@@ -1402,6 +1426,17 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
 // Never coerces to anything; Error suppresses follow-on diagnostics.
 // Equality is structural: field slots hold copies, so shared shapes
 // with different indexes still match.
+// `&mut T` coerces to `&T`: one is the other with the unique half
+// dropped, which is a shared reborrow of the same referent.
+bool Checker::coerces_to_shared(ir::TypeIdx expected, ir::TypeIdx actual) {
+  if (tag_of(expected) != ir::TypeTag::Ref ||
+      tag_of(actual) != ir::TypeTag::MutRef) {
+    return false;
+  }
+  return builder.ref_types()[builder.types()[expected].as_ref()].pointee.idx ==
+         builder.ref_types()[builder.types()[actual].as_ref()].pointee.idx;
+}
+
 ir::TypeIdx Checker::unify(ir::TypeIdx expected,
                            ir::TypeIdx actual,
                            diag::Span span,
@@ -1420,6 +1455,12 @@ ir::TypeIdx Checker::unify(ir::TypeIdx expected,
   }
   if (is_never(actual)) {
     return expected;
+  }
+  // `&mut T` where `&T` is expected is a shared reborrow, not a
+  // mismatch. The exclusive reference is consumed at the call, so
+  // nothing can write through it while the shared one is live.
+  if (coerces_to_shared(expected, actual)) {
+    return actual;
   }
   // An unwritten slot is the one mismatch with an obvious fix, so it
   // gets its own message instead of two type names.

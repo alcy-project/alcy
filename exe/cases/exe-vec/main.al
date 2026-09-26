@@ -4,11 +4,13 @@
 // borrowed pointer the borrow checker could not track, and the returned
 // enum read a dead stack frame. See docs/adr/0012 and
 // docs/adr/0014.
-fn sum_all(mut v: Vec<i32>) -> i32 {
+// A read-only walk: `at` takes `&Self`, so no unique borrow is needed
+// and the vector stays readable.
+fn sum_all(v: &Vec<i32>) -> i32 {
   mut total := 0i32
   mut i := 0 as usize
   while i < v.len() {
-    total = total + *v.at_mut(i).unwrap()
+    total = total + *v.at(i).unwrap()
     i = i + 1
   }
   ret total
@@ -32,7 +34,7 @@ fn main() -> i32 {
   if v.len() != 1000 {
     ret 2
   }
-  if sum_all(v) != 499500 {
+  if sum_all(&v) != 499500 {
     ret 3
   }
   // The vector survived a by-value call, so it is still whole.
@@ -49,40 +51,52 @@ fn main() -> i32 {
   if *kept.unwrap() != 10i32 {
     ret 6
   }
-  // Bounds: the last index is present, one past it is not.
-  if v.at_mut(1000 as usize).is_some() {
+  // Bounds: the last index is present, one past it is not. `at` is the
+  // shared accessor, so this needs no unique borrow.
+  if v.at(1000 as usize).is_some() {
     ret 7
   }
-  if v.at_mut(999 as usize).is_none() {
+  if v.at(999 as usize).is_none() {
     ret 8
+  }
+  if *v.at(500 as usize).unwrap() != 500i32 {
+    ret 18
+  }
+  // A shared borrow held while the vector is otherwise used.
+  held := v.at(3 as usize)
+  if v.len() != 1000 {
+    ret 19
+  }
+  if *held.unwrap() != 3i32 {
+    ret 20
   }
   last := v.pop()
   if last.is_none() {
-    ret 9
+    ret 18
   }
   if last.unwrap() != 999i32 {
-    ret 10
+    ret 19
   }
   if v.len() != 999 {
-    ret 11
+    ret 20
   }
   v.clear()
   if !v.is_empty() {
-    ret 12
+    ret 18
   }
   // Capacity survives a clear, and a reserved vector starts empty.
   if v.capacity() == 0 {
-    ret 13
+    ret 19
   }
   mut w := Vec::<i32>::with_capacity(8 as usize)
   if !w.is_empty() {
-    ret 14
+    ret 20
   }
   if w.capacity() != 8 {
-    ret 15
+    ret 18
   }
   if w.pop().is_some() {
-    ret 16
+    ret 19
   }
   ret 0
 }

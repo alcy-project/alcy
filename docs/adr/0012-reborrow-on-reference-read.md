@@ -221,11 +221,14 @@ is every element reference it hands out.
   elision, and the extent computation are designed together rather than
   arriving as three patches that disagree.
 - A dereference step is landed, which names a place reached through a
-  reference and closes the unchecked write above. What is left is rule
-  3, the `&mut T` to `&T` coercion, and the extent computation that
-  feeds the region solver. Neither `Vec`'s read-only accessor nor a
-  growable `String`'s `as_str` needs rule 1 any further; both are waiting
-  on the coercion.
+  reference and closes the unchecked write above. Rule 3 is landed too:
+  `&mut T` coerces to `&T` at an argument and at a receiver, which is
+  sound because the exclusive reference is consumed there, so nothing
+  can write through it while the shared one is live. `elem_ref` and
+  `uninit_ref` are the shared counterparts of `elem_ptr` and
+  `uninit_assume`, and with them `Vec` has a read-only `at` through a
+  shared receiver. What is left is the extent computation that feeds the
+  region solver, and the elision and two-phase work that follow it.
 
 ## Alternatives considered
 

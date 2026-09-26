@@ -1565,12 +1565,17 @@ TEST_CASE("Check borrow expressions") {
     CHECK(result.package.has_value());
   }
   {
-    io::TempDir dir = io::TempDir::create_unique("alcy_borrow_mismatch_test_");
+    // `&mut T` where `&T` is expected is a shared reborrow, so this
+    // binds rather than mismatching. See docs/adr/0012 rule 3.
+    io::TempDir dir =
+        io::TempDir::create_unique("alcy_borrow_reborrow_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn main() {\n"
-                                        "  x := 1\n"
+                                        "  mut x := 1\n"
                                         "  r: &i32 := &mut x\n"
-                                        "  _ := r\n"
+                                        "  _ := *r\n"
+                                        "  x = 2\n"
+                                        "  _ := x\n"
                                         "}\n"}});
     CHECK(setup);
     if (!setup) {
@@ -1578,7 +1583,7 @@ TEST_CASE("Check borrow expressions") {
     }
     Fixture f;
     const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
-    CHECK(!result.package.has_value());
+    CHECK(result.package.has_value());
   }
 }
 
