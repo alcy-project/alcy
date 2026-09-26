@@ -20,8 +20,8 @@ because the language cannot name varying sizes and arities yet.
   compile-time error through the ordinary `comp` rules.
 - `buf` bounds every write; overruns truncate silently. `written`
   counts stored bytes, `total` counts bytes the output would have
-  taken untruncated; `total > buf.len` — equivalently
-  `total > written` — detects truncation. Truncation never panics.
+  taken untruncated; `total > buf.len` - equivalently
+  `total > written` - detects truncation. Truncation never panics.
 - `args` is a heterogeneous tuple, one element per placeholder.
 
 ## Placeholders

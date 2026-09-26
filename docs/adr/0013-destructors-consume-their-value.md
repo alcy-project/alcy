@@ -13,7 +13,7 @@ operation, so a leaked block leaks.
 
 A container therefore cannot be written in the language. `Vec<T>` has to
 reallocate, and the old block has to be released at the moment the
-vector replaces it — code the type itself has to carry, run at a point
+vector replaces it - code the type itself has to carry, run at a point
 the language currently has no way to express.
 
 ## Decision

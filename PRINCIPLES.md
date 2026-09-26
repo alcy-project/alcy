@@ -17,9 +17,9 @@ Two threads run through it. The first is what a programmer is asked to
 believe: that nothing happens behind their back, that misuse is caught
 or is impossible to do by accident, and that the compiler's freedom to
 infer is not paid for with the programmer's freedom to reason. The
-second is where the language has to be usable — bare metal and
+second is where the language has to be usable - bare metal and
 operating systems, where addresses are physical and no allocator is
-guaranteed — because a language that is only comfortable in user space
+guaranteed - because a language that is only comfortable in user space
 is not the language this is for.
 
 ## A language whose abstractions cost nothing
@@ -61,7 +61,7 @@ can identify.
 The corollary is that where a decision *cannot* be named, the language
 should be suspicious of needing it. An operation whose preconditions
 the programmer cannot state, and whose violation the compiler cannot
-see, belongs in a closed intrinsic set with a documented contract — not
+see, belongs in a closed intrinsic set with a documented contract - not
 in ordinary syntax.
 
 ## Misuse is hard by accident and easy on purpose
@@ -98,7 +98,7 @@ absence of a garbage collector a feature.
 Where the discipline is insufficient, the language provides a *visible*
 way out. `uninit_assume` is the current example: an ordinary call whose
 name is the programmer stating a precondition. It will become `unsafe`
-when `unsafe` lands, and it was designed with that in mind — the
+when `unsafe` lands, and it was designed with that in mind - the
 discharge point was chosen so the gate has somewhere to go.
 
 ## Usable in systems, not only in user space

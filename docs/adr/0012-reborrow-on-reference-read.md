@@ -82,8 +82,8 @@ current code, and what the work has to account for:
 
 - A `Load` from a reference-typed place creates no loan. This is the
   hole.
-- The obvious fix — treat such a `Load` like a `Borrow` for loan
-  purposes — was tried and **rejected**, for two reasons worth recording
+- The obvious fix - treat such a `Load` like a `Borrow` for loan
+  purposes - was tried and **rejected**, for two reasons worth recording
   so the next attempt does not repeat them.
 
   First, it reports false conflicts on correct code. A reborrow derived
@@ -95,8 +95,8 @@ current code, and what the work has to account for:
 
   Second, and decisively, it **does not catch the case it was written
   for**. A reborrow that escapes through a return flows out through the
-  summary mechanism — the set of parameters whose loans may reach a
-  return — and a per-instruction conflict test never sees it. The
+  summary mechanism - the set of parameters whose loans may reach a
+  return - and a per-instruction conflict test never sees it. The
   original unsound program still compiled.
 
 So the fix is not a per-instruction check. It has to be part of the

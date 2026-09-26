@@ -14,8 +14,8 @@ belongs in `docs/`.
 ## Core design principles
 
 These govern the compiler's implementation. For the principles the
-*language* is built to hold — which decide language design questions
-rather than code layout — see [PRINCIPLES.md](PRINCIPLES.md).
+*language* is built to hold - which decide language design questions
+rather than code layout - see [PRINCIPLES.md](PRINCIPLES.md).
 
 When implementing or modifying any component in alcy, preserve the following
 principles:
