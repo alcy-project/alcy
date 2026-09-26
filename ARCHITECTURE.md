@@ -265,6 +265,40 @@ consideration of their effect on these contracts.
   handling; compiler code interacting with LLVM APIs must not assume either
   facility is available.
 
+## Validation & error model
+
+Validation happens at trust boundaries - the public API of each module -
+and nowhere else by default. The contract (decided in
+[ADR 0015](docs/adr/0015-boundary-validation.md)) is:
+
+- **Public API is checked-only.** Every public entry point that accepts
+  externally supplied or independently constructible data returns
+  `base::Result<T, E>`; there is no public unchecked API. Unchecked
+  implementations live in private headers or `.cc` files.
+- **One rule chooses `E`.** A module-local error type when the caller must
+  handle the failure programmatically (`path::PathError`,
+  `ir::VerifyError`, ...); `diag::Reported` when details are accumulated in
+  a `DiagBag` and only success/failure crosses the boundary. The
+  `diag::Fallible` container alias is not used: the error type is spelled
+  out in every signature.
+- **Verifiers are pure.** `verify_*` functions return
+  `base::Result<void, VerifyError>` (or a validated artifact) and never
+  mutate input, perform I/O, log, write to a `DiagBag`, or touch global
+  state. Public entries convert a verifier failure into a diagnostic and
+  return early.
+- **Verified artifacts cross hot paths.** Where several consumers need the
+  same guarantee, the validating entry returns a proof-carrying type
+  (`ir::VerifiedStorage`) so downstream stages do not repeat the full
+  verification. Pure `verify_*` checks without a proof type
+  (`ast::verify_file`, `lexer::verify_token_stream`,
+  `analyzer::verify_module_tree`) run once at the producing or
+  consuming boundary. Local index/range invariants remain `DCHECK`s.
+- **Responsibilities.** The `cli` parses argv, validates flag values,
+  builds `CliConfig`, dispatches, and maps exit codes; it performs no
+  semantic validation of source, manifests, module graphs, or IR.
+  Pipeline entries validate their raw request once and pass validated
+  targets down, so the same check is never implemented twice.
+
 ## Pipeline & data flow
 
 ```text
@@ -370,7 +404,7 @@ with a from-source fallback. Build and platform details are documented in
 
 - **Invariant enforcement**: Structural invariants should be checked at the
   boundary where they become required, rather than relying on downstream
-  consumers to recover from invalid state.
+  consumers to recover from invalid state. See *Validation & error model*.
 
 - **No untracked allocation**: New allocating utilities in low-level
   infrastructure must be evaluated against the zero-allocation contracts of
