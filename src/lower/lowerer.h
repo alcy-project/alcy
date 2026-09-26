@@ -5,6 +5,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -270,9 +271,12 @@ class Lowerer {
                      std::string_view name,
                      u32& index_out);
   std::vector<ir::TypeIdx> variant_payload(ir::TypeIdx enum_type, u32 variant);
-  ir::TypeIdx enum_slot_type();
+  ir::TypeIdx enum_slot_type(ir::TypeIdx enum_type);
+  ir::TypeIdx payload_carrier(u64 align);
 
-  ir::TypeIdx enum_slot_type_ = ir::TypeIdx(base::kInvalidIdx);
+  // Enum slot types by enum type index: the payload half is inline,
+  // so the slot is no longer one shape shared by every enum.
+  std::unordered_map<u32, ir::TypeIdx> enum_slot_types_;
   Val lower_variant_construct(ast::ExprIdx expr,
                               const analyzer::CheckedModule::VariantUse* use);
   ir::OperandIdx disc_operand(u32 discriminant);
@@ -294,7 +298,11 @@ class Lowerer {
   bool is_unit_payload(const std::vector<ir::TypeIdx>& payloads);
   Val void_value();
   ir::TypeIdx payload_tuple(const std::vector<ir::TypeIdx>& fields);
-  Val load_payload_field(Val slot_addr, ir::TypeIdx payload_type, u32 field);
+  Val load_payload_field(Val slot_addr, ir::TypeIdxRange fields, u32 field);
+  ir::RegisterIdx payload_field_addr(Val slot_addr,
+                                     ir::TypeIdxRange fields,
+                                     u32 field);
+  ir::TypeIdxRange variant_fields(ir::TypeIdx enum_type, u32 variant);
   void emit_br(ir::BlockIdx target);
   void emit_cond_br(ir::OperandIdx cond,
                     ir::BlockIdx then_block,

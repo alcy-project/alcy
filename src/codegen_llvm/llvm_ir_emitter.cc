@@ -115,13 +115,28 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
       return llvm::StructType::get(module_->getContext(), element_types);
     }
     case T::Enum: {
-      // All enum values share the slot shape lowered as a tuple of an
-      // i32 discriminant and a payload pointer; loads and allocas of
-      // the enum type agree on this layout.
+      // A discriminant, then the payload in the slot itself. Keeping the
+      // payload here rather than behind a pointer is what lets an enum
+      // value outlive the frame that built it. The area is sized from
+      // ir::type_layout, which the lowerer reads the same numbers from,
+      // so a field's address resolves identically on both sides.
       llvm::SmallVector<llvm::Type*, 2> slot_types;
       slot_types.emplace_back(builder_->getInt32Ty());
-      slot_types.emplace_back(builder_->getPtrTy());
-      return llvm::StructType::get(module_->getContext(), slot_types);
+      slot_types.emplace_back(enum_payload_area_type(idx));
+      llvm::StructType* slot =
+          llvm::StructType::get(module_->getContext(), slot_types);
+      // The layout ir::type_layout publishes is what field offsets are
+      // computed against, so the type built here has to match it. The
+      // module has no DataLayout this early, so this can only be checked
+      // once one is installed.
+      const ir::TypeLayout expected =
+          ir::type_layout(storage_.state(), idx, width_);
+      if (!module_->getDataLayout().isDefault()) {
+        const llvm::DataLayout& dl = module_->getDataLayout();
+        DCHECK_EQ(dl.getTypeAllocSize(slot).getFixedValue(), expected.size);
+        DCHECK_EQ(dl.getABITypeAlign(slot).value(), expected.align);
+      }
+      return slot;
     }
     default: {
       DLOG("Unsupported type: {}", tag);
@@ -129,6 +144,35 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
       UNREACHABLE();
     }
   }
+}
+
+// The payload half of an enum's slot: a byte area on the narrowest
+// carrier primitive that carries the alignment ir::type_layout
+// published. A plain byte array would be align 1, which stores correctly
+// on x86 and is still wrong on a strict-alignment target.
+//
+// The carrier is chosen from the published alignment rather than from the
+// module's DataLayout, because a type is built before the module has one.
+llvm::Type* LlvmIrEmitter::enum_payload_area_type(ir::TypeIdx idx) const {
+  const ir::TypeLayout area =
+      ir::enum_payload_area(storage_.state(), idx, width_);
+  llvm::Type* carrier = builder_->getInt8Ty();
+  u64 carrier_bytes = 1;
+  if (area.align > 8) {
+    carrier = llvm::ArrayType::get(builder_->getInt32Ty(), 4);
+    carrier_bytes = 16;
+  } else if (area.align == 8) {
+    carrier = builder_->getInt64Ty();
+    carrier_bytes = 8;
+  } else if (area.align == 4) {
+    carrier = builder_->getInt32Ty();
+    carrier_bytes = 4;
+  } else if (area.align == 2) {
+    carrier = builder_->getInt16Ty();
+    carrier_bytes = 2;
+  }
+  DCHECK_EQ(area.size % carrier_bytes, 0u);
+  return llvm::ArrayType::get(carrier, area.size / carrier_bytes);
 }
 
 void LlvmIrEmitter::emit() && noexcept {

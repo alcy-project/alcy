@@ -110,6 +110,21 @@ inline TypeLayout fields_layout(const StorageState& state,
   return out;
 }
 
+// Byte offset of field `index` within a field list laid out by
+// fields_layout. The same walk, so an offset and the size that reserved
+// it cannot disagree.
+inline u64 field_offset(const StorageState& state,
+                        TypeIdxRange fields,
+                        u32 index,
+                        PointerWidth width) {
+  u64 cursor = 0;
+  for (u32 i = 0; i < index; ++i) {
+    const TypeLayout layout = type_layout(state, fields[i], width);
+    cursor = align_up(cursor, layout.align) + layout.size;
+  }
+  return align_up(cursor, type_layout(state, fields[index], width).align);
+}
+
 // The payload area of an enum's slot: a discriminant, then room for the
 // widest variant payload, aligned for the strictest payload field. The
 // size is a whole number of carriers so the emitted array has exactly

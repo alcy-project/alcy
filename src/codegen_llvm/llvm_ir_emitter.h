@@ -40,6 +40,9 @@ class LlvmIrEmitter {
   void check_state();
 
   llvm::Type* type(ir::TypeIdx idx) const;
+  // The payload half of an enum slot: a byte area on a carrier that
+  // carries the alignment ir::type_layout published.
+  llvm::Type* enum_payload_area_type(ir::TypeIdx idx) const;
 
   void emit_function(llvm::Function* llvm_function, const ir::Function& func);
   void emit_block(const ir::Block& block);

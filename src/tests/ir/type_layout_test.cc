@@ -5,10 +5,10 @@
 #include <utility>
 
 #include "doctest/doctest.h"
+#include "ir/common.h"
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
-#include "ir/common.h"
 #include "ir/type.h"
 
 namespace ir {

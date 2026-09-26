@@ -617,7 +617,7 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       internal(node.span, "variant without call");
       return Val{size_one, error_type(), false, false};
     }
-    const ir::TypeIdx slot = enum_slot_type();
+    const ir::TypeIdx slot = enum_slot_type(use->enum_type);
     const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, slot, {size_one});
     const ir::RegisterIdx tag =
         emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
@@ -719,15 +719,54 @@ std::vector<ir::TypeIdx> Lowerer::variant_payload(ir::TypeIdx enum_type,
   return payloads;
 }
 
-ir::TypeIdx Lowerer::enum_slot_type() {
-  if (enum_slot_type_.is_valid()) {
-    return enum_slot_type_;
+ir::TypeIdxRange Lowerer::variant_fields(ir::TypeIdx enum_type, u32 variant) {
+  const ir::EnumType& enum_ty =
+      builder.state().enum_types[builder.state().types[enum_type].as_enum()];
+  const u32 at = enum_ty.variants.head().idx + variant;
+  return builder.state().enum_variant_types[ir::EnumVariantTypeIdx(at)].fields;
+}
+
+// The slot for an enum value: a discriminant, then the payload area.
+// Both halves are appended back to back because a tuple's element types
+// have to be consecutive in the type table. The area is a byte array on
+// a carrier carrying the published alignment, which is the same type the
+// emitter builds, so a field's address resolves identically on both
+// sides.
+ir::TypeIdx Lowerer::enum_slot_type(ir::TypeIdx enum_type) {
+  const auto cached = enum_slot_types_.find(enum_type.idx);
+  if (cached != enum_slot_types_.end()) {
+    return cached->second;
   }
+  const ir::TypeLayout area =
+      ir::enum_payload_area(builder.state(), enum_type, width);
+  const ir::TypeIdx carrier = payload_carrier(area.align);
+  const u64 carrier_bytes = area.align == 0 ? 1 : area.align;
+  // Everything the two slot halves are copied from is interned first, so
+  // the copies land next to each other in the type table: array_type
+  // appends a node of its own, which would otherwise separate them.
+  const ir::TypeIdx array =
+      builder.array_type(carrier, area.size / carrier_bytes);
+  const ir::TypeIdx disc =
+      builder.ref_type(builder.primitive(ir::TypeTag::I32));
+  const ir::TypeIdx bytes = builder.ref_type(array);
   ir::TypeSeq seq;
-  seq.push(builder.ref_type(builder.primitive(ir::TypeTag::I32)));
-  seq.push(builder.ref_type(builder.primitive(ir::TypeTag::Ptr)));
-  enum_slot_type_ = builder.tuple_type(seq.finish());
-  return enum_slot_type_;
+  seq.push(disc);
+  seq.push(bytes);
+  const ir::TypeIdx slot = builder.tuple_type(seq.finish());
+  enum_slot_types_.emplace(enum_type.idx, slot);
+  return slot;
+}
+
+// The narrowest primitive whose alignment is at least `align`, so the
+// area is aligned for the widest payload it holds.
+ir::TypeIdx Lowerer::payload_carrier(u64 align) {
+  switch (align) {
+    case 1: return builder.primitive(ir::TypeTag::U8);
+    case 2: return builder.primitive(ir::TypeTag::U16);
+    case 4: return builder.primitive(ir::TypeTag::U32);
+    case 8: return builder.primitive(ir::TypeTag::U64);
+    default: return builder.array_type(builder.primitive(ir::TypeTag::U32), 4);
+  }
 }
 
 Val Lowerer::lower_variant_construct(
@@ -740,7 +779,7 @@ Val Lowerer::lower_variant_construct(
     internal(call.span, "variant arity");
     return Val{size_one, error_type(), false, false};
   }
-  const ir::TypeIdx slot = enum_slot_type();
+  const ir::TypeIdx slot = enum_slot_type(use->enum_type);
   const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, slot, {size_one});
   const ir::RegisterIdx tag =
       emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
@@ -758,9 +797,11 @@ Val Lowerer::lower_variant_construct(
       mark_move(value);
     }
   } else if (!payloads.empty()) {
-    const ir::TypeIdx payload_type = payload_tuple(payloads);
-    const ir::RegisterIdx payload =
-        emit(ir::Opcode::Alloca, payload_type, {size_one});
+    // The payload lives in the slot, so a value built here outlives this
+    // frame and can be returned. Field addresses come from the offsets
+    // ir::field_offset published for this variant.
+    const ir::TypeIdxRange fields =
+        variant_fields(use->enum_type, use->variant);
     for (usize i = 0; i < payloads.size(); ++i) {
       Val value =
           lower_expr(call.payload.get<ast::ExprCall>().args[i], &payloads[i]);
@@ -768,20 +809,33 @@ Val Lowerer::lower_variant_construct(
         return Val{size_one, error_type(), false, false};
       }
       const ir::RegisterIdx field =
-          emit(ir::Opcode::GetElementPtr, payloads[i],
-               {to_operand(payload, payload_type), zero_i32,
-                index_operand(static_cast<u32>(i))});
+          payload_field_addr(Val{to_operand(addr, slot), slot, true, false},
+                             fields, static_cast<u32>(i));
       emit_void(ir::Opcode::Store,
                 {use_value(value), to_operand(field, payloads[i])});
     }
-    const ir::TypeIdx ptr = builder.primitive(ir::TypeTag::Ptr);
-    const ir::RegisterIdx slot_field =
-        emit(ir::Opcode::GetElementPtr, ptr,
-             {to_operand(addr, slot), zero_i32, index_operand(1)});
-    emit_void(ir::Opcode::Store,
-              {to_operand(payload, ptr), to_operand(slot_field, ptr)});
   }
   return Val{to_operand(addr, slot), use->enum_type, true, false};
+}
+
+// Address of payload field `field` of the enum whose slot is at
+// `slot_addr`: the slot's payload area, then the field's byte offset
+// within it. Two projections because the area is a byte array, so a
+// second index would be scaled by the carrier rather than counted in
+// bytes.
+ir::RegisterIdx Lowerer::payload_field_addr(Val slot_addr,
+                                            ir::TypeIdxRange fields,
+                                            u32 field) {
+  const ir::TypeIdx byte = builder.primitive(ir::TypeTag::U8);
+  const ir::RegisterIdx area = emit(ir::Opcode::GetElementPtr, byte,
+                                    {slot_addr.op, zero_i32, index_operand(1)});
+  // One index, because the area is reached as a byte pointer: a second
+  // level would need a pointer to an aggregate and would scale by the
+  // carrier instead of counting bytes.
+  return emit(
+      ir::Opcode::GetElementPtr, byte,
+      {to_operand(area, byte), index_operand(static_cast<u32>(ir::field_offset(
+                                   builder.state(), fields, field, width)))});
 }
 
 ir::OperandIdx Lowerer::disc_operand(u32 discriminant) {
@@ -1458,23 +1512,11 @@ ir::TypeIdx Lowerer::payload_tuple(const std::vector<ir::TypeIdx>& fields) {
 // pointer is type-erased in the slot, so it reinterprets through
 // the variant payload type before projecting the field.
 Val Lowerer::load_payload_field(Val slot_addr,
-                                ir::TypeIdx payload_type,
+                                ir::TypeIdxRange fields,
                                 u32 field) {
-  const ir::TupleType& shape =
-      builder.state()
-          .tuple_types[builder.state().types[payload_type].as_tuple()];
-  const ir::TypeIdx field_type = shape.elements[field];
-  const ir::TypeIdx ptr = builder.primitive(ir::TypeTag::Ptr);
-  const ir::RegisterIdx ptr_gep =
-      emit(ir::Opcode::GetElementPtr, ptr,
-           {slot_addr.op, zero_i32, index_operand(1)});
-  const ir::RegisterIdx payload =
-      emit(ir::Opcode::Load, ptr, {to_operand(ptr_gep, ptr)});
-  const ir::RegisterIdx typed =
-      emit(ir::Opcode::TypeCast, payload_type, {to_operand(payload, ptr)});
+  const ir::TypeIdx field_type = fields[field];
   const ir::RegisterIdx field_gep =
-      emit(ir::Opcode::GetElementPtr, field_type,
-           {to_operand(typed, payload_type), zero_i32, index_operand(field)});
+      payload_field_addr(slot_addr, fields, field);
   const ir::RegisterIdx loaded =
       emit(ir::Opcode::Load, field_type, {to_operand(field_gep, field_type)});
   return Val{to_operand(loaded, field_type), field_type, false, false};
@@ -2011,10 +2053,9 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
         }
         return;
       }
-      const ir::TypeIdx payload_type = payload_tuple(payloads);
+      const ir::TypeIdxRange fields = variant_fields(scrut_type, variant);
       for (usize i = 0; i < payloads.size() && !failed; ++i) {
-        Val field =
-            load_payload_field(scrut_addr, payload_type, static_cast<u32>(i));
+        Val field = load_payload_field(scrut_addr, fields, static_cast<u32>(i));
         bind_pattern(elements[i], field);
       }
       return;
@@ -2350,7 +2391,8 @@ Val Lowerer::lower_question(ast::ExprIdx expr) {
       emit(ir::Opcode::Load, scrut_type, {addr.op});
   emit_void(ir::Opcode::Ret, {to_operand(propagate, scrut_type)});
   switch_to(ok_block);
-  const Val payload = load_payload_field(addr, payload_tuple(first), 0);
+  const Val payload =
+      load_payload_field(addr, variant_fields(scrut_type, 0), 0);
   emit_br(join_block);
   switch_to(join_block);
   return payload;

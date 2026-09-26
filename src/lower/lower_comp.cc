@@ -951,7 +951,7 @@ Val Lowerer::materialize_comp_value(const CompVal& value, diag::Span span) {
         internal(span, "comp variant arity");
         return Val{size_one, error_type(), false, false};
       }
-      const ir::TypeIdx slot = enum_slot_type();
+      const ir::TypeIdx slot = enum_slot_type(value.type);
       const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, slot, {size_one});
       const ir::RegisterIdx tag_reg =
           emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
