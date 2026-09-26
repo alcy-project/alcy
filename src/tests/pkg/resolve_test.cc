@@ -19,7 +19,7 @@ namespace pkg {
 
 namespace {
 
-constexpr std::string_view kRootManifest =
+constexpr std::string_view ROOT_MANIFEST =
     "[package]\n"
     "name = \"root\"\n"
     "version = \"0.1.0\"\n"
@@ -28,7 +28,7 @@ constexpr std::string_view kRootManifest =
     "leaf = { path = \"libs/leaf\" }\n"
     "mid = { path = \"mid\" }\n";
 
-constexpr std::string_view kMidManifest =
+constexpr std::string_view MID_MANIFEST =
     "[package]\n"
     "name = \"mid\"\n"
     "version = \"0.2.0\"\n"
@@ -36,7 +36,7 @@ constexpr std::string_view kMidManifest =
     "[dependencies]\n"
     "leaf = { path = \"../libs/leaf\" }\n";
 
-constexpr std::string_view kLeafManifest =
+constexpr std::string_view LEAF_MANIFEST =
     "[package]\n"
     "name = \"leaf\"\n"
     "version = \"0.3.0\"\n";
@@ -54,7 +54,7 @@ bool write_package(io::TempDir& dir,
                    std::string_view manifest,
                    std::string& out_root) {
   const std::string manifest_path =
-      std::string(rel) + "/" + std::string(kManifestFileName);
+      std::string(rel) + "/" + std::string(MANIFEST_FILE_NAME);
   if (!dir.write_file(manifest_path, manifest)) {
     return false;
   }
@@ -67,16 +67,16 @@ bool write_package(io::TempDir& dir,
 TEST_CASE("Resolve collects transitive path dependencies") {
   io::TempDir dir = io::TempDir::create_unique("alcy_resolve_test_");
   std::string root;
-  bool setup = write_package(dir, "root", kRootManifest, root);
-  setup = setup && dir.write_file("root/libs/leaf/alcy.toml", kLeafManifest);
-  setup = setup && dir.write_file("root/mid/alcy.toml", kMidManifest);
+  bool setup = write_package(dir, "root", ROOT_MANIFEST, root);
+  setup = setup && dir.write_file("root/libs/leaf/alcy.toml", LEAF_MANIFEST);
+  setup = setup && dir.write_file("root/mid/alcy.toml", MID_MANIFEST);
   CHECK(setup);
   if (!setup) {
     return;
   }
 
   Fixture f;
-  diag::Fallible<std::vector<ResolvedPackage>> result =
+  base::Result<std::vector<ResolvedPackage>, diag::Reported> result =
       resolve_package(root, f.sources, f.arena, f.bag);
   CHECK(result.is_ok());
   if (!result.is_ok()) {
@@ -94,7 +94,7 @@ TEST_CASE("Resolve collects transitive path dependencies") {
   CHECK(resolved[1].manifest.name == "leaf");
   CHECK(resolved[2].manifest.name == "mid");
   CHECK(resolved[3].manifest.name == "leaf");
-  CHECK(resolved[0].manifest_file != source::kUnknownFile);
+  CHECK(resolved[0].manifest_file != source::UNKNOWN_FILE);
 }
 
 TEST_CASE("Resolve detects dependency cycles across spellings") {
@@ -139,7 +139,7 @@ TEST_CASE("Resolve visits diamonds twice without cycle errors") {
   }
 
   Fixture f;
-  diag::Fallible<std::vector<ResolvedPackage>> result =
+  base::Result<std::vector<ResolvedPackage>, diag::Reported> result =
       resolve_package(root, f.sources, f.arena, f.bag);
   CHECK(result.is_ok());
   if (!result.is_ok()) {

@@ -25,7 +25,7 @@ TypeLayout layout_of(const StorageState& state,
 
 TEST_CASE("Layout gives primitives their natural size and alignment") {
   StorageBuilder builder;
-  Storage storage = std::move(builder).build();
+  Storage storage = std::move(builder).build().unwrap().unwrap();
   const StorageState& state = storage.state();
 
   CHECK(layout_of(state, primitive_idx(TypeTag::I1), PointerWidth::W64).size ==
@@ -50,7 +50,7 @@ TEST_CASE("Layout gives primitives their natural size and alignment") {
 
 TEST_CASE("Layout follows the target pointer width") {
   StorageBuilder builder;
-  Storage storage = std::move(builder).build();
+  Storage storage = std::move(builder).build().unwrap().unwrap();
   const StorageState& state = storage.state();
   const TypeIdx ptr = primitive_idx(TypeTag::Ptr);
   const TypeIdx str = primitive_idx(TypeTag::Str);
@@ -84,7 +84,7 @@ TEST_CASE("Layout pads a struct to its strictest field") {
   const TypeIdx wide_struct = builder.struct_type(
       str::kInvalidStringPoolId, wide.finish(), TypeIdxRange{});
 
-  Storage storage = std::move(builder).build();
+  Storage storage = std::move(builder).build().unwrap().unwrap();
   const StorageState& state = storage.state();
 
   const TypeLayout padded_layout = layout_of(state, padded, PointerWidth::W64);
@@ -102,7 +102,7 @@ TEST_CASE("Layout sizes an array from its element") {
   const TypeIdx i32_ty = builder.primitive(TypeTag::I32);
   const TypeIdx arr = builder.array_type(i32_ty, 3);
   const TypeIdx empty = builder.array_type(i32_ty, 0);
-  Storage storage = std::move(builder).build();
+  Storage storage = std::move(builder).build().unwrap().unwrap();
   const StorageState& state = storage.state();
 
   CHECK(layout_of(state, arr, PointerWidth::W64).size == 12);
@@ -133,7 +133,7 @@ TEST_CASE("Layout gives an enum a discriminant and a payload area") {
       str::kInvalidStringPoolId, EnumVariantTypeIdxRange{wide_variant, 1},
       TypeIdxRange{});
 
-  Storage storage = std::move(builder).build();
+  Storage storage = std::move(builder).build().unwrap().unwrap();
   const StorageState& state = storage.state();
 
   const TypeLayout narrow_layout =
@@ -169,7 +169,7 @@ TEST_CASE("Layout sizes an enum area for its widest variant") {
                         EnumVariantTypeIdxRange{ok, 2}, TypeIdxRange{});
   CHECK(err.idx == ok.idx + 1);
 
-  Storage storage = std::move(builder).build();
+  Storage storage = std::move(builder).build().unwrap().unwrap();
   const TypeLayout both_layout =
       layout_of(storage.state(), both, PointerWidth::W64);
   CHECK(both_layout.align == 8);
@@ -184,7 +184,7 @@ TEST_CASE("Layout gives a payload-less enum only its discriminant") {
   const TypeIdx tag_only =
       builder.enum_type(str::kInvalidStringPoolId,
                         EnumVariantTypeIdxRange{unit, 1}, TypeIdxRange{});
-  Storage storage = std::move(builder).build();
+  Storage storage = std::move(builder).build().unwrap().unwrap();
 
   const TypeLayout layout =
       layout_of(storage.state(), tag_only, PointerWidth::W64);
@@ -213,7 +213,7 @@ TEST_CASE("Layout of a nested enum flows into its containing struct") {
   const TypeIdx outer = builder.struct_type(str::kInvalidStringPoolId,
                                             fields.finish(), TypeIdxRange{});
 
-  Storage storage = std::move(builder).build();
+  Storage storage = std::move(builder).build().unwrap().unwrap();
   const TypeLayout outer_layout =
       layout_of(storage.state(), outer, PointerWidth::W64);
   CHECK(outer_layout.align == 8);

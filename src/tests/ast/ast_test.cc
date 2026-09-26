@@ -20,7 +20,7 @@ struct Fixture {
 };
 
 diag::Span test_span(u32 offset = 0, u32 length = 1) {
-  return diag::Span{source::kUnknownFile, offset, length};
+  return diag::Span{source::UNKNOWN_FILE, offset, length};
 }
 
 }  // namespace

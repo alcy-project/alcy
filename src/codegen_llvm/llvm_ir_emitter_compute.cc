@@ -66,8 +66,8 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
 
   auto binary = [&](auto emit) {
     DCHECK(ops.size() == 2);
-    const ir::Operand& lhs = storage_.operands()[ops.head()];
-    const ir::Operand& rhs = storage_.operands()[ops.head() + 1];
+    const ir::Operand& lhs = storage_->operands()[ops.head()];
+    const ir::Operand& rhs = storage_->operands()[ops.head() + 1];
     if (i.dst.is_valid()) {
       values_.add_register(
           i.dst, emit(resolve_operand_value(lhs), resolve_operand_value(rhs)));
@@ -179,7 +179,7 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
     }
     case Op::Not: {
       DCHECK(ops.size() == 1);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
+      const ir::Operand& lhs = storage_->operands()[ops.head()];
       if (i.dst.is_valid()) {
         values_.add_register(i.dst,
                              builder_->CreateNot(resolve_operand_value(lhs)));
@@ -188,7 +188,7 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
     }
     case Op::BitReverse: {
       DCHECK(ops.size() == 1);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
+      const ir::Operand& lhs = storage_->operands()[ops.head()];
       llvm::Value* value = resolve_operand_value(lhs);
       if (i.dst.is_valid()) {
         values_.add_register(
@@ -204,9 +204,9 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
     case Op::Gt:
     case Op::Ge: {
       DCHECK(ops.size() == 2);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      const ir::Operand& rhs = storage_.operands()[ops.head() + 1];
-      const ir::TypeTag tag = storage_.types()[lhs.type.idx].tag;
+      const ir::Operand& lhs = storage_->operands()[ops.head()];
+      const ir::Operand& rhs = storage_->operands()[ops.head() + 1];
+      const ir::TypeTag tag = storage_->types()[lhs.type.idx].tag;
       llvm::Value* lhs_val = resolve_operand_value(lhs);
       llvm::Value* rhs_val = resolve_operand_value(rhs);
       llvm::Value* result = nullptr;
@@ -237,10 +237,10 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
       if (!i.dst.is_valid()) {
         break;
       }
-      const ir::Operand& src = storage_.operands()[ops.head()];
-      const ir::TypeTag src_tag = storage_.types()[src.type.idx].tag;
-      const ir::Register& dst_reg = storage_.registers()[i.dst];
-      const ir::TypeTag dst_tag = storage_.types()[dst_reg.type.idx].tag;
+      const ir::Operand& src = storage_->operands()[ops.head()];
+      const ir::TypeTag src_tag = storage_->types()[src.type.idx].tag;
+      const ir::Register& dst_reg = storage_->registers()[i.dst];
+      const ir::TypeTag dst_tag = storage_->types()[dst_reg.type.idx].tag;
       llvm::Value* value = resolve_operand_value(src);
       llvm::Type* dst_ty = type(dst_reg.type);
       llvm::Value* result = nullptr;
@@ -309,7 +309,7 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
       const u64 amount = i.op == Op::TypeSizeOf
                              ? layout.getTypeAllocSize(measured).getFixedValue()
                              : layout.getABITypeAlign(measured).value();
-      llvm::Type* dst_ty = type(storage_.registers()[i.dst].type);
+      llvm::Type* dst_ty = type(storage_->registers()[i.dst].type);
       values_.add_register(
           i.dst, llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(dst_ty),
                                         amount));
@@ -318,11 +318,11 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
     case Op::Select: {
       DCHECK(ops.size() == 3);
       llvm::Value* cond =
-          resolve_operand_value(storage_.operands()[ops.head()]);
+          resolve_operand_value(storage_->operands()[ops.head()]);
       llvm::Value* true_val =
-          resolve_operand_value(storage_.operands()[ops.head() + 1]);
+          resolve_operand_value(storage_->operands()[ops.head() + 1]);
       llvm::Value* false_val =
-          resolve_operand_value(storage_.operands()[ops.head() + 2]);
+          resolve_operand_value(storage_->operands()[ops.head() + 2]);
       if (i.dst.is_valid()) {
         values_.add_register(i.dst,
                              builder_->CreateSelect(cond, true_val, false_val));
@@ -334,7 +334,7 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
       DCHECK(ops.size() == 1);
       if (i.dst.is_valid()) {
         values_.add_register(
-            i.dst, resolve_operand_value(storage_.operands()[ops.head()]));
+            i.dst, resolve_operand_value(storage_->operands()[ops.head()]));
       }
       break;
     }
@@ -343,7 +343,7 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
       DCHECK(ops.size() == 1);
       if (i.dst.is_valid()) {
         values_.add_register(
-            i.dst, resolve_operand_value(storage_.operands()[ops.head()]));
+            i.dst, resolve_operand_value(storage_->operands()[ops.head()]));
       }
       break;
     }

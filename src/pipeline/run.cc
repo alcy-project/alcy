@@ -31,22 +31,24 @@ namespace {
 
 // Links lowered IR in a scratch directory and executes it with
 // inherited stdio, forwarding args to the program.
-RunResult link_and_run(PipelineContext& ctx,
-                       lower::LoweredPackage& lowered,
-                       bool optimize,
-                       std::string_view linker,
-                       std::span<const std::string_view> args) {
+base::Result<RunOutcome, diag::Reported> link_and_run(
+    PipelineContext& ctx,
+    lower::LoweredPackage& lowered,
+    bool optimize,
+    std::string_view linker,
+    std::span<const std::string_view> args) {
   io::TempDir scratch = io::TempDir::create_unique("alcy_run_");
   const std::string object_path = scratch.join("main.o");
-  if (!emit_package_object(ctx, lowered, optimize, object_path) ||
-      !stage_runtime(scratch)) {
-    return RunResult{false, 0};
+  if (emit_package_object(ctx, lowered, optimize, object_path).is_err() ||
+      stage_runtime(scratch, ctx.bag).is_err()) {
+    return base::make_err(diag::Reported{});
   }
   const std::string exe_path =
       scratch.join(std::string("main") + std::string(exe_suffix()));
   const std::string runtime_path = scratch.join(runtime_source_name());
-  if (!link_executable(ctx, linker, object_path, runtime_path, exe_path)) {
-    return RunResult{false, 0};
+  if (link_executable(ctx, linker, object_path, runtime_path, exe_path)
+          .is_err()) {
+    return base::make_err(diag::Reported{});
   }
   std::vector<std::string> argv;
   argv.reserve(args.size() + 1);
@@ -56,63 +58,70 @@ RunResult link_and_run(PipelineContext& ctx,
   }
   base::Result<i32, SpawnError> executed = run_command(argv);
   if (executed.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineLinkError,
+    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_LINK_ERROR,
                                    "cannot execute '{}'", exe_path);
     (void)index;
-    return RunResult{false, 0};
+    return base::make_err(diag::Reported{});
   }
-  return RunResult{true, std::move(executed).unwrap()};
+  return base::make_ok(RunOutcome{.exit_code = std::move(executed).unwrap()});
 }
 
 }  // namespace
 
-RunResult run_single_file(PipelineContext& ctx,
-                          std::string_view target,
-                          bool optimize,
-                          std::string_view linker,
-                          std::span<const std::string_view> args) {
+base::Result<RunOutcome, diag::Reported> run_single_file(
+    PipelineContext& ctx,
+    std::string_view target,
+    bool optimize,
+    std::string_view linker,
+    std::span<const std::string_view> args) {
   base::Result<source::FileId, source::SourceError> file =
       ctx.sources.load(target);
   if (file.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineIoError,
+    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot read '{}'", target);
     (void)index;
-    return RunResult{false, 0};
+    return base::make_err(diag::Reported{});
   }
   const source::FileId root = std::move(file).unwrap();
   const analyzer::ModuleInput single_input{"", root};
-  diag::Fallible<analyzer::ModuleTree> tree =
-      analyzer::resolve_modules(root, {&single_input, 1}, "", ctx.sources,
-                                ctx.ast, ctx.bag, std_prelude(ctx));
-  if (tree.is_err() || ctx.bag.has_errors()) {
-    return RunResult{false, 0};
+  base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> prelude =
+      std_prelude(ctx);
+  if (prelude.is_err()) {
+    return base::make_err(diag::Reported{});
   }
-  diag::Fallible<lower::LoweredPackage> package =
+  base::Result<analyzer::ModuleTree, diag::Reported> tree =
+      analyzer::resolve_modules(root, {&single_input, 1}, "", ctx.sources,
+                                ctx.ast, ctx.bag, std::move(prelude).unwrap());
+  if (tree.is_err() || ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  base::Result<lower::LoweredPackage, diag::Reported> package =
       compile_tree(ctx, std::move(tree).unwrap());
   if (package.is_err() || ctx.bag.has_errors()) {
-    return RunResult{false, 0};
+    return base::make_err(diag::Reported{});
   }
   lower::LoweredPackage lowered = std::move(package).unwrap();
   return link_and_run(ctx, lowered, optimize, linker, args);
 }
 
-RunResult run_package(PipelineContext& ctx,
-                      const path::Path& root,
-                      source::FileId manifest_file,
-                      std::string_view manifest_name,
-                      bool optimize,
-                      std::string_view linker,
-                      std::span<const std::string_view> args) {
-  diag::Fallible<BinTarget> target =
+base::Result<RunOutcome, diag::Reported> run_package(
+    PipelineContext& ctx,
+    const path::Path& root,
+    source::FileId manifest_file,
+    std::string_view manifest_name,
+    bool optimize,
+    std::string_view linker,
+    std::span<const std::string_view> args) {
+  base::Result<BinTarget, diag::Reported> target =
       resolve_package_target(ctx, root, manifest_file, manifest_name);
   if (target.is_err() || ctx.bag.has_errors()) {
-    return RunResult{false, 0};
+    return base::make_err(diag::Reported{});
   }
   BinTarget resolved = std::move(target).unwrap();
-  diag::Fallible<lower::LoweredPackage> package =
+  base::Result<lower::LoweredPackage, diag::Reported> package =
       compile_tree(ctx, resolved.tree);
   if (package.is_err() || ctx.bag.has_errors()) {
-    return RunResult{false, 0};
+    return base::make_err(diag::Reported{});
   }
   lower::LoweredPackage lowered = std::move(package).unwrap();
   return link_and_run(ctx, lowered, optimize, linker, args);

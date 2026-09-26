@@ -596,7 +596,7 @@ bool Lowerer::comp_run_fn(u32 def_module,
   if (args.size() != params.size() || args.size() != fn.params.size()) {
     return comp_fail(span, "call arity");
   }
-  if (comp_call_depth_ >= kCompMaxCallDepth) {
+  if (comp_call_depth_ >= COMP_MAX_CALL_DEPTH) {
     return comp_fail(span, "comp call depth exhausted");
   }
   ++comp_call_depth_;
@@ -814,7 +814,7 @@ bool Lowerer::comp_eval_method_call(u32 mod,
       method.args.size() + 1 != fn.params.size()) {
     return comp_fail(node.span, "call arity");
   }
-  if (comp_call_depth_ >= kCompMaxCallDepth) {
+  if (comp_call_depth_ >= COMP_MAX_CALL_DEPTH) {
     return comp_fail(node.span, "comp call depth exhausted");
   }
   ++comp_call_depth_;
@@ -993,7 +993,7 @@ bool Lowerer::comp_evaluate(u32 mod, ast::ExprIdx expr, CompVal& out) {
   CompScope scope;
   scope.outer = &comp_scope_;
   scope.frames.emplace_back();
-  comp_budget_ = kCompStepBudget;
+  comp_budget_ = COMP_STEP_BUDGET;
   comp_call_depth_ = 0;
   return comp_eval_expr(mod, expr, scope, out);
 }
@@ -1432,9 +1432,9 @@ bool Lowerer::comp_eval_binary(u32 mod,
       if (comp_is_signed(tag)) {
         const i64 sl = comp_sign_extend(left, tag);
         const i64 sr = comp_sign_extend(right, tag);
-        static constexpr i64 kMin = static_cast<i64>(static_cast<u64>(1) << 63);
-        if (sl == kMin && sr == -1 && comp_int_bytes(tag) == 8) {
-          out.value.int_value = static_cast<u64>(kMin);
+        static constexpr i64 MIN = static_cast<i64>(static_cast<u64>(1) << 63);
+        if (sl == MIN && sr == -1 && comp_int_bytes(tag) == 8) {
+          out.value.int_value = static_cast<u64>(MIN);
           return true;
         }
         const i64 quotient = sl / sr;

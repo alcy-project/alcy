@@ -3,6 +3,7 @@
 
 #include "source/source.h"
 
+#include <optional>
 #include <string_view>
 #include <utility>
 
@@ -27,9 +28,20 @@ TEST_CASE("SourceManager loads files and dedups by path") {
     return;
   }
   const FileId id = std::move(first).unwrap();
-  CHECK(sources.bytes(id) == "let x = 1;\n");
-  CHECK(sources.name(id) == dir.join("a.al"));
+  const std::optional<std::string_view> bytes = sources.bytes(id);
+  const std::optional<std::string_view> name = sources.name(id);
+  CHECK(bytes.has_value());
+  CHECK(name.has_value());
+  if (!bytes.has_value() || !name.has_value()) {
+    return;
+  }
+  CHECK(*bytes == "let x = 1;\n");
+  CHECK(*name == dir.join("a.al"));
   CHECK(sources.file_count() == 1);
+
+  // An id that names no loaded file is nullopt, not an empty view.
+  CHECK(!sources.bytes(id + 1).has_value());
+  CHECK(!sources.name(id + 1).has_value());
 
   base::Result<FileId, SourceError> second = sources.load(dir.join("a.al"));
   CHECK(second.is_ok());
@@ -65,7 +77,14 @@ TEST_CASE("SourceManager loads empty files") {
   if (!result.is_ok()) {
     return;
   }
-  CHECK(sources.bytes(std::move(result).unwrap()).empty());
+  // A loaded empty file is known: engaged, with an empty view.
+  const std::optional<std::string_view> bytes =
+      sources.bytes(std::move(result).unwrap());
+  CHECK(bytes.has_value());
+  if (!bytes.has_value()) {
+    return;
+  }
+  CHECK(bytes->empty());
 }
 
 }  // namespace source

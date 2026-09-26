@@ -10,7 +10,7 @@ namespace pipeline {
 // Embedded standard library sources (generated). Staged to a scratch
 // directory at build/check time and injected as prelude modules, so
 // compilations need no install-layout assumptions.
-extern const unsigned char kStdCoreMain[];
-extern const u64 kStdCoreMain_len;
+extern const unsigned char STD_CORE_MAIN[];
+extern const u64 STD_CORE_MAIN_LEN;
 
 }  // namespace pipeline

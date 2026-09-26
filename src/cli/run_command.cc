@@ -27,16 +27,17 @@ i32 run_run(const CliConfig& config, const diag::RenderOptions& options) {
       config.target_dir.empty() ? "." : config.target_dir;
   const std::span<const std::string_view> args(config.program_args);
 
-  if (raw_dir.size() >= path::kSourceExtension.size() &&
-      raw_dir.substr(raw_dir.size() - path::kSourceExtension.size()) ==
-          path::kSourceExtension) {
-    const pipeline::RunResult result = pipeline::run_single_file(
-        ctx, raw_dir, config.release, config.linker, args);
-    if (!result.ok) {
+  if (raw_dir.size() >= path::SOURCE_EXTENSION.size() &&
+      raw_dir.substr(raw_dir.size() - path::SOURCE_EXTENSION.size()) ==
+          path::SOURCE_EXTENSION) {
+    base::Result<pipeline::RunOutcome, diag::Reported> result =
+        pipeline::run_single_file(ctx, raw_dir, config.release, config.linker,
+                                  args);
+    if (result.is_err()) {
       report_diagnostics(ctx.bag, ctx.sources, options);
       return result_code(ResultCode::RunFailed);
     }
-    return result.exit_code;
+    return std::move(result).unwrap().exit_code;
   }
 
   base::Result<pipeline::ManifestProbe, path::PathError> probe =
@@ -48,20 +49,21 @@ i32 run_run(const CliConfig& config, const diag::RenderOptions& options) {
   pipeline::ManifestProbe found = std::move(probe).unwrap();
   if (!found.found) {
     const u32 index = ctx.bag.emit(
-        diag::Severity::Error, pipeline::kPipelineNoManifest,
+        diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
         "no manifest found at '{}'; run a file or add alcy.toml", raw_dir);
     (void)index;
     report_diagnostics(ctx.bag, ctx.sources, options);
     return result_code(ResultCode::RunFailed);
   }
-  const pipeline::RunResult result = pipeline::run_package(
-      ctx, found.root, found.manifest, found.manifest_name, config.release,
-      config.linker, args);
-  if (!result.ok) {
+  base::Result<pipeline::RunOutcome, diag::Reported> result =
+      pipeline::run_package(ctx, found.root, found.manifest,
+                            found.manifest_name, config.release, config.linker,
+                            args);
+  if (result.is_err()) {
     report_diagnostics(ctx.bag, ctx.sources, options);
     return result_code(ResultCode::RunFailed);
   }
-  return result.exit_code;
+  return std::move(result).unwrap().exit_code;
 }
 
 }  // namespace cli

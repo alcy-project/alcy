@@ -9,11 +9,13 @@
 #include <vector>
 
 #include "ast/ast.h"
+#include "ast/verify.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "lexer/lexer.h"
 #include "lexer/token.h"
 #include "source/source.h"
 
@@ -125,7 +127,7 @@ void Parser::skip_insignificant() {
       const diag::Span span = tokens_[pos_].span;
       const std::string_view spelling = bytes_.substr(span.offset, span.length);
       const u32 index =
-          bag_.emit(diag::Severity::Error, kParserReservedWord, span,
+          bag_.emit(diag::Severity::Error, PARSER_RESERVED_WORD, span,
                     "`{}` is reserved for future use", spelling);
       (void)index;
       ++pos_;
@@ -159,13 +161,13 @@ bool Parser::expect(lexer::TokenKind kind, std::string_view what) {
   }
   if (at_end()) {
     const u32 index =
-        bag_.emit(diag::Severity::Error, kParserUnexpectedToken,
+        bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN,
                   span_from(pos_), "expected {}, found end of file", what);
     (void)index;
     return false;
   }
   const diag::Span span = peek().span;
-  const u32 index = bag_.emit(diag::Severity::Error, kParserUnexpectedToken,
+  const u32 index = bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN,
                               span, "expected {}, found `{}`", what,
                               bytes_.substr(span.offset, span.length));
   (void)index;
@@ -253,7 +255,17 @@ Parser::StmtLead Parser::scan_lead() const {
   return StmtLead::None;
 }
 
-std::span<const ast::ItemIdx> Parser::parse() {
+base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
+  if (base::Result<void, lexer::TokenStreamError> verified =
+          lexer::verify_token_stream(tokens_, file_, bytes_);
+      verified.is_err()) {
+    const u32 index = bag_.emit(
+        diag::Severity::Error, PARSER_INVALID_TOKEN_STREAM,
+        "internal error: invalid token stream: {}",
+        lexer::describe_token_stream_error(std::move(verified).unwrap_err()));
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
   std::vector<ast::ItemIdx> items;
   while (!at_end()) {
     if (match(lexer::TokenKind::Semicolon)) {
@@ -266,7 +278,17 @@ std::span<const ast::ItemIdx> Parser::parse() {
     }
     items.push_back(item);
   }
-  return ast::copy_to_arena(ast_.spans, items);
+  if (base::Result<void, ast::VerifyError> verified = ast::verify_file(ast_);
+      verified.is_err()) {
+    const u32 index =
+        bag_.emit(diag::Severity::Error, PARSER_INVALID_AST,
+                  "internal error: invalid syntax tree: {}",
+                  ast::describe_verify_error(std::move(verified).unwrap_err()));
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  return base::make_ok(
+      std::span<const ast::ItemIdx>(ast::copy_to_arena(ast_.spans, items)));
 }
 
 ast::ItemIdx Parser::parse_item() {
@@ -284,24 +306,24 @@ ast::ItemIdx Parser::parse_item() {
   }
   if (at_end()) {
     const u32 index =
-        bag_.emit(diag::Severity::Error, kParserUnexpectedToken,
+        bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN,
                   span_from(pos_), "expected item, found end of file");
     (void)index;
     return ast::ItemIdx::invalid();
   }
   const diag::Span span = peek().span;
-  const u32 index = bag_.emit(diag::Severity::Error, kParserUnexpectedToken,
+  const u32 index = bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN,
                               span, "expected item, found `{}`",
                               bytes_.substr(span.offset, span.length));
   (void)index;
   return ast::ItemIdx::invalid();
 }
 
-base::Result<ast::Ident, diag::Fatal> Parser::parse_ident(
+base::Result<ast::Ident, diag::Reported> Parser::parse_ident(
     std::string_view what) {
   if (peek_kind() != lexer::TokenKind::Ident) {
     expect(lexer::TokenKind::Ident, what);
-    return base::make_err(diag::Fatal{});
+    return base::make_err(diag::Reported{});
   }
   const diag::Span span = peek().span;
   ast::Ident id{bytes_.substr(span.offset, span.length), span};
@@ -397,7 +419,7 @@ ast::ItemIdx Parser::parse_fn(bool is_pub) {
   if (!expect(lexer::TokenKind::Fn, "function")) {
     return ast::ItemIdx::invalid();
   }
-  base::Result<ast::Ident, diag::Fatal> name = parse_ident("function name");
+  base::Result<ast::Ident, diag::Reported> name = parse_ident("function name");
   if (name.is_err()) {
     return ast::ItemIdx::invalid();
   }
@@ -475,7 +497,7 @@ ast::ItemIdx Parser::parse_intrinsic_fn(bool is_pub) {
   if (!expect(lexer::TokenKind::Fn, "function")) {
     return ast::ItemIdx::invalid();
   }
-  base::Result<ast::Ident, diag::Fatal> name = parse_ident("function name");
+  base::Result<ast::Ident, diag::Reported> name = parse_ident("function name");
   if (name.is_err()) {
     return ast::ItemIdx::invalid();
   }
@@ -522,7 +544,7 @@ ast::ItemIdx Parser::parse_struct(bool is_pub) {
   if (!expect(lexer::TokenKind::Struct, "struct")) {
     return ast::ItemIdx::invalid();
   }
-  base::Result<ast::Ident, diag::Fatal> name = parse_ident("struct name");
+  base::Result<ast::Ident, diag::Reported> name = parse_ident("struct name");
   if (name.is_err()) {
     return ast::ItemIdx::invalid();
   }
@@ -535,7 +557,7 @@ ast::ItemIdx Parser::parse_struct(bool is_pub) {
   }
   std::vector<ast::ItemStructField> fields;
   while (!check(lexer::TokenKind::RBrace) && !at_end()) {
-    base::Result<ast::Ident, diag::Fatal> field_name =
+    base::Result<ast::Ident, diag::Reported> field_name =
         parse_ident("field name");
     if (field_name.is_err()) {
       return ast::ItemIdx::invalid();
@@ -573,7 +595,7 @@ ast::ItemIdx Parser::parse_enum(bool is_pub) {
   if (!expect(lexer::TokenKind::Enum, "enum")) {
     return ast::ItemIdx::invalid();
   }
-  base::Result<ast::Ident, diag::Fatal> name = parse_ident("enum name");
+  base::Result<ast::Ident, diag::Reported> name = parse_ident("enum name");
   if (name.is_err()) {
     return ast::ItemIdx::invalid();
   }
@@ -586,7 +608,7 @@ ast::ItemIdx Parser::parse_enum(bool is_pub) {
   }
   std::vector<ast::ItemEnumVariant> variants;
   while (!check(lexer::TokenKind::RBrace) && !at_end()) {
-    base::Result<ast::Ident, diag::Fatal> variant_name =
+    base::Result<ast::Ident, diag::Reported> variant_name =
         parse_ident("variant name");
     if (variant_name.is_err()) {
       return ast::ItemIdx::invalid();
@@ -639,7 +661,8 @@ bool Parser::parse_generic_params(std::vector<ast::Ident>& params) {
     return true;
   }
   while (!check(lexer::TokenKind::Greater) && !at_end()) {
-    base::Result<ast::Ident, diag::Fatal> param = parse_ident("type parameter");
+    base::Result<ast::Ident, diag::Reported> param =
+        parse_ident("type parameter");
     if (param.is_err()) {
       return false;
     }
@@ -647,7 +670,7 @@ bool Parser::parse_generic_params(std::vector<ast::Ident>& params) {
     for (const ast::Ident& existing : params) {
       if (existing.name == name.name) {
         const u32 index =
-            bag_.emit(diag::Severity::Error, kParserUnexpectedToken, name.span,
+            bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, name.span,
                       "duplicate type parameter '{}'", name.name);
         (void)index;
         return false;
@@ -712,7 +735,7 @@ ast::ItemIdx Parser::parse_static(bool is_pub) {
   if (!expect(lexer::TokenKind::Static, "static")) {
     return ast::ItemIdx::invalid();
   }
-  base::Result<ast::Ident, diag::Fatal> name = parse_ident("static name");
+  base::Result<ast::Ident, diag::Reported> name = parse_ident("static name");
   if (name.is_err()) {
     return ast::ItemIdx::invalid();
   }
@@ -747,7 +770,7 @@ ast::ItemIdx Parser::parse_const(bool is_pub) {
   if (!expect(lexer::TokenKind::Const, "const")) {
     return ast::ItemIdx::invalid();
   }
-  base::Result<ast::Ident, diag::Fatal> name = parse_ident("const name");
+  base::Result<ast::Ident, diag::Reported> name = parse_ident("const name");
   if (name.is_err()) {
     return ast::ItemIdx::invalid();
   }
@@ -796,7 +819,7 @@ ast::ItemIdx Parser::parse_use(bool is_pub) {
       .alias = ast::Ident{},
   });
   if (match(lexer::TokenKind::As)) {
-    base::Result<ast::Ident, diag::Fatal> alias = parse_ident("alias");
+    base::Result<ast::Ident, diag::Reported> alias = parse_ident("alias");
     if (alias.is_err()) {
       return ast::ItemIdx::invalid();
     }
@@ -838,8 +861,9 @@ bool Parser::parse_decimal_u64(u64* out) {
       continue;
     }
     if (c < '0' || c > '9') {
-      const u32 index = bag_.emit(diag::Severity::Error, kParserUnexpectedToken,
-                                  span, "array length must be decimal");
+      const u32 index =
+          bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span,
+                    "array length must be decimal");
       (void)index;
       return false;
     }
@@ -873,8 +897,9 @@ ast::BlockIdx Parser::parse_block() {
     statements.push_back(stmt);
     if (!match(lexer::TokenKind::Semicolon) &&
         !check(lexer::TokenKind::RBrace) && !at_end()) {
-      const u32 index = bag_.emit(diag::Severity::Error, kParserUnexpectedToken,
-                                  peek().span, "expected `;`");
+      const u32 index =
+          bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, peek().span,
+                    "expected `;`");
       (void)index;
       synchronize();
     }

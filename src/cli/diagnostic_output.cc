@@ -3,6 +3,7 @@
 
 #include "cli/diagnostic_output.h"
 
+#include <optional>
 #include <string_view>
 
 #include "base/logger.h"
@@ -16,12 +17,15 @@ namespace cli {
 
 namespace {
 
-diag::SourceText fetch_source(source::FileId id, const void* ctx) {
+std::optional<diag::SourceText> fetch_source(source::FileId id,
+                                             const void* ctx) {
   const auto* sources = static_cast<const source::SourceManager*>(ctx);
-  if (id >= sources->file_count()) {
-    return {};
+  const std::optional<std::string_view> name = sources->name(id);
+  const std::optional<std::string_view> bytes = sources->bytes(id);
+  if (!name.has_value() || !bytes.has_value()) {
+    return std::nullopt;
   }
-  return {sources->name(id), sources->bytes(id)};
+  return diag::SourceText{*name, *bytes};
 }
 
 }  // namespace

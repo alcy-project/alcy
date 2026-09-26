@@ -17,13 +17,13 @@ namespace {
 
 // Input is already separator-folded here.
 std::string normalize_canonical(std::string_view path) {
-  const bool absolute = !path.empty() && path.front() == kDefaultPathSeparator;
+  const bool absolute = !path.empty() && path.front() == DEFAULT_PATH_SEPARATOR;
   std::string out;
   std::vector<usize> starts;
   usize i = absolute ? 1 : 0;
   while (i <= path.size()) {
     usize end = i;
-    while (end < path.size() && path[end] != kDefaultPathSeparator) {
+    while (end < path.size() && path[end] != DEFAULT_PATH_SEPARATOR) {
       ++end;
     }
     const std::string_view part = path.substr(i, end - i);
@@ -35,21 +35,21 @@ std::string normalize_canonical(std::string_view path) {
         starts.pop_back();
       } else if (!absolute) {
         if (!out.empty()) {
-          out.push_back(kDefaultPathSeparator);
+          out.push_back(DEFAULT_PATH_SEPARATOR);
         }
         out.append("..");
       }
     } else {
       starts.push_back(static_cast<usize>(out.size()));
       if (!out.empty()) {
-        out.push_back(kDefaultPathSeparator);
+        out.push_back(DEFAULT_PATH_SEPARATOR);
       }
       out.append(part);
     }
     i = end + 1;
   }
   if (absolute) {
-    return std::string(1, kDefaultPathSeparator) + out;
+    return std::string(1, DEFAULT_PATH_SEPARATOR) + out;
   }
   return out.empty() ? "." : out;
 }
@@ -58,8 +58,8 @@ std::string normalize_canonical(std::string_view path) {
 std::string fold_separators(std::string_view path) {
   std::string out(path);
   for (char& c : out) {
-    if (c == kWindowsPathSeparator) {
-      c = kDefaultPathSeparator;
+    if (c == WINDOWS_PATH_SEPARATOR) {
+      c = DEFAULT_PATH_SEPARATOR;
     }
   }
   return out;
@@ -81,10 +81,10 @@ base::Result<Path, PathError> Path::from_native(std::string_view path) {
 
 Path Path::join(std::string_view child) const {
   std::string out = value_;
-  out.push_back(kDefaultPathSeparator);
+  out.push_back(DEFAULT_PATH_SEPARATOR);
 #if BUILD_FLAG(IS_OS_WIN)
   for (const char c : child) {
-    out.push_back(c == kWindowsPathSeparator ? kDefaultPathSeparator : c);
+    out.push_back(c == WINDOWS_PATH_SEPARATOR ? DEFAULT_PATH_SEPARATOR : c);
   }
 #else
   out.append(child);
@@ -93,18 +93,18 @@ Path Path::join(std::string_view child) const {
 }
 
 Path Path::parent() const {
-  const usize slash = value_.find_last_of(kDefaultPathSeparator);
+  const usize slash = value_.find_last_of(DEFAULT_PATH_SEPARATOR);
   if (slash == std::string::npos) {
     return Path(".");
   }
   if (slash == 0) {
-    return Path(std::string(1, kDefaultPathSeparator));
+    return Path(std::string(1, DEFAULT_PATH_SEPARATOR));
   }
   return Path(value_.substr(0, slash));
 }
 
 bool Path::is_absolute() const {
-  return !value_.empty() && value_.front() == kDefaultPathSeparator;
+  return !value_.empty() && value_.front() == DEFAULT_PATH_SEPARATOR;
 }
 
 bool operator==(std::string_view lhs, const Path& rhs) {

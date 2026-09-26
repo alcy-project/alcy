@@ -17,12 +17,12 @@ using Idx = base::Idx<T, base::IdxBaseType>;
 struct Function;
 using FunctionIdx = details::Idx<Function>;
 using FunctionIdxRange = base::IdxRange<FunctionIdx>;
-// constexpr u32 kFunctionParameterTypesSooThreshold = 8;
+// constexpr u32 FUNCTION_PARAMETER_TYPES_SOO_THRESHOLD = 8;
 
 struct Block;
 using BlockIdx = details::Idx<Block>;
 using BlockIdxRange = base::IdxRange<BlockIdx>;
-// constexpr u32 kBlockParameterTypesSooThreshold = 20;
+// constexpr u32 BLOCK_PARAMETER_TYPES_SOO_THRESHOLD = 20;
 
 struct BlockParam;
 using BlockParamIdx = details::Idx<BlockParam>;

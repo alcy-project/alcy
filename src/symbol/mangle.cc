@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "fpag/base/result.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 
@@ -37,46 +38,46 @@ namespace {
 // the string appears, since a tag is a letter and a length is a digit.
 // A tuple and a nominal's argument list carry an explicit count, so
 // their extent does not depend on what follows.
-constexpr std::string_view kPrefix = "_A";
-constexpr std::string_view kVersion = "1";
+constexpr std::string_view PREFIX = "_A";
+constexpr std::string_view VERSION = "1";
 // Ends a list of length-prefixed segments.
-constexpr char kListEnd = '.';
+constexpr char LIST_END = '.';
 
 // Primitives, one character each. The letters are chosen to be
 // memorable; `display` turns them back into source spelling, which is
 // why the encoding itself does not have to be readable.
-constexpr char kTagBool = 'b';
-constexpr char kTagI8 = 'h';
-constexpr char kTagI16 = 'H';
-constexpr char kTagI32 = 'i';
-constexpr char kTagI64 = 'I';
-constexpr char kTagU8 = 't';
-constexpr char kTagU16 = 'T';
-constexpr char kTagU32 = 'U';
-constexpr char kTagU64 = 'L';
-constexpr char kTagF32 = 'f';
-constexpr char kTagF64 = 'F';
-constexpr char kTagStr = 'z';
-constexpr char kTagPtr = 'p';
-constexpr char kTagRef = 'r';
-constexpr char kTagMutRef = 'w';
-constexpr char kTagArray = 'y';
-constexpr char kTagTuple = 'u';
-constexpr char kTagNominal = 'n';
+constexpr char TAG_BOOL = 'b';
+constexpr char TAG_I8 = 'h';
+constexpr char TAG_I16 = 'H';
+constexpr char TAG_I32 = 'i';
+constexpr char TAG_I64 = 'I';
+constexpr char TAG_U8 = 't';
+constexpr char TAG_U16 = 'T';
+constexpr char TAG_U32 = 'U';
+constexpr char TAG_U64 = 'L';
+constexpr char TAG_F32 = 'f';
+constexpr char TAG_F64 = 'F';
+constexpr char TAG_STR = 'z';
+constexpr char TAG_PTR = 'p';
+constexpr char TAG_REF = 'r';
+constexpr char TAG_MUT_REF = 'w';
+constexpr char TAG_ARRAY = 'y';
+constexpr char TAG_TUPLE = 'u';
+constexpr char TAG_NOMINAL = 'n';
 
 struct Primitive {
   char tag;
   std::string_view spelling;
 };
 
-constexpr Primitive kPrimitives[] = {
-    {kTagBool, "bool"}, {kTagI8, "i8"},   {kTagI16, "i16"}, {kTagI32, "i32"},
-    {kTagI64, "i64"},   {kTagU8, "u8"},   {kTagU16, "u16"}, {kTagU32, "u32"},
-    {kTagU64, "u64"},   {kTagF32, "f32"}, {kTagF64, "f64"},
+constexpr Primitive PRIMITIVES[] = {
+    {TAG_BOOL, "bool"}, {TAG_I8, "i8"},   {TAG_I16, "i16"}, {TAG_I32, "i32"},
+    {TAG_I64, "i64"},   {TAG_U8, "u8"},   {TAG_U16, "u16"}, {TAG_U32, "u32"},
+    {TAG_U64, "u64"},   {TAG_F32, "f32"}, {TAG_F64, "f64"},
 };
 
 std::string_view primitive_spelling(char tag) {
-  for (const Primitive& primitive : kPrimitives) {
+  for (const Primitive& primitive : PRIMITIVES) {
     if (primitive.tag == tag) {
       return primitive.spelling;
     }
@@ -86,17 +87,17 @@ std::string_view primitive_spelling(char tag) {
 
 char primitive_tag(ir::TypeTag tag) {
   switch (tag) {
-    case ir::TypeTag::I1: return kTagBool;
-    case ir::TypeTag::I8: return kTagI8;
-    case ir::TypeTag::I16: return kTagI16;
-    case ir::TypeTag::I32: return kTagI32;
-    case ir::TypeTag::I64: return kTagI64;
-    case ir::TypeTag::U8: return kTagU8;
-    case ir::TypeTag::U16: return kTagU16;
-    case ir::TypeTag::U32: return kTagU32;
-    case ir::TypeTag::U64: return kTagU64;
-    case ir::TypeTag::F32: return kTagF32;
-    case ir::TypeTag::F64: return kTagF64;
+    case ir::TypeTag::I1: return TAG_BOOL;
+    case ir::TypeTag::I8: return TAG_I8;
+    case ir::TypeTag::I16: return TAG_I16;
+    case ir::TypeTag::I32: return TAG_I32;
+    case ir::TypeTag::I64: return TAG_I64;
+    case ir::TypeTag::U8: return TAG_U8;
+    case ir::TypeTag::U16: return TAG_U16;
+    case ir::TypeTag::U32: return TAG_U32;
+    case ir::TypeTag::U64: return TAG_U64;
+    case ir::TypeTag::F32: return TAG_F32;
+    case ir::TypeTag::F64: return TAG_F64;
     default: return '\0';
   }
 }
@@ -127,10 +128,10 @@ void append_u64(std::string& out, u64 value) {
 // module tree spells it. Encoding it segment by segment with explicit
 // lengths means a segment may contain any byte, separators included.
 void append_path(std::string& out, std::string_view path) {
-  constexpr std::string_view kSeparator = "::";
+  constexpr std::string_view SEPARATOR = "::";
   usize start = 0;
   while (start <= path.size()) {
-    const usize split = path.find(kSeparator, start);
+    const usize split = path.find(SEPARATOR, start);
     const std::string_view segment = split == std::string_view::npos
                                          ? path.substr(start)
                                          : path.substr(start, split - start);
@@ -141,9 +142,9 @@ void append_path(std::string& out, std::string_view path) {
     if (split == std::string_view::npos) {
       break;
     }
-    start = split + kSeparator.size();
+    start = split + SEPARATOR.size();
   }
-  out.push_back(kListEnd);
+  out.push_back(LIST_END);
 }
 
 class Encoder {
@@ -160,19 +161,19 @@ class Encoder {
       return;
     }
     switch (node.tag) {
-      case ir::TypeTag::Str: out_.push_back(kTagStr); return;
+      case ir::TypeTag::Str: out_.push_back(TAG_STR); return;
       case ir::TypeTag::Ref:
-        out_.push_back(kTagRef);
+        out_.push_back(TAG_REF);
         encode_type(pointee(node));
         return;
       case ir::TypeTag::MutRef:
-        out_.push_back(kTagMutRef);
+        out_.push_back(TAG_MUT_REF);
         encode_type(pointee(node));
         return;
-      case ir::TypeTag::Ptr: out_.push_back(kTagPtr); return;
+      case ir::TypeTag::Ptr: out_.push_back(TAG_PTR); return;
       case ir::TypeTag::Array: {
         const ir::ArrayType& array = types_.array_types()[node.as_array()];
-        out_.push_back(kTagArray);
+        out_.push_back(TAG_ARRAY);
         append_u64(out_, array.count);
         encode_type(array.element);
         return;
@@ -180,7 +181,7 @@ class Encoder {
       case ir::TypeTag::Tuple: {
         const ir::TypeIdxRange elements =
             types_.tuple_types()[node.as_tuple()].elements;
-        out_.push_back(kTagTuple);
+        out_.push_back(TAG_TUPLE);
         append_u64(out_, elements.size());
         for (const ir::TypeIdx element : elements) {
           encode_type(element);
@@ -193,14 +194,14 @@ class Encoder {
         // Void, Never, Error, and Function never appear in a signature
         // the linker sees. Encoding one as `str` keeps the mapping
         // total; nothing decodes a symbol back into a program.
-        out_.push_back(kTagStr);
+        out_.push_back(TAG_STR);
         return;
     }
   }
 
  private:
   void encode_nominal(const ir::TypeNode& node) {
-    out_.push_back(kTagNominal);
+    out_.push_back(TAG_NOMINAL);
     std::string_view name;
     ir::TypeIdxRange params;
     if (node.tag == ir::TypeTag::Struct) {
@@ -274,7 +275,7 @@ class Decoder {
   // following length-prefixed item is not read as one more segment.
   bool read_segments(std::vector<std::string>& out) {
     out.clear();
-    while (!at_end() && peek() != kListEnd) {
+    while (!at_end() && peek() != LIST_END) {
       std::string segment;
       if (!read_name(segment)) {
         return false;
@@ -282,7 +283,7 @@ class Decoder {
       out.push_back(std::move(segment));
     }
     char end = '\0';
-    return read_char(end) && end == kListEnd;
+    return read_char(end) && end == LIST_END;
   }
 
   // A list of types ends at the end of the symbol or at the first
@@ -305,16 +306,16 @@ class Decoder {
       return true;
     }
     switch (tag) {
-      case kTagStr: out.kind = DecodedType::Kind::Str; return true;
-      case kTagPtr: out.kind = DecodedType::Kind::Ptr; return true;
-      case kTagRef:
-      case kTagMutRef: {
+      case TAG_STR: out.kind = DecodedType::Kind::Str; return true;
+      case TAG_PTR: out.kind = DecodedType::Kind::Ptr; return true;
+      case TAG_REF:
+      case TAG_MUT_REF: {
         out.kind =
-            tag == kTagRef ? DecodedType::Kind::Ref : DecodedType::Kind::MutRef;
+            tag == TAG_REF ? DecodedType::Kind::Ref : DecodedType::Kind::MutRef;
         out.parts.resize(1);
         return decode_type(out.parts[0]);
       }
-      case kTagArray: {
+      case TAG_ARRAY: {
         out.kind = DecodedType::Kind::Array;
         if (!read_u64(out.count)) {
           return false;
@@ -322,7 +323,7 @@ class Decoder {
         out.parts.resize(1);
         return decode_type(out.parts[0]);
       }
-      case kTagTuple: {
+      case TAG_TUPLE: {
         out.kind = DecodedType::Kind::Tuple;
         u64 count = 0;
         if (!read_u64(count) || !plausible_count(count)) {
@@ -336,7 +337,7 @@ class Decoder {
         }
         return true;
       }
-      case kTagNominal: {
+      case TAG_NOMINAL: {
         out.kind = DecodedType::Kind::Nominal;
         if (!read_segments(out.path)) {
           return false;
@@ -377,8 +378,8 @@ std::string mangle(const Signature& signature,
     return signature.name;
   }
   std::string out;
-  out.append(kPrefix);
-  out.append(kVersion);
+  out.append(PREFIX);
+  out.append(VERSION);
   if (const char kind = kind_tag(signature.kind); kind != '\0') {
     out.push_back(kind);
   }
@@ -392,36 +393,40 @@ std::string mangle(const Signature& signature,
   return out;
 }
 
-bool demangle(std::string_view text, Demangled& out) {
-  if (!text.starts_with(kPrefix)) {
-    return false;
+base::Result<Demangled, DemangleError> demangle(std::string_view text) {
+  if (!text.starts_with(PREFIX)) {
+    return base::make_err(DemangleError::NotAlcySymbol);
   }
-  Decoder decoder(text.substr(kPrefix.size()));
+  Decoder decoder(text.substr(PREFIX.size()));
   char version = '\0';
-  if (!decoder.read_char(version) || version != kVersion[0]) {
-    return false;
+  if (!decoder.read_char(version) || version != VERSION[0]) {
+    return base::make_err(DemangleError::UnknownVersion);
   }
+  Demangled out;
   char kind = '\0';
   if (!decoder.read_char(kind)) {
-    return false;
+    return base::make_err(DemangleError::Malformed);
   }
   switch (kind) {
     case 'f': out.kind = Signature::Kind::Free; break;
     case 'a': out.kind = Signature::Kind::Assoc; break;
     case 'm': out.kind = Signature::Kind::Method; break;
-    default: return false;
+    default: return base::make_err(DemangleError::Malformed);
   }
   if (!decoder.read_segments(out.path) || !decoder.read_name(out.name)) {
-    return false;
+    return base::make_err(DemangleError::Malformed);
   }
   while (!decoder.type_list_ended()) {
     out.generics.emplace_back();
     if (!decoder.decode_type(out.generics.back())) {
-      return false;
+      return base::make_err(DemangleError::Malformed);
     }
   }
   // Trailing bytes mean the encoding and this decoder disagree.
-  return decoder.at_end();
+  if (!decoder.at_end()) {
+    return base::make_err(DemangleError::Malformed);
+  }
+  return base::make_ok(std::move(out));
 }
 
 std::string display(const DecodedType& type) {

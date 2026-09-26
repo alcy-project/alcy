@@ -4,6 +4,8 @@
 #pragma once
 
 #include "diag/bag.h"
+#include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "lower/lower.h"
 
 namespace borrow {
@@ -15,7 +17,10 @@ namespace borrow {
 // last use. Interprocedural precision comes from function summaries
 // (parameter positions whose loans may reach a return, computed to
 // a bounded fixed-point over the call graph) reified at call sites.
-// Diagnostics only; the cli gates the exit code on the bag.
-void check_borrows(const lower::LoweredPackage& lowered, diag::DiagBag& bag);
+// Findings accumulate in the bag; err marks a package that gained
+// errors. The cli still gates the exit code on the bag.
+base::Result<void, diag::Reported> check_borrows(
+    const lower::LoweredPackage& lowered,
+    diag::DiagBag& bag);
 
 }  // namespace borrow

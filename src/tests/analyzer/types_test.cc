@@ -61,7 +61,7 @@ CheckCase check_case(
     std::initializer_list<std::pair<std::string_view, std::string_view>>
         prelude = {}) {
   std::vector<ModuleInput> inputs;
-  source::FileId root = source::kUnknownFile;
+  source::FileId root = source::UNKNOWN_FILE;
   for (std::string_view rel : rels) {
     base::Result<source::FileId, source::SourceError> loaded =
         f.sources.load(dir.join(rel));
@@ -94,7 +94,7 @@ CheckCase check_case(
     prelude_inputs.push_back(
         {prelude_storage.back(), std::move(loaded).unwrap()});
   }
-  diag::Fallible<ModuleTree> tree_result = resolve_modules(
+  base::Result<ModuleTree, diag::Reported> tree_result = resolve_modules(
       root, inputs, "testpkg", f.sources, f.ast, f.bag, prelude_inputs);
   if (tree_result.is_err() || f.bag.has_errors()) {
     return {std::nullopt};
@@ -129,13 +129,13 @@ const CheckedModule::NamedType* find_type(const CheckedModule& module,
 
 // `Option` and `Result` live in the core prelude since ADR-0009, so
 // tests that mention them inject a matching declaration set.
-constexpr std::string_view kCorePrelude =
+constexpr std::string_view CORE_PRELUDE =
     R"(pub intrinsic fn panic(msg: str) -> !;
 pub enum Option<T> { Some(T), None }
 pub enum Result<T, E> { Ok(T), Err(E) }
 )";
 
-constexpr std::string_view kCorePreludeFile = "core.al";
+constexpr std::string_view CORE_PRELUDE_FILE = "core.al";
 
 // Static storage keeps the returned initializer_list valid for the
 // caller's use; an initializer_list of temporaries would dangle.
@@ -143,8 +143,8 @@ const std::initializer_list<std::pair<std::string_view, std::string_view>>&
 core_prelude() {
   static const std::initializer_list<
       std::pair<std::string_view, std::string_view>>
-      kPrelude = {{"core", kCorePreludeFile}};
-  return kPrelude;
+      PRELUDE = {{"core", CORE_PRELUDE_FILE}};
+  return PRELUDE;
 }
 
 }  // namespace
@@ -175,8 +175,8 @@ TEST_CASE("Check interns structs with named fields") {
   if (point == nullptr) {
     return;
   }
-  CHECK(result.package->types.types()[point->type].tag == ir::TypeTag::Struct);
-  CHECK(result.package->types.is_copy_type(point->type));
+  CHECK(result.package->types->types()[point->type].tag == ir::TypeTag::Struct);
+  CHECK(result.package->types->is_copy_type(point->type));
   bool fields_ok = false;
   for (const CheckedModule::StructInfo& info : root->structs) {
     if (info.type.idx == point->type.idx) {
@@ -210,8 +210,8 @@ TEST_CASE("Check interns enums with payloads") {
   if (choice == nullptr) {
     return;
   }
-  CHECK(result.package->types.types()[choice->type].tag == ir::TypeTag::Enum);
-  CHECK(result.package->types.is_copy_type(choice->type));
+  CHECK(result.package->types->types()[choice->type].tag == ir::TypeTag::Enum);
+  CHECK(result.package->types->is_copy_type(choice->type));
 }
 
 TEST_CASE("Check instantiates generic structs") {
@@ -243,7 +243,7 @@ TEST_CASE("Check instantiates generic structs") {
   if (root == nullptr || root->functions.size() < 2) {
     return;
   }
-  const ir::Storage& types = result.package->types;
+  const ir::Storage& types = *result.package->types;
   const ir::TypeIdx pair_i_s = root->functions[0].params[0];
   CHECK(types.types()[pair_i_s].tag == ir::TypeTag::Struct);
   // Identical instantiations share one index; different ones do not.
@@ -323,7 +323,7 @@ TEST_CASE("Check resolves annotations and signatures") {
   if (sig.params.size() != 4) {
     return;
   }
-  const ir::Storage& types = result.package->types;
+  const ir::Storage& types = *result.package->types;
   CHECK(types.types()[sig.params[0]].tag == ir::TypeTag::I32);
   CHECK(types.types()[sig.params[1]].tag == ir::TypeTag::Ref);
   CHECK(types.types()[sig.params[2]].tag == ir::TypeTag::Tuple);
@@ -363,7 +363,7 @@ TEST_CASE("Check instantiates generic enums") {
   }
   const CheckedModule::FnSig& sig = root->functions[0];
   CHECK(sig.name == "f");
-  const ir::Storage& types = result.package->types;
+  const ir::Storage& types = *result.package->types;
   CHECK(types.types()[sig.params[0]].tag == ir::TypeTag::Enum);
   CHECK(types.types()[sig.ret].tag == ir::TypeTag::Enum);
   CHECK(sig.params[0].idx == sig.ret.idx);
@@ -646,7 +646,7 @@ TEST_CASE("Check resolves cross-module types") {
   if (holder == nullptr) {
     return;
   }
-  CHECK(result.package->types.is_copy_type(holder->type));
+  CHECK(result.package->types->is_copy_type(holder->type));
 }
 
 TEST_CASE("Check instantiates core generic types with dedup") {
@@ -659,7 +659,7 @@ TEST_CASE("Check instantiates core generic types with dedup") {
                        "fn g(b: Result<i32, bool>) -> i32 {\n"
                        "  ret 0\n"
                        "}\n"},
-                      {kCorePreludeFile, kCorePrelude}});
+                      {CORE_PRELUDE_FILE, CORE_PRELUDE}});
   CHECK(setup);
   if (!setup) {
     return;
@@ -677,7 +677,7 @@ TEST_CASE("Check instantiates core generic types with dedup") {
   if (root == nullptr || root->functions.size() != 2) {
     return;
   }
-  const ir::Storage& types = result.package->types;
+  const ir::Storage& types = *result.package->types;
   CHECK(types.types()[root->functions[0].params[0]].tag == ir::TypeTag::Enum);
   CHECK(types.types()[root->functions[0].ret].tag == ir::TypeTag::Enum);
   // Identical instantiations share one index.
@@ -698,7 +698,7 @@ TEST_CASE("Check lets user code define Result and Option") {
                        "    Option::Never => 1,\n"
                        "  }\n"
                        "}\n"},
-                      {kCorePreludeFile, kCorePrelude}});
+                      {CORE_PRELUDE_FILE, CORE_PRELUDE}});
   CHECK(setup);
   if (!setup) {
     return;
@@ -745,14 +745,14 @@ TEST_CASE("Check maps pointer widths for sized integers") {
     return;
   }
   const ir::StructType& narrow_struct =
-      narrow_result.package->types.struct_types()
-          [narrow_result.package->types.types()[narrow_w->type].as_struct()];
+      narrow_result.package->types->struct_types()
+          [narrow_result.package->types->types()[narrow_w->type].as_struct()];
   const ir::StructType& wide_struct =
-      wide_result.package->types.struct_types()
-          [wide_result.package->types.types()[wide_w->type].as_struct()];
-  CHECK(narrow_result.package->types.types()[narrow_struct.fields[0]].tag ==
+      wide_result.package->types->struct_types()
+          [wide_result.package->types->types()[wide_w->type].as_struct()];
+  CHECK(narrow_result.package->types->types()[narrow_struct.fields[0]].tag ==
         ir::TypeTag::I32);
-  CHECK(wide_result.package->types.types()[wide_struct.fields[0]].tag ==
+  CHECK(wide_result.package->types->types()[wide_struct.fields[0]].tag ==
         ir::TypeTag::I64);
 }
 
@@ -828,7 +828,7 @@ TEST_CASE("Check rejects malformed generics") {
                                         "fn f(x: Result<i32>) -> i32 {\n"
                                         "  ret 0\n"
                                         "}\n"},
-                                       {kCorePreludeFile, kCorePrelude}});
+                                       {CORE_PRELUDE_FILE, CORE_PRELUDE}});
     CHECK(setup);
     if (!setup) {
       return;
@@ -880,7 +880,7 @@ TEST_CASE("Check accepts mutable reference fields as move-only") {
   if (holder == nullptr) {
     return;
   }
-  CHECK(!result.package->types.is_copy_type(holder->type));
+  CHECK(!result.package->types->is_copy_type(holder->type));
 }
 
 TEST_CASE("Check exposes core generic shapes through the IR") {
@@ -890,7 +890,7 @@ TEST_CASE("Check exposes core generic shapes through the IR") {
                        "fn f(a: Result<i32, bool>) -> Option<i32> {\n"
                        "  ret Option::None\n"
                        "}\n"},
-                      {kCorePreludeFile, kCorePrelude}});
+                      {CORE_PRELUDE_FILE, CORE_PRELUDE}});
   CHECK(setup);
   if (!setup) {
     return;
@@ -908,7 +908,7 @@ TEST_CASE("Check exposes core generic shapes through the IR") {
   if (root == nullptr || root->functions.empty()) {
     return;
   }
-  const ir::Storage& types = result.package->types;
+  const ir::Storage& types = *result.package->types;
   const ir::TypeIdx result_ty = root->functions[0].params[0];
   const ir::TypeIdx option_ty = root->functions[0].ret;
   const ir::EnumType& result_shape =
@@ -969,9 +969,9 @@ TEST_CASE("Check judges Copy structurally") {
   if (all_copy == nullptr || has_mut == nullptr || mixed == nullptr) {
     return;
   }
-  CHECK(result.package->types.is_copy_type(all_copy->type));
-  CHECK(!result.package->types.is_copy_type(has_mut->type));
-  CHECK(!result.package->types.is_copy_type(mixed->type));
+  CHECK(result.package->types->is_copy_type(all_copy->type));
+  CHECK(!result.package->types->is_copy_type(has_mut->type));
+  CHECK(!result.package->types->is_copy_type(mixed->type));
 }
 
 TEST_CASE("Check expressions accept well-typed programs") {
@@ -1094,7 +1094,7 @@ TEST_CASE("Check question-mark propagation") {
                                         "  x := get()?\n"
                                         "  ret Result::Ok(x + 1i32)\n"
                                         "}\n"},
-                                       {kCorePreludeFile, kCorePrelude}});
+                                       {CORE_PRELUDE_FILE, CORE_PRELUDE}});
     CHECK(setup);
     if (!setup) {
       return;
@@ -1115,7 +1115,7 @@ TEST_CASE("Check question-mark propagation") {
                                         "  x := get()?\n"
                                         "  ret Result::Ok(x + 1i32)\n"
                                         "}\n"},
-                                       {kCorePreludeFile, kCorePrelude}});
+                                       {CORE_PRELUDE_FILE, CORE_PRELUDE}});
     CHECK(setup);
     if (!setup) {
       return;
@@ -1134,7 +1134,7 @@ TEST_CASE("Check question-mark propagation") {
                                         "fn caller() -> i32 {\n"
                                         "  ret get()?\n"
                                         "}\n"},
-                                       {kCorePreludeFile, kCorePrelude}});
+                                       {CORE_PRELUDE_FILE, CORE_PRELUDE}});
     CHECK(setup);
     if (!setup) {
       return;
@@ -1268,7 +1268,7 @@ TEST_CASE("Check match exhaustiveness") {
                                         "    Option::None => 0,\n"
                                         "  }\n"
                                         "}\n"},
-                                       {kCorePreludeFile, kCorePrelude}});
+                                       {CORE_PRELUDE_FILE, CORE_PRELUDE}});
     CHECK(setup);
     if (!setup) {
       return;
@@ -1286,7 +1286,7 @@ TEST_CASE("Check match exhaustiveness") {
                                         "    Option::Some(x) => x,\n"
                                         "  }\n"
                                         "}\n"},
-                                       {kCorePreludeFile, kCorePrelude}});
+                                       {CORE_PRELUDE_FILE, CORE_PRELUDE}});
     CHECK(setup);
     if (!setup) {
       return;
@@ -1372,7 +1372,7 @@ TEST_CASE("Check inherent and core generic methods") {
                          "  _ := ok\n"
                          "  ret p.get() + v\n"
                          "}\n"},
-                        {kCorePreludeFile,
+                        {CORE_PRELUDE_FILE,
                          R"(pub intrinsic fn panic(msg: str) -> !;
 pub enum Option<T> { Some(T), None }
 pub enum Result<T, E> { Ok(T), Err(E) }
@@ -1399,7 +1399,7 @@ impl<T, E> Result<T, E> {
                                         "fn f(r: Result<i32, bool>) -> i32 {\n"
                                         "  ret r.no_such_method()\n"
                                         "}\n"},
-                                       {kCorePreludeFile, kCorePrelude}});
+                                       {CORE_PRELUDE_FILE, CORE_PRELUDE}});
     CHECK(setup);
     if (!setup) {
       return;
@@ -1445,7 +1445,7 @@ TEST_CASE("Check unused-value warnings") {
                                       "  get()\n"
                                       "  side()\n"
                                       "}\n"},
-                                     {kCorePreludeFile, kCorePrelude}});
+                                     {CORE_PRELUDE_FILE, CORE_PRELUDE}});
   CHECK(setup);
   if (!setup) {
     return;

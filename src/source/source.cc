@@ -3,6 +3,7 @@
 
 #include "source/source.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -39,21 +40,22 @@ base::Result<FileId, SourceError> SourceManager::load(std::string_view path) {
   return base::make_ok(static_cast<FileId>(entries_.size() - 1));
 }
 
-std::string_view SourceManager::bytes(FileId id) const {
+std::optional<std::string_view> SourceManager::bytes(FileId id) const {
   if (id >= entries_.size()) {
-    return {};
+    return std::nullopt;
   }
   const Entry& entry = entries_[id];
   if (!entry.mapping.is_mapped()) {
-    return {};
+    // A loaded file of zero bytes maps nothing; it is still known.
+    return std::string_view{};
   }
-  return {reinterpret_cast<const char*>(entry.mapping.data()),
-          entry.mapping.size()};
+  return std::string_view{reinterpret_cast<const char*>(entry.mapping.data()),
+                          entry.mapping.size()};
 }
 
-std::string_view SourceManager::name(FileId id) const {
+std::optional<std::string_view> SourceManager::name(FileId id) const {
   if (id >= entries_.size()) {
-    return {};
+    return std::nullopt;
   }
   return entries_[id].path;
 }

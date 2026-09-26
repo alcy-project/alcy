@@ -53,7 +53,7 @@ bool check_case(io::TempDir& dir,
                 std::initializer_list<std::string_view> rels,
                 Fixture& f) {
   std::vector<analyzer::ModuleInput> inputs;
-  source::FileId root = source::kUnknownFile;
+  source::FileId root = source::UNKNOWN_FILE;
   for (std::string_view rel : rels) {
     base::Result<source::FileId, source::SourceError> loaded =
         f.sources.load(dir.join(rel));
@@ -74,24 +74,27 @@ bool check_case(io::TempDir& dir,
       inputs.push_back({name, id});
     }
   }
-  diag::Fallible<analyzer::ModuleTree> tree_result = analyzer::resolve_modules(
-      root, inputs, "testpkg", f.sources, f.ast, f.bag);
+  base::Result<analyzer::ModuleTree, diag::Reported> tree_result =
+      analyzer::resolve_modules(root, inputs, "testpkg", f.sources, f.ast,
+                                f.bag);
   if (tree_result.is_err() || f.bag.has_errors()) {
     return false;
   }
   analyzer::ModuleTree tree = std::move(tree_result).unwrap();
-  diag::Fallible<analyzer::CheckedPackage> checked_result =
+  base::Result<analyzer::CheckedPackage, diag::Reported> checked_result =
       analyzer::check_package(tree, ir::PointerWidth::W64, f.ast, f.bag);
   if (checked_result.is_err() || f.bag.has_errors()) {
     return false;
   }
-  diag::Fallible<lower::LoweredPackage> lowered_result =
+  base::Result<lower::LoweredPackage, diag::Reported> lowered_result =
       lower::lower_package(std::move(checked_result).unwrap(),
                            ir::PointerWidth::W64, f.ast, f.strings, f.bag);
   if (lowered_result.is_err() || f.bag.has_errors()) {
     return false;
   }
-  check_borrows(std::move(lowered_result).unwrap(), f.bag);
+  if (check_borrows(std::move(lowered_result).unwrap(), f.bag).is_err()) {
+    return false;
+  }
   return !f.bag.has_errors();
 }
 

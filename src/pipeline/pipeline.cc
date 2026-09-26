@@ -37,11 +37,11 @@ namespace pipeline {
 namespace {
 
 bool has_source_extension(std::string_view path) {
-  if (path.size() < path::kSourceExtension.size()) {
+  if (path.size() < path::SOURCE_EXTENSION.size()) {
     return false;
   }
-  return path.substr(path.size() - path::kSourceExtension.size()) ==
-         path::kSourceExtension;
+  return path.substr(path.size() - path::SOURCE_EXTENSION.size()) ==
+         path::SOURCE_EXTENSION;
 }
 
 // A directory containing alcy.toml is a nested package: its sources belong
@@ -49,7 +49,7 @@ bool has_source_extension(std::string_view path) {
 // tested, only its children.
 bool is_nested_package(const path::Path& dir) {
   io::FileHandle probe;
-  return probe.open(dir.join(pkg::kManifestFileName).as_view(),
+  return probe.open(dir.join(pkg::MANIFEST_FILE_NAME).as_view(),
                     io::FileAccess::Read);
 }
 
@@ -60,7 +60,7 @@ bool walk_sources(const path::Path& dir, std::vector<path::Path>& paths) {
 #if BUILD_FLAG(IS_OS_WIN)
   WIN32_FIND_DATAA found;
   const std::string pattern =
-      std::string(dir.as_view()) + path::kDefaultPathSeparator + "*";
+      std::string(dir.as_view()) + path::DEFAULT_PATH_SEPARATOR + "*";
   HANDLE handle = ::FindFirstFileA(pattern.c_str(), &found);
   if (handle == INVALID_HANDLE_VALUE) {
     return false;
@@ -116,30 +116,30 @@ bool walk_sources(const path::Path& dir, std::vector<path::Path>& paths) {
 
 }  // namespace
 
-diag::Fallible<DiscoveredSources> discover_sources(
+base::Result<DiscoveredSources, diag::Reported> discover_sources(
     std::string_view dir,
     source::SourceManager& sources,
     diag::DiagBag& bag) {
   base::Result<path::Path, path::PathError> root = path::Path::from_native(dir);
   if (root.is_err()) {
-    const u32 index = bag.emit(diag::Severity::Error, kPipelineIoError,
+    const u32 index = bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                "invalid source directory '{}'", dir);
     (void)index;
-    return base::make_err(diag::Fatal{});
+    return base::make_err(diag::Reported{});
   }
   const path::Path root_path = std::move(root).unwrap();
   std::vector<path::Path> paths;
   if (!walk_sources(root_path, paths)) {
-    const u32 index = bag.emit(diag::Severity::Error, kPipelineIoError,
+    const u32 index = bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                "source directory '{}' is not accessible", dir);
     (void)index;
-    return base::make_err(diag::Fatal{});
+    return base::make_err(diag::Reported{});
   }
   if (paths.empty()) {
-    const u32 index = bag.emit(diag::Severity::Error, kPipelineIoError,
+    const u32 index = bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                "no source files found under '{}'", dir);
     (void)index;
-    return base::make_err(diag::Fatal{});
+    return base::make_err(diag::Reported{});
   }
   std::sort(paths.begin(), paths.end());
 
@@ -150,26 +150,26 @@ diag::Fallible<DiscoveredSources> discover_sources(
         sources.load(path.as_view());
     if (loaded.is_err()) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kPipelineIoError,
+          bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                    "cannot read source file '{}'", path.as_view());
       (void)index;
-      return base::make_err(diag::Fatal{});
+      return base::make_err(diag::Reported{});
     }
     discovered.files.push_back(std::move(loaded).unwrap());
   }
   return base::make_ok(std::move(discovered));
 }
 
-diag::Fallible<ProjectBuild> compile_project(
+base::Result<ProjectBuild, diag::Reported> compile_project(
     std::span<const pkg::ResolvedPackage> packages,
     source::SourceManager& sources,
     diag::DiagBag& bag) {
   ProjectBuild build;
   for (const pkg::ResolvedPackage& package : packages) {
-    diag::Fallible<DiscoveredSources> discovered =
+    base::Result<DiscoveredSources, diag::Reported> discovered =
         discover_sources(package.dir.as_view(), sources, bag);
     if (discovered.is_err()) {
-      return base::make_err(diag::Fatal{});
+      return base::make_err(diag::Reported{});
     }
     const DiscoveredSources found = std::move(discovered).unwrap();
     build.files_loaded += static_cast<u32>(found.files.size());

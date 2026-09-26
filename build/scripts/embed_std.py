@@ -22,7 +22,7 @@ def emit_array(out, symbol, data: bytes):
         chunk = data[offset : offset + 12]
         out.write("    " + ", ".join(f"0x{b:02x}" for b in chunk) + ",\n")
     out.write("};\n")
-    out.write(f"const u64 {symbol}_len = {len(data)}ULL;\n\n")
+    out.write(f"const u64 {symbol}_LEN = {len(data)}ULL;\n\n")
 
 
 def main():
@@ -33,7 +33,7 @@ def main():
 
     std_dir = Path(args.std_dir)
     files = {
-        "kStdCoreMain": std_dir / "core" / "main.al",
+        "STD_CORE_MAIN": std_dir / "core" / "main.al",
     }
     with open(args.output, "w", encoding="utf-8") as out:
         out.write(

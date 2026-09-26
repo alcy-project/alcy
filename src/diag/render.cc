@@ -4,6 +4,7 @@
 #include "diag/render.h"
 
 #include <iterator>
+#include <optional>
 #include <string_view>
 
 #include "diag/diagnostic.h"
@@ -150,16 +151,19 @@ void render(const Diagnostic& diag,
     return;
   }
 
-  SourceText source;
+  std::optional<SourceText> fetched;
   if (fetch != nullptr) {
-    source = fetch(diag.primary_span.file, ctx);
+    fetched = fetch(diag.primary_span.file, ctx);
   }
+  const SourceText source = fetched.value_or(SourceText{});
   const std::string_view name =
       source.name.empty() ? "[unknown file]" : source.name;
 
   fmt::format_to(std::back_inserter(out), " --> ");
   append_colored(out, options.color, term::kCyan, name);
-  if (source.bytes.empty()) {
+  // No bytes, or a span past the end of the file: show the raw offset
+  // rather than fabricate a line/column the text cannot support.
+  if (source.bytes.empty() || diag.primary_span.offset > source.bytes.size()) {
     fmt::format_to(std::back_inserter(out), ":{}\n", diag.primary_span.offset);
     return;
   }
@@ -205,10 +209,11 @@ void render(const Diagnostic& diag,
 
   for (u32 i = 0; i < diag.label_count; ++i) {
     const Label& label = diag.labels[i];
-    SourceText label_source;
+    std::optional<SourceText> fetched_label;
     if (fetch != nullptr) {
-      label_source = fetch(label.span.file, ctx);
+      fetched_label = fetch(label.span.file, ctx);
     }
+    const SourceText label_source = fetched_label.value_or(SourceText{});
     const std::string_view label_name =
         label_source.name.empty() ? "[unknown file]" : label_source.name;
     fmt::format_to(std::back_inserter(out), " = ");
@@ -217,7 +222,8 @@ void render(const Diagnostic& diag,
     end_style(out, options.color);
     fmt::format_to(std::back_inserter(out), ": {} --> ", label.message);
     append_colored(out, options.color, term::kCyan, label_name);
-    if (label_source.bytes.empty()) {
+    if (label_source.bytes.empty() ||
+        label.span.offset > label_source.bytes.size()) {
       fmt::format_to(std::back_inserter(out), ":{}\n", label.span.offset);
       continue;
     }

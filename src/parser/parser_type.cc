@@ -281,7 +281,8 @@ ast::PatternIdx Parser::parse_primary_pattern() {
         node.payload.mut_ident.name = ast::Ident{"self", span};
         return ast_.patterns.push_back(node);
       }
-      base::Result<ast::Ident, diag::Fatal> name = parse_ident("pattern name");
+      base::Result<ast::Ident, diag::Reported> name =
+          parse_ident("pattern name");
       if (name.is_err()) {
         return ast::PatternIdx::invalid();
       }
@@ -435,7 +436,7 @@ ast::PatternIdx Parser::parse_primary_pattern() {
   if (match(lexer::TokenKind::LBrace)) {
     std::vector<ast::FieldPattern> fields;
     while (!check(lexer::TokenKind::RBrace) && !at_end()) {
-      base::Result<ast::Ident, diag::Fatal> name = parse_ident("field name");
+      base::Result<ast::Ident, diag::Reported> name = parse_ident("field name");
       if (name.is_err()) {
         return ast::PatternIdx::invalid();
       }

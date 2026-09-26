@@ -12,6 +12,7 @@
 #include "analyzer/checker.h"
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
+#include "ast/verify.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -24,6 +25,7 @@
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
+#include "ir/verifier.h"
 
 namespace analyzer {
 Checker::Checker(const ModuleTree& tree,
@@ -34,7 +36,7 @@ Checker::Checker(const ModuleTree& tree,
       ast(ast),
       width(width),
       bag(bag),
-      interner(kInternerCapacity) {}
+      interner(INTERNER_CAPACITY) {}
 
 // Pass 1: registers every nominal definition, diagnosing duplicates
 // and reserved names. No interning happens here.
@@ -66,14 +68,14 @@ void Checker::register_nominals() {
         // The wrapper is compiler-owned; a declaration under the same
         // name would make the spelling resolve two ways.
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerDuplicateDefinition, span,
+            bag.emit(diag::Severity::Error, ANALYZER_DUPLICATE_DEFINITION, span,
                      "'{}' is a built-in type", name);
         (void)index;
         continue;
       }
       if (duplicate) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerDuplicateDefinition, span,
+            bag.emit(diag::Severity::Error, ANALYZER_DUPLICATE_DEFINITION, span,
                      "duplicate definition of '{}'", name);
         (void)index;
         continue;
@@ -106,7 +108,7 @@ u32 Checker::find_child_module(u32 module, std::string_view name) const {
       return i;
     }
   }
-  return kNoModule;
+  return NO_MODULE;
 }
 
 ir::TypeIdx Checker::primitive_type(ast::PrimitiveKind kind, diag::Span span) {
@@ -134,7 +136,7 @@ ir::TypeIdx Checker::primitive_type(ast::PrimitiveKind kind, diag::Span span) {
     case PK::I128:
     case PK::U128: {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerUnsupportedType, span,
+          bag.emit(diag::Severity::Error, ANALYZER_UNSUPPORTED_TYPE, span,
                    "type is not supported in MVP");
       (void)index;
       return error_type();
@@ -298,7 +300,7 @@ ir::TypeIdx Checker::storage_copy(ir::TypeIdx type) {
 }
 
 // Key of a type in the shared instantiation numbering, which is what
-// lowering side tables are keyed by. Returns kNoInst for a type that
+// lowering side tables are keyed by. Returns NO_INST for a type that
 // is not a generic instantiation.
 u32 Checker::inst_index(ir::TypeIdx type) const {
   for (u32 i = 0; i < static_cast<u32>(inst_numbering.size()); ++i) {
@@ -306,7 +308,7 @@ u32 Checker::inst_index(ir::TypeIdx type) const {
       return i;
     }
   }
-  return kNoInst;
+  return NO_INST;
 }
 
 // Storage copies chain: a copy's origin can itself be a copy, so the
@@ -511,15 +513,15 @@ bool Checker::walk_module_prefix(u32 module,
     module_out = module;
     return true;
   }
-  u32 current = kNoModule;
+  u32 current = NO_MODULE;
   if (head == "package") {
     current = tree.root;
   } else if (head == "self") {
     current = module;
   } else if (head == "super") {
-    if (parents[module] == kNoModule) {
+    if (parents[module] == NO_MODULE) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerUnknownType,
+          bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_TYPE,
                    ast.paths[path].span, "the root module has no parent");
       (void)index;
       return false;
@@ -527,9 +529,9 @@ bool Checker::walk_module_prefix(u32 module,
     current = parents[module];
   } else {
     current = find_child_module(module, head);
-    if (current == kNoModule) {
+    if (current == NO_MODULE) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerUnknownType,
+          bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_TYPE,
                    ast.paths[path].span, "unresolved {} '{}'", what, head);
       (void)index;
       return false;
@@ -537,8 +539,8 @@ bool Checker::walk_module_prefix(u32 module,
   }
   for (usize i = 1; i + 1 < segments.size(); ++i) {
     current = find_child_module(current, segments[i].name);
-    if (current == kNoModule) {
-      const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownType,
+    if (current == NO_MODULE) {
+      const u32 index = bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_TYPE,
                                  ast.paths[path].span, "unresolved {} '{}'",
                                  what, segments[i].name);
       (void)index;
@@ -606,14 +608,14 @@ ir::TypeIdx Checker::resolve_type(u32 module,
         if (name == "Self") {
           if (self == nullptr) {
             const u32 index =
-                bag.emit(diag::Severity::Error, kAnalyzerUnknownType, node.span,
-                         "Self outside of an impl block");
+                bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_TYPE,
+                         node.span, "Self outside of an impl block");
             (void)index;
             return error_type();
           }
           if (!node.payload.get<ast::TypePath>().args.empty()) {
             const u32 index =
-                bag.emit(diag::Severity::Error, kAnalyzerGenericArguments,
+                bag.emit(diag::Severity::Error, ANALYZER_GENERIC_ARGUMENTS,
                          node.span, "generic arguments are not supported");
             (void)index;
             return error_type();
@@ -625,7 +627,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
           if (type_params[i - 1].first == name) {
             if (!node.payload.get<ast::TypePath>().args.empty()) {
               const u32 index =
-                  bag.emit(diag::Severity::Error, kAnalyzerGenericArguments,
+                  bag.emit(diag::Severity::Error, ANALYZER_GENERIC_ARGUMENTS,
                            node.span, "generic arguments are not supported");
               (void)index;
               return error_type();
@@ -637,7 +639,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
           const auto& args = node.payload.get<ast::TypePath>().args;
           if (args.size() != 1) {
             const u32 index =
-                bag.emit(diag::Severity::Error, kAnalyzerGenericArguments,
+                bag.emit(diag::Severity::Error, ANALYZER_GENERIC_ARGUMENTS,
                          node.span, "'MaybeUninit' takes one type argument");
             (void)index;
             return error_type();
@@ -645,7 +647,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
           return intern_uninit(resolve_type(module, args[0], self));
         }
       }
-      u32 target_module = kNoModule;
+      u32 target_module = NO_MODULE;
       std::string_view target_name;
       if (!resolve_type_path(module, node.payload.get<ast::TypePath>().path,
                              target_module, target_name)) {
@@ -668,7 +670,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
       }
       if (entry == nullptr) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerUnknownType, node.span,
+            bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_TYPE, node.span,
                      "'{}' is not a type", target_name);
         (void)index;
         return error_type();
@@ -678,7 +680,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
       if (param_count == 0) {
         if (arg_count != 0) {
           const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerGenericArguments,
+              bag.emit(diag::Severity::Error, ANALYZER_GENERIC_ARGUMENTS,
                        node.span, "generic arguments are not supported");
           (void)index;
           return error_type();
@@ -687,7 +689,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
       }
       if (arg_count != param_count) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerArityMismatch, node.span,
+            bag.emit(diag::Severity::Error, ANALYZER_ARITY_MISMATCH, node.span,
                      "'{}' expects {} argument{}", target_name, param_count,
                      param_count == 1 ? "" : "s");
         (void)index;
@@ -730,8 +732,8 @@ bool Checker::check_intrinsic_signature(u32 module,
   std::vector<ir::TypeIdx> expected;
   ir::TypeIdx expected_ret = builder.primitive(ir::TypeTag::Void);
   const auto wrong = [&]() {
-    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
-                               intrinsic.name.span,
+    const u32 index = bag.emit(diag::Severity::Error,
+                               ANALYZER_INVALID_OPERATION, intrinsic.name.span,
                                "intrinsic '{}' has the wrong signature", name);
     (void)index;
     return false;
@@ -899,7 +901,7 @@ void Checker::process_module(u32 module) {
             node.payload.get<ast::ItemIntrinsic>();
         if (!is_known_intrinsic(intrinsic.name.name)) {
           const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerUnknownIntrinsic,
+              bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_INTRINSIC,
                        intrinsic.name.span, "unknown intrinsic '{}'",
                        intrinsic.name.name);
           (void)index;
@@ -932,7 +934,7 @@ void Checker::process_module(u32 module) {
         for (const ast::ItemFnParam& param : intrinsic.params) {
           if (param.is_comp) {
             const u32 index =
-                bag.emit(diag::Severity::Error, kAnalyzerInvalidComp,
+                bag.emit(diag::Severity::Error, ANALYZER_INVALID_COMP,
                          ast.patterns[param.pattern].span,
                          "`comp` parameters on intrinsics are not supported");
             (void)index;
@@ -982,11 +984,11 @@ void Checker::process_module(u32 module) {
           if (!self_node.payload.get<ast::TypePath>().args.empty() &&
               node.payload.get<ast::ItemImpl>().params.empty()) {
             const u32 index = bag.emit(
-                diag::Severity::Error, kAnalyzerGenericArguments,
+                diag::Severity::Error, ANALYZER_GENERIC_ARGUMENTS,
                 self_node.span, "generic impl blocks are not supported");
             (void)index;
           } else {
-            u32 target_module = kNoModule;
+            u32 target_module = NO_MODULE;
             std::string_view target_name;
             if (resolve_type_path(module,
                                   self_node.payload.get<ast::TypePath>().path,
@@ -1004,15 +1006,15 @@ void Checker::process_module(u32 module) {
                 }
               } else {
                 const u32 index = bag.emit(
-                    diag::Severity::Error, kAnalyzerUnknownType, self_node.span,
-                    "inherent impl requires a nominal type");
+                    diag::Severity::Error, ANALYZER_UNKNOWN_TYPE,
+                    self_node.span, "inherent impl requires a nominal type");
                 (void)index;
               }
             }
           }
         } else {
           const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerUnknownType,
+              bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_TYPE,
                        self_node.span, "inherent impl requires a nominal type");
           (void)index;
         }
@@ -1061,8 +1063,8 @@ bool Checker::check_drop_signature(u32 module,
                                    const CheckedModule::FnSig& sig,
                                    CheckedModule::ReceiverKind receiver,
                                    ast::ItemIdx item) {
-  static constexpr std::string_view kDrop = "drop";
-  if (sig.name != kDrop || receiver == CheckedModule::ReceiverKind::None) {
+  static constexpr std::string_view DROP = "drop";
+  if (sig.name != DROP || receiver == CheckedModule::ReceiverKind::None) {
     return false;
   }
   const ast::Ident& name = ast.items[item].payload.get<ast::ItemFn>().name;
@@ -1071,7 +1073,7 @@ bool Checker::check_drop_signature(u32 module,
                      tag_of(sig.ret) == ir::TypeTag::Void;
   if (!valid) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerBadDropSignature, name.span,
+        bag.emit(diag::Severity::Error, ANALYZER_BAD_DROP_SIGNATURE, name.span,
                  "destructor must be 'fn drop(self: Self)' returning nothing");
     (void)index;
     return false;
@@ -1080,7 +1082,7 @@ bool Checker::check_drop_signature(u32 module,
     // `Copy` is structural, so a Copy type has no owned resource for a
     // destructor to release; a copy of it would be dropped too.
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerDropOnCopy, name.span,
+        bag.emit(diag::Severity::Error, ANALYZER_DROP_ON_COPY, name.span,
                  "type is Copy because all of its fields are, so it cannot "
                  "have a destructor");
     (void)index;
@@ -1168,7 +1170,7 @@ CheckedModule::DropGlue Checker::find_drop_glue(ir::TypeIdx type) {
   // A generic type reaches its destructor through `impl<T> Name<T>`,
   // which only exists once instantiated.
   const CheckedModule::MethodInfo* method =
-      lookup_method(type, "drop", kNoModule, diag::Span{});
+      lookup_method(type, "drop", NO_MODULE, diag::Span{});
   if (method == nullptr) {
     return {};
   }
@@ -1427,7 +1429,7 @@ ir::TypeIdx Checker::unify(ir::TypeIdx expected,
                                       : ir::TypeIdx::invalid();
   if (uninit_side.is_valid()) {
     const u32 index = bag.emit(
-        diag::Severity::Error, kAnalyzerTypeMismatch, span,
+        diag::Severity::Error, ANALYZER_TYPE_MISMATCH, span,
         "uninitialized value used as '{}'; release it with "
         "'uninit_assume' once written",
         pretty_tag(tag_of(uninit_side == expected ? actual : expected)));
@@ -1435,7 +1437,7 @@ ir::TypeIdx Checker::unify(ir::TypeIdx expected,
     return error_type();
   }
   const u32 index =
-      bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, span,
+      bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH, span,
                "type mismatch in {}: expected '{}', found '{}'", what,
                pretty_tag(tag_of(expected)), pretty_tag(tag_of(actual)));
   (void)index;
@@ -1467,7 +1469,7 @@ bool Checker::classify_suffix(std::string_view spelling,
     ir::TypeTag tag;
     bool is_float;
   };
-  constexpr Suffix kSuffixes[] = {
+  constexpr Suffix SUFFIXES[] = {
       {"isize", TT::I64, false}, {"usize", TT::U64, false},
       {"i8", TT::I8, false},     {"i16", TT::I16, false},
       {"i32", TT::I32, false},   {"i64", TT::I64, false},
@@ -1475,7 +1477,7 @@ bool Checker::classify_suffix(std::string_view spelling,
       {"u32", TT::U32, false},   {"u64", TT::U64, false},
       {"f32", TT::F32, true},    {"f64", TT::F64, true},
   };
-  for (const Suffix& suffix : kSuffixes) {
+  for (const Suffix& suffix : SUFFIXES) {
     if (spelling.size() > suffix.text.size() &&
         spelling.substr(spelling.size() - suffix.text.size()) == suffix.text) {
       tag = suffix.tag;
@@ -1500,7 +1502,7 @@ bool Checker::classify_suffix(std::string_view spelling,
     return false;
   }
   const u32 index =
-      bag.emit(diag::Severity::Error, kAnalyzerUnsupportedType, span,
+      bag.emit(diag::Severity::Error, ANALYZER_UNSUPPORTED_TYPE, span,
                "unsupported literal suffix '{}'", spelling.substr(alpha));
   (void)index;
   tag = TT::Error;
@@ -1528,7 +1530,7 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
     }
     case LK::Char: {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerUnsupportedType, lit.span,
+          bag.emit(diag::Severity::Error, ANALYZER_UNSUPPORTED_TYPE, lit.span,
                    "character literals need the core Char type (deferred)");
       (void)index;
       return error_type();
@@ -1543,7 +1545,7 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
       }
       if (is_float) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, lit.span,
+            bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH, lit.span,
                      "float suffix on an integer literal");
         (void)index;
         return error_type();
@@ -1568,7 +1570,7 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
       }
       if (has_suffix && !is_float_tag(tag)) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, lit.span,
+            bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH, lit.span,
                      "integer suffix on a float literal");
         (void)index;
         return error_type();
@@ -1594,7 +1596,7 @@ void Checker::validate_cycles(const ir::Storage& storage) {
     std::vector<ir::TypeIdx> stack;
     if (has_value_cycle(entry.type, stack, storage)) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerRecursiveType, entry.span,
+          bag.emit(diag::Severity::Error, ANALYZER_RECURSIVE_TYPE, entry.span,
                    "recursive type '{}' without indirection", entry.name);
       (void)index;
     }
@@ -1605,7 +1607,7 @@ void Checker::validate_cycles(const ir::Storage& storage) {
     }
     std::vector<ir::TypeIdx> stack;
     if (has_value_cycle(instance.type, stack, storage)) {
-      const u32 index = bag.emit(diag::Severity::Error, kAnalyzerRecursiveType,
+      const u32 index = bag.emit(diag::Severity::Error, ANALYZER_RECURSIVE_TYPE,
                                  nominals[instance.nominal].span,
                                  "recursive type '{}' without indirection",
                                  nominals[instance.nominal].name);
@@ -1741,7 +1743,7 @@ bool Checker::find_variant(u32 module,
     return false;
   }
   if (matches.size() > 1) {
-    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
+    const u32 index = bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
                                span, "ambiguous variant '{}'", name);
     (void)index;
     return false;
@@ -1799,7 +1801,7 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
       if (target.kind != ast::TypeKind::Path) {
         continue;
       }
-      u32 target_module = kNoModule;
+      u32 target_module = NO_MODULE;
       std::string_view target_name;
       if (!resolve_type_path(m, target.payload.get<ast::TypePath>().path,
                              target_module, target_name)) {
@@ -1980,11 +1982,11 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
     return nullptr;
   }
   modules[module].functions.push_back(
-      {fn_name(item), sig_params, ret, item, kNoInst});
+      {fn_name(item), sig_params, ret, item, NO_INST});
   const u32 sig_index = static_cast<u32>(modules[module].functions.size()) - 1;
   // Claim a slot in the shared instantiation numbering before checking
   // the body, so recursive calls key the same context.
-  fn_instances.push_back(FnInstance{item, module, args, sig_index, kNoInst});
+  fn_instances.push_back(FnInstance{item, module, args, sig_index, NO_INST});
   const u32 inst = static_cast<u32>(inst_numbering.size());
   inst_numbering.emplace_back(base::kInvalidIdx);
   fn_instances.back().inst = inst;
@@ -2020,7 +2022,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   const std::span<const ast::Ident> params = fn_generic_params(item);
   if (explicit_args.size() != params.size() && !explicit_args.empty()) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerArityMismatch, span,
+        bag.emit(diag::Severity::Error, ANALYZER_ARITY_MISMATCH, span,
                  "'{}' expects {} type argument{}", fn_name(item),
                  params.size(), params.size() == 1 ? "" : "s");
     (void)index;
@@ -2047,7 +2049,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
     const ir::TypeTag tag = builder.types()[actual.idx].tag;
     if (tag != ir::TypeTag::Ref && tag != ir::TypeTag::MutRef) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
+          bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, span,
                    "'{}' needs a reference to bind its type "
                    "argument",
                    fn_name(item));
@@ -2060,7 +2062,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
       bound_type = uninit_payload(bound_type);
       if (!bound_type.is_valid()) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
+            bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, span,
                      "'{}' needs uninitialized storage to bind its type "
                      "argument",
                      fn_name(item));
@@ -2073,7 +2075,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   for (const ir::TypeIdx arg : bound) {
     if (!arg.is_valid()) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
+          bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, span,
                    "cannot infer the type arguments of '{}'; add them with "
                    "'{}::<T>(...)'",
                    fn_name(item), fn_name(item));
@@ -2238,7 +2240,7 @@ bool Checker::resolve_value_path(u32 module,
       out.kind = PathValue::Kind::Type;
       return true;
     }
-    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
+    const u32 index = bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
                                node.span, "unresolved value '{}'", name);
     (void)index;
     return false;
@@ -2247,11 +2249,11 @@ bool Checker::resolve_value_path(u32 module,
     const std::string_view head = node.segments[0].name;
     const std::string_view member = node.segments[1].name;
     const u32 child = (head == "package" || head == "self" || head == "super")
-                          ? kNoModule
+                          ? NO_MODULE
                           : find_child_module(module, head);
-    if (child != kNoModule || head == "package" || head == "self" ||
+    if (child != NO_MODULE || head == "package" || head == "self" ||
         head == "super") {
-      u32 target = kNoModule;
+      u32 target = NO_MODULE;
       if (!walk_module_prefix(module, path, "value", target)) {
         return false;
       }
@@ -2279,7 +2281,7 @@ bool Checker::resolve_value_path(u32 module,
                        : PathValue::Kind::TupleVariant;
         return true;
       }
-      const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
+      const u32 index = bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
                                  node.span, "unresolved value '{}'", member);
       (void)index;
       return false;
@@ -2315,7 +2317,7 @@ bool Checker::resolve_value_path(u32 module,
         // `Name::<T>::member` names the member of one instantiation.
         if (type_args.empty()) {
           const u32 index = bag.emit(
-              diag::Severity::Error, kAnalyzerGenericArguments, node.span,
+              diag::Severity::Error, ANALYZER_GENERIC_ARGUMENTS, node.span,
               "'{}' needs type arguments to name an associated "
               "function; write '{}::<T>::{}'",
               head, head, member);
@@ -2335,7 +2337,7 @@ bool Checker::resolve_value_path(u32 module,
         self = intern_nominal(*nominal);
       } else {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerGenericArguments,
+            bag.emit(diag::Severity::Error, ANALYZER_GENERIC_ARGUMENTS,
                      node.span, "'{}' takes no type arguments", head);
         (void)index;
         return false;
@@ -2350,12 +2352,12 @@ bool Checker::resolve_value_path(u32 module,
       }
     }
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerUnknownValue, node.span,
+        bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE, node.span,
                  "unresolved value '{}::{}'", head, member);
     (void)index;
     return false;
   }
-  u32 target = kNoModule;
+  u32 target = NO_MODULE;
   if (!walk_module_prefix(module, path, "value", target)) {
     return false;
   }
@@ -2370,7 +2372,7 @@ bool Checker::resolve_value_path(u32 module,
     out.function = fn;
     return true;
   }
-  const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
+  const u32 index = bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
                              node.span, "unresolved value '{}'", member);
   (void)index;
   return false;
@@ -2403,11 +2405,11 @@ bool Checker::resolve_variant_path(u32 module,
     const std::string_view head = node.segments[0].name;
     const std::string_view member = node.segments[1].name;
     const u32 child = (head == "package" || head == "self" || head == "super")
-                          ? kNoModule
+                          ? NO_MODULE
                           : find_child_module(module, head);
-    if (child != kNoModule || head == "package" || head == "self" ||
+    if (child != NO_MODULE || head == "package" || head == "self" ||
         head == "super") {
-      u32 target = kNoModule;
+      u32 target = NO_MODULE;
       if (!walk_module_prefix(module, path, "value", target)) {
         return false;
       }
@@ -2478,12 +2480,12 @@ NominalEntry* Checker::resolve_struct_path(u32 module, ast::PathIdx path) {
       return nominal;
     }
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerUnknownValue, node.span,
+        bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE, node.span,
                  "unresolved struct '{}'", node.segments[0].name);
     (void)index;
     return nullptr;
   }
-  u32 target = kNoModule;
+  u32 target = NO_MODULE;
   if (!walk_module_prefix(module, path, "value", target)) {
     return nullptr;
   }
@@ -2493,7 +2495,7 @@ NominalEntry* Checker::resolve_struct_path(u32 module, ast::PathIdx path) {
     return nominal;
   }
   const u32 index =
-      bag.emit(diag::Severity::Error, kAnalyzerUnknownValue, node.span,
+      bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE, node.span,
                "unresolved struct '{}'", node.segments.back().name);
   (void)index;
   return nullptr;
@@ -2567,7 +2569,7 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
     const bool refutable = bind_pattern(module, param.pattern, type);
     bind_comp_known = false;
     if (refutable) {
-      const u32 index = bag.emit(diag::Severity::Error, kAnalyzerRefutableLet,
+      const u32 index = bag.emit(diag::Severity::Error, ANALYZER_REFUTABLE_LET,
                                  ast.patterns[param.pattern].span,
                                  "refutable pattern in function parameter");
       (void)index;
@@ -2583,7 +2585,7 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
 void Checker::check_main(u32 module, ast::ItemIdx fn) {
   const ast::ItemNode& node = ast.items[fn];
   if (!node.payload.get<ast::ItemFn>().params.empty()) {
-    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerBadReturn,
+    const u32 index = bag.emit(diag::Severity::Error, ANALYZER_BAD_RETURN,
                                node.span, "'main' must take no parameters");
     (void)index;
   }
@@ -2614,7 +2616,7 @@ void Checker::check_main(u32 module, ast::ItemIdx fn) {
     }
   }
   const u32 index =
-      bag.emit(diag::Severity::Error, kAnalyzerBadReturn, node.span,
+      bag.emit(diag::Severity::Error, ANALYZER_BAD_RETURN, node.span,
                "'main' must return '()', 'i32', or a two-variant enum "
                "whose first variant holds '()'");
   (void)index;
@@ -2649,7 +2651,7 @@ void Checker::check_bodies() {
               ast.types[node.payload.get<ast::ItemImpl>().type];
           if (self_node.kind == ast::TypeKind::Path &&
               self_node.payload.get<ast::TypePath>().args.empty()) {
-            u32 target_module = kNoModule;
+            u32 target_module = NO_MODULE;
             std::string_view target_name;
             if (resolve_type_path(m,
                                   self_node.payload.get<ast::TypePath>().path,
@@ -2687,7 +2689,7 @@ void Checker::check_bodies() {
           const ir::TypeIdx declared = resolve_type(m, type, nullptr);
           if (is_const && ast.exprs[init].kind != ast::ExprKind::Literal) {
             const u32 index =
-                bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION,
                          ast.exprs[init].span,
                          "const '{}' admits literal expressions only", name);
             (void)index;
@@ -2696,7 +2698,7 @@ void Checker::check_bodies() {
             std::vector<u32> visited;
             if (contains_mut_ref(declared, visited)) {
               const u32 index =
-                  bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                  bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION,
                            ast.types[type].span,
                            "static '{}' must not contain '&mut'", name);
               (void)index;
@@ -2720,14 +2722,36 @@ CheckedModule Checker::empty_module(u32 module) {
   checked.module = module;
   return checked;
 }
-diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
-                                             ir::PointerWidth width,
-                                             ast::AstArena& ast,
-                                             diag::DiagBag& bag) {
+base::Result<CheckedPackage, diag::Reported> check_package(
+    const ModuleTree& tree,
+    ir::PointerWidth width,
+    ast::AstArena& ast,
+    diag::DiagBag& bag) {
+  // Consumer precondition: the tree shape and every arena index the
+  // checker dereferences are validated before any pass runs, so
+  // hand-built trees fail with a diagnostic instead of UB.
+  if (base::Result<void, ModuleTreeError> verified = verify_module_tree(tree);
+      verified.is_err()) {
+    const u32 index =
+        bag.emit(diag::Severity::Error, ANALYZER_INVALID_MODULE_TREE,
+                 "internal error: invalid module tree: {}",
+                 describe_module_tree_error(std::move(verified).unwrap_err()));
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  if (base::Result<void, ast::VerifyError> verified = ast::verify_file(ast);
+      verified.is_err()) {
+    const u32 index =
+        bag.emit(diag::Severity::Error, ANALYZER_INVALID_MODULE_TREE,
+                 "internal error: invalid syntax tree: {}",
+                 ast::describe_verify_error(std::move(verified).unwrap_err()));
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
   Checker checker{tree, width, ast, bag};
   checker.uninit_name_id = checker.interner.intern("MaybeUninit");
   checker.register_nominals();
-  checker.parents.assign(tree.modules.size(), kNoModule);
+  checker.parents.assign(tree.modules.size(), NO_MODULE);
   for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
     for (const ModuleNode* child : tree.modules[m]->children) {
       for (u32 c = 0; c < static_cast<u32>(tree.modules.size()); ++c) {
@@ -2748,8 +2772,20 @@ diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
   // while the type builder is still live and before the type table is
   // moved out.
   checker.resolve_drops();
-  ir::Storage storage = std::move(checker.builder).build();
-  checker.validate_cycles(storage);
+  base::Result<ir::VerifiedStorage, ir::VerifyError> built =
+      std::move(checker.builder).build();
+  if (built.is_err()) {
+    const ir::VerifyError error = std::move(built).unwrap_err();
+    const u32 index =
+        bag.emit(diag::Severity::Error, ANALYZER_INVALID_IR, diag::Span{},
+                 "internal error: checked types failed "
+                 "verification ({} at index {})",
+                 ir::format_as(error.kind), error.index);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  ir::VerifiedStorage storage = std::move(built).unwrap();
+  checker.validate_cycles(*storage);
   CheckedPackage package{tree,
                          std::move(storage),
                          std::move(checker.modules),

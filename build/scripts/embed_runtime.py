@@ -22,7 +22,7 @@ def emit_array(out, symbol, data: bytes):
         chunk = data[offset : offset + 12]
         out.write("    " + ", ".join(f"0x{b:02x}" for b in chunk) + ",\n")
     out.write("};\n")
-    out.write(f"const u64 {symbol}_len = {len(data)}ULL;\n\n")
+    out.write(f"const u64 {symbol}_LEN = {len(data)}ULL;\n\n")
 
 
 def main():
@@ -33,8 +33,8 @@ def main():
 
     runtime_dir = Path(args.runtime_dir)
     files = {
-        "kAlcyRuntimeHeader": runtime_dir / "alcy_runtime.h",
-        "kAlcyRuntimeSource": runtime_dir / "alcy_runtime.c",
+        "ALCY_RUNTIME_HEADER": runtime_dir / "alcy_runtime.h",
+        "ALCY_RUNTIME_SOURCE": runtime_dir / "alcy_runtime.c",
     }
     with open(args.output, "w", encoding="utf-8") as out:
         out.write(

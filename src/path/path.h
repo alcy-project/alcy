@@ -16,12 +16,12 @@ namespace path {
 // '/' on every platform (valid on Windows file APIs too), keeping lockfiles
 // and diagnostics portable. Never branch this per platform: mixing native
 // separators reintroduces mismatched spellings and invalid TOML escapes.
-constexpr char kDefaultPathSeparator = '/';
-// Folded into kDefaultPathSeparator on Windows; a valid filename character on
+constexpr char DEFAULT_PATH_SEPARATOR = '/';
+// Folded into DEFAULT_PATH_SEPARATOR on Windows; a valid filename character on
 // POSIX, so it is only ever treated as a separator under IS_OS_WIN.
-constexpr char kWindowsPathSeparator = '\\';
+constexpr char WINDOWS_PATH_SEPARATOR = '\\';
 
-constexpr std::string_view kSourceExtension = ".al";
+constexpr std::string_view SOURCE_EXTENSION = ".al";
 
 enum class PathError : u8 { ContainsNul };
 

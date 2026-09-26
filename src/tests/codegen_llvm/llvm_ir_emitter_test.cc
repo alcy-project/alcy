@@ -25,7 +25,7 @@
 
 namespace codegen_llvm {
 
-ir::Storage hello_world_ir(str::StringInterner* interner) {
+ir::VerifiedStorage hello_world_ir(str::StringInterner* interner) {
   ir::StorageBuilder builder;
 
   const str::StringPoolId main_str = interner->intern("main");
@@ -130,7 +130,7 @@ ir::Storage hello_world_ir(str::StringInterner* interner) {
       .blocks = {block, 1},
   });
 
-  return std::move(builder).build();
+  return std::move(builder).build().unwrap();
 }
 
 TEST_CASE("Emit Hello World") {
@@ -139,7 +139,7 @@ TEST_CASE("Emit Hello World") {
       std::make_unique<llvm::Module>("llvm_ir_emitter_test", context);
 
   str::StringInterner interner(mem::page_size());
-  ir::Storage storage = hello_world_ir(&interner);
+  ir::VerifiedStorage storage = hello_world_ir(&interner);
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         ir::PointerWidth::W64);
 
@@ -261,7 +261,7 @@ TEST_CASE("Emit struct and array calls") {
       .blocks = {block2, 1},
   });
 
-  ir::Storage storage = std::move(builder).build();
+  ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         ir::PointerWidth::W64);
 
@@ -426,7 +426,7 @@ TEST_CASE("Emit compute instructions") {
       .blocks = {block, 1},
   });
 
-  ir::Storage storage = std::move(builder).build();
+  ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         ir::PointerWidth::W64);
 
@@ -569,7 +569,7 @@ TEST_CASE("Emit control flow") {
       .blocks = sw_blocks.finish(),
   });
 
-  ir::Storage storage = std::move(builder).build();
+  ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         ir::PointerWidth::W64);
 
@@ -797,7 +797,7 @@ TEST_CASE("Emit memory instructions") {
       .blocks = {block, 1},
   });
 
-  ir::Storage storage = std::move(builder).build();
+  ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         ir::PointerWidth::W64);
 
@@ -872,7 +872,7 @@ TEST_CASE("Emit ignores Drop markers") {
       .blocks = {block, 1},
   });
 
-  ir::Storage storage = std::move(builder).build();
+  ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         ir::PointerWidth::W64);
 

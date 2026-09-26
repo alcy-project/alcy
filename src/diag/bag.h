@@ -19,15 +19,22 @@
 
 namespace diag {
 
-// Marker error type for fallible phase results: when a phase bails, details
-// are already in the bag, so the error itself carries nothing.
-struct Fatal {};
+// Marker error type for APIs that report failure through a DiagBag: the
+// Result conveys only success or failure because the details are already
+// recorded in the bag. Zero-sized, so it costs nothing to return.
+struct Reported {};
 
-// Conventional phase result: T on success, Fatal (details in DiagBag) on
-// unrecoverable failure. Recoverable diagnostics never fail the result;
-// the cli decides the exit code from DiagBag::has_errors().
-template <typename T>
-using Fallible = base::Result<T, Fatal>;
+// Structured failure for DiagBag itself: a diagnostic index that does not
+// name an emitted entry.
+enum class BagError : u8 {
+  InvalidIndex,
+};
+
+// Diagnostic-side-channel convention: a phase that accumulates diagnostics
+// returns base::Result<T, Reported>. Recoverable diagnostics never fail
+// the result; the cli decides the exit code from DiagBag::has_errors().
+// Failures with programmatically actionable details use a module-local
+// error type instead.
 
 // Arena-backed bag of diagnostics gathered during one compilation phase.
 //
@@ -64,16 +71,18 @@ class DiagBag {
   }
 
   // Attaches secondary labels to a previously emitted diagnostic. The labels
-  // array is copied into the arena.
-  void label(u32 index, std::initializer_list<Label> labels);
+  // array is copied into the arena. Fails when `index` does not name an
+  // emitted diagnostic.
+  base::Result<void, BagError> label(u32 index,
+                                     std::initializer_list<Label> labels);
 
-  Diagnostic& at(u32 index) {
-    DCHECK_LT(index, size_);
-    return entries_[index];
-  }
-  const Diagnostic& at(u32 index) const {
-    DCHECK_LT(index, size_);
-    return entries_[index];
+  // Checked lookup: returns nullptr when `index` does not name an emitted
+  // diagnostic.
+  const Diagnostic* at(u32 index) const {
+    if (index >= size_) {
+      return nullptr;
+    }
+    return &entries_[index];
   }
 
   bool has_errors() const { return error_count_ > 0; }
@@ -123,7 +132,7 @@ class DiagBag {
   u32 error_count_ = 0;
   u32 warning_count_ = 0;
 
-  static constexpr u32 kInitialCapacity = 8;
+  static constexpr u32 INITIAL_CAPACITY = 8;
 };
 
 }  // namespace diag

@@ -3,6 +3,7 @@
 
 #include "pipeline/pipeline.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -33,12 +34,15 @@ struct Fixture {
   Fixture() { arena.reserve(1u << 20); }
 };
 
-diag::SourceText fetch_source(source::FileId id, const void* ctx) {
+std::optional<diag::SourceText> fetch_source(source::FileId id,
+                                             const void* ctx) {
   const auto* sources = static_cast<const source::SourceManager*>(ctx);
-  if (id >= sources->file_count()) {
-    return {};
+  const std::optional<std::string_view> name = sources->name(id);
+  const std::optional<std::string_view> bytes = sources->bytes(id);
+  if (!name.has_value() || !bytes.has_value()) {
+    return std::nullopt;
   }
-  return {sources->name(id), sources->bytes(id)};
+  return diag::SourceText{*name, *bytes};
 }
 
 }  // namespace
@@ -55,7 +59,7 @@ TEST_CASE("Discover finds nested sources in sorted order") {
   }
 
   Fixture f;
-  diag::Fallible<DiscoveredSources> result =
+  base::Result<DiscoveredSources, diag::Reported> result =
       discover_sources(dir.path(), f.sources, f.bag);
   CHECK(result.is_ok());
   if (!result.is_ok()) {
@@ -68,9 +72,12 @@ TEST_CASE("Discover finds nested sources in sorted order") {
     return;
   }
   // Sorted: a.al, main.al, util.al.
-  CHECK(f.sources.name(discovered.files[0]) == dir.join("a.al"));
-  CHECK(f.sources.name(discovered.files[1]) == dir.join("main.al"));
-  CHECK(f.sources.name(discovered.files[2]) == dir.join("util.al"));
+  CHECK(f.sources.name(discovered.files[0]).value_or(std::string_view{}) ==
+        dir.join("a.al"));
+  CHECK(f.sources.name(discovered.files[1]).value_or(std::string_view{}) ==
+        dir.join("main.al"));
+  CHECK(f.sources.name(discovered.files[2]).value_or(std::string_view{}) ==
+        dir.join("util.al"));
 }
 
 TEST_CASE("Discover reports missing directories") {
@@ -95,14 +102,14 @@ TEST_CASE("Compile project loads every package") {
   }
 
   Fixture f;
-  diag::Fallible<std::vector<pkg::ResolvedPackage>> resolved =
+  base::Result<std::vector<pkg::ResolvedPackage>, diag::Reported> resolved =
       pkg::resolve_package(dir.join("root"), f.sources, f.arena, f.bag);
   CHECK(resolved.is_ok());
   if (!resolved.is_ok()) {
     return;
   }
 
-  diag::Fallible<ProjectBuild> built =
+  base::Result<ProjectBuild, diag::Reported> built =
       compile_project(std::move(resolved).unwrap(), f.sources, f.bag);
   CHECK(built.is_ok());
   if (!built.is_ok()) {
@@ -133,16 +140,20 @@ TEST_CASE("Source fetch feeds the renderer") {
 
   const u32 index =
       f.bag.emit(diag::Severity::Error, 1, diag::Span{id, 4, 1}, "bad token");
-  const diag::Diagnostic& diag = f.bag.at(index);
+  const diag::Diagnostic* const diag = f.bag.at(index);
+  CHECK(diag != nullptr);
+  if (diag == nullptr) {
+    return;
+  }
 
   fmt::memory_buffer out;
-  diag::render(diag, out, {}, fetch_source, &f.sources);
+  diag::render(*diag, out, {}, fetch_source, &f.sources);
   const std::string rendered(out.data(), out.size());
   CHECK(rendered.find(":1:5\n") != std::string::npos);
   CHECK(rendered.find("let y = 2;") != std::string::npos);
 
-  diag::SourceText unknown = fetch_source(999, &f.sources);
-  CHECK(unknown.bytes.empty());
+  const std::optional<diag::SourceText> unknown = fetch_source(999, &f.sources);
+  CHECK(!unknown.has_value());
 }
 
 }  // namespace pipeline

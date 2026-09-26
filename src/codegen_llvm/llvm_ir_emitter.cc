@@ -13,11 +13,7 @@
 #include "debug/dcheck.h"
 #include "debug/dlog.h"
 #include "debug/fatal.h"
-#include "diag/diagnostic.h"
-#include "diag/render.h"
-#include "fmt/format.h"
 #include "fpag/base/numeric.h"
-#include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"
 #include "ir/block.h"
 #include "ir/common.h"
@@ -29,7 +25,6 @@
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
-#include "ir/verifier.h"
 #include "symbol/mangle.h"
 
 #if BUILD_FLAG(IS_DEBUG)
@@ -39,7 +34,7 @@
 namespace codegen_llvm {
 
 LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
-                             ir::Storage&& storage,
+                             ir::VerifiedStorage storage,
                              str::StringInterner* interner,
                              ir::PointerWidth width)
     : module_(module),
@@ -56,7 +51,7 @@ void LlvmIrEmitter::check_state() {
 }
 
 llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
-  const ir::TypeNode& node = storage_.types()[idx];
+  const ir::TypeNode& node = storage_->types()[idx];
   const ir::TypeTag tag = node.tag;
   using T = ir::TypeTag;
 
@@ -92,8 +87,8 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
     case T::MutRef: return builder_->getPtrTy();
     case T::Struct: {
       const ir::StructType& struct_type =
-          storage_.struct_types()[node.as_struct()];
-      llvm::SmallVector<llvm::Type*, kFunctionArgsSooSize> field_types;
+          storage_->struct_types()[node.as_struct()];
+      llvm::SmallVector<llvm::Type*, FUNCTION_ARGS_SOO_SIZE> field_types;
       field_types.reserve(struct_type.fields.size());
       for (const ir::TypeIdx field : struct_type.fields) {
         field_types.emplace_back(type(field));
@@ -102,12 +97,14 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
       return llvm::StructType::get(module_->getContext(), field_types);
     }
     case T::Array: {
-      const ir::ArrayType& array_type = storage_.array_types()[node.as_array()];
+      const ir::ArrayType& array_type =
+          storage_->array_types()[node.as_array()];
       return llvm::ArrayType::get(type(array_type.element), array_type.count);
     }
     case T::Tuple: {
-      const ir::TupleType& tuple_type = storage_.tuple_types()[node.as_tuple()];
-      llvm::SmallVector<llvm::Type*, kFunctionArgsSooSize> element_types;
+      const ir::TupleType& tuple_type =
+          storage_->tuple_types()[node.as_tuple()];
+      llvm::SmallVector<llvm::Type*, FUNCTION_ARGS_SOO_SIZE> element_types;
       element_types.reserve(tuple_type.elements.size());
       for (const ir::TypeIdx element : tuple_type.elements) {
         element_types.emplace_back(type(element));
@@ -130,7 +127,7 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
       // module has no DataLayout this early, so this can only be checked
       // once one is installed.
       const ir::TypeLayout expected =
-          ir::type_layout(storage_.state(), idx, width_);
+          ir::type_layout(storage_->state(), idx, width_);
       if (!module_->getDataLayout().isDefault()) {
         const llvm::DataLayout& dl = module_->getDataLayout();
         DCHECK_EQ(dl.getTypeAllocSize(slot).getFixedValue(), expected.size);
@@ -155,7 +152,7 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
 // module's DataLayout, because a type is built before the module has one.
 llvm::Type* LlvmIrEmitter::enum_payload_area_type(ir::TypeIdx idx) const {
   const ir::TypeLayout area =
-      ir::enum_payload_area(storage_.state(), idx, width_);
+      ir::enum_payload_area(storage_->state(), idx, width_);
   llvm::Type* carrier = builder_->getInt8Ty();
   u64 carrier_bytes = 1;
   if (area.align > 8) {
@@ -178,12 +175,12 @@ llvm::Type* LlvmIrEmitter::enum_payload_area_type(ir::TypeIdx idx) const {
 void LlvmIrEmitter::emit() && noexcept {
   check_state();
 
-  values_.resize_functions(storage_.functions().size());
-  values_.resize_registers(storage_.registers().size());
-  values_.resize_blocks(storage_.blocks().size());
-  values_.resize_immutables(storage_.immutables().size());
-  values_.resize_external_functions(storage_.external_functions().size());
-  values_.resize_alloca_types(storage_.registers().size());
+  values_.resize_functions(storage_->functions().size());
+  values_.resize_registers(storage_->registers().size());
+  values_.resize_blocks(storage_->blocks().size());
+  values_.resize_immutables(storage_->immutables().size());
+  values_.resize_external_functions(storage_->external_functions().size());
+  values_.resize_alloca_types(storage_->registers().size());
 
   setup_immutables();
   setup_external_functions();
@@ -192,8 +189,8 @@ void LlvmIrEmitter::emit() && noexcept {
   // calls resolve regardless of declaration order.
   llvm::Function* entry_function = nullptr;
   ir::TypeTag entry_return = ir::TypeTag::Void;
-  for (const ir::FunctionIdx function_idx : storage_.functions().idx_range()) {
-    const ir::Function& function = storage_.functions()[function_idx];
+  for (const ir::FunctionIdx function_idx : storage_->functions().idx_range()) {
+    const ir::Function& function = storage_->functions()[function_idx];
 
     llvm::Function* llvm_function = nullptr;
     if (entry_function == nullptr && is_entry_candidate(function)) {
@@ -203,15 +200,15 @@ void LlvmIrEmitter::emit() && noexcept {
       renamed.name = interner_->intern("alcy_main");
       llvm_function = create_function(renamed);
       entry_function = llvm_function;
-      entry_return = storage_.types()[function.meta.return_type.idx].tag;
+      entry_return = storage_->types()[function.meta.return_type.idx].tag;
     } else {
       llvm_function = create_function(function.meta);
     }
     values_.add_function(function_idx, llvm_function);
   }
   // PERF: Consider run this process concurrently.
-  for (const ir::FunctionIdx function_idx : storage_.functions().idx_range()) {
-    const ir::Function& function = storage_.functions()[function_idx];
+  for (const ir::FunctionIdx function_idx : storage_->functions().idx_range()) {
+    const ir::Function& function = storage_->functions()[function_idx];
     emit_function(values_.function(function_idx), function);
   }
   if (entry_function != nullptr) {
@@ -219,15 +216,9 @@ void LlvmIrEmitter::emit() && noexcept {
   }
 
 #if BUILD_FLAG(IS_DEBUG)
-  if (base::Result<void, ir::VerifyError> result = ir::verify_storage(storage_);
-      result.is_err()) [[unlikely]] {
-    const ir::VerifyError error = std::move(result).unwrap_err();
-    const diag::Diagnostic diag = ir::to_diagnostic(error);
-    fmt::memory_buffer rendered;
-    diag::render(diag, rendered);
-    DLOG("{}", std::string_view(rendered.data(), rendered.size()));
-    UNREACHABLE();
-  }
+  // Storage arrives verified (StorageBuilder::build is the only
+  // production path), so only the generated LLVM module is rechecked
+  // here; re-running the alcy verifier would repeat build-time work.
   if (llvm::verifyModule(*module_, &llvm::errs())) [[unlikely]] {
     DLOG("LLVM verify module failed");
     module_->print(llvm::errs(), nullptr);
@@ -251,13 +242,13 @@ void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
   // PHIs: lowering places one block parameter per declared parameter.
   unsigned arg_no = 0;
   for (const ir::BlockIdx block_idx : function.blocks) {
-    const ir::Block& block = storage_.blocks()[block_idx];
+    const ir::Block& block = storage_->blocks()[block_idx];
     llvm::BasicBlock* llvm_block = values_.block(block_idx);
     const bool is_entry = block_idx.idx == function.blocks.head().idx;
 
     builder_->SetInsertPoint(llvm_block);
     for (const ir::BlockParamIdx param_id : block.block_params) {
-      const ir::BlockParam& param = storage_.block_params()[param_id];
+      const ir::BlockParam& param = storage_->block_params()[param_id];
 
       if (is_entry) {
         values_.add_register(param.reg, llvm_function->getArg(arg_no++));
@@ -269,7 +260,7 @@ void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
   }
 
   for (const ir::BlockIdx block_idx : function.blocks) {
-    const ir::Block& block = storage_.blocks()[block_idx];
+    const ir::Block& block = storage_->blocks()[block_idx];
     builder_->SetInsertPoint(values_.block(block_idx));
     emit_block(block);
   }
@@ -288,7 +279,7 @@ void LlvmIrEmitter::emit_block(const ir::Block& block) {
   check_state();
 
   for (const ir::InstructionIdx instr_idx : block.instrs) {
-    const ir::Instruction& instr = storage_.instrs()[instr_idx];
+    const ir::Instruction& instr = storage_->instrs()[instr_idx];
     emit_instruction(instr);
   }
 }
@@ -371,7 +362,7 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
       // operands[0] = Target block
       // operands[1..N] = parameters
       DCHECK(!ops.empty());
-      const ir::Operand& target_op = storage_.operands()[ops.head()];
+      const ir::Operand& target_op = storage_->operands()[ops.head()];
       const ir::BlockIdx target_block_idx = target_op.as_block();
       llvm::BasicBlock* target_llvm_block = values_.block(target_block_idx);
       llvm::BasicBlock* current_llvm_block = builder_->GetInsertBlock();
@@ -379,15 +370,15 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
       builder_->CreateBr(target_llvm_block);
 
       // Add incoming values to target block phi nodes.
-      const ir::Block& target_block = storage_.blocks()[target_block_idx];
+      const ir::Block& target_block = storage_->blocks()[target_block_idx];
       for (const ir::BlockParamIdx param_idx : target_block.block_params) {
-        const ir::BlockParam& param = storage_.block_params()[param_idx];
+        const ir::BlockParam& param = storage_->block_params()[param_idx];
 
         auto* phi =
             llvm::cast<llvm::PHINode>(values_.register_value(param.reg));
 
         const ir::Operand& arg_op =
-            storage_.operands()[ops.head() + 1 + param_idx.idx];
+            storage_->operands()[ops.head() + 1 + param_idx.idx];
         llvm::Value* arg_val = resolve_operand_value(arg_op);
 
         phi->addIncoming(arg_val, current_llvm_block);
@@ -399,11 +390,11 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
       // block parameters in MVP.
       DCHECK(ops.size() == 3);
       llvm::Value* cond =
-          resolve_operand_value(storage_.operands()[ops.head()]);
+          resolve_operand_value(storage_->operands()[ops.head()]);
       llvm::BasicBlock* true_block =
-          values_.block(storage_.operands()[ops.head() + 1].as_block());
+          values_.block(storage_->operands()[ops.head() + 1].as_block());
       llvm::BasicBlock* false_block =
-          values_.block(storage_.operands()[ops.head() + 2].as_block());
+          values_.block(storage_->operands()[ops.head() + 2].as_block());
       builder_->CreateCondBr(cond, true_block, false_block);
       break;
     }
@@ -412,16 +403,16 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
       // Targets must not take block parameters in MVP.
       DCHECK(ops.size() >= 2);
       llvm::Value* value =
-          resolve_operand_value(storage_.operands()[ops.head()]);
+          resolve_operand_value(storage_->operands()[ops.head()]);
       llvm::BasicBlock* default_block =
-          values_.block(storage_.operands()[ops.head() + 1].as_block());
+          values_.block(storage_->operands()[ops.head() + 1].as_block());
       llvm::SwitchInst* switch_inst =
           builder_->CreateSwitch(value, default_block);
       for (u32 idx = 2; idx + 1 < ops.size(); idx += 2) {
         auto* case_value = llvm::cast<llvm::ConstantInt>(
-            resolve_operand_value(storage_.operands()[ops.head() + idx]));
-        llvm::BasicBlock* case_block =
-            values_.block(storage_.operands()[ops.head() + idx + 1].as_block());
+            resolve_operand_value(storage_->operands()[ops.head() + idx]));
+        llvm::BasicBlock* case_block = values_.block(
+            storage_->operands()[ops.head() + idx + 1].as_block());
         switch_inst->addCase(case_value, case_block);
       }
       break;
@@ -430,15 +421,15 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
       DCHECK(ops.size() >= 1);
 
       // Head is callee
-      const ir::Operand& callee_op = storage_.operands()[ops.head()];
+      const ir::Operand& callee_op = storage_->operands()[ops.head()];
       llvm::Function* callee_func = resolve_operand_function(callee_op);
 
-      llvm::SmallVector<llvm::Value*, kFunctionArgsSooSize> args;
+      llvm::SmallVector<llvm::Value*, FUNCTION_ARGS_SOO_SIZE> args;
       args.reserve(ops.size() - 1);
 
       // All ops except head are args
       for (u32 idx = 1; idx < ops.size(); ++idx) {
-        const ir::Operand& arg_op = storage_.operands()[ops.head() + idx];
+        const ir::Operand& arg_op = storage_->operands()[ops.head() + idx];
         args.push_back(resolve_operand_value(arg_op));
       }
 
@@ -454,7 +445,7 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
       if (ops.empty()) {
         builder_->CreateRetVoid();
       } else {
-        const ir::Operand& lhs = storage_.operands()[ops.head()];
+        const ir::Operand& lhs = storage_->operands()[ops.head()];
         builder_->CreateRet(resolve_operand_value(lhs));
       }
       break;
@@ -498,12 +489,12 @@ std::string LlvmIrEmitter::linkable_name(
   for (u32 i = 0; i < generics.size(); ++i) {
     signature.generics.emplace_back(generics.head().idx + i);
   }
-  return symbol::mangle(signature, storage_, *interner_);
+  return symbol::mangle(signature, *storage_, *interner_);
 }
 
 llvm::Function* LlvmIrEmitter::create_function(
     const ir::FunctionMeta& function_meta) const {
-  llvm::SmallVector<llvm::Type*, kFunctionArgsSooSize> parameter_types;
+  llvm::SmallVector<llvm::Type*, FUNCTION_ARGS_SOO_SIZE> parameter_types;
   parameter_types.reserve(function_meta.param_types.size());
   // DLOG("Function Name: {}, Param Count in Slice: {}",
   //      interner_->get(function_meta.name), function_meta.param_types.size());
@@ -558,10 +549,10 @@ llvm::Function* LlvmIrEmitter::resolve_operand_function(
 
 void LlvmIrEmitter::setup_immutables() {
   for (const ir::ImmutableIdx immutable_idx :
-       storage_.immutables().idx_range()) {
-    const ir::Immutable& immutable = storage_.immutables()[immutable_idx];
+       storage_->immutables().idx_range()) {
+    const ir::Immutable& immutable = storage_->immutables()[immutable_idx];
 
-    const ir::TypeTag tag = storage_.types()[immutable.type.idx].tag;
+    const ir::TypeTag tag = storage_->types()[immutable.type.idx].tag;
 
     if (ir::is_integer_type(tag)) {
       // TODO: Add i128, u128, i256, u256, and arbitrary bit support with
@@ -604,10 +595,10 @@ void LlvmIrEmitter::setup_immutables() {
 
 void LlvmIrEmitter::setup_external_functions() {
   for (ir::ExternalFunctionIdx function_idx(0);
-       function_idx.idx < storage_.external_functions().size();
+       function_idx.idx < storage_->external_functions().size();
        ++function_idx) {
     const ir::ExternalFunction& function =
-        storage_.external_functions()[function_idx];
+        storage_->external_functions()[function_idx];
 
     values_.add_external_function(function_idx, create_function(function.meta));
   }
@@ -620,7 +611,7 @@ bool LlvmIrEmitter::is_entry_candidate(const ir::Function& function) const {
   if (!function.meta.param_types.empty()) {
     return false;
   }
-  const ir::TypeTag ret = storage_.types()[function.meta.return_type.idx].tag;
+  const ir::TypeTag ret = storage_->types()[function.meta.return_type.idx].tag;
   return ret == ir::TypeTag::Void || ret == ir::TypeTag::I32 ||
          ret == ir::TypeTag::Enum;
 }

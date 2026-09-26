@@ -28,12 +28,12 @@
 
 namespace lower {
 
-// Diagnostic codes 4300-4319 are reserved for lowering.
-constexpr u32 kLowerUnsupported = 4300;
-constexpr u32 kLowerInternal = 4301;
-constexpr u32 kLowerUnreachable = 4302;
-constexpr u32 kLowerDropUnplaced = 4303;
-constexpr u32 kLowerDiscardedDestructor = 4304;
+// Diagnostic codes 5000-5099 are reserved for lowering.
+constexpr u32 LOWER_UNSUPPORTED = 5000;
+constexpr u32 LOWER_INTERNAL = 5001;
+constexpr u32 LOWER_UNREACHABLE = 5002;
+constexpr u32 LOWER_DROP_UNPLACED = 5003;
+constexpr u32 LOWER_DISCARDED_DESTRUCTOR = 5004;
 
 // A lowered value: either an SSA operand or the address of one.
 // Places stay in address form so moves and borrows observe origins.
@@ -118,8 +118,8 @@ class Lowerer {
     std::string name;
     std::vector<ir::TypeIdx> params;
     ir::TypeIdx ret = ir::TypeIdx(base::kInvalidIdx);
-    // Generic instantiation lowered under (kNoInst for plain code).
-    u32 inst = analyzer::kNoInst;
+    // Generic instantiation lowered under (NO_INST for plain code).
+    u32 inst = analyzer::NO_INST;
     // What the symbol names. A method and an associated function share
     // an item, so the kind comes from the signature, not the item.
     ir::SymbolKind kind = ir::SymbolKind::Free;
@@ -141,8 +141,8 @@ class Lowerer {
   u32 comp_call_depth_ = 0;
   // Instantiation under lowering (runtime) and under comp
   // evaluation; side-table lookups match these contexts.
-  u32 cur_inst_ = analyzer::kNoInst;
-  u32 comp_inst_ = analyzer::kNoInst;
+  u32 cur_inst_ = analyzer::NO_INST;
+  u32 comp_inst_ = analyzer::NO_INST;
 
   struct ExtEntry {
     std::string_view name;
@@ -335,8 +335,8 @@ class Lowerer {
 
   // Compile-time evaluation
 
-  static constexpr usize kCompStepBudget = 1u << 20;
-  static constexpr u32 kCompMaxCallDepth = 64;
+  static constexpr usize COMP_STEP_BUDGET = 1u << 20;
+  static constexpr u32 COMP_MAX_CALL_DEPTH = 64;
   static bool comp_is_signed(ir::TypeTag tag);
   static u32 comp_int_bytes(ir::TypeTag tag);
   static u64 comp_mask(ir::TypeTag tag);
@@ -463,7 +463,7 @@ class Lowerer {
   void run();
 
   ir::BlockParamIdxRange pending_block_params_;
-  ir::Storage finish() &&;
+  base::Result<ir::VerifiedStorage, ir::VerifyError> finish() &&;
 };
 
 }  // namespace lower

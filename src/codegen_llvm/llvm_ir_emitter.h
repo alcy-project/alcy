@@ -22,8 +22,12 @@ class LlvmIrEmitter {
   using IRBuilder =
       llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>;
 
+  // `storage` carries its verification proof: the emitter never
+  // sees unverified IR. Unreachable opcode and shape cases below
+  // rely on this; the only way to build a proof is
+  // StorageBuilder::build.
   LlvmIrEmitter(llvm::Module* module,
-                ir::Storage&& storage,
+                ir::VerifiedStorage storage,
                 str::StringInterner* interner,
                 ir::PointerWidth width);
   ~LlvmIrEmitter() = default;
@@ -72,13 +76,13 @@ class LlvmIrEmitter {
   void emit_entry(llvm::Function* entry_function, ir::TypeTag ret);
 
   llvm::Module* module_;
-  ir::Storage storage_;
+  ir::VerifiedStorage storage_;
   std::unique_ptr<IRBuilder> builder_;
   str::StringInterner* interner_;
   ir::PointerWidth width_;
   LlvmIrStorage values_;
 
-  static constexpr usize kFunctionArgsSooSize = 8;
+  static constexpr usize FUNCTION_ARGS_SOO_SIZE = 8;
 };
 
 }  // namespace codegen_llvm

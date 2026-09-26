@@ -27,12 +27,12 @@ ResultCode run_build(const CliConfig& config,
   const std::string_view raw_dir =
       config.target_dir.empty() ? "." : config.target_dir;
 
-  if (raw_dir.size() >= path::kSourceExtension.size() &&
-      raw_dir.substr(raw_dir.size() - path::kSourceExtension.size()) ==
-          path::kSourceExtension) {
-    auto res = pipeline::build_single_file(ctx, raw_dir, config.output,
-                                           config.release, config.linker);
-    if (!res.is_ok() || ctx.bag.has_errors()) {
+  if (raw_dir.size() >= path::SOURCE_EXTENSION.size() &&
+      raw_dir.substr(raw_dir.size() - path::SOURCE_EXTENSION.size()) ==
+          path::SOURCE_EXTENSION) {
+    base::Result<void, diag::Reported> res = pipeline::build_single_file(
+        ctx, raw_dir, config.output, config.release, config.linker);
+    if (res.is_err() || ctx.bag.has_errors()) {
       report_diagnostics(ctx.bag, ctx.sources, options);
       return ResultCode::BuildFailed;
     }
@@ -48,10 +48,10 @@ ResultCode run_build(const CliConfig& config,
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
   if (found.found) {
-    auto res = pipeline::build_package(ctx, found.root, found.manifest,
-                                       found.manifest_name, config.output,
-                                       config.release, config.linker);
-    if (!res.is_ok() || ctx.bag.has_errors()) {
+    base::Result<void, diag::Reported> res = pipeline::build_package(
+        ctx, found.root, found.manifest, found.manifest_name, config.output,
+        config.release, config.linker);
+    if (res.is_err() || ctx.bag.has_errors()) {
       report_diagnostics(ctx.bag, ctx.sources, options);
       return ResultCode::BuildFailed;
     }
@@ -62,7 +62,7 @@ ResultCode run_build(const CliConfig& config,
   // Without a manifest there is no module structure to build: report
   // the error instead of claiming a build that never ran.
   const u32 index = ctx.bag.emit(
-      diag::Severity::Error, pipeline::kPipelineNoManifest,
+      diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
       "no manifest found at '{}'; build a file or add alcy.toml", raw_dir);
   (void)index;
   report_diagnostics(ctx.bag, ctx.sources, options);

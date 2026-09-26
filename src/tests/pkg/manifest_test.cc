@@ -25,7 +25,7 @@ struct Fixture {
   Fixture() { arena.reserve(1u << 20); }
 };
 
-constexpr std::string_view kValidManifest =
+constexpr std::string_view VALID_MANIFEST =
     "[package]\n"
     "name = \"hello\"\n"
     "version = \"0.1.0\"\n"
@@ -52,8 +52,8 @@ TEST_CASE("Version parses strict X.Y.Z") {
 
 TEST_CASE("Manifest parses a valid package") {
   Fixture f;
-  diag::Fallible<PackageManifest> result = parse_manifest(
-      kValidManifest, "alcy.toml", source::kUnknownFile, f.bag, f.arena);
+  base::Result<PackageManifest, diag::Reported> result = parse_manifest(
+      VALID_MANIFEST, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
   CHECK(result.is_ok());
   if (!result.is_ok()) {
     return;
@@ -79,8 +79,8 @@ TEST_CASE("Manifest without dependencies parses") {
   Fixture f;
   constexpr std::string_view bytes =
       "[package]\nname = \"solo\"\nversion = \"2.0.0\"\n";
-  diag::Fallible<PackageManifest> result =
-      parse_manifest(bytes, "alcy.toml", source::kUnknownFile, f.bag, f.arena);
+  base::Result<PackageManifest, diag::Reported> result =
+      parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
   CHECK(result.is_ok());
   if (!result.is_ok()) {
     return;
@@ -102,8 +102,8 @@ TEST_CASE("Manifest parses binary targets") {
       "[[bin]]\npath = \"main.al\"\n"
       "\n"
       "[[bin]]\nname = \"tool\"\npath = \"tool.al\"\n";
-  diag::Fallible<PackageManifest> result =
-      parse_manifest(bytes, "alcy.toml", source::kUnknownFile, f.bag, f.arena);
+  base::Result<PackageManifest, diag::Reported> result =
+      parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
   CHECK(result.is_ok());
   if (!result.is_ok()) {
     return;
@@ -126,7 +126,7 @@ TEST_CASE("Manifest rejects binary targets without paths") {
       "[package]\nname = \"app\"\nversion = \"0.1.0\"\n"
       "\n"
       "[[bin]]\nname = \"tool\"\n";
-  CHECK(parse_manifest(bytes, "alcy.toml", source::kUnknownFile, f.bag, f.arena)
+  CHECK(parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena)
             .is_err());
   CHECK(f.bag.has_errors());
 }
@@ -134,7 +134,7 @@ TEST_CASE("Manifest rejects binary targets without paths") {
 TEST_CASE("Manifest syntax errors carry spans") {
   Fixture f;
   constexpr std::string_view bytes = "[package]\nname = \n";
-  diag::Fallible<PackageManifest> result =
+  base::Result<PackageManifest, diag::Reported> result =
       parse_manifest(bytes, "alcy.toml", 3, f.bag, f.arena);
   CHECK(result.is_err());
   CHECK(f.bag.has_errors());
@@ -142,33 +142,37 @@ TEST_CASE("Manifest syntax errors carry spans") {
   if (f.bag.size() != 1) {
     return;
   }
-  const diag::Diagnostic& diag = f.bag.at(0);
-  CHECK(diag.severity == diag::Severity::Error);
-  CHECK(diag.code == 2000);
-  CHECK(diag.has_primary_span);
-  CHECK(diag.primary_span.file == 3);
+  const diag::Diagnostic* const diag = f.bag.at(0);
+  CHECK(diag != nullptr);
+  if (diag == nullptr) {
+    return;
+  }
+  CHECK(diag->severity == diag::Severity::Error);
+  CHECK(diag->code == 1000);
+  CHECK(diag->has_primary_span);
+  CHECK(diag->primary_span.file == 3);
 }
 
 TEST_CASE("Manifest semantic errors are diagnosed") {
   Fixture f;
   constexpr std::string_view no_package = "[other]\n";
-  CHECK(parse_manifest(no_package, "alcy.toml", source::kUnknownFile, f.bag,
+  CHECK(parse_manifest(no_package, "alcy.toml", source::UNKNOWN_FILE, f.bag,
                        f.arena)
             .is_err());
   constexpr std::string_view no_version = "[package]\nname = \"x\"\n";
-  CHECK(parse_manifest(no_version, "alcy.toml", source::kUnknownFile, f.bag,
+  CHECK(parse_manifest(no_version, "alcy.toml", source::UNKNOWN_FILE, f.bag,
                        f.arena)
             .is_err());
   constexpr std::string_view bad_version =
       "[package]\nname = \"x\"\nversion = \"nope\"\n";
   CHECK(parse_version("nope").is_err());
-  CHECK(parse_manifest(bad_version, "alcy.toml", source::kUnknownFile, f.bag,
+  CHECK(parse_manifest(bad_version, "alcy.toml", source::UNKNOWN_FILE, f.bag,
                        f.arena)
             .is_err());
   constexpr std::string_view registry_dep =
       "[package]\nname = \"x\"\nversion = \"0.1.0\"\n"
       "[dependencies]\nfoo = \"1.0\"\n";
-  CHECK(parse_manifest(registry_dep, "alcy.toml", source::kUnknownFile, f.bag,
+  CHECK(parse_manifest(registry_dep, "alcy.toml", source::UNKNOWN_FILE, f.bag,
                        f.arena)
             .is_err());
   CHECK(f.bag.error_count() == 4);

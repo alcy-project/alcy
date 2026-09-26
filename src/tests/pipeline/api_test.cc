@@ -3,6 +3,7 @@
 
 #include <span>
 #include <string>
+#include <utility>
 
 #include "analyzer/resolve.h"
 #include "config/build_config.h"
@@ -21,14 +22,21 @@ namespace pipeline {
 #if !BUILD_FLAG(IS_OS_ASMJS)
 TEST_CASE("Pipeline stages the standard library prelude") {
   PipelineContext ctx;
-  const std::span<const analyzer::ModuleInput> prelude = std_prelude(ctx);
-  CHECK(!prelude.empty());
+  base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> prelude =
+      std_prelude(ctx);
+  CHECK(prelude.is_ok());
   CHECK(!ctx.bag.has_errors());
-  if (prelude.empty()) {
+  if (prelude.is_err()) {
     return;
   }
-  CHECK(prelude[0].name == "core");
-  CHECK(prelude[0].id != source::kUnknownFile);
+  const std::span<const analyzer::ModuleInput> inputs =
+      std::move(prelude).unwrap();
+  CHECK(!inputs.empty());
+  if (inputs.empty()) {
+    return;
+  }
+  CHECK(inputs[0].name == "core");
+  CHECK(inputs[0].id != source::UNKNOWN_FILE);
 }
 TEST_CASE("Pipeline build produces object file") {
   io::TempDir dir = io::TempDir::create_unique("pipeline_build_object_test_");
@@ -69,20 +77,23 @@ TEST_CASE("Pipeline build produces executable") {
   CHECK(res.is_ok());
 }
 
-TEST_CASE("Pipeline build creates nonexistent directory") {
+TEST_CASE("Pipeline build reports an unwritable object path") {
   io::TempDir dir = io::TempDir::create_unique("pipeline_build_bad_output_");
-  const bool setup = dir.write_file("main.al", "fn main() {\n}\n");
+  const bool setup = dir.write_file("main.al", "fn main() {\n}\n") &&
+                     dir.write_file("blocker", "not a directory\n");
   CHECK(setup);
   if (!setup) {
     return;
   }
 
   PipelineContext ctx;
-  const std::string bad_path = std::string(dir.path()) + "/no-such-dir/main.o";
+  // A regular file blocks directory creation, so neither creating the
+  // parent nor writing the object can succeed.
+  const std::string bad_path = std::string(dir.path()) + "/blocker/main.o";
   auto res = pipeline::build_single_file(ctx, dir.join("main.al"), bad_path,
                                          false, "");
-  CHECK(res.is_ok());
-  CHECK(!ctx.bag.has_errors());
+  CHECK(res.is_err());
+  CHECK(ctx.bag.has_errors());
 }
 #endif
 

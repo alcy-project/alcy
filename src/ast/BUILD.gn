@@ -2,7 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 source_set("ast") {
-  sources = [ "ast.h" ]
+  sources = [
+    "ast.h",
+    "verify.cc",
+    "verify.h",
+  ]
   deps = [
     "//src:base_modules",
     "//src/diag",

@@ -7,6 +7,7 @@
 
 #include "ast/ast.h"
 #include "diag/bag.h"
+#include "fpag/base/result.h"
 
 namespace parser {
 
@@ -23,8 +24,13 @@ namespace parser {
 // nested scopes freshens. `or`-pattern alternatives share one scope
 // each, pre-seeded from the first alternative, and must bind identical
 // name sets.
-void desugar_shadowing(std::span<const ast::ItemIdx> items,
-                       ast::AstArena& ast,
-                       diag::DiagBag& bag);
+//
+// Verifies the arena on exit, so callers receive validated output: a
+// verification failure reports an internal diagnostic and returns err.
+// Name errors still accumulate in the bag with an ok result.
+base::Result<void, diag::Reported> desugar_shadowing(
+    std::span<const ast::ItemIdx> items,
+    ast::AstArena& ast,
+    diag::DiagBag& bag);
 
 }  // namespace parser

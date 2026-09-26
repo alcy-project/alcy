@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "analyzer/resolve.h"
+#include "analyzer/types.h"
 #include "ast/ast.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
@@ -16,6 +17,7 @@
 #include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
+#include "ir/type.h"
 #include "source/source.h"
 
 namespace analyzer {
@@ -56,7 +58,7 @@ ResolveCase resolve_case(io::TempDir& dir,
                          Fixture& f,
                          std::string_view package_name = "testpkg") {
   std::vector<ModuleInput> inputs;
-  source::FileId root = source::kUnknownFile;
+  source::FileId root = source::UNKNOWN_FILE;
   for (std::string_view rel : rels) {
     base::Result<source::FileId, source::SourceError> loaded =
         f.sources.load(dir.join(rel));
@@ -77,7 +79,7 @@ ResolveCase resolve_case(io::TempDir& dir,
       inputs.push_back({name, id});
     }
   }
-  diag::Fallible<ModuleTree> result =
+  base::Result<ModuleTree, diag::Reported> result =
       resolve_modules(root, inputs, package_name, f.sources, f.ast, f.bag);
   if (result.is_err()) {
     ModuleTree empty;
@@ -189,7 +191,7 @@ TEST_CASE("Resolve reports duplicate module declarations") {
       {"a", std::move(first).unwrap()},
       {"a", std::move(second).unwrap()},
   };
-  diag::Fallible<ModuleTree> resolved =
+  base::Result<ModuleTree, diag::Reported> resolved =
       resolve_modules(inputs[0].id, inputs, "testpkg", f.sources, f.ast, f.bag);
   CHECK(f.bag.has_errors());
 }
@@ -466,7 +468,7 @@ ResolveCase resolve_case_with_prelude(
         prelude,
     Fixture& f) {
   std::vector<ModuleInput> inputs;
-  source::FileId root = source::kUnknownFile;
+  source::FileId root = source::UNKNOWN_FILE;
   for (std::string_view rel : rels) {
     base::Result<source::FileId, source::SourceError> loaded =
         f.sources.load(dir.join(rel));
@@ -493,7 +495,7 @@ ResolveCase resolve_case_with_prelude(
     prelude_inputs.push_back(
         {prelude_storage.back(), std::move(loaded).unwrap()});
   }
-  diag::Fallible<ModuleTree> result = resolve_modules(
+  base::Result<ModuleTree, diag::Reported> result = resolve_modules(
       root, inputs, "testpkg", f.sources, f.ast, f.bag, prelude_inputs);
   if (result.is_err()) {
     ModuleTree empty;
@@ -568,6 +570,36 @@ TEST_CASE("Resolve prefers locals over prelude imports") {
   for (const Import& import : root->imports) {
     CHECK(!(import.ns == Namespace::Value && import.name == "help"));
   }
+}
+
+TEST_CASE("Module tree verification rejects malformed trees") {
+  const ModuleTree empty{.modules = {}, .root = 0};
+  CHECK(verify_module_tree(empty).is_err());
+
+  ModuleNode node;
+  node.path = "";
+  node.file = source::UNKNOWN_FILE;
+  ModuleNode* const one[] = {&node};
+  const ModuleTree bad_root{.modules = {one, 1}, .root = 5};
+  CHECK(verify_module_tree(bad_root).is_err());
+
+  ModuleNode* const null_entry[] = {nullptr};
+  const ModuleTree null_module{.modules = {null_entry, 1}, .root = 0};
+  CHECK(verify_module_tree(null_module).is_err());
+
+  const ModuleTree bad_prelude{
+      .modules = {one, 1}, .root = 0, .prelude_modules = 2};
+  CHECK(verify_module_tree(bad_prelude).is_err());
+
+  const ModuleTree valid{.modules = {one, 1}, .root = 0};
+  CHECK(verify_module_tree(valid).is_ok());
+}
+
+TEST_CASE("Check package rejects a malformed module tree") {
+  Fixture f;
+  const ModuleTree empty{.modules = {}, .root = 0};
+  CHECK(check_package(empty, ir::PointerWidth::W64, f.ast, f.bag).is_err());
+  CHECK(f.bag.has_errors());
 }
 
 }  // namespace analyzer

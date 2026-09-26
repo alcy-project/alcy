@@ -36,9 +36,9 @@ TEST_CASE("DiagBag counts and iteration") {
   CHECK(f.bag.has_errors());
   CHECK(f.bag.error_count() == 1);
   CHECK(f.bag.warning_count() == 1);
-  CHECK(f.bag.at(e).code == 7);
-  CHECK(f.bag.at(e).message == "broken thing");
-  CHECK(f.bag.at(w).severity == Severity::Warning);
+  CHECK(f.bag.at(e)->code == 7);
+  CHECK(f.bag.at(e)->message == "broken thing");
+  CHECK(f.bag.at(w)->severity == Severity::Warning);
 
   u32 seen = 0;
   f.bag.for_each([&](const Diagnostic&) { ++seen; });
@@ -50,21 +50,22 @@ TEST_CASE("DiagBag spans and labels") {
   const Span span{.file = 3, .offset = 8, .length = 3};
   const u32 i =
       f.bag.emit(Severity::Error, 1, span, "bad call from {}", "here");
-  CHECK(f.bag.at(i).has_primary_span);
-  CHECK(f.bag.at(i).primary_span.offset == 8);
-  CHECK(f.bag.at(i).label_count == 0);
+  CHECK(f.bag.at(i)->has_primary_span);
+  CHECK(f.bag.at(i)->primary_span.offset == 8);
+  CHECK(f.bag.at(i)->label_count == 0);
 
-  f.bag.label(i, {{{.file = 3, .offset = 23, .length = 1}, "used here"}});
-  CHECK(f.bag.at(i).label_count == 1);
-  CHECK(f.bag.at(i).labels[0].message == "used here");
+  CHECK(f.bag.label(i, {{{.file = 3, .offset = 23, .length = 1}, "used here"}})
+            .is_ok());
+  CHECK(f.bag.at(i)->label_count == 1);
+  CHECK(f.bag.at(i)->labels[0].message == "used here");
 }
 
-TEST_CASE("Fallible result smoke test") {
-  Fallible<int> ok = base::make_ok(3);
+TEST_CASE("Reported result smoke test") {
+  base::Result<i32, diag::Reported> ok = base::make_ok(3);
   CHECK(ok.is_ok());
   CHECK(!ok.is_err());
 
-  Fallible<int> err = base::make_err(Fatal{});
+  base::Result<i32, diag::Reported> err = base::make_err(Reported{});
   CHECK(err.is_err());
   CHECK(!err.is_ok());
 }

@@ -32,7 +32,7 @@ namespace lower {
 // and tuple construction, field access, arithmetic/comparison/cast,
 // calls (free, associated, and methods), borrows, blocks, control
 // flow, `?`, indexing, enums (including generic instantiations), and
-// statics. Anything outside that set diagnoses `kLowerUnsupported`
+// statics. Anything outside that set diagnoses `LOWER_UNSUPPORTED`
 // and fails the lowering (fail fast: no dangling references).
 //
 // Value model (uniform memory, required by codegen's GEP tracking):
@@ -62,7 +62,9 @@ namespace lower {
 // instruction spans locate diagnostics and the address table names
 // places (analysis needs only identity, messages need names).
 struct LoweredPackage {
-  ir::Storage storage;
+  // Verified when lowering built it; borrow checking and the emitter
+  // consume this proof instead of re-verifying.
+  ir::VerifiedStorage storage;
   // Parallel to storage instrs by InstructionIdx.
   std::vector<diag::Span> instr_spans;
   // Alloca additions: address, bound name, and whether it backs a
@@ -78,10 +80,11 @@ struct LoweredPackage {
   usize prelude_functions = 0;
 };
 
-diag::Fallible<LoweredPackage> lower_package(analyzer::CheckedPackage package,
-                                             ir::PointerWidth width,
-                                             ast::AstArena& ast,
-                                             str::StringInterner& strings,
-                                             diag::DiagBag& bag);
+base::Result<LoweredPackage, diag::Reported> lower_package(
+    analyzer::CheckedPackage package,
+    ir::PointerWidth width,
+    ast::AstArena& ast,
+    str::StringInterner& strings,
+    diag::DiagBag& bag);
 
 }  // namespace lower

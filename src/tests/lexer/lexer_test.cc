@@ -3,6 +3,7 @@
 
 #include "lexer/lexer.h"
 
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -26,7 +27,7 @@ struct Fixture {
 };
 
 std::vector<Token> lex_all(std::string_view bytes, diag::DiagBag& bag) {
-  Lexer lexer(bytes, source::kUnknownFile, bag);
+  Lexer lexer(bytes, source::UNKNOWN_FILE, bag);
   std::vector<Token> out;
   lexer.tokenize(out);
   return out;
@@ -240,6 +241,44 @@ TEST_CASE("Lexer recovers from invalid characters") {
                     {TokenKind::Ident, TokenKind::Error, TokenKind::Ident,
                      TokenKind::Error, TokenKind::Ident, TokenKind::Eof}));
   CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Token stream verification accepts lexer output") {
+  Fixture f;
+  constexpr std::string_view bytes = "fn main() {}\n";
+  const std::vector<Token> tokens = lex_all(bytes, f.bag);
+  CHECK(
+      verify_token_stream(std::span<const Token>(tokens.data(), tokens.size()),
+                          source::UNKNOWN_FILE, bytes)
+          .is_ok());
+}
+
+TEST_CASE("Token stream verification rejects malformed streams") {
+  Fixture f;
+  constexpr std::string_view bytes = "fn main() {}\n";
+
+  const std::vector<Token> empty;
+  CHECK(verify_token_stream({}, source::UNKNOWN_FILE, bytes).is_err());
+
+  const std::vector<Token> tokens = lex_all(bytes, f.bag);
+  const std::span<const Token> all(tokens.data(), tokens.size());
+  CHECK(verify_token_stream(all.subspan(0, all.size() - 1),
+                            source::UNKNOWN_FILE, bytes)
+            .is_err());
+
+  Lexer other(bytes, 5, f.bag);
+  std::vector<Token> foreign;
+  other.tokenize(foreign);
+  CHECK(verify_token_stream(
+            std::span<const Token>(foreign.data(), foreign.size()),
+            source::UNKNOWN_FILE, bytes)
+            .is_err());
+
+  const Token past_end{.kind = TokenKind::Eof,
+                       .span = {source::UNKNOWN_FILE, 100, 1}};
+  CHECK(verify_token_stream(std::span<const Token>(&past_end, 1),
+                            source::UNKNOWN_FILE, bytes)
+            .is_err());
 }
 
 }  // namespace lexer

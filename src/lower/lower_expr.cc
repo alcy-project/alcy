@@ -34,14 +34,14 @@ namespace lower {
 
 void Lowerer::unsupported(diag::Span span, std::string_view what) {
   const u32 index =
-      bag.emit(diag::Severity::Error, kLowerUnsupported, span,
+      bag.emit(diag::Severity::Error, LOWER_UNSUPPORTED, span,
                "'{}' is not supported in this lowering slice", what);
   (void)index;
   failed = true;
 }
 
 void Lowerer::internal(diag::Span span, std::string_view what) {
-  const u32 index = bag.emit(diag::Severity::Error, kLowerInternal, span,
+  const u32 index = bag.emit(diag::Severity::Error, LOWER_INTERNAL, span,
                              "internal lowering error: {}", what);
   (void)index;
   failed = true;
@@ -127,13 +127,13 @@ bool Lowerer::same_shape_inner(ir::TypeIdx a,
 // longest known suffix and parse what remains (wrapping arithmetic
 // matches release overflow semantics; checked overflow is later work).
 u64 Lowerer::parse_numeric_value(std::string_view spelling) {
-  constexpr std::string_view kSuffixes[] = {
+  constexpr std::string_view SUFFIXES[] = {
       "isize", "usize", "i8",  "i16", "i32", "i64",
       "u8",    "u16",   "u32", "u64", "f32", "f64",
   };
 
   // Strip type suffix if present.
-  for (std::string_view suffix : kSuffixes) {
+  for (std::string_view suffix : SUFFIXES) {
     const bool has_suffix =
         spelling.size() > suffix.size() && spelling.ends_with(suffix);
     if (has_suffix) {
@@ -213,7 +213,7 @@ ir::TypeTag Lowerer::literal_tag(ast::LiteralIdx value,
     std::string_view suffix;
     ir::TypeTag tag;
   };
-  constexpr SuffixTag kSuffixes[] = {
+  constexpr SuffixTag SUFFIXES[] = {
       {"f32", ir::TypeTag::F32},   {"f64", ir::TypeTag::F64},
       {"isize", ir::TypeTag::I64}, {"usize", ir::TypeTag::U64},
       {"i8", ir::TypeTag::I8},     {"i16", ir::TypeTag::I16},
@@ -221,7 +221,7 @@ ir::TypeTag Lowerer::literal_tag(ast::LiteralIdx value,
       {"u8", ir::TypeTag::U8},     {"u16", ir::TypeTag::U16},
       {"u32", ir::TypeTag::U32},   {"u64", ir::TypeTag::U64},
   };
-  for (const SuffixTag& entry : kSuffixes) {
+  for (const SuffixTag& entry : SUFFIXES) {
     if (lit.spelling.size() > entry.suffix.size() &&
         lit.spelling.substr(lit.spelling.size() - entry.suffix.size()) ==
             entry.suffix) {
@@ -2656,7 +2656,7 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
         // so its destructor would never run and whatever it holds would
         // be lost.
         const u32 index = bag.emit(
-            diag::Severity::Error, kLowerDiscardedDestructor, node.span,
+            diag::Severity::Error, LOWER_DISCARDED_DESTRUCTOR, node.span,
             "discarded value holds something with a destructor, so ending "
             "it here is needed");
         (void)index;
@@ -2721,7 +2721,7 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
       break;
     }
     if (!reachable) {
-      const u32 index = bag.emit(diag::Severity::Warning, kLowerUnreachable,
+      const u32 index = bag.emit(diag::Severity::Warning, LOWER_UNREACHABLE,
                                  ast.stmts[stmt].span, "unreachable statement");
       (void)index;
       continue;
@@ -2745,7 +2745,7 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
     }
   } else if (!reachable && node.value.is_valid()) {
     const u32 index =
-        bag.emit(diag::Severity::Warning, kLowerUnreachable,
+        bag.emit(diag::Severity::Warning, LOWER_UNREACHABLE,
                  ast.exprs[node.value].span, "unreachable expression");
     (void)index;
   }

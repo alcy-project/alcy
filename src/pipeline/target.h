@@ -21,7 +21,7 @@ namespace pipeline {
 // MVP pointer width: isize/usize map to 64-bit integers. An explicit
 // choice (never sniffed from the host); a --target flag selects it
 // once cross builds land.
-constexpr ir::PointerWidth kTargetWidth = ir::PointerWidth::W64;
+constexpr ir::PointerWidth TARGET_WIDTH = ir::PointerWidth::W64;
 
 // Resolved binary target: the module tree plus its source count and
 // binary name. Shared by check and build; callers report and map
@@ -40,7 +40,7 @@ struct BinTarget {
 struct ManifestProbe {
   bool found = false;
   path::Path root;
-  source::FileId manifest = source::kUnknownFile;
+  source::FileId manifest = source::UNKNOWN_FILE;
   std::string manifest_name;
 };
 
@@ -52,13 +52,13 @@ base::Result<ManifestProbe, path::PathError> find_package_manifest(
 
 // Parses the manifest and resolves its single binary target. Shared by
 // build and check; the manifest views borrow the context arena.
-diag::Fallible<BinTarget> resolve_package_target(
+base::Result<BinTarget, diag::Reported> resolve_package_target(
     PipelineContext& ctx,
     const path::Path& root,
     source::FileId manifest_file,
     std::string_view manifest_name);
 
-diag::Fallible<BinTarget> resolve_bin_target(
+base::Result<BinTarget, diag::Reported> resolve_bin_target(
     PipelineContext& ctx,
     const path::Path& root,
     const pkg::PackageManifest& manifest,

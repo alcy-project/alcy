@@ -26,6 +26,8 @@ source_set("cli") {
     "result_code.h",
     "run_command.cc",
     "run_command.h",
+    "validate.cc",
+    "validate.h",
   ]
   deps = [ "//src/pipeline" ]
   defines = [

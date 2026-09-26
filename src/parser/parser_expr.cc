@@ -483,7 +483,8 @@ ast::ExprIdx Parser::parse_postfix() {
         });
         base = ast_.exprs.push_back(node);
       } else {
-        base::Result<ast::Ident, diag::Fatal> name = parse_ident("field name");
+        base::Result<ast::Ident, diag::Reported> name =
+            parse_ident("field name");
         if (name.is_err()) {
           return ast::ExprIdx::invalid();
         }
@@ -731,7 +732,7 @@ ast::ExprIdx Parser::parse_primary() {
         }
         break;
       }
-      base::Result<ast::Ident, diag::Fatal> name = parse_ident("field name");
+      base::Result<ast::Ident, diag::Reported> name = parse_ident("field name");
       if (name.is_err()) {
         return ast::ExprIdx::invalid();
       }
@@ -976,7 +977,7 @@ ast::ExprIdx Parser::parse_array_literal() {
   }
   if (check(lexer::TokenKind::RBracket)) {
     const u32 index =
-        bag_.emit(diag::Severity::Error, kParserUnexpectedToken, peek().span,
+        bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, peek().span,
                   "array literal needs elements or a repeat count");
     (void)index;
     return ast::ExprIdx::invalid();
@@ -1042,7 +1043,7 @@ ast::ExprIdx Parser::parse_comp_block() {
   }
   if (!check(lexer::TokenKind::LBrace)) {
     const u32 index = bag_.emit(
-        diag::Severity::Error, kParserUnexpectedToken, peek().span,
+        diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, peek().span,
         "`comp` is only allowed on parameters, declarations, and blocks");
     (void)index;
     return ast::ExprIdx::invalid();

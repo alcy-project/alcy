@@ -6,11 +6,13 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "ast/ast.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
+#include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
 #include "lexer/lexer.h"
 #include "lexer/token.h"
@@ -30,12 +32,17 @@ struct Fixture {
 };
 
 std::span<const ast::ItemIdx> parse(std::string_view bytes, Fixture& f) {
-  lexer::Lexer lexer(bytes, source::kUnknownFile, f.bag);
+  lexer::Lexer lexer(bytes, source::UNKNOWN_FILE, f.bag);
   std::vector<lexer::Token> tokens;
   lexer.tokenize(tokens);
   Parser parser(std::span<const lexer::Token>(tokens.data(), tokens.size()),
-                bytes, source::kUnknownFile, f.ast, f.bag);
-  return parser.parse();
+                bytes, source::UNKNOWN_FILE, f.ast, f.bag);
+  base::Result<std::span<const ast::ItemIdx>, diag::Reported> parsed =
+      parser.parse();
+  if (parsed.is_err()) {
+    return {};
+  }
+  return std::move(parsed).unwrap();
 }
 
 // Collects binding and use spellings in source order: IdentPattern and
@@ -354,7 +361,9 @@ bool check_names(std::string_view bytes,
   if (f.bag.has_errors()) {
     return false;
   }
-  desugar_shadowing(items, f.ast, f.bag);
+  if (desugar_shadowing(items, f.ast, f.bag).is_err()) {
+    return false;
+  }
   if (f.bag.has_errors()) {
     return false;
   }
@@ -367,7 +376,7 @@ bool check_desugar_fails(std::string_view bytes, Fixture& f) {
   if (f.bag.has_errors()) {
     return false;
   }
-  desugar_shadowing(items, f.ast, f.bag);
+  (void)desugar_shadowing(items, f.ast, f.bag);
   return f.bag.has_errors();
 }
 

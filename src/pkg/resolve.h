@@ -19,7 +19,7 @@ struct ResolvedPackage {
   // Canonical directory path (owns its bytes).
   path::Path dir;
   // Manifest file id in the SourceManager passed to resolve_package().
-  source::FileId manifest_file = source::kUnknownFile;
+  source::FileId manifest_file = source::UNKNOWN_FILE;
 };
 
 // Resolves the package at `dir` (which must contain alcy.toml) plus its
@@ -28,7 +28,7 @@ struct ResolvedPackage {
 // manifests, and unparsable manifests as diagnostics. Shared dependencies
 // resolve once per incoming edge (no dedup in MVP). Manifest views borrow
 // from `arena`, which must outlive the result.
-diag::Fallible<std::vector<ResolvedPackage>> resolve_package(
+base::Result<std::vector<ResolvedPackage>, diag::Reported> resolve_package(
     std::string_view dir,
     source::SourceManager& sources,
     mem::Arena& arena,

@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include <memory>
 #include <utility>
 
 #include "debug/dcheck.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "fpag/str/string_pool_id.h"
 #include "ir/block.h"
 #include "ir/block_param.h"
@@ -20,6 +20,7 @@
 #include "ir/register.h"
 #include "ir/storage.h"
 #include "ir/type.h"
+#include "ir/verifier.h"
 
 namespace ir {
 
@@ -179,7 +180,7 @@ class StorageBuilder {
   }
 
   TypeIdx array_type(TypeIdx element, u64 count) {
-    for (TypeIdx idx(kPrimitiveTypeCount + 1); idx.idx < state_.types.size();
+    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
          ++idx) {
       const TypeNode& node = state_.types[idx];
       if (node.tag != TypeTag::Array) {
@@ -206,7 +207,7 @@ class StorageBuilder {
   // never match.
   TypeIdx reference_type(TypeIdx pointee, bool is_mut) {
     const TypeTag tag = is_mut ? TypeTag::MutRef : TypeTag::Ref;
-    for (TypeIdx idx(kPrimitiveTypeCount + 1); idx.idx < state_.types.size();
+    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
          ++idx) {
       const TypeNode& node = state_.types[idx];
       if (node.tag != tag) {
@@ -225,7 +226,7 @@ class StorageBuilder {
   }
 
   TypeIdx tuple_type(TypeIdxRange elements) {
-    for (TypeIdx idx(kPrimitiveTypeCount + 1); idx.idx < state_.types.size();
+    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
          ++idx) {
       const TypeNode& node = state_.types[idx];
       if (node.tag != TypeTag::Tuple) {
@@ -257,7 +258,7 @@ class StorageBuilder {
   }
 
   TypeIdx never_type() {
-    for (TypeIdx idx(kPrimitiveTypeCount + 1); idx.idx < state_.types.size();
+    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
          ++idx) {
       if (state_.types[idx].tag == TypeTag::Never) {
         return idx;
@@ -269,7 +270,7 @@ class StorageBuilder {
   }
 
   TypeIdx error_type() {
-    for (TypeIdx idx(kPrimitiveTypeCount + 1); idx.idx < state_.types.size();
+    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
          ++idx) {
       if (state_.types[idx].tag == TypeTag::Error) {
         return idx;
@@ -323,10 +324,15 @@ class StorageBuilder {
     return state_.types.emplace_back(state_.types[idx]);
   }
 
-  Storage build() && { return Storage(std::move(state_)); }
-
-  std::unique_ptr<Storage> build_unique() && {
-    return std::make_unique<Storage>(std::move(*this).build());
+  // Verifies the built storage and returns it as proof-carrying
+  // VerifiedStorage. Invalid builder output becomes a structured
+  // error instead of corrupt IR downstream.
+  base::Result<VerifiedStorage, VerifyError> build() && {
+    Storage storage(std::move(state_));
+    if (VerifyResult verified = verify_storage(storage); verified.is_err()) {
+      return base::make_err(std::move(verified).unwrap_err());
+    }
+    return base::make_ok(VerifiedStorage(std::move(storage)));
   }
 
  private:
@@ -334,7 +340,7 @@ class StorageBuilder {
   // table lookup. Only the default constructor does this; a builder created
   // from an existing state assumes its table is already populated.
   void intern_primitives() {
-    for (u32 i = 0; i < kPrimitiveTypeCount; ++i) {
+    for (u32 i = 0; i < PRIMITIVE_TYPE_COUNT; ++i) {
       TypeNode node{};
       node.tag = static_cast<TypeTag>(i);
       state_.types.emplace_back(node);

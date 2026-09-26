@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "analyzer/resolve.h"
+#include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -28,30 +29,32 @@ std::string_view as_view(const unsigned char* data, u64 len) {
 
 }  // namespace
 
-std::span<const analyzer::ModuleInput> std_prelude(PipelineContext& ctx) {
+base::Result<std::span<const analyzer::ModuleInput>, diag::Reported>
+std_prelude(PipelineContext& ctx) {
   if (ctx.std_staged) {
-    return ctx.std_inputs;
+    return base::make_ok(
+        std::span<const analyzer::ModuleInput>(ctx.std_inputs));
   }
-  ctx.std_staged = true;
   ctx.std_scratch.emplace("alcy_std");
   io::TempDir& scratch = *ctx.std_scratch;
   if (!scratch.write_file(std_core_name(),
-                          as_view(kStdCoreMain, kStdCoreMain_len))) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineIoError,
+                          as_view(STD_CORE_MAIN, STD_CORE_MAIN_LEN))) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot stage the standard library");
     (void)index;
-    return {};
+    return base::make_err(diag::Reported{});
   }
   base::Result<source::FileId, source::SourceError> loaded =
       ctx.sources.load(scratch.join(std_core_name()));
   if (loaded.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineIoError,
+    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot load the standard library");
     (void)index;
-    return {};
+    return base::make_err(diag::Reported{});
   }
   ctx.std_inputs.push_back({"core", std::move(loaded).unwrap()});
-  return ctx.std_inputs;
+  ctx.std_staged = true;
+  return base::make_ok(std::span<const analyzer::ModuleInput>(ctx.std_inputs));
 }
 
 std::string_view std_core_name() {

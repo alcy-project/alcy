@@ -18,12 +18,12 @@
 
 namespace pipeline {
 
-// Diagnostic codes 3000-3099 are reserved for the pipeline.
-inline constexpr u32 kPipelineNoManifest = 3000;
-inline constexpr u32 kPipelineIoError = 3001;
-inline constexpr u32 kPipelineNotImplemented = 3002;
-inline constexpr u32 kPipelineNoTargets = 3003;
-inline constexpr u32 kPipelineLinkError = 3004;
+// Diagnostic codes 8000-8099 are reserved for the pipeline.
+inline constexpr u32 PIPELINE_NO_MANIFEST = 8000;
+inline constexpr u32 PIPELINE_IO_ERROR = 8001;
+inline constexpr u32 PIPELINE_NOT_IMPLEMENTED = 8002;
+inline constexpr u32 PIPELINE_NO_TARGETS = 8003;
+inline constexpr u32 PIPELINE_LINK_ERROR = 8004;
 
 struct PipelineContext {
   mem::Arena arena;

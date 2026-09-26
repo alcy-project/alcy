@@ -60,8 +60,8 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       if (!i.dst.is_valid()) {
         break;
       }
-      const ir::Operand& size_op = storage_.operands()[ops.head()];
-      llvm::Type* elem_ty = type(storage_.registers()[i.dst].type);
+      const ir::Operand& size_op = storage_->operands()[ops.head()];
+      llvm::Type* elem_ty = type(storage_->registers()[i.dst].type);
       llvm::Value* size = resolve_operand_value(size_op);
       llvm::AllocaInst* alloca = builder_->CreateAlloca(elem_ty, size);
       values_.add_register(i.dst, alloca);
@@ -73,9 +73,9 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       if (!i.dst.is_valid()) {
         break;
       }
-      const ir::Operand& ptr_op = storage_.operands()[ops.head()];
+      const ir::Operand& ptr_op = storage_->operands()[ops.head()];
 
-      const ir::Register& dst_reg = storage_.registers()[i.dst];
+      const ir::Register& dst_reg = storage_->registers()[i.dst];
       llvm::Type* load_ty = type(dst_reg.type);
 
       values_.add_register(
@@ -84,8 +84,8 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
     }
     case Op::Store: {
       DCHECK(ops.size() == 2);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      const ir::Operand& rhs = storage_.operands()[ops.head() + 1];
+      const ir::Operand& lhs = storage_->operands()[ops.head()];
+      const ir::Operand& rhs = storage_->operands()[ops.head() + 1];
       llvm::StoreInst* store = builder_->CreateStore(
           resolve_operand_value(lhs), resolve_operand_value(rhs));
       if (i.dst.is_valid()) {
@@ -97,11 +97,11 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       DCHECK(ops.size() == 3);
       DCHECK(!i.dst.is_valid());
       builder_->CreateMemCpy(
-          resolve_operand_value(storage_.operands()[ops.head()]),
+          resolve_operand_value(storage_->operands()[ops.head()]),
           llvm::MaybeAlign(1),
-          resolve_operand_value(storage_.operands()[ops.head() + 1]),
+          resolve_operand_value(storage_->operands()[ops.head() + 1]),
           llvm::MaybeAlign(1),
-          resolve_operand_value(storage_.operands()[ops.head() + 2]));
+          resolve_operand_value(storage_->operands()[ops.head() + 2]));
       break;
     }
     case Op::GetElementPtr: {
@@ -109,26 +109,27 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       // the base pointer's tracked site; nested projections (which have
       // no site of their own) carry it as their register type.
       DCHECK(ops.size() >= 2);
-      const ir::Operand& base_op = storage_.operands()[ops.head()];
+      const ir::Operand& base_op = storage_->operands()[ops.head()];
       DCHECK(base_op.is<ir::RegisterIdx>());
       const ir::RegisterIdx base_reg = base_op.as_register();
       llvm::Type* elem_ty = values_.alloca_type(base_reg);
       if (elem_ty == nullptr) {
         // Nested projections carry the pointee as their register
         // type; dereference reference tags once to reach it.
-        ir::TypeIdx base_ty = storage_.registers()[base_reg].type;
-        ir::TypeTag tag = storage_.types()[base_ty.idx].tag;
+        ir::TypeIdx base_ty = storage_->registers()[base_reg].type;
+        ir::TypeTag tag = storage_->types()[base_ty.idx].tag;
         if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
-          base_ty = storage_.ref_types()[storage_.types()[base_ty.idx].as_ref()]
-                        .pointee;
+          base_ty =
+              storage_->ref_types()[storage_->types()[base_ty.idx].as_ref()]
+                  .pointee;
         }
         elem_ty = type(base_ty);
       }
       DCHECK_MSG(elem_ty, "GetElementPtr of untracked pointer");
-      llvm::SmallVector<llvm::Value*, kFunctionArgsSooSize> indices;
+      llvm::SmallVector<llvm::Value*, FUNCTION_ARGS_SOO_SIZE> indices;
       for (u32 idx = 1; idx < ops.size(); ++idx) {
         indices.push_back(
-            resolve_operand_value(storage_.operands()[ops.head() + idx]));
+            resolve_operand_value(storage_->operands()[ops.head() + idx]));
       }
       llvm::Value* gep =
           builder_->CreateGEP(elem_ty, resolve_operand_value(base_op), indices);
@@ -142,16 +143,17 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       // carries the element reference type, so the pointee is the
       // element type regardless of the base pointer's provenance.
       DCHECK(ops.size() == 2);
-      const ir::Operand& base_op = storage_.operands()[ops.head()];
+      const ir::Operand& base_op = storage_->operands()[ops.head()];
       DCHECK(base_op.is<ir::RegisterIdx>());
       DCHECK(i.dst.is_valid());
-      const ir::TypeIdx dst_ty = storage_.registers()[i.dst].type;
-      const ir::TypeTag dst_tag = storage_.types()[dst_ty.idx].tag;
+      const ir::TypeIdx dst_ty = storage_->registers()[i.dst].type;
+      const ir::TypeTag dst_tag = storage_->types()[dst_ty.idx].tag;
       DCHECK(dst_tag == ir::TypeTag::Ref || dst_tag == ir::TypeTag::MutRef);
-      llvm::Type* elem_ty = type(
-          storage_.ref_types()[storage_.types()[dst_ty.idx].as_ref()].pointee);
+      llvm::Type* elem_ty =
+          type(storage_->ref_types()[storage_->types()[dst_ty.idx].as_ref()]
+                   .pointee);
       llvm::SmallVector<llvm::Value*, 1> indices{
-          resolve_operand_value(storage_.operands()[ops.head() + 1])};
+          resolve_operand_value(storage_->operands()[ops.head() + 1])};
       values_.add_register(
           i.dst, builder_->CreateGEP(elem_ty, resolve_operand_value(base_op),
                                      indices));
@@ -160,14 +162,15 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
     case Op::ExtractValue: {
       // operands = [aggregate, index...]; indexes are integer immediates.
       DCHECK(ops.size() >= 2);
-      llvm::Value* agg = resolve_operand_value(storage_.operands()[ops.head()]);
-      llvm::SmallVector<u32, kFunctionArgsSooSize> indices;
+      llvm::Value* agg =
+          resolve_operand_value(storage_->operands()[ops.head()]);
+      llvm::SmallVector<u32, FUNCTION_ARGS_SOO_SIZE> indices;
       for (u32 idx = 1; idx < ops.size(); ++idx) {
-        const ir::Operand& index_op = storage_.operands()[ops.head() + idx];
+        const ir::Operand& index_op = storage_->operands()[ops.head() + idx];
         DCHECK(index_op.is<ir::ImmutableIdx>());
         const ir::Immutable& imm =
-            storage_.immutables()[index_op.as_immutable()];
-        const ir::TypeTag tag = storage_.types()[imm.type.idx].tag;
+            storage_->immutables()[index_op.as_immutable()];
+        const ir::TypeTag tag = storage_->types()[imm.type.idx].tag;
         DCHECK(ir::is_integer_type(tag));
         indices.push_back(static_cast<u32>(imm.as_u64_integer(tag)));
       }
@@ -179,16 +182,17 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
     case Op::InsertValue: {
       // operands = [aggregate, field_value, index...].
       DCHECK(ops.size() >= 3);
-      llvm::Value* agg = resolve_operand_value(storage_.operands()[ops.head()]);
+      llvm::Value* agg =
+          resolve_operand_value(storage_->operands()[ops.head()]);
       llvm::Value* field_value =
-          resolve_operand_value(storage_.operands()[ops.head() + 1]);
-      llvm::SmallVector<u32, kFunctionArgsSooSize> indices;
+          resolve_operand_value(storage_->operands()[ops.head() + 1]);
+      llvm::SmallVector<u32, FUNCTION_ARGS_SOO_SIZE> indices;
       for (u32 idx = 2; idx < ops.size(); ++idx) {
-        const ir::Operand& index_op = storage_.operands()[ops.head() + idx];
+        const ir::Operand& index_op = storage_->operands()[ops.head() + idx];
         DCHECK(index_op.is<ir::ImmutableIdx>());
         const ir::Immutable& imm =
-            storage_.immutables()[index_op.as_immutable()];
-        const ir::TypeTag tag = storage_.types()[imm.type.idx].tag;
+            storage_->immutables()[index_op.as_immutable()];
+        const ir::TypeTag tag = storage_->types()[imm.type.idx].tag;
         DCHECK(ir::is_integer_type(tag));
         indices.push_back(static_cast<u32>(imm.as_u64_integer(tag)));
       }
@@ -203,8 +207,8 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       if (!i.dst.is_valid()) {
         break;
       }
-      const ir::Operand& ptr_op = storage_.operands()[ops.head()];
-      const ir::Register& dst_reg = storage_.registers()[i.dst];
+      const ir::Operand& ptr_op = storage_->operands()[ops.head()];
+      const ir::Register& dst_reg = storage_->registers()[i.dst];
       llvm::LoadInst* load = builder_->CreateLoad(
           type(dst_reg.type), resolve_operand_value(ptr_op));
       load->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);
@@ -213,8 +217,8 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
     }
     case Op::AtomicStore: {
       DCHECK(ops.size() == 2);
-      const ir::Operand& lhs = storage_.operands()[ops.head()];
-      const ir::Operand& rhs = storage_.operands()[ops.head() + 1];
+      const ir::Operand& lhs = storage_->operands()[ops.head()];
+      const ir::Operand& rhs = storage_->operands()[ops.head() + 1];
       llvm::StoreInst* store = builder_->CreateStore(
           resolve_operand_value(lhs), resolve_operand_value(rhs));
       store->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);
@@ -225,8 +229,8 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
     }
     case Op::AtomicRmw: {
       DCHECK(ops.size() == 2);
-      const ir::Operand& ptr_op = storage_.operands()[ops.head()];
-      const ir::Operand& val_op = storage_.operands()[ops.head() + 1];
+      const ir::Operand& ptr_op = storage_->operands()[ops.head()];
+      const ir::Operand& val_op = storage_->operands()[ops.head() + 1];
       llvm::AtomicRMWInst* rmw = builder_->CreateAtomicRMW(
           rmw_op(i.flags.rmw_op), resolve_operand_value(ptr_op),
           resolve_operand_value(val_op), llvm::MaybeAlign(),
@@ -240,9 +244,9 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       // operands = [ptr, cmp, new].
       DCHECK(ops.size() == 3);
       llvm::AtomicCmpXchgInst* cmpxchg = builder_->CreateAtomicCmpXchg(
-          resolve_operand_value(storage_.operands()[ops.head()]),
-          resolve_operand_value(storage_.operands()[ops.head() + 1]),
-          resolve_operand_value(storage_.operands()[ops.head() + 2]),
+          resolve_operand_value(storage_->operands()[ops.head()]),
+          resolve_operand_value(storage_->operands()[ops.head() + 1]),
+          resolve_operand_value(storage_->operands()[ops.head() + 2]),
           llvm::MaybeAlign(), llvm::AtomicOrdering::SequentiallyConsistent,
           llvm::AtomicOrdering::SequentiallyConsistent);
       if (i.dst.is_valid()) {

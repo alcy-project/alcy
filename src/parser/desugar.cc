@@ -11,17 +11,20 @@
 #include <vector>
 
 #include "ast/ast.h"
+#include "ast/verify.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
+#include "parser/parser.h"
 
 namespace parser {
 
 namespace {
 
-// Diagnostic codes 4100-4199 are reserved for the parser.
-constexpr u32 kParserOrPatternMismatch = 4100;
-constexpr u32 kParserAlreadyBound = 4101;
+// Diagnostic codes 3100-3199 are reserved for desugaring.
+constexpr u32 PARSER_OR_PATTERN_MISMATCH = 3100;
+constexpr u32 PARSER_ALREADY_BOUND = 3101;
 
 bool is_keyword_name(std::string_view name) {
   return name == "self" || name == "super" || name == "package" ||
@@ -99,7 +102,7 @@ class Desugar {
         return existing->fresh;
       }
       const u32 index =
-          bag.emit(diag::Severity::Error, kParserAlreadyBound, ident.span,
+          bag.emit(diag::Severity::Error, PARSER_ALREADY_BOUND, ident.span,
                    "`{}` is already bound in this scope", ident.name);
       (void)index;
       return ident.name;
@@ -298,9 +301,9 @@ class Desugar {
         }
       }
       if (mismatch) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, kParserOrPatternMismatch, node.span,
-                     "or-pattern alternatives must bind the same names");
+        const u32 index = bag.emit(
+            diag::Severity::Error, PARSER_OR_PATTERN_MISMATCH, node.span,
+            "or-pattern alternatives must bind the same names");
         (void)index;
       }
       pop_scope();
@@ -315,7 +318,7 @@ class Desugar {
       }
       if (clash) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kParserAlreadyBound, node.span,
+            bag.emit(diag::Severity::Error, PARSER_ALREADY_BOUND, node.span,
                      "`{}` is already bound in this scope", binding.orig);
         (void)index;
         continue;
@@ -500,11 +503,22 @@ class Desugar {
 
 }  // namespace
 
-void desugar_shadowing(std::span<const ast::ItemIdx> items,
-                       ast::AstArena& ast,
-                       diag::DiagBag& bag) {
+base::Result<void, diag::Reported> desugar_shadowing(
+    std::span<const ast::ItemIdx> items,
+    ast::AstArena& ast,
+    diag::DiagBag& bag) {
   Desugar desugar{ast, bag};
   desugar.run(items);
+  if (base::Result<void, ast::VerifyError> verified = ast::verify_file(ast);
+      verified.is_err()) {
+    const u32 index =
+        bag.emit(diag::Severity::Error, PARSER_INVALID_AST,
+                 "internal error: invalid syntax tree: {}",
+                 ast::describe_verify_error(std::move(verified).unwrap_err()));
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  return base::make_ok();
 }
 
 }  // namespace parser

@@ -3,16 +3,42 @@
 
 #pragma once
 
+#include <span>
 #include <string_view>
 #include <vector>
 
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "lexer/token.h"
 #include "source/source.h"
 
 namespace lexer {
+
+// Structural failure of a token stream handed to the parser.
+enum class TokenStreamError : u8 {
+  // No tokens at all.
+  Empty,
+  // The last token is not Eof.
+  MissingEof,
+  // A token names a different file than the bytes it is checked against.
+  WrongFile,
+  // A token span runs past the end of the source bytes.
+  SpanOutOfRange,
+};
+
+// Pure verifier for a token stream handed to the parser: non-empty,
+// terminated by Eof, and every span inside `bytes` for `file`. The
+// lexer's own output satisfies this; hand-built streams must pass it
+// first. No I/O, no logging, no bag writes.
+base::Result<void, TokenStreamError> verify_token_stream(
+    std::span<const Token> tokens,
+    source::FileId file,
+    std::string_view bytes);
+
+// Short human-readable detail for a token stream failure.
+std::string_view describe_token_stream_error(TokenStreamError error);
 
 // Hand-written recursive lexer over UTF-8 source bytes. Lexing never
 // fails hard: invalid input becomes Error tokens with diagnostics in

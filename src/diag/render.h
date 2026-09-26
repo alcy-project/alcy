@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string_view>
 
 #include "diag/diagnostic.h"
@@ -12,16 +13,17 @@
 namespace diag {
 
 // Zero-copy source lookup for the renderer: both views borrow from storage
-// owned by the caller (e.g. SourceManager's mapped files). Name may be
-// empty when unknown.
+// owned by the caller (e.g. SourceManager's mapped files).
 struct SourceText {
   std::string_view name;
   std::string_view bytes;
 };
 
-// Returns the source text for a file id, or an empty SourceText when the
-// file is unknown. Must never allocate.
-using SourceFetch = SourceText (*)(source::FileId file_id, const void* ctx);
+// Returns the source text for a file id, or std::nullopt when the id does
+// not name a known file - distinct from a known file whose bytes are
+// empty. Must never allocate.
+using SourceFetch = std::optional<SourceText> (*)(source::FileId file_id,
+                                                  const void* ctx);
 
 // Presentation choices supplied by the output layer. The renderer does not
 // inspect the terminal or environment.

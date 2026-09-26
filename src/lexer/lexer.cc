@@ -3,6 +3,7 @@
 
 #include "lexer/lexer.h"
 
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -10,6 +11,7 @@
 #include "diag/diagnostic.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "lexer/token.h"
 #include "source/source.h"
 
@@ -17,13 +19,13 @@ namespace lexer {
 
 namespace {
 
-// Diagnostic codes 4000-4099 are reserved for the lexer.
-constexpr u32 kLexerInvalidChar = 4000;
-constexpr u32 kLexerUnterminatedString = 4001;
-constexpr u32 kLexerUnterminatedChar = 4002;
-constexpr u32 kLexerInvalidNumber = 4003;
-constexpr u32 kLexerUnterminatedBlockComment = 4004;
-constexpr u32 kLexerInvalidEscape = 4005;
+// Diagnostic codes 2000-2099 are reserved for the lexer.
+constexpr u32 LEXER_INVALID_CHAR = 2000;
+constexpr u32 LEXER_UNTERMINATED_STRING = 2001;
+constexpr u32 LEXER_UNTERMINATED_CHAR = 2002;
+constexpr u32 LEXER_INVALID_NUMBER = 2003;
+constexpr u32 LEXER_UNTERMINATED_BLOCK_COMMENT = 2004;
+constexpr u32 LEXER_INVALID_ESCAPE = 2005;
 
 bool is_alpha(char c) {
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
@@ -110,7 +112,7 @@ struct Keyword {
 
 // Linear scan: identifiers are a fraction of tokens, and the table is
 // small enough that smarter lookup buys nothing measurable.
-constexpr Keyword kKeywords[] = {
+constexpr Keyword KEYWORDS[] = {
     {"Self", TokenKind::SelfType},
     {"as", TokenKind::As},
     {"async", TokenKind::Async},
@@ -166,7 +168,7 @@ constexpr Keyword kKeywords[] = {
 };
 
 TokenKind lookup_keyword(std::string_view word) {
-  for (const Keyword& keyword : kKeywords) {
+  for (const Keyword& keyword : KEYWORDS) {
     if (keyword.spelling == word) {
       return keyword.kind;
     }
@@ -270,7 +272,7 @@ void Lexer::skip_trivia(std::vector<Token>& out) {
         }
       }
       if (depth > 0) {
-        emit_error(out, start, pos_ - start, kLexerUnterminatedBlockComment,
+        emit_error(out, start, pos_ - start, LEXER_UNTERMINATED_BLOCK_COMMENT,
                    "unterminated block comment");
       }
     } else {
@@ -387,12 +389,12 @@ void Lexer::lex_number(std::vector<Token>& out) {
       while (!at_end() && is_alnum_or_underscore(peek())) {
         advance();
       }
-      emit_error(out, start, pos_ - start, kLexerInvalidNumber,
+      emit_error(out, start, pos_ - start, LEXER_INVALID_NUMBER,
                  "invalid number literal");
       return;
     }
     if (trailing_underscore && !is_alpha(peek())) {
-      emit_error(out, start, pos_ - start, kLexerInvalidNumber,
+      emit_error(out, start, pos_ - start, LEXER_INVALID_NUMBER,
                  "invalid number literal");
       return;
     }
@@ -400,7 +402,7 @@ void Lexer::lex_number(std::vector<Token>& out) {
       while (!at_end() && is_alnum_or_underscore(peek())) {
         advance();
       }
-      emit_error(out, start, pos_ - start, kLexerInvalidNumber,
+      emit_error(out, start, pos_ - start, LEXER_INVALID_NUMBER,
                  "invalid number literal");
       return;
     }
@@ -431,7 +433,7 @@ void Lexer::lex_number(std::vector<Token>& out) {
       }
     }
     if (bytes_[pos_ - 1] == '_' && !is_alpha(peek())) {
-      emit_error(out, start, pos_ - start, kLexerInvalidNumber,
+      emit_error(out, start, pos_ - start, LEXER_INVALID_NUMBER,
                  "invalid number literal");
       return;
     }
@@ -496,12 +498,12 @@ void Lexer::lex_string(std::vector<Token>& out) {
     advance();
   }
   if (!terminated) {
-    emit_error(out, start, pos_ - start, kLexerUnterminatedString,
+    emit_error(out, start, pos_ - start, LEXER_UNTERMINATED_STRING,
                "unterminated string literal");
     return;
   }
   if (bad_escape) {
-    emit_error(out, start, pos_ - start, kLexerInvalidEscape,
+    emit_error(out, start, pos_ - start, LEXER_INVALID_ESCAPE,
                "invalid escape in string literal");
     return;
   }
@@ -563,17 +565,17 @@ void Lexer::lex_char(std::vector<Token>& out) {
     empty = false;
   }
   if (!terminated) {
-    emit_error(out, start, pos_ - start, kLexerUnterminatedChar,
+    emit_error(out, start, pos_ - start, LEXER_UNTERMINATED_CHAR,
                "unterminated character literal");
     return;
   }
   if (empty) {
-    emit_error(out, start, pos_ - start, kLexerInvalidChar,
+    emit_error(out, start, pos_ - start, LEXER_INVALID_CHAR,
                "empty character literal");
     return;
   }
   if (bad_escape) {
-    emit_error(out, start, pos_ - start, kLexerInvalidEscape,
+    emit_error(out, start, pos_ - start, LEXER_INVALID_ESCAPE,
                "invalid escape in character literal");
     return;
   }
@@ -750,7 +752,7 @@ void Lexer::lex_symbol(std::vector<Token>& out) {
     if (pos_ + scalar > bytes_.size()) {
       scalar = bytes_.size() - pos_;
     }
-    emit_error(out, start, scalar, kLexerInvalidChar, "invalid character");
+    emit_error(out, start, scalar, LEXER_INVALID_CHAR, "invalid character");
     advance(scalar);
     return;
   }
@@ -767,7 +769,7 @@ void Lexer::tokenize(std::vector<Token>& out) {
     }
     const char c = peek();
     if (c == '\0') {
-      emit_error(out, pos_, 1, kLexerInvalidChar, "invalid character");
+      emit_error(out, pos_, 1, LEXER_INVALID_CHAR, "invalid character");
       advance();
     } else if (is_alpha(c) || c == '_') {
       lex_identifier(out);
@@ -783,6 +785,43 @@ void Lexer::tokenize(std::vector<Token>& out) {
   }
   last_significant_ = TokenKind::Eof;
   out.push_back(Token{.kind = TokenKind::Eof, .span = span_at(pos_, 0)});
+}
+
+base::Result<void, TokenStreamError> verify_token_stream(
+    std::span<const Token> tokens,
+    source::FileId file,
+    std::string_view bytes) {
+  if (tokens.empty()) {
+    return base::make_err(TokenStreamError::Empty);
+  }
+  if (tokens.back().kind != TokenKind::Eof) {
+    return base::make_err(TokenStreamError::MissingEof);
+  }
+  const usize size = bytes.size();
+  for (const Token& token : tokens) {
+    if (token.span.file != file) {
+      return base::make_err(TokenStreamError::WrongFile);
+    }
+    const usize offset = token.span.offset;
+    const usize length = token.span.length;
+    if (offset > size || length > size - offset) {
+      return base::make_err(TokenStreamError::SpanOutOfRange);
+    }
+  }
+  return base::make_ok();
+}
+
+std::string_view describe_token_stream_error(TokenStreamError error) {
+  switch (error) {
+    case TokenStreamError::Empty: return "token stream is empty";
+    case TokenStreamError::MissingEof:
+      return "token stream is not terminated by Eof";
+    case TokenStreamError::WrongFile:
+      return "token span names a different file";
+    case TokenStreamError::SpanOutOfRange:
+      return "token span runs past the end of the source bytes";
+  }
+  return "invalid token stream";
 }
 
 }  // namespace lexer

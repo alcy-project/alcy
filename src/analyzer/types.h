@@ -19,7 +19,7 @@ namespace analyzer {
 
 // Sentinel for "no generic instantiation": table entries recorded
 // outside any instantiation-time checking carry this key.
-constexpr u32 kNoInst = 0xFFFFFFFFu;
+constexpr u32 NO_INST = 0xFFFFFFFFu;
 
 // Per-module type information for type checking and lowering. All TypeIdx
 // refer to the package Storage below; all views borrow source bytes.
@@ -51,9 +51,9 @@ struct CheckedModule {
     ir::TypeIdx ret;
     // Declaring item for body lowering (invalid for synthesized entries).
     ast::ItemIdx item;
-    // Instantiation this signature was checked under; kNoInst for
+    // Instantiation this signature was checked under; NO_INST for
     // non-generic functions. Lowering keys the callee body by it.
-    u32 inst = kNoInst;
+    u32 inst = NO_INST;
   };
   // Lazily-instantiated generic methods append signatures during body
   // checking, so element addresses must stay stable: never
@@ -97,11 +97,11 @@ struct CheckedModule {
   // Lowering side tables: every checked expression records its type,
   // and every checked call records its callee, so lowering never
   // re-resolves paths or re-derives types. `inst` keys entries
-  // checked under a generic instantiation (kNoInst otherwise).
+  // checked under a generic instantiation (NO_INST otherwise).
   struct ExprType {
     ast::ExprIdx expr;
     ir::TypeIdx type;
-    u32 inst = kNoInst;
+    u32 inst = NO_INST;
   };
   std::vector<ExprType> expr_types;
   struct CallTarget {
@@ -109,7 +109,7 @@ struct CheckedModule {
     bool is_method;
     u32 module;
     u32 index;
-    u32 inst = kNoInst;
+    u32 inst = NO_INST;
   };
   std::vector<CallTarget> call_targets;
   // Variant resolution for lowering: every checked variant use records
@@ -119,7 +119,7 @@ struct CheckedModule {
     ast::PathIdx path;
     ir::TypeIdx enum_type;
     u32 variant = 0;
-    u32 inst = kNoInst;
+    u32 inst = NO_INST;
   };
   std::vector<VariantUse> variants;
 };
@@ -134,13 +134,15 @@ struct FnInstance {
   std::vector<ir::TypeIdx> args;
   u32 sig_index = 0;
   // Key into the shared instantiation numbering that keys lowering
-  // side tables; kNoInst for a function whose body needed no context.
-  u32 inst = kNoInst;
+  // side tables; NO_INST for a function whose body needed no context.
+  u32 inst = NO_INST;
 };
 
 struct CheckedPackage {
   ModuleTree tree;
-  ir::Storage types;
+  // Verified when the checker built them; lowering reseeds its builder
+  // from this proof instead of re-verifying.
+  ir::VerifiedStorage types;
   // Aligned with tree.modules by index.
   std::vector<CheckedModule> modules;
   // Every generic enum instantiation type, aligned with the
@@ -166,9 +168,10 @@ struct CheckedPackage {
 // nominal definitions (structs, enums), signatures, and generic
 // instantiations. Reports unknown, duplicate, recursive, and malformed
 // types, then checks bodies.
-diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
-                                             ir::PointerWidth width,
-                                             ast::AstArena& ast,
-                                             diag::DiagBag& bag);
+base::Result<CheckedPackage, diag::Reported> check_package(
+    const ModuleTree& tree,
+    ir::PointerWidth width,
+    ast::AstArena& ast,
+    diag::DiagBag& bag);
 
 }  // namespace analyzer

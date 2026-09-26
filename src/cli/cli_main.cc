@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "base/logger.h"
 #include "cli/build_command.h"
@@ -19,10 +20,12 @@
 #include "cli/parse_output.h"
 #include "cli/result_code.h"
 #include "cli/run_command.h"
+#include "cli/validate.h"
 #include "debug/fatal.h"
 #include "diag/render.h"
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
 
@@ -80,7 +83,17 @@ i32 cli_main(i32 argc, char** argv) {
     const diag::RenderOptions options{
         .color = style != term::ColorStyle::Off,
     };
-    exit_code = dispatch(config, options);
+    // Grammar parsing produced the config; semantic validation gates
+    // dispatch so no command ever sees a nonsensical field combination.
+    base::Result<void, ConfigError> validated = validate_cli_config(config);
+    if (validated.is_err()) {
+      base::logger.wo_prefix(
+          "error: {}",
+          describe_config_error(std::move(validated).unwrap_err()));
+      exit_code = result_code(ResultCode::ArgParseError);
+    } else {
+      exit_code = dispatch(config, options);
+    }
   }
   return exit_code;
 }

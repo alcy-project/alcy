@@ -44,30 +44,37 @@ ResultCode run_check(const CliConfig& config,
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
   if (found.found) {
-    const pipeline::CheckResult result = pipeline::check_package(
-        ctx, found.root, found.manifest, found.manifest_name);
+    base::Result<pipeline::CheckResult, diag::Reported> result =
+        pipeline::check_package(ctx, found.root, found.manifest,
+                                found.manifest_name);
     report_diagnostics(ctx.bag, ctx.sources, options);
-    log_check_result(result);
-    return result.success ? ResultCode::Success : ResultCode::CheckFailed;
+    if (result.is_err()) {
+      return ResultCode::CheckFailed;
+    }
+    log_check_result(std::move(result).unwrap());
+    return ResultCode::Success;
   }
 
   // Single-file mode for explicit `foo.al` targets. Directories without
   // a manifest are not checked: module structure needs declared roots.
-  if (raw_target.size() < path::kSourceExtension.size() ||
-      raw_target.substr(raw_target.size() - path::kSourceExtension.size()) !=
-          path::kSourceExtension) {
+  if (raw_target.size() < path::SOURCE_EXTENSION.size() ||
+      raw_target.substr(raw_target.size() - path::SOURCE_EXTENSION.size()) !=
+          path::SOURCE_EXTENSION) {
     const u32 index = ctx.bag.emit(
-        diag::Severity::Error, pipeline::kPipelineNoManifest,
+        diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
         "no manifest found at '{}'; check a file or add alcy.toml", raw_target);
     (void)index;
     report_diagnostics(ctx.bag, ctx.sources, options);
     return ResultCode::CheckFailed;
   }
-  const pipeline::CheckResult result =
+  base::Result<pipeline::CheckResult, diag::Reported> result =
       pipeline::check_single_file(ctx, raw_target);
   report_diagnostics(ctx.bag, ctx.sources, options);
-  log_check_result(result);
-  return result.success ? ResultCode::Success : ResultCode::CheckFailed;
+  if (result.is_err()) {
+    return ResultCode::CheckFailed;
+  }
+  log_check_result(std::move(result).unwrap());
+  return ResultCode::Success;
 }
 
 }  // namespace cli

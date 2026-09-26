@@ -17,9 +17,13 @@
 
 namespace parser {
 
-// Diagnostic codes 4100-4199 are reserved for the parser.
-inline constexpr u32 kParserUnexpectedToken = 4100;
-inline constexpr u32 kParserReservedWord = 4101;
+// Diagnostic codes 3000-3199 are reserved for the parser.
+inline constexpr u32 PARSER_UNEXPECTED_TOKEN = 3000;
+inline constexpr u32 PARSER_RESERVED_WORD = 3001;
+// The token stream handed to the parser failed structural verification.
+inline constexpr u32 PARSER_INVALID_TOKEN_STREAM = 3002;
+// The parsed arena failed structural verification.
+inline constexpr u32 PARSER_INVALID_AST = 3003;
 
 // Hand-written recursive-descent parser over a token stream. Parsing is
 // error-tolerant: failures report a diagnostic and synchronize at item,
@@ -35,9 +39,12 @@ class Parser {
          ast::AstArena& arena,
          diag::DiagBag& bag);
 
-  // Parses a whole file into items. Always returns; errors accumulate
-  // in the bag and erroneous constructs are simply absent.
-  std::span<const ast::ItemIdx> parse();
+  // Parses a whole file into items. The token stream is verified on
+  // entry and the arena on exit, so callers receive validated items;
+  // either failure reports an internal diagnostic and returns err.
+  // Grammar errors still accumulate in the bag with valid items
+  // returned: erroneous constructs are simply absent.
+  base::Result<std::span<const ast::ItemIdx>, diag::Reported> parse();
 
  private:
   // Token cursor. Never rests on skipped kinds.
@@ -115,7 +122,7 @@ class Parser {
   ast::StmtIdx parse_stmt();
 
   // Small pieces.
-  base::Result<ast::Ident, diag::Fatal> parse_ident(std::string_view what);
+  base::Result<ast::Ident, diag::Reported> parse_ident(std::string_view what);
   // Parses a decimal integer literal (digits and `_`) for array
   // lengths; the token must already be checked as Integer.
   bool parse_decimal_u64(u64* out);

@@ -7,6 +7,8 @@
 #include <utility>
 
 #include "doctest/doctest.h"
+#include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/seq_builder.h"
@@ -44,7 +46,7 @@ struct Fixture {
                                params.finish());
   }
 
-  ir::Storage build() { return std::move(builder).build(); }
+  ir::Storage build() { return std::move(builder).build().unwrap().unwrap(); }
 };
 
 symbol::Signature signature(std::string path,
@@ -102,7 +104,7 @@ TEST_CASE("Mangle is deterministic") {
   sig.generics = {f.pair(f.i32, f.arr), f.mut_u8, f.ref_str};
   const ir::Storage types = f.build();
   const std::string first = symbol::mangle(sig, types, f.strings);
-  for (int i = 0; i < 4; ++i) {
+  for (i32 i = 0; i < 4; ++i) {
     CHECK(symbol::mangle(sig, types, f.strings) == first);
   }
 }
@@ -113,8 +115,13 @@ TEST_CASE("Mangle splits a module path into segments") {
       signature("a::b::c", "f", symbol::Signature::Kind::Free);
   const ir::Storage types = f.build();
   const std::string encoded = symbol::mangle(nested, types, f.strings);
-  symbol::Demangled out;
-  CHECK(symbol::demangle(encoded, out));
+  base::Result<symbol::Demangled, symbol::DemangleError> decoded =
+      symbol::demangle(encoded);
+  CHECK(decoded.is_ok());
+  if (decoded.is_err()) {
+    return;
+  }
+  symbol::Demangled out = std::move(decoded).unwrap();
   CHECK(out.path.size() == 3);
   CHECK(out.path[0] == "a");
   CHECK(out.path[1] == "b");
@@ -141,8 +148,13 @@ TEST_CASE("Demangle recovers a signature") {
   const ir::Storage types = f.build();
   const std::string encoded = symbol::mangle(sig, types, f.strings);
 
-  symbol::Demangled out;
-  CHECK(symbol::demangle(encoded, out));
+  base::Result<symbol::Demangled, symbol::DemangleError> decoded =
+      symbol::demangle(encoded);
+  CHECK(decoded.is_ok());
+  if (decoded.is_err()) {
+    return;
+  }
+  symbol::Demangled out = std::move(decoded).unwrap();
   CHECK(out.kind == symbol::Signature::Kind::Method);
   CHECK(out.path.size() == 2);
   CHECK(out.path[0] == "core");
@@ -161,22 +173,21 @@ TEST_CASE("Demangle recovers a signature") {
 }
 
 TEST_CASE("Demangle rejects what it does not understand") {
-  symbol::Demangled out;
   // Not ours.
-  CHECK(!symbol::demangle("free", out));
-  CHECK(!symbol::demangle("alcy_main", out));
+  CHECK(symbol::demangle("free").is_err());
+  CHECK(symbol::demangle("alcy_main").is_err());
   // Ours, but an unknown version.
-  CHECK(!symbol::demangle("_A9f03free", out));
+  CHECK(symbol::demangle("_A9f03free").is_err());
   // Unknown kind.
-  CHECK(!symbol::demangle("_A1z03free", out));
+  CHECK(symbol::demangle("_A1z03free").is_err());
   // Truncated: the name claims more bytes than remain.
-  CHECK(!symbol::demangle("_A1f09free", out));
+  CHECK(symbol::demangle("_A1f09free").is_err());
   // Truncated inside a type argument.
-  CHECK(!symbol::demangle("_A1f03free4core", out));
+  CHECK(symbol::demangle("_A1f03free4core").is_err());
   // Trailing bytes mean the encoding and the decoder disagree.
-  CHECK(!symbol::demangle("_A1f03free!!", out));
+  CHECK(symbol::demangle("_A1f03free!!").is_err());
   // A count larger than what is left cannot be honest.
-  CHECK(!symbol::demangle("_A1f03free99i", out));
+  CHECK(symbol::demangle("_A1f03free99i").is_err());
 }
 
 TEST_CASE("Display renders source spelling") {

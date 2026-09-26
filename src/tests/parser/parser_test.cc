@@ -5,11 +5,13 @@
 
 #include <span>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "ast/ast.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
+#include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
 #include "lexer/lexer.h"
 #include "lexer/token.h"
@@ -33,12 +35,17 @@ struct ParseResult {
 };
 
 ParseResult parse(std::string_view bytes, Fixture& f) {
-  lexer::Lexer lexer(bytes, source::kUnknownFile, f.bag);
+  lexer::Lexer lexer(bytes, source::UNKNOWN_FILE, f.bag);
   std::vector<lexer::Token> tokens;
   lexer.tokenize(tokens);
   Parser parser(std::span<const lexer::Token>(tokens.data(), tokens.size()),
-                bytes, source::kUnknownFile, f.ast, f.bag);
-  auto items = parser.parse();
+                bytes, source::UNKNOWN_FILE, f.ast, f.bag);
+  base::Result<std::span<const ast::ItemIdx>, diag::Reported> parsed =
+      parser.parse();
+  if (parsed.is_err()) {
+    return {{}, false};
+  }
+  auto items = std::move(parsed).unwrap();
   return {items, !f.bag.has_errors()};
 }
 
@@ -660,6 +667,19 @@ TEST_CASE("Parser rejects intrinsic methods") {
   const ParseResult result =
       parse("struct S { x: i32 }\nimpl S { intrinsic fn f(); }", f);
   CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Parser rejects a token stream without Eof") {
+  Fixture f;
+  constexpr std::string_view bytes = "fn main() {}\n";
+  lexer::Lexer lexer(bytes, source::UNKNOWN_FILE, f.bag);
+  std::vector<lexer::Token> tokens;
+  lexer.tokenize(tokens);
+  tokens.pop_back();
+  Parser parser(std::span<const lexer::Token>(tokens.data(), tokens.size()),
+                bytes, source::UNKNOWN_FILE, f.ast, f.bag);
+  CHECK(parser.parse().is_err());
   CHECK(f.bag.has_errors());
 }
 

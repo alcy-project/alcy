@@ -199,10 +199,10 @@ inline TypeLayout type_layout(const StorageState& state,
     case TypeTag::Enum: {
       // A discriminant, then the payload area. The area is a whole
       // number of carriers, so the emitted slot has exactly this layout.
-      constexpr u64 kDisc = 4;
+      constexpr u64 DISC = 4;
       const TypeLayout area = enum_payload_area(state, idx, width);
-      const u64 align = area.align > kDisc ? area.align : kDisc;
-      return {align_up(kDisc, area.align) + area.size, align};
+      const u64 align = area.align > DISC ? area.align : DISC;
+      return {align_up(DISC, area.align) + area.size, align};
     }
   }
   UNREACHABLE();
@@ -337,6 +337,34 @@ class Storage {
 
  private:
   StorageState state_;
+};
+
+// Storage that passed structural verification at build time. The only
+// production path to a Storage is StorageBuilder::build, so holding
+// this type proves verify_storage ran; consumers that require valid
+// IR (lowering output, the emitter) take it instead of re-verifying.
+class VerifiedStorage {
+ public:
+  ~VerifiedStorage() = default;
+
+  VerifiedStorage(const VerifiedStorage&) = delete;
+  VerifiedStorage& operator=(const VerifiedStorage&) = delete;
+
+  VerifiedStorage(VerifiedStorage&&) noexcept = default;
+  VerifiedStorage& operator=(VerifiedStorage&&) noexcept = default;
+
+  const Storage& operator*() const { return storage_; }
+  const Storage* operator->() const { return &storage_; }
+
+  // Moves the verified storage out for phase handoff. The proof is
+  // consumed: downstream code holds a plain Storage again.
+  Storage unwrap() && { return std::move(storage_); }
+
+ private:
+  friend class StorageBuilder;
+  explicit VerifiedStorage(Storage storage) : storage_(std::move(storage)) {}
+
+  Storage storage_;
 };
 
 }  // namespace ir

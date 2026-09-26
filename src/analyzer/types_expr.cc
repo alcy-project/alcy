@@ -103,7 +103,7 @@ bool Checker::bind_pattern(u32 module,
         }
         if (resolved.kind != PathValue::Kind::TupleVariant) {
           const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, node.span,
+              bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH, node.span,
                        "not a tuple variant");
           (void)index;
           bind_error_idents(module, pattern);
@@ -119,7 +119,7 @@ bool Checker::bind_pattern(u32 module,
               generic_instance_for(nominal_index(resolved.enom), type);
           if (instance == nullptr) {
             const u32 index = bag.emit(
-                diag::Severity::Error, kAnalyzerTypeMismatch, node.span,
+                diag::Severity::Error, ANALYZER_TYPE_MISMATCH, node.span,
                 "variant is not a member of the matched type");
             (void)index;
             bind_error_idents(module, pattern);
@@ -133,7 +133,7 @@ bool Checker::bind_pattern(u32 module,
             node.payload.tuple.elements;
         if (payloads.size() != elements.size()) {
           const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerArityError, node.span,
+              bag.emit(diag::Severity::Error, ANALYZER_ARITY_ERROR, node.span,
                        "variant expects {} fields, pattern has {}",
                        payloads.size(), elements.size());
           (void)index;
@@ -159,7 +159,7 @@ bool Checker::bind_pattern(u32 module,
           node.payload.tuple.elements;
       if (tuple_type.elements.size() != elements.size()) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerArityError, node.span,
+            bag.emit(diag::Severity::Error, ANALYZER_ARITY_ERROR, node.span,
                      "tuple pattern has {} elements, type has {}",
                      elements.size(), tuple_type.elements.size());
         (void)index;
@@ -190,7 +190,7 @@ bool Checker::bind_pattern(u32 module,
             generic_instance_for(nominal_index(nominal), type);
         if (instance == nullptr) {
           const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, node.span,
+              bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH, node.span,
                        "struct is not a member of the matched type");
           (void)index;
           bind_error_idents(module, pattern);
@@ -217,7 +217,7 @@ bool Checker::bind_pattern(u32 module,
         }
         if (!found) {
           const u32 diag =
-              bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
+              bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
                        field.name.span, "unknown field '{}'", field.name.name);
           (void)diag;
           bind_error_idents(module, field.pattern);
@@ -236,7 +236,7 @@ bool Checker::bind_pattern(u32 module,
       if ((node.payload.ref.is_mut && tag != ir::TypeTag::MutRef) ||
           (!node.payload.ref.is_mut && tag != ir::TypeTag::Ref)) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, node.span,
+            bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH, node.span,
                      "reference pattern on a non-reference type");
         (void)index;
         bind_error_idents(module, pattern);
@@ -272,7 +272,7 @@ bool Checker::bind_pattern(u32 module,
           }
           if (!found) {
             const u32 index =
-                bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+                bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION,
                          ast.patterns[alternatives[i]].span,
                          "or-pattern alternatives must bind the same names");
             (void)index;
@@ -527,7 +527,7 @@ ir::TypeIdx Checker::check_binary_operands(u32 module,
     return left;
   }
   const u32 index =
-      bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch, span,
+      bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH, span,
                "type mismatch in {}: '{}' vs '{}'", what,
                pretty_tag(tag_of(left)), pretty_tag(tag_of(right)));
   (void)index;
@@ -543,9 +543,9 @@ void Checker::check_call_args(u32 module,
                               bool skip_first) {
   const usize fixed = skip_first ? 1 : 0;
   if (args.size() + fixed != params.size()) {
-    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
-                               "'{}' expects {} arguments, found {}", what,
-                               params.size() - fixed, args.size());
+    const u32 index = bag.emit(diag::Severity::Error, ANALYZER_ARITY_ERROR,
+                               span, "'{}' expects {} arguments, found {}",
+                               what, params.size() - fixed, args.size());
     (void)index;
     return;
   }
@@ -560,13 +560,13 @@ void Checker::check_call_args(u32 module,
         !expr_comp_known(module, args[i])) {
       if (comp_depth > 0) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+            bag.emit(diag::Severity::Error, ANALYZER_NOT_COMP_KNOWN,
                      ast.exprs[args[i]].span,
                      "comp evaluation argument must be comp-known");
         (void)index;
       } else {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+            bag.emit(diag::Severity::Error, ANALYZER_NOT_COMP_KNOWN,
                      ast.exprs[args[i]].span,
                      "argument for `comp` parameter must be comp-known");
         (void)index;
@@ -647,7 +647,7 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
       if (resolved.kind == PathValue::Kind::Static && comp_depth > 0 &&
           !is_literal_const(module, path)) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerInvalidComp, span,
+            bag.emit(diag::Severity::Error, ANALYZER_INVALID_COMP, span,
                      "statics with storage cannot be read in comp evaluation");
         (void)index;
         return error_type();
@@ -660,9 +660,9 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
               expected != nullptr ? generic_find(*expected) : nullptr;
           if (instance == nullptr ||
               instance->nominal != nominal_index(resolved.enom)) {
-            const u32 index =
-                bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
-                         "cannot infer the generic type; add an annotation");
+            const u32 index = bag.emit(
+                diag::Severity::Error, ANALYZER_INVALID_OPERATION, span,
+                "cannot infer the generic type; add an annotation");
             (void)index;
             return error_type();
           }
@@ -685,14 +685,14 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
     case PathValue::Kind::AssocFunction:
     case PathValue::Kind::TupleVariant: {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
+          bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, span,
                    "callee needs arguments");
       (void)index;
       return error_type();
     }
     case PathValue::Kind::Type: {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
+          bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, span,
                    "expected a value, found a type");
       (void)index;
       return error_type();
@@ -719,14 +719,14 @@ bool Checker::verify_fmt_literal(ast::ExprIdx fmt_expr,
       parse_format_string(unescape_format_string(literal.spelling));
   if (parsed.error != FmtError::None) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+        bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION,
                  ast.exprs[fmt_expr].span, "invalid format string");
     (void)index;
     return false;
   }
   if (parsed.placeholders != elements.size()) {
     const u32 index = bag.emit(
-        diag::Severity::Error, kAnalyzerArityError, ast.exprs[fmt_expr].span,
+        diag::Severity::Error, ANALYZER_ARITY_ERROR, ast.exprs[fmt_expr].span,
         "format string has {} placeholders for {} arguments",
         parsed.placeholders, elements.size());
     (void)index;
@@ -735,7 +735,7 @@ bool Checker::verify_fmt_literal(ast::ExprIdx fmt_expr,
   for (ir::TypeIdx element : elements) {
     if (!is_formattable_tag(tag_of(element))) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+          bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION,
                    ast.exprs[args_expr].span, "argument is not formattable");
       (void)index;
       return false;
@@ -757,14 +757,14 @@ ir::TypeIdx Checker::check_fmt_write(u32 module,
   const diag::Span span = node.span;
   if (comp_depth > 0) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerInvalidComp, span,
+        bag.emit(diag::Severity::Error, ANALYZER_INVALID_COMP, span,
                  "'write' is not allowed in comp evaluation");
     (void)index;
     return error_type();
   }
   if (args.size() != 3) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
+        bag.emit(diag::Severity::Error, ANALYZER_ARITY_ERROR, span,
                  "'write' expects 3 arguments, found {}", args.size());
     (void)index;
     return error_type();
@@ -774,7 +774,7 @@ ir::TypeIdx Checker::check_fmt_write(u32 module,
   unify(str, fmt_type, ast.exprs[args[0]].span, "format string");
   if (!expr_comp_known(module, args[0])) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+        bag.emit(diag::Severity::Error, ANALYZER_NOT_COMP_KNOWN,
                  ast.exprs[args[0]].span, "format string must be comp-known");
     (void)index;
     return error_type();
@@ -792,7 +792,7 @@ ir::TypeIdx Checker::check_fmt_write(u32 module,
   }
   if (!buf_ok) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch,
+        bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH,
                  ast.exprs[args[1]].span, "buffer must be `&mut [u8]`");
     (void)index;
     return error_type();
@@ -804,7 +804,7 @@ ir::TypeIdx Checker::check_fmt_write(u32 module,
   if (!is_error(args_type) && !empty_args &&
       tag_of(args_type) != ir::TypeTag::Tuple) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch,
+        bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH,
                  ast.exprs[args[2]].span, "arguments must be a tuple");
     (void)index;
     return error_type();
@@ -825,7 +825,7 @@ ir::TypeIdx Checker::check_fmt_write(u32 module,
   record_call(module, node.payload.get<ast::ExprCall>().callee, fn);
   NominalEntry* outcome = find_nominal_in_scope(module, "WriteOutcome");
   if (outcome == nullptr) {
-    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownType,
+    const u32 index = bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_TYPE,
                                span, "'WriteOutcome' is not in scope");
     (void)index;
     return error_type();
@@ -848,14 +848,14 @@ ir::TypeIdx Checker::check_fmt_format(u32 module,
   const diag::Span span = node.span;
   if (comp_depth > 0) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerInvalidComp, span,
+        bag.emit(diag::Severity::Error, ANALYZER_INVALID_COMP, span,
                  "'format' is not allowed in comp evaluation");
     (void)index;
     return error_type();
   }
   if (args.size() != 2) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
+        bag.emit(diag::Severity::Error, ANALYZER_ARITY_ERROR, span,
                  "'format' expects 2 arguments, found {}", args.size());
     (void)index;
     return error_type();
@@ -865,7 +865,7 @@ ir::TypeIdx Checker::check_fmt_format(u32 module,
   unify(str, fmt_type, ast.exprs[args[0]].span, "format string");
   if (!expr_comp_known(module, args[0])) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+        bag.emit(diag::Severity::Error, ANALYZER_NOT_COMP_KNOWN,
                  ast.exprs[args[0]].span, "format string must be comp-known");
     (void)index;
     return error_type();
@@ -876,7 +876,7 @@ ir::TypeIdx Checker::check_fmt_format(u32 module,
   if (!is_error(args_type) && !empty_args &&
       tag_of(args_type) != ir::TypeTag::Tuple) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch,
+        bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH,
                  ast.exprs[args[1]].span, "arguments must be a tuple");
     (void)index;
     return error_type();
@@ -897,7 +897,7 @@ ir::TypeIdx Checker::check_fmt_format(u32 module,
   record_call(module, node.payload.get<ast::ExprCall>().callee, fn);
   NominalEntry* string_type = find_nominal_in_scope(module, "String");
   if (string_type == nullptr) {
-    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerUnknownType,
+    const u32 index = bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_TYPE,
                                span, "'String' is not in scope");
     (void)index;
     return error_type();
@@ -921,7 +921,7 @@ ir::TypeIdx Checker::check_call(u32 module,
   const diag::Span span = node.span;
   if (ast.exprs[callee].kind != ast::ExprKind::Path) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+        bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION,
                  ast.exprs[callee].span, "cannot call a non-path expression");
     (void)index;
     for (ast::ExprIdx arg : args) {
@@ -938,14 +938,14 @@ ir::TypeIdx Checker::check_call(u32 module,
     if (name == "print" || name == "println") {
       if (comp_depth > 0) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerInvalidComp, span,
+            bag.emit(diag::Severity::Error, ANALYZER_INVALID_COMP, span,
                      "'{}' is not allowed in comp evaluation", name);
         (void)index;
         return error_type();
       }
       if (args.size() != 1) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
+            bag.emit(diag::Severity::Error, ANALYZER_ARITY_ERROR, span,
                      "'{}' expects 1 argument, found {}", name, args.size());
         (void)index;
         return error_type();
@@ -962,14 +962,14 @@ ir::TypeIdx Checker::check_call(u32 module,
     if (name == "panic") {
       if (comp_depth > 0) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerInvalidComp, span,
+            bag.emit(diag::Severity::Error, ANALYZER_INVALID_COMP, span,
                      "'panic' is not allowed in comp evaluation");
         (void)index;
         return error_type();
       }
       if (args.size() != 1) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerArityError, span,
+            bag.emit(diag::Severity::Error, ANALYZER_ARITY_ERROR, span,
                      "'panic' expects 1 argument, found {}", args.size());
         (void)index;
         return error_type();
@@ -1051,7 +1051,7 @@ ir::TypeIdx Checker::check_call(u32 module,
       }
       if (instance == nullptr) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, span,
+            bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, span,
                      "cannot infer the generic type; add an annotation");
         (void)index;
         for (ast::ExprIdx arg : args) {
@@ -1067,7 +1067,7 @@ ir::TypeIdx Checker::check_call(u32 module,
     modules[module].variants.push_back(
         {path, enum_type, resolved.variant, cur_inst});
     if (args.size() != payloads.size()) {
-      const u32 index = bag.emit(diag::Severity::Error, kAnalyzerArityError,
+      const u32 index = bag.emit(diag::Severity::Error, ANALYZER_ARITY_ERROR,
                                  span, "variant expects {} arguments, found {}",
                                  payloads.size(), args.size());
       (void)index;
@@ -1082,7 +1082,7 @@ ir::TypeIdx Checker::check_call(u32 module,
       if (comp_depth > 0 && !comp_checked_in_scope(args[i]) &&
           !expr_comp_known(module, args[i])) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+            bag.emit(diag::Severity::Error, ANALYZER_NOT_COMP_KNOWN,
                      ast.exprs[args[i]].span,
                      "comp evaluation argument must be comp-known");
         (void)index;
@@ -1093,7 +1093,7 @@ ir::TypeIdx Checker::check_call(u32 module,
     }
     return enum_type;
   }
-  const u32 index = bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+  const u32 index = bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION,
                              span, "not callable");
   (void)index;
   for (ast::ExprIdx arg : args) {
@@ -1126,7 +1126,7 @@ ir::TypeIdx Checker::check_method_call(u32 module,
       lookup_method(nominal, name, module, node.span);
   if (method == nullptr) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
+        bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
                  node.payload.get<ast::ExprMethodCall>().name.span,
                  "no method '{}'", name);
     (void)index;
@@ -1137,7 +1137,7 @@ ir::TypeIdx Checker::check_method_call(u32 module,
   }
   if (method->receiver == CheckedModule::ReceiverKind::None) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+        bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION,
                  node.payload.get<ast::ExprMethodCall>().name.span,
                  "associated function '{}' called as a method", name);
     (void)index;
@@ -1160,7 +1160,7 @@ ir::TypeIdx Checker::check_method_call(u32 module,
     }
     if (!coerced) {
       const u32 index = bag.emit(
-          diag::Severity::Error, kAnalyzerTypeMismatch,
+          diag::Severity::Error, ANALYZER_TYPE_MISMATCH,
           ast.exprs[node.payload.get<ast::ExprMethodCall>().receiver].span,
           "type mismatch in receiver");
       (void)index;
@@ -1254,7 +1254,7 @@ ir::TypeIdx Checker::check_field(u32 module,
     }
     if (owner == nullptr) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
+          bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
                    field_name.span, "unknown field '{}'", field_name.name);
       (void)index;
       return error_type();
@@ -1270,7 +1270,7 @@ ir::TypeIdx Checker::check_field(u32 module,
     }
     if (!named) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
+          bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
                    field_name.span, "unknown field '{}'", field_name.name);
       (void)index;
       return error_type();
@@ -1295,7 +1295,7 @@ ir::TypeIdx Checker::check_field(u32 module,
       index = index * 10 + static_cast<u32>(c - '0');
     }
     if (!digits || index >= tuple_type.elements.size()) {
-      const u32 diag = bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
+      const u32 diag = bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
                                 field_name.span, "unknown tuple field '{}'",
                                 field_name.name);
       (void)diag;
@@ -1307,7 +1307,7 @@ ir::TypeIdx Checker::check_field(u32 module,
     }
     return result;
   }
-  const u32 index = bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+  const u32 index = bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION,
                              node.span, "no fields on '{}'", pretty_tag(tag));
   (void)index;
   return error_type();
@@ -1340,7 +1340,7 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
     instance = expected != nullptr ? generic_find(*expected) : nullptr;
     if (instance == nullptr || instance->nominal != nominal_index(nominal)) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, node.span,
+          bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, node.span,
                    "cannot infer the generic type; add an annotation");
       (void)index;
       for (const ast::ExprFieldInit& field :
@@ -1372,7 +1372,7 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
     }
     if (!found) {
       const u32 diag =
-          bag.emit(diag::Severity::Error, kAnalyzerUnknownValue,
+          bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
                    field.name.span, "unknown field '{}'", field.name.name);
       (void)diag;
       check_expr(module, field.value, nullptr);
@@ -1393,7 +1393,7 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
     for (usize i = 0; i < seen.size(); ++i) {
       if (!seen[i]) {
         const u32 diag =
-            bag.emit(diag::Severity::Error, kAnalyzerArityError, node.span,
+            bag.emit(diag::Severity::Error, ANALYZER_ARITY_ERROR, node.span,
                      "missing field '{}'",
                      decl.payload.get<ast::ItemStruct>().fields[i].name.name);
         (void)diag;
@@ -1421,21 +1421,21 @@ ir::TypeIdx Checker::check_question(u32 module,
   const ir::TypeIdx inner =
       check_expr(module, node.payload.get<ast::ExprQuestion>().inner, nullptr);
   if (tag_of(inner) != ir::TypeTag::Enum) {
-    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerBadQuestion,
+    const u32 index = bag.emit(diag::Severity::Error, ANALYZER_BAD_QUESTION,
                                node.span, "'?' needs an enum operand");
     (void)index;
     return error_type();
   }
   if (tag_of(fn_ret) != ir::TypeTag::Enum) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, node.span,
+        bag.emit(diag::Severity::Error, ANALYZER_BAD_QUESTION, node.span,
                  "'?' needs an enclosing function returning the same enum");
     (void)index;
     return error_type();
   }
   if (inner.idx != fn_ret.idx) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, node.span,
+        bag.emit(diag::Severity::Error, ANALYZER_BAD_QUESTION, node.span,
                  "'?' type does not match the function return type");
     (void)index;
     return error_type();
@@ -1444,7 +1444,7 @@ ir::TypeIdx Checker::check_question(u32 module,
       builder.enum_types()[builder.types()[inner].as_enum()];
   if (shape.variants.size() < 2) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, node.span,
+        bag.emit(diag::Severity::Error, ANALYZER_BAD_QUESTION, node.span,
                  "'?' needs an enum with a success and a failure variant");
     (void)index;
     return error_type();
@@ -1453,7 +1453,7 @@ ir::TypeIdx Checker::check_question(u32 module,
       builder.enum_variant_types()[shape.variants.head()];
   if (first.fields.empty()) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerBadQuestion, node.span,
+        bag.emit(diag::Severity::Error, ANALYZER_BAD_QUESTION, node.span,
                  "'?' needs a first variant carrying a value");
     (void)index;
     return error_type();
@@ -1488,7 +1488,7 @@ ir::TypeIdx Checker::check_cast(u32 module,
     }
     return target;
   }
-  const u32 index = bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+  const u32 index = bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION,
                              node.span, "invalid cast from '{}' to '{}'",
                              pretty_tag(from), pretty_tag(to));
   (void)index;
@@ -1508,7 +1508,7 @@ ir::TypeIdx Checker::check_index(u32 module,
   }
   if (!is_integer_tag(tag_of(position))) {
     const u32 diag =
-        bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch,
+        bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH,
                  ast.exprs[node.payload.get<ast::ExprIndex>().index].span,
                  "array index must be an integer");
     (void)diag;
@@ -1516,7 +1516,7 @@ ir::TypeIdx Checker::check_index(u32 module,
   }
   if (tag_of(receiver) != ir::TypeTag::Array) {
     const u32 diag =
-        bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, node.span,
+        bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, node.span,
                  "cannot index '{}'", pretty_tag(tag_of(receiver)));
     (void)diag;
     return error_type();
@@ -1540,7 +1540,7 @@ void Checker::check_cond(u32 module, ast::CondIdx cond, bool& binds) {
     if (verify_comp_known && !comp_checked_in_scope(node.init) &&
         !expr_comp_known(module, node.init)) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+          bag.emit(diag::Severity::Error, ANALYZER_NOT_COMP_KNOWN,
                    ast.exprs[node.init].span,
                    "comp condition initializer is not comp-known");
       (void)index;
@@ -1552,7 +1552,7 @@ void Checker::check_cond(u32 module, ast::CondIdx cond, bool& binds) {
   unify(boolean, actual, ast.exprs[node.value].span, "condition");
   if (verify_comp_known && !comp_checked_in_scope(node.value) &&
       !expr_comp_known(module, node.value)) {
-    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+    const u32 index = bag.emit(diag::Severity::Error, ANALYZER_NOT_COMP_KNOWN,
                                ast.exprs[node.value].span,
                                "comp condition is not comp-known");
     (void)index;
@@ -1572,7 +1572,7 @@ ir::TypeIdx Checker::check_if(u32 module,
   }
   if (!node.payload.get<ast::ExprIf>().else_block.is_valid()) {
     if (!is_void(then) && !is_error(then) && !is_never(then)) {
-      const u32 index = bag.emit(diag::Severity::Error, kAnalyzerTypeMismatch,
+      const u32 index = bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH,
                                  node.span, "if without else yields '()'");
       (void)index;
     }
@@ -1611,7 +1611,7 @@ void Checker::check_exhaustive(u32 module,
   if (tag == ir::TypeTag::I1) {
     if (!covered_bool[0] || !covered_bool[1]) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerNonExhaustiveMatch, span,
+          bag.emit(diag::Severity::Error, ANALYZER_NON_EXHAUSTIVE_MATCH, span,
                    "non-exhaustive match: missing '{}'",
                    !covered_bool[0] ? "true" : "false");
       (void)index;
@@ -1662,7 +1662,7 @@ void Checker::check_exhaustive(u32 module,
     for (usize i = 0; i < covered.size(); ++i) {
       if (!covered[i]) {
         const u32 index = bag.emit(
-            diag::Severity::Error, kAnalyzerNonExhaustiveMatch, span,
+            diag::Severity::Error, ANALYZER_NON_EXHAUSTIVE_MATCH, span,
             "non-exhaustive match: '{}' not covered", variants[i].name.name);
         (void)index;
         return;
@@ -1672,7 +1672,7 @@ void Checker::check_exhaustive(u32 module,
   }
   if (is_integer_tag(tag)) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerNonExhaustiveMatch, span,
+        bag.emit(diag::Severity::Error, ANALYZER_NON_EXHAUSTIVE_MATCH, span,
                  "non-exhaustive integer match: add a wildcard arm");
     (void)index;
     return;
@@ -1685,7 +1685,7 @@ void Checker::check_exhaustive(u32 module,
       }
     }
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerNonExhaustiveMatch, span,
+        bag.emit(diag::Severity::Error, ANALYZER_NON_EXHAUSTIVE_MATCH, span,
                  "non-exhaustive tuple match: add a wildcard arm");
     (void)index;
     return;
@@ -1697,13 +1697,14 @@ void Checker::check_exhaustive(u32 module,
       }
     }
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerNonExhaustiveMatch, span,
+        bag.emit(diag::Severity::Error, ANALYZER_NON_EXHAUSTIVE_MATCH, span,
                  "non-exhaustive struct match: add a wildcard arm");
     (void)index;
     return;
   }
-  const u32 index = bag.emit(diag::Severity::Error, kAnalyzerNonExhaustiveMatch,
-                             span, "non-exhaustive match: add a wildcard arm");
+  const u32 index =
+      bag.emit(diag::Severity::Error, ANALYZER_NON_EXHAUSTIVE_MATCH, span,
+               "non-exhaustive match: add a wildcard arm");
   (void)index;
 }
 
@@ -1797,7 +1798,7 @@ ir::TypeIdx Checker::check_match(u32 module,
   const ir::TypeIdx scrutinee = check_expr(module, scrutinee_expr, nullptr);
   if (verify_comp_known && !comp_checked_in_scope(scrutinee_expr) &&
       !expr_comp_known(module, scrutinee_expr)) {
-    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+    const u32 index = bag.emit(diag::Severity::Error, ANALYZER_NOT_COMP_KNOWN,
                                ast.exprs[scrutinee_expr].span,
                                "comp match scrutinee is not comp-known");
     (void)index;
@@ -1843,7 +1844,7 @@ ir::TypeIdx Checker::check_array(u32 module,
   const ast::ExprArray& array = node.payload.get<ast::ExprArray>();
   // Bounds compiler-time expansion: repeat counts are unbounded
   // literals, and lowering stores per element.
-  static constexpr u64 kMaxArrayElements = 1u << 20;
+  static constexpr u64 MAX_ARRAY_ELEMENTS = 1u << 20;
   const ir::TypeIdx* element_expected = nullptr;
   ir::TypeIdx expected_element = error_type();
   u64 expected_count = 0;
@@ -1857,11 +1858,11 @@ ir::TypeIdx Checker::check_array(u32 module,
     has_expected_count = true;
   }
   if (array.repeat.is_valid()) {
-    if (array.count > kMaxArrayElements) {
+    if (array.count > MAX_ARRAY_ELEMENTS) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, node.span,
+          bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, node.span,
                    "array repeat count {} exceeds the limit of {}", array.count,
-                   kMaxArrayElements);
+                   MAX_ARRAY_ELEMENTS);
       (void)index;
       return error_type();
     }
@@ -1869,7 +1870,7 @@ ir::TypeIdx Checker::check_array(u32 module,
         check_expr(module, array.repeat, element_expected);
     if (has_expected_count && expected_count != array.count) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerArityError, node.span,
+          bag.emit(diag::Severity::Error, ANALYZER_ARITY_ERROR, node.span,
                    "array expects {} elements, found repeat of {}",
                    expected_count, array.count);
       (void)index;
@@ -1883,13 +1884,13 @@ ir::TypeIdx Checker::check_array(u32 module,
   }
   if (array.elements.empty()) {
     const u32 index =
-        bag.emit(diag::Severity::Error, kAnalyzerArityError, node.span,
+        bag.emit(diag::Severity::Error, ANALYZER_ARITY_ERROR, node.span,
                  "array literal needs elements or a repeat count");
     (void)index;
     return error_type();
   }
   if (has_expected_count && expected_count != array.elements.size()) {
-    const u32 index = bag.emit(diag::Severity::Error, kAnalyzerArityError,
+    const u32 index = bag.emit(diag::Severity::Error, ANALYZER_ARITY_ERROR,
                                node.span, "array expects {} elements, found {}",
                                expected_count, array.elements.size());
     (void)index;
@@ -2000,7 +2001,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
           break;
       }
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, node.span,
+          bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, node.span,
                    "invalid unary operand '{}'", pretty_tag(tag));
       (void)index;
       return error_type();
@@ -2032,7 +2033,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
       const ir::TypeTag tag = tag_of(inner);
       if (tag != ir::TypeTag::Ref && tag != ir::TypeTag::MutRef) {
         const u32 index = bag.emit(
-            diag::Severity::Error, kAnalyzerInvalidOperation, node.span,
+            diag::Severity::Error, ANALYZER_INVALID_OPERATION, node.span,
             "cannot dereference '{}'", pretty_tag(tag_of(inner)));
         (void)index;
         return error_type();
@@ -2101,7 +2102,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
           break;
       }
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation, node.span,
+          bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, node.span,
                    "invalid binary operand '{}'", pretty_tag(tag));
       (void)index;
       return error_type();
@@ -2171,13 +2172,13 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
     case ast::ExprKind::Return: {
       if (comp_depth > 0) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerInvalidComp, node.span,
+            bag.emit(diag::Severity::Error, ANALYZER_INVALID_COMP, node.span,
                      "'ret' must not cross a comp block boundary");
         (void)index;
         return error_type();
       }
       if (!in_fn) {
-        const u32 index = bag.emit(diag::Severity::Error, kAnalyzerBadReturn,
+        const u32 index = bag.emit(diag::Severity::Error, ANALYZER_BAD_RETURN,
                                    node.span, "'ret' outside of a function");
         (void)index;
         return error_type();
@@ -2199,12 +2200,12 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
       if (loop_depth == 0) {
         if (node.kind == ast::ExprKind::Break) {
           const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerBreakOutsideLoop,
+              bag.emit(diag::Severity::Error, ANALYZER_BREAK_OUTSIDE_LOOP,
                        node.span, "'break' outside of a loop");
           (void)index;
         } else {
           const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerBreakOutsideLoop,
+              bag.emit(diag::Severity::Error, ANALYZER_BREAK_OUTSIDE_LOOP,
                        node.span, "'continue' outside of a loop");
           (void)index;
         }
@@ -2214,7 +2215,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
     }
     case ast::ExprKind::Range: {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerUnsupportedExpr, node.span,
+          bag.emit(diag::Severity::Error, ANALYZER_UNSUPPORTED_EXPR, node.span,
                    "range expressions arrive post-MVP");
       (void)index;
       return error_type();
@@ -2237,7 +2238,7 @@ ir::TypeIdx Checker::check_block(u32 module,
       result = unify(*expected, result, ast.exprs[node.value].span, "block");
     }
     if (verify_comp_known && !expr_comp_known(module, node.value)) {
-      const u32 index = bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+      const u32 index = bag.emit(diag::Severity::Error, ANALYZER_NOT_COMP_KNOWN,
                                  ast.exprs[node.value].span,
                                  "comp block value is not comp-known");
       (void)index;
@@ -2262,7 +2263,7 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
       }
       if (resolved.kind != PathValue::Kind::Local) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerBadAssignment, node.span,
+            bag.emit(diag::Severity::Error, ANALYZER_BAD_ASSIGNMENT, node.span,
                      "cannot assign to this place");
         (void)index;
         return error_type();
@@ -2273,14 +2274,14 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
       const Local* local = lookup_local(ast.paths[path].segments.back().name);
       if (local == nullptr || !local->is_mut) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerBadAssignment, node.span,
+            bag.emit(diag::Severity::Error, ANALYZER_BAD_ASSIGNMENT, node.span,
                      "cannot assign to an immutable binding");
         (void)index;
         return error_type();
       }
       if (verify_comp_known && !local->comp_known) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown, node.span,
+            bag.emit(diag::Severity::Error, ANALYZER_NOT_COMP_KNOWN, node.span,
                      "comp assignment place is not comp-known");
         (void)index;
         return error_type();
@@ -2314,7 +2315,7 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
       }
       if (tag_of(inner) != ir::TypeTag::MutRef) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerBadAssignment, node.span,
+            bag.emit(diag::Severity::Error, ANALYZER_BAD_ASSIGNMENT, node.span,
                      "cannot assign through a shared reference");
         (void)index;
         return error_type();
@@ -2322,7 +2323,7 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
       return builder.ref_types()[builder.types()[inner.idx].as_ref()].pointee;
     }
     default: {
-      const u32 index = bag.emit(diag::Severity::Error, kAnalyzerBadAssignment,
+      const u32 index = bag.emit(diag::Severity::Error, ANALYZER_BAD_ASSIGNMENT,
                                  node.span, "cannot assign to this place");
       (void)index;
       return error_type();
@@ -2354,7 +2355,7 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
           !comp_checked_in_scope(decl.init) &&
           !expr_comp_known(module, decl.init)) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerNotCompKnown,
+            bag.emit(diag::Severity::Error, ANALYZER_NOT_COMP_KNOWN,
                      ast.exprs[decl.init].span,
                      "comp declaration initializer is not comp-known");
         (void)index;
@@ -2367,7 +2368,7 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
       }
       if (refutable) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerRefutableLet,
+            bag.emit(diag::Severity::Error, ANALYZER_REFUTABLE_LET,
                      ast.patterns[decl.pattern].span,
                      "refutable pattern in declaration; use match");
         (void)index;
@@ -2385,7 +2386,7 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
           if (const Local* local = lookup_local(segments[0].name)) {
             if (local->comp_known) {
               const u32 index = bag.emit(
-                  diag::Severity::Error, kAnalyzerInvalidComp, node.span,
+                  diag::Severity::Error, ANALYZER_INVALID_COMP, node.span,
                   "cannot reassign a comp binding at runtime");
               (void)index;
               return;
@@ -2401,7 +2402,7 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
           !expr_comp_known(module,
                            node.payload.get<ast::StmtReassign>().value)) {
         const u32 index = bag.emit(
-            diag::Severity::Error, kAnalyzerNotCompKnown,
+            diag::Severity::Error, ANALYZER_NOT_COMP_KNOWN,
             ast.exprs[node.payload.get<ast::StmtReassign>().value].span,
             "comp assignment value is not comp-known");
         (void)index;
@@ -2410,7 +2411,7 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
         const ir::TypeTag tag = tag_of(place);
         if (!is_integer_tag(tag) && !is_float_tag(tag)) {
           const u32 index =
-              bag.emit(diag::Severity::Error, kAnalyzerInvalidOperation,
+              bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION,
                        node.span, "compound assignment needs a numeric place");
           (void)index;
           return;
@@ -2428,7 +2429,7 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
         return;
       }
       const u32 index = bag.emit(
-          diag::Severity::Warning, kAnalyzerMustUse,
+          diag::Severity::Warning, ANALYZER_MUST_USE,
           ast.exprs[node.payload.get<ast::StmtExpr>().value].span,
           "unused non-() value; discard it explicitly with `_ := ...`");
       (void)index;

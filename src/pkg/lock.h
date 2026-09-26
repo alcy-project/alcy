@@ -8,6 +8,7 @@
 
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
 #include "pkg/manifest.h"
 #include "pkg/resolve.h"
@@ -28,12 +29,27 @@ struct Lockfile {
   u32 package_count = 0;
 };
 
+enum class LockError : u8 {
+  // A resolved package fails manifest verification (lock_resolved), or a
+  // package entry is unusable (serialize_lockfile).
+  InvalidPackage,
+  // The lockfile model itself is inconsistent: a package count with no
+  // package array.
+  InvalidLockfile,
+};
+
 // Builds a lockfile model from resolved packages, in resolution order.
-Lockfile lock_resolved(std::span<const ResolvedPackage> resolved,
-                       mem::Arena& arena);
+// Each package must pass verify_manifest first; failures return the
+// structured error without emitting anything.
+base::Result<Lockfile, LockError> lock_resolved(
+    std::span<const ResolvedPackage> resolved,
+    mem::Arena& arena);
 
 // Serializes in alcy.lock TOML format. Only '"' and '\\' and control
 // characters are escaped; full TOML string fidelity is future work.
-void serialize_lockfile(const Lockfile& lock, fmt::memory_buffer& out);
+// Rejects a structurally invalid lock model instead of reading through
+// it.
+base::Result<void, LockError> serialize_lockfile(const Lockfile& lock,
+                                                 fmt::memory_buffer& out);
 
 }  // namespace pkg

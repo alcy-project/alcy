@@ -3,9 +3,11 @@
 
 #include "pipeline/runtime_stage.h"
 
+#include <optional>
 #include <string_view>
 #include <utility>
 
+#include "diag/bag.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
@@ -19,10 +21,12 @@ namespace {
 
 TEST_CASE("Stage writes embedded runtime sources") {
   io::TempDir dir = io::TempDir::create_unique("alcy_runtime_stage_test_");
-  CHECK(stage_runtime(dir));
-
   mem::Arena arena;
   arena.reserve(1u << 16);
+  diag::DiagBag bag{arena};
+  CHECK(stage_runtime(dir, bag).is_ok());
+  CHECK(!bag.has_errors());
+
   source::SourceManager sources;
   base::Result<source::FileId, source::SourceError> header =
       sources.load(dir.join(runtime_header_name()));
@@ -33,18 +37,23 @@ TEST_CASE("Stage writes embedded runtime sources") {
   if (header.is_err() || source.is_err()) {
     return;
   }
-  const std::string_view staged_header =
+  const std::optional<std::string_view> staged_header =
       sources.bytes(std::move(header).unwrap());
-  const std::string_view staged_source =
+  const std::optional<std::string_view> staged_source =
       sources.bytes(std::move(source).unwrap());
-  CHECK(staged_header ==
-        std::string_view(reinterpret_cast<const char*>(kAlcyRuntimeHeader),
-                         kAlcyRuntimeHeader_len));
-  CHECK(staged_source ==
-        std::string_view(reinterpret_cast<const char*>(kAlcyRuntimeSource),
-                         kAlcyRuntimeSource_len));
+  CHECK(staged_header.has_value());
+  CHECK(staged_source.has_value());
+  if (!staged_header.has_value() || !staged_source.has_value()) {
+    return;
+  }
+  CHECK(*staged_header ==
+        std::string_view(reinterpret_cast<const char*>(ALCY_RUNTIME_HEADER),
+                         ALCY_RUNTIME_HEADER_LEN));
+  CHECK(*staged_source ==
+        std::string_view(reinterpret_cast<const char*>(ALCY_RUNTIME_SOURCE),
+                         ALCY_RUNTIME_SOURCE_LEN));
   // The staged header is a real translation-unit dependency.
-  CHECK(staged_source.find("alcy_runtime.h") != std::string_view::npos);
+  CHECK(staged_source->find("alcy_runtime.h") != std::string_view::npos);
 }
 
 }  // namespace

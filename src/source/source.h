@@ -4,6 +4,7 @@
 #pragma once
 
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -18,7 +19,7 @@ namespace source {
 // module treats it as an opaque key (notably diag::Span, which locates
 // views into the files owned here).
 using FileId = u32;
-constexpr FileId kUnknownFile = std::numeric_limits<FileId>::max();
+constexpr FileId UNKNOWN_FILE = std::numeric_limits<FileId>::max();
 
 enum class SourceError : u8 {
   OpenFailed,
@@ -41,8 +42,11 @@ class SourceManager {
   // Loads a file, or returns the existing id when already loaded.
   base::Result<FileId, SourceError> load(std::string_view path);
 
-  std::string_view bytes(FileId id) const;
-  std::string_view name(FileId id) const;
+  // Checked accessors: std::nullopt means `id` does not name a loaded
+  // file, which keeps an unknown id distinguishable from a loaded file
+  // whose content (or name) happens to be empty.
+  std::optional<std::string_view> bytes(FileId id) const;
+  std::optional<std::string_view> name(FileId id) const;
   usize file_count() const { return entries_.size(); }
 
  private:

@@ -88,6 +88,6 @@ static_assert(sizeof(Operand) == 12);
 static_assert(Operand{Operand::Payload{}, primitive_idx(TypeTag::Void)}.tag() ==
               Operand::TagOf<void>);
 
-constexpr Operand kInvalidOperand = Operand::invalid();
+constexpr Operand INVALID_OPERAND = Operand::invalid();
 
 }  // namespace ir

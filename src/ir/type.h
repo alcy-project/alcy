@@ -58,14 +58,14 @@ enum class PointerWidth : u8 {
 // TypeTag order so that TypeIdx(static_cast<u32>(tag)) resolves without a
 // table lookup. The Function tag is pre-interned right after them; Struct
 // and Array nodes are only created via their factories.
-constexpr u32 kPrimitiveTypeCount = static_cast<u32>(TypeTag::Struct);
+constexpr u32 PRIMITIVE_TYPE_COUNT = static_cast<u32>(TypeTag::Struct);
 
 // Resolves a pre-interned primitive tag to its table index without a lookup.
 // StorageBuilder pre-interns these in TypeTag order (plus Function right
 // after), so this mapping must stay in sync with intern_primitives().
 constexpr TypeIdx primitive_idx(TypeTag tag) {
   if (tag == TypeTag::Function) {
-    return TypeIdx(kPrimitiveTypeCount);
+    return TypeIdx(PRIMITIVE_TYPE_COUNT);
   }
   return TypeIdx(static_cast<u32>(tag));
 }

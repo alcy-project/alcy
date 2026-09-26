@@ -28,7 +28,7 @@ struct Fixture {
   Fixture() { arena.reserve(1u << 20); }
 };
 
-constexpr std::string_view kBaseManifest =
+constexpr std::string_view BASE_MANIFEST =
     "[package]\n"
     "name = \"demo\"\n"
     "version = \"0.1.0\"\n"
@@ -38,8 +38,8 @@ constexpr std::string_view kBaseManifest =
     "path = \"main.al\"\n";
 
 PackageManifest parse_ok(std::string_view text, Fixture& f) {
-  diag::Fallible<PackageManifest> result =
-      parse_manifest(text, "alcy.toml", source::kUnknownFile, f.bag, f.arena);
+  base::Result<PackageManifest, diag::Reported> result =
+      parse_manifest(text, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
   CHECK(result.is_ok());
   if (result.is_err()) {
     return PackageManifest{};
@@ -57,7 +57,7 @@ bool write_all(io::TempDir& dir, std::string_view rel, std::string_view text) {
 TEST_CASE("Manifest parses explicit module sets") {
   Fixture f;
   const PackageManifest manifest =
-      parse_ok(std::string(kBaseManifest) +
+      parse_ok(std::string(BASE_MANIFEST) +
                    "\n[modules]\n"
                    "include = [\"main\", \"utils/io\"]\n"
                    "export = [\"api\"]\n",
@@ -76,7 +76,7 @@ TEST_CASE("Manifest parses explicit module sets") {
 
 TEST_CASE("Manifest without modules selects wildcards") {
   Fixture f;
-  const PackageManifest manifest = parse_ok(kBaseManifest, f);
+  const PackageManifest manifest = parse_ok(BASE_MANIFEST, f);
   CHECK(manifest.modules.wildcard);
   CHECK(manifest.modules.include_count == 0);
   CHECK(manifest.modules.export_count == 0);
@@ -84,11 +84,11 @@ TEST_CASE("Manifest without modules selects wildcards") {
 
 TEST_CASE("Manifest rejects duplicate module entries") {
   Fixture f;
-  diag::Fallible<PackageManifest> result =
-      parse_manifest(std::string(kBaseManifest) +
+  base::Result<PackageManifest, diag::Reported> result =
+      parse_manifest(std::string(BASE_MANIFEST) +
                          "\n[modules]\n"
                          "include = [\"main\", \"main\"]\n",
-                     "alcy.toml", source::kUnknownFile, f.bag, f.arena);
+                     "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
   CHECK(result.is_err());
   CHECK(f.bag.has_errors());
 }
@@ -105,7 +105,7 @@ TEST_CASE("Modules resolve explicit entries to files") {
   }
   Fixture f;
   const PackageManifest manifest =
-      parse_ok(std::string(kBaseManifest) +
+      parse_ok(std::string(BASE_MANIFEST) +
                    "\n[modules]\n"
                    "include = [\"main\", \"util\"]\n",
                f);
@@ -119,8 +119,9 @@ TEST_CASE("Modules resolve explicit entries to files") {
     }
     files.push_back(std::move(loaded).unwrap());
   }
-  diag::Fallible<std::vector<ModuleFile>> resolved = resolve_module_files(
-      manifest, dir.path(), files, f.sources, f.bag, f.arena);
+  base::Result<std::vector<ModuleFile>, diag::Reported> resolved =
+      resolve_module_files(manifest, dir.path(), files, f.sources, f.bag,
+                           f.arena);
   CHECK(resolved.is_ok());
   if (resolved.is_err()) {
     return;
@@ -147,7 +148,7 @@ TEST_CASE("Modules resolve wildcards by relative path") {
     return;
   }
   Fixture f;
-  const PackageManifest manifest = parse_ok(kBaseManifest, f);
+  const PackageManifest manifest = parse_ok(BASE_MANIFEST, f);
   CHECK(manifest.modules.wildcard);
   std::vector<source::FileId> files;
   for (std::string_view rel : {"main.al", "io/util.al"}) {
@@ -160,8 +161,9 @@ TEST_CASE("Modules resolve wildcards by relative path") {
     files.push_back(std::move(loaded).unwrap());
   }
   // The nested file needs its directory to exist first.
-  diag::Fallible<std::vector<ModuleFile>> resolved = resolve_module_files(
-      manifest, dir.path(), files, f.sources, f.bag, f.arena);
+  base::Result<std::vector<ModuleFile>, diag::Reported> resolved =
+      resolve_module_files(manifest, dir.path(), files, f.sources, f.bag,
+                           f.arena);
   CHECK(resolved.is_ok());
   if (resolved.is_err()) {
     return;
@@ -184,7 +186,7 @@ TEST_CASE("Modules reject missing include files") {
   }
   Fixture f;
   const PackageManifest manifest =
-      parse_ok(std::string(kBaseManifest) +
+      parse_ok(std::string(BASE_MANIFEST) +
                    "\n[modules]\n"
                    "include = [\"main\", \"ghost\"]\n",
                f);
@@ -196,8 +198,9 @@ TEST_CASE("Modules reject missing include files") {
     return;
   }
   files.push_back(std::move(loaded).unwrap());
-  diag::Fallible<std::vector<ModuleFile>> resolved = resolve_module_files(
-      manifest, dir.path(), files, f.sources, f.bag, f.arena);
+  base::Result<std::vector<ModuleFile>, diag::Reported> resolved =
+      resolve_module_files(manifest, dir.path(), files, f.sources, f.bag,
+                           f.arena);
   CHECK(resolved.is_err());
   CHECK(f.bag.has_errors());
 }

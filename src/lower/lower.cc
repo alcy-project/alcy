@@ -83,7 +83,7 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
                  str::StringInterner& strings,
                  diag::DiagBag& bag)
     : pkg(std::move(package)),
-      builder(std::move(pkg.types).take_state()),
+      builder(std::move(pkg.types).unwrap().take_state()),
       width(width),
       ast(ast),
       strings(strings),
@@ -151,13 +151,13 @@ ir::RegisterIdx Lowerer::emit_type_query(ir::Opcode op, ir::TypeIdx measure) {
 
 const std::vector<ir::TypeIdx>& Lowerer::fn_instance_args(u32 module,
                                                           u32 sig_index) const {
-  static const std::vector<ir::TypeIdx> kNone;
+  static const std::vector<ir::TypeIdx> NONE;
   for (const analyzer::FnInstance& instance : pkg.fn_insts) {
     if (instance.module == module && instance.sig_index == sig_index) {
       return instance.args;
     }
   }
-  return kNone;
+  return NONE;
 }
 
 void Lowerer::emit_void(ir::Opcode op, const std::vector<ir::OperandIdx>& ops) {
@@ -298,7 +298,7 @@ void Lowerer::emit_drops(u32 mark, diag::Span span) {
       continue;
     }
     const u32 index = bag.emit(
-        diag::Severity::Warning, kLowerDropUnplaced, span,
+        diag::Severity::Warning, LOWER_DROP_UNPLACED, span,
         "destructor for '{}' is not run: it is reached through a variant or "
         "an array, so declare 'fn drop(self: Self)' to end it",
         local.name);
@@ -452,8 +452,8 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
       return entry.idx;
     }
   }
-  static constexpr usize kMaxFnEntries = 8192;
-  if (fns.size() >= kMaxFnEntries) {
+  static constexpr usize MAX_FN_ENTRIES = 8192;
+  if (fns.size() >= MAX_FN_ENTRIES) {
     internal(diag::Span{}, "function specialization budget exhausted");
     return ir::FunctionIdx(base::kInvalidIdx);
   }
@@ -471,7 +471,7 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   // A generic body is named by the arguments it was instantiated with.
   // A method's arguments come from the type it was instantiated on; a
   // generic free function's from the signature it registered.
-  if (inst != analyzer::kNoInst && inst < pkg.generic_insts.size()) {
+  if (inst != analyzer::NO_INST && inst < pkg.generic_insts.size()) {
     const ir::TypeIdx self = pkg.generic_insts[inst];
     if (self.is_valid()) {
       entry.generics = nominal_arguments(self);
@@ -516,7 +516,7 @@ std::vector<ir::TypeIdx> Lowerer::fn_args_for(ast::ItemIdx item) const {
   return {};
 }
 
-// Index of a generic instantiation, or kNoInst when the type is not
+// Index of a generic instantiation, or NO_INST when the type is not
 // a generic instantiation.
 u32 Lowerer::generic_inst_index(ir::TypeIdx type) const {
   for (u32 i = 0; i < static_cast<u32>(pkg.generic_insts.size()); ++i) {
@@ -524,7 +524,7 @@ u32 Lowerer::generic_inst_index(ir::TypeIdx type) const {
       return i;
     }
   }
-  return analyzer::kNoInst;
+  return analyzer::NO_INST;
 }
 
 // Lowering context of a call target: the checker recorded the
@@ -538,18 +538,18 @@ u32 Lowerer::generic_inst_index(ir::TypeIdx type) const {
 u32 Lowerer::callee_inst(
     const analyzer::CheckedModule::CallTarget* target) const {
   if (target == nullptr) {
-    return analyzer::kNoInst;
+    return analyzer::NO_INST;
   }
   if (target->is_method) {
     const analyzer::CheckedModule& def = pkg.modules[target->module];
     if (target->index >= def.methods.size()) {
-      return analyzer::kNoInst;
+      return analyzer::NO_INST;
     }
     return generic_inst_index(def.methods[target->index].self_type);
   }
   const analyzer::CheckedModule& def = pkg.modules[target->module];
   if (target->index >= def.functions.size()) {
-    return analyzer::kNoInst;
+    return analyzer::NO_INST;
   }
   return def.functions[target->index].inst;
 }
@@ -760,7 +760,7 @@ void Lowerer::run() {
           !ast.items[sig.item].payload.get<ast::ItemFn>().generic.empty()) {
         continue;
       }
-      fn_index(m, sig.item, sig.name, sig.params, sig.ret, analyzer::kNoInst,
+      fn_index(m, sig.item, sig.name, sig.params, sig.ret, analyzer::NO_INST,
                {});
       if (failed) {
         return;
@@ -832,28 +832,29 @@ void Lowerer::run() {
   }
 }
 
-ir::Storage Lowerer::finish() && {
+base::Result<ir::VerifiedStorage, ir::VerifyError> Lowerer::finish() && {
   return std::move(builder).build();
 }
-diag::Fallible<LoweredPackage> lower_package(analyzer::CheckedPackage package,
-                                             ir::PointerWidth width,
-                                             ast::AstArena& ast,
-                                             str::StringInterner& strings,
-                                             diag::DiagBag& bag) {
+base::Result<LoweredPackage, diag::Reported> lower_package(
+    analyzer::CheckedPackage package,
+    ir::PointerWidth width,
+    ast::AstArena& ast,
+    str::StringInterner& strings,
+    diag::DiagBag& bag) {
   Lowerer lowerer(std::move(package), width, ast, strings, bag);
   lowerer.run();
   if (lowerer.failed) {
-    return base::make_err(diag::Fatal{});
+    return base::make_err(diag::Reported{});
   }
   // Tables leave before the builder moves; aggregate init stays whole.
   std::vector<diag::Span> spans = std::move(lowerer.instr_spans_);
   std::vector<LoweredPackage::AddrInfo> addrs = std::move(lowerer.addr_names_);
   const usize prelude_functions = lowerer.prelude_functions_;
-  ir::Storage storage = std::move(lowerer).finish();
-  if (base::Result<void, ir::VerifyError> result = ir::verify_storage(storage);
-      result.is_err()) {
-    ir::VerifyError error = std::move(result).unwrap_err();
-    const u32 index = bag.emit(diag::Severity::Error, kLowerInternal,
+  base::Result<ir::VerifiedStorage, ir::VerifyError> built =
+      std::move(lowerer).finish();
+  if (built.is_err()) {
+    const ir::VerifyError error = std::move(built).unwrap_err();
+    const u32 index = bag.emit(diag::Severity::Error, LOWER_INTERNAL,
                                diag::Span{}, "lowered IR failed verification");
     (void)index;
     const diag::Diagnostic diag = ir::to_diagnostic(error);
@@ -861,8 +862,9 @@ diag::Fallible<LoweredPackage> lower_package(analyzer::CheckedPackage package,
     diag::render(diag, rendered);
     DLOG("verify failure: {} at index {}",
          std::string_view(rendered.data(), rendered.size()), error.index);
-    return base::make_err(diag::Fatal{});
+    return base::make_err(diag::Reported{});
   }
+  ir::VerifiedStorage storage = std::move(built).unwrap();
   // Tables outlive the builder move above; the Lowerer shell is empty.
   LoweredPackage lowered{std::move(storage), std::move(spans), std::move(addrs),
                          prelude_functions};

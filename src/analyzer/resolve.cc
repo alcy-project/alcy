@@ -4,6 +4,7 @@
 #include "analyzer/resolve.h"
 
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -28,23 +29,23 @@ namespace analyzer {
 
 namespace {
 
-// Diagnostic codes 4200-4299 are reserved for module resolution.
-constexpr u32 kAnalyzerDuplicateModule = 4200;
-constexpr u32 kAnalyzerUnresolvedImport = 4201;
-constexpr u32 kAnalyzerAmbiguousImport = 4202;
-constexpr u32 kAnalyzerUnreachableFile = 4203;
-constexpr u32 kAnalyzerInvalidPath = 4204;
+// Diagnostic codes 4000-4009 are reserved for module resolution.
+constexpr u32 ANALYZER_DUPLICATE_MODULE = 4000;
+constexpr u32 ANALYZER_UNRESOLVED_IMPORT = 4001;
+constexpr u32 ANALYZER_AMBIGUOUS_IMPORT = 4002;
+constexpr u32 ANALYZER_UNREACHABLE_FILE = 4003;
+constexpr u32 ANALYZER_INVALID_PATH = 4004;
 
-constexpr u32 kNoModule = std::numeric_limits<u32>::max();
+constexpr u32 NO_MODULE = std::numeric_limits<u32>::max();
 
 struct FileData {
-  source::FileId id = source::kUnknownFile;
+  source::FileId id = source::UNKNOWN_FILE;
   path::Path path;
   // Items are parsed into the package AstArena (never a per-file
   // arena): ModuleNode::items outlives resolve_modules, so per-file
   // arenas would dangle.
   std::span<const ast::ItemIdx> items;
-  u32 module = kNoModule;
+  u32 module = NO_MODULE;
 
   FileData(source::FileId id, path::Path path)
       : id(id), path(std::move(path)) {}
@@ -65,7 +66,7 @@ class Resolver {
   ast::AstArena& ast;
   diag::DiagBag& bag;
   std::string_view package_name;
-  source::FileId root = source::kUnknownFile;
+  source::FileId root = source::UNKNOWN_FILE;
   std::vector<FileData> file_data;
   // Prelude sources: lexed and parsed like package files but attached
   // as standalone modules, never into the package tree.
@@ -126,31 +127,41 @@ class Resolver {
         return child;
       }
     }
-    return kNoModule;
+    return NO_MODULE;
   }
 
   void lex_parse_file(FileData& file) {
-    const std::string_view bytes = sources.bytes(file.id);
+    // File ids were validated when the inputs were admitted in run().
+    const std::optional<std::string_view> file_bytes = sources.bytes(file.id);
+    DCHECK(file_bytes.has_value());
+    const std::string_view bytes = file_bytes.value_or(std::string_view{});
     lexer::Lexer lexer(bytes, file.id, bag);
     std::vector<lexer::Token> tokens;
     lexer.tokenize(tokens);
     parser::Parser parser(
         std::span<const lexer::Token>(tokens.data(), tokens.size()), bytes,
         file.id, ast, bag);
-    file.items = parser.parse();
-    parser::desugar_shadowing(file.items, ast, bag);
+    base::Result<std::span<const ast::ItemIdx>, diag::Reported> parsed =
+        parser.parse();
+    if (parsed.is_err()) {
+      return;
+    }
+    file.items = std::move(parsed).unwrap();
+    if (parser::desugar_shadowing(file.items, ast, bag).is_err()) {
+      return;
+    }
   }
 
   void build_tree() {
-    u32 root_file = kNoModule;
+    u32 root_file = NO_MODULE;
     for (u32 i = 0; i < static_cast<u32>(file_data.size()); ++i) {
       if (file_data[i].id == root) {
         root_file = i;
       }
     }
-    DCHECK(root_file != kNoModule);
+    DCHECK(root_file != NO_MODULE);
     const u32 root_module =
-        add_module("", root, file_data[root_file].items, kNoModule);
+        add_module("", root, file_data[root_file].items, NO_MODULE);
     file_data[root_file].module = root_module;
 
     for (u32 i = 0; i < static_cast<u32>(file_data.size()); ++i) {
@@ -170,9 +181,9 @@ class Resolver {
     }
 
     for (const FileData& file : file_data) {
-      if (file.module == kNoModule) {
+      if (file.module == NO_MODULE) {
         const u32 index =
-            bag.emit(diag::Severity::Warning, kAnalyzerUnreachableFile,
+            bag.emit(diag::Severity::Warning, ANALYZER_UNREACHABLE_FILE,
                      "source file '{}' has no module", file.path.as_view());
         (void)index;
       }
@@ -197,15 +208,15 @@ class Resolver {
                                          : prefix + "::" + std::string(segment);
       const bool leaf = slash == slash_name.size();
       u32 child = find_child_module(parent, segment);
-      if (child == kNoModule) {
+      if (child == NO_MODULE) {
         child = add_module(
-            child_path, leaf ? file_data[file].id : source::kUnknownFile,
+            child_path, leaf ? file_data[file].id : source::UNKNOWN_FILE,
             leaf ? file_data[file].items : std::span<const ast::ItemIdx>{},
             parent);
         module_children[parent].push_back(child);
       } else if (leaf) {
         const u32 index = bag.emit(
-            diag::Severity::Error, kAnalyzerDuplicateModule, diag::Span{},
+            diag::Severity::Error, ANALYZER_DUPLICATE_MODULE, diag::Span{},
             "module '{}' is declared more than once", slash_name);
         (void)index;
         return;
@@ -309,7 +320,7 @@ class Resolver {
     }
     if (exports_state[module] == 1) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerUnresolvedImport,
+          bag.emit(diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT,
                    modules[module]->items.empty()
                        ? diag::Span{}
                        : ast.items[modules[module]->items[0]].span,
@@ -354,7 +365,7 @@ class Resolver {
                                           : local_modules[module],
                  name)) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerAmbiguousImport,
+          bag.emit(diag::Severity::Error, ANALYZER_AMBIGUOUS_IMPORT,
                    use_node.span, "`{}` conflicts with a local item", name);
       (void)index;
       return;
@@ -362,7 +373,7 @@ class Resolver {
     for (const Import& prior : module_imports[module]) {
       if (prior.ns == ns && prior.name == name) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerAmbiguousImport,
+            bag.emit(diag::Severity::Error, ANALYZER_AMBIGUOUS_IMPORT,
                      use_node.span, "`{}` is imported more than once", name);
         (void)index;
         return;
@@ -405,12 +416,12 @@ class Resolver {
     }
     if (segments.size() < 2) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerUnresolvedImport, node.span,
+          bag.emit(diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT, node.span,
                    "imports must be module-qualified (`self::foo`)");
       (void)index;
       return;
     }
-    u32 current = kNoModule;
+    u32 current = NO_MODULE;
     const std::string_view head = segments[0];
     if (head == "package" || head == package_name) {
       current = 0;
@@ -423,9 +434,9 @@ class Resolver {
     } else if (head == "self") {
       current = module;
     } else if (head == "super") {
-      if (parents[module] == kNoModule) {
+      if (parents[module] == NO_MODULE) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerUnresolvedImport,
+            bag.emit(diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT,
                      node.span, "the root module has no parent");
         (void)index;
         return;
@@ -433,9 +444,9 @@ class Resolver {
       current = parents[module];
     } else {
       current = find_child_module(module, head);
-      if (current == kNoModule) {
+      if (current == NO_MODULE) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerUnresolvedImport,
+            bag.emit(diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT,
                      node.span, "unresolved import '{}'", head);
         (void)index;
         return;
@@ -443,9 +454,9 @@ class Resolver {
     }
     for (usize i = 1; i + 1 < segments.size(); ++i) {
       current = find_child_module(current, segments[i]);
-      if (current == kNoModule) {
+      if (current == NO_MODULE) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kAnalyzerUnresolvedImport,
+            bag.emit(diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT,
                      node.span, "unresolved import '{}'", segments[i]);
         (void)index;
         return;
@@ -459,7 +470,7 @@ class Resolver {
     // Locals first: no recursion is needed and self-targets never false
     // cycle. Re-exports follow only for members locals lack.
     bool resolved = false;
-    u32 target = kNoModule;
+    u32 target = NO_MODULE;
     std::string_view final_member;
     // A struct or enum name occupies the type and value namespaces alike.
     const Namespace namespaces[] = {Namespace::Module, Namespace::Type,
@@ -483,7 +494,7 @@ class Resolver {
     }
     if (!resolved) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kAnalyzerUnresolvedImport, node.span,
+          bag.emit(diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT, node.span,
                    "unresolved import '{}'", member);
       (void)index;
     }
@@ -499,10 +510,18 @@ class Resolver {
     root = root_id;
     file_data.reserve(inputs.size());
     for (const ModuleInput& input : inputs) {
+      const std::optional<std::string_view> source_name =
+          sources.name(input.id);
+      if (!source_name.has_value()) {
+        const u32 index = bag.emit(diag::Severity::Error, ANALYZER_INVALID_PATH,
+                                   "unknown file id for a module input");
+        (void)index;
+        continue;
+      }
       base::Result<path::Path, path::PathError> canonical =
-          path::Path::from_native(sources.name(input.id));
+          path::Path::from_native(*source_name);
       if (canonical.is_err()) {
-        const u32 index = bag.emit(diag::Severity::Error, kAnalyzerInvalidPath,
+        const u32 index = bag.emit(diag::Severity::Error, ANALYZER_INVALID_PATH,
                                    "invalid source path for file");
         (void)index;
         continue;
@@ -512,10 +531,18 @@ class Resolver {
       file_data.emplace_back(input.id, std::move(path));
     }
     for (const ModuleInput& input : prelude) {
+      const std::optional<std::string_view> source_name =
+          sources.name(input.id);
+      if (!source_name.has_value()) {
+        const u32 index = bag.emit(diag::Severity::Error, ANALYZER_INVALID_PATH,
+                                   "unknown file id for a prelude input");
+        (void)index;
+        continue;
+      }
       base::Result<path::Path, path::PathError> canonical =
-          path::Path::from_native(sources.name(input.id));
+          path::Path::from_native(*source_name);
       if (canonical.is_err()) {
-        const u32 index = bag.emit(diag::Severity::Error, kAnalyzerInvalidPath,
+        const u32 index = bag.emit(diag::Severity::Error, ANALYZER_INVALID_PATH,
                                    "invalid source path for file");
         (void)index;
         continue;
@@ -535,7 +562,7 @@ class Resolver {
       const std::string path =
           prelude_names[i].empty() ? "prelude" : prelude_names[i];
       const u32 module = add_module(path, prelude_data[i].id,
-                                    prelude_data[i].items, kNoModule);
+                                    prelude_data[i].items, NO_MODULE);
       modules[module]->is_prelude = true;
       prelude_data[i].module = module;
       prelude_modules.push_back(module);
@@ -566,7 +593,7 @@ class Resolver {
 
 }  // namespace
 
-diag::Fallible<ModuleTree> resolve_modules(
+base::Result<ModuleTree, diag::Reported> resolve_modules(
     source::FileId root,
     std::span<const ModuleInput> modules,
     std::string_view package_name,
@@ -575,7 +602,41 @@ diag::Fallible<ModuleTree> resolve_modules(
     diag::DiagBag& bag,
     std::span<const ModuleInput> prelude) {
   Resolver resolver{sources, ast, bag};
-  return base::make_ok(resolver.run(root, modules, package_name, prelude));
+  ModuleTree tree = resolver.run(root, modules, package_name, prelude);
+  if (bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  return base::make_ok(tree);
+}
+
+base::Result<void, ModuleTreeError> verify_module_tree(const ModuleTree& tree) {
+  if (tree.modules.empty()) {
+    return base::make_err(ModuleTreeError::Empty);
+  }
+  if (tree.root >= tree.modules.size()) {
+    return base::make_err(ModuleTreeError::RootOutOfRange);
+  }
+  for (const ModuleNode* module : tree.modules) {
+    if (module == nullptr) {
+      return base::make_err(ModuleTreeError::NullModule);
+    }
+  }
+  if (tree.prelude_modules > tree.modules.size()) {
+    return base::make_err(ModuleTreeError::BadPreludeCount);
+  }
+  return base::make_ok();
+}
+
+std::string_view describe_module_tree_error(ModuleTreeError error) {
+  switch (error) {
+    case ModuleTreeError::Empty: return "module tree has no modules";
+    case ModuleTreeError::RootOutOfRange:
+      return "module tree root names no module";
+    case ModuleTreeError::NullModule: return "module tree holds a null module";
+    case ModuleTreeError::BadPreludeCount:
+      return "module tree prelude count exceeds the module count";
+  }
+  return "invalid module tree";
 }
 
 }  // namespace analyzer

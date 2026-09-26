@@ -69,7 +69,7 @@ LowerCase lower_case(io::TempDir& dir,
                      std::initializer_list<std::string_view> rels,
                      Fixture& f) {
   std::vector<analyzer::ModuleInput> inputs;
-  source::FileId root = source::kUnknownFile;
+  source::FileId root = source::UNKNOWN_FILE;
   for (std::string_view rel : rels) {
     base::Result<source::FileId, source::SourceError> loaded =
         f.sources.load(dir.join(rel));
@@ -90,19 +90,20 @@ LowerCase lower_case(io::TempDir& dir,
       inputs.push_back({name, id});
     }
   }
-  diag::Fallible<analyzer::ModuleTree> tree_result = analyzer::resolve_modules(
-      root, inputs, "testpkg", f.sources, f.ast, f.bag);
+  base::Result<analyzer::ModuleTree, diag::Reported> tree_result =
+      analyzer::resolve_modules(root, inputs, "testpkg", f.sources, f.ast,
+                                f.bag);
   if (tree_result.is_err() || f.bag.has_errors()) {
     return {std::nullopt, false};
   }
   analyzer::ModuleTree tree = std::move(tree_result).unwrap();
-  diag::Fallible<analyzer::CheckedPackage> checked_result =
+  base::Result<analyzer::CheckedPackage, diag::Reported> checked_result =
       analyzer::check_package(tree, ir::PointerWidth::W64, f.ast, f.bag);
   if (checked_result.is_err() || f.bag.has_errors()) {
     return {std::nullopt, false};
   }
   analyzer::CheckedPackage checked = std::move(checked_result).unwrap();
-  diag::Fallible<LoweredPackage> lowered_result = lower_package(
+  base::Result<LoweredPackage, diag::Reported> lowered_result = lower_package(
       std::move(checked), ir::PointerWidth::W64, f.ast, f.strings, f.bag);
   if (lowered_result.is_err()) {
     return {std::nullopt, false};
@@ -133,8 +134,8 @@ TEST_CASE("Lower straight-line arithmetic") {
   if (!result.ok || !result.lowered.has_value()) {
     return;
   }
-  CHECK(result.lowered->storage.functions().size() == 2);
-  CHECK(ir::verify_storage(result.lowered->storage).is_ok());
+  CHECK(result.lowered->storage->functions().size() == 2);
+  CHECK(ir::verify_storage(*result.lowered->storage).is_ok());
 }
 
 TEST_CASE("Lower structs tuples fields and borrows") {
@@ -161,7 +162,7 @@ TEST_CASE("Lower structs tuples fields and borrows") {
   if (!result.ok || !result.lowered.has_value()) {
     return;
   }
-  CHECK(ir::verify_storage(result.lowered->storage).is_ok());
+  CHECK(ir::verify_storage(*result.lowered->storage).is_ok());
 }
 
 TEST_CASE("Lower lowers control flow to verifiable blocks") {
@@ -196,7 +197,7 @@ TEST_CASE("Lower lowers control flow to verifiable blocks") {
   if (!result.ok || !result.lowered.has_value()) {
     return;
   }
-  CHECK(ir::verify_storage(result.lowered->storage).is_ok());
+  CHECK(ir::verify_storage(*result.lowered->storage).is_ok());
 }
 
 TEST_CASE("Lower lowers enums matches and question propagation") {
@@ -245,7 +246,7 @@ TEST_CASE("Lower lowers enums matches and question propagation") {
   if (!result.ok || !result.lowered.has_value()) {
     return;
   }
-  CHECK(ir::verify_storage(result.lowered->storage).is_ok());
+  CHECK(ir::verify_storage(*result.lowered->storage).is_ok());
 }
 
 TEST_CASE("Lower emits verifiable LLVM IR") {
@@ -475,7 +476,7 @@ TEST_CASE("Lowering emits no Drop markers") {
     return;
   }
   // Drop stays a no-op ruling: destruction needs no markers.
-  for (const ir::Instruction& instr : result.lowered->storage.instrs()) {
+  for (const ir::Instruction& instr : result.lowered->storage->instrs()) {
     CHECK(instr.op != ir::Opcode::Drop);
   }
 }

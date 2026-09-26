@@ -33,7 +33,7 @@ namespace {
 bool make_dirs(std::string_view path) {
   std::string current;
   for (usize i = 0; i <= path.size(); ++i) {
-    if (i == path.size() || path[i] == path::kDefaultPathSeparator) {
+    if (i == path.size() || path[i] == path::DEFAULT_PATH_SEPARATOR) {
       if (!current.empty()) {
 #if BUILD_FLAG(IS_OS_WIN)
         ::_mkdir(current.c_str());
@@ -83,13 +83,13 @@ bool valid_package_name(std::string_view name) {
 NewResult write_package_files(PipelineContext& ctx,
                               const path::Path& package_dir,
                               std::string_view name) {
-  const path::Path manifest_path = package_dir.join(pkg::kManifestFileName);
+  const path::Path manifest_path = package_dir.join(pkg::MANIFEST_FILE_NAME);
   const path::Path main_path = package_dir.join("main.al");
   for (const path::Path& path : {manifest_path, main_path}) {
     io::FileHandle probe;
     if (probe.open(path.c_str(), io::FileAccess::Read)) {
       const u32 index = ctx.bag.emit(
-          diag::Severity::Error, kPipelineIoError,
+          diag::Severity::Error, PIPELINE_IO_ERROR,
           "'{}' already exists; refusing to overwrite", path.as_view());
       (void)index;
       return base::make_err(0);
@@ -108,19 +108,19 @@ include = ["main"]
 name = "{}"
 path = "main.al")",
                                                     name, name);
-  static constexpr std::string_view kMainText =
+  static constexpr std::string_view MAIN_TEXT =
       "fn main() {\n  // Write your code here.\n}\n";
 
   if (!make_dirs(package_dir.as_view())) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineIoError,
+    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot create package directory: '{}'",
                                    package_dir.as_view());
     (void)index;
     return base::make_err(0);
   }
   if (!write_text_file(manifest_path.as_view(), manifest_template) ||
-      !write_text_file(main_path.as_view(), kMainText)) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineIoError,
+      !write_text_file(main_path.as_view(), MAIN_TEXT)) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot create package files: '{}'",
                                    package_dir.as_view());
     (void)index;
@@ -134,7 +134,7 @@ std::string_view dir_basename(std::string_view dir) {
   if (dir.empty() || dir == "." || dir == "..") {
     return {};
   }
-  const usize slash = dir.rfind(path::kDefaultPathSeparator);
+  const usize slash = dir.rfind(path::DEFAULT_PATH_SEPARATOR);
   if (slash == std::string_view::npos) {
     return dir;
   }
@@ -166,7 +166,7 @@ NewResult create_new_package(PipelineContext& ctx,
                              std::string_view target_dir) {
   if (!valid_package_name(target_dir)) {
     const u32 index = ctx.bag.emit(
-        diag::Severity::Error, kPipelineIoError,
+        diag::Severity::Error, PIPELINE_IO_ERROR,
         "invalid package name '{}'; use [A-Za-z0-9_-] only", target_dir);
     (void)index;
     return base::make_err(0);
@@ -175,7 +175,7 @@ NewResult create_new_package(PipelineContext& ctx,
   base::Result<path::Path, path::PathError> root =
       path::Path::from_native(target_dir);
   if (root.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineIoError,
+    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot create package '{}'", target_dir);
     (void)index;
     return base::make_err(0);
@@ -188,7 +188,7 @@ NewResult init_package(PipelineContext& ctx, std::string_view target_dir) {
   base::Result<path::Path, path::PathError> root =
       path::Path::from_native(target_dir);
   if (root.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, kPipelineIoError,
+    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot init package '{}'", target_dir);
     (void)index;
     return base::make_err(0);
@@ -202,7 +202,7 @@ NewResult init_package(PipelineContext& ctx, std::string_view target_dir) {
   }
   if (!valid_package_name(name)) {
     const u32 index = ctx.bag.emit(
-        diag::Severity::Error, kPipelineIoError,
+        diag::Severity::Error, PIPELINE_IO_ERROR,
         "cannot derive a package name from '{}'; use [A-Za-z0-9_-] only",
         target_dir);
     (void)index;

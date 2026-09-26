@@ -1,3 +1,3 @@
 exit = 0
-contains = ["W2002", "not in [modules]"]
+contains = ["W1101", "not in [modules]"]
 not_contains = ["error[E"]

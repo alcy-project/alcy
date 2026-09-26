@@ -12,7 +12,7 @@ namespace diag {
 // Zero-copy: spans never own bytes, they only locate views into source
 // storage owned elsewhere (e.g. memory-mapped files held by SourceManager).
 struct Span {
-  source::FileId file = source::kUnknownFile;
+  source::FileId file = source::UNKNOWN_FILE;
   u32 offset = 0;
   u32 length = 0;
 };

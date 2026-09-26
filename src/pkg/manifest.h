@@ -16,7 +16,7 @@
 namespace pkg {
 
 // Manifest file name looked up in package directories.
-constexpr std::string_view kManifestFileName = "alcy.toml";
+constexpr std::string_view MANIFEST_FILE_NAME = "alcy.toml";
 
 struct Version {
   u32 major = 0;
@@ -42,7 +42,7 @@ inline base::Result<Version, VersionError> parse_version(
   }
   Version version;
   u32* parts[3] = {&version.major, &version.minor, &version.patch};
-  for (int i = 0; i < 3; ++i) {
+  for (i32 i = 0; i < 3; ++i) {
     std::string_view part;
     if (i < 2) {
       const usize dot = text.find('.');
@@ -116,12 +116,42 @@ struct PackageManifest {
   ModuleSet modules;
 };
 
+// Structural failure of a manifest assembled outside parse_manifest.
+enum class ManifestError : u8 {
+  EmptyName,
+  NullDependencyArray,
+  NullBinArray,
+  NullModuleInclude,
+  NullModuleExport,
+  EmptyDependencyName,
+  EmptyDependencyPath,
+  EmptyBinPath,
+  EmptyModuleEntry,
+};
+
+// Pure structural verifier: pointer/count pairs agree and the strings
+// parse_manifest guarantees are present. Its own output satisfies this;
+// a manifest assembled directly (notably in tests) must pass it before
+// crossing a public API. No I/O, no allocation, no bag writes, no input
+// mutation.
+base::Result<void, ManifestError> verify_manifest(
+    const PackageManifest& manifest);
+
+// Entry-point conversion helper: emits `manifest '<name>': <detail>`
+// (code 2001, the manifest semantic range) into bag. Verifiers stay
+// pure; this is how an entry turns their structured failure into a
+// diagnostic.
+void report_manifest_error(ManifestError error,
+                           std::string_view name,
+                           diag::DiagBag& bag);
+
 // Parses manifest bytes; all strings reference arena copies. `file` backs
-// spans for syntax errors (pass source::kUnknownFile when unknown).
-diag::Fallible<PackageManifest> parse_manifest(std::string_view bytes,
-                                               std::string_view filename,
-                                               source::FileId file,
-                                               diag::DiagBag& bag,
-                                               mem::Arena& arena);
+// spans for syntax errors (pass source::UNKNOWN_FILE when unknown).
+base::Result<PackageManifest, diag::Reported> parse_manifest(
+    std::string_view bytes,
+    std::string_view filename,
+    source::FileId file,
+    diag::DiagBag& bag,
+    mem::Arena& arena);
 
 }  // namespace pkg

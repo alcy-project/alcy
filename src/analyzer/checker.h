@@ -22,38 +22,40 @@
 
 namespace analyzer {
 
-// Diagnostic codes 4210-4219 are reserved for type checking.
-constexpr u32 kAnalyzerRecursiveType = 4210;
-constexpr u32 kAnalyzerUnknownType = 4211;
-constexpr u32 kAnalyzerDuplicateDefinition = 4212;
-constexpr u32 kAnalyzerReservedName = 4213;
-constexpr u32 kAnalyzerArityMismatch = 4214;
-constexpr u32 kAnalyzerGenericArguments = 4215;
-constexpr u32 kAnalyzerUnsupportedType = 4216;
-// Diagnostic codes 4220-4239 are reserved for expression checking.
-constexpr u32 kAnalyzerTypeMismatch = 4220;
-constexpr u32 kAnalyzerUnknownValue = 4221;
-constexpr u32 kAnalyzerArityError = 4222;
-constexpr u32 kAnalyzerInvalidOperation = 4223;
-constexpr u32 kAnalyzerNonExhaustiveMatch = 4224;
-constexpr u32 kAnalyzerRefutableLet = 4225;
-constexpr u32 kAnalyzerMustUse = 4226;
-constexpr u32 kAnalyzerBadQuestion = 4227;
-constexpr u32 kAnalyzerBadReturn = 4228;
-constexpr u32 kAnalyzerBadAssignment = 4229;
-constexpr u32 kAnalyzerBreakOutsideLoop = 4230;
-constexpr u32 kAnalyzerUnsupportedExpr = 4231;
-constexpr u32 kAnalyzerNotCompKnown = 4232;
-constexpr u32 kAnalyzerInvalidComp = 4233;
-constexpr u32 kAnalyzerUnknownIntrinsic = 4234;
-// Diagnostic codes 4240-4249 are reserved for destructors.
-constexpr u32 kAnalyzerBadDropSignature = 4240;
-constexpr u32 kAnalyzerDropOnCopy = 4241;
+// Diagnostic codes 4010-4019 are reserved for type checking.
+constexpr u32 ANALYZER_RECURSIVE_TYPE = 4010;
+constexpr u32 ANALYZER_UNKNOWN_TYPE = 4011;
+constexpr u32 ANALYZER_DUPLICATE_DEFINITION = 4012;
+constexpr u32 ANALYZER_RESERVED_NAME = 4013;
+constexpr u32 ANALYZER_ARITY_MISMATCH = 4014;
+constexpr u32 ANALYZER_GENERIC_ARGUMENTS = 4015;
+constexpr u32 ANALYZER_UNSUPPORTED_TYPE = 4016;
+// Checked types failed storage verification on the way out.
+constexpr u32 ANALYZER_INVALID_IR = 4017;
+// Diagnostic codes 4020-4039 are reserved for expression checking.
+constexpr u32 ANALYZER_TYPE_MISMATCH = 4020;
+constexpr u32 ANALYZER_UNKNOWN_VALUE = 4021;
+constexpr u32 ANALYZER_ARITY_ERROR = 4022;
+constexpr u32 ANALYZER_INVALID_OPERATION = 4023;
+constexpr u32 ANALYZER_NON_EXHAUSTIVE_MATCH = 4024;
+constexpr u32 ANALYZER_REFUTABLE_LET = 4025;
+constexpr u32 ANALYZER_MUST_USE = 4026;
+constexpr u32 ANALYZER_BAD_QUESTION = 4027;
+constexpr u32 ANALYZER_BAD_RETURN = 4028;
+constexpr u32 ANALYZER_BAD_ASSIGNMENT = 4029;
+constexpr u32 ANALYZER_BREAK_OUTSIDE_LOOP = 4030;
+constexpr u32 ANALYZER_UNSUPPORTED_EXPR = 4031;
+constexpr u32 ANALYZER_NOT_COMP_KNOWN = 4032;
+constexpr u32 ANALYZER_INVALID_COMP = 4033;
+constexpr u32 ANALYZER_UNKNOWN_INTRINSIC = 4034;
+// Diagnostic codes 4040-4049 are reserved for destructors.
+constexpr u32 ANALYZER_BAD_DROP_SIGNATURE = 4040;
+constexpr u32 ANALYZER_DROP_ON_COPY = 4041;
 
 // Name-interning map capacity (power of two, fixed: the table never
 // resizes and traps on overflow, so size for programs, not tests).
-constexpr u32 kInternerCapacity = 1u << 16;
-constexpr u32 kNoModule = 0xFFFFFFFFu;
+constexpr u32 INTERNER_CAPACITY = 1u << 16;
+constexpr u32 NO_MODULE = 0xFFFFFFFFu;
 
 struct NominalEntry {
   u32 module;
@@ -111,8 +113,8 @@ class Checker {
   // instantiating a generic enum or checking its members.
   std::vector<std::pair<std::string_view, ir::TypeIdx>> type_params;
   // Index into generic_instances while checking an instantiated
-  // method body (kNoInst otherwise); keys the lowering side tables.
-  u32 cur_inst = kNoInst;
+  // method body (NO_INST otherwise); keys the lowering side tables.
+  u32 cur_inst = NO_INST;
   std::vector<CheckedModule> modules;
   std::vector<u32> parents;
 
@@ -147,7 +149,7 @@ class Checker {
   // Payload of a `MaybeUninit<T>` wrapper; invalid for any other type.
   ir::TypeIdx uninit_payload(ir::TypeIdx type) const;
   // Key of a type in the shared instantiation numbering, matching what
-  // lowering side tables use; kNoInst for a non-instantiation.
+  // lowering side tables use; NO_INST for a non-instantiation.
   u32 inst_index(ir::TypeIdx type) const;
   // Declared type parameters of a function or method item.
   std::span<const ast::Ident> fn_generic_params(ast::ItemIdx item) const;

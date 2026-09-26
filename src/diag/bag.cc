@@ -7,7 +7,6 @@
 #include <initializer_list>
 #include <string_view>
 
-#include "debug/dcheck.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -20,7 +19,7 @@ u32 DiagBag::push(Severity severity,
                   bool has_primary,
                   std::string_view message) {
   if (size_ == capacity_) {
-    const u32 grown = capacity_ == 0 ? kInitialCapacity : capacity_ * 2;
+    const u32 grown = capacity_ == 0 ? INITIAL_CAPACITY : capacity_ * 2;
     Diagnostic* const mem = static_cast<Diagnostic*>(
         arena_->alloc(sizeof(Diagnostic) * grown, alignof(Diagnostic)));
     for (u32 i = 0; i < size_; ++i) {
@@ -58,10 +57,14 @@ std::string_view DiagBag::intern(std::string_view bytes) const {
   return {mem, bytes.size()};
 }
 
-void DiagBag::label(u32 index, std::initializer_list<Label> labels) {
-  DCHECK_LT(index, size_);
+base::Result<void, BagError> DiagBag::label(
+    u32 index,
+    std::initializer_list<Label> labels) {
+  if (index >= size_) {
+    return base::make_err(BagError::InvalidIndex);
+  }
   if (labels.size() == 0) {
-    return;
+    return base::make_ok();
   }
   Label* const mem = static_cast<Label*>(
       arena_->alloc(sizeof(Label) * labels.size(), alignof(Label)));
@@ -71,6 +74,7 @@ void DiagBag::label(u32 index, std::initializer_list<Label> labels) {
   }
   entries_[index].labels = mem;
   entries_[index].label_count = static_cast<u32>(labels.size());
+  return base::make_ok();
 }
 
 }  // namespace diag

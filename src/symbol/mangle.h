@@ -7,6 +7,8 @@
 #include <string_view>
 #include <vector>
 
+#include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"
 #include "ir/storage.h"
 
@@ -79,10 +81,19 @@ std::string mangle(const Signature& signature,
                    const ir::Storage& types,
                    const str::StringInterner& strings);
 
-// Recovers a signature, or reports failure. A symbol that is truncated,
-// carries an unknown version, or is not alcy's is rejected rather than
-// partially decoded.
-bool demangle(std::string_view text, Demangled& out);
+// Recovers a signature. A symbol that is truncated, carries an
+// unknown version, or is not alcy's becomes a structured error
+// rather than a partial decode.
+enum class DemangleError : u8 {
+  // Missing the alcy prefix: not our symbol.
+  NotAlcySymbol,
+  // The version byte disagrees with this decoder.
+  UnknownVersion,
+  // Truncated or undecodable body, including trailing bytes.
+  Malformed,
+};
+
+base::Result<Demangled, DemangleError> demangle(std::string_view text);
 
 // Renders a decoded type in source spelling, for diagnostics.
 std::string display(const DecodedType& type);

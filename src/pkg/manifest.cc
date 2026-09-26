@@ -34,9 +34,9 @@ namespace pkg {
 
 namespace {
 
-// Diagnostic codes 2000-2099 are reserved for manifest errors.
-constexpr u32 kManifestSyntaxError = 2000;
-constexpr u32 kManifestSemanticError = 2001;
+// Diagnostic codes 1000-1099 are reserved for manifest errors.
+constexpr u32 MANIFEST_SYNTAX_ERROR = 1000;
+constexpr u32 MANIFEST_SEMANTIC_ERROR = 1001;
 
 // Copies bytes into the arena for model views.
 std::string_view copy_str(mem::Arena& arena, std::string_view bytes) {
@@ -76,32 +76,117 @@ diag::Span toml_span(std::string_view bytes,
   return {.file = file, .offset = begin, .length = length};
 }
 
-diag::Fallible<PackageManifest> semantic_error(diag::DiagBag& bag,
-                                               std::string_view filename,
-                                               std::string_view message) {
+base::Result<PackageManifest, diag::Reported> semantic_error(
+    diag::DiagBag& bag,
+    std::string_view filename,
+    std::string_view message) {
   // Semantic errors carry the manifest path in the message; spans attach
   // once lowering tracks node positions (a later phase).
-  const u32 index = bag.emit(diag::Severity::Error, kManifestSemanticError,
+  const u32 index = bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
                              "manifest '{}': {}", filename, message);
   (void)index;
-  return base::make_err(diag::Fatal{});
+  return base::make_err(diag::Reported{});
 }
 
 }  // namespace
 
-diag::Fallible<PackageManifest> parse_manifest(std::string_view bytes,
-                                               std::string_view filename,
-                                               source::FileId file,
-                                               diag::DiagBag& bag,
-                                               mem::Arena& arena) {
+base::Result<void, ManifestError> verify_manifest(
+    const PackageManifest& manifest) {
+  if (manifest.name.empty()) {
+    return base::make_err(ManifestError::EmptyName);
+  }
+  if (manifest.dependency_count > 0 && manifest.dependencies == nullptr) {
+    return base::make_err(ManifestError::NullDependencyArray);
+  }
+  if (manifest.bin_count > 0 && manifest.bins == nullptr) {
+    return base::make_err(ManifestError::NullBinArray);
+  }
+  if (manifest.modules.include_count > 0 &&
+      manifest.modules.include == nullptr) {
+    return base::make_err(ManifestError::NullModuleInclude);
+  }
+  if (manifest.modules.export_count > 0 &&
+      manifest.modules.exports == nullptr) {
+    return base::make_err(ManifestError::NullModuleExport);
+  }
+  for (u32 i = 0; i < manifest.dependency_count; ++i) {
+    const Dependency& dependency = manifest.dependencies[i];
+    if (dependency.name.empty()) {
+      return base::make_err(ManifestError::EmptyDependencyName);
+    }
+    if (dependency.path.empty()) {
+      return base::make_err(ManifestError::EmptyDependencyPath);
+    }
+  }
+  for (u32 i = 0; i < manifest.bin_count; ++i) {
+    // A bin name may be empty: it defaults to the package name.
+    if (manifest.bins[i].path.empty()) {
+      return base::make_err(ManifestError::EmptyBinPath);
+    }
+  }
+  for (u32 i = 0; i < manifest.modules.include_count; ++i) {
+    if (manifest.modules.include[i].empty()) {
+      return base::make_err(ManifestError::EmptyModuleEntry);
+    }
+  }
+  for (u32 i = 0; i < manifest.modules.export_count; ++i) {
+    if (manifest.modules.exports[i].empty()) {
+      return base::make_err(ManifestError::EmptyModuleEntry);
+    }
+  }
+  return base::make_ok();
+}
+
+void report_manifest_error(ManifestError error,
+                           std::string_view name,
+                           diag::DiagBag& bag) {
+  std::string_view detail = "invalid manifest";
+  switch (error) {
+    case ManifestError::EmptyName: detail = "empty [package] name"; break;
+    case ManifestError::NullDependencyArray:
+      detail = "dependency count without a dependency array";
+      break;
+    case ManifestError::NullBinArray:
+      detail = "bin count without a bin array";
+      break;
+    case ManifestError::NullModuleInclude:
+      detail = "module include count without an include array";
+      break;
+    case ManifestError::NullModuleExport:
+      detail = "module export count without an export array";
+      break;
+    case ManifestError::EmptyDependencyName:
+      detail = "dependency with an empty name";
+      break;
+    case ManifestError::EmptyDependencyPath:
+      detail = "dependency with an empty path";
+      break;
+    case ManifestError::EmptyBinPath:
+      detail = "bin target with an empty path";
+      break;
+    case ManifestError::EmptyModuleEntry:
+      detail = "module list with an empty entry";
+      break;
+  }
+  const u32 index = bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
+                             "manifest '{}': {}", name, detail);
+  (void)index;
+}
+
+base::Result<PackageManifest, diag::Reported> parse_manifest(
+    std::string_view bytes,
+    std::string_view filename,
+    source::FileId file,
+    diag::DiagBag& bag,
+    mem::Arena& arena) {
   toml::parse_result result = toml::parse(bytes, filename);
   if (!result) {
     const toml::parse_error& error = result.error();
-    const u32 index = bag.emit(diag::Severity::Error, kManifestSyntaxError,
+    const u32 index = bag.emit(diag::Severity::Error, MANIFEST_SYNTAX_ERROR,
                                toml_span(bytes, file, error.source()),
                                "TOML syntax error: {}", error.description());
     (void)index;
-    return base::make_err(diag::Fatal{});
+    return base::make_err(diag::Reported{});
   }
 
   const toml::table& root = result.table();
@@ -171,20 +256,20 @@ diag::Fallible<PackageManifest> parse_manifest(std::string_view bytes,
       const std::string_view dep_name = key.str();
       if (!node.is_table()) {
         // Registry-style `foo = "1.0"` has no path to follow.
-        bag.emit(diag::Severity::Error, kManifestSemanticError,
+        bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
                  "manifest '{}': dependency '{}' needs {{ path = ... }}; "
                  "registry dependencies are not supported",
                  filename, dep_name);
-        return base::make_err(diag::Fatal{});
+        return base::make_err(diag::Reported{});
       }
       const toml::table* const dep_table = node.as_table();
       const auto path_it = dep_table->find("path");
       if (path_it == dep_table->end()) {
-        bag.emit(diag::Severity::Error, kManifestSemanticError,
+        bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
                  "manifest '{}': dependency '{}' needs {{ path = ... }}; "
                  "registry dependencies are not supported",
                  filename, dep_name);
-        return base::make_err(diag::Fatal{});
+        return base::make_err(diag::Reported{});
       }
       const auto path = path_it->second.value<std::string_view>();
       if (!path.has_value() || path->empty()) {

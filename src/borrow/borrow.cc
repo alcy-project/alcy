@@ -24,19 +24,19 @@ namespace borrow {
 
 namespace {
 
-// Diagnostic codes 4400-4409 are reserved for borrow checking.
-constexpr u32 kBorrowUseAfterMove = 4400;
-constexpr u32 kBorrowConflict = 4401;
-constexpr u32 kBorrowEscape = 4402;
-constexpr u32 kBorrowAssignBorrowed = 4403;
+// Diagnostic codes 6000-6099 are reserved for borrow checking.
+constexpr u32 BORROW_USE_AFTER_MOVE = 6000;
+constexpr u32 BORROW_CONFLICT = 6001;
+constexpr u32 BORROW_ESCAPE = 6002;
+constexpr u32 BORROW_ASSIGN_BORROWED = 6003;
 
-constexpr u32 kNoRoot = 0xFFFFFFFFu;
+constexpr u32 NO_ROOT = 0xFFFFFFFFu;
 
 // A place: a root register (alloca or block parameter) plus a field
 // path. Moves, borrows, and revives name overlapping places: one
 // path prefixes the other (or they are equal).
 struct Place {
-  u32 root = kNoRoot;
+  u32 root = NO_ROOT;
   std::vector<u32> path;
 };
 
@@ -55,7 +55,7 @@ bool overlaps(const Place& a, const Place& b) {
 }
 
 struct Loan {
-  u32 reg = kNoRoot;
+  u32 reg = NO_ROOT;
   Place place;
   bool exclusive = false;
   u32 birth = 0;
@@ -63,7 +63,7 @@ struct Loan {
   // Summary token for a parameter alloca: carries the parameter
   // index so return-reachability becomes a summary. Never conflicts;
   // reification propagates the caller's own loans instead.
-  u32 param = kNoRoot;
+  u32 param = NO_ROOT;
 };
 
 class Checker {
@@ -150,7 +150,7 @@ class Checker {
       return false;
     }
     const u32 reg = operand.as_register().idx;
-    if (reg >= home.size() || home[reg] == kNoRoot) {
+    if (reg >= home.size() || home[reg] == NO_ROOT) {
       return false;
     }
     place.root = home[reg];
@@ -208,18 +208,18 @@ class Checker {
         break;
       }
       case ir::Opcode::Load: {
-        u32 addr = kNoRoot;
+        u32 addr = NO_ROOT;
         if (operand_reg(0, addr) && instr.dst.is_valid()) {
           flow[instr.dst.idx] = flow[addr];
         }
         break;
       }
       case ir::Opcode::GetElementPtr: {
-        u32 base = kNoRoot;
+        u32 base = NO_ROOT;
         if (!operand_reg(0, base) || !instr.dst.is_valid()) {
           break;
         }
-        if (home[base] == kNoRoot) {
+        if (home[base] == NO_ROOT) {
           break;
         }
         home[instr.dst.idx] = home[base];
@@ -238,14 +238,14 @@ class Checker {
         break;
       }
       case ir::Opcode::Move: {
-        u32 src = kNoRoot;
+        u32 src = NO_ROOT;
         if (operand_reg(0, src) && instr.dst.is_valid()) {
           flow[instr.dst.idx] = flow[src];
         }
         break;
       }
       case ir::Opcode::Borrow: {
-        u32 place_reg = kNoRoot;
+        u32 place_reg = NO_ROOT;
         if (!operand_reg(0, place_reg) || !instr.dst.is_valid()) {
           break;
         }
@@ -259,8 +259,8 @@ class Checker {
         break;
       }
       case ir::Opcode::Store: {
-        u32 value = kNoRoot;
-        u32 addr = kNoRoot;
+        u32 value = NO_ROOT;
+        u32 addr = NO_ROOT;
         if (!operand_reg(0, value) || !operand_reg(1, addr)) {
           break;
         }
@@ -370,7 +370,7 @@ class Checker {
     for (const Place& gone : moved) {
       if (overlaps(gone, place)) {
         const u32 index =
-            bag.emit(diag::Severity::Error, kBorrowUseAfterMove, span,
+            bag.emit(diag::Severity::Error, BORROW_USE_AFTER_MOVE, span,
                      "use of moved '{}' in {}", addr_name(place.root), action);
         (void)index;
         return;
@@ -611,14 +611,14 @@ class Checker {
         }
         check_place_use(moved, place, span, "move");
         for (const Loan& loan : loans) {
-          if (loan.param != kNoRoot) {
+          if (loan.param != NO_ROOT) {
             continue;
           }
           if (!live_at(loan, pos) || !overlaps(loan.place, place)) {
             continue;
           }
           const u32 index =
-              bag.emit(diag::Severity::Error, kBorrowUseAfterMove, span,
+              bag.emit(diag::Severity::Error, BORROW_USE_AFTER_MOVE, span,
                        "move of '{}' invalidates an outstanding borrow",
                        addr_name(place.root));
           (void)index;
@@ -637,7 +637,7 @@ class Checker {
             instr.dst.is_valid() &&
             tag_of(storage.registers()[instr.dst].type) == ir::TypeTag::MutRef;
         for (const Loan& loan : loans) {
-          if (loan.reg == instr.dst.idx || loan.param != kNoRoot) {
+          if (loan.reg == instr.dst.idx || loan.param != NO_ROOT) {
             continue;
           }
           if (!live_at(loan, pos) || !overlaps(loan.place, place)) {
@@ -645,7 +645,7 @@ class Checker {
           }
           if (exclusive || loan.exclusive) {
             const u32 index =
-                bag.emit(diag::Severity::Error, kBorrowConflict, span,
+                bag.emit(diag::Severity::Error, BORROW_CONFLICT, span,
                          "conflicting borrows of '{}'", addr_name(place.root));
             (void)index;
             break;
@@ -659,14 +659,14 @@ class Checker {
           kill_moved(moved, place);
           // Assignment invalidates outstanding borrows of the place.
           for (const Loan& loan : loans) {
-            if (loan.param != kNoRoot) {
+            if (loan.param != NO_ROOT) {
               continue;
             }
             if (!live_at(loan, pos) || !overlaps(loan.place, place)) {
               continue;
             }
             const u32 index = bag.emit(
-                diag::Severity::Error, kBorrowAssignBorrowed, span,
+                diag::Severity::Error, BORROW_ASSIGN_BORROWED, span,
                 "cannot assign to '{}' while borrowed", addr_name(place.root));
             (void)index;
             break;
@@ -684,13 +684,13 @@ class Checker {
           break;
         }
         for (u32 loan : flow[value.as_register().idx]) {
-          if (loan >= loans.size() || loans[loan].param != kNoRoot) {
+          if (loan >= loans.size() || loans[loan].param != NO_ROOT) {
             continue;
           }
           const u32 root = loans[loan].place.root;
           if (!is_param_root(root, fn)) {
             const u32 index =
-                bag.emit(diag::Severity::Error, kBorrowEscape, span,
+                bag.emit(diag::Severity::Error, BORROW_ESCAPE, span,
                          "returns reference to local '{}'", addr_name(root));
             (void)index;
             break;
@@ -755,7 +755,7 @@ class Checker {
         continue;
       }
       for (u32 loan : flow[value.as_register().idx]) {
-        if (loan >= loans.size() || loans[loan].param == kNoRoot) {
+        if (loan >= loans.size() || loans[loan].param == NO_ROOT) {
           continue;
         }
         bool known = false;
@@ -795,7 +795,7 @@ class Checker {
 
   void reset_function() {
     // Per-function scratch shares global register indexes.
-    home.assign(storage.registers().size(), kNoRoot);
+    home.assign(storage.registers().size(), NO_ROOT);
     path.assign(storage.registers().size(), {});
     flow.assign(storage.registers().size(), {});
     last_use.assign(storage.registers().size(), 0);
@@ -837,9 +837,16 @@ class Checker {
 
 }  // namespace
 
-void check_borrows(const lower::LoweredPackage& lowered, diag::DiagBag& bag) {
-  Checker checker{lowered, lowered.storage, bag};
+base::Result<void, diag::Reported> check_borrows(
+    const lower::LoweredPackage& lowered,
+    diag::DiagBag& bag) {
+  const u32 errors = bag.error_count();
+  Checker checker{lowered, *lowered.storage, bag};
   checker.run();
+  if (bag.error_count() != errors) {
+    return base::make_err(diag::Reported{});
+  }
+  return base::make_ok();
 }
 
 }  // namespace borrow

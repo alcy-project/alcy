@@ -3,6 +3,7 @@
 
 #include "pkg/modules.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -22,9 +23,9 @@ namespace pkg {
 
 namespace {
 
-// TODO: fix duplicated with manifest errors
-constexpr u32 kModulesSemanticError = 2001;
-constexpr u32 kModulesUnselectedFile = 2002;
+// Diagnostic codes 1100-1199 are reserved for module selection.
+constexpr u32 MODULES_SEMANTIC_ERROR = 1100;
+constexpr u32 MODULES_UNSELECTED_FILE = 1101;
 
 // Copies bytes into arena storage for name views.
 std::string_view copy_str(mem::Arena& arena, std::string_view bytes) {
@@ -70,13 +71,20 @@ std::string module_name_of(std::string_view relative) {
 
 }  // namespace
 
-diag::Fallible<std::vector<ModuleFile>> resolve_module_files(
+base::Result<std::vector<ModuleFile>, diag::Reported> resolve_module_files(
     const PackageManifest& manifest,
     std::string_view root,
     const std::vector<source::FileId>& files,
     source::SourceManager& sources,
     diag::DiagBag& bag,
     mem::Arena& arena) {
+  // Entry validation: manifests built directly (rather than parsed)
+  // must be structurally sound before the selection below reads them.
+  base::Result<void, ManifestError> verified = verify_manifest(manifest);
+  if (verified.is_err()) {
+    report_manifest_error(std::move(verified).unwrap_err(), root, bag);
+    return base::make_err(diag::Reported{});
+  }
   std::vector<ModuleFile> selected;
   auto add_module = [&](const std::string& name, source::FileId id) {
     for (const ModuleFile& prior : selected) {
@@ -96,34 +104,39 @@ diag::Fallible<std::vector<ModuleFile>> resolve_module_files(
     }
     const path::Path candidate =
         std::move(candidate_root).unwrap().join(std::string(entry) + ".al");
-    source::FileId found = source::kUnknownFile;
+    source::FileId found = source::UNKNOWN_FILE;
     for (source::FileId id : files) {
-      if (sources.name(id) == candidate.as_view()) {
+      const std::optional<std::string_view> name = sources.name(id);
+      if (name.has_value() && *name == candidate.as_view()) {
         found = id;
         break;
       }
     }
-    if (found == source::kUnknownFile) {
+    if (found == source::UNKNOWN_FILE) {
       const u32 index =
-          bag.emit(diag::Severity::Error, kModulesSemanticError, diag::Span{},
+          bag.emit(diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{},
                    "manifest [modules] include '{}' has no file", entry);
       (void)index;
-      return base::make_err(diag::Fatal{});
+      return base::make_err(diag::Reported{});
     }
     add_module(std::string(entry), found);
   }
 
   if (manifest.modules.wildcard) {
     for (source::FileId id : files) {
-      const std::string_view relative = relative_to(sources.name(id), root);
+      const std::optional<std::string_view> name = sources.name(id);
+      if (!name.has_value()) {
+        continue;
+      }
+      const std::string_view relative = relative_to(*name, root);
       if (relative.empty()) {
         continue;
       }
-      const std::string name = module_name_of(relative);
-      if (name.empty()) {
+      const std::string name_str = module_name_of(relative);
+      if (name_str.empty()) {
         continue;
       }
-      add_module(name, id);
+      add_module(name_str, id);
     }
   }
   for (source::FileId id : files) {
@@ -135,9 +148,10 @@ diag::Fallible<std::vector<ModuleFile>> resolve_module_files(
       }
     }
     if (!taken) {
-      const u32 index =
-          bag.emit(diag::Severity::Warning, kModulesUnselectedFile,
-                   "source file '{}' is not in [modules]", sources.name(id));
+      const u32 index = bag.emit(
+          diag::Severity::Warning, MODULES_UNSELECTED_FILE,
+          "source file '{}' is not in [modules]",
+          sources.name(id).value_or(std::string_view{"[unknown file]"}));
       (void)index;
     }
   }

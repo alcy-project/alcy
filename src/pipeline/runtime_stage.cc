@@ -5,9 +5,13 @@
 
 #include <string_view>
 
+#include "diag/bag.h"
+#include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
 #include "pipeline/embedded_runtime.h"
+#include "pipeline/pipeline_context.h"
 
 namespace pipeline {
 
@@ -19,13 +23,18 @@ std::string_view as_view(const unsigned char* data, u64 len) {
 
 }  // namespace
 
-bool stage_runtime(io::TempDir& dir) {
+base::Result<void, diag::Reported> stage_runtime(io::TempDir& dir,
+                                                 diag::DiagBag& bag) {
   if (!dir.write_file(runtime_header_name(),
-                      as_view(kAlcyRuntimeHeader, kAlcyRuntimeHeader_len))) {
-    return false;
+                      as_view(ALCY_RUNTIME_HEADER, ALCY_RUNTIME_HEADER_LEN)) ||
+      !dir.write_file(runtime_source_name(),
+                      as_view(ALCY_RUNTIME_SOURCE, ALCY_RUNTIME_SOURCE_LEN))) {
+    const u32 index = bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
+                               "cannot stage the runtime");
+    (void)index;
+    return base::make_err(diag::Reported{});
   }
-  return dir.write_file(runtime_source_name(),
-                        as_view(kAlcyRuntimeSource, kAlcyRuntimeSource_len));
+  return base::make_ok();
 }
 
 std::string_view runtime_header_name() {
