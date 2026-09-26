@@ -110,6 +110,104 @@ pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ()) -> WriteOutcome {
   panic("fmt::write must expand")
 }
 
+// A growable sequence of `T` values, owning the buffer it reads
+// through.
+//
+// The buffer is uninitialized storage, so an element is readable only
+// between being pushed and being popped or overwritten. `T` has to be
+// movable by assignment, which is what lets a reallocation move an
+// element from the old buffer to the new one.
+//
+// Accessors take `&mut Self`. A read-only accessor needs a shared
+// reborrow of `*self`, which the language does not have yet; see
+// docs/adr/0012.
+pub struct Vec<T> {
+  buf: &mut MaybeUninit<T>,
+  len: usize,
+  cap: usize,
+}
+
+impl<T> Vec<T> {
+  pub fn new() -> Vec<T> {
+    ret Vec { buf: alloc::<T>(0), len: 0, cap: 0 }
+  }
+
+  // Reserves room for `n` elements without changing the length. A zero
+  // `n` still yields a distinct, freeable block.
+  pub fn with_capacity(n: usize) -> Vec<T> {
+    ret Vec { buf: alloc::<T>(n), len: 0, cap: n }
+  }
+
+  pub fn len(mut self: &mut Self) -> usize {
+    ret self.len
+  }
+
+  pub fn capacity(mut self: &mut Self) -> usize {
+    ret self.cap
+  }
+
+  pub fn is_empty(mut self: &mut Self) -> bool {
+    ret self.len == 0
+  }
+
+  // Appends `value`, growing the buffer when it is full.
+  pub fn push(mut self: &mut Self, value: T) {
+    if self.len == self.cap {
+      self.grow()
+    }
+    uninit_write(elem_ptr(self.buf, self.len), value)
+    self.len = self.len + 1
+  }
+
+  // Moves to a block twice the room, or to a first block of four.
+  // Elements are moved to the new buffer, so a `T` carrying a
+  // destructor does not get one run for them; see docs/spec/deferred.md.
+  fn grow(mut self: &mut Self) {
+    mut next := self.cap * 2
+    if self.cap == 0 {
+      next = 4
+    }
+    fresh := alloc::<T>(next)
+    mut i := 0 as usize
+    while i < self.len {
+      uninit_write(elem_ptr(fresh, i), *uninit_assume(elem_ptr(self.buf, i)))
+      i = i + 1
+    }
+    if self.cap != 0 {
+      dealloc(self.buf, self.cap)
+    }
+    self.buf = fresh
+    self.cap = next
+  }
+
+  // The element at `index`, or `None` when `index` is past the end.
+  pub fn at_mut(mut self: &mut Self, index: usize) -> Option<&mut T> {
+    if index >= self.len {
+      ret Option::None
+    }
+    ret Option::Some(uninit_assume(elem_ptr(self.buf, index)))
+  }
+
+  // Removes and returns the last element, or `None` when empty.
+  pub fn pop(mut self: &mut Self) -> Option<T> {
+    if self.len == 0 {
+      ret Option::None
+    }
+    self.len = self.len - 1
+    ret Option::Some(*uninit_assume(elem_ptr(self.buf, self.len)))
+  }
+
+  // Forgets every element, keeping the room already reserved. A `T`
+  // carrying a destructor is not ended.
+  pub fn clear(mut self: &mut Self) {
+    self.len = 0
+  }
+
+  pub fn drop(self: Vec<T>) {
+    dealloc(self.buf, self.cap)
+  }
+}
+
 // A value that may be absent. `None` carries no payload, so
 // `Option<T>` is copyable for every `T`.
 //

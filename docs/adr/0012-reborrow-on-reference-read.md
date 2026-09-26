@@ -172,9 +172,12 @@ is a real gap, but a different one from the fault above.
 
 - The unsoundness is understood and located, and the naive fix is known
   not to work, so the real work is not at risk of repeating it.
-- A container is blocked on the enum payload layout rather than on the
-  shape of its API. That is the first thing to fix, and it is smaller
-  than the region work.
+- `Vec<T>` now ships in core, which clears the reference gap off the
+  container's critical path. It takes `&mut Self` throughout and has no
+  read-only accessor, and the region work is what gives it one. What is
+  still unfixed here is narrower and does not affect it: a write through
+  a dereference is not checked, so `&mut v` of a by-value parameter can
+  still be returned and dangle.
 - The rules are recorded before implementation, so the coercions, the
   elision, and the extent computation are designed together rather than
   arriving as three patches that disagree.

@@ -11,7 +11,9 @@ relied upon by MVP programs or by the MVP compiler implementation.
   destructor that way must declare its own `drop`, and the compiler warns
   when it cannot place one. Moving one field out of a struct also does
   not retire the struct's own destructor; field-level move tracking is
-  still to come. See `docs/adr/0013`.
+  still to come. See `docs/adr/0013`. For the same reason `Vec::grow`
+  moves elements rather than ending them and `Vec::clear` forgets them,
+  so a `T` with a destructor leaks until the buffer is released.
 - Generic structs, generic enums, generic free functions, and generic
   intrinsics are MVP: they intern per instantiation, and `impl<T>
   Name<T>` methods specialize per instantiation. A generic call takes
