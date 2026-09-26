@@ -14,6 +14,7 @@ executable("tests") {
     "diag/bag_test.cc",
     "diag/render_test.cc",
     "ir/ir_common_test.cc",
+    "ir/type_layout_test.cc",
     "ir/verifier_test.cc",
     "lexer/lexer_test.cc",
     "lexer/token_test.cc",

@@ -65,6 +65,134 @@ struct StorageState {
   TupleTypes tuple_types;
 };
 
+// Size and alignment of a type on a target, in bytes.
+//
+// One source of layout knowledge for the whole compiler: the emitter
+// asserts against it when it builds a type, and a region solver needs
+// the same numbers. The rules are LLVM's default data layout, so a
+// field list lays its fields out in order, each at the next offset its
+// own alignment allows.
+struct TypeLayout {
+  u64 size = 0;
+  u64 align = 1;
+};
+
+constexpr u64 align_up(u64 value, u64 align) {
+  return align == 0 ? value : ((value + align - 1) / align) * align;
+}
+
+inline TypeLayout type_layout(const StorageState& state,
+                              TypeIdx idx,
+                              PointerWidth width);
+inline TypeLayout fields_layout(const StorageState& state,
+                                TypeIdxRange fields,
+                                PointerWidth width);
+inline TypeLayout enum_payload_area(const StorageState& state,
+                                    TypeIdx idx,
+                                    PointerWidth width);
+
+// Layout of a field list: each field at the next offset its alignment
+// allows, the whole rounded up to the strictest field. An empty list has
+// no size, which is what an uninhabited payload needs.
+inline TypeLayout fields_layout(const StorageState& state,
+                                TypeIdxRange fields,
+                                PointerWidth width) {
+  TypeLayout out{};
+  if (fields.empty()) {
+    return out;
+  }
+  for (TypeIdx field : fields) {
+    const TypeLayout field_layout = type_layout(state, field, width);
+    out.size = align_up(out.size, field_layout.align) + field_layout.size;
+    out.align = field_layout.align > out.align ? field_layout.align : out.align;
+  }
+  out.size = align_up(out.size, out.align);
+  return out;
+}
+
+// The payload area of an enum's slot: a discriminant, then room for the
+// widest variant payload, aligned for the strictest payload field. The
+// size is a whole number of carriers so the emitted array has exactly
+// this layout and a field's offset within the area is the same number
+// the lowerer and the emitter both read.
+inline TypeLayout enum_payload_area(const StorageState& state,
+                                    TypeIdx idx,
+                                    PointerWidth width) {
+  u64 align = 1;
+  u64 size = 0;
+  const EnumType& enum_type = state.enum_types[state.types[idx].as_enum()];
+  for (EnumVariantTypeIdx variant : enum_type.variants) {
+    const TypeIdxRange fields = state.enum_variant_types[variant].fields;
+    if (fields.empty()) {
+      continue;
+    }
+    for (TypeIdx field : fields) {
+      const u64 field_align = type_layout(state, field, width).align;
+      if (field_align > align) {
+        align = field_align;
+      }
+    }
+    const u64 variant_size = fields_layout(state, fields, width).size;
+    if (variant_size > size) {
+      size = variant_size;
+    }
+  }
+  return {align_up(size, align), align};
+}
+
+inline TypeLayout type_layout(const StorageState& state,
+                              TypeIdx idx,
+                              PointerWidth width) {
+  const u64 word = width == PointerWidth::W64 ? 8 : 4;
+  const TypeNode& node = state.types[idx];
+  switch (node.tag) {
+    // Uninhabited: a `()` field stores nothing, so it takes no room.
+    case TypeTag::Void:
+    case TypeTag::Never:
+    case TypeTag::Error: return {};
+    case TypeTag::I1: return {1, 1};
+    case TypeTag::I8:
+    case TypeTag::U8: return {1, 1};
+    case TypeTag::I16:
+    case TypeTag::U16: return {2, 2};
+    case TypeTag::I32:
+    case TypeTag::U32:
+    case TypeTag::F32: return {4, 4};
+    case TypeTag::I64:
+    case TypeTag::U64:
+    case TypeTag::F64: return {8, 8};
+    // Fat pointer: {bytes, len}, with the length riding the target.
+    case TypeTag::Str: return {2 * word, word};
+    case TypeTag::Ptr:
+    case TypeTag::Ref:
+    case TypeTag::MutRef:
+    case TypeTag::Function: return {word, word};
+    case TypeTag::Struct:
+      return fields_layout(state, state.struct_types[node.as_struct()].fields,
+                           width);
+    case TypeTag::Tuple:
+      return fields_layout(state, state.tuple_types[node.as_tuple()].elements,
+                           width);
+    case TypeTag::Array: {
+      const ArrayType& array = state.array_types[node.as_array()];
+      if (array.count == 0) {
+        return {};
+      }
+      const TypeLayout element = type_layout(state, array.element, width);
+      return {element.size * array.count, element.align};
+    }
+    case TypeTag::Enum: {
+      // A discriminant, then the payload area. The area is a whole
+      // number of carriers, so the emitted slot has exactly this layout.
+      constexpr u64 kDisc = 4;
+      const TypeLayout area = enum_payload_area(state, idx, width);
+      const u64 align = area.align > kDisc ? area.align : kDisc;
+      return {align_up(kDisc, area.align) + area.size, align};
+    }
+  }
+  UNREACHABLE();
+}
+
 // Structural Copy query over raw state, shared by Storage and passes
 // that read through a builder before build() (see lower). Cycle-free
 // input required (see Storage::is_copy_type).
@@ -184,6 +312,13 @@ class Storage {
   // destructors force move-only once drop syntax lands (no syntax
   // exists yet, so no check is needed here).
   bool is_copy_type(TypeIdx idx) const { return ir::is_copy_type(state_, idx); }
+
+  // Size and alignment of `idx` on `width`. The emitter asserts against
+  // this for the types it builds, so a layout rule that disagrees with
+  // LLVM is caught where it is introduced.
+  TypeLayout layout_of(TypeIdx idx, PointerWidth width) const {
+    return ir::type_layout(state_, idx, width);
+  }
 
  private:
   StorageState state_;
