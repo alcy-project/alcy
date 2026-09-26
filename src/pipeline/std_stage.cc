@@ -23,6 +23,11 @@ namespace pipeline {
 
 namespace {
 
+bool ends_with(std::string_view text, std::string_view suffix) {
+  return text.size() >= suffix.size() &&
+         text.compare(text.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
 std::string_view as_view(const unsigned char* data, u64 len) {
   return std::string_view(reinterpret_cast<const char*>(data), len);
 }
@@ -59,8 +64,14 @@ std_prelude(PipelineContext& ctx) {
       (void)index;
       return base::make_err(diag::Reported{});
     }
+    // A source named `prelude.al` is its package's facade: the module
+    // whose public surface is in scope without a `use`. Anything else in
+    // the package is an ordinary module beside it. The distinction is
+    // made here, from what was staged, so a `prelude` module in a user
+    // package carries no special meaning.
+    const bool facade = ends_with(source.path, "/prelude.al");
     ctx.std_inputs.push_back(
-        {std::string_view(source.path), std::move(loaded).unwrap()});
+        {std::string_view(source.path), std::move(loaded).unwrap(), facade});
   }
   ctx.std_staged = true;
   return base::make_ok(std::span<const analyzer::ModuleInput>(ctx.std_inputs));

@@ -44,10 +44,10 @@ base::Result<CheckResult, diag::Reported> finish_check(
     return fail();
   } else {
     analyzer::CheckedPackage package = std::move(checked).unwrap();
-    // Prelude modules check with the package but read as toolchain
-    // sources, so reported counts exclude them.
-    module_count = package.modules.size() > tree.prelude_modules
-                       ? package.modules.size() - tree.prelude_modules
+    // Staged prelude modules check with the package but read as
+    // toolchain sources, so reported counts exclude them.
+    module_count = package.modules.size() > tree.staged_modules
+                       ? package.modules.size() - tree.staged_modules
                        : 0;
     base::Result<lower::LoweredPackage, diag::Reported> lowered =
         lower::lower_package(std::move(package), TARGET_WIDTH, ctx.ast,

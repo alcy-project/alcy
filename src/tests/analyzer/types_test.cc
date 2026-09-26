@@ -91,8 +91,10 @@ CheckCase check_case(
       continue;
     }
     prelude_storage.emplace_back(name);
+    // A staged prelude source is a package facade, so its public
+    // surface is in scope without a `use`; see docs/adr/0016.
     prelude_inputs.push_back(
-        {prelude_storage.back(), std::move(loaded).unwrap()});
+        {prelude_storage.back(), std::move(loaded).unwrap(), true});
   }
   base::Result<ModuleTree, diag::Reported> tree_result = resolve_modules(
       root, inputs, "testpkg", f.sources, f.ast, f.bag, prelude_inputs);

@@ -69,9 +69,12 @@ class Resolver {
   source::FileId root = source::UNKNOWN_FILE;
   std::vector<FileData> file_data;
   // Prelude sources: lexed and parsed like package files but attached
-  // as standalone modules, never into the package tree.
+  // as their own tree, never into the package tree. A facade is the
+  // root of one prelude package; the rest of that package's modules sit
+  // beside it and are ordinary modules.
   std::vector<FileData> prelude_data;
   std::vector<std::string> prelude_names;
+  std::vector<bool> prelude_facades;
   std::vector<u32> prelude_modules;
   std::vector<ModuleNode*> modules;
   std::vector<u32> parents;
@@ -188,6 +191,29 @@ class Resolver {
         (void)index;
       }
     }
+  }
+
+  // Splits a slash-separated module name into segments, dropping a
+  // trailing `.al` so a staged source path names the same module as the
+  // manifest path it came from.
+  static std::vector<std::string_view> split_segments(std::string_view name) {
+    std::vector<std::string_view> segments;
+    usize start = 0;
+    while (start <= name.size()) {
+      usize slash = name.find('/', start);
+      if (slash == std::string_view::npos) {
+        slash = name.size();
+      }
+      std::string_view segment = name.substr(start, slash - start);
+      if (segment.ends_with(".al")) {
+        segment.remove_suffix(3);
+      }
+      if (!segment.empty()) {
+        segments.push_back(segment);
+      }
+      start = slash + 1;
+    }
+    return segments;
   }
 
   // Attaches one listed file under the root, creating fileless
@@ -549,6 +575,7 @@ class Resolver {
       }
       path::Path path = std::move(canonical).unwrap();
       prelude_names.emplace_back(input.name);
+      prelude_facades.push_back(input.is_facade);
       prelude_data.emplace_back(input.id, std::move(path));
     }
     for (FileData& file : file_data) {
@@ -558,15 +585,54 @@ class Resolver {
       lex_parse_file(file);
     }
     build_tree();
+    // A prelude package is a tree: slash-separated names nest, so
+    // `core/prelude.al` and `core/mem.al` share a fileless `core` root
+    // and can reach each other. Only a facade is a prelude, so only its
+    // public surface is in scope without a `use`.
+    u32 prelude_root = NO_MODULE;
+    std::vector<std::string> prelude_prefix;
+    const u32 modules_before = static_cast<u32>(modules.size());
     for (usize i = 0; i < prelude_data.size(); ++i) {
-      const std::string path =
-          prelude_names[i].empty() ? "prelude" : prelude_names[i];
-      const u32 module = add_module(path, prelude_data[i].id,
-                                    prelude_data[i].items, NO_MODULE);
-      modules[module]->is_prelude = true;
-      prelude_data[i].module = module;
-      prelude_modules.push_back(module);
+      const std::string& slash_name = prelude_names[i];
+      const std::vector<std::string_view> segments = split_segments(slash_name);
+      u32 parent = NO_MODULE;
+      std::string prefix;
+      for (usize seg = 0; seg < segments.size(); ++seg) {
+        const bool leaf = seg + 1 == segments.size();
+        const std::string child_path =
+            prefix.empty() ? std::string(segments[seg])
+                           : prefix + "::" + std::string(segments[seg]);
+        u32 child = NO_MODULE;
+        for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+          if (modules[m]->path == child_path && parents[m] == parent) {
+            child = m;
+            break;
+          }
+        }
+        if (child == NO_MODULE) {
+          child = add_module(
+              child_path, leaf ? prelude_data[i].id : source::UNKNOWN_FILE,
+              leaf ? prelude_data[i].items : std::span<const ast::ItemIdx>{},
+              parent);
+          if (parent == NO_MODULE) {
+            prelude_root = child;
+          } else {
+            module_children[parent].push_back(child);
+          }
+        } else if (!leaf) {
+          module_children[parent].push_back(child);
+        }
+        prefix = child_path;
+        parent = child;
+      }
+      prelude_data[i].module = parent;
+      if (prelude_facades[i]) {
+        modules[parent]->is_prelude = true;
+        prelude_modules.push_back(parent);
+      }
     }
+    (void)prelude_root;
+    (void)prelude_prefix;
     collect_locals();
     inject_prelude();
     for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
@@ -587,6 +653,7 @@ class Resolver {
         ast.spans, std::vector<ModuleNode*>(modules.begin(), modules.end()));
     tree.root = root_index;
     tree.prelude_modules = static_cast<u32>(prelude_modules.size());
+    tree.staged_modules = static_cast<u32>(modules.size()) - modules_before;
     return tree;
   }
 };

@@ -50,8 +50,13 @@ struct ModuleNode {
 struct ModuleTree {
   std::span<ModuleNode* const> modules;
   u32 root;
-  // Standalone prelude modules appended after package modules.
+  // Facade modules appended after the package's own: one per staged
+  // prelude package, whose public surface is in scope without a `use`.
   u32 prelude_modules = 0;
+  // Every module the staged prelude added, facades and the fileless
+  // package roots between them. Reported counts exclude these, since
+  // they are toolchain sources rather than the program's own.
+  u32 staged_modules = 0;
 };
 
 // Structural failure of a module tree handed to check_package.
@@ -93,6 +98,11 @@ std::string_view describe_module_tree_error(ModuleTreeError error);
 struct ModuleInput {
   std::string_view name;
   source::FileId id = source::UNKNOWN_FILE;
+  // A facade is the root module of a prelude package: its public
+  // surface is what a program sees without a `use`. It is a property of
+  // the staged standard library, not of the module's name, so a
+  // `prelude` module in a user package is just an ordinary module.
+  bool is_facade = false;
 };
 
 base::Result<ModuleTree, diag::Reported> resolve_modules(
