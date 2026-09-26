@@ -161,10 +161,15 @@ fn g(mut b: &mut i32) -> i32 {
 }
 ```
 
-This compiles and is unsound. The checker's `Place` is a root register
-plus a field path, so a place reached *through* a reference has no
-representation: a borrow of `*b` and a store to `*b` both resolve to
-`b` itself. It is a real gap, but a different one from the fault above.
+This used to compile, and was unsound. It does not any more: a path step
+is now either a field index or a dereference, and reading a place of
+reference type steps through to the referent. So `*b` names
+`b`'s path plus a dereference, the same place the loan of `&*b` names,
+and the store is seen.
+
+That is the whole of what was missing. It is narrower than it looks,
+because the rest of rule 1 already worked: a shared receiver already
+hands out borrows of its own fields.
 
 ## Rule 1 is narrower than it looks
 
@@ -215,6 +220,12 @@ is every element reference it hands out.
 - The rules are recorded before implementation, so the coercions, the
   elision, and the extent computation are designed together rather than
   arriving as three patches that disagree.
+- A dereference step is landed, which names a place reached through a
+  reference and closes the unchecked write above. What is left is rule
+  3, the `&mut T` to `&T` coercion, and the extent computation that
+  feeds the region solver. Neither `Vec`'s read-only accessor nor a
+  growable `String`'s `as_str` needs rule 1 any further; both are waiting
+  on the coercion.
 
 ## Alternatives considered
 

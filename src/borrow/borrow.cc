@@ -32,9 +32,17 @@ constexpr u32 BORROW_ASSIGN_BORROWED = 6003;
 
 constexpr u32 NO_ROOT = 0xFFFFFFFFu;
 
-// A place: a root register (alloca or block parameter) plus a field
-// path. Moves, borrows, and revives name overlapping places: one
-// path prefixes the other (or they are equal).
+// A path step is either a field index or a dereference. Reading a place
+// of reference type steps through to the referent, which is what makes
+// the referent itself nameable: `*b` and `b.field` are `b`'s path plus
+// a dereference, so a loan of one is seen to overlap a store to the
+// other. A field index can never collide with the marker because the
+// table's size bounds every index.
+constexpr u32 kDerefStep = 0xFFFFFFFFu;
+
+// A place: a root register (alloca or block parameter) plus a path.
+// Moves, borrows, and revives name overlapping places: one path prefixes
+// the other (or they are equal).
 struct Place {
   u32 root = NO_ROOT;
   std::vector<u32> path;
@@ -209,8 +217,22 @@ class Checker {
       }
       case ir::Opcode::Load: {
         u32 addr = NO_ROOT;
-        if (operand_reg(0, addr) && instr.dst.is_valid()) {
-          flow[instr.dst.idx] = flow[addr];
+        if (!operand_reg(0, addr) || !instr.dst.is_valid()) {
+          break;
+        }
+        flow[instr.dst.idx] = flow[addr];
+        // Reading a place of reference type yields the referent, and the
+        // referent is a place: `home`/`path` carry the read place plus a
+        // dereference, so a store through the result and a loan of the
+        // source are seen to name the same thing. Any other type yields
+        // a value, which is not a place and keeps no path of its own.
+        const ir::TypeIdx loaded_ty = storage.registers()[instr.dst.idx].type;
+        const ir::TypeTag loaded = tag_of(loaded_ty);
+        if ((loaded == ir::TypeTag::Ref || loaded == ir::TypeTag::MutRef) &&
+            home[addr] != NO_ROOT) {
+          home[instr.dst.idx] = home[addr];
+          path[instr.dst.idx] = path[addr];
+          path[instr.dst.idx].push_back(kDerefStep);
         }
         break;
       }

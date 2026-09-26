@@ -249,6 +249,64 @@ TEST_CASE("Borrow reads a moved value into the call that moved it") {
   CHECK(!f.bag.has_errors());
 }
 
+TEST_CASE("Borrow rejects a write through a reborrow") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_deref_test_");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn g(mut b: &mut i32) -> i32 {\n"
+                                      "  x := &*b\n"
+                                      "  *b = 1\n"
+                                      "  ret *x\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  mut n := 0\n"
+                                      "  _ := g(&mut n)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  CHECK(!check_case(dir, "main.al", {"main.al"}, f));
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Borrow accepts a read through a shared receiver") {
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_borrow_shared_recv_test_");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct S { n: i32 }\n"
+                                      "impl S {\n"
+                                      "  fn get(self: &Self) -> &i32 {\n"
+                                      "    ret &self.n\n"
+                                      "  }\n"
+                                      "  fn bump(mut self: &mut Self) {\n"
+                                      "    self.n = self.n + 1\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn read_only(s: &S) -> i32 {\n"
+                                      "  r := s.get()\n"
+                                      "  ret *r\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  x := S { n: 1 }\n"
+                                      "  mut y := S { n: 1 }\n"
+                                      "  _ := x.get()\n"
+                                      "  _ := read_only(&x)\n"
+                                      "  y.bump()\n"
+                                      "  r := y.get()\n"
+                                      "  _ := *r\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  CHECK(check_case(dir, "main.al", {"main.al"}, f));
+  CHECK(!f.bag.has_errors());
+}
+
 TEST_CASE("Borrow joins maybe-moves across branches") {
   io::TempDir dir = io::TempDir::create_unique("alcy_borrow_join_test_");
   const bool setup = write_all(dir, {{"main.al",
