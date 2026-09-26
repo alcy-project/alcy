@@ -41,8 +41,10 @@ relied upon by MVP programs or by the MVP compiler implementation.
 
   It passes today whenever the dead frame still holds the payload by
   accident, which is why nothing catches it. The payload belongs inline
-  in the enum's own slot; see `docs/adr/0014`. `Option<T>` is the enum
-  every container accessor returns, so this is what blocks `Vec`.
+  in the enum's own slot, laid out from offsets the analyzer publishes
+  for both the emitter and the lowerer; see `docs/adr/0014`.
+  `Option<T>` is the enum every container accessor returns, so this is
+  what blocks `Vec`.
 - Reborrowing, and the coercions that go with it: `&mut T` used where a
   shorter `&mut T` or a `&T` is expected, including as a method
   receiver. Without it a method taking `&self` cannot be called through

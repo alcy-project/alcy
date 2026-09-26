@@ -94,40 +94,43 @@ payload nested in a struct or an array as well as for a returned value.
 - Uninhabited payloads (`()` fields) still store nothing, and a
   unit-variant enum still has no payload area.
 
-## What has to change
+## Plan
 
-Four sites depend on the payload being a pointer, and the two halves
-have to agree on the layout:
+Three commits, each green. The offset source is the analyzer: the
+emitter builds the payload area from numbers the analyzer published, and
+the lowerer addresses fields with the offsets the analyzer published, so
+the two halves cannot disagree.
 
-- The emitter's enum type is `{i32, ptr}`. It becomes a discriminant
-  followed by a payload area sized for the widest variant payload.
-- Enum construction allocas the payload tuple, fills it, and stores the
-  alloca's address into the slot. It stores each field into the slot's
-  payload area at that field's offset instead, and stores no pointer.
-- `load_payload_field` loads the payload pointer out of the slot, casts
-  it to the payload tuple, and indexes it. It indexes the slot's payload
-  area at the field's offset instead, with no load and no cast.
-- `payload_tuple` already builds a variant's payload shape, so it is
-  the natural starting point for the layout rather than something to
-  invent alongside it.
+**1. A layout function over raw types.** `ir::type_layout` returns the
+size and alignment of a type for a target width, covering the primitive
+tags, references, tuples, structs, arrays, enums, and `str` (whose
+length rides the pointer width). Unit tests assert hand-computed values
+per width. This is the only new piece of layout knowledge in the
+compiler, and a region solver will want the same function.
 
-**The offsets need one source of truth.** The lowerer addresses a
-payload field with a constant byte offset into the slot's payload area,
-and the emitter sizes that area. If the lowerer computes an offset
-structurally and the emitter sizes the area through LLVM's own layout
-rules, the two can disagree, and the disagreement is a misaligned or
-misplaced field that only shows up on some target. So the layout is
-computed once, in the analyzer, and published in the checked package for
-both to read, the way `FunctionMeta` and the generic instantiation
-tables already are. Neither half recomputes it.
+**2. Publish each enum's payload layout.** The checker computes, per
+enum, the payload area's size and alignment, and per variant per field
+the byte offset within the area. It goes in `CheckedPackage` beside the
+other lowering tables. Unit tests cover an agreeing-shape enum, a
+differing-shape one, and a payload-less one.
 
-An area whose alignment exceeds the discriminant's is expressed as an
-array of a carrier primitive chosen to carry that alignment, so the slot
-is aligned for the widest payload it has to hold rather than for the
-discriminant alone. A bare byte array would be align 1, which stores
-correctly on x86 and is still wrong on a strict-alignment target, and
-this language is meant to reach bare metal.
+**3. Store the payload inline.** The emitter's enum type becomes a
+discriminant followed by the payload area, built from the published
+numbers, and asserts in a debug build that the type it built has the
+published size and alignment. Construction stores each field at its
+offset; `load_payload_field` reads at its offset. Neither allocates a
+payload or stores a pointer any more. The `dangle` reproducer becomes an
+`exe` case, and a differing-shape enum (`Result<T, E>`) gets one too.
 
+Two constraints shaped this. A tuple's element type indices must be
+consecutive in the type table, so the slot's two halves are appended
+back to back with nothing in between; a byte area needs no nested
+construction, so the ordering falls out. And the borrow checker's place
+is a root plus a field path that already takes every constant index, so
+a two-step projection needs no change there and is in fact more precise
+than one pointer to the whole payload.
+
+## Alternatives considered
 ## Alternatives considered
 
 - **Keep the pointer and forbid returning an enum with a payload.**
