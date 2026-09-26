@@ -164,9 +164,43 @@ fn g(mut b: &mut i32) -> i32 {
 This compiles and is unsound. The checker's `Place` is a root register
 plus a field path, so a place reached *through* a reference has no
 representation: a borrow of `*b` and a store to `*b` both resolve to
-`b` itself. That is the missing machinery rule 1 and the region solver
-describe, and it is why a container still has no read-only accessor. It
-is a real gap, but a different one from the fault above.
+`b` itself. It is a real gap, but a different one from the fault above.
+
+## Rule 1 is narrower than it looks
+
+The unsound case above reads a place of reference type. A place of any
+*other* type is already handled, so the rule is not "references are not
+modelled" but "a place whose type is itself a reference has no
+representation". A shared receiver already hands out borrows of its
+fields, repeatedly, and the field stays readable afterwards:
+
+```
+struct Cell { n: i32, tag: i32 }
+
+impl Cell {
+  fn get(self: &Self) -> &i32 { ret &self.n }
+  fn opt(self: &Self, i: i32) -> Option<&i32> {
+    if i != 0 { ret Option::None }
+    ret Option::Some(&self.n)
+  }
+}
+
+fn main() -> i32 {
+  c := Cell { n: 5, tag: 1 }
+  p := c.get()
+  q := c.get()        // a second reborrow of the same place
+  if *o.unwrap() != 5 { ... }
+  if c.n != 5 { ... } // and the place is still readable
+}
+```
+
+So implicit reborrow at a receiver, elision in the return position, and
+a shared loan that does not freeze writes all work today for a field of
+non-reference type. What is missing is the coercion chain in rule 3 when
+the field is `&mut MaybeUninit<T>` and what it contains, plus the write
+check above. That is why an inline-storage container needs nothing from
+this work while `Vec` does: `Vec`'s buffer field is a reference, and so
+is every element reference it hands out.
 
 ## Consequences
 
