@@ -32,8 +32,15 @@ def main():
     args = parser.parse_args()
 
     std_dir = Path(args.std_dir)
+    # One entry module per package of the `alcy/std` suite, in a fixed
+    # order so the generated file is byte-stable. See docs/adr/0016.
+    order = [
+        "core", "fmt", "alloc", "atomic", "sync", "io", "network",
+        "thread", "arch", "simd", "time",
+    ]
     files = {
-        "STD_CORE_MAIN": std_dir / "core" / "main.al",
+        ("STD_%s_PRELUDE" % name.upper()): std_dir / name / "prelude.al"
+        for name in order
     }
     with open(args.output, "w", encoding="utf-8") as out:
         out.write(
@@ -48,8 +55,21 @@ def main():
             "namespace pipeline {\n"
             "\n"
         )
+        entries = []
         for symbol, path in files.items():
             emit_array(out, symbol, path.read_bytes())
+            entries.append((symbol, path))
+        out.write("const StagedSource kStagedSources[] = {\n")
+        for symbol, path in entries:
+            rel = path.relative_to(std_dir).as_posix()
+            out.write(
+                '  {"%s", %s, %s_LEN},\n' % (rel, symbol, symbol)
+            )
+        out.write("};\n\n")
+        out.write(
+            "const usize kStagedSourceCount = "
+            "sizeof(kStagedSources) / sizeof(kStagedSources[0]);\n\n"
+        )
         out.write("}  // namespace pipeline\n")
     return 0
 

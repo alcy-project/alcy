@@ -272,8 +272,7 @@ TEST_CASE("Borrow rejects a write through a reborrow") {
 }
 
 TEST_CASE("Borrow accepts a read through a shared receiver") {
-  io::TempDir dir =
-      io::TempDir::create_unique("alcy_borrow_shared_recv_test_");
+  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_shared_recv_test_");
   const bool setup = write_all(dir, {{"main.al",
                                       "struct S { n: i32 }\n"
                                       "impl S {\n"

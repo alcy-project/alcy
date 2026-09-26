@@ -33,6 +33,32 @@
 - Resolution order is lexical scope, then module, then (in future)
   the core prelude. Ambiguity is a compile-time error.
 
+## Suites
+
+A **suite** is a named set of packages. It is addressed as
+`<owner>/<suite>` and a package within one as
+`<owner>/<suite>/<package>`; a dependency entry is either form, and a
+suite entry pulls every member. There are no suites in suites, so a
+three-segment path is always a package.
+
+**Every package is opt-in, `core` included.** A program that wants
+`Option` asks for `alcy/std/core`. A name in scope then always traces
+to a line in a manifest.
+
+A package has two surfaces:
+
+- `[modules] export` is the **public** surface: what `use` can reach.
+  It is manifest-declared, per ADR-0007.
+- The package's root module (`prelude.al`) is the **implicit** surface:
+  its `pub` items need no `use`. This is a scope concern, not a way to
+  hide an API, which is why it does not conflict with ADR-0007.
+
+A suite guarantees that no name appears in two members' implicit
+surfaces, so selecting a whole suite cannot produce an ambiguity.
+
+The standard library is the `alcy/std` suite; see ADR-0016 for the
+member list and the dependency graph.
+
 ## Packages
 
 - A binary package declares exactly one `[[bin]]` target with an

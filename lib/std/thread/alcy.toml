@@ -1,0 +1,27 @@
+# Part of the `alcy/std` suite; see docs/adr/0016.
+#
+# Spawning and joining threads of execution.
+#
+# `dependencies` and `export` are in the form ADR-0016 specifies.
+# The manifest parser does not read them yet: the compiler still
+# embeds these sources directly, so `dependencies` is inert and
+# nothing enforces `export`.
+
+[package]
+name = "thread"
+version = "0.1.0"
+
+[modules]
+include = [
+  "prelude",
+]
+
+[dependencies]
+paths = [
+  "alcy/std/core",
+]
+
+# The public surface. `prelude.al` re-exports the subset of these
+# that needs no `use` declaration.
+export = [
+]

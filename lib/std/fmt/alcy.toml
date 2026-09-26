@@ -1,0 +1,29 @@
+# Part of the `alcy/std` suite; see docs/adr/0016.
+#
+# Compile-time expanded formatting into a caller's buffer.
+#
+# `dependencies` and `export` are in the form ADR-0016 specifies.
+# The manifest parser does not read them yet: the compiler still
+# embeds these sources directly, so `dependencies` is inert and
+# nothing enforces `export`.
+
+[package]
+name = "fmt"
+version = "0.1.0"
+
+[modules]
+include = [
+  "prelude",
+]
+
+[dependencies]
+paths = [
+  "alcy/std/core",
+  "alcy/std/alloc",
+]
+
+# The public surface. Its `pub` items are also the implicit
+# surface: a program depending on this package sees them with no `use`.
+export = [
+  "prelude",
+]

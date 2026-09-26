@@ -18,7 +18,19 @@ action("embed_runtime") {
 
 action("embed_std") {
   script = "//build/scripts/embed_std.py"
-  inputs = [ "//lib/std/core/main.al" ]
+  inputs = [
+    "//lib/std/core/prelude.al",
+    "//lib/std/fmt/prelude.al",
+    "//lib/std/alloc/prelude.al",
+    "//lib/std/atomic/prelude.al",
+    "//lib/std/sync/prelude.al",
+    "//lib/std/io/prelude.al",
+    "//lib/std/network/prelude.al",
+    "//lib/std/thread/prelude.al",
+    "//lib/std/arch/prelude.al",
+    "//lib/std/simd/prelude.al",
+    "//lib/std/time/prelude.al",
+  ]
   outputs = [ "$target_gen_dir/embedded_std.cc" ]
   args = [
     "--std-dir",

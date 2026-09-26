@@ -20,7 +20,4 @@ namespace pipeline {
 base::Result<std::span<const analyzer::ModuleInput>, diag::Reported>
 std_prelude(PipelineContext& ctx);
 
-// Staged file names, relative to the staging directory.
-std::string_view std_core_name();
-
 }  // namespace pipeline

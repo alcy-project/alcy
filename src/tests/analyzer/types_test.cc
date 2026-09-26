@@ -1567,8 +1567,7 @@ TEST_CASE("Check borrow expressions") {
   {
     // `&mut T` where `&T` is expected is a shared reborrow, so this
     // binds rather than mismatching. See docs/adr/0012 rule 3.
-    io::TempDir dir =
-        io::TempDir::create_unique("alcy_borrow_reborrow_test_");
+    io::TempDir dir = io::TempDir::create_unique("alcy_borrow_reborrow_test_");
     const bool setup = write_all(dir, {{"main.al",
                                         "fn main() {\n"
                                         "  mut x := 1\n"

@@ -35,8 +35,13 @@ TEST_CASE("Pipeline stages the standard library prelude") {
   if (inputs.empty()) {
     return;
   }
-  CHECK(inputs[0].name == "core");
+  // One entry module per package of the `alcy/std` suite, named by its
+  // path within the suite; see docs/adr/0016.
+  CHECK(inputs[0].name == "core/prelude.al");
   CHECK(inputs[0].id != source::UNKNOWN_FILE);
+  for (const analyzer::ModuleInput& input : inputs) {
+    CHECK(input.id != source::UNKNOWN_FILE);
+  }
 }
 TEST_CASE("Pipeline build produces object file") {
   io::TempDir dir = io::TempDir::create_unique("pipeline_build_object_test_");

@@ -37,28 +37,33 @@ std_prelude(PipelineContext& ctx) {
   }
   ctx.std_scratch.emplace("alcy_std");
   io::TempDir& scratch = *ctx.std_scratch;
-  if (!scratch.write_file(std_core_name(),
-                          as_view(STD_CORE_MAIN, STD_CORE_MAIN_LEN))) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot stage the standard library");
-    (void)index;
-    return base::make_err(diag::Reported{});
+  // One entry module per package of the `alcy/std` suite, named by its
+  // path within the suite. The suite is injected whole until package
+  // selection lands; see docs/adr/0016.
+  for (usize i = 0; i < kStagedSourceCount; ++i) {
+    const StagedSource& source = kStagedSources[i];
+    if (!scratch.write_file(
+            std::string_view(source.path),
+            as_view(source.data,
+                    static_cast<decltype(source.len)>(source.len)))) {
+      const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
+                                     "cannot stage the standard library");
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
+    base::Result<source::FileId, source::SourceError> loaded =
+        ctx.sources.load(scratch.join(std::string_view(source.path)));
+    if (loaded.is_err()) {
+      const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
+                                     "cannot load the standard library");
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
+    ctx.std_inputs.push_back(
+        {std::string_view(source.path), std::move(loaded).unwrap()});
   }
-  base::Result<source::FileId, source::SourceError> loaded =
-      ctx.sources.load(scratch.join(std_core_name()));
-  if (loaded.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot load the standard library");
-    (void)index;
-    return base::make_err(diag::Reported{});
-  }
-  ctx.std_inputs.push_back({"core", std::move(loaded).unwrap()});
   ctx.std_staged = true;
   return base::make_ok(std::span<const analyzer::ModuleInput>(ctx.std_inputs));
-}
-
-std::string_view std_core_name() {
-  return "core_main.al";
 }
 
 }  // namespace pipeline

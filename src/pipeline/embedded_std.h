@@ -3,14 +3,23 @@
 
 #pragma once
 
+#include <cstddef>
+
 #include "fpag/base/numeric.h"
 
 namespace pipeline {
 
-// Embedded standard library sources (generated). Staged to a scratch
-// directory at build/check time and injected as prelude modules, so
-// compilations need no install-layout assumptions.
-extern const unsigned char STD_CORE_MAIN[];
-extern const u64 STD_CORE_MAIN_LEN;
+// One embedded standard library source, named by its suite-relative
+// path (`core/prelude.al`). Staged to a scratch directory and injected
+// as a prelude module, so compilations need no install-layout
+// assumptions. The table is generated; see build/scripts/embed_std.py.
+struct StagedSource {
+  const char* path;
+  const unsigned char* data;
+  u64 len;
+};
+
+extern const StagedSource kStagedSources[];
+extern const usize kStagedSourceCount;
 
 }  // namespace pipeline

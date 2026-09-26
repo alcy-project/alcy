@@ -64,6 +64,21 @@ relied upon by MVP programs or by the MVP compiler implementation.
 
 ## Toolchain
 
+- The `alcy/std` suite is laid out and documented (ADR-0016) but the
+  compiler does not read it. `dependencies` is still the
+  `[dependencies.<name>] path = ...` table and selects nothing, `[modules]
+  export` is parsed and never enforced, and the whole suite is injected
+  as prelude modules, so a program's implicit surface is currently every
+  std item rather than the one its `prelude.al` re-exports. The manifest
+  schema change to `dependencies = ["alcy/std"]`, per-package selection,
+  export enforcement and cross-package `use` are all still to come.
+- A std package is one entry module today. Splitting a package into
+  several modules behind a `prelude.al` facade needs the prelude
+  injection to build a nested module tree: each staged source is added as
+  an independent root, so a facade's `use mem::{...}` has no sibling to
+  resolve against. The layout and the manifests do not depend on it.
+
+
 - Summary-carrying package artifacts (`[lib]` targets, cross-package
   compilation).
 - Custom linker, incremental compilation and linking.
