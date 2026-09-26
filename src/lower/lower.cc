@@ -203,6 +203,106 @@ void Lowerer::mark_move(Val v) {
   if (v.place && v.address && !is_copy(v.type)) {
     const ir::RegisterIdx marker = emit(ir::Opcode::Move, v.type, {v.op});
     (void)marker;
+    // Scope exit ends the value's own place, so a move out of it has
+    // to retire the drop that exit would otherwise place. A move of a
+    // field counts: the enclosing value is no longer whole.
+    const ir::Operand& operand = builder.state().operands[v.op.idx];
+    if (operand.is<ir::RegisterIdx>()) {
+      const u32 reg = operand.as_register().idx;
+      for (Local& local : locals) {
+        if (local.addr.idx == reg) {
+          local.moved = true;
+          break;
+        }
+      }
+    }
+  }
+}
+
+bool Lowerer::is_destructor(ast::ItemIdx item) const {
+  for (const analyzer::CheckedModule& checked : pkg.modules) {
+    for (const analyzer::CheckedModule::MethodInfo& method : checked.methods) {
+      if (method.is_drop && method.item == item) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool Lowerer::runs_destructor(ir::TypeIdx type) const {
+  return type.idx < pkg.needs_drop.size() && pkg.needs_drop[type.idx];
+}
+
+bool Lowerer::emit_drop_at(ir::OperandIdx place,
+                           ir::TypeIdx type,
+                           diag::Span span) {
+  if (!runs_destructor(type)) {
+    return true;
+  }
+  if (type.idx < pkg.drop_glue.size()) {
+    const analyzer::CheckedModule::DropGlue& glue = pkg.drop_glue[type.idx];
+    if (glue.index != base::kInvalidIdx) {
+      const analyzer::CheckedModule& def = pkg.modules[glue.module];
+      const analyzer::CheckedModule::MethodInfo& info = def.methods[glue.index];
+      ir::FunctionIdx fn = fn_index(
+          glue.module, info.item, info.name, info.params, info.ret,
+          generic_inst_index(info.self_type), {}, ir::SymbolKind::Method);
+      if (!fn.is_valid()) {
+        return false;
+      }
+      std::vector<ir::OperandIdx> ops;
+      ops.push_back(builder.operand(ir::Operand::from_function(
+          fn, builder.primitive(ir::TypeTag::Function))));
+      Val self{place, type, true, true};
+      ops.push_back(arg_for(self, info.params[0]));
+      emit_void(ir::Opcode::Call, ops);
+      return true;
+    }
+  }
+  // No destructor of its own: ending the value ends what it holds. A
+  // struct names its fields, so that walk is direct.
+  const ir::TypeNode& node = builder.types()[type];
+  if (node.tag != ir::TypeTag::Struct) {
+    return false;
+  }
+  const ir::StructType& fields = builder.struct_types()[node.as_struct()];
+  bool placed = true;
+  for (u32 i = 0; i < fields.fields.size(); ++i) {
+    const ir::TypeIdx field = fields.fields[i];
+    if (!runs_destructor(field)) {
+      continue;
+    }
+    const ir::RegisterIdx gep = emit(ir::Opcode::GetElementPtr, field,
+                                     {place, zero_i32, index_operand(i)});
+    if (!emit_drop_at(to_operand(gep, field), field, span)) {
+      placed = false;
+    }
+  }
+  return placed;
+}
+
+void Lowerer::emit_drops(u32 mark, diag::Span span) {
+  // Innermost value first, so a value is ended before whatever it was
+  // declared next to.
+  for (u32 i = static_cast<u32>(locals.size()); i > mark; --i) {
+    Local& local = locals[i - 1];
+    if (!local.needs_drop || local.moved) {
+      continue;
+    }
+    if (emit_drop_at(to_operand(local.addr, local.type), local.type, span)) {
+      // Ending a value through its own destructor consumes it, so a
+      // second scope exit must not end it again. A value ended through
+      // the destructors of what it holds is spent the same way.
+      local.moved = true;
+      continue;
+    }
+    const u32 index = bag.emit(
+        diag::Severity::Warning, kLowerDropUnplaced, span,
+        "destructor for '{}' is not run: it is reached through a variant or "
+        "an array, so declare 'fn drop(self: Self)' to end it",
+        local.name);
+    (void)index;
   }
 }
 
@@ -521,6 +621,10 @@ void Lowerer::lower_fn(const FnEntry& entry) {
     return;
   }
   // Bind parameters (patterns may destructure) after allocas exist.
+  // They are locals from here on, so they are the function's own scope
+  // and a return ends them along with everything declared inside.
+  scope_marks.clear();
+  scope_marks.push_back(0);
   binding_param_ = true;
   const std::span<const ast::ItemFnParam> params = fn.params;
   usize pending_at = 0;
@@ -560,6 +664,11 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   }
   pending_params_.clear();
   binding_param_ = false;
+  if (is_destructor(entry.item) && !locals.empty()) {
+    // A destructor ends the value it is given; ending it again on the
+    // way out would call the destructor on its own receiver forever.
+    locals[0].moved = true;
+  }
   if (failed) {
     return;
   }
@@ -567,15 +676,30 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   if (failed) {
     return;
   }
-  if (!terminated_cur()) {
-    if (tag_of(body.type) == ir::TypeTag::Void) {
-      emit_void(ir::Opcode::Ret, {});
-    } else if (tag_of(body.type) == ir::TypeTag::Never) {
-      emit_void(ir::Opcode::Unreachable, {});
-    } else {
-      emit_void(ir::Opcode::Ret, {use_value(body)});
-    }
+  if (terminated_cur()) {
+    scope_marks.clear();
+    return;
   }
+  const ir::TypeTag body_tag = tag_of(body.type);
+  if (body_tag == ir::TypeTag::Never) {
+    scope_marks.clear();
+    emit_void(ir::Opcode::Unreachable, {});
+    return;
+  }
+  // Falling off the end ends the parameters too, so a function that
+  // returns normally releases everything it was given. Taking the
+  // result first moves it out of the value it came from, so the scope
+  // exit does not end it again.
+  if (body_tag == ir::TypeTag::Void) {
+    emit_drops(0, fn.name.span);
+    scope_marks.clear();
+    emit_void(ir::Opcode::Ret, {});
+    return;
+  }
+  const ir::OperandIdx result = use_value(body);
+  emit_drops(0, fn.name.span);
+  scope_marks.clear();
+  emit_void(ir::Opcode::Ret, {result});
 }
 
 void Lowerer::run() {

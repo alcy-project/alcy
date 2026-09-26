@@ -5,6 +5,13 @@ relied upon by MVP programs or by the MVP compiler implementation.
 
 ## Language
 
+- Destructor glue reaches a struct's fields, but not an enum variant's
+  payload or an array's elements: both need a discriminant read or a
+  loop, which the drop emitter does not build. A type reaching a
+  destructor that way must declare its own `drop`, and the compiler warns
+  when it cannot place one. Moving one field out of a struct also does
+  not retire the struct's own destructor; field-level move tracking is
+  still to come. See `docs/adr/0013`.
 - Generic structs, generic enums, generic free functions, and generic
   intrinsics are MVP: they intern per instantiation, and `impl<T>
   Name<T>` methods specialize per instantiation. A generic call takes

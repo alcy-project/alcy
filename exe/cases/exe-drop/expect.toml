@@ -1,0 +1,9 @@
+exit = 0
+stdout = """
+made-holder
+made-gen
+res
+early-done
+gen
+res
+"""

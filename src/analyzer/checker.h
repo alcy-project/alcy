@@ -46,6 +46,9 @@ constexpr u32 kAnalyzerUnsupportedExpr = 4231;
 constexpr u32 kAnalyzerNotCompKnown = 4232;
 constexpr u32 kAnalyzerInvalidComp = 4233;
 constexpr u32 kAnalyzerUnknownIntrinsic = 4234;
+// Diagnostic codes 4240-4249 are reserved for destructors.
+constexpr u32 kAnalyzerBadDropSignature = 4240;
+constexpr u32 kAnalyzerDropOnCopy = 4241;
 
 // Name-interning map capacity (power of two, fixed: the table never
 // resizes and traps on overflow, so size for programs, not tests).
@@ -99,6 +102,9 @@ class Checker {
   std::vector<std::pair<ir::TypeIdx, ir::TypeIdx>> type_origins_;
   // `MaybeUninit<T>` wrappers interned so far, as (wrapper, payload).
   std::vector<std::pair<ir::TypeIdx, ir::TypeIdx>> uninit_types_;
+  // Destructor resolution, aligned with the type table by index.
+  std::vector<CheckedModule::DropGlue> drop_glue_;
+  std::vector<bool> needs_drop_;
   // Interned name every `MaybeUninit` wrapper carries.
   str::StringPoolId uninit_name_id = str::kInvalidStringPoolId;
   // Active type-parameter scope: innermost last. Pushed while
@@ -276,6 +282,19 @@ class Checker {
   void record_call(u32 module,
                    ast::ExprIdx callee,
                    const CheckedModule::MethodInfo* method);
+  // Recognizes a `drop` method and rejects a signature that could not
+  // act as a destructor. Returns whether the method is one.
+  bool check_drop_signature(u32 module,
+                            ir::TypeIdx self_type,
+                            const CheckedModule::FnSig& sig,
+                            CheckedModule::ReceiverKind receiver,
+                            ast::ItemIdx item);
+  // Resolves the destructor of every type in the package, instantiating
+  // generic ones, and records which types run code when a value ends.
+  void resolve_drops();
+  bool drop_scan(ir::TypeIdx type, std::vector<u32>& stack);
+  bool holds_destructible(ir::TypeIdx type, std::vector<u32>& stack);
+  CheckedModule::DropGlue find_drop_glue(ir::TypeIdx type);
 
   struct PathValue {
     enum class Kind : u8 {

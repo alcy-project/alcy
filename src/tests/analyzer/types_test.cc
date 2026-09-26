@@ -2128,4 +2128,155 @@ TEST_CASE(
   CHECK(f.bag.has_errors());
 }
 
+namespace {
+
+// The type a struct local ends up with, found by its first field: a
+// struct's field range holds storage copies so it stays contiguous, so
+// this is not the index the field's own declaration published.
+ir::TypeIdx struct_with_field(const CheckedPackage& package,
+                              std::string_view field) {
+  for (const CheckedModule& checked : package.modules) {
+    for (const CheckedModule::StructInfo& info : checked.structs) {
+      if (!info.fields.empty() && info.fields[0] == field) {
+        return info.type;
+      }
+    }
+  }
+  return ir::TypeIdx(base::kInvalidIdx);
+}
+
+}  // namespace
+
+TEST_CASE("Analyze marks a type with a destructor as needing one") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_drop_needs_test_");
+  const bool setup = write_all(
+      dir,
+      {{"main.al",
+        "pub intrinsic fn alloc<T>(count: usize) -> &mut MaybeUninit<T>;\n"
+        "pub intrinsic fn dealloc<T>(ptr: &mut MaybeUninit<T>, count: usize);\n"
+        "struct R { buf: &mut MaybeUninit<u8> }\n"
+        "impl R {\n"
+        "  fn drop(self: R) {\n"
+        "    dealloc(self.buf, 1 as usize)\n"
+        "  }\n"
+        "}\n"
+        "struct P { n: i32 }\n"
+        "fn main() {\n"
+        "  r := R { buf: alloc::<u8>(4) }\n"
+        "  p := P { n: 1 }\n"
+        "  _ := r.buf\n"
+        "  _ := p.n\n"
+        "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const ir::TypeIdx owns = struct_with_field(*result.package, "buf");
+  const ir::TypeIdx plain = struct_with_field(*result.package, "n");
+  CHECK(owns.is_valid());
+  CHECK(plain.is_valid());
+  if (!owns.is_valid() || !plain.is_valid()) {
+    return;
+  }
+  CHECK(result.package->needs_drop[owns.idx]);
+  CHECK(result.package->drop_glue[owns.idx].index != base::kInvalidIdx);
+  CHECK(!result.package->needs_drop[plain.idx]);
+  CHECK(result.package->drop_glue[plain.idx].index == base::kInvalidIdx);
+}
+
+TEST_CASE("Analyze propagates a destructor through a containing struct") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_drop_contains_test_");
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "pub intrinsic fn alloc<T>(count: usize) -> &mut "
+                       "MaybeUninit<T>;\n"
+                       "pub intrinsic fn dealloc<T>(ptr: &mut "
+                       "MaybeUninit<T>, count: usize);\n"
+                       "struct R { buf: &mut MaybeUninit<u8> }\n"
+                       "impl R {\n"
+                       "  fn drop(self: R) {\n"
+                       "    dealloc(self.buf, 1 as usize)\n"
+                       "  }\n"
+                       "}\n"
+                       "struct H { inner: R, tag: i32 }\n"
+                       "fn main() {\n"
+                       "  h := H { inner: R { buf: alloc::<u8>(4) },"
+                       " tag: 1 }\n"
+                       "  _ := h.tag\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const ir::TypeIdx holder = struct_with_field(*result.package, "inner");
+  CHECK(holder.is_valid());
+  if (!holder.is_valid()) {
+    return;
+  }
+  // Ending it ends what it holds, even though it declares no destructor.
+  CHECK(result.package->needs_drop[holder.idx]);
+  CHECK(result.package->drop_glue[holder.idx].index == base::kInvalidIdx);
+}
+
+TEST_CASE("Analyze resolves a generic type's destructor") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_drop_generic_test_");
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "pub intrinsic fn alloc<T>(count: usize) -> &mut "
+                       "MaybeUninit<T>;\n"
+                       "pub intrinsic fn dealloc<T>(ptr: &mut "
+                       "MaybeUninit<T>, count: usize);\n"
+                       "struct Box<T> { item: T,"
+                       " raw: &mut MaybeUninit<u8> }\n"
+                       "impl<T> Box<T> {\n"
+                       "  fn wrap(v: T) -> Box<T> {\n"
+                       "    ret Box { item: v, raw: alloc::<u8>(1) }\n"
+                       "  }\n"
+                       "  fn drop(self: Box<T>) {\n"
+                       "    dealloc(self.raw, 1 as usize)\n"
+                       "  }\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  b := Box::<i32>::wrap(1i32)\n"
+                       "  ret b.item\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const ir::TypeIdx box = struct_with_field(*result.package, "item");
+  CHECK(box.is_valid());
+  if (!box.is_valid()) {
+    return;
+  }
+  // The declared `Box<T>` and the `Box<i32>` it was instantiated on both
+  // resolve a destructor: the instantiated one is what scope exit calls.
+  CHECK(result.package->needs_drop[box.idx]);
+  CHECK(result.package->drop_glue[box.idx].index != base::kInvalidIdx);
+  for (ir::TypeIdx inst : result.package->generic_insts) {
+    if (inst.idx >= result.package->needs_drop.size()) {
+      continue;
+    }
+    CHECK(result.package->needs_drop[inst.idx]);
+  }
+}
+
 }  // namespace analyzer

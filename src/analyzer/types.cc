@@ -1045,13 +1045,162 @@ void Checker::process_module(u32 module) {
           modules[module].methods.push_back(
               {self_ok ? self_type : error_type(),
                method_node.payload.get<ast::ItemFn>().name.name, sig.params,
-               sig.ret, receiver, method});
+               sig.ret, receiver, method,
+               self_ok && check_drop_signature(module, self_type, sig, receiver,
+                                               method)});
         }
         break;
       }
       case ast::ItemKind::Use: break;
     }
   }
+}
+
+bool Checker::check_drop_signature(u32 module,
+                                   ir::TypeIdx self_type,
+                                   const CheckedModule::FnSig& sig,
+                                   CheckedModule::ReceiverKind receiver,
+                                   ast::ItemIdx item) {
+  static constexpr std::string_view kDrop = "drop";
+  if (sig.name != kDrop || receiver == CheckedModule::ReceiverKind::None) {
+    return false;
+  }
+  const ast::Ident& name = ast.items[item].payload.get<ast::ItemFn>().name;
+  const bool valid = receiver == CheckedModule::ReceiverKind::ByValue &&
+                     sig.params.size() == 1 &&
+                     tag_of(sig.ret) == ir::TypeTag::Void;
+  if (!valid) {
+    const u32 index =
+        bag.emit(diag::Severity::Error, kAnalyzerBadDropSignature, name.span,
+                 "destructor must be 'fn drop(self: Self)' returning nothing");
+    (void)index;
+    return false;
+  }
+  if (ir::is_copy_type(builder.state(), self_type)) {
+    // `Copy` is structural, so a Copy type has no owned resource for a
+    // destructor to release; a copy of it would be dropped too.
+    const u32 index =
+        bag.emit(diag::Severity::Error, kAnalyzerDropOnCopy, name.span,
+                 "type is Copy because all of its fields are, so it cannot "
+                 "have a destructor");
+    (void)index;
+    return false;
+  }
+  (void)module;
+  return true;
+}
+
+void Checker::resolve_drops() {
+  drop_glue_.clear();
+  needs_drop_.clear();
+  std::vector<u32> stack;
+  // Resolving a generic destructor instantiates it, which can intern
+  // further types, so the scan follows the type table as it grows.
+  for (u32 i = 0; i < builder.types().size(); ++i) {
+    drop_scan(ir::TypeIdx(i), stack);
+  }
+}
+
+bool Checker::drop_scan(ir::TypeIdx type, std::vector<u32>& stack) {
+  if (needs_drop_.size() <= type.idx) {
+    drop_glue_.resize(type.idx + 1, CheckedModule::DropGlue{});
+    needs_drop_.resize(type.idx + 1, false);
+  }
+  if (needs_drop_[type.idx]) {
+    return true;
+  }
+  // A struct's field range holds storage copies so it stays contiguous,
+  // and a copy is a distinct type index. Destructors are declared on the
+  // type the copy came from, so the scan follows the copy back.
+  const ir::TypeIdx origin = type_origin(type);
+  if (origin.idx != type.idx) {
+    const bool result = drop_scan(origin, stack);
+    drop_glue_[type.idx] = drop_glue_[origin.idx];
+    needs_drop_[type.idx] = result;
+    return result;
+  }
+  for (u32 entry : stack) {
+    // A type that contains itself has no finite destructor walk. The
+    // cycle check rejects such a type before this runs.
+    if (entry == type.idx) {
+      return false;
+    }
+  }
+  stack.push_back(type.idx);
+  const ir::TypeNode& node = builder.types()[type];
+  bool result = false;
+  CheckedModule::DropGlue glue;
+  switch (node.tag) {
+    case ir::TypeTag::Struct:
+    case ir::TypeTag::Enum: {
+      glue = find_drop_glue(type);
+      if (glue.index != base::kInvalidIdx) {
+        result = true;
+        break;
+      }
+      // No destructor of its own: ending a value still runs the
+      // destructors of whatever it holds.
+      result = holds_destructible(type, stack);
+      break;
+    }
+    case ir::TypeTag::Array:
+      result = drop_scan(builder.array_types()[node.as_array()].element, stack);
+      break;
+    default: break;
+  }
+  stack.pop_back();
+  needs_drop_[type.idx] = result;
+  if (glue.index != base::kInvalidIdx) {
+    drop_glue_[type.idx] = glue;
+  }
+  return result;
+}
+
+CheckedModule::DropGlue Checker::find_drop_glue(ir::TypeIdx type) {
+  for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+    for (u32 k = 0; k < static_cast<u32>(modules[m].methods.size()); ++k) {
+      const CheckedModule::MethodInfo& method = modules[m].methods[k];
+      if (method.is_drop && method.self_type.idx == type.idx) {
+        return {m, k};
+      }
+    }
+  }
+  // A generic type reaches its destructor through `impl<T> Name<T>`,
+  // which only exists once instantiated.
+  const CheckedModule::MethodInfo* method =
+      lookup_method(type, "drop", kNoModule, diag::Span{});
+  if (method == nullptr) {
+    return {};
+  }
+  for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+    for (u32 k = 0; k < static_cast<u32>(modules[m].methods.size()); ++k) {
+      if (&modules[m].methods[k] == method) {
+        return {m, k};
+      }
+    }
+  }
+  return {};
+}
+
+bool Checker::holds_destructible(ir::TypeIdx type, std::vector<u32>& stack) {
+  const ir::TypeNode& node = builder.types()[type];
+  if (node.tag == ir::TypeTag::Struct) {
+    for (ir::TypeIdx field : builder.struct_types()[node.as_struct()].fields) {
+      if (drop_scan(field, stack)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  for (ir::EnumVariantTypeIdx v :
+       builder.enum_types()[node.as_enum()].variants) {
+    for (ir::TypeIdx payload : builder.enum_variant_types()[v].fields) {
+      if (drop_scan(payload, stack)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 bool Checker::has_value_cycle(ir::TypeIdx root,
@@ -1984,7 +2133,10 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
          method_item});
     modules[impl_module].methods.push_back(
         {self_type, method_node.payload.get<ast::ItemFn>().name.name, params,
-         ret, receiver, method_item});
+         ret, receiver, method_item,
+         check_drop_signature(impl_module, self_type,
+                              modules[impl_module].functions.back(), receiver,
+                              method_item)});
     // Nested instantiations append during the body check; keep the
     // entry this call owns.
     CheckedModule::MethodInfo* entry = &modules[impl_module].methods.back();
@@ -2592,6 +2744,10 @@ diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
     checker.process_module(m);
   }
   checker.check_bodies();
+  // Resolving a generic destructor instantiates it, so this has to run
+  // while the type builder is still live and before the type table is
+  // moved out.
+  checker.resolve_drops();
   ir::Storage storage = std::move(checker.builder).build();
   checker.validate_cycles(storage);
   CheckedPackage package{tree,
@@ -2599,7 +2755,11 @@ diag::Fallible<CheckedPackage> check_package(const ModuleTree& tree,
                          std::move(checker.modules),
                          std::move(checker.inst_numbering),
                          std::move(checker.fn_instances),
-                         std::move(checker.type_origins_)};
+                         std::move(checker.type_origins_),
+                         {},
+                         {}};
+  package.drop_glue = std::move(checker.drop_glue_);
+  package.needs_drop = std::move(checker.needs_drop_);
   // Generic instantiations lower as ordinary nominals; publish their
   // field or variant names under the defining module for lowering
   // lookups. Their types publish in instantiation order for keying.

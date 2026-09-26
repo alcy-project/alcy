@@ -72,6 +72,18 @@ struct CheckedModule {
     ir::TypeIdx ret;
     ReceiverKind receiver;
     ast::ItemIdx item;
+    // The type's destructor: `fn drop(self: Self)`. The compiler calls
+    // it where the value ends, so it consumes the value and the
+    // borrow checker sees that as a move.
+    bool is_drop = false;
+  };
+  // Destructor glue for one type: the `drop` method to call, as an
+  // index into `modules[module].methods`. A method reached through a
+  // generic impl is the instantiation the checker produced, so its
+  // `self_type` already names the concrete type it destroys.
+  struct DropGlue {
+    u32 module = base::kInvalidIdx;
+    u32 index = base::kInvalidIdx;
   };
   std::deque<MethodInfo> methods;
   struct StaticInfo {
@@ -141,6 +153,13 @@ struct CheckedPackage {
   // copied from, as (copy, origin) pairs. Lowering follows these so a
   // field's copied type resolves to its declaring nominal.
   std::vector<std::pair<ir::TypeIdx, ir::TypeIdx>> type_origins;
+  // Aligned with `types` by type index: whether ending a value of that
+  // type runs code, and which `drop` method to run when the type's own
+  // destructor is what runs. Types that only *contain* something
+  // destructible have no glue of their own; the destructor of the
+  // containing value walks them.
+  std::vector<CheckedModule::DropGlue> drop_glue;
+  std::vector<bool> needs_drop;
 };
 
 // Resolves every type position in the package to interned TypeIdx:

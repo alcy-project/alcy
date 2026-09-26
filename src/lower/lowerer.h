@@ -31,6 +31,8 @@ namespace lower {
 constexpr u32 kLowerUnsupported = 4300;
 constexpr u32 kLowerInternal = 4301;
 constexpr u32 kLowerUnreachable = 4302;
+constexpr u32 kLowerDropUnplaced = 4303;
+constexpr u32 kLowerDiscardedDestructor = 4304;
 
 // A lowered value: either an SSA operand or the address of one.
 // Places stay in address form so moves and borrows observe origins.
@@ -45,6 +47,11 @@ struct Local {
   std::string_view name;
   ir::RegisterIdx addr;
   ir::TypeIdx type;
+  // Ending this value runs code, so a scope exit has to place a call.
+  bool needs_drop = false;
+  // The value has already left, either through a move out of it or
+  // through a call that consumed it. Scope exit must not end it again.
+  bool moved = false;
 };
 
 class Lowerer {
@@ -145,6 +152,10 @@ class Lowerer {
   // Per-function state.
   u32 module = 0;
   std::vector<Local> locals;
+  // One entry per open block, holding the `locals` size on entry. A
+  // value declared inside a block ends with it, so a scope exit ends
+  // everything from its mark onward.
+  std::vector<u32> scope_marks;
   // Instruction streams by reserved block: reservation order matches
   // creation order, so reserved indexes line up with storage positions.
   std::vector<ir::InstrSeq> streams_;
@@ -426,6 +437,16 @@ class Lowerer {
   Val lower_literal_zero(ir::TypeIdx type, diag::Span span);
   void lower_stmt(ast::StmtIdx stmt);
   Val lower_block(ast::BlockIdx block, const ir::TypeIdx* expected);
+  // Ends every value from `mark` onward, innermost first. A destructor
+  // consumes its value, so this runs the move the borrow checker sees
+  // as ending the local.
+  void emit_drops(u32 mark, diag::Span span);
+  // Ends one place: calls the type's destructor if it has one, and
+  // otherwise ends each destructible field it holds. Returns whether
+  // every destructor in that place was placed.
+  bool emit_drop_at(ir::OperandIdx place, ir::TypeIdx type, diag::Span span);
+  bool runs_destructor(ir::TypeIdx type) const;
+  bool is_destructor(ast::ItemIdx item) const;
   void lower_fn(const FnEntry& entry);
 
   // Registers backing the current entry-block parameter list, consumed

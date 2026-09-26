@@ -502,7 +502,8 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
       const ir::RegisterIdx addr =
           emit(ir::Opcode::Alloca, init.type, {size_one});
       emit_void(ir::Opcode::Store, {material.op, to_operand(addr, init.type)});
-      locals.push_back({name, addr, init.type});
+      locals.push_back(
+          {name, addr, init.type, runs_destructor(init.type), false});
       addr_names_.push_back({addr, name, binding_param_});
       return;
     }
@@ -2519,18 +2520,27 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     case ast::ExprKind::Return: {
       const ast::ExprReturn& ret = node.payload.get<ast::ExprReturn>();
-      if (!ret.value.is_valid()) {
-        emit_void(ir::Opcode::Ret, {});
-      } else {
+      // Leaving the function ends every value still alive, innermost
+      // scope first, so nothing the caller receives outlives a value it
+      // was borrowed from. A result is taken first, which moves it out
+      // of the value it came from.
+      ir::OperandIdx result(base::kInvalidIdx);
+      bool carries_result = false;
+      if (ret.value.is_valid()) {
         Val value = lower_expr(ret.value, nullptr);
         if (failed) {
           return Val{size_one, error_type(), false, false};
         }
-        if (tag_of(value.type) == ir::TypeTag::Void) {
-          emit_void(ir::Opcode::Ret, {});
-        } else {
-          emit_void(ir::Opcode::Ret, {use_value(value)});
+        if (tag_of(value.type) != ir::TypeTag::Void) {
+          result = use_value(value);
+          carries_result = true;
         }
+      }
+      emit_drops(0, node.span);
+      if (carries_result) {
+        emit_void(ir::Opcode::Ret, {result});
+      } else {
+        emit_void(ir::Opcode::Ret, {});
       }
       return Val{size_one, builder.never_type(), false, false};
     }
@@ -2594,6 +2604,17 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
       }
       // Moving into the binding consumes a non-Copy place.
       const ir::OperandIdx moved = use_value(init);
+      if (ast.patterns[decl.pattern].kind == ast::PatternKind::Wildcard &&
+          runs_destructor(init.type)) {
+        // Nothing is left to own the value once the binding discards it,
+        // so its destructor would never run and whatever it holds would
+        // be lost.
+        const u32 index = bag.emit(
+            diag::Severity::Error, kLowerDiscardedDestructor, node.span,
+            "discarded value holds something with a destructor, so ending "
+            "it here is needed");
+        (void)index;
+      }
       bind_pattern(decl.pattern, Val{moved, init.type, false, false});
       return;
     }
@@ -2629,6 +2650,25 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
 
 Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
   const ast::Block& node = ast.blocks[block];
+  const u32 mark = static_cast<u32>(locals.size());
+  // Which of the enclosing values have already left is a property of the
+  // path, not of the function: a value ended on one path out of this
+  // block is still there on the paths that did not take it. Snapshot the
+  // flags the block inherited and put them back on the way out, so a
+  // destructor placed inside a branch does not retire the value for the
+  // code that follows the branch.
+  std::vector<bool> inherited;
+  inherited.reserve(mark);
+  for (u32 i = 0; i < mark; ++i) {
+    inherited.push_back(locals[i].moved);
+  }
+  scope_marks.push_back(mark);
+  auto leave = [&] {
+    scope_marks.pop_back();
+    for (u32 i = 0; i < inherited.size(); ++i) {
+      locals[i].moved = inherited[i];
+    }
+  };
   bool reachable = true;
   for (ast::StmtIdx stmt : node.statements) {
     if (failed) {
@@ -2645,20 +2685,27 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
       reachable = false;
     }
   }
-  if (failed || terminated_cur()) {
-    if (!reachable && node.value.is_valid()) {
-      const u32 index =
-          bag.emit(diag::Severity::Warning, kLowerUnreachable,
-                   ast.exprs[node.value].span, "unreachable expression");
-      (void)index;
+  Val value{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+  if (!failed && reachable && !terminated_cur()) {
+    // A block's trailing value is lowered first: evaluating it can move
+    // a value the block declared out, and ending a value that has
+    // already left would run its destructor on nothing.
+    if (node.value.is_valid()) {
+      value = lower_expr(node.value, expected);
     }
-    return Val{size_one, error_type(), false, false};
+    if (!failed && !terminated_cur()) {
+      // Falling off the end of the block ends what the block declared.
+      emit_drops(mark, node.span);
+    }
+  } else if (!reachable && node.value.is_valid()) {
+    const u32 index =
+        bag.emit(diag::Severity::Warning, kLowerUnreachable,
+                 ast.exprs[node.value].span, "unreachable expression");
+    (void)index;
   }
-  if (!node.value.is_valid()) {
-    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
-  }
-  Val value = lower_expr(node.value, expected);
-  if (failed) {
+  const bool bad = failed || terminated_cur();
+  leave();
+  if (bad) {
     return Val{size_one, error_type(), false, false};
   }
   return value;
