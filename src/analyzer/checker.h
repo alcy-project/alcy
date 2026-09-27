@@ -11,6 +11,7 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -51,6 +52,8 @@ constexpr u32 ANALYZER_UNKNOWN_INTRINSIC = 4034;
 // Diagnostic codes 4040-4049 are reserved for destructors.
 constexpr u32 ANALYZER_BAD_DROP_SIGNATURE = 4040;
 constexpr u32 ANALYZER_DROP_ON_COPY = 4041;
+// Diagnostic codes 4050-4059 are reserved for resource limits.
+constexpr u32 ANALYZER_TOO_DEEP = 4050;
 
 // Name-interning map capacity (power of two, fixed: the table never
 // resizes and traps on overflow, so size for programs, not tests).
@@ -366,6 +369,12 @@ class Checker {
   std::vector<bool> comp_param_flags(ast::ItemIdx item) const;
   bool comp_checked_in_scope(ast::ExprIdx init) const;
   bool is_literal_const(u32 module, ast::PathIdx path) const;
+  // Bounds the recursive tree walk; see base::MAX_NESTING. A long
+  // operator chain parses in a loop, so the parser's own descent does
+  // not bound the tree it produces and this pass has to.
+  base::NestingGuard nesting_{base::MAX_NESTING};
+  bool reported_too_deep_ = false;
+  void report_too_deep(diag::Span span);
   ir::TypeIdx check_path_expr(u32 module,
                               std::span<const ast::TypeIdx> type_args,
                               ast::PathIdx path,

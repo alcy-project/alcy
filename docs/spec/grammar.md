@@ -11,6 +11,13 @@ rejected with guidance diagnostics.
 - `..=`, `..<` are single tokens. After an integer literal, `..`
   starts a range operator, never a float fraction (`1..2` is
   `1 .. 2`); `1. < 2` keeps float-then-compare.
+- Nesting is bounded at 256 levels, counted on expressions, types,
+  blocks, patterns, and items alike. Exceeding it is a diagnostic, not
+  an error the program can observe: the parser, checker, and lowerer
+  all stop descending and report `E3004`/`E4050`/`E5005`. The limit
+  keeps a pathologically nested file from exhausting the stack, and it
+  is a language property rather than an implementation detail, so every
+  stage applies the same number.
 - Newlines are significant: outside brackets, a newline is lexed as
   `;` when the preceding token ends a statement (identifiers,
   literals, `)`, `]`, `}`, `break`, `continue`, `ret`) unless the

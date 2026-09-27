@@ -12,8 +12,10 @@
 
 #include "ast/ast.h"
 #include "ast/verify.h"
+#include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "parser/parser.h"
@@ -47,8 +49,27 @@ class Desugar {
   u32 counter = 0;
   std::vector<std::vector<Binding>> scopes;
   std::vector<ast::Ident> path_scratch;
+  // Bounds the tree walk; see base::MAX_NESTING.
+  base::NestingGuard nesting_{base::MAX_NESTING};
+  bool reported_too_deep_ = false;
 
   Desugar(ast::AstArena& ast, diag::DiagBag& bag) : ast(ast), bag(bag) {}
+
+  // Reports the nesting budget once and returns true when the caller
+  // must stop descending.
+  bool nesting_exhausted(diag::Span span) {
+    if (!nesting_.exhausted()) {
+      return false;
+    }
+    if (!reported_too_deep_) {
+      reported_too_deep_ = true;
+      const u32 index =
+          bag.emit(diag::Severity::Error, PARSER_TOO_DEEP, span,
+                   "nesting is deeper than the limit of {}", nesting_.limit());
+      (void)index;
+    }
+    return true;
+  }
 
   void push_scope() { scopes.emplace_back(); }
 
@@ -183,6 +204,10 @@ class Desugar {
   }
 
   void visit_block(ast::BlockIdx block) {
+    if (nesting_exhausted(ast.blocks[block].span)) {
+      return;
+    }
+    const base::NestingScope scope(nesting_);
     const ast::Block& node = ast.blocks[block];
     push_scope();
     for (ast::StmtIdx stmt : node.statements) {
@@ -236,6 +261,10 @@ class Desugar {
   }
 
   void visit_pattern(ast::PatternIdx pattern) {
+    if (nesting_exhausted(ast.patterns[pattern].span)) {
+      return;
+    }
+    const base::NestingScope scope(nesting_);
     const ast::PatternNode& node = ast.patterns[pattern];
     switch (node.kind) {
       case ast::PatternKind::Wildcard: break;
@@ -343,6 +372,10 @@ class Desugar {
     if (!expr.is_valid()) {
       return;
     }
+    if (nesting_exhausted(ast.exprs[expr].span)) {
+      return;
+    }
+    const base::NestingScope scope(nesting_);
     const ast::ExprNode& node = ast.exprs[expr];
     switch (node.kind) {
       case ast::ExprKind::Literal: break;

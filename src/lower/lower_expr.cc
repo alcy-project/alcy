@@ -11,6 +11,7 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -465,6 +466,12 @@ ir::TypeIdx Lowerer::field_type_of(ir::TypeIdx base,
 }
 
 void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
+  if (nesting_.exhausted()) {
+    report_nesting(ast.patterns[pattern].span);
+    failed = true;
+    return;
+  }
+  const base::NestingScope scope(nesting_);
   const ast::PatternNode& node = ast.patterns[pattern];
   switch (node.kind) {
     case ast::PatternKind::Wildcard: break;
@@ -2442,10 +2449,30 @@ Val Lowerer::lower_question(ast::ExprIdx expr) {
   return payload;
 }
 
+bool Lowerer::report_nesting(diag::Span span) {
+  if (reported_too_deep_) {
+    return true;
+  }
+  reported_too_deep_ = true;
+  const u32 index =
+      bag.emit(diag::Severity::Error, LOWER_TOO_DEEP, span,
+               "nesting is deeper than the limit of {}", nesting_.limit());
+  (void)index;
+  return true;
+}
+
 Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
+  // Every expression routes through here, so this one check bounds the
+  // whole walk.
+  if (nesting_.exhausted()) {
+    report_nesting(ast.exprs[expr].span);
+    failed = true;
+    return Val{size_one, error_type(), false, false};
+  }
+  const base::NestingScope scope(nesting_);
   const ast::ExprNode& node = ast.exprs[expr];
   SpanGuard guard{this, cur_span_};
   cur_span_ = node.span;
@@ -2769,6 +2796,12 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
 }
 
 Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
+  if (nesting_.exhausted()) {
+    report_nesting(ast.blocks[block].span);
+    failed = true;
+    return Val{size_one, error_type(), false, false};
+  }
+  const base::NestingScope scope(nesting_);
   const ast::Block& node = ast.blocks[block];
   const u32 mark = static_cast<u32>(locals.size());
   // Whether an enclosing value has already left is a property of the

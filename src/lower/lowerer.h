@@ -13,6 +13,7 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/idx.h"
@@ -34,6 +35,8 @@ constexpr u32 LOWER_INTERNAL = 5001;
 constexpr u32 LOWER_UNREACHABLE = 5002;
 constexpr u32 LOWER_DROP_UNPLACED = 5003;
 constexpr u32 LOWER_DISCARDED_DESTRUCTOR = 5004;
+// Nesting exceeded the language's budget, so the walk stopped.
+constexpr u32 LOWER_TOO_DEEP = 5005;
 
 // A lowered value: either an SSA operand or the address of one.
 // Places stay in address form so moves and borrows observe origins.
@@ -156,6 +159,16 @@ class Lowerer {
   // value declared inside a block ends with it, so a scope exit ends
   // everything from its mark onward.
   std::vector<u32> scope_marks;
+  // Bounds the recursive tree walk; see base::MAX_NESTING. The analyzer
+  // rejects a tree this deep before lowering sees it, so tripping this
+  // means the budget is the only thing between a hostile input and the
+  // stack.
+  base::NestingGuard nesting_{base::MAX_NESTING};
+  bool reported_too_deep_ = false;
+  // True once the budget is spent, so a lowered value can be reported
+  // without a span at hand.
+  bool nesting_exhausted() const { return nesting_.exhausted(); }
+  bool report_nesting(diag::Span span);
   // Instruction streams by reserved block: reservation order matches
   // creation order, so reserved indexes line up with storage positions.
   std::vector<ir::InstrSeq> streams_;

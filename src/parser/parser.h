@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "ast/ast.h"
+#include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -24,6 +25,8 @@ inline constexpr u32 PARSER_RESERVED_WORD = 3001;
 inline constexpr u32 PARSER_INVALID_TOKEN_STREAM = 3002;
 // The parsed arena failed structural verification.
 inline constexpr u32 PARSER_INVALID_AST = 3003;
+// Nesting exceeded the language's budget, so the descent stopped.
+inline constexpr u32 PARSER_TOO_DEEP = 3004;
 
 // Hand-written recursive-descent parser over a token stream. Parsing is
 // error-tolerant: failures report a diagnostic and synchronize at item,
@@ -147,6 +150,15 @@ class Parser {
   // so their "{" reads as the body block (parenthesize to force a
   // struct there).
   bool allow_struct_lit_ = true;
+  // Bounds the recursive descent; see base::MAX_NESTING.
+  base::NestingGuard nesting_{base::MAX_NESTING};
+  // Set once the budget is spent, so the many frames that then fail
+  // report one diagnostic rather than one per level.
+  bool reported_too_deep_ = false;
+
+  // Reports the nesting budget once and returns true when the caller
+  // must stop descending.
+  bool nesting_exhausted(diag::Span span);
 };
 
 }  // namespace parser

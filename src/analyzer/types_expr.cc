@@ -10,6 +10,7 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -1831,10 +1832,31 @@ ir::TypeIdx Checker::check_match(u32 module,
   return result;
 }
 
+void Checker::report_too_deep(diag::Span span) {
+  if (reported_too_deep_) {
+    return;
+  }
+  reported_too_deep_ = true;
+  const u32 index =
+      bag.emit(diag::Severity::Error, ANALYZER_TOO_DEEP, span,
+               "nesting is deeper than the limit of {}", nesting_.limit());
+  (void)index;
+}
+
 ir::TypeIdx Checker::check_expr(u32 module,
                                 ast::ExprIdx expr,
                                 const ir::TypeIdx* expected) {
-  const ir::TypeIdx type = check_expr_inner(module, expr, expected);
+  // Every expression routes through here, so this one check bounds the
+  // whole walk. The type is still recorded, so the table stays complete
+  // and a later lookup of this expression finds an error rather than
+  // nothing.
+  const ir::TypeIdx type =
+      nesting_.exhausted()
+          ? (report_too_deep(ast.exprs[expr].span), error_type())
+          : [&] {
+              const base::NestingScope scope(nesting_);
+              return check_expr_inner(module, expr, expected);
+            }();
   modules[module].expr_types.push_back({expr, type, cur_inst});
   return type;
 }
@@ -2242,6 +2264,11 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
 ir::TypeIdx Checker::check_block(u32 module,
                                  ast::BlockIdx block,
                                  const ir::TypeIdx* expected) {
+  if (nesting_.exhausted()) {
+    report_too_deep(ast.blocks[block].span);
+    return error_type();
+  }
+  const base::NestingScope scope(nesting_);
   const ast::Block& node = ast.blocks[block];
   scopes.emplace_back();
   for (ast::StmtIdx stmt : node.statements) {

@@ -55,6 +55,10 @@ struct LineInfo {
 
 constexpr u32 TAB_WIDTH = 4;
 
+// Widest caret run rendered. Past this the run says nothing extra about
+// where the span starts, and the line above already shows the extent.
+constexpr u32 MAX_CARET_RUN = 80;
+
 // Display columns spanned by the bytes in [line_start, offset).
 u32 display_column(std::string_view bytes, u32 line_start, u32 offset) {
   u32 col = 1;
@@ -242,6 +246,12 @@ void render(const Diagnostic& diag,
   u32 carets = end_col > start_col ? end_col - start_col : 0;
   if (carets == 0) {
     carets = 1;
+  }
+  // A span can cover a whole line — a rejected deeply nested expression
+  // spans thousands of columns — and a caret per column buries the
+  // message in noise, so the run is capped at a readable width.
+  if (carets > MAX_CARET_RUN) {
+    carets = MAX_CARET_RUN;
   }
   write_gutter(out, gutter);
   out.push_back(' ');

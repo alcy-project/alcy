@@ -10,6 +10,7 @@
 
 #include "ast/ast.h"
 #include "ast/verify.h"
+#include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -881,7 +882,25 @@ bool Parser::parse_decimal_u64(u64* out) {
   return true;
 }
 
+bool Parser::nesting_exhausted(diag::Span span) {
+  if (!nesting_.exhausted()) {
+    return false;
+  }
+  if (!reported_too_deep_) {
+    reported_too_deep_ = true;
+    const u32 index =
+        bag_.emit(diag::Severity::Error, PARSER_TOO_DEEP, span,
+                  "nesting is deeper than the limit of {}", nesting_.limit());
+    (void)index;
+  }
+  return true;
+}
+
 ast::BlockIdx Parser::parse_block() {
+  if (nesting_exhausted(peek().span)) {
+    return ast::BlockIdx::invalid();
+  }
+  const base::NestingScope scope(nesting_);
   const usize mark = pos_;
   if (!expect(lexer::TokenKind::LBrace, "`{`")) {
     return ast::BlockIdx::invalid();

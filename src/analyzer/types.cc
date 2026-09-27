@@ -13,6 +13,7 @@
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
 #include "ast/verify.h"
+#include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -556,6 +557,11 @@ bool Checker::resolve_type_path(u32 module,
 ir::TypeIdx Checker::resolve_type(u32 module,
                                   ast::TypeIdx type,
                                   const ir::TypeIdx* self) {
+  if (nesting_.exhausted()) {
+    report_too_deep(ast.types[type].span);
+    return error_type();
+  }
+  const base::NestingScope scope(nesting_);
   const ast::TypeNode& node = ast.types[type];
   switch (node.kind) {
     case ast::TypeKind::Primitive: {
@@ -2632,6 +2638,9 @@ bool Checker::contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited) {
 
 void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   const ast::ItemNode& node = ast.items[fn];
+  // One report per function: the budget is per function, and every
+  // frame past it would otherwise repeat the same diagnostic.
+  reported_too_deep_ = false;
   fn_ret = builder.primitive(ir::TypeTag::Void);
   if (node.payload.get<ast::ItemFn>().return_type.is_valid()) {
     fn_ret =

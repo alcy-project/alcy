@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "ast/ast.h"
+#include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -18,6 +19,10 @@
 namespace parser {
 
 ast::ExprIdx Parser::parse_expr() {
+  if (nesting_exhausted(peek().span)) {
+    return ast::ExprIdx::invalid();
+  }
+  const base::NestingScope scope(nesting_);
   return parse_range();
 }
 

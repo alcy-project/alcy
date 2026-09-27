@@ -608,6 +608,9 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   // and a return ends them along with everything declared inside.
   scope_marks.clear();
   scope_marks.push_back(0);
+  // One report per function: the budget is per function, and every
+  // frame past it would otherwise repeat the same diagnostic.
+  reported_too_deep_ = false;
   binding_param_ = true;
   const std::span<const ast::ItemFnParam> params = fn.params;
   usize pending_at = 0;

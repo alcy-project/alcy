@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "ast/ast.h"
+#include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -17,6 +18,10 @@
 namespace parser {
 
 ast::TypeIdx Parser::parse_type() {
+  if (nesting_exhausted(peek().span)) {
+    return ast::TypeIdx::invalid();
+  }
+  const base::NestingScope scope(nesting_);
   const usize mark = pos_;
   switch (peek_kind()) {
     using T = lexer::TokenKind;
@@ -259,6 +264,10 @@ ast::PatternIdx Parser::parse_or_pattern() {
 }
 
 ast::PatternIdx Parser::parse_primary_pattern() {
+  if (nesting_exhausted(peek().span)) {
+    return ast::PatternIdx::invalid();
+  }
+  const base::NestingScope scope(nesting_);
   const usize mark = pos_;
   switch (peek_kind()) {
     case lexer::TokenKind::Underscore: {

@@ -5,7 +5,11 @@ source_set("base") {
   sources = [
     "logger.cc",
     "logger.h",
+    "nesting.h",
   ]
   configs += [ "//src:alcy_config" ]
-  deps = [ "//third_party/fpag" ]
+  deps = [
+    "//src/debug",
+    "//third_party/fpag",
+  ]
 }
