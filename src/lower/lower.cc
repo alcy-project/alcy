@@ -51,7 +51,7 @@ usize Lowerer::at(ir::BlockIdx block) const {
 
 ir::BlockIdx Lowerer::reserve_block() {
   streams_.emplace_back();
-  stream_last_.emplace_back(base::kInvalidIdx);
+  stream_last_.emplace_back(base::INVALID_IDX);
   fn_blocks_.emplace_back(block_next_++);
   return fn_blocks_.back();
 }
@@ -129,7 +129,7 @@ ir::RegisterIdx Lowerer::emit(ir::Opcode op,
 
 ir::RegisterIdx Lowerer::emit_type_query(ir::Opcode op, ir::TypeIdx measure) {
   if (failed) {
-    return ir::RegisterIdx(base::kInvalidIdx);
+    return ir::RegisterIdx(base::INVALID_IDX);
   }
   const ir::TypeIdx usize_ty = usize_type();
   const ir::RegisterIdx dst = claim_reg();
@@ -168,7 +168,7 @@ void Lowerer::emit_void(ir::Opcode op, const std::vector<ir::OperandIdx>& ops) {
   const ir::InstructionIdx void_instr =
       builder.instr({.op = op,
                      .flags = {},
-                     .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .dst = ir::RegisterIdx(base::INVALID_IDX),
                      .measure = ir::TypeIdx::invalid(),
                      .operands = range});
   streams_[at(cur_)].push(void_instr);
@@ -240,7 +240,7 @@ bool Lowerer::emit_drop_at(ir::OperandIdx place,
   }
   if (type.idx < pkg.drop_glue.size()) {
     const analyzer::CheckedModule::DropGlue& glue = pkg.drop_glue[type.idx];
-    if (glue.index != base::kInvalidIdx) {
+    if (glue.index != base::INVALID_IDX) {
       const analyzer::CheckedModule& def = pkg.modules[glue.module];
       const analyzer::CheckedModule::MethodInfo& info = def.methods[glue.index];
       ir::FunctionIdx fn = fn_index(
@@ -447,7 +447,7 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   static constexpr usize MAX_FN_ENTRIES = 8192;
   if (fns.size() >= MAX_FN_ENTRIES) {
     internal(diag::Span{}, "function specialization budget exhausted");
-    return ir::FunctionIdx(base::kInvalidIdx);
+    return ir::FunctionIdx(base::INVALID_IDX);
   }
   const ir::FunctionIdx idx(static_cast<u32>(fns.size()));
   FnEntry entry;
@@ -595,7 +595,7 @@ void Lowerer::lower_fn(const FnEntry& entry) {
     }
     const ir::RegisterIdx reg = claim_reg();
     builder.reg({.type = entry.params[i],
-                 .def_idx = ir::InstructionIdx(base::kInvalidIdx)});
+                 .def_idx = ir::InstructionIdx(base::INVALID_IDX)});
     param_seq.push(builder.block_param({.type = entry.params[i], .reg = reg}));
     pending_params_.push_back(reg);
   }

@@ -50,7 +50,7 @@ Storage valid_storage() {
   const InstructionIdx inst_ret = builder.instr({
       .op = Opcode::Ret,
       .flags = {},
-      .dst = RegisterIdx(base::kInvalidIdx),
+      .dst = RegisterIdx(base::INVALID_IDX),
       .measure = ir::TypeIdx::invalid(),
       .operands = {ret_arg, 1},
   });
@@ -63,8 +63,8 @@ Storage valid_storage() {
   builder.function({
       .meta = {.return_type = primitive_idx(TypeTag::I32),
                .param_types = {},
-               .name = str::kEmptyStringId,
-               .path = str::kEmptyStringId,
+               .name = str::EMPTY_STRING_ID,
+               .path = str::EMPTY_STRING_ID,
                .kind = SymbolKind::Foreign,
                .generics = TypeIdxRange{}},
       .blocks = {block, 1},
@@ -75,8 +75,8 @@ Storage valid_storage() {
 FunctionMeta void_meta() {
   return FunctionMeta{.return_type = primitive_idx(TypeTag::Void),
                       .param_types = {},
-                      .name = str::kEmptyStringId,
-                      .path = str::kEmptyStringId,
+                      .name = str::EMPTY_STRING_ID,
+                      .path = str::EMPTY_STRING_ID,
                       .kind = SymbolKind::Foreign,
                       .generics = TypeIdxRange{}};
 }
@@ -153,7 +153,7 @@ TEST_CASE("Verify misplaced terminator") {
   const InstructionIdx inst_ret1 = builder.instr({
       .op = Opcode::Ret,
       .flags = {},
-      .dst = RegisterIdx(base::kInvalidIdx),
+      .dst = RegisterIdx(base::INVALID_IDX),
       .measure = ir::TypeIdx::invalid(),
       .operands = {ret_arg, 1},
   });
@@ -163,7 +163,7 @@ TEST_CASE("Verify misplaced terminator") {
   const InstructionIdx inst_ret2 = builder.instr({
       .op = Opcode::Ret,
       .flags = {},
-      .dst = RegisterIdx(base::kInvalidIdx),
+      .dst = RegisterIdx(base::INVALID_IDX),
       .measure = ir::TypeIdx::invalid(),
       .operands = {ret_arg2, 1},
   });
@@ -187,7 +187,7 @@ TEST_CASE("Verify unknown operand tag") {
   const InstructionIdx inst = builder.instr({
       .op = Opcode::Ret,
       .flags = {},
-      .dst = RegisterIdx(base::kInvalidIdx),
+      .dst = RegisterIdx(base::INVALID_IDX),
       .measure = ir::TypeIdx::invalid(),
       .operands = {oidx, 1},
   });
@@ -206,15 +206,15 @@ TEST_CASE("Verify undefined register") {
   StorageBuilder builder;
   // Register 1 exists but is never defined or bound.
   builder.reg({.type = primitive_idx(TypeTag::I32),
-               .def_idx = InstructionIdx(base::kInvalidIdx)});
+               .def_idx = InstructionIdx(base::INVALID_IDX)});
   builder.reg({.type = primitive_idx(TypeTag::I32),
-               .def_idx = InstructionIdx(base::kInvalidIdx)});
+               .def_idx = InstructionIdx(base::INVALID_IDX)});
   const OperandIdx arg = builder.operand(
       Operand::from_register(RegisterIdx(1), primitive_idx(TypeTag::I32)));
   const InstructionIdx inst = builder.instr({
       .op = Opcode::Ret,
       .flags = {},
-      .dst = RegisterIdx(base::kInvalidIdx),
+      .dst = RegisterIdx(base::INVALID_IDX),
       .measure = ir::TypeIdx::invalid(),
       .operands = {arg, 1},
   });
@@ -225,8 +225,8 @@ TEST_CASE("Verify undefined register") {
   builder.function({
       .meta = {.return_type = primitive_idx(TypeTag::I32),
                .param_types = {},
-               .name = str::kEmptyStringId,
-               .path = str::kEmptyStringId,
+               .name = str::EMPTY_STRING_ID,
+               .path = str::EMPTY_STRING_ID,
                .kind = SymbolKind::Foreign,
                .generics = TypeIdxRange{}},
       .blocks = {block, 1},
@@ -265,7 +265,7 @@ TEST_CASE("Verify redefined register") {
   const InstructionIdx inst_ret = builder.instr({
       .op = Opcode::Ret,
       .flags = {},
-      .dst = RegisterIdx(base::kInvalidIdx),
+      .dst = RegisterIdx(base::INVALID_IDX),
       .measure = ir::TypeIdx::invalid(),
       .operands = {ret_arg, 1},
   });
@@ -291,7 +291,7 @@ TEST_CASE("Verify invalid callee") {
   const InstructionIdx inst = builder.instr({
       .op = Opcode::Call,
       .flags = {},
-      .dst = RegisterIdx(base::kInvalidIdx),
+      .dst = RegisterIdx(base::INVALID_IDX),
       .measure = ir::TypeIdx::invalid(),
       .operands = {head, 1},
   });
@@ -301,7 +301,7 @@ TEST_CASE("Verify invalid callee") {
   const InstructionIdx inst_ret = builder.instr({
       .op = Opcode::Ret,
       .flags = {},
-      .dst = RegisterIdx(base::kInvalidIdx),
+      .dst = RegisterIdx(base::INVALID_IDX),
       .measure = ir::TypeIdx::invalid(),
       .operands = {ret_arg, 1},
   });
@@ -321,7 +321,7 @@ TEST_CASE("Verify invalid branch target") {
   StorageBuilder builder;
   // Bind register 0 via a block param so the operand itself is valid.
   builder.reg({.type = primitive_idx(TypeTag::I32),
-               .def_idx = InstructionIdx(base::kInvalidIdx)});
+               .def_idx = InstructionIdx(base::INVALID_IDX)});
   const BlockParamIdx param = builder.block_param({
       .type = primitive_idx(TypeTag::I32),
       .reg = RegisterIdx(0),
@@ -331,7 +331,7 @@ TEST_CASE("Verify invalid branch target") {
   const InstructionIdx inst = builder.instr({
       .op = Opcode::Br,
       .flags = {},
-      .dst = RegisterIdx(base::kInvalidIdx),
+      .dst = RegisterIdx(base::INVALID_IDX),
       .measure = ir::TypeIdx::invalid(),
       .operands = {head, 1},
   });
@@ -356,7 +356,7 @@ TEST_CASE("Verify out of range indexes") {
     const InstructionIdx inst = builder.instr({
         .op = Opcode::Ret,
         .flags = {},
-        .dst = RegisterIdx(base::kInvalidIdx),
+        .dst = RegisterIdx(base::INVALID_IDX),
         .measure = ir::TypeIdx::invalid(),
         .operands = {arg, 4},
     });
@@ -409,8 +409,8 @@ TEST_CASE("Verify struct and array types") {
     const TypeIdx i32 = builder.primitive(TypeTag::I32);
     fields.push(builder.ref_type(i32));
     fields.push(builder.ref_type(i32));
-    const TypeIdx st = builder.struct_type(str::kEmptyStringId, fields.finish(),
-                                           ir::TypeIdxRange{});
+    const TypeIdx st = builder.struct_type(str::EMPTY_STRING_ID,
+                                           fields.finish(), ir::TypeIdxRange{});
     const TypeIdx arr = builder.array_type(i32, 4);
     TypeSeq params;
     params.push(builder.ref_type(st));
@@ -435,7 +435,7 @@ TEST_CASE("Verify struct and array types") {
     const InstructionIdx inst_ret = builder.instr({
         .op = Opcode::Ret,
         .flags = {},
-        .dst = RegisterIdx(base::kInvalidIdx),
+        .dst = RegisterIdx(base::INVALID_IDX),
         .measure = ir::TypeIdx::invalid(),
         .operands = {ret_arg, 1},
     });
@@ -447,8 +447,8 @@ TEST_CASE("Verify struct and array types") {
     builder.function({
         .meta = {.return_type = i32,
                  .param_types = params.finish(),
-                 .name = str::kEmptyStringId,
-                 .path = str::kEmptyStringId,
+                 .name = str::EMPTY_STRING_ID,
+                 .path = str::EMPTY_STRING_ID,
                  .kind = SymbolKind::Foreign,
                  .generics = TypeIdxRange{}},
         .blocks = {block, 1},
@@ -459,7 +459,7 @@ TEST_CASE("Verify struct and array types") {
   // Struct field range exceeds the types storage.
   {
     StorageBuilder builder;
-    builder.struct_type(str::kEmptyStringId, {TypeIdx(99), 1},
+    builder.struct_type(str::EMPTY_STRING_ID, {TypeIdx(99), 1},
                         ir::TypeIdxRange{});
     check_invalid(std::move(builder).build(),
                   VerifyErrorKind::StructFieldsOutOfRange);
@@ -484,9 +484,9 @@ TEST_CASE("Verify enum types") {
     TypeSeq payload;
     payload.push(builder.ref_type(i32));
     EnumVariantTypeSeq variants;
-    variants.push(builder.enum_variant(str::kEmptyStringId, {}));
-    variants.push(builder.enum_variant(str::kEmptyStringId, payload.finish()));
-    builder.enum_type(str::kEmptyStringId, variants.finish(),
+    variants.push(builder.enum_variant(str::EMPTY_STRING_ID, {}));
+    variants.push(builder.enum_variant(str::EMPTY_STRING_ID, payload.finish()));
+    builder.enum_type(str::EMPTY_STRING_ID, variants.finish(),
                       ir::TypeIdxRange{});
     Storage storage = std::move(builder).build().unwrap().unwrap();
     CHECK(verify_storage(storage).is_ok());
@@ -495,7 +495,7 @@ TEST_CASE("Verify enum types") {
   {
     StorageState state;
     state.enum_types.emplace_back(EnumType{
-        .name = str::kEmptyStringId,
+        .name = str::EMPTY_STRING_ID,
         .variants = {EnumVariantTypeIdx(7), 1},
         .params = {TypeIdx(0), 0},
     });
@@ -510,11 +510,11 @@ TEST_CASE("Verify enum types") {
   {
     StorageState state;
     state.enum_variant_types.emplace_back(EnumVariantType{
-        .name = str::kEmptyStringId,
+        .name = str::EMPTY_STRING_ID,
         .fields = {TypeIdx(99), 1},
     });
     state.enum_types.emplace_back(EnumType{
-        .name = str::kEmptyStringId,
+        .name = str::EMPTY_STRING_ID,
         .variants = {EnumVariantTypeIdx(0), 1},
         .params = {TypeIdx(0), 0},
     });
@@ -539,7 +539,7 @@ TEST_CASE("Verify CondBr shapes") {
       const InstructionIdx inst =
           builder.instr({.op = Opcode::Ret,
                          .flags = {},
-                         .dst = RegisterIdx(base::kInvalidIdx),
+                         .dst = RegisterIdx(base::INVALID_IDX),
                          .measure = ir::TypeIdx::invalid(),
                          .operands = args.finish()});
       InstrSeq instrs;
@@ -549,7 +549,7 @@ TEST_CASE("Verify CondBr shapes") {
 
     const ImmutableIdx zero =
         builder.immutable({.type = i32, .data = {.i32_value = 0}});
-    builder.reg({.type = i32, .def_idx = InstructionIdx(base::kInvalidIdx)});
+    builder.reg({.type = i32, .def_idx = InstructionIdx(base::INVALID_IDX)});
     const BlockParamIdx param =
         builder.block_param({.type = i32, .reg = RegisterIdx(0)});
     const BlockIdx entry = builder.block({{}, {}});
@@ -563,7 +563,7 @@ TEST_CASE("Verify CondBr shapes") {
     const InstructionIdx inst =
         builder.instr({.op = Opcode::CondBr,
                        .flags = {},
-                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .dst = RegisterIdx(base::INVALID_IDX),
                        .measure = ir::TypeIdx::invalid(),
                        .operands = args.finish()});
     InstrSeq instrs;
@@ -580,8 +580,8 @@ TEST_CASE("Verify CondBr shapes") {
     builder.function({
         .meta = {.return_type = i32,
                  .param_types = {},
-                 .name = str::kEmptyStringId,
-                 .path = str::kEmptyStringId,
+                 .name = str::EMPTY_STRING_ID,
+                 .path = str::EMPTY_STRING_ID,
                  .kind = SymbolKind::Foreign,
                  .generics = TypeIdxRange{}},
         .blocks = blocks.finish(),
@@ -592,7 +592,7 @@ TEST_CASE("Verify CondBr shapes") {
   {
     StorageBuilder builder;
     const TypeIdx i1 = builder.primitive(TypeTag::I1);
-    builder.reg({.type = i1, .def_idx = InstructionIdx(base::kInvalidIdx)});
+    builder.reg({.type = i1, .def_idx = InstructionIdx(base::INVALID_IDX)});
     const BlockParamIdx param =
         builder.block_param({.type = i1, .reg = RegisterIdx(0)});
     const BlockIdx entry = builder.block({{}, {}});
@@ -602,7 +602,7 @@ TEST_CASE("Verify CondBr shapes") {
     const InstructionIdx inst =
         builder.instr({.op = Opcode::CondBr,
                        .flags = {},
-                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .dst = RegisterIdx(base::INVALID_IDX),
                        .measure = ir::TypeIdx::invalid(),
                        .operands = args.finish()});
     InstrSeq instrs;
@@ -614,8 +614,8 @@ TEST_CASE("Verify CondBr shapes") {
     builder.function({
         .meta = {.return_type = i1,
                  .param_types = {},
-                 .name = str::kEmptyStringId,
-                 .path = str::kEmptyStringId,
+                 .name = str::EMPTY_STRING_ID,
+                 .path = str::EMPTY_STRING_ID,
                  .kind = SymbolKind::Foreign,
                  .generics = TypeIdxRange{}},
         .blocks = {entry, 1},
@@ -629,7 +629,7 @@ TEST_CASE("Verify Switch shapes") {
   {
     StorageBuilder builder;
     const TypeIdx i32 = builder.primitive(TypeTag::I32);
-    builder.reg({.type = i32, .def_idx = InstructionIdx(base::kInvalidIdx)});
+    builder.reg({.type = i32, .def_idx = InstructionIdx(base::INVALID_IDX)});
     const BlockParamIdx param =
         builder.block_param({.type = i32, .reg = RegisterIdx(0)});
     const BlockIdx entry = builder.block({{}, {}});
@@ -640,7 +640,7 @@ TEST_CASE("Verify Switch shapes") {
     const InstructionIdx inst_ret =
         builder.instr({.op = Opcode::Ret,
                        .flags = {},
-                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .dst = RegisterIdx(base::INVALID_IDX),
                        .measure = ir::TypeIdx::invalid(),
                        .operands = ret_args.finish()});
     InstrSeq ret_instrs;
@@ -656,7 +656,7 @@ TEST_CASE("Verify Switch shapes") {
     const InstructionIdx inst =
         builder.instr({.op = Opcode::Switch,
                        .flags = {},
-                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .dst = RegisterIdx(base::INVALID_IDX),
                        .measure = ir::TypeIdx::invalid(),
                        .operands = args.finish()});
     InstrSeq instrs;
@@ -668,8 +668,8 @@ TEST_CASE("Verify Switch shapes") {
     builder.function({
         .meta = {.return_type = i32,
                  .param_types = {},
-                 .name = str::kEmptyStringId,
-                 .path = str::kEmptyStringId,
+                 .name = str::EMPTY_STRING_ID,
+                 .path = str::EMPTY_STRING_ID,
                  .kind = SymbolKind::Foreign,
                  .generics = TypeIdxRange{}},
         .blocks = {entry, 1},
@@ -706,7 +706,7 @@ TEST_CASE("Verify Switch shapes") {
     const InstructionIdx inst =
         builder.instr({.op = Opcode::Switch,
                        .flags = {},
-                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .dst = RegisterIdx(base::INVALID_IDX),
                        .measure = ir::TypeIdx::invalid(),
                        .operands = args.finish()});
     InstrSeq instrs;
@@ -717,8 +717,8 @@ TEST_CASE("Verify Switch shapes") {
     builder.function({
         .meta = {.return_type = i32,
                  .param_types = {},
-                 .name = str::kEmptyStringId,
-                 .path = str::kEmptyStringId,
+                 .name = str::EMPTY_STRING_ID,
+                 .path = str::EMPTY_STRING_ID,
                  .kind = SymbolKind::Foreign,
                  .generics = TypeIdxRange{}},
         .blocks = {entry, 1},
@@ -748,7 +748,7 @@ TEST_CASE("Verify memory shapes") {
     const InstructionIdx inst =
         builder.instr({.op = Opcode::GetElementPtr,
                        .flags = {},
-                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .dst = RegisterIdx(base::INVALID_IDX),
                        .measure = ir::TypeIdx::invalid(),
                        .operands = args.finish()});
     const OperandIdx gep_ret_arg =
@@ -756,7 +756,7 @@ TEST_CASE("Verify memory shapes") {
     const InstructionIdx inst_gep_ret =
         builder.instr({.op = Opcode::Ret,
                        .flags = {},
-                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .dst = RegisterIdx(base::INVALID_IDX),
                        .measure = ir::TypeIdx::invalid(),
                        .operands = {gep_ret_arg, 1}});
     InstrSeq instrs;
@@ -767,8 +767,8 @@ TEST_CASE("Verify memory shapes") {
     builder.function({
         .meta = {.return_type = i32,
                  .param_types = {},
-                 .name = str::kEmptyStringId,
-                 .path = str::kEmptyStringId,
+                 .name = str::EMPTY_STRING_ID,
+                 .path = str::EMPTY_STRING_ID,
                  .kind = SymbolKind::Foreign,
                  .generics = TypeIdxRange{}},
         .blocks = {entry, 1},
@@ -805,7 +805,7 @@ TEST_CASE("Verify memory shapes") {
     const InstructionIdx inst_ext_ret =
         builder.instr({.op = Opcode::Ret,
                        .flags = {},
-                       .dst = RegisterIdx(base::kInvalidIdx),
+                       .dst = RegisterIdx(base::INVALID_IDX),
                        .measure = ir::TypeIdx::invalid(),
                        .operands = {ext_ret_arg, 1}});
     InstrSeq instrs;
@@ -816,8 +816,8 @@ TEST_CASE("Verify memory shapes") {
     builder.function({
         .meta = {.return_type = i32,
                  .param_types = {},
-                 .name = str::kEmptyStringId,
-                 .path = str::kEmptyStringId,
+                 .name = str::EMPTY_STRING_ID,
+                 .path = str::EMPTY_STRING_ID,
                  .kind = SymbolKind::Foreign,
                  .generics = TypeIdxRange{}},
         .blocks = {entry, 1},
@@ -834,8 +834,8 @@ TEST_CASE("Verify call arity") {
   const ExternalFunctionIdx callee =
       builder.external_function({.meta = {.return_type = i32,
                                           .param_types = {p0, 1},
-                                          .name = str::kEmptyStringId,
-                                          .path = str::kEmptyStringId,
+                                          .name = str::EMPTY_STRING_ID,
+                                          .path = str::EMPTY_STRING_ID,
                                           .kind = SymbolKind::Foreign,
                                           .generics = TypeIdxRange{}},
                                  .calling_conv = CallingConvention::C});
@@ -844,7 +844,7 @@ TEST_CASE("Verify call arity") {
   const InstructionIdx inst =
       builder.instr({.op = Opcode::Call,
                      .flags = {},
-                     .dst = RegisterIdx(base::kInvalidIdx),
+                     .dst = RegisterIdx(base::INVALID_IDX),
                      .measure = ir::TypeIdx::invalid(),
                      .operands = {head, 1}});
   const ImmutableIdx zero =
@@ -854,7 +854,7 @@ TEST_CASE("Verify call arity") {
   const InstructionIdx inst_ret =
       builder.instr({.op = Opcode::Ret,
                      .flags = {},
-                     .dst = RegisterIdx(base::kInvalidIdx),
+                     .dst = RegisterIdx(base::INVALID_IDX),
                      .measure = ir::TypeIdx::invalid(),
                      .operands = {ret_arg, 1}});
   const BlockIdx entry = builder.block({{}, {}});
@@ -865,8 +865,8 @@ TEST_CASE("Verify call arity") {
   builder.function({
       .meta = {.return_type = i32,
                .param_types = {},
-               .name = str::kEmptyStringId,
-               .path = str::kEmptyStringId,
+               .name = str::EMPTY_STRING_ID,
+               .path = str::EMPTY_STRING_ID,
                .kind = SymbolKind::Foreign,
                .generics = TypeIdxRange{}},
       .blocks = {entry, 1},

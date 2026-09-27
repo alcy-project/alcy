@@ -484,7 +484,7 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
         name = node.payload.mut_ident.name.name;
       }
       if (tag_of(init.type) == ir::TypeTag::Void) {
-        locals.push_back({name, ir::RegisterIdx(base::kInvalidIdx), init.type});
+        locals.push_back({name, ir::RegisterIdx(base::INVALID_IDX), init.type});
         return;
       }
       const Val material = materialize(init);
@@ -643,7 +643,7 @@ ir::ExternalFunctionIdx Lowerer::declare_external(
       builder.external_function({.meta = {.return_type = ret,
                                           .param_types = seq.finish(),
                                           .name = strings.intern(name),
-                                          .path = str::kEmptyStringId,
+                                          .path = str::EMPTY_STRING_ID,
                                           .kind = ir::SymbolKind::Foreign,
                                           .generics = ir::TypeIdxRange{}},
                                  .calling_conv = ir::CallingConvention::C});
@@ -1264,17 +1264,17 @@ ir::OperandIdx Lowerer::advance_ptr(ir::OperandIdx ptr,
   const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
   const ir::RegisterIdx as_int = emit(ir::Opcode::TypeCast, usize_ty, {ptr});
   if (failed) {
-    return ir::OperandIdx(base::kInvalidIdx);
+    return ir::OperandIdx(base::INVALID_IDX);
   }
   const ir::RegisterIdx sum = emit(ir::Opcode::IntAdd, usize_ty,
                                    {to_operand(as_int, usize_ty), offset});
   if (failed) {
-    return ir::OperandIdx(base::kInvalidIdx);
+    return ir::OperandIdx(base::INVALID_IDX);
   }
   const ir::RegisterIdx bumped =
       emit(ir::Opcode::TypeCast, ptr_ty, {to_operand(sum, usize_ty)});
   if (failed) {
-    return ir::OperandIdx(base::kInvalidIdx);
+    return ir::OperandIdx(base::INVALID_IDX);
   }
   (void)span;
   return to_operand(bumped, ptr_ty);
@@ -2176,7 +2176,7 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     bodies.push_back(reserve_block());
   }
   const ir::BlockIdx fail = reserve_block();
-  ir::BlockIdx join = ir::BlockIdx(base::kInvalidIdx);
+  ir::BlockIdx join = ir::BlockIdx(base::INVALID_IDX);
   if (arms.empty()) {
     internal(node.span, "match without arms");
     return Val{size_one, error_type(), false, false};
@@ -2236,7 +2236,7 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     slot = result_slot(result_type, node.span);
   }
   ir::BlockIdx else_block = reserve_block();
-  ir::BlockIdx join = ir::BlockIdx(base::kInvalidIdx);
+  ir::BlockIdx join = ir::BlockIdx(base::INVALID_IDX);
   auto finish_arm = [&](Val produced) {
     if (has_slot && !terminated_cur()) {
       store_result(slot, produced);
@@ -2652,7 +2652,7 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       // Leaving the function ends every value still alive, so nothing
       // the caller receives outlives a value it was borrowed from. The
       // result is taken first, which moves it out of its origin.
-      ir::OperandIdx result(base::kInvalidIdx);
+      ir::OperandIdx result(base::INVALID_IDX);
       bool carries_result = false;
       if (ret.value.is_valid()) {
         Val value = lower_expr(ret.value, nullptr);

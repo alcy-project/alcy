@@ -111,7 +111,7 @@ class Checker {
   std::vector<CheckedModule::DropGlue> drop_glue_;
   std::vector<bool> needs_drop_;
   // Interned name every `MaybeUninit` wrapper carries.
-  str::StringPoolId uninit_name_id = str::kInvalidStringPoolId;
+  str::StringPoolId uninit_name_id = str::INVALID_STRING_POOL_ID;
   // Active type-parameter scope: innermost last. Pushed while
   // instantiating a generic enum or checking its members.
   std::vector<std::pair<std::string_view, ir::TypeIdx>> type_params;

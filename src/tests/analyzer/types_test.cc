@@ -2147,7 +2147,7 @@ ir::TypeIdx struct_with_field(const CheckedPackage& package,
       }
     }
   }
-  return ir::TypeIdx(base::kInvalidIdx);
+  return ir::TypeIdx(base::INVALID_IDX);
 }
 
 }  // namespace
@@ -2190,9 +2190,9 @@ TEST_CASE("Analyze marks a type with a destructor as needing one") {
     return;
   }
   CHECK(result.package->needs_drop[owns.idx]);
-  CHECK(result.package->drop_glue[owns.idx].index != base::kInvalidIdx);
+  CHECK(result.package->drop_glue[owns.idx].index != base::INVALID_IDX);
   CHECK(!result.package->needs_drop[plain.idx]);
-  CHECK(result.package->drop_glue[plain.idx].index == base::kInvalidIdx);
+  CHECK(result.package->drop_glue[plain.idx].index == base::INVALID_IDX);
 }
 
 TEST_CASE("Analyze propagates a destructor through a containing struct") {
@@ -2232,7 +2232,7 @@ TEST_CASE("Analyze propagates a destructor through a containing struct") {
   }
   // Ending it ends what it holds, even though it declares no destructor.
   CHECK(result.package->needs_drop[holder.idx]);
-  CHECK(result.package->drop_glue[holder.idx].index == base::kInvalidIdx);
+  CHECK(result.package->drop_glue[holder.idx].index == base::INVALID_IDX);
 }
 
 TEST_CASE("Analyze resolves a generic type's destructor") {
@@ -2275,7 +2275,7 @@ TEST_CASE("Analyze resolves a generic type's destructor") {
   // The declared `Box<T>` and the `Box<i32>` it was instantiated on both
   // resolve a destructor: the instantiated one is what scope exit calls.
   CHECK(result.package->needs_drop[box.idx]);
-  CHECK(result.package->drop_glue[box.idx].index != base::kInvalidIdx);
+  CHECK(result.package->drop_glue[box.idx].index != base::INVALID_IDX);
   for (ir::TypeIdx inst : result.package->generic_insts) {
     if (inst.idx >= result.package->needs_drop.size()) {
       continue;

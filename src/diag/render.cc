@@ -35,9 +35,9 @@ constexpr char severity_code(Severity severity) {
 
 constexpr std::string_view severity_color(Severity severity) {
   switch (severity) {
-    case Severity::Error: return term::kRed;
-    case Severity::Warning: return term::kYellow;
-    case Severity::Note: return term::kCyan;
+    case Severity::Error: return term::FG_RED;
+    case Severity::Warning: return term::FG_YELLOW;
+    case Severity::Note: return term::FG_CYAN;
   }
 }
 
@@ -144,14 +144,14 @@ void begin_style(fmt::memory_buffer& out,
     return;
   }
   if (bold) {
-    append_text(out, term::kBold);
+    append_text(out, term::BOLD);
   }
   append_text(out, color);
 }
 
 void end_style(fmt::memory_buffer& out, bool enabled) {
   if (enabled) {
-    append_text(out, term::kReset);
+    append_text(out, term::RESET);
   }
 }
 
@@ -207,7 +207,7 @@ void render(const Diagnostic& diag,
       source.name.empty() ? "[unknown file]" : source.name;
 
   fmt::format_to(std::back_inserter(out), " --> ");
-  append_colored(out, options.color, term::kCyan, name);
+  append_colored(out, options.color, term::FG_CYAN, name);
   // No bytes, or a span past the end of the file: show the raw offset
   // rather than fabricate a line/column the text cannot support.
   if (source.bytes.empty() || diag.primary_span.offset > source.bytes.size()) {
@@ -221,7 +221,7 @@ void render(const Diagnostic& diag,
   const u32 gutter = decimal_width(info.line);
   write_gutter(out, gutter);
   fmt::format_to(std::back_inserter(out), "\n");
-  begin_style(out, options.color, term::kBlue);
+  begin_style(out, options.color, term::FG_BLUE);
   fmt::format_to(std::back_inserter(out), "{}", info.line);
   end_style(out, options.color);
   fmt::format_to(std::back_inserter(out), " | ");
@@ -275,11 +275,11 @@ void render(const Diagnostic& diag,
     const std::string_view label_name =
         label_source.name.empty() ? "[unknown file]" : label_source.name;
     fmt::format_to(std::back_inserter(out), " = ");
-    begin_style(out, options.color, term::kCyan, true);
+    begin_style(out, options.color, term::FG_CYAN, true);
     fmt::format_to(std::back_inserter(out), "note");
     end_style(out, options.color);
     fmt::format_to(std::back_inserter(out), ": {} --> ", label.message);
-    append_colored(out, options.color, term::kCyan, label_name);
+    append_colored(out, options.color, term::FG_CYAN, label_name);
     if (label_source.bytes.empty() ||
         label.span.offset > label_source.bytes.size()) {
       fmt::format_to(std::back_inserter(out), ":{}\n", label.span.offset);

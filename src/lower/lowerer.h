@@ -100,7 +100,7 @@ class Lowerer {
 
   struct CompVal {
     CompValue value;
-    ir::TypeIdx type = ir::TypeIdx(base::kInvalidIdx);
+    ir::TypeIdx type = ir::TypeIdx(base::INVALID_IDX);
   };
 
   // Lexical comp bindings: persistent per-function bindings plus
@@ -115,11 +115,11 @@ class Lowerer {
     // Specialization key over comp argument values; empty for
     // functions without comp parameters.
     std::string comp_key;
-    ir::FunctionIdx idx = ir::FunctionIdx(base::kInvalidIdx);
+    ir::FunctionIdx idx = ir::FunctionIdx(base::INVALID_IDX);
     u32 mod = 0;
     std::string name;
     std::vector<ir::TypeIdx> params;
-    ir::TypeIdx ret = ir::TypeIdx(base::kInvalidIdx);
+    ir::TypeIdx ret = ir::TypeIdx(base::INVALID_IDX);
     // Generic instantiation lowered under (NO_INST for plain code).
     u32 inst = analyzer::NO_INST;
     // What the symbol names. A method and an associated function share
@@ -174,7 +174,7 @@ class Lowerer {
   std::vector<ir::InstrSeq> streams_;
   std::vector<ir::InstructionIdx> stream_last_;
   std::vector<ir::BlockIdx> fn_blocks_;
-  ir::BlockIdx cur_{base::kInvalidIdx};
+  ir::BlockIdx cur_{base::INVALID_IDX};
   u32 block_next_ = 0;
   u32 fn_block_base_ = 0;
   bool binding_param_ = false;

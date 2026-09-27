@@ -80,8 +80,8 @@ struct CheckedModule {
   // generic impl is the instantiation the checker produced, so its
   // `self_type` already names the concrete type it destroys.
   struct DropGlue {
-    u32 module = base::kInvalidIdx;
-    u32 index = base::kInvalidIdx;
+    u32 module = base::INVALID_IDX;
+    u32 index = base::INVALID_IDX;
   };
   // Lazily-instantiated generic methods append during body checking,
   // so element addresses must stay stable: never reallocate-held.

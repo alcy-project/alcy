@@ -28,7 +28,7 @@ struct FunctionMeta {
   // Source name, kept for diagnostics and for finding the entry point.
   str::StringPoolId name;
   // Dotted module path, empty for the root module.
-  str::StringPoolId path = str::kEmptyStringId;
+  str::StringPoolId path = str::EMPTY_STRING_ID;
   SymbolKind kind = SymbolKind::Foreign;
   // Type arguments of the instantiation, empty for a non-generic item.
   TypeIdxRange generics;

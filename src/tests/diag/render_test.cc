@@ -145,15 +145,15 @@ TEST_CASE("Render colorizes diagnostic elements") {
             .is_ok());
 
   const std::string colored = render_str(*f.bag.at(i), {.color = true});
-  CHECK(colored.find(term::kBold) != std::string::npos);
-  CHECK(colored.find(term::kRed) != std::string::npos);
-  CHECK(colored.find(term::kCyan) != std::string::npos);
-  CHECK(colored.find(term::kBlue) != std::string::npos);
+  CHECK(colored.find(term::BOLD) != std::string::npos);
+  CHECK(colored.find(term::FG_RED) != std::string::npos);
+  CHECK(colored.find(term::FG_CYAN) != std::string::npos);
+  CHECK(colored.find(term::FG_BLUE) != std::string::npos);
   CHECK(colored.find("\x1b[38;2;") == std::string::npos);
   CHECK(colored.find("bad call\n") != std::string::npos);
-  CHECK(colored.find(" = " + std::string(term::kBold) +
-                     std::string(term::kCyan) + "note" +
-                     std::string(term::kReset)) != std::string::npos);
+  CHECK(colored.find(" = " + std::string(term::BOLD) +
+                     std::string(term::FG_CYAN) + "note" +
+                     std::string(term::RESET)) != std::string::npos);
 }
 
 TEST_CASE("Render uses severity-specific colors") {
@@ -166,9 +166,9 @@ TEST_CASE("Render uses severity-specific colors") {
   const std::string warning_text =
       render_str(*f.bag.at(warning), {.color = true});
   const std::string note_text = render_str(*f.bag.at(note), {.color = true});
-  CHECK(error_text.find(term::kRed) != std::string::npos);
-  CHECK(warning_text.find(term::kYellow) != std::string::npos);
-  CHECK(note_text.find(term::kCyan) != std::string::npos);
+  CHECK(error_text.find(term::FG_RED) != std::string::npos);
+  CHECK(warning_text.find(term::FG_YELLOW) != std::string::npos);
+  CHECK(note_text.find(term::FG_CYAN) != std::string::npos);
   CHECK(error_text.find("\x1b[38;5;") == std::string::npos);
   CHECK(warning_text.find("\x1b[38;5;") == std::string::npos);
   CHECK(note_text.find("\x1b[38;5;") == std::string::npos);

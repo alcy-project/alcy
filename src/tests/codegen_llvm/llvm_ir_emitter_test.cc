@@ -44,7 +44,7 @@ ir::VerifiedStorage hello_world_ir(str::StringInterner* interner) {
       .meta = {.return_type = ir::primitive_idx(ir::TypeTag::I32),
                .param_types = {puts_param_type_id, 1},
                .name = puts_str,
-               .path = str::kEmptyStringId,
+               .path = str::EMPTY_STRING_ID,
                .kind = ir::SymbolKind::Foreign,
                .generics = ir::TypeIdxRange{}},
       .calling_conv = ir::CallingConvention::C,
@@ -105,7 +105,7 @@ ir::VerifiedStorage hello_world_ir(str::StringInterner* interner) {
   const ir::InstructionIdx inst_ret = builder.instr({
       .op = ir::Opcode::Ret,
       .flags = {},
-      .dst = ir::RegisterIdx(base::kInvalidIdx),
+      .dst = ir::RegisterIdx(base::INVALID_IDX),
       .measure = ir::TypeIdx::invalid(),
       .operands = {reg_op, 1},
   });
@@ -124,7 +124,7 @@ ir::VerifiedStorage hello_world_ir(str::StringInterner* interner) {
       .meta = {.return_type = ir::primitive_idx(ir::TypeTag::I32),
                .param_types = {},
                .name = main_str,
-               .path = str::kEmptyStringId,
+               .path = str::EMPTY_STRING_ID,
                .kind = ir::SymbolKind::Foreign,
                .generics = ir::TypeIdxRange{}},
       .blocks = {block, 1},
@@ -172,7 +172,7 @@ TEST_CASE("Emit struct and array calls") {
       .meta = {.return_type = pair,
                .param_types = {},
                .name = interner.intern("makepair"),
-               .path = str::kEmptyStringId,
+               .path = str::EMPTY_STRING_ID,
                .kind = ir::SymbolKind::Foreign,
                .generics = ir::TypeIdxRange{}},
       .calling_conv = ir::CallingConvention::C,
@@ -181,7 +181,7 @@ TEST_CASE("Emit struct and array calls") {
       .meta = {.return_type = arr4,
                .param_types = {},
                .name = interner.intern("mkarr"),
-               .path = str::kEmptyStringId,
+               .path = str::EMPTY_STRING_ID,
                .kind = ir::SymbolKind::Foreign,
                .generics = ir::TypeIdxRange{}},
       .calling_conv = ir::CallingConvention::C,
@@ -203,7 +203,7 @@ TEST_CASE("Emit struct and array calls") {
   const ir::InstructionIdx inst_ret = builder.instr({
       .op = ir::Opcode::Ret,
       .flags = {},
-      .dst = ir::RegisterIdx(base::kInvalidIdx),
+      .dst = ir::RegisterIdx(base::INVALID_IDX),
       .measure = ir::TypeIdx::invalid(),
       .operands = {ret_op, 1},
   });
@@ -218,7 +218,7 @@ TEST_CASE("Emit struct and array calls") {
       .meta = {.return_type = pair,
                .param_types = {},
                .name = interner.intern("testpair"),
-               .path = str::kEmptyStringId,
+               .path = str::EMPTY_STRING_ID,
                .kind = ir::SymbolKind::Foreign,
                .generics = ir::TypeIdxRange{}},
       .blocks = {block, 1},
@@ -240,7 +240,7 @@ TEST_CASE("Emit struct and array calls") {
   const ir::InstructionIdx inst_ret2 = builder.instr({
       .op = ir::Opcode::Ret,
       .flags = {},
-      .dst = ir::RegisterIdx(base::kInvalidIdx),
+      .dst = ir::RegisterIdx(base::INVALID_IDX),
       .measure = ir::TypeIdx::invalid(),
       .operands = {ret_op2, 1},
   });
@@ -255,7 +255,7 @@ TEST_CASE("Emit struct and array calls") {
       .meta = {.return_type = arr4,
                .param_types = {},
                .name = interner.intern("testarr"),
-               .path = str::kEmptyStringId,
+               .path = str::EMPTY_STRING_ID,
                .kind = ir::SymbolKind::Foreign,
                .generics = ir::TypeIdxRange{}},
       .blocks = {block2, 1},
@@ -293,8 +293,8 @@ TEST_CASE("Emit compute instructions") {
   params.push(builder.ref_type(i32));
   params.push(builder.ref_type(i32));
 
-  builder.reg({.type = i32, .def_idx = ir::InstructionIdx(base::kInvalidIdx)});
-  builder.reg({.type = i32, .def_idx = ir::InstructionIdx(base::kInvalidIdx)});
+  builder.reg({.type = i32, .def_idx = ir::InstructionIdx(base::INVALID_IDX)});
+  builder.reg({.type = i32, .def_idx = ir::InstructionIdx(base::INVALID_IDX)});
   ir::BlockParamSeq block_params;
   block_params.push(
       builder.block_param({.type = i32, .reg = ir::RegisterIdx(0)}));
@@ -398,7 +398,7 @@ TEST_CASE("Emit compute instructions") {
   const ir::InstructionIdx inst_drop =
       builder.instr({.op = ir::Opcode::Drop,
                      .flags = {},
-                     .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .dst = ir::RegisterIdx(base::INVALID_IDX),
                      .measure = ir::TypeIdx::invalid(),
                      .operands = {drop_arg, 1}});
   instrs.push(inst_drop);
@@ -407,7 +407,7 @@ TEST_CASE("Emit compute instructions") {
   const ir::InstructionIdx inst_ret =
       builder.instr({.op = ir::Opcode::Ret,
                      .flags = {},
-                     .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .dst = ir::RegisterIdx(base::INVALID_IDX),
                      .measure = ir::TypeIdx::invalid(),
                      .operands = {ret_arg, 1}});
   instrs.push(inst_ret);
@@ -420,7 +420,7 @@ TEST_CASE("Emit compute instructions") {
       .meta = {.return_type = i32,
                .param_types = params.finish(),
                .name = interner.intern("arith"),
-               .path = str::kEmptyStringId,
+               .path = str::EMPTY_STRING_ID,
                .kind = ir::SymbolKind::Foreign,
                .generics = ir::TypeIdxRange{}},
       .blocks = {block, 1},
@@ -470,7 +470,7 @@ TEST_CASE("Emit control flow") {
   // @condbr(i1 %c) -> i32 with entry/then/else blocks.
   ir::TypeSeq cond_params;
   cond_params.push(builder.ref_type(i1));
-  builder.reg({.type = i1, .def_idx = ir::InstructionIdx(base::kInvalidIdx)});
+  builder.reg({.type = i1, .def_idx = ir::InstructionIdx(base::INVALID_IDX)});
   const ir::BlockParamIdx cond_param =
       builder.block_param({.type = i1, .reg = ir::RegisterIdx(0)});
 
@@ -480,7 +480,7 @@ TEST_CASE("Emit control flow") {
     const ir::InstructionIdx inst =
         builder.instr({.op = ir::Opcode::Ret,
                        .flags = {},
-                       .dst = ir::RegisterIdx(base::kInvalidIdx),
+                       .dst = ir::RegisterIdx(base::INVALID_IDX),
                        .measure = ir::TypeIdx::invalid(),
                        .operands = args.finish()});
     ir::InstrSeq instrs;
@@ -502,7 +502,7 @@ TEST_CASE("Emit control flow") {
   const ir::InstructionIdx inst_condbr =
       builder.instr({.op = ir::Opcode::CondBr,
                      .flags = {},
-                     .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .dst = ir::RegisterIdx(base::INVALID_IDX),
                      .measure = ir::TypeIdx::invalid(),
                      .operands = cond_args.finish()});
   ir::InstrSeq entry_instrs;
@@ -519,14 +519,14 @@ TEST_CASE("Emit control flow") {
       .meta = {.return_type = i32,
                .param_types = cond_params.finish(),
                .name = interner.intern("condbr"),
-               .path = str::kEmptyStringId,
+               .path = str::EMPTY_STRING_ID,
                .kind = ir::SymbolKind::Foreign,
                .generics = ir::TypeIdxRange{}},
       .blocks = cond_blocks.finish(),
   });
 
   // @sw(i32 %v) -> i32 with entry/default/case blocks.
-  builder.reg({.type = i32, .def_idx = ir::InstructionIdx(base::kInvalidIdx)});
+  builder.reg({.type = i32, .def_idx = ir::InstructionIdx(base::INVALID_IDX)});
   const ir::BlockIdx sw_entry = builder.block({{}, {}});
   const ir::BlockIdx sw_default = ret_block(zero);
   const ir::BlockIdx sw_case1 = ret_block(ten);
@@ -542,7 +542,7 @@ TEST_CASE("Emit control flow") {
   const ir::InstructionIdx inst_sw =
       builder.instr({.op = ir::Opcode::Switch,
                      .flags = {},
-                     .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .dst = ir::RegisterIdx(base::INVALID_IDX),
                      .measure = ir::TypeIdx::invalid(),
                      .operands = sw_args.finish()});
   ir::InstrSeq sw_instrs;
@@ -562,7 +562,7 @@ TEST_CASE("Emit control flow") {
       .meta = {.return_type = i32,
                .param_types = sw_fn_params.finish(),
                .name = interner.intern("sw"),
-               .path = str::kEmptyStringId,
+               .path = str::EMPTY_STRING_ID,
                .kind = ir::SymbolKind::Foreign,
                .generics = ir::TypeIdxRange{}},
       .blocks = sw_blocks.finish(),
@@ -646,7 +646,7 @@ TEST_CASE("Emit memory instructions") {
       reg_op(ir::RegisterIdx(0), ir::primitive_idx(ir::TypeTag::Ptr)));
   instrs.push(builder.instr({.op = ir::Opcode::Store,
                              .flags = {},
-                             .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .dst = ir::RegisterIdx(base::INVALID_IDX),
                              .measure = ir::TypeIdx::invalid(),
                              .operands = store_args.finish()}));
   unary(ir::Opcode::Load,
@@ -660,7 +660,7 @@ TEST_CASE("Emit memory instructions") {
       reg_op(ir::RegisterIdx(0), ir::primitive_idx(ir::TypeTag::Ptr)));
   instrs.push(builder.instr({.op = ir::Opcode::AtomicStore,
                              .flags = {},
-                             .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .dst = ir::RegisterIdx(base::INVALID_IDX),
                              .measure = ir::TypeIdx::invalid(),
                              .operands = astore_args.finish()}));
   unary(ir::Opcode::AtomicLoad,
@@ -701,7 +701,7 @@ TEST_CASE("Emit memory instructions") {
   builder.reg({.type = pair_i1, .def_idx = inst_cmpxchg});
   instrs.push(builder.instr({.op = ir::Opcode::Fence,
                              .flags = {},
-                             .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .dst = ir::RegisterIdx(base::INVALID_IDX),
                              .measure = ir::TypeIdx::invalid(),
                              .operands = {}}));
 
@@ -734,7 +734,7 @@ TEST_CASE("Emit memory instructions") {
       reg_op(ir::RegisterIdx(6), ir::primitive_idx(ir::TypeTag::Ptr)));
   instrs.push(builder.instr({.op = ir::Opcode::Store,
                              .flags = {},
-                             .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .dst = ir::RegisterIdx(base::INVALID_IDX),
                              .measure = ir::TypeIdx::invalid(),
                              .operands = field_store_args.finish()}));
   unary(ir::Opcode::Load,
@@ -780,7 +780,7 @@ TEST_CASE("Emit memory instructions") {
   const ir::InstructionIdx inst_ret =
       builder.instr({.op = ir::Opcode::Ret,
                      .flags = {},
-                     .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .dst = ir::RegisterIdx(base::INVALID_IDX),
                      .measure = ir::TypeIdx::invalid(),
                      .operands = {reg_op(ir::RegisterIdx(10), i32), 1}});
   instrs.push(inst_ret);
@@ -790,7 +790,7 @@ TEST_CASE("Emit memory instructions") {
       .meta = {.return_type = i32,
                .param_types = {},
                .name = interner.intern("memtest"),
-               .path = str::kEmptyStringId,
+               .path = str::EMPTY_STRING_ID,
                .kind = ir::SymbolKind::Foreign,
                .generics = ir::TypeIdxRange{}},
       .blocks = {block, 1},
@@ -849,13 +849,13 @@ TEST_CASE("Emit ignores Drop markers") {
       reg_op(ir::RegisterIdx(0), ir::primitive_idx(ir::TypeTag::Ptr)));
   instrs.push(builder.instr({.op = ir::Opcode::Drop,
                              .flags = {},
-                             .dst = ir::RegisterIdx(base::kInvalidIdx),
+                             .dst = ir::RegisterIdx(base::INVALID_IDX),
                              .measure = ir::TypeIdx::invalid(),
                              .operands = drop_args.finish()}));
   const ir::InstructionIdx inst_ret =
       builder.instr({.op = ir::Opcode::Ret,
                      .flags = {},
-                     .dst = ir::RegisterIdx(base::kInvalidIdx),
+                     .dst = ir::RegisterIdx(base::INVALID_IDX),
                      .measure = ir::TypeIdx::invalid(),
                      .operands = {}});
   instrs.push(inst_ret);
@@ -865,7 +865,7 @@ TEST_CASE("Emit ignores Drop markers") {
       .meta = {.return_type = builder.primitive(ir::TypeTag::Void),
                .param_types = {},
                .name = interner.intern("markertest"),
-               .path = str::kEmptyStringId,
+               .path = str::EMPTY_STRING_ID,
                .kind = ir::SymbolKind::Foreign,
                .generics = ir::TypeIdxRange{}},
       .blocks = {block, 1},

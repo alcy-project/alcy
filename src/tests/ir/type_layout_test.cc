@@ -75,7 +75,7 @@ TEST_CASE("Layout pads a struct to its strictest field") {
   fields.push(builder.ref_type(i8_ty));
   fields.push(builder.ref_type(i8_ty));
   fields.push(builder.ref_type(i32_ty));
-  const TypeIdx padded = builder.struct_type(str::kInvalidStringPoolId,
+  const TypeIdx padded = builder.struct_type(str::INVALID_STRING_POOL_ID,
                                              fields.finish(), TypeIdxRange{});
 
   // An i64 first forces everything up to a multiple of eight.
@@ -83,7 +83,7 @@ TEST_CASE("Layout pads a struct to its strictest field") {
   wide.push(builder.ref_type(i64_ty));
   wide.push(builder.ref_type(i8_ty));
   const TypeIdx wide_struct = builder.struct_type(
-      str::kInvalidStringPoolId, wide.finish(), TypeIdxRange{});
+      str::INVALID_STRING_POOL_ID, wide.finish(), TypeIdxRange{});
 
   Storage storage = std::move(builder).build().unwrap().unwrap();
   const StorageState& state = storage.state();
@@ -120,18 +120,18 @@ TEST_CASE("Layout gives an enum a discriminant and a payload area") {
   TypeSeq narrow;
   narrow.push(builder.ref_type(i32_ty));
   const EnumVariantTypeIdx narrow_variant =
-      builder.enum_variant(str::kInvalidStringPoolId, narrow.finish());
+      builder.enum_variant(str::INVALID_STRING_POOL_ID, narrow.finish());
   const TypeIdx narrow_enum = builder.enum_type(
-      str::kInvalidStringPoolId, EnumVariantTypeIdxRange{narrow_variant, 1},
+      str::INVALID_STRING_POOL_ID, EnumVariantTypeIdxRange{narrow_variant, 1},
       TypeIdxRange{});
 
   // `enum F { A(&mut i32) }`: the area has to be 8-aligned for a pointer.
   TypeSeq wide;
   wide.push(builder.ref_type(ptr_ty));
   const EnumVariantTypeIdx wide_variant =
-      builder.enum_variant(str::kInvalidStringPoolId, wide.finish());
+      builder.enum_variant(str::INVALID_STRING_POOL_ID, wide.finish());
   const TypeIdx wide_enum = builder.enum_type(
-      str::kInvalidStringPoolId, EnumVariantTypeIdxRange{wide_variant, 1},
+      str::INVALID_STRING_POOL_ID, EnumVariantTypeIdxRange{wide_variant, 1},
       TypeIdxRange{});
 
   Storage storage = std::move(builder).build().unwrap().unwrap();
@@ -161,12 +161,12 @@ TEST_CASE("Layout sizes an enum area for its widest variant") {
   TypeSeq err_fields;
   err_fields.push(builder.ref_type(ptr_ty));
   const EnumVariantTypeIdx ok =
-      builder.enum_variant(str::kInvalidStringPoolId, ok_fields.finish());
+      builder.enum_variant(str::INVALID_STRING_POOL_ID, ok_fields.finish());
   const EnumVariantTypeIdx err =
-      builder.enum_variant(str::kInvalidStringPoolId, err_fields.finish());
+      builder.enum_variant(str::INVALID_STRING_POOL_ID, err_fields.finish());
   // Variants land in declaration order, so `ok` then `err`.
   const TypeIdx both =
-      builder.enum_type(str::kInvalidStringPoolId,
+      builder.enum_type(str::INVALID_STRING_POOL_ID,
                         EnumVariantTypeIdxRange{ok, 2}, TypeIdxRange{});
   CHECK(err.idx == ok.idx + 1);
 
@@ -181,9 +181,9 @@ TEST_CASE("Layout gives a payload-less enum only its discriminant") {
   StorageBuilder builder;
   TypeSeq none;
   const EnumVariantTypeIdx unit =
-      builder.enum_variant(str::kInvalidStringPoolId, none.finish());
+      builder.enum_variant(str::INVALID_STRING_POOL_ID, none.finish());
   const TypeIdx tag_only =
-      builder.enum_type(str::kInvalidStringPoolId,
+      builder.enum_type(str::INVALID_STRING_POOL_ID,
                         EnumVariantTypeIdxRange{unit, 1}, TypeIdxRange{});
   Storage storage = std::move(builder).build().unwrap().unwrap();
 
@@ -201,9 +201,9 @@ TEST_CASE("Layout of a nested enum flows into its containing struct") {
   TypeSeq wide_fields;
   wide_fields.push(builder.ref_type(ptr_ty));
   const EnumVariantTypeIdx wide_variant =
-      builder.enum_variant(str::kInvalidStringPoolId, wide_fields.finish());
+      builder.enum_variant(str::INVALID_STRING_POOL_ID, wide_fields.finish());
   const TypeIdx wide_enum = builder.enum_type(
-      str::kInvalidStringPoolId, EnumVariantTypeIdxRange{wide_variant, 1},
+      str::INVALID_STRING_POOL_ID, EnumVariantTypeIdxRange{wide_variant, 1},
       TypeIdxRange{});
 
   // A byte then that enum: the enum is 8-aligned, so the byte is padded
@@ -211,7 +211,7 @@ TEST_CASE("Layout of a nested enum flows into its containing struct") {
   TypeSeq fields;
   fields.push(builder.ref_type(i8_ty));
   fields.push(builder.ref_type(wide_enum));
-  const TypeIdx outer = builder.struct_type(str::kInvalidStringPoolId,
+  const TypeIdx outer = builder.struct_type(str::INVALID_STRING_POOL_ID,
                                             fields.finish(), TypeIdxRange{});
 
   Storage storage = std::move(builder).build().unwrap().unwrap();

@@ -371,7 +371,7 @@ const GenericInstance* Checker::infer_from_payload_args(
     return nullptr;
   }
   std::vector<ir::TypeIdx> bound(decl.params.size(),
-                                 ir::TypeIdx(base::kInvalidIdx));
+                                 ir::TypeIdx(base::INVALID_IDX));
   for (usize i = 0; i < fields.size(); ++i) {
     const ast::TypeNode& field = ast.types[fields[i]];
     if (field.kind != ast::TypeKind::Path ||
@@ -1151,7 +1151,7 @@ bool Checker::drop_scan(ir::TypeIdx type, std::vector<u32>& stack) {
     case ir::TypeTag::Struct:
     case ir::TypeTag::Enum: {
       glue = find_drop_glue(type);
-      if (glue.index != base::kInvalidIdx) {
+      if (glue.index != base::INVALID_IDX) {
         result = true;
         break;
       }
@@ -1167,7 +1167,7 @@ bool Checker::drop_scan(ir::TypeIdx type, std::vector<u32>& stack) {
   }
   stack.pop_back();
   needs_drop_[type.idx] = result;
-  if (glue.index != base::kInvalidIdx) {
+  if (glue.index != base::INVALID_IDX) {
     drop_glue_[type.idx] = glue;
   }
   return result;
@@ -2071,7 +2071,7 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
   // the body, so recursive calls key the same context.
   fn_instances.push_back(FnInstance{item, module, args, sig_index, NO_INST});
   const u32 inst = static_cast<u32>(inst_numbering.size());
-  inst_numbering.emplace_back(base::kInvalidIdx);
+  inst_numbering.emplace_back(base::INVALID_IDX);
   fn_instances.back().inst = inst;
   modules[module].functions[sig_index].inst = inst;
 
@@ -2111,7 +2111,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
     (void)index;
     return nullptr;
   }
-  std::vector<ir::TypeIdx> bound(params.size(), ir::TypeIdx(base::kInvalidIdx));
+  std::vector<ir::TypeIdx> bound(params.size(), ir::TypeIdx(base::INVALID_IDX));
   for (usize i = 0; i < explicit_args.size(); ++i) {
     bound[i] = resolve_type(module, explicit_args[i], nullptr);
   }

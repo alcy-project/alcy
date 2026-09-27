@@ -532,7 +532,7 @@ bool Lowerer::comp_eval_loop(
     CompFlow& out,
     bool always,
     diag::Span span,
-    ast::ExprIdx cond = ast::ExprIdx(base::kInvalidIdx)) {
+    ast::ExprIdx cond = ast::ExprIdx(base::INVALID_IDX)) {
   while (!failed) {
     if (!always) {
       CompVal test;
@@ -1632,7 +1632,7 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
     const ir::TypeIdx u64_ty = builder.primitive(ir::TypeTag::U64);
     const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
     bool negative = false;
-    ir::RegisterIdx is_negative = ir::RegisterIdx(base::kInvalidIdx);
+    ir::RegisterIdx is_negative = ir::RegisterIdx(base::INVALID_IDX);
     ir::RegisterIdx wide = loaded;
     if (ir::is_signed_integer_type(tag_of(elem_ty))) {
       // The sign is a runtime property, so the digits come from a
