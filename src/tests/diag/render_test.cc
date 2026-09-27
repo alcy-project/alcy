@@ -21,10 +21,20 @@ namespace diag {
 namespace {
 
 constexpr std::string_view SRC = "x := foo(1, 2)\ny := 2\n";
+// Two wide lines for the column tests: a multi-byte character and a
+// tab, each of which a byte column would misplace.
+constexpr std::string_view WIDE_SRC = "  s := \"\xe6\x97\xa5\xe6\x9c\xac\" @";
+constexpr std::string_view TABBED_SRC = "fn f() {\n\tx := @\n}\n";
 
 std::optional<SourceText> fetch_source(u32 file, const void*) {
   if (file == 3) {
     return SourceText{"main.al", SRC};
+  }
+  if (file == 4) {
+    return SourceText{"wide.al", WIDE_SRC};
+  }
+  if (file == 5) {
+    return SourceText{"tabbed.al", TABBED_SRC};
   }
   return std::nullopt;
 }
@@ -162,6 +172,33 @@ TEST_CASE("Render uses severity-specific colors") {
   CHECK(error_text.find("\x1b[38;5;") == std::string::npos);
   CHECK(warning_text.find("\x1b[38;5;") == std::string::npos);
   CHECK(note_text.find("\x1b[38;5;") == std::string::npos);
+}
+
+TEST_CASE("Render counts columns in characters, not bytes") {
+  // The `@` is display column 13 but byte offset 16, so a byte column
+  // would put the caret three columns to its right.
+  BagFixture f;
+  const u32 i = f.bag.emit(Severity::Error, 1,
+                           Span{.file = 4, .offset = 16, .length = 1}, "bad");
+  CHECK(render_str(*f.bag.at(i)) ==
+        "error[E1]: bad\n"
+        " --> wide.al:1:13\n"
+        "  |\n"
+        "1 |   s := \"\xe6\x97\xa5\xe6\x9c\xac\" @\n"
+        "  |             ^\n");
+}
+
+TEST_CASE("Render expands tabs so the caret lands under its character") {
+  // The leading tab becomes four spaces, so the `@` is column 10.
+  BagFixture f;
+  const u32 i = f.bag.emit(Severity::Error, 1,
+                           Span{.file = 5, .offset = 15, .length = 1}, "bad");
+  CHECK(render_str(*f.bag.at(i)) ==
+        "error[E1]: bad\n"
+        " --> tabbed.al:2:10\n"
+        "  |\n"
+        "2 |     x := @\n"
+        "  |          ^\n");
 }
 
 }  // namespace diag

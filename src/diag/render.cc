@@ -43,9 +43,32 @@ constexpr std::string_view severity_color(Severity severity) {
 
 struct LineInfo {
   u32 line = 1;
+  // 1-based display column: UTF-8 code points, with a tab advancing to
+  // the next multiple of kTabWidth. Byte columns would put the caret
+  // after every multi-byte character and before every expanded tab.
   u32 col = 1;
+  // Byte offset where the line starts, so callers converting a
+  // byte-relative length do not have to reverse the column arithmetic.
+  u32 start = 0;
   std::string_view text;
 };
+
+constexpr u32 kTabWidth = 4;
+
+// Display columns spanned by the bytes in [line_start, offset).
+u32 display_column(std::string_view bytes, u32 line_start, u32 offset) {
+  u32 col = 1;
+  for (u32 i = line_start; i < offset && i < bytes.size(); ++i) {
+    // A UTF-8 continuation byte continues the character before it, so
+    // it occupies no column of its own.
+    if ((static_cast<unsigned char>(bytes[i]) & 0xC0) == 0x80) {
+      continue;
+    }
+    col = bytes[i] == '\t' ? ((col - 1) / kTabWidth + 1) * kTabWidth + 1
+                           : col + 1;
+  }
+  return col;
+}
 
 // Locates the 1-based line/column of a byte offset and extracts the line.
 // Out-of-range offsets clamp to the end of the buffer.
@@ -69,8 +92,28 @@ LineInfo locate(std::string_view bytes, u32 offset) {
     }
   }
   return {.line = line,
-          .col = offset - line_start + 1,
+          .col = display_column(bytes, line_start, offset),
+          .start = line_start,
           .text = bytes.substr(line_start, line_end - line_start)};
+}
+
+// Renders source text for the snippet, expanding tabs to the same width
+// the column arithmetic assumes so the caret stays under its character.
+// Tab stops count from the start of the line, matching display_column,
+// not from wherever the output buffer happens to begin.
+void append_expanded(fmt::memory_buffer& out, std::string_view text) {
+  u32 col = 1;
+  for (const char c : text) {
+    if (c != '\t') {
+      out.push_back(c);
+      ++col;
+      continue;
+    }
+    col = ((col - 1) / kTabWidth + 1) * kTabWidth + 1;
+    for (u32 i = 1; i < col; ++i) {
+      out.push_back(' ');
+    }
+  }
 }
 
 u32 decimal_width(u32 value) {
@@ -177,7 +220,9 @@ void render(const Diagnostic& diag,
   begin_style(out, options.color, term::kBlue);
   fmt::format_to(std::back_inserter(out), "{}", info.line);
   end_style(out, options.color);
-  fmt::format_to(std::back_inserter(out), " | {}\n", info.text);
+  fmt::format_to(std::back_inserter(out), " | ");
+  append_expanded(out, info.text);
+  fmt::format_to(std::back_inserter(out), "\n");
 
   // Caret run clipped to the rendered line (at least one caret).
   // locate() clamps out-of-range offsets; mirror that here.
@@ -185,19 +230,22 @@ void render(const Diagnostic& diag,
   if (line_offset > source.bytes.size()) {
     line_offset = static_cast<u32>(source.bytes.size());
   }
-  const u32 line_start = line_offset - (info.col - 1);
-  u32 line_end = line_start + static_cast<u32>(info.text.size());
+  const u32 line_end = info.start + static_cast<u32>(info.text.size());
   u32 caret_end = line_offset + diag.primary_span.length;
   if (caret_end > line_end) {
     caret_end = line_end;
   }
-  u32 carets = caret_end > line_offset ? caret_end - line_offset : 0;
+  // The run is measured in display columns, so a span covering
+  // multi-byte characters underlines as wide as it looks.
+  const u32 start_col = info.col;
+  const u32 end_col = display_column(source.bytes, info.start, caret_end);
+  u32 carets = end_col > start_col ? end_col - start_col : 0;
   if (carets == 0) {
     carets = 1;
   }
   write_gutter(out, gutter);
   out.push_back(' ');
-  for (u32 i = 1; i < info.col; ++i) {
+  for (u32 i = 1; i < start_col; ++i) {
     out.push_back(' ');
   }
   begin_style(out, options.color, severity_color(diag.severity));
