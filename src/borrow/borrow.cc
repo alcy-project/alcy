@@ -91,6 +91,10 @@ class Checker {
   std::vector<std::vector<u32>> flow;
   std::vector<u32> last_use;
   std::vector<Loan> loans;
+  // Entry-block allocas holding a block parameter, paired with that
+  // parameter's position. Filled by param_allocas per function and read
+  // by is_param_root, so both see the same homes.
+  std::vector<std::pair<u32, u32>> param_homes;
   // Move states per block, indexed by global block. Joins union
   // predecessor states (a use after a maybe-move is an error);
   // sibling branches stay independent through CFG predecessors.
@@ -129,23 +133,9 @@ class Checker {
         return true;
       }
     }
-    // Parameter home allocas (entry stores of block parameters).
-    const ir::Block& entry = storage.blocks()[fn.blocks.head()];
-    for (ir::InstructionIdx iidx : entry.instrs) {
-      const ir::Instruction& instr = instr_at(iidx);
-      if (instr.op != ir::Opcode::Store || instr.operands.size() != 2) {
-        continue;
-      }
-      const ir::Operand& value = storage.operands()[instr.operands.head()];
-      const ir::Operand& target = storage.operands()[instr.operands.head() + 1];
-      if (!value.is<ir::RegisterIdx>() || !target.is<ir::RegisterIdx>() ||
-          target.as_register().idx != reg) {
-        continue;
-      }
-      for (ir::BlockParamIdx pidx : entry.block_params) {
-        if (storage.block_params()[pidx].reg.idx == value.as_register().idx) {
-          return true;
-        }
+    for (const auto& home_entry : param_homes) {
+      if (home_entry.first == reg) {
+        return true;
       }
     }
     return false;
@@ -170,9 +160,8 @@ class Checker {
   // Parameters arrive already borrowed; the token makes their flow
   // to the return observable without creating conflicts.
   void seed_param_loans(const ir::Function& fn) {
-    std::vector<std::pair<u32, u32>> params;
-    param_allocas(fn, params);
-    for (const auto& [alloca, index] : params) {
+    param_allocas(fn, param_homes);
+    for (const auto& [alloca, index] : param_homes) {
       if (alloca >= flow.size()) {
         continue;
       }
@@ -370,7 +359,13 @@ class Checker {
           storage.operands()[instr.operands.head() + offset];
       if (operand.is<ir::RegisterIdx>() &&
           operand.as_register().idx < last_use.size()) {
-        last_use[operand.as_register().idx] = pos;
+        // Max, not assign: blocks are visited in reservation order
+        // while instructions are emitted in visit order, so a later
+        // visit can carry a smaller index.
+        u32& last = last_use[operand.as_register().idx];
+        if (pos > last) {
+          last = pos;
+        }
       }
     }
   }
@@ -832,6 +827,7 @@ class Checker {
     loans.clear();
     moved_in.clear();
     moved_out.clear();
+    param_homes.clear();
   }
 
   void run() {
