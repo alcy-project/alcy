@@ -14,6 +14,7 @@
 #include "config/build_config.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace codegen_llvm {
 
@@ -142,6 +143,16 @@ emit_object(llvm::Module& module, std::string_view triple, bool optimize) {
 
   std::vector<u8> result(buffer_vec.begin(), buffer_vec.end());
   return base::make_ok(std::move(result));
+}
+
+std::string emit_ir(llvm::Module& module) {
+  std::string text;
+  llvm::raw_string_ostream out(text);
+  // Not a new pass pipeline: the module is already built, and printing it
+  // must not change it. LLVM's own -S does the same.
+  module.print(out, nullptr);
+  out.flush();
+  return text;
 }
 
 }  // namespace codegen_llvm

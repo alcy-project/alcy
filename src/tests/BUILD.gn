@@ -25,6 +25,7 @@ executable("tests") {
     "parser/parser_test.cc",
     "path/path_test.cc",
     "pipeline/api_test.cc",
+    "pipeline/emit_mode_test.cc",
     "pipeline/hostile_input_test.cc",
     "pipeline/nesting_test.cc",
     "pipeline/new_test.cc",

@@ -30,8 +30,9 @@ ResultCode run_build(const CliConfig& config,
   if (raw_dir.size() >= path::SOURCE_EXTENSION.size() &&
       raw_dir.substr(raw_dir.size() - path::SOURCE_EXTENSION.size()) ==
           path::SOURCE_EXTENSION) {
-    base::Result<void, diag::Reported> res = pipeline::build_single_file(
-        ctx, raw_dir, config.output, config.release, config.linker);
+    base::Result<void, diag::Reported> res =
+        pipeline::build_single_file(ctx, raw_dir, config.output, config.release,
+                                    config.linker, config.emit);
     // Report before branching: a successful build still carries the
     // warnings the bag collected along the way.
     report_diagnostics(ctx.bag, ctx.sources, options);
@@ -52,7 +53,7 @@ ResultCode run_build(const CliConfig& config,
   if (found.found) {
     base::Result<void, diag::Reported> res = pipeline::build_package(
         ctx, found.root, found.manifest, found.manifest_name, config.output,
-        config.release, config.linker);
+        config.release, config.linker, config.emit);
     report_diagnostics(ctx.bag, ctx.sources, options);
     if (res.is_err() || ctx.bag.has_errors()) {
       return ResultCode::BuildFailed;

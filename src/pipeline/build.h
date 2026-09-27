@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -16,6 +17,27 @@
 #include "source/source.h"
 
 namespace pipeline {
+
+// What a build writes. The mode is chosen explicitly rather than inferred
+// from the output's extension, because an extension says what a file is
+// called and not what was asked for: `main.o` as a *name* is just as valid
+// a request for an executable as `main` is a request for an object.
+enum class EmitMode : u8 {
+  // Compile, link against the runtime, and write an executable.
+  Executable,
+  // Write one relocatable object and stop.
+  Object,
+  // Write the module as LLVM's textual IR and stop. Needs no target, so it
+  // is the one mode that works before a backend is chosen.
+  LlvmIr,
+};
+
+// The mode named by `text`, or std::nullopt when it names no mode. The
+// spelling is the CLI's: what follows `emit=`.
+std::optional<EmitMode> parse_emit_mode(std::string_view text);
+
+// The mode's CLI spelling, for a diagnostic that quotes it back.
+std::string_view emit_mode_name(EmitMode mode);
 
 // Shared frontend: type checking, lowering, and borrow checking over a
 // resolved tree. Used by build and run so both lower identical IR.
@@ -31,6 +53,12 @@ base::Result<void, diag::Reported> emit_package_object(
     bool optimize,
     const std::string& output_path);
 
+// Writes the module as LLVM's textual IR.
+base::Result<void, diag::Reported> emit_package_ir(
+    PipelineContext& ctx,
+    lower::LoweredPackage& package,
+    const std::string& output_path);
+
 // Links one object plus the staged runtime into an executable.
 // Empty linker selects the default toolchain driver.
 base::Result<void, diag::Reported> link_executable(
@@ -44,7 +72,8 @@ base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
                                                      std::string_view target,
                                                      std::string_view output,
                                                      bool optimize,
-                                                     std::string_view linker);
+                                                     std::string_view linker,
+                                                     EmitMode mode);
 
 base::Result<void, diag::Reported> build_package(PipelineContext& ctx,
                                                  const path::Path& root,
@@ -52,6 +81,7 @@ base::Result<void, diag::Reported> build_package(PipelineContext& ctx,
                                                  std::string_view manifest_name,
                                                  std::string_view output,
                                                  bool optimize,
-                                                 std::string_view linker);
+                                                 std::string_view linker,
+                                                 EmitMode mode);
 
 }  // namespace pipeline

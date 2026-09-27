@@ -19,6 +19,7 @@
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
+#include "pipeline/build.h"
 
 namespace cli {
 
@@ -42,6 +43,11 @@ CliConfig extract_from_matches(arg::Matches&& matches) {
     c.subcommand = Subcommand::Check;
   }
   c.release = matches.get<bool>("release").unwrap_or(false);
+  // The choices above already rejected anything else, so an unknown value
+  // here means the default, not an error to report a second time.
+  c.emit = pipeline::parse_emit_mode(
+               matches.get<std::string_view>("emit").unwrap_or("executable"))
+               .value_or(pipeline::EmitMode::Executable);
   c.output = matches.get<std::string_view>("output").unwrap_or(c.output);
   c.linker = matches.get<std::string_view>("linker").unwrap_or(c.linker);
 
@@ -104,8 +110,16 @@ arg::Parser build_parser() {
                        .build())
           .add_arg(arg::ArgBuilder("output")
                        .short_name('o')
-                       .help("Object output path for single-file builds.")
+                       .help("Where the output goes. Empty picks a path "
+                             "beside the input.")
                        .default_value("")
+                       .build())
+          .add_arg(arg::ArgBuilder("emit")
+                       .help("What to write: executable (default), object, "
+                             "or llvm-ir. The output's extension no longer "
+                             "decides.")
+                       .choices({"executable", "object", "llvm-ir"})
+                       .default_value("executable")
                        .build())
           .add_arg(arg::ArgBuilder("linker")
                        .help("System linker driver for executable builds.")

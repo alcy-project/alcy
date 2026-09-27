@@ -4,6 +4,7 @@
 #include "pipeline/build.h"
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -56,6 +57,41 @@ base::Result<lower::LoweredPackage, diag::Reported> compile_tree(
   return base::make_ok(std::move(package));
 }
 
+std::optional<EmitMode> parse_emit_mode(std::string_view text) {
+  if (text == "executable" || text == "exe") {
+    return EmitMode::Executable;
+  }
+  if (text == "object" || text == "obj") {
+    return EmitMode::Object;
+  }
+  if (text == "llvm-ir" || text == "ir") {
+    return EmitMode::LlvmIr;
+  }
+  return std::nullopt;
+}
+
+// The extension an unnamed output gets. It follows the mode rather than
+// the file kind, because the mode is what the caller asked for: naming an
+// object `main.bin` and a module `main` are both fine, and the extension
+// is the default rather than the switch.
+std::string suffix_for(EmitMode mode) {
+  switch (mode) {
+    case EmitMode::Object: return ".o";
+    case EmitMode::LlvmIr: return ".ll";
+    case EmitMode::Executable: break;
+  }
+  return std::string(exe_suffix());
+}
+
+std::string_view emit_mode_name(EmitMode mode) {
+  switch (mode) {
+    case EmitMode::Executable: return "executable";
+    case EmitMode::Object: return "object";
+    case EmitMode::LlvmIr: return "llvm-ir";
+  }
+  return "executable";
+}
+
 base::Result<void, diag::Reported> emit_package_object(
     PipelineContext& ctx,
     lower::LoweredPackage& package,
@@ -96,6 +132,37 @@ base::Result<void, diag::Reported> emit_package_object(
   return base::make_ok();
 }
 
+base::Result<void, diag::Reported> emit_package_ir(
+    PipelineContext& ctx,
+    lower::LoweredPackage& package,
+    const std::string& output_path) {
+  llvm::LLVMContext context;
+  auto module = std::make_unique<llvm::Module>("alcy_module", context);
+  codegen_llvm::LlvmIrEmitter emitter(module.get(), std::move(package.storage),
+                                      &ctx.strings, TARGET_WIDTH);
+  std::move(emitter).emit();
+  const std::string ir = codegen_llvm::emit_ir(*module);
+
+  base::Result<path::Path, path::PathError> parsed =
+      path::Path::from_native(output_path);
+  if (parsed.is_err()) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
+                                   "invalid output path '{}'", output_path);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  const path::Path parent = std::move(parsed).unwrap().parent();
+  const std::vector<u8> buffer(ir.begin(), ir.end());
+  if (ensure_directories(ctx, parent.as_view()).is_err() ||
+      !io::write_file(buffer, output_path)) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
+                                   "cannot write ir '{}'", output_path);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  return base::make_ok();
+}
+
 base::Result<void, diag::Reported> link_executable(
     PipelineContext& ctx,
     std::string_view linker,
@@ -128,7 +195,8 @@ base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
                                                      std::string_view target,
                                                      std::string_view output,
                                                      bool optimize,
-                                                     std::string_view linker) {
+                                                     std::string_view linker,
+                                                     EmitMode mode) {
   base::Result<source::FileId, source::SourceError> file =
       ctx.sources.load(target);
   if (file.is_err()) {
@@ -156,20 +224,19 @@ base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
     return base::make_err(diag::Reported{});
   }
   lower::LoweredPackage lowered = std::move(package).unwrap();
-  // An explicit .o output keeps object emission; otherwise the
-  // single file links straight to an executable.
   std::string output_path =
       output.empty() ? std::string(target) : std::string(output);
   if (output.empty()) {
     // The target spells a source file, so an extension is present.
     const usize dot = output_path.rfind('.');
     DCHECK(dot != std::string::npos);
-    output_path.replace(dot, std::string::npos, exe_suffix());
+    output_path.replace(dot, std::string::npos, suffix_for(mode));
   }
-  const bool want_object = output_path.size() >= 2 &&
-                           output_path.substr(output_path.size() - 2) == ".o";
-  if (want_object) {
+  if (mode == EmitMode::Object) {
     return emit_package_object(ctx, lowered, optimize, output_path);
+  }
+  if (mode == EmitMode::LlvmIr) {
+    return emit_package_ir(ctx, lowered, output_path);
   }
   io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
   const std::string object_path = scratch.join("main.o");
@@ -187,7 +254,8 @@ base::Result<void, diag::Reported> build_package(PipelineContext& ctx,
                                                  std::string_view manifest_name,
                                                  std::string_view output,
                                                  bool optimize,
-                                                 std::string_view linker) {
+                                                 std::string_view linker,
+                                                 EmitMode mode) {
   base::Result<BinTarget, diag::Reported> target =
       resolve_package_target(ctx, root, manifest_file, manifest_name);
   if (target.is_err() || ctx.bag.has_errors()) {
@@ -200,17 +268,32 @@ base::Result<void, diag::Reported> build_package(PipelineContext& ctx,
     return base::make_err(diag::Reported{});
   }
   lower::LoweredPackage lowered = std::move(package).unwrap();
-  std::string exe_path;
+  // An executable goes where the manifest says builds go; the other two
+  // are inspection outputs, so they land beside the manifest unless the
+  // caller named a path.
+  const path::Path out_dir = root.join("out");
+  std::string output_path;
   if (output.empty()) {
-    const path::Path out_dir = root.join("out");
-    if (ensure_directories(ctx, out_dir.as_view()).is_err()) {
-      return base::make_err(diag::Reported{});
+    if (mode == EmitMode::Executable) {
+      if (ensure_directories(ctx, out_dir.as_view()).is_err()) {
+        return base::make_err(diag::Reported{});
+      }
+      output_path =
+          out_dir
+              .join(std::string(resolved.bin_name) + std::string(exe_suffix()))
+              .as_view();
+    } else {
+      output_path = root.join(std::string(resolved.bin_name) + suffix_for(mode))
+                        .as_view();
     }
-    exe_path =
-        out_dir.join(std::string(resolved.bin_name) + std::string(exe_suffix()))
-            .as_view();
   } else {
-    exe_path = std::string(output);
+    output_path = std::string(output);
+  }
+  if (mode == EmitMode::Object) {
+    return emit_package_object(ctx, lowered, optimize, output_path);
+  }
+  if (mode == EmitMode::LlvmIr) {
+    return emit_package_ir(ctx, lowered, output_path);
   }
   io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
   const std::string object_path = scratch.join("main.o");
@@ -219,7 +302,7 @@ base::Result<void, diag::Reported> build_package(PipelineContext& ctx,
     return base::make_err(diag::Reported{});
   }
   const std::string runtime_path = scratch.join(runtime_source_name());
-  return link_executable(ctx, linker, object_path, runtime_path, exe_path);
+  return link_executable(ctx, linker, object_path, runtime_path, output_path);
 }
 
 }  // namespace pipeline

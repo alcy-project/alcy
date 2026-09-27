@@ -3,6 +3,7 @@
 
 #include "cli/cli_main.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -11,6 +12,7 @@
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/io/file_handle.h"
+#include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 
 namespace cli {
@@ -80,10 +82,12 @@ TEST_CASE("Check rejects a non-exhaustive match") {
 
 i32 run_build_on(io::TempDir& dir,
                  std::string_view rel,
-                 std::string_view output) {
+                 std::string_view output,
+                 std::string_view emit = "executable") {
   const std::string target = dir.join(rel);
   const std::string out = dir.join(output);
-  std::vector<std::string> storage{"alcy", "build", target, "-o", out};
+  std::vector<std::string> storage{"alcy", "build",  target,           "-o",
+                                   out,    "--emit", std::string(emit)};
   std::vector<char*> argv;
   argv.reserve(storage.size());
   for (std::string& arg : storage) {
@@ -103,7 +107,48 @@ TEST_CASE("Build emits an object file") {
   if (!setup) {
     return;
   }
-  CHECK(run_build_on(dir, "main.al", "main.o") == 0);
+  CHECK(run_build_on(dir, "main.al", "main.o", "object") == 0);
+  // The extension alone would have been an executable called main.o, so
+  // the file is checked rather than just the exit code.
+  CHECK(io::is_file(dir.join("main.o")));
+  const std::optional<std::string> bytes = io::read_file(dir.join("main.o"));
+  CHECK(bytes.has_value());
+  if (bytes.has_value() && bytes->size() > 4) {
+    CHECK(bytes->compare(0, 4,
+                         "\x7f"
+                         "ELF") == 0);
+  }
+}
+
+TEST_CASE("Build emits textual IR") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_ir_test_");
+  const bool setup = write_all(dir, "main.al",
+                               "fn main() -> i32 {\n"
+                               "  print(\"hi\")\n"
+                               "  ret 0\n"
+                               "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CHECK(run_build_on(dir, "main.al", "main.ll", "llvm-ir") == 0);
+  const std::optional<std::string> ir = io::read_file(dir.join("main.ll"));
+  CHECK(ir.has_value());
+  if (ir.has_value()) {
+    CHECK(ir->find("define") != std::string::npos);
+  }
+}
+
+TEST_CASE("Build rejects an unknown emit mode") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_emit_test_");
+  const bool setup = write_all(dir, "main.al",
+                               "fn main() {\n"
+                               "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CHECK(run_build_on(dir, "main.al", "main.o", "bitcode") != 0);
 }
 
 TEST_CASE("Build links an executable") {
@@ -129,7 +174,8 @@ TEST_CASE("Build creates nonexistent directory") {
   if (!setup) {
     return;
   }
-  CHECK(run_build_on(dir, "main.al", "no-such-dir/main.o") == 0);
+  CHECK(run_build_on(dir, "main.al", "no-such-dir/main.o", "object") == 0);
+  CHECK(io::is_file(dir.join("no-such-dir/main.o")));
 }
 
 i32 run_run_on(io::TempDir& dir,

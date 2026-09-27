@@ -8,6 +8,7 @@
 
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
+#include "pipeline/build.h"
 
 namespace cli {
 
@@ -30,9 +31,12 @@ struct CliConfig {
   // absent; the cli substitutes "."). Borrows argv storage, so a config
   // must not outlive the argument vector it was parsed from.
   std::string_view target_dir;
-  // Object output path for single-file builds (empty selects next to the
-  // input with a .o suffix). Borrows argv storage like target_dir.
+  // Where the output goes (empty selects a path beside the input, or the
+  // package's out/ directory). Borrows argv storage like target_dir.
   std::string_view output;
+  // What the build writes. Defaults to an executable, so the name says
+  // which one only when it is not the default.
+  pipeline::EmitMode emit = pipeline::EmitMode::Executable;
   // System linker driver for executable builds (empty selects the default
   // toolchain driver). Borrows argv storage like target_dir.
   std::string_view linker;

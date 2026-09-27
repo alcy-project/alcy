@@ -62,7 +62,7 @@ TEST_CASE("Pipeline build produces object file") {
 
   const std::string obj_path = std::string(dir.path()) + "/main.o";
   auto res = pipeline::build_single_file(ctx, dir.join("main.al"), obj_path,
-                                         false, "");
+                                         false, "", pipeline::EmitMode::Object);
   CHECK(res.is_ok());
 }
 
@@ -77,8 +77,9 @@ TEST_CASE("Pipeline build produces executable") {
 
   PipelineContext ctx;
   const std::string exe_path = std::string(dir.path()) + "/main_exe";
-  auto res = pipeline::build_single_file(ctx, dir.join("main.al"), exe_path,
-                                         false, "");
+  auto res =
+      pipeline::build_single_file(ctx, dir.join("main.al"), exe_path, false, "",
+                                  pipeline::EmitMode::Executable);
   CHECK(res.is_ok());
 }
 
@@ -96,7 +97,7 @@ TEST_CASE("Pipeline build reports an unwritable object path") {
   // parent nor writing the object can succeed.
   const std::string bad_path = std::string(dir.path()) + "/blocker/main.o";
   auto res = pipeline::build_single_file(ctx, dir.join("main.al"), bad_path,
-                                         false, "");
+                                         false, "", pipeline::EmitMode::Object);
   CHECK(res.is_err());
   CHECK(ctx.bag.has_errors());
 }

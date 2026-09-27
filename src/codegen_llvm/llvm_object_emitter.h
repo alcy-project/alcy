@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -30,5 +31,14 @@ base::Result<std::vector<u8>, ObjectEmitError> emit_object(
     llvm::Module& module,
     std::string_view triple,
     bool optimize = false);
+
+// The module as LLVM's textual IR. This is the only output that can be
+// read, diffed, and checked by a tool outside this compiler: an object
+// file is written straight from a TargetMachine, so nothing but the
+// compiler itself can say what is in it. It also stops before code
+// generation, so it is the one output that does not need a target.
+//
+// Infallible: printing a module to a string cannot fail.
+std::string emit_ir(llvm::Module& module);
 
 }  // namespace codegen_llvm
