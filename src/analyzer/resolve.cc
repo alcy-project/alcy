@@ -162,7 +162,15 @@ class Resolver {
         root_file = i;
       }
     }
-    DCHECK(root_file != NO_MODULE);
+    if (root_file == NO_MODULE) {
+      // The root file was not among the inputs, so there is nothing to
+      // attach a tree to. A checked index would read out of bounds.
+      const u32 index =
+          bag.emit(diag::Severity::Error, ANALYZER_INVALID_PATH, diag::Span{},
+                   "root file is not among the module inputs");
+      (void)index;
+      return;
+    }
     const u32 root_module =
         add_module("", root, file_data[root_file].items, NO_MODULE);
     file_data[root_file].module = root_module;
@@ -611,10 +619,21 @@ class Resolver {
               child_path, leaf ? prelude_data[i].id : source::UNKNOWN_FILE,
               leaf ? prelude_data[i].items : std::span<const ast::ItemIdx>{},
               parent);
-          if (parent != NO_MODULE) {
-            module_children[parent].push_back(child);
-          }
-        } else if (!leaf) {
+        } else if (leaf) {
+          // Two staged sources resolved to the same leaf: the later one
+          // would silently overwrite the earlier module's items.
+          const u32 index = bag.emit(
+              diag::Severity::Error, ANALYZER_DUPLICATE_MODULE,
+              prelude_data[i].id == source::UNKNOWN_FILE
+                  ? diag::Span{}
+                  : diag::Span{prelude_data[i].id, 0, 0},
+              "prelude module '{}' is declared more than once", child_path);
+          (void)index;
+          continue;
+        }
+        // A top-level module has no parent to hang off, so the root
+        // case skips the edge entirely.
+        if (parent != NO_MODULE) {
           module_children[parent].push_back(child);
         }
         prefix = child_path;
