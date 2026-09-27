@@ -76,8 +76,36 @@ CheckOptions:
     value:        lower_case
   - key:          readability-identifier-naming.FunctionIgnoredRegexp
     value:        ""
-  # - key:          readability-identifier-naming.MemberCase
-  #   value:        aNy_CasE
+  # MemberCase and VariableCase stay off: field names carry a trailing
+  # underscore by convention, and enabling them buries the naming rules
+  # that matter under a flood of pre-existing violations.
+  #
+  # clang-tidy spells the UPPER_SNAKE_CASE casing `UPPER_CASE`; the
+  # latter is the only accepted value and the check rejects the config
+  # outright on anything else.
+  #
+  # A named constant is a `constexpr` one, so the constexpr spellings are
+  # what get enforced. `ConstantCase` is deliberately not used: it also
+  # demands an upper-case name of every local `const`, which is a plain
+  # snake_case name like `index`. The global and static constexpr forms
+  # are named separately so a function-local `constexpr` (a suffix, a
+  # digit, a small local table) is left alone.
+  - key:          readability-identifier-naming.GlobalConstexprVariableCase
+    value:        UPPER_CASE
+  - key:          readability-identifier-naming.StaticConstexprVariableCase
+    value:        UPPER_CASE
+  - key:          readability-identifier-naming.ClassConstexprCase
+    value:        UPPER_CASE
+  - key:          readability-identifier-naming.ClassConstantCase
+    value:        UPPER_CASE
+  # The remaining namespace-scope `const` objects that are not
+  # compile-time values, such as the generated staged-source tables.
+  - key:          readability-identifier-naming.GlobalConstantCase
+    value:        UPPER_CASE
+  - key:          readability-identifier-naming.StaticConstantCase
+    value:        UPPER_CASE
+  - key:          readability-identifier-naming.ConstantMemberCase
+    value:        UPPER_CASE
   - key:          readability-identifier-naming.ParameterCase
     value:        lower_case
   - key:          readability-identifier-naming.UnionCase

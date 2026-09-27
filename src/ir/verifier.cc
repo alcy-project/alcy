@@ -185,7 +185,7 @@ VerifyResult verify_storage(const Storage& storage) {
           return err(VerifyErrorKind::TypeIdxOutOfRange, oidx.idx);
         }
         switch (operand.tag()) {
-          case Operand::TagOf<RegisterIdx>:
+          case Operand::TAG_OF<RegisterIdx>:
             if (operand.as_register().idx >= storage.registers().size()) {
               return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
@@ -194,28 +194,28 @@ VerifyResult verify_storage(const Storage& storage) {
                          operand.as_register().idx);
             }
             break;
-          case Operand::TagOf<FunctionIdx>:
+          case Operand::TAG_OF<FunctionIdx>:
             if (operand.as_function().idx >= storage.functions().size()) {
               return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
             break;
-          case Operand::TagOf<BlockIdx>:
+          case Operand::TAG_OF<BlockIdx>:
             if (operand.as_block().idx >= storage.blocks().size()) {
               return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
             break;
-          case Operand::TagOf<ImmutableIdx>:
+          case Operand::TAG_OF<ImmutableIdx>:
             if (operand.as_immutable().idx >= storage.immutables().size()) {
               return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
             break;
-          case Operand::TagOf<ExternalFunctionIdx>:
+          case Operand::TAG_OF<ExternalFunctionIdx>:
             if (operand.as_external_function().idx >=
                 storage.external_functions().size()) {
               return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
             break;
-          case Operand::TagOf<void>:
+          case Operand::TAG_OF<void>:
             return err(VerifyErrorKind::UnknownOperandTag, oidx.idx);
         }
       }

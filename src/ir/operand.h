@@ -19,7 +19,7 @@ struct Operand {
                                         void>;
   using Tag = Payload::Tag;
   template <typename T>
-  static constexpr Tag TagOf = Payload::TagOf<T>;
+  static constexpr Tag TAG_OF = Payload::TagOf<T>;
 
   Payload data;
   TypeIdx type;
@@ -86,7 +86,7 @@ struct Operand {
 
 static_assert(sizeof(Operand) == 12);
 static_assert(Operand{Operand::Payload{}, primitive_idx(TypeTag::Void)}.tag() ==
-              Operand::TagOf<void>);
+              Operand::TAG_OF<void>);
 
 constexpr Operand INVALID_OPERAND = Operand::invalid();
 
