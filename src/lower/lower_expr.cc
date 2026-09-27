@@ -1909,12 +1909,17 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
     return Val{to_operand(dst, boolean), boolean, false, false};
   }
   if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
-    ir::Opcode op = ir::Opcode::FAdd;
+    ir::Opcode op = ir::Opcode::FDiv;
     switch (bin.op) {
       case ast::BinaryOp::Add: op = ir::Opcode::FAdd; break;
       case ast::BinaryOp::Sub: op = ir::Opcode::FSub; break;
       case ast::BinaryOp::Mul: op = ir::Opcode::FMul; break;
-      default: op = ir::Opcode::FDiv; break;
+      case ast::BinaryOp::Div: op = ir::Opcode::FDiv; break;
+      default:
+        // Checking admits only these four on a float; anything else
+        // reaching here would silently become a division.
+        unsupported(node.span, "float operator");
+        return Val{size_one, error_type(), false, false};
     }
     const ir::RegisterIdx dst =
         emit(op, lhs.type, {use_value(lhs), use_value(rhs)});

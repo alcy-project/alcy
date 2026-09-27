@@ -2094,8 +2094,22 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
             return boolean;
           }
           break;
-        default:
+        case ast::BinaryOp::Add:
+        case ast::BinaryOp::Sub:
+        case ast::BinaryOp::Mul:
+        case ast::BinaryOp::Div:
           if (is_integer_tag(tag) || is_float_tag(tag)) {
+            if (expected != nullptr) {
+              return unify(*expected, operands, node.span, "arithmetic");
+            }
+            return operands;
+          }
+          break;
+        default:
+          // Remainder and the bitwise and shift operators are
+          // integer-only. Letting a float reach here would fall through
+          // the lowerer's float switch to a division.
+          if (is_integer_tag(tag)) {
             if (expected != nullptr) {
               return unify(*expected, operands, node.span, "arithmetic");
             }

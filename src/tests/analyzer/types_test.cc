@@ -2284,4 +2284,21 @@ TEST_CASE("Analyze resolves a generic type's destructor") {
   }
 }
 
+TEST_CASE("Check rejects a remainder or bitwise operator on a float") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_float_rem_test_");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> f64 {\n"
+                                      "  ret 5.0 % 2.0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+
 }  // namespace analyzer

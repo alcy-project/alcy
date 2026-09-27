@@ -292,6 +292,10 @@ void LlvmIrEmitter::emit_instruction(const ir::Instruction& instr) {
     case Op::UintDiv:
     case Op::IntRem:
     case Op::UintRem:
+    case Op::FAdd:
+    case Op::FSub:
+    case Op::FMul:
+    case Op::FDiv:
     case Op::And:
     case Op::Or:
     case Op::Xor:
