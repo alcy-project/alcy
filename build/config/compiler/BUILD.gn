@@ -203,6 +203,18 @@ config("asan") {
   ldflags = [ "-fsanitize=address" ]
 }
 
+config("coverage") {
+  # Source-based coverage, which is what llvm-cov reports on: it maps
+  # counters to source regions rather than to blocks, so a refactor moves
+  # the numbers with the code. `-fprofile-instr-generate` also goes in
+  # ldflags because the runtime that writes the .profraw is linked in.
+  cflags = [
+    "-fprofile-instr-generate",
+    "-fcoverage-mapping",
+  ]
+  ldflags = [ "-fprofile-instr-generate" ]
+}
+
 config("debug") {
   defines = [ "_DEBUG" ]
   cflags = [

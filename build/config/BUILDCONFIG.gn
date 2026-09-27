@@ -60,6 +60,15 @@ declare_args() {
   is_fuzz = false
 }
 
+# Instruments the build for source-based coverage. Off by default, and
+# meant for a debug build: optimising code attributes lines to the wrong
+# place, so the report would describe the compiler rather than the
+# source. Checked by build/scripts/check_coverage.py, which ratchets
+# against build/coverage_baseline.json.
+declare_args() {
+  is_coverage = false
+}
+
 if (!is_win && !is_mac && !is_ios) {
   declare_args() {
     use_mold =
@@ -156,6 +165,15 @@ if (is_debug) {
   }
 } else {
   default_compiler_configs += [ "//build/config/compiler:release" ]
+}
+
+# Coverage comes after the mode config so the instrumentation is the
+# last thing added, and is deliberately independent of is_debug: what
+# matters is that the build is not optimised, which the mode already
+# decides. ASan stays on because it is what makes an uncovered line
+# reachable at all.
+if (is_coverage) {
+  default_compiler_configs += [ "//build/config/compiler:coverage" ]
 }
 
 default_configs =

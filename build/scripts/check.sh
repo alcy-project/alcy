@@ -26,6 +26,14 @@ if [[ "${1:-}" == "--wasm" ]]; then
   run_wasm=true
 fi
 
+# Pass --no-coverage to skip the coverage ratchet, which needs llvm-cov.
+# It rebuilds the tests and the compiler with instrumentation, so it is
+# the slowest step here.
+run_coverage=true
+if [[ "${1:-}" == "--no-coverage" ]]; then
+  run_coverage=false
+fi
+
 if command -v typos >/dev/null 2>&1; then
   typos
 fi
@@ -65,6 +73,17 @@ wasm_subdir="build_wasm"
 
 "${py_runner[@]}" "$tool_scripts_dir/format.py" --dry-run
 "${py_runner[@]}" "$tool_scripts_dir/lint.py"
+
+# The coverage ratchet rebuilds instrumented binaries, so it runs after
+# the format and lint gates and reuses its own output directory. Skip it
+# with --no-coverage when llvm-cov is not available.
+if [[ $run_coverage == true ]]; then
+  command -v llvm-cov >/dev/null 2>&1 || {
+    echo "error: llvm-cov not found; pass --no-coverage to skip" >&2
+    exit 1
+  }
+  "${py_runner[@]}" "$tool_scripts_dir/check_coverage.py"
+fi
 
 "${py_runner[@]}" "$tool_scripts_dir/verify_static_linkage.py" \
   --build-dir="$root_dir/out/$release_subdir"
