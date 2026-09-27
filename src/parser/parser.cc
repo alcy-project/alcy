@@ -865,7 +865,17 @@ bool Parser::parse_decimal_u64(u64* out) {
       (void)index;
       return false;
     }
-    value = value * 10 + static_cast<u64>(c - '0');
+    // Reject rather than wrap: a wrapped length would silently become a
+    // smaller array, or zero.
+    const u64 digit = static_cast<u64>(c - '0');
+    if (value > (~0ull - digit) / 10) {
+      const u32 index =
+          bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span,
+                    "array length is too large");
+      (void)index;
+      return false;
+    }
+    value = value * 10 + digit;
   }
   *out = value;
   return true;

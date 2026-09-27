@@ -690,6 +690,15 @@ TEST_CASE("Parser keeps a negative literal pattern's sign off the spelling") {
   CHECK(!f.bag.has_errors());
 }
 
+TEST_CASE("Parser rejects an array length that overflows") {
+  Fixture f;
+  // Wrapping would silently turn this into a length of zero.
+  const ParseResult result =
+      parse("fn f() -> [u8; 18446744073709551616] { [0u8; 0] }", f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Parser rejects a token stream without Eof") {
   Fixture f;
   constexpr std::string_view bytes = "fn main() {}\n";
