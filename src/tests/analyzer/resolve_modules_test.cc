@@ -1,7 +1,9 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <deque>
 #include <initializer_list>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -15,10 +17,10 @@
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
 #include "ir/type.h"
 #include "source/source.h"
+#include "tests/util/virtual_source.h"
 
 namespace analyzer {
 
@@ -33,14 +35,20 @@ struct Fixture {
   Fixture() { arena.reserve(1u << 20); }
 };
 
+// The sources one case declared, held in memory. It stands in for a
+// scratch directory and keeps the `dir` name so the cases below read the
+// way they were written.
+using VirtualDir = tests::DeclaredSources;
+
+// Records the sources rather than writing them, so a case cannot fail for
+// a reason other than what it asserts. Always succeeds, which keeps the
+// call sites' guard meaningful to read.
 bool write_all(
-    io::TempDir& dir,
+    VirtualDir& dir,
     std::initializer_list<std::pair<std::string_view, std::string_view>>
         files) {
-  for (const auto& [rel, content] : files) {
-    if (!dir.write_file(rel, content)) {
-      return false;
-    }
+  for (const auto& [name, bytes] : files) {
+    dir.add(name, bytes);
   }
   return true;
 }
@@ -51,32 +59,24 @@ struct ResolveCase {
   bool ok;
 };
 
-ResolveCase resolve_case(io::TempDir& dir,
+ResolveCase resolve_case(VirtualDir& dir,
                          std::string_view root_rel,
                          std::initializer_list<std::string_view> rels,
                          Fixture& f,
                          std::string_view package_name = "testpkg") {
   std::vector<ModuleInput> inputs;
   source::FileId root = source::UNKNOWN_FILE;
+  std::deque<std::string> name_storage;
   for (std::string_view rel : rels) {
-    base::Result<source::FileId, source::SourceError> loaded =
-        f.sources.load(dir.join(rel));
-    if (loaded.is_err()) {
+    std::optional<analyzer::ModuleInput> input = tests::register_source(
+        f.sources, dir, rel, rel == root_rel, name_storage);
+    if (!input.has_value()) {
       continue;
     }
-    const source::FileId id = std::move(loaded).unwrap();
     if (rel == root_rel) {
-      root = id;
-      inputs.push_back({"", id});
-    } else {
-      std::string_view name = rel;
-      constexpr std::string_view suffix = ".al";
-      if (name.size() > suffix.size() &&
-          name.substr(name.size() - suffix.size()) == suffix) {
-        name.remove_suffix(suffix.size());
-      }
-      inputs.push_back({name, id});
+      root = input->id;
     }
+    inputs.push_back(*std::move(input));
   }
   base::Result<ModuleTree, diag::Reported> result =
       resolve_modules(root, inputs, package_name, f.sources, f.ast, f.bag);
@@ -102,7 +102,7 @@ const ModuleNode* find_module(const ModuleTree& tree, std::string_view path) {
 }  // namespace
 
 TEST_CASE("Resolve builds nested module trees") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_tree_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
                                         {"a.al", "struct Point { x: i32 }\n"},
@@ -139,7 +139,7 @@ TEST_CASE("Resolve builds nested module trees") {
 }
 
 TEST_CASE("Resolve attaches deeply nested modules") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_deep_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
                                         {"x/y/z.al", "fn deep() {}\n"},
@@ -160,7 +160,7 @@ TEST_CASE("Resolve attaches deeply nested modules") {
 }
 
 TEST_CASE("Resolve reports duplicate module declarations") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_dup_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
                                         {"a.al", "fn x() {}\n"},
@@ -173,22 +173,21 @@ TEST_CASE("Resolve reports duplicate module declarations") {
 
   Fixture f;
   // Two files claiming one slash name collide regardless of paths.
-  base::Result<source::FileId, source::SourceError> first =
-      f.sources.load(dir.join("a.al"));
-  base::Result<source::FileId, source::SourceError> second =
-      f.sources.load(dir.join("sub/a.al"));
-  base::Result<source::FileId, source::SourceError> root =
-      f.sources.load(dir.join("main.al"));
-  CHECK(first.is_ok());
-  CHECK(second.is_ok());
-  CHECK(root.is_ok());
-  if (first.is_err() || second.is_err() || root.is_err()) {
+  // Registered by hand because two of them claim the module name "a", and
+  // going through the rel list would register only the first.
+  const tests::VirtualSource* const a = dir.find("a.al");
+  const tests::VirtualSource* const nested_a = dir.find("sub/a.al");
+  const tests::VirtualSource* const main = dir.find("main.al");
+  CHECK(a != nullptr);
+  CHECK(nested_a != nullptr);
+  CHECK(main != nullptr);
+  if (a == nullptr || nested_a == nullptr || main == nullptr) {
     return;
   }
   const ModuleInput inputs[] = {
-      {"", std::move(root).unwrap()},
-      {"a", std::move(first).unwrap()},
-      {"a", std::move(second).unwrap()},
+      {"", f.sources.add_virtual(main->name, main->bytes)},
+      {"a", f.sources.add_virtual(a->name, a->bytes)},
+      {"a", f.sources.add_virtual(nested_a->name, nested_a->bytes)},
   };
   base::Result<ModuleTree, diag::Reported> resolved =
       resolve_modules(inputs[0].id, inputs, "testpkg", f.sources, f.ast, f.bag);
@@ -196,8 +195,7 @@ TEST_CASE("Resolve reports duplicate module declarations") {
 }
 
 TEST_CASE("Resolve attaches unreferenced files as modules") {
-  io::TempDir dir =
-      io::TempDir::create_unique("alcy_analyzer_unreachable_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
                                         {"stray.al", "fn stray() {}\n"},
@@ -215,7 +213,7 @@ TEST_CASE("Resolve attaches unreferenced files as modules") {
 }
 
 TEST_CASE("Resolve resolves imports across modules") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_use_test_");
+  VirtualDir dir;
   const bool setup = write_all(
       dir, {
                {"main.al",
@@ -285,7 +283,7 @@ TEST_CASE("Resolve resolves imports across modules") {
 }
 
 TEST_CASE("Resolve handles super imports from nested modules") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_super_test_");
+  VirtualDir dir;
   const bool setup =
       write_all(dir, {
                          {"main.al", "fn main() {}\n"},
@@ -313,8 +311,7 @@ TEST_CASE("Resolve handles super imports from nested modules") {
 }
 
 TEST_CASE("Resolve reports bad imports") {
-  io::TempDir dir =
-      io::TempDir::create_unique("alcy_analyzer_unresolved_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
                                         {"a.al", "struct Point { x: i32 }\n"},
@@ -326,7 +323,7 @@ TEST_CASE("Resolve reports bad imports") {
 
   Fixture f2;
   {
-    io::TempDir dir2("alcy_analyzer_unresolved2_test");
+    VirtualDir dir2;
     const bool setup2 =
         write_all(dir2, {{"main.al", "use a::Nope;\nfn main() {}\n"},
                          {"a.al", "struct Point { x: i32 }\n"}});
@@ -342,7 +339,7 @@ TEST_CASE("Resolve reports bad imports") {
 
   Fixture f3;
   {
-    io::TempDir dir3("alcy_analyzer_unresolved3_test");
+    VirtualDir dir3;
     const bool setup3 =
         write_all(dir3, {{"main.al", "use foo;\nfn main() {}\n"}});
     CHECK(setup3);
@@ -356,7 +353,7 @@ TEST_CASE("Resolve reports bad imports") {
 
   Fixture f4;
   {
-    io::TempDir dir4("alcy_analyzer_unresolved4_test");
+    VirtualDir dir4;
     const bool setup4 =
         write_all(dir4, {{"main.al", "use super::x;\nfn main() {}\n"}});
     CHECK(setup4);
@@ -370,7 +367,7 @@ TEST_CASE("Resolve reports bad imports") {
 }
 
 TEST_CASE("Resolve reports conflicting imports") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_ambiguous_test_");
+  VirtualDir dir;
   const bool setup = write_all(
       dir, {
                {"main.al", "use a::Thing;\nuse b::Thing;\nfn main() {}\n"},
@@ -390,7 +387,7 @@ TEST_CASE("Resolve reports conflicting imports") {
 }
 
 TEST_CASE("Resolve follows public re-exports") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_reexport_test_");
+  VirtualDir dir;
   const bool setup =
       write_all(dir, {
                          {"main.al", "use a::Thing;\nfn main() {}\n"},
@@ -439,7 +436,7 @@ TEST_CASE("Resolve follows public re-exports") {
 }
 
 TEST_CASE("Resolve reports re-export cycles") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_cycle_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
                                         {"a.al", "pub use b::Thing;\n"},
@@ -458,41 +455,39 @@ TEST_CASE("Resolve reports re-export cycles") {
 }
 
 ResolveCase resolve_case_with_prelude(
-    io::TempDir& dir,
+    VirtualDir& dir,
     std::string_view root_rel,
     std::initializer_list<std::string_view> rels,
     std::initializer_list<std::pair<std::string_view, std::string_view>>
         prelude,
     Fixture& f) {
+  std::deque<std::string> name_storage;
   std::vector<ModuleInput> inputs;
   source::FileId root = source::UNKNOWN_FILE;
   for (std::string_view rel : rels) {
-    base::Result<source::FileId, source::SourceError> loaded =
-        f.sources.load(dir.join(rel));
-    if (loaded.is_err()) {
+    std::optional<ModuleInput> input = tests::register_source(
+        f.sources, dir, rel, rel == root_rel, name_storage);
+    if (!input.has_value()) {
       continue;
     }
-    const source::FileId id = std::move(loaded).unwrap();
     if (rel == root_rel) {
-      root = id;
-      inputs.push_back({"", id});
-    } else {
-      inputs.push_back({rel, id});
+      root = input->id;
     }
+    inputs.push_back(*std::move(input));
   }
-  std::vector<std::string> prelude_storage;
+  std::deque<std::string> prelude_storage;
   std::vector<ModuleInput> prelude_inputs;
   for (const auto& [name, rel] : prelude) {
-    base::Result<source::FileId, source::SourceError> loaded =
-        f.sources.load(dir.join(rel));
-    if (loaded.is_err()) {
+    const tests::VirtualSource* const file = dir.find(rel);
+    if (file == nullptr) {
       continue;
     }
     prelude_storage.emplace_back(name);
     // A staged prelude source is a package facade, so its public
     // surface is in scope without a `use`; see docs/adr/0016.
-    prelude_inputs.push_back(
-        {prelude_storage.back(), std::move(loaded).unwrap(), true});
+    prelude_inputs.push_back({prelude_storage.back(),
+                              f.sources.add_virtual(file->name, file->bytes),
+                              true});
   }
   base::Result<ModuleTree, diag::Reported> result = resolve_modules(
       root, inputs, "testpkg", f.sources, f.ast, f.bag, prelude_inputs);
@@ -507,7 +502,7 @@ ResolveCase resolve_case_with_prelude(
 }
 
 TEST_CASE("Resolve injects prelude imports") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_analyzer_prelude_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {
                                         {"main.al", "fn main() {}\n"},
                                         {"core.al", "pub fn help() {}\n"},
@@ -542,8 +537,7 @@ TEST_CASE("Resolve injects prelude imports") {
 }
 
 TEST_CASE("Resolve prefers locals over prelude imports") {
-  io::TempDir dir =
-      io::TempDir::create_unique("alcy_analyzer_prelude_shadow_test_");
+  VirtualDir dir;
   const bool setup =
       write_all(dir, {
                          {"main.al", "fn help() {}\nfn main() {}\n"},

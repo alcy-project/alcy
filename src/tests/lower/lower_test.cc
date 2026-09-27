@@ -3,6 +3,7 @@
 
 #include "lower/lower.h"
 
+#include <deque>
 #include <initializer_list>
 #include <memory>
 #include <optional>
@@ -22,7 +23,6 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/file_handle.h"
-#include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
 #include "fpag/mem/page_allocator.h"
 #include "fpag/str/string_interner.h"
@@ -32,6 +32,7 @@
 #include "ir/type.h"
 #include "ir/verifier.h"
 #include "source/source.h"
+#include "tests/util/virtual_source.h"
 
 namespace lower {
 
@@ -47,14 +48,20 @@ struct Fixture {
   Fixture() { arena.reserve(1u << 20); }
 };
 
+// The sources one case declared, held in memory. It stands in for a
+// scratch directory and keeps the `dir` name so the cases below read the
+// way they were written.
+using VirtualDir = tests::DeclaredSources;
+
+// Records the sources rather than writing them, so a case cannot fail for
+// a reason other than what it asserts. Always succeeds, which keeps the
+// call sites' guard meaningful to read.
 bool write_all(
-    io::TempDir& dir,
+    VirtualDir& dir,
     std::initializer_list<std::pair<std::string_view, std::string_view>>
         files) {
-  for (const auto& [rel, content] : files) {
-    if (!dir.write_file(rel, content)) {
-      return false;
-    }
+  for (const auto& [name, bytes] : files) {
+    dir.add(name, bytes);
   }
   return true;
 }
@@ -64,31 +71,23 @@ struct LowerCase {
   bool ok;
 };
 
-LowerCase lower_case(io::TempDir& dir,
+LowerCase lower_case(VirtualDir& dir,
                      std::string_view root_rel,
                      std::initializer_list<std::string_view> rels,
                      Fixture& f) {
   std::vector<analyzer::ModuleInput> inputs;
   source::FileId root = source::UNKNOWN_FILE;
+  std::deque<std::string> name_storage;
   for (std::string_view rel : rels) {
-    base::Result<source::FileId, source::SourceError> loaded =
-        f.sources.load(dir.join(rel));
-    if (loaded.is_err()) {
+    std::optional<analyzer::ModuleInput> input = tests::register_source(
+        f.sources, dir, rel, rel == root_rel, name_storage);
+    if (!input.has_value()) {
       continue;
     }
-    const source::FileId id = std::move(loaded).unwrap();
     if (rel == root_rel) {
-      root = id;
-      inputs.push_back({"", id});
-    } else {
-      std::string_view name = rel;
-      constexpr std::string_view suffix = ".al";
-      if (name.size() > suffix.size() &&
-          name.substr(name.size() - suffix.size()) == suffix) {
-        name.remove_suffix(suffix.size());
-      }
-      inputs.push_back({name, id});
+      root = input->id;
     }
+    inputs.push_back(*std::move(input));
   }
   base::Result<analyzer::ModuleTree, diag::Reported> tree_result =
       analyzer::resolve_modules(root, inputs, "testpkg", f.sources, f.ast,
@@ -114,7 +113,7 @@ LowerCase lower_case(io::TempDir& dir,
 }  // namespace
 
 TEST_CASE("Lower straight-line arithmetic") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_lower_arith_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn add(a: i32, b: i32) -> i32 {\n"
                                       "  ret a + b * 2\n"
@@ -139,7 +138,7 @@ TEST_CASE("Lower straight-line arithmetic") {
 }
 
 TEST_CASE("Lower structs tuples fields and borrows") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_lower_aggregate_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct Point { x: i32, y: i32 }\n"
                                       "fn get(p: &Point) -> i32 {\n"
@@ -166,7 +165,7 @@ TEST_CASE("Lower structs tuples fields and borrows") {
 }
 
 TEST_CASE("Lower lowers control flow to verifiable blocks") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_lower_control_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn f(b: bool) -> i32 {\n"
                                       "  r := match b {\n"
@@ -201,7 +200,7 @@ TEST_CASE("Lower lowers control flow to verifiable blocks") {
 }
 
 TEST_CASE("Lower lowers enums matches and question propagation") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_lower_enum_test_");
+  VirtualDir dir;
   const bool setup =
       write_all(dir, {{"main.al",
                        "enum Shape { Circle(i32), Rect }\n"
@@ -250,7 +249,7 @@ TEST_CASE("Lower lowers enums matches and question propagation") {
 }
 
 TEST_CASE("Lower emits verifiable LLVM IR") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_lower_emit_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn add(a: i32, b: i32) -> i32 {\n"
                                       "  ret a + b\n"
@@ -281,7 +280,7 @@ TEST_CASE("Lower emits verifiable LLVM IR") {
 }
 
 TEST_CASE("Lower emits verifiable LLVM IR for print") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_lower_emit_print_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  print(\"hi\")\n"
@@ -318,7 +317,7 @@ TEST_CASE("Lower emits verifiable LLVM IR for print") {
 
 #if !defined(OS_ASMJS)
 TEST_CASE("Lower emits relocatable objects") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_lower_emit_object_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn add(a: i32, b: i32) -> i32 {\n"
                                       "  ret a + b\n"
@@ -348,7 +347,6 @@ TEST_CASE("Lower emits relocatable objects") {
   std::move(emitter).emit();
   CHECK(!llvm::verifyModule(*module));
 
-  const std::string object_path = dir.join("main.o");
   base::Result<std::vector<u8>, codegen_llvm::ObjectEmitError> emitted =
       codegen_llvm::emit_object(*module, "");
   CHECK(emitted.is_ok());
@@ -378,25 +376,22 @@ TEST_CASE("Lower emits relocatable objects") {
 #endif
 
 TEST_CASE("Lower wraps all main forms in a C entry") {
-  const std::pair<std::string_view, std::string_view> cases[] = {
-      {"alcy_entry_void_test",
-       "fn main() {\n"
-       "  print(\"hi\")\n"
-       "}\n"},
-      {"alcy_entry_i32_test",
-       "fn main() -> i32 {\n"
-       "  ret 3\n"
-       "}\n"},
-      {"alcy_entry_result_test",
-       "enum Result<T, E> { Ok(T), Err(E) }\n"
-       "fn main() -> Result<(), i32> {\n"
-       "  ret Result::Ok(if true {\n"
-       "  } else {\n"
-       "  })\n"
-       "}\n"},
+  const std::string_view cases[] = {
+      "fn main() {\n"
+      "  print(\"hi\")\n"
+      "}\n",
+      "fn main() -> i32 {\n"
+      "  ret 3\n"
+      "}\n",
+      "enum Result<T, E> { Ok(T), Err(E) }\n"
+      "fn main() -> Result<(), i32> {\n"
+      "  ret Result::Ok(if true {\n"
+      "  } else {\n"
+      "  })\n"
+      "}\n",
   };
-  for (const auto& [name, source] : cases) {
-    io::TempDir dir(name);
+  for (const std::string_view source : cases) {
+    VirtualDir dir;
     const bool setup = write_all(dir, {{"main.al", source}});
     CHECK(setup);
     if (!setup) {
@@ -430,7 +425,7 @@ TEST_CASE("Lower wraps all main forms in a C entry") {
 }
 
 TEST_CASE("Lower warns on unreachable statements") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_lower_unreachable_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  ret\n"
@@ -448,7 +443,7 @@ TEST_CASE("Lower warns on unreachable statements") {
 }
 
 TEST_CASE("Lowering emits no Drop markers") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_lower_no_drop_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct H { r: &mut i32 }\n"
                                       "fn main() {\n"
@@ -480,7 +475,7 @@ TEST_CASE("Lowering emits no Drop markers") {
 }
 
 TEST_CASE("Lower emits verifiable LLVM IR for control flow") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_lower_emit_control_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn f(b: bool) -> i32 {\n"
                                       "  r := match b {\n"
@@ -522,7 +517,7 @@ TEST_CASE("Lower emits verifiable LLVM IR for control flow") {
 }
 
 TEST_CASE("Lower emits verifiable LLVM IR for enums and calls") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_lower_emit_enum_test_");
+  VirtualDir dir;
   const bool setup =
       write_all(dir, {{"main.al",
                        "enum Shape { Circle(i32), Rect }\n"

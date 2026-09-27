@@ -3,7 +3,10 @@
 
 #include "borrow/borrow.h"
 
+#include <deque>
 #include <initializer_list>
+#include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -14,13 +17,13 @@
 #include "diag/bag.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
-#include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
 #include "fpag/mem/page_allocator.h"
 #include "fpag/str/string_interner.h"
 #include "ir/type.h"
 #include "lower/lower.h"
 #include "source/source.h"
+#include "tests/util/virtual_source.h"
 
 namespace borrow {
 
@@ -36,43 +39,41 @@ struct Fixture {
   Fixture() { arena.reserve(1u << 20); }
 };
 
+// The sources one case declared, held in memory. It stands in for a
+// scratch directory and keeps the `dir` name so the cases below read the
+// way they were written.
+using VirtualDir = tests::DeclaredSources;
+
+// Records the sources rather than writing them, so a case cannot fail for
+// a reason other than what it asserts. Always succeeds, which keeps the
+// call sites' guard meaningful to read.
 bool write_all(
-    io::TempDir& dir,
+    VirtualDir& dir,
     std::initializer_list<std::pair<std::string_view, std::string_view>>
         files) {
-  for (const auto& [rel, content] : files) {
-    if (!dir.write_file(rel, content)) {
-      return false;
-    }
+  for (const auto& [name, bytes] : files) {
+    dir.add(name, bytes);
   }
   return true;
 }
 
-bool check_case(io::TempDir& dir,
+bool check_case(VirtualDir& dir,
                 std::string_view root_rel,
                 std::initializer_list<std::string_view> rels,
                 Fixture& f) {
   std::vector<analyzer::ModuleInput> inputs;
   source::FileId root = source::UNKNOWN_FILE;
+  std::deque<std::string> name_storage;
   for (std::string_view rel : rels) {
-    base::Result<source::FileId, source::SourceError> loaded =
-        f.sources.load(dir.join(rel));
-    if (loaded.is_err()) {
+    std::optional<analyzer::ModuleInput> input = tests::register_source(
+        f.sources, dir, rel, rel == root_rel, name_storage);
+    if (!input.has_value()) {
       continue;
     }
-    const source::FileId id = std::move(loaded).unwrap();
     if (rel == root_rel) {
-      root = id;
-      inputs.push_back({"", id});
-    } else {
-      std::string_view name = rel;
-      constexpr std::string_view suffix = ".al";
-      if (name.size() > suffix.size() &&
-          name.substr(name.size() - suffix.size()) == suffix) {
-        name.remove_suffix(suffix.size());
-      }
-      inputs.push_back({name, id});
+      root = input->id;
     }
+    inputs.push_back(*std::move(input));
   }
   base::Result<analyzer::ModuleTree, diag::Reported> tree_result =
       analyzer::resolve_modules(root, inputs, "testpkg", f.sources, f.ast,
@@ -101,7 +102,7 @@ bool check_case(io::TempDir& dir,
 }  // namespace
 
 TEST_CASE("Borrow accepts shared borrows") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_shared_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct Point { x: i32 }\n"
                                       "fn get(p: &Point) -> i32 {\n"
@@ -123,7 +124,7 @@ TEST_CASE("Borrow accepts shared borrows") {
 }
 
 TEST_CASE("Borrow rejects exclusive conflicts") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_conflict_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  x := 1\n"
@@ -143,7 +144,7 @@ TEST_CASE("Borrow rejects exclusive conflicts") {
 }
 
 TEST_CASE("Borrow rejects mixed conflicts") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_mixed_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  x := 1\n"
@@ -163,7 +164,7 @@ TEST_CASE("Borrow rejects mixed conflicts") {
 }
 
 TEST_CASE("Borrow expires at last use") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_expiry_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  x := 1\n"
@@ -182,7 +183,7 @@ TEST_CASE("Borrow expires at last use") {
 }
 
 TEST_CASE("Borrow rejects use after move") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_move_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct H { r: &mut i32 }\n"
                                       "fn main() {\n"
@@ -203,7 +204,7 @@ TEST_CASE("Borrow rejects use after move") {
 }
 
 TEST_CASE("Borrow rejects a read after a by-value call move") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_call_move_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct H { r: &mut i32 }\n"
                                       "fn consume(h: H) -> i32 {\n"
@@ -227,7 +228,7 @@ TEST_CASE("Borrow rejects a read after a by-value call move") {
 }
 
 TEST_CASE("Borrow reads a moved value into the call that moved it") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_move_read_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct H { n: i32 }\n"
                                       "fn consume(h: H) -> i32 {\n"
@@ -250,7 +251,7 @@ TEST_CASE("Borrow reads a moved value into the call that moved it") {
 }
 
 TEST_CASE("Borrow rejects a write through a reborrow") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_deref_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn g(mut b: &mut i32) -> i32 {\n"
                                       "  x := &*b\n"
@@ -272,7 +273,7 @@ TEST_CASE("Borrow rejects a write through a reborrow") {
 }
 
 TEST_CASE("Borrow accepts a read through a shared receiver") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_shared_recv_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct S { n: i32 }\n"
                                       "impl S {\n"
@@ -307,7 +308,7 @@ TEST_CASE("Borrow accepts a read through a shared receiver") {
 }
 
 TEST_CASE("Borrow joins maybe-moves across branches") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_join_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct H { r: &mut i32 }\n"
                                       "fn main() {\n"
@@ -332,7 +333,7 @@ TEST_CASE("Borrow joins maybe-moves across branches") {
 }
 
 TEST_CASE("Borrow keeps sibling branches independent") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_sibling_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct H { r: &mut i32 }\n"
                                       "fn main() {\n"
@@ -356,7 +357,7 @@ TEST_CASE("Borrow keeps sibling branches independent") {
 }
 
 TEST_CASE("Borrow catches loop-carried moves") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_loop_move_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct H { r: &mut i32 }\n"
                                       "fn main() {\n"
@@ -380,7 +381,7 @@ TEST_CASE("Borrow catches loop-carried moves") {
 }
 
 TEST_CASE("Borrow expires loans across loop iterations") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_loop_expiry_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  mut x := 1\n"
@@ -400,8 +401,7 @@ TEST_CASE("Borrow expires loans across loop iterations") {
 }
 
 TEST_CASE("Borrow rejects conflicting loop borrows") {
-  io::TempDir dir =
-      io::TempDir::create_unique("alcy_borrow_loop_conflict_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  mut x := 1\n"
@@ -427,7 +427,7 @@ TEST_CASE("Borrow rejects conflicting loop borrows") {
 }
 
 TEST_CASE("Borrow rejects use after by-value match") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_match_move_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "enum E { A(&mut i32), B }\n"
                                       "fn main() {\n"
@@ -451,7 +451,7 @@ TEST_CASE("Borrow rejects use after by-value match") {
 }
 
 TEST_CASE("Borrow tracks loans spilled into aggregates") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_spill_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct H { r: &mut i32 }\n"
                                       "fn main() {\n"
@@ -473,7 +473,7 @@ TEST_CASE("Borrow tracks loans spilled into aggregates") {
 }
 
 TEST_CASE("Borrow reifies only returned parameters") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_summary_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn fst(a: &i32, b: &i32) -> &i32 {\n"
                                       "  ret a\n"
@@ -496,8 +496,7 @@ TEST_CASE("Borrow reifies only returned parameters") {
 }
 
 TEST_CASE("Borrow summarizes struct returns") {
-  io::TempDir dir =
-      io::TempDir::create_unique("alcy_borrow_struct_summary_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct H { r: &mut i32 }\n"
                                       "fn wrap(r: &mut i32, s: &i32) -> H {\n"
@@ -521,8 +520,7 @@ TEST_CASE("Borrow summarizes struct returns") {
 }
 
 TEST_CASE("Borrow rejects conflicts through summaries") {
-  io::TempDir dir =
-      io::TempDir::create_unique("alcy_borrow_summary_conflict_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct H { r: &mut i32 }\n"
                                       "fn proj(h: H) -> &mut i32 {\n"
@@ -547,7 +545,7 @@ TEST_CASE("Borrow rejects conflicts through summaries") {
 }
 
 TEST_CASE("Borrow summarizes recursive functions") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_recursion_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn f(n: i32, x: &i32) -> &i32 {\n"
                                       "  if n <= 0 {\n"
@@ -570,7 +568,7 @@ TEST_CASE("Borrow summarizes recursive functions") {
 }
 
 TEST_CASE("Borrow iterates summaries to a fixed point") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_fixpoint_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn a(n: i32, x: &i32) -> &i32 {\n"
                                       "  ret b(n, x)\n"
@@ -599,7 +597,7 @@ TEST_CASE("Borrow iterates summaries to a fixed point") {
 }
 
 TEST_CASE("Borrow rejects assignment while borrowed") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_assign_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  mut a := 1\n"
@@ -618,7 +616,7 @@ TEST_CASE("Borrow rejects assignment while borrowed") {
 }
 
 TEST_CASE("Borrow rejects moves under live loans") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_invalidate_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct H { r: &mut i32 }\n"
                                       "fn main() {\n"
@@ -640,7 +638,7 @@ TEST_CASE("Borrow rejects moves under live loans") {
 }
 
 TEST_CASE("Borrow rejects escaping references") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_escape_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn f() -> &i32 {\n"
                                       "  x := 1\n"
@@ -657,7 +655,7 @@ TEST_CASE("Borrow rejects escaping references") {
 }
 
 TEST_CASE("Borrow accepts parameter returns") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_borrow_param_test_");
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn id(p: &i32) -> &i32 {\n"
                                       "  ret p\n"
