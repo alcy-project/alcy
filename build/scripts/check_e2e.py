@@ -22,6 +22,7 @@ An optional `args` list is inserted before the selected subcommand.
 import argparse
 import subprocess
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -45,7 +46,13 @@ def parse_expect(path: Path):
     if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
         sys.exit(f"{path}: 'args' must be a list of strings")
 
-    return expected_exit, contains, not_contains, args
+    # Defaults to `check`; a case that needs another subcommand (one
+    # whose diagnostics are only reported on that path) names it.
+    subcommand = data.get("subcommand", "check")
+    if not isinstance(subcommand, str):
+        sys.exit(f"{path}: 'subcommand' must be a string")
+
+    return expected_exit, contains, not_contains, args, subcommand
 
 
 def run_case(alcy: Path, case_dir: Path):
@@ -53,17 +60,30 @@ def run_case(alcy: Path, case_dir: Path):
     if not expect_path.is_file():
         return False, "missing expect.toml"
 
-    expected_exit, contains, not_contains, extra_args = parse_expect(expect_path)
+    expected_exit, contains, not_contains, extra_args, subcommand = parse_expect(
+        expect_path
+    )
     if (case_dir / "alcy.toml").is_file():
-        argv = [str(alcy), *extra_args, "check", "."]
+        argv = [str(alcy), *extra_args, subcommand, "."]
         cwd = case_dir
     elif (case_dir / "main.al").is_file():
-        argv = [str(alcy), *extra_args, "check", str(case_dir / "main.al")]
+        argv = [str(alcy), *extra_args, subcommand, str(case_dir / "main.al")]
         cwd = project_root_dir
     else:
         return False, "no alcy.toml or main.al found"
 
+    # A case that builds would otherwise drop an executable into its own
+    # source tree, so send the output to a scratch directory instead.
+    if subcommand == "build":
+        with tempfile.TemporaryDirectory() as scratch:
+            argv = [*argv, "-o", str(Path(scratch) / "out")]
+            proc = subprocess.run(argv, capture_output=True, text=True, cwd=cwd)
+            return compare(proc, expected_exit, contains, not_contains)
     proc = subprocess.run(argv, capture_output=True, text=True, cwd=cwd)
+    return compare(proc, expected_exit, contains, not_contains)
+
+
+def compare(proc, expected_exit, contains, not_contains):
     output = proc.stdout + proc.stderr
     problems = []
 

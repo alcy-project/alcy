@@ -33,8 +33,10 @@ i32 run_run(const CliConfig& config, const diag::RenderOptions& options) {
     base::Result<pipeline::RunOutcome, diag::Reported> result =
         pipeline::run_single_file(ctx, raw_dir, config.release, config.linker,
                                   args);
+    // Report before branching: a run that reaches the program still
+    // carries the warnings the bag collected along the way.
+    report_diagnostics(ctx.bag, ctx.sources, options);
     if (result.is_err()) {
-      report_diagnostics(ctx.bag, ctx.sources, options);
       return result_code(ResultCode::RunFailed);
     }
     return std::move(result).unwrap().exit_code;
@@ -59,8 +61,8 @@ i32 run_run(const CliConfig& config, const diag::RenderOptions& options) {
       pipeline::run_package(ctx, found.root, found.manifest,
                             found.manifest_name, config.release, config.linker,
                             args);
+  report_diagnostics(ctx.bag, ctx.sources, options);
   if (result.is_err()) {
-    report_diagnostics(ctx.bag, ctx.sources, options);
     return result_code(ResultCode::RunFailed);
   }
   return std::move(result).unwrap().exit_code;

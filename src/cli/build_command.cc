@@ -32,8 +32,10 @@ ResultCode run_build(const CliConfig& config,
           path::SOURCE_EXTENSION) {
     base::Result<void, diag::Reported> res = pipeline::build_single_file(
         ctx, raw_dir, config.output, config.release, config.linker);
+    // Report before branching: a successful build still carries the
+    // warnings the bag collected along the way.
+    report_diagnostics(ctx.bag, ctx.sources, options);
     if (res.is_err() || ctx.bag.has_errors()) {
-      report_diagnostics(ctx.bag, ctx.sources, options);
       return ResultCode::BuildFailed;
     }
     base::logger.wo_prefix("built successfully");
@@ -51,8 +53,8 @@ ResultCode run_build(const CliConfig& config,
     base::Result<void, diag::Reported> res = pipeline::build_package(
         ctx, found.root, found.manifest, found.manifest_name, config.output,
         config.release, config.linker);
+    report_diagnostics(ctx.bag, ctx.sources, options);
     if (res.is_err() || ctx.bag.has_errors()) {
-      report_diagnostics(ctx.bag, ctx.sources, options);
       return ResultCode::BuildFailed;
     }
     base::logger.wo_prefix("built successfully");
