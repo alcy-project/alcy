@@ -53,9 +53,10 @@ bool is_nested_package(const path::Path& dir) {
                     io::FileAccess::Read);
 }
 
-// Collects *.al files under dir, recursively. Directory symlinks are never
-// followed, so link cycles are impossible. Unreadable nested entries are
-// skipped. Returns false only when the root itself cannot be opened.
+// Collects *.al files under dir, recursively. Symlinked files are
+// followed, symlinked directories are not, so link cycles are
+// impossible. Unreadable nested entries are skipped. Returns false only
+// when the root itself cannot be opened.
 bool walk_sources(const path::Path& dir, std::vector<path::Path>& paths) {
 #if BUILD_FLAG(IS_OS_WIN)
   WIN32_FIND_DATAA found;
@@ -104,7 +105,18 @@ bool walk_sources(const path::Path& dir, std::vector<path::Path>& paths) {
       if (!is_nested_package(full)) {
         walk_sources(full, paths);
       }
-    } else if (S_ISREG(info.st_mode) && has_source_extension(full.as_view())) {
+      continue;
+    }
+    // A regular file is a source when it carries the extension. A
+    // symlinked file is resolved and treated the same way; a symlinked
+    // *directory* resolves to a directory and so is left alone, which
+    // keeps a link cycle from making the walk unbounded.
+    bool is_source = S_ISREG(info.st_mode);
+    if (!is_source && S_ISLNK(info.st_mode) &&
+        ::stat(full.c_str(), &info) == 0) {
+      is_source = S_ISREG(info.st_mode);
+    }
+    if (is_source && has_source_extension(full.as_view())) {
       paths.push_back(full);
     }
   }
