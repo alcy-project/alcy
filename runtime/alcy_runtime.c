@@ -46,22 +46,21 @@ static void write_all(int fd, const char* data, size_t len) {
 }
 
 void alcy_print(const char* message, size_t len) {
-  write_all(STDOUT_FILENO, message == NULL ? "" : message, len);
+  // A null message carries no bytes, so the length must drop with it;
+  // passing the caller's length would read past the empty literal.
+  const char* data = message == NULL ? "" : message;
+  write_all(STDOUT_FILENO, data, message == NULL ? 0 : len);
 }
 
 void alcy_println(const char* message, size_t len) {
-  if (message == NULL) {
-    message = "";
-  }
-  write_all(STDOUT_FILENO, message, len);
+  const char* data = message == NULL ? "" : message;
+  write_all(STDOUT_FILENO, data, message == NULL ? 0 : len);
   write_all(STDOUT_FILENO, "\n", 1);
 }
 
 void alcy_panic(const char* message, size_t len) {
-  if (message == NULL) {
-    message = "";
-  }
-  write_all(STDERR_FILENO, message, len);
+  const char* data = message == NULL ? "" : message;
+  write_all(STDERR_FILENO, data, message == NULL ? 0 : len);
   abort();
 }
 
