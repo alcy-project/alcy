@@ -220,16 +220,29 @@ class Checker {
         if (!operand_reg(0, addr) || !instr.dst.is_valid()) {
           break;
         }
-        flow[instr.dst.idx] = flow[addr];
         // Reading a place of reference type yields the referent, and the
         // referent is a place: home/path carry the read place plus a
-        // dereference, so a store through the result and a loan of the
-        // source name the same thing. Any other type yields a value,
-        // which is not a place and keeps no path of its own.
+        // dereference, and the loan flows on as a reborrow. An
+        // aggregate behaves the same way, because loading
+        // `H { r: &mut i32 }` copies a reference that still points into
+        // the loan. A plain scalar load is a *copy* that owns nothing,
+        // so the loan stops there: `x := *r` must not look like
+        // returning the reference, nor keep the borrow alive past its
+        // last use.
         const ir::TypeIdx loaded_ty = storage.registers()[instr.dst.idx].type;
         const ir::TypeTag loaded = tag_of(loaded_ty);
-        if ((loaded == ir::TypeTag::Ref || loaded == ir::TypeTag::MutRef) &&
-            home[addr] != NO_ROOT) {
+        const bool is_reborrow =
+            loaded == ir::TypeTag::Ref || loaded == ir::TypeTag::MutRef;
+        const bool carries_reference =
+            is_reborrow || loaded == ir::TypeTag::Struct ||
+            loaded == ir::TypeTag::Tuple || loaded == ir::TypeTag::Array ||
+            loaded == ir::TypeTag::Enum;
+        if (carries_reference) {
+          flow[instr.dst.idx] = flow[addr];
+        } else {
+          flow[instr.dst.idx].clear();
+        }
+        if (is_reborrow && home[addr] != NO_ROOT) {
           home[instr.dst.idx] = home[addr];
           path[instr.dst.idx] = path[addr];
           path[instr.dst.idx].push_back(kDerefStep);
