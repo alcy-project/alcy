@@ -44,7 +44,7 @@ constexpr std::string_view severity_color(Severity severity) {
 struct LineInfo {
   u32 line = 1;
   // 1-based display column: UTF-8 code points, with a tab advancing to
-  // the next multiple of kTabWidth. Byte columns would put the caret
+  // the next multiple of TAB_WIDTH. Byte columns would put the caret
   // after every multi-byte character and before every expanded tab.
   u32 col = 1;
   // Byte offset where the line starts, so callers converting a
@@ -53,7 +53,7 @@ struct LineInfo {
   std::string_view text;
 };
 
-constexpr u32 kTabWidth = 4;
+constexpr u32 TAB_WIDTH = 4;
 
 // Display columns spanned by the bytes in [line_start, offset).
 u32 display_column(std::string_view bytes, u32 line_start, u32 offset) {
@@ -64,7 +64,7 @@ u32 display_column(std::string_view bytes, u32 line_start, u32 offset) {
     if ((static_cast<unsigned char>(bytes[i]) & 0xC0) == 0x80) {
       continue;
     }
-    col = bytes[i] == '\t' ? ((col - 1) / kTabWidth + 1) * kTabWidth + 1
+    col = bytes[i] == '\t' ? ((col - 1) / TAB_WIDTH + 1) * TAB_WIDTH + 1
                            : col + 1;
   }
   return col;
@@ -109,7 +109,7 @@ void append_expanded(fmt::memory_buffer& out, std::string_view text) {
       ++col;
       continue;
     }
-    col = ((col - 1) / kTabWidth + 1) * kTabWidth + 1;
+    col = ((col - 1) / TAB_WIDTH + 1) * TAB_WIDTH + 1;
     for (u32 i = 1; i < col; ++i) {
       out.push_back(' ');
     }

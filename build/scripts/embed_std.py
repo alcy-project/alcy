@@ -59,7 +59,7 @@ def main():
         for symbol, path in files.items():
             emit_array(out, symbol, path.read_bytes())
             entries.append((symbol, path))
-        out.write("const StagedSource kStagedSources[] = {\n")
+        out.write("const StagedSource STAGED_SOURCES[] = {\n")
         for symbol, path in entries:
             rel = path.relative_to(std_dir).as_posix()
             out.write(
@@ -67,8 +67,8 @@ def main():
             )
         out.write("};\n\n")
         out.write(
-            "const usize kStagedSourceCount = "
-            "sizeof(kStagedSources) / sizeof(kStagedSources[0]);\n\n"
+            "const usize STAGED_SOURCE_COUNT = "
+            "sizeof(STAGED_SOURCES) / sizeof(STAGED_SOURCES[0]);\n\n"
         )
         out.write("}  // namespace pipeline\n")
     return 0

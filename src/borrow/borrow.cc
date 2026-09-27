@@ -38,7 +38,7 @@ constexpr u32 NO_ROOT = 0xFFFFFFFFu;
 // a dereference, so a loan of one is seen to overlap a store to the
 // other. A field index can never collide with the marker because the
 // table's size bounds every index.
-constexpr u32 kDerefStep = 0xFFFFFFFFu;
+constexpr u32 DEREF_STEP = 0xFFFFFFFFu;
 
 // A place: a root register (alloca or block parameter) plus a path.
 // Moves, borrows, and revives name overlapping places: one path prefixes
@@ -234,7 +234,7 @@ class Checker {
         if (is_reborrow && home[addr] != NO_ROOT) {
           home[instr.dst.idx] = home[addr];
           path[instr.dst.idx] = path[addr];
-          path[instr.dst.idx].push_back(kDerefStep);
+          path[instr.dst.idx].push_back(DEREF_STEP);
         }
         break;
       }

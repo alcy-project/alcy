@@ -19,7 +19,7 @@ struct StagedSource {
   u64 len;
 };
 
-extern const StagedSource kStagedSources[];
-extern const usize kStagedSourceCount;
+extern const StagedSource STAGED_SOURCES[];
+extern const usize STAGED_SOURCE_COUNT;
 
 }  // namespace pipeline

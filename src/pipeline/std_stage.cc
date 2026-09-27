@@ -45,8 +45,8 @@ std_prelude(PipelineContext& ctx) {
   // One entry module per package of the `alcy/std` suite, named by its
   // path within the suite. The suite is injected whole until package
   // selection lands; see docs/adr/0016.
-  for (usize i = 0; i < kStagedSourceCount; ++i) {
-    const StagedSource& source = kStagedSources[i];
+  for (usize i = 0; i < STAGED_SOURCE_COUNT; ++i) {
+    const StagedSource& source = STAGED_SOURCES[i];
     if (!scratch.write_file(
             std::string_view(source.path),
             as_view(source.data,
