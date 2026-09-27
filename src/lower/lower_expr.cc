@@ -1882,11 +1882,16 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
       return Val{size_one, error_type(), false, false};
     }
   } else {
-    lhs = lower_expr(bin.lhs, nullptr);
+    // Both sides are literals, so neither carries the unified type: the
+    // checker's result is the only source for it. Lowering the left
+    // with no hint would take its own default (`1 + 2i64` would narrow
+    // to i32) and emit an operand the return type cannot hold.
+    const ir::TypeIdx unified = expr_type(expr);
+    lhs = lower_expr(bin.lhs, &unified);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    rhs = lower_expr(bin.rhs, &lhs.type);
+    rhs = lower_expr(bin.rhs, &unified);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
