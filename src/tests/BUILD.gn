@@ -31,6 +31,7 @@ executable("tests") {
     "pipeline/pipeline_test.cc",
     "pipeline/runtime_stage_test.cc",
     "pipeline/spawn_test.cc",
+    "pipeline/std_stage_test.cc",
     "pkg/lock_test.cc",
     "pkg/manifest_test.cc",
     "pkg/modules_test.cc",

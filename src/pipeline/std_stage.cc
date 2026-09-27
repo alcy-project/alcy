@@ -40,7 +40,14 @@ std_prelude(PipelineContext& ctx) {
     return base::make_ok(
         std::span<const analyzer::ModuleInput>(ctx.std_inputs));
   }
-  ctx.std_scratch.emplace("alcy_std");
+  // The scratch directory must be unique per process. A fixed name is
+  // wiped and recreated on construction, and each staged file is then
+  // written with "wb", which truncates the existing inode rather than
+  // replacing it. Two alcy processes sharing one directory therefore
+  // truncate a prelude the other has already mapped, and the reader then
+  // faults past the end of a truncated mapping. Parallel builds and
+  // concurrent editor integrations hit this routinely.
+  ctx.std_scratch.emplace(io::TempDir::create_unique("alcy_std_"));
   io::TempDir& scratch = *ctx.std_scratch;
   // One entry module per package of the `alcy/std` suite, named by its
   // path within the suite. The suite is injected whole until package
