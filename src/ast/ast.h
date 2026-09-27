@@ -190,9 +190,14 @@ enum class LiteralKind : u8 {
 struct Literal {
   LiteralKind kind;
   diag::Span span;
-  // Source spelling (including suffixes and quotes); the semantic value
-  // is computed on demand by later stages.
+  // Source spelling of the magnitude (including suffixes and quotes),
+  // without a leading `-`; the semantic value is computed on demand by
+  // later stages.
   std::string_view spelling;
+  // A `-` preceded this literal. Patterns keep the sign here rather
+  // than in `spelling`, so the magnitude parses the same either way and
+  // only the value differs. Expressions spell negation as `ExprUnary`.
+  bool is_negative = false;
 };
 
 // Patterns

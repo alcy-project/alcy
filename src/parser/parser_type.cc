@@ -317,9 +317,6 @@ ast::PatternIdx Parser::parse_primary_pattern() {
       return ast_.patterns.push_back(node);
     }
     case lexer::TokenKind::Minus: {
-      // Negative number patterns ("-1"): the minus is consumed here, so
-      // only the pattern span covers it and the literal keeps the
-      // unsigned spelling.
       advance();
       if (peek_kind() != lexer::TokenKind::Integer &&
           peek_kind() != lexer::TokenKind::Float) {
@@ -328,9 +325,12 @@ ast::PatternIdx Parser::parse_primary_pattern() {
       }
       const bool is_float = peek_kind() == lexer::TokenKind::Float;
       const diag::Span span = peek().span;
-      const ast::LiteralIdx value = ast_.literals.push_back(ast::Literal{
-          is_float ? ast::LiteralKind::Float : ast::LiteralKind::Integer, span,
-          bytes_.substr(span.offset, span.length)});
+      const ast::LiteralIdx value = ast_.literals.push_back(
+          ast::Literal{.kind = is_float ? ast::LiteralKind::Float
+                                        : ast::LiteralKind::Integer,
+                       .span = span,
+                       .spelling = bytes_.substr(span.offset, span.length),
+                       .is_negative = true});
       advance();
       ast::PatternNode node;
       node.kind = ast::PatternKind::Literal;

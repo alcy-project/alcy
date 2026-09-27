@@ -151,6 +151,9 @@ bool Lowerer::comp_eval_literal(u32 mod, ast::ExprIdx expr, CompVal& out) {
   if (lit.kind == ast::LiteralKind::Integer) {
     out.value.tag = CompValue::Tag::Int;
     out.value.int_value = parse_numeric_value(lit.spelling);
+    if (lit.is_negative) {
+      out.value.int_value = 0 - out.value.int_value;
+    }
     return true;
   }
   return comp_fail(node.span, "literal is not comp-evaluable");
@@ -251,8 +254,12 @@ bool Lowerer::comp_match_pattern(u32 mod,
         if (value.value.tag != CompValue::Tag::Int) {
           return false;
         }
-        return value.value.int_value == (parse_numeric_value(lit.spelling) &
-                                         comp_mask(tag_of(value.type)));
+        u64 expected = parse_numeric_value(lit.spelling);
+        if (lit.is_negative) {
+          expected = 0 - expected;
+        }
+        return value.value.int_value ==
+               (expected & comp_mask(tag_of(value.type)));
       }
       if (lit.kind == ast::LiteralKind::String) {
         if (value.value.tag != CompValue::Tag::Str) {

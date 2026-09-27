@@ -5,6 +5,9 @@
 - `match` requires exhaustive arms over integer/bool literals, unit
   and tuple variant patterns, tuple and struct patterns, and `_`.
   Bindings move by default; `&`/`&mut` patterns borrow.
+- A negative integer or float literal is a pattern (`-1 => ...`), and
+  compares by value after the sign is applied, so `-1` does not match
+  `1`.
 - Deferred: guards, string literal patterns.
 
 ## Blocks, values, and sequencing

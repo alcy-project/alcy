@@ -668,6 +668,28 @@ TEST_CASE("Parser rejects intrinsic methods") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Parser keeps a negative literal pattern's sign off the spelling") {
+  Fixture f;
+  const ParseResult result =
+      parse("fn f(n: i32) { match n { -1 => {}, _ => {} } }", f);
+  CHECK(result.ok);
+  if (!result.ok) {
+    return;
+  }
+  // The magnitude parses the same either way, so the sign travels as a
+  // flag rather than as text a number parser would have to strip.
+  bool found = false;
+  for (const ast::Literal& lit : f.ast.literals) {
+    if (lit.is_negative) {
+      found = true;
+      CHECK(lit.spelling == "1");
+      CHECK(lit.span.length == 1);
+    }
+  }
+  CHECK(found);
+  CHECK(!f.bag.has_errors());
+}
+
 TEST_CASE("Parser rejects a token stream without Eof") {
   Fixture f;
   constexpr std::string_view bytes = "fn main() {}\n";

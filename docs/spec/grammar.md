@@ -73,12 +73,18 @@ Tuple types are structural and concrete (no polymorphism in MVP).
 
 ```
 pattern := "_" | ident | "mut" ident | literal
+         | "-" literal                          # negative number patterns
          | path "(" pattern ("," pattern)* ")"   # tuple variants, tuples
          | path "{" field_pat ("," field_pat)* "}"  # struct patterns
          | "&" pattern | "&" "mut" pattern
          | pattern "|" pattern                    # or-patterns
 field_pat := ident | ident ":" pattern
 ```
+
+A `-` binds only to an integer or float literal, so `-1` is one
+pattern and `x - 1` never parses as a pattern. The sign is not part of
+the literal's spelling; it is recorded separately, so the magnitude
+parses identically either way.
 
 Declaration left-hand sides use this grammar with `:=`
 (`(c, _) := ...`, `_ := ...`). Range patterns are deferred.
@@ -125,6 +131,8 @@ block_like  := block | if_expr | match_expr | loop_expr | while_expr
 ```
 
 - `?` binds tighter than all binary operators.
+- `%`, `&`, `|`, `^`, `<<`, and `>>` are integer-only; applying one to
+  a float is rejected. Floats admit `+ - * /` and the comparisons.
 - Unary `*` dereferences a reference into the place it names.
   Assignment through it needs a `&mut` reference.
 - A turbofish supplies explicit type arguments to a generic call;

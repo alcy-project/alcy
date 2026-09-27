@@ -282,8 +282,10 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
         break;
       }
     }
-    const double value =
-        digits.empty() ? 0.0 : std::strtod(digits.c_str(), nullptr);
+    double value = digits.empty() ? 0.0 : std::strtod(digits.c_str(), nullptr);
+    if (lit.is_negative) {
+      value = -value;
+    }
     ir::Immutable imm{.type = type, .data = {}};
     if (tag == ir::TypeTag::F32) {
       imm.data.f32_value = static_cast<f32>(value);
@@ -298,6 +300,11 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
     value = lit.spelling == "true" ? 1 : 0;
   } else {
     value = parse_numeric_value(lit.spelling);
+    // Negation wraps, matching the two's-complement release semantics
+    // the rest of the literal path already uses.
+    if (lit.is_negative) {
+      value = 0 - value;
+    }
   }
   return Val{imm_from_u64(tag, type, value), type, false, false};
 }
