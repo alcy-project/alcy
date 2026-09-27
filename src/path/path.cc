@@ -102,7 +102,24 @@ Path Path::parent() const {
 }
 
 bool Path::is_absolute() const {
-  return !value_.empty() && value_.front() == DEFAULT_PATH_SEPARATOR;
+  if (value_.empty()) {
+    return false;
+  }
+  if (value_.front() == DEFAULT_PATH_SEPARATOR) {
+    return true;
+  }
+#if BUILD_FLAG(IS_OS_WIN)
+  // A drive root (`C:/x`) and a UNC root (`//host/share`) are absolute
+  // too, yet neither starts with a separator.
+  if (value_.size() >= 2 && value_[1] == ':') {
+    return true;
+  }
+  return value_.starts_with("//");
+#else
+  // Off Windows a `C:` is just a character in a file name, so only a
+  // leading separator makes a path absolute.
+  return false;
+#endif
 }
 
 bool operator==(std::string_view lhs, const Path& rhs) {

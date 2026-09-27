@@ -20,22 +20,74 @@ namespace pkg {
 
 namespace {
 
+// Length of the well-formed UTF-8 sequence starting at `text[i]`, or 0
+// when the bytes there are not one. A path component on POSIX need not
+// be valid UTF-8, and a TOML string must be, so the caller escapes
+// whatever this rejects.
+usize utf8_sequence_length(std::string_view text, usize i) {
+  const auto byte = [text](usize at) {
+    return static_cast<unsigned char>(text[at]);
+  };
+  const unsigned char lead = byte(i);
+  const auto continuation = [&](usize at) { return (byte(at) & 0xC0) == 0x80; };
+  if (lead < 0x80) {
+    return 1;
+  }
+  if ((lead & 0xE0) == 0xC0) {
+    return i + 1 < text.size() && continuation(i + 1) ? 2 : 0;
+  }
+  if ((lead & 0xF0) == 0xE0) {
+    return i + 2 < text.size() && continuation(i + 1) && continuation(i + 2)
+               ? 3
+               : 0;
+  }
+  if ((lead & 0xF8) == 0xF0) {
+    return i + 3 < text.size() && continuation(i + 1) && continuation(i + 2) &&
+                   continuation(i + 3)
+               ? 4
+               : 0;
+  }
+  // A continuation byte with no lead, or 0xF8-0xFF, starts nothing.
+  return 0;
+}
+
 void write_escaped(fmt::memory_buffer& out, std::string_view text) {
   static constexpr char HEX[] = "0123456789abcdef";
-  for (const char c : text) {
+  for (usize i = 0; i < text.size();) {
+    const char c = text[i];
+    const unsigned char u = static_cast<unsigned char>(c);
     switch (c) {
-      case '"': fmt::format_to(std::back_inserter(out), "\\\""); break;
-      case '\\': fmt::format_to(std::back_inserter(out), "\\\\"); break;
-      default:
-        if (c >= 0x00 && c < 0x20) {
-          const unsigned char u = static_cast<unsigned char>(c);
-          fmt::format_to(std::back_inserter(out), "\\u00{}{}", HEX[u >> 4],
-                         HEX[u & 0xF]);
-        } else {
-          out.push_back(c);
-        }
-        break;
+      case '"':
+        fmt::format_to(std::back_inserter(out), "\\\"");
+        ++i;
+        continue;
+      case '\\':
+        fmt::format_to(std::back_inserter(out), "\\\\");
+        ++i;
+        continue;
+      default: break;
     }
+    // TOML requires every control character escaped, and 0x7F (DEL)
+    // counts.
+    if (u < 0x20 || u == 0x7F) {
+      fmt::format_to(std::back_inserter(out), "\\u00{}{}", HEX[u >> 4],
+                     HEX[u & 0xF]);
+      ++i;
+      continue;
+    }
+    // A well-formed multi-byte character passes through as itself; a
+    // byte that starts no such sequence is escaped as its code unit
+    // rather than written through and producing an unparseable
+    // document.
+    const usize length = u < 0x80 ? 1 : utf8_sequence_length(text, i);
+    if (length == 0) {
+      fmt::format_to(std::back_inserter(out), "\\u00{}{}", HEX[u >> 4],
+                     HEX[u & 0xF]);
+      ++i;
+      continue;
+    }
+    out.append(text.substr(i, length));
+    i += length;
   }
 }
 
@@ -56,6 +108,12 @@ base::Result<Lockfile, LockError> lock_resolved(
                              alignof(LockedPackage)));
   for (usize i = 0; i < resolved.size(); ++i) {
     const ResolvedPackage& package = resolved[i];
+    // A file URI needs an absolute path: after `//` a relative spelling
+    // would read as the authority with an empty path. Path
+    // canonicalization is lexical, so a relative input arrives as-is.
+    if (!package.dir.is_absolute()) {
+      return base::make_err(LockError::InvalidPackage);
+    }
     std::string source = "path+file://";
     source += package.dir.as_view();
     packages[i] = LockedPackage{

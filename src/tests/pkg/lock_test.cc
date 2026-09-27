@@ -14,6 +14,7 @@
 #include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
 #include "path/path.h"
+#include "pkg/manifest.h"
 #include "pkg/resolve.h"
 #include "source/source.h"
 
@@ -131,6 +132,53 @@ TEST_CASE("lock_resolved rejects a package with an invalid manifest") {
   };
   base::Result<Lockfile, LockError> locked = lock_resolved({&bad, 1}, f.arena);
   CHECK(locked.is_err());
+}
+
+TEST_CASE("lock_resolved rejects a relative package directory") {
+  Fixture f;
+  PackageManifest manifest;
+  manifest.name = "app";
+  manifest.version = {1, 2, 3};
+  // After `//` a relative path reads as the URI authority, so the
+  // source would name a host instead of a file.
+  const ResolvedPackage relative{
+      .manifest = manifest,
+      .dir = path::Path::from_native("sub/dir").unwrap(),
+  };
+  base::Result<Lockfile, LockError> locked =
+      lock_resolved({&relative, 1}, f.arena);
+  CHECK(locked.is_err());
+}
+
+TEST_CASE("Lockfile escapes characters TOML cannot carry raw") {
+  // 0x7F is a control character, and a byte that is not valid UTF-8
+  // cannot appear in a TOML string at all.
+  const std::string name = "del\x7F\xFF";
+  const LockedPackage packages[] = {
+      {.name = name.c_str(), .version = {0, 0, 0}, .source = "path+file:///x"},
+  };
+  const Lockfile lock{.packages = packages, .package_count = 1};
+  fmt::memory_buffer out;
+  CHECK(serialize_lockfile(lock, out).is_ok());
+  const std::string text(out.data(), out.size());
+  CHECK(text.find("\\u007f") != std::string::npos);
+  CHECK(text.find("\\u00ff") != std::string::npos);
+  CHECK(text.find('\x7F') == std::string::npos);
+}
+
+TEST_CASE("Lockfile keeps well-formed UTF-8 intact") {
+  // A package name is valid UTF-8, so it must survive the escaper
+  // rather than being broken into per-byte escapes.
+  const std::string name = "\xE6\x97\xA5\xE6\x9C\xAC \xF0\x9F\x98\x80";
+  const LockedPackage packages[] = {
+      {.name = name.c_str(), .version = {0, 0, 0}, .source = "path+file:///x"},
+  };
+  const Lockfile lock{.packages = packages, .package_count = 1};
+  fmt::memory_buffer out;
+  CHECK(serialize_lockfile(lock, out).is_ok());
+  const std::string text(out.data(), out.size());
+  CHECK(text.find(name) != std::string::npos);
+  CHECK(text.find("\\u00e6") == std::string::npos);
 }
 
 }  // namespace pkg
