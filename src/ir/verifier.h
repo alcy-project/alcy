@@ -86,9 +86,10 @@ constexpr std::string_view format_as(const VerifyErrorKind kind) {
 using VerifyResult = base::Result<void, VerifyError>;
 
 // Converts a structural error into a span-less diagnostic. Codes
-// 7100-7199 are reserved for IR verification; the message is the kind
-// name. Human-friendly texts arrive with later phases that know source
-// locations.
+// 7100-7999 are reserved for IR verification, so adding a
+// VerifyErrorKind needs no renumbering as long as the range holds; the
+// message is the kind name. Human-friendly texts arrive with later
+// phases that know source locations.
 inline diag::Diagnostic to_diagnostic(const VerifyError& error) {
   return diag::Diagnostic{
       .severity = diag::Severity::Error,

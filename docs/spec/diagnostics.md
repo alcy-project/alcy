@@ -15,7 +15,7 @@ late-stage ones:
 | 4000–4999 | analyzer    | `src/analyzer/resolve.*`, `src/analyzer/checker.h` |
 | 5000–5999 | lower       | `src/lower/lowerer.h`         |
 | 6000–6999 | borrow      | `src/borrow/borrow.cc`        |
-| 7000–7999 | ir          | `src/ir/verifier.h` (7100–7126, one per `VerifyErrorKind`) |
+| 7000–7999 | ir          | `src/ir/verifier.h` (7100+, one per `VerifyErrorKind`) |
 | 8000–8999 | pipeline    | `src/pipeline/pipeline_context.h` |
 | 9000+     | future      | Unassigned                    |
 
@@ -137,9 +137,11 @@ Destructors (`src/analyzer/checker.h`, 4040–4049):
 
 `src/ir/verifier.h` emits one code per `VerifyErrorKind`, numbered in
 declaration order from `7100`: the message is the kind name, and the
-diagnostic carries no span. These are internal-invariant failures, so
-a user normally sees the phase that caught the bad IR (for example
-`5001` or `4017`) rather than the code here.
+diagnostic carries no span. Adding a kind takes the next ordinal; the
+range up to 8000 is reserved, so no renumbering is needed. These are
+internal-invariant failures, so a user normally sees the phase that
+caught the bad IR (for example `5001` or `4017`) rather than the code
+here.
 
 ## pipeline (8000–8999)
 
