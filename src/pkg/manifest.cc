@@ -40,6 +40,9 @@ constexpr u32 MANIFEST_SYNTAX_ERROR = 1000;
 constexpr u32 MANIFEST_SEMANTIC_ERROR = 1001;
 
 // Converts a 1-based toml line/column into a byte offset, clamped.
+// toml++ counts columns in code points, so the column is walked over
+// the line rather than added as a byte count; otherwise any non-ASCII
+// character before the error shifts the reported position right.
 u32 line_col_to_offset(std::string_view bytes, u32 line, u32 column) {
   u32 offset = 0;
   for (u32 current = 1; current < line && offset < bytes.size(); ++offset) {
@@ -47,9 +50,25 @@ u32 line_col_to_offset(std::string_view bytes, u32 line, u32 column) {
       ++current;
     }
   }
-  offset += (column > 0 ? column - 1 : 0);
-  if (offset > bytes.size()) {
-    offset = static_cast<u32>(bytes.size());
+  if (column <= 1) {
+    return offset;
+  }
+  u32 line_end = offset;
+  while (line_end < bytes.size() && bytes[line_end] != '\n') {
+    ++line_end;
+  }
+  // Step over `column - 1` characters, each beginning at a byte that is
+  // not a continuation. Running off the end clamps to the line end, so
+  // a span past the last character still points inside the file.
+  for (u32 remaining = column - 1; remaining > 0; --remaining) {
+    while (offset < line_end &&
+           (static_cast<unsigned char>(bytes[offset]) & 0xC0) == 0x80) {
+      ++offset;
+    }
+    if (offset >= line_end) {
+      return line_end;
+    }
+    ++offset;
   }
   return offset;
 }
@@ -348,6 +367,8 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
                                 "[modules] include entries must be strings");
         }
         if (*entry == "*") {
+          // Repeating the wildcard says nothing new, so it is not a
+          // duplicate the way repeating a name is.
           modules.wildcard = true;
           continue;
         }
