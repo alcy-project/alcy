@@ -88,7 +88,17 @@ base::Result<CheckResult, diag::Reported> check_single_file(
     (void)index;
     return fail();
   }
-  const source::FileId root = std::move(file).unwrap();
+  return check_root(ctx, std::move(file).unwrap());
+}
+
+base::Result<CheckResult, diag::Reported> check_source(PipelineContext& ctx,
+                                                       std::string_view name,
+                                                       std::string_view bytes) {
+  return check_root(ctx, ctx.sources.add_virtual(name, bytes));
+}
+
+base::Result<CheckResult, diag::Reported> check_root(PipelineContext& ctx,
+                                                     source::FileId root) {
   const analyzer::ModuleInput single_input{"", root};
   base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> prelude =
       std_prelude(ctx);

@@ -30,6 +30,21 @@ base::Result<CheckResult, diag::Reported> check_single_file(
     PipelineContext& ctx,
     std::string_view target);
 
+// Checks a single source held in memory. `name` is what diagnostics and
+// module naming see and need not be a path, so a caller with text but no
+// file can go through the whole front end without touching the
+// filesystem. This is check_single_file without the load, and it is what
+// a test wants.
+base::Result<CheckResult, diag::Reported> check_source(PipelineContext& ctx,
+                                                       std::string_view name,
+                                                       std::string_view bytes);
+
+// The shared tail of the two entry points above: everything from the
+// root file's module input onwards, which does not care where the bytes
+// came from.
+base::Result<CheckResult, diag::Reported> check_root(PipelineContext& ctx,
+                                                     source::FileId root);
+
 base::Result<CheckResult, diag::Reported> check_package(
     PipelineContext& ctx,
     const path::Path& root,

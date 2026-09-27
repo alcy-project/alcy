@@ -40,11 +40,31 @@ base::Result<FileId, SourceError> SourceManager::load(std::string_view path) {
   return base::make_ok(static_cast<FileId>(entries_.size() - 1));
 }
 
+FileId SourceManager::add_virtual(std::string_view name,
+                                  std::string_view bytes) {
+  // One id per name, matching load(): two ids for one name would let a
+  // caller see two different contents under a single label.
+  for (FileId i = 0; i < static_cast<FileId>(entries_.size()); ++i) {
+    if (entries_[i].path == name) {
+      return i;
+    }
+  }
+  virtuals_.emplace_back(bytes);
+  Entry entry;
+  entry.path = std::string(name);
+  entry.virtual_index = static_cast<u32>(virtuals_.size() - 1);
+  entries_.push_back(std::move(entry));
+  return static_cast<FileId>(entries_.size() - 1);
+}
+
 std::optional<std::string_view> SourceManager::bytes(FileId id) const {
   if (id >= entries_.size()) {
     return std::nullopt;
   }
   const Entry& entry = entries_[id];
+  if (entry.virtual_index != NO_VIRTUAL) {
+    return std::string_view{virtuals_[entry.virtual_index]};
+  }
   if (!entry.mapping.is_mapped()) {
     // A loaded file of zero bytes maps nothing; it is still known.
     return std::string_view{};
@@ -58,6 +78,13 @@ std::optional<std::string_view> SourceManager::name(FileId id) const {
     return std::nullopt;
   }
   return entries_[id].path;
+}
+
+bool SourceManager::is_mapped(FileId id) const {
+  if (id >= entries_.size()) {
+    return false;
+  }
+  return entries_[id].virtual_index == NO_VIRTUAL;
 }
 
 }  // namespace source
