@@ -9,7 +9,6 @@
 #include "config/build_config.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
-#include "fpag/io/temp_dir.h"
 #include "pipeline/check.h"
 #include "pipeline/pipeline_context.h"
 
@@ -26,15 +25,14 @@ struct CheckOutcome {
 // Runs a whole check and reports what came back. The point of every case
 // here is that the compiler answers with a diagnostic; a crash would end
 // the process rather than return, so a surviving call is the assertion.
+//
+// The source is held in memory, so a case costs a string and no
+// filesystem.
 CheckOutcome run_check(const std::string& source) {
-  io::TempDir dir = io::TempDir::create_unique("alcy_nesting_test_");
   CheckOutcome outcome;
-  if (!dir.write_file("main.al", source)) {
-    return outcome;
-  }
   PipelineContext ctx;
   const base::Result<CheckResult, diag::Reported> result =
-      check_single_file(ctx, dir.join("main.al"));
+      check_source(ctx, "main.al", source);
   outcome.ran = true;
   outcome.rejected = ctx.bag.has_errors();
   for (u32 i = 0; i < ctx.bag.size(); ++i) {

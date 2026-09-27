@@ -11,7 +11,6 @@
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/io/temp_dir.h"
 #include "path/path.h"
 #include "pipeline/check.h"
 #include "pipeline/pipeline_context.h"
@@ -193,15 +192,12 @@ TEST_CASE("Hostile input never crashes the checker") {
         "hostile/" + std::to_string(i) + (truncate ? " truncated" : "");
 
     INFO("case: " << name << " source: " << source);
-    io::TempDir dir = io::TempDir::create_unique("alcy_hostile_test_");
-    if (!dir.write_file("main.al", source)) {
-      continue;
-    }
     PipelineContext ctx;
     // The call returning at all is the assertion: a crash would take
-    // the process with it.
+    // the process with it. The source is held in memory, so a case costs
+    // a string rather than a file.
     const base::Result<CheckResult, diag::Reported> result =
-        check_single_file(ctx, dir.join("main.al"));
+        check_source(ctx, "main.al", source);
     (void)result;
   }
 }
@@ -220,13 +216,9 @@ TEST_CASE("Hostile input never crashes on raw bytes") {
     }
     INFO("case: " << i);
 
-    io::TempDir dir = io::TempDir::create_unique("alcy_hostile_bytes_test_");
-    if (!dir.write_file("main.al", source)) {
-      continue;
-    }
     PipelineContext ctx;
     const base::Result<CheckResult, diag::Reported> result =
-        check_single_file(ctx, dir.join("main.al"));
+        check_source(ctx, "main.al", source);
     (void)result;
   }
 }
