@@ -37,6 +37,9 @@ struct CliConfig {
   // What the build writes. Defaults to an executable, so the name says
   // which one only when it is not the default.
   pipeline::EmitMode emit = pipeline::EmitMode::Executable;
+  // Check the program on standard input rather than a target. The name it
+  // is reported under is <stdin>, since a pipe carries no file behind it.
+  bool stdin_source = false;
   // System linker driver for executable builds (empty selects the default
   // toolchain driver). Borrows argv storage like target_dir.
   std::string_view linker;

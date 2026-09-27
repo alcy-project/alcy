@@ -45,6 +45,7 @@ CliConfig extract_from_matches(arg::Matches&& matches) {
   c.release = matches.get<bool>("release").unwrap_or(false);
   // The choices above already rejected anything else, so an unknown value
   // here means the default, not an error to report a second time.
+  c.stdin_source = matches.get<bool>("stdin").unwrap_or(false);
   c.emit = pipeline::parse_emit_mode(
                matches.get<std::string_view>("emit").unwrap_or("executable"))
                .value_or(pipeline::EmitMode::Executable);
@@ -144,6 +145,12 @@ arg::Parser build_parser() {
           .build());
   builder.add_subcommand(
       build_subcommand("check", "Check a package without emitting code")
+          .add_arg(arg::ArgBuilder("stdin")
+                       .help("Read the program from standard input instead of "
+                             "a file, and report against the name <stdin>. "
+                             "For an editor buffer that has never been saved.")
+                       .is_flag(true)
+                       .build())
           .build());
   return arg::Parser(std::move(builder).build());
 }
