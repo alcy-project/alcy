@@ -35,6 +35,7 @@ executable("tests") {
     "pkg/manifest_test.cc",
     "pkg/modules_test.cc",
     "pkg/resolve_test.cc",
+    "property/lock_property_test.cc",
     "property/mangle_property_test.cc",
     "source/source_test.cc",
     "symbol/mangle_test.cc",
@@ -59,5 +60,9 @@ executable("tests") {
     "//src:alcy_lib",
     "//src/cli",
     "//third_party/doctest",
+
+    # A property test parses what a serializer wrote, which is the only
+    # way to state "the output is loadable" without a second reader.
+    "//third_party/toml",
   ]
 }
