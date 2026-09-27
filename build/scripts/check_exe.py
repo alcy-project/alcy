@@ -53,7 +53,48 @@ def parse_expect(path: Path):
     return expected_exit, expected_stdout, stdout_contains, stderr_contains
 
 
-def run_case(alcy: Path, case_dir: Path):
+# The runtime alcy links against, as source. Only the sanitizing path
+# needs it: alcy stages its own embedded copy for a normal build.
+RUNTIME_SOURCE = project_root_dir / "runtime" / "alcy_runtime.c"
+
+# Sanitizers for a generated program. Address is the one that finds
+# memory bugs in compiler output; undefined is here because a lowering
+# mistake often shows up as an integer or shift operation that is merely
+# wrong rather than fatal.
+SANITIZERS = ["-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-g"]
+
+# Both of these come from the system toolchain rather than from alcy, so
+# the sanitized path is skipped rather than failed where they are absent.
+SYSTEM_CLANG = shutil.which("clang")
+
+
+def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path):
+    """Builds the case through textual IR so the sanitizers can reach it.
+
+    alcy writes an object straight from an LLVM TargetMachine, with no
+    external compiler in the path, so the code it generates cannot be
+    instrumented after the fact. Textual IR can: the program is handed to
+    clang, which both compiles and instruments it. That is the reason
+    --emit=llvm-ir exists, and this is what it is for.
+    """
+    ir = work / "main.ll"
+    argv = [str(alcy), "build", "." if is_package else "main.al",
+            "--emit=llvm-ir", "-o", str(ir)]
+    proc = subprocess.run(argv, capture_output=True, text=True, cwd=work)
+    if proc.returncode != 0 or not ir.is_file():
+        return proc, "alcy --emit=llvm-ir did not produce a module"
+
+    # -x ir applies to every input after it, so the runtime's language is
+    # named again rather than left inheriting it.
+    link = [SYSTEM_CLANG, "-x", "ir", str(ir), "-x", "c", str(RUNTIME_SOURCE),
+            *SANITIZERS, "-o", str(exe)]
+    proc = subprocess.run(link, capture_output=True, text=True, cwd=work)
+    if proc.returncode != 0:
+        return proc, "clang could not compile the generated IR"
+    return proc, ""
+
+
+def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
     is_package = (case_dir / "alcy.toml").is_file()
     main_al = case_dir / "main.al"
     expect_path = case_dir / "expect.toml"
@@ -79,17 +120,23 @@ def run_case(alcy: Path, case_dir: Path):
                 dirs_exist_ok=True,
                 ignore=shutil.ignore_patterns("expect.toml"),
             )
-            build_argv = [str(alcy), "build", ".", "-o", exe_name]
+            target = "."
         else:
             shutil.copy(main_al, work / "main.al")
-            build_argv = [str(alcy), "build", "main.al", "-o", exe_name]
+            target = "main.al"
 
-        proc = subprocess.run(
-            build_argv,
-            capture_output=True,
-            text=True,
-            cwd=work,
-        )
+        if sanitize:
+            proc, why = build_sanitized(alcy, work, is_package, work / exe_name)
+            if why:
+                return False, f"{why}\n--- stderr ---\n{proc.stderr}"
+        else:
+            build_argv = [str(alcy), "build", target, "-o", exe_name]
+            proc = subprocess.run(
+                build_argv,
+                capture_output=True,
+                text=True,
+                cwd=work,
+            )
         if proc.returncode != 0:
             return False, (
                 f"alcy build failed: exit={proc.returncode}\n"
@@ -131,6 +178,19 @@ def run_case(alcy: Path, case_dir: Path):
             if needle not in proc.stderr:
                 problems.append(f"missing stderr: {needle!r}")
 
+        # A sanitizer writes its report to stderr and exits non-zero, which
+        # the exit check may already have caught. This catches the case
+        # where a case expects a non-zero exit, so a report would pass for
+        # an ordinary failure.
+        for marker in (
+            "AddressSanitizer",
+            "runtime error:",
+            "LeakSanitizer",
+            "SEGV on unknown address",
+        ):
+            if marker in proc.stderr:
+                problems.append(f"sanitizer report: {marker}")
+
     if problems:
         detail = "; ".join(problems)
         detail += f"\n--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
@@ -150,7 +210,20 @@ def main():
         default="",
         help="Comma-separated case names to run (default: all)",
     )
+    parser.add_argument(
+        "--sanitize",
+        action="store_true",
+        help=(
+            "Build each case through --emit=llvm-ir and compile it with "
+            "AddressSanitizer and UndefinedBehaviorSanitizer, so a bug in "
+            "the code alcy generates is reported rather than inherited."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.sanitize and SYSTEM_CLANG is None:
+        print("clang is not on PATH; skipping the sanitized build")
+        args.sanitize = False
 
     alcy = project_root_dir / "out" / args.build_subdir / "alcy"
     if not alcy.is_file():
@@ -173,7 +246,7 @@ def main():
         if selected is not None and case_dir.name not in selected:
             continue
         ran += 1
-        ok, detail = run_case(alcy, case_dir)
+        ok, detail = run_case(alcy, case_dir, args.sanitize)
         print(f"{'PASS' if ok else 'FAIL'} {case_dir.name}")
         if not ok:
             failures += 1

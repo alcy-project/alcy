@@ -19,20 +19,26 @@ script_dir=$(dirname "$0")
 cd "$script_dir/../.." && root_dir=$(pwd)
 tool_scripts_dir="$root_dir/build/scripts"
 
-# Pass --wasm to also build and run the tests as WebAssembly
-# (requires Emscripten and node on PATH).
+# Switches rather than a mode, so any order and any subset work.
+#
+#   --wasm         also build and run the tests as WebAssembly (needs
+#                  Emscripten and node)
+#   --no-sanitize  skip the sanitized build of the exe cases (needs clang,
+#                  and roughly doubles their runtime)
+#   --no-coverage  skip the coverage ratchet (needs llvm-cov, and rebuilds
+#                  the tests and the compiler with instrumentation)
 run_wasm=false
-if [[ "${1:-}" == "--wasm" ]]; then
-  run_wasm=true
-fi
-
-# Pass --no-coverage to skip the coverage ratchet, which needs llvm-cov.
-# It rebuilds the tests and the compiler with instrumentation, so it is
-# the slowest step here.
+run_sanitize=true
 run_coverage=true
-if [[ "${1:-}" == "--no-coverage" ]]; then
-  run_coverage=false
-fi
+for flag in "$@"; do
+  case "$flag" in
+    --wasm) run_wasm=true ;;
+    --no-wasm) run_wasm=false ;;
+    --no-sanitize) run_sanitize=false ;;
+    --no-coverage) run_coverage=false ;;
+    *) echo "error: unknown flag '$flag'" >&2; exit 1 ;;
+  esac
+done
 
 if command -v typos >/dev/null 2>&1; then
   typos
@@ -70,6 +76,15 @@ wasm_subdir="build_wasm"
 
 "${py_runner[@]}" "$tool_scripts_dir/check_exe.py" \
   --build-subdir=$debug_subdir
+
+# The same cases again through --emit=llvm-ir, so the code alcy generates
+# is compiled by an external toolchain that can instrument it. Skipped
+# where clang is absent, and slow, so it is a separate step.
+if [[ $run_sanitize == true ]]; then
+  "${py_runner[@]}" "$tool_scripts_dir/check_exe.py" \
+    --build-subdir=$debug_subdir \
+    --sanitize
+fi
 
 "${py_runner[@]}" "$tool_scripts_dir/format.py" --dry-run
 "${py_runner[@]}" "$tool_scripts_dir/lint.py"
