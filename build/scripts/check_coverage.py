@@ -86,7 +86,14 @@ def build(verbose: bool = False) -> int:
     ]
     if verbose:
         command.append("--verbose")
-    return subprocess.run(command, cwd=REPO_ROOT).returncode
+    # Both targets, in the order they are measured: the default target is
+    # the compiler alone, so asking for it does not build the tests and a
+    # stale test binary would silently report the old numbers.
+    for target in ("tests", "default"):
+        step = command + [f"--target={target}"]
+        if subprocess.run(step, cwd=REPO_ROOT).returncode != 0:
+            return 1
+    return 0
 
 
 def measure(verbose: bool = False) -> dict:

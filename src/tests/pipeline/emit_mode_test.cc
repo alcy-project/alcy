@@ -11,8 +11,10 @@
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
+#include "path/path.h"
 #include "pipeline/build.h"
 #include "pipeline/pipeline_context.h"
+#include "source/source.h"
 
 namespace pipeline {
 
@@ -53,12 +55,6 @@ TEST_CASE("An unknown emit mode is not a mode") {
   CHECK(!parse_emit_mode("bitcode").has_value());
   CHECK(!parse_emit_mode("LLVM-IR").has_value());
   CHECK(!parse_emit_mode(".o").has_value());
-}
-
-TEST_CASE("Each emit mode names itself back") {
-  CHECK(emit_mode_name(EmitMode::Executable) == "executable");
-  CHECK(emit_mode_name(EmitMode::Object) == "object");
-  CHECK(emit_mode_name(EmitMode::LlvmIr) == "llvm-ir");
 }
 
 TEST_CASE("A build writes what the mode asked for") {
@@ -121,6 +117,56 @@ TEST_CASE("The default extension follows the mode") {
     CHECK(built.is_ok());
   }
   CHECK(io::is_file(dir.join("main.o")));
+}
+
+TEST_CASE("A package build honours the mode too") {
+  // A package puts an executable in out/ and an object beside the
+  // manifest, so the two modes do not land in the same place.
+  io::TempDir dir = io::TempDir::create_unique("alcy_emit_package_test_");
+  const bool setup =
+      dir.write_file(
+          "proj/alcy.toml",
+          "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[[bin]]\n"
+          "name = \"app\"\npath = \"main.al\"\n") &&
+      dir.write_file("proj/main.al", PROGRAM);
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  struct Case {
+    EmitMode mode;
+    const char* relative;
+  };
+  const Case cases[] = {
+      {EmitMode::Object, "proj/app.o"},
+      {EmitMode::LlvmIr, "proj/app.ll"},
+  };
+  for (const Case& one : cases) {
+    INFO("mode " << static_cast<u32>(one.mode));
+    PipelineContext ctx;
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("proj"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    base::Result<void, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", false, "", one.mode);
+    CHECK(built.is_ok());
+    CHECK(io::is_file(dir.join(one.relative)));
+    // An object never ends up in the executable's directory, and an
+    // executable is never what the other two asked for.
+    CHECK(!io::is_file(dir.join("proj/out/app.o")));
+  }
 }
 
 }  // namespace pipeline

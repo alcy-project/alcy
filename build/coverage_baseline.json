@@ -5,9 +5,9 @@
     "coverage of src/ drops below this. Move it only on purpose."
   ],
   "lines": {
-    "count": 29313,
-    "covered": 23346,
-    "percent": 79.64384402824685
+    "count": 29693,
+    "covered": 23732,
+    "percent": 79.92456134442462
   },
   "modules": {
     "analyzer": {
@@ -27,12 +27,12 @@
       "covered": 666
     },
     "cli": {
-      "count": 426,
-      "covered": 331
+      "count": 438,
+      "covered": 355
     },
     "codegen_llvm": {
-      "count": 1054,
-      "covered": 921
+      "count": 1061,
+      "covered": 928
     },
     "debug": {
       "count": 0,
@@ -63,24 +63,24 @@
       "covered": 77
     },
     "pipeline": {
-      "count": 804,
-      "covered": 527
+      "count": 868,
+      "covered": 583
     },
     "pkg": {
       "count": 725,
       "covered": 562
     },
     "source": {
-      "count": 39,
-      "covered": 37
+      "count": 61,
+      "covered": 57
     },
     "symbol": {
       "count": 339,
       "covered": 251
     },
     "tests": {
-      "count": 8948,
-      "covered": 8022
+      "count": 9223,
+      "covered": 8301
     },
     "text": {
       "count": 83,

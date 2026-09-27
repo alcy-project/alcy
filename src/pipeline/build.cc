@@ -83,15 +83,6 @@ std::string suffix_for(EmitMode mode) {
   return std::string(exe_suffix());
 }
 
-std::string_view emit_mode_name(EmitMode mode) {
-  switch (mode) {
-    case EmitMode::Executable: return "executable";
-    case EmitMode::Object: return "object";
-    case EmitMode::LlvmIr: return "llvm-ir";
-  }
-  return "executable";
-}
-
 base::Result<void, diag::Reported> emit_package_object(
     PipelineContext& ctx,
     lower::LoweredPackage& package,

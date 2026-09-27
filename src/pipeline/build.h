@@ -36,9 +36,6 @@ enum class EmitMode : u8 {
 // spelling is the CLI's: what follows `emit=`.
 std::optional<EmitMode> parse_emit_mode(std::string_view text);
 
-// The mode's CLI spelling, for a diagnostic that quotes it back.
-std::string_view emit_mode_name(EmitMode mode);
-
 // Shared frontend: type checking, lowering, and borrow checking over a
 // resolved tree. Used by build and run so both lower identical IR.
 base::Result<lower::LoweredPackage, diag::Reported> compile_tree(
