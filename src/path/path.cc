@@ -27,9 +27,7 @@ std::string normalize_canonical(std::string_view path) {
       ++end;
     }
     const std::string_view part = path.substr(i, end - i);
-    if (part.empty() || part == ".") {
-      // Skip.
-    } else if (part == "..") {
+    if (part == "..") {
       if (!starts.empty()) {
         out.resize(starts.back());
         starts.pop_back();
@@ -39,7 +37,7 @@ std::string normalize_canonical(std::string_view path) {
         }
         out.append("..");
       }
-    } else {
+    } else if (!part.empty() && part != ".") {
       starts.push_back(static_cast<usize>(out.size()));
       if (!out.empty()) {
         out.push_back(DEFAULT_PATH_SEPARATOR);

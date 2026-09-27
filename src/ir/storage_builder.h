@@ -131,13 +131,6 @@ class StorageBuilder {
   OperandIdx operand(Operand&& operand) {
     return state_.operands.emplace_back(std::move(operand));
   }
-  TypeIdx type(TypeTag tag) {
-    DCHECK(tag != TypeTag::Struct && tag != TypeTag::Array &&
-           tag != TypeTag::Enum && tag != TypeTag::Never &&
-           tag != TypeTag::Tuple && tag != TypeTag::Error);
-    return primitive(tag);
-  }
-
   // Returns the pre-interned node for a non-composite tag. O(1), no
   // allocation. Struct, Array, Enum, Never, Tuple, and Error nodes are
   // created via their factories instead.
@@ -158,11 +151,9 @@ class StorageBuilder {
     return state_.types.emplace_back(node);
   }
 
-  // Reserves a nominal node for recursive types and returns its index
-  // immediately with empty contents; fill_struct/fill_enum complete it.
-  // Re-entrant references resolve to the reserved index. Placeholders
-  // are valid empty nominals, so error paths need no cleanup; the
-  // analyzer rejects uninhabited value-only cycles separately.
+  // Reserves an empty nominal node that re-entrant references resolve
+  // to; fill_struct/fill_enum complete it. Placeholders are valid, so
+  // error paths need no cleanup.
   TypeIdx reserve_struct(str::StringPoolId name) {
     TypeNode node{};
     node.tag = TypeTag::Struct;
@@ -317,8 +308,8 @@ class StorageBuilder {
     return state_.types.emplace_back(node);
   }
 
-  // Appends a copy of an existing type entry and returns the new index.
-  // Useful for building field lists that reference the same type twice.
+  // Appends a copy of an existing type entry, so a field list can
+  // reference the same type twice; a range holds each element once.
   TypeIdx ref_type(TypeIdx idx) {
     DCHECK(idx.idx < state_.types.size());
     return state_.types.emplace_back(state_.types[idx]);

@@ -15,12 +15,11 @@ namespace ir {
 // Storage vectors require range members (e.g. Instruction::operands) to
 // reference consecutive entries. Hand-rolled {head, size} pairs silently
 // break when appends interleave; this guard records the head on first push
-// and verifies contiguity on every push. It holds no storage itself, so
-// StorageBuilder needs no changes.
+// and verifies contiguity on every push. It holds no storage itself.
 //
 // Convention: use SeqBuilder for ranges of two or more entries. Single entry
-// ranges ({idx, 1}) and intentionally-invalid ranges in negative tests use
-// braced literals directly.
+// ranges and intentionally-invalid ranges in negative tests use braced
+// literals directly.
 template <typename IdxT>
 class SeqBuilder {
  public:

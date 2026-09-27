@@ -45,4 +45,10 @@ struct PipelineContext {
 // Returns ".exe" on Windows or else ""
 std::string_view exe_suffix();
 
+// Creates every missing directory leading to `path`, and `path` itself
+// when it names a directory rather than a file. A path that fails
+// validation is left to the caller's own write to report.
+base::Result<void, diag::Reported> ensure_directories(PipelineContext& ctx,
+                                                      std::string_view path);
+
 }  // namespace pipeline

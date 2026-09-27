@@ -388,8 +388,6 @@ ast::PathIdx Parser::parse_path(std::vector<ast::TypeIdx>* type_args) {
   return ast_.paths.push_back(path);
 }
 
-// Reads a turbofish argument list; the `::` and the opening `<` are
-// already consumed.
 bool Parser::parse_turbofish(std::vector<ast::TypeIdx>& type_args) {
   while (!check(lexer::TokenKind::Greater) &&
          !check(lexer::TokenKind::GreaterGreater) && !at_end()) {

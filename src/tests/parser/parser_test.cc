@@ -236,9 +236,7 @@ TEST_CASE("Parser builds generic enum and impl params") {
   if (!result.ok || result.items.size() != 2) {
     return;
   }
-  const ast::ItemNode& enum_node = f.ast.items[result.items[0]];
   const ast::ItemEnum option = as_enum(result.items[0], f);
-  (void)enum_node;
   CHECK(option.params.size() == 1);
   if (option.params.size() != 1) {
     return;

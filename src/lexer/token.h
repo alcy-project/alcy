@@ -147,9 +147,9 @@ enum class TokenKind : u8 {
   Eof,
 };
 
-// A lexical token: its kind plus the source span it was read from.
-// Literal spellings live in the source text and are re-read from the
-// SourceManager on demand, so tokens stay small and POD-like.
+// A lexical token. Literal spellings live in the source text and are
+// re-read from the SourceManager on demand, so tokens stay small and
+// POD-like.
 struct Token {
   TokenKind kind = TokenKind::Eof;
   diag::Span span;

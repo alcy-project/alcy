@@ -97,7 +97,6 @@ bool walk_sources(const path::Path& dir, std::vector<path::Path>& paths) {
     }
     const path::Path full = dir.join(name);
     struct stat info;
-    // lstat: never follow symlinks, so link cycles are impossible.
     if (::lstat(full.c_str(), &info) != 0) {
       continue;
     }

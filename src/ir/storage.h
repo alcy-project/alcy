@@ -22,9 +22,8 @@
 namespace ir {
 
 struct StorageState {
-  // Note: base::Vec maintained (not arena) because idx stability,
-  // random access, and DOD iteration favor dense table; arena conversion
-  // offers no benefit for IR storage.
+  // base::Vec, not an arena: index stability, random access, and DOD
+  // iteration all favor a dense table.
 
   template <typename T>
   using Alloc = std::allocator<T>;
@@ -125,11 +124,11 @@ inline u64 field_offset(const StorageState& state,
   return align_up(cursor, type_layout(state, fields[index], width).align);
 }
 
-// The payload area of an enum's slot: a discriminant, then room for the
-// widest variant payload, aligned for the strictest payload field. The
-// size is a whole number of carriers so the emitted array has exactly
-// this layout and a field's offset within the area is the same number
-// the lowerer and the emitter both read.
+// Layout of an enum's payload area: room for the widest variant
+// payload, aligned for the strictest payload field. The size is a whole
+// number of carriers so the emitted array has exactly this layout and a
+// field's offset within the area is the same number the lowerer and the
+// emitter both read.
 inline TypeLayout enum_payload_area(const StorageState& state,
                                     TypeIdx idx,
                                     PointerWidth width) {
@@ -197,8 +196,8 @@ inline TypeLayout type_layout(const StorageState& state,
       return {element.size * array.count, element.align};
     }
     case TypeTag::Enum: {
-      // A discriminant, then the payload area. The area is a whole
-      // number of carriers, so the emitted slot has exactly this layout.
+      // Discriminant, padded up to the payload area's alignment, then
+      // the area itself.
       constexpr u64 DISC = 4;
       const TypeLayout area = enum_payload_area(state, idx, width);
       const u64 align = area.align > DISC ? area.align : DISC;
@@ -320,17 +319,12 @@ class Storage {
     return state_.tuple_types;
   }
 
-  // Copy-ability of a fully interned type: primitives (except MutRef),
-  // shared references, units, and structural types whose every part is
-  // Copy. Must only run on cycle-free storage; check_package validates
-  // uninhabited value cycles before anyone queries. User-defined
-  // destructors force move-only once drop syntax lands (no syntax
-  // exists yet, so no check is needed here).
+  // Copy-ability of a fully interned type. Must only run on cycle-free
+  // storage; check_package validates uninhabited value cycles before
+  // anyone queries. User-defined destructors force move-only once drop
+  // syntax lands.
   bool is_copy_type(TypeIdx idx) const { return ir::is_copy_type(state_, idx); }
 
-  // Size and alignment of `idx` on `width`. The emitter asserts against
-  // this for the types it builds, so a layout rule that disagrees with
-  // LLVM is caught where it is introduced.
   TypeLayout layout_of(TypeIdx idx, PointerWidth width) const {
     return ir::type_layout(state_, idx, width);
   }

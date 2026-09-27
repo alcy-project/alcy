@@ -17,8 +17,7 @@ namespace pipeline {
 
 // Outcome of a successful `run`: the executed program's exit code,
 // which is program output, not a failure. A failed build, link, or
-// execution is diag::Reported with diagnostics in the bag. The program
-// inherits stdio, so its output streams straight to the terminal.
+// execution is diag::Reported with diagnostics in the bag.
 struct RunOutcome {
   i32 exit_code = 0;
 };

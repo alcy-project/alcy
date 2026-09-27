@@ -25,7 +25,6 @@ namespace codegen_llvm {
 
 namespace {
 
-// Integer comparison helpers keyed by operand type tag.
 llvm::CmpInst::Predicate int_predicate(ir::Opcode op, bool is_signed) {
   using Op = ir::Opcode;
   using Pred = llvm::CmpInst::Predicate;

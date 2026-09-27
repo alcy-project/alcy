@@ -168,14 +168,11 @@ CheckedModule::ReceiverKind Checker::classify_receiver(ir::TypeIdx first,
   return CheckedModule::ReceiverKind::None;
 }
 
-// Interns a registered nominal, reserving its index first so recursive
-// references resolve to it. A post-pass rejects uninhabited cycles.
-
 // `MaybeUninit<T>` is a compiler-owned one-field struct standing for
-// storage that holds a `T` nobody has written yet. It has the payload's
-// layout and lowers transparently to it, so the wrapper costs nothing;
-// its purpose is to keep the unwritten value out of reach until
-// `uninit_assume` releases it.
+// storage that holds a `T` nobody has written yet. It shares the
+// payload's layout and lowers transparently to it, so the wrapper costs
+// nothing; its purpose is to keep the unwritten value out of reach
+// until `uninit_assume` releases it.
 ir::TypeIdx Checker::intern_uninit(ir::TypeIdx payload) {
   // Wrappers are keyed on the type the payload was copied from, so a
   // payload reached through a chain of storage copies resolves to the
@@ -198,8 +195,6 @@ ir::TypeIdx Checker::intern_uninit(ir::TypeIdx payload) {
   return wrapper;
 }
 
-// Payload of a `MaybeUninit<T>` wrapper, or an invalid index for any
-// other type.
 ir::TypeIdx Checker::uninit_payload(ir::TypeIdx type) const {
   if (tag_of(type) != ir::TypeTag::Struct) {
     return ir::TypeIdx::invalid();
@@ -213,6 +208,8 @@ ir::TypeIdx Checker::uninit_payload(ir::TypeIdx type) const {
   return shape.fields.size() == 1 ? shape.fields[0] : ir::TypeIdx::invalid();
 }
 
+// Interns a registered nominal, reserving its index first so recursive
+// references resolve to it. A post-pass rejects uninhabited cycles.
 ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
   if (entry.complete || entry.started) {
     return entry.type;
@@ -292,16 +289,12 @@ const GenericInstance* Checker::generic_instance_for(u32 nominal,
   return instance;
 }
 
-// Appends a storage copy of `type` and records its origin.
 ir::TypeIdx Checker::storage_copy(ir::TypeIdx type) {
   const ir::TypeIdx copy = builder.ref_type(type);
   type_origins_.emplace_back(copy, type);
   return copy;
 }
 
-// Key of a type in the shared instantiation numbering, which is what
-// lowering side tables are keyed by. Returns NO_INST for a type that
-// is not a generic instantiation.
 u32 Checker::inst_index(ir::TypeIdx type) const {
   for (u32 i = 0; i < static_cast<u32>(inst_numbering.size()); ++i) {
     if (inst_numbering[i].idx == type.idx) {
@@ -331,7 +324,6 @@ ir::TypeIdx Checker::type_origin(ir::TypeIdx type) const {
   return current;
 }
 
-// Parameter names of a nominal declaration, whether struct or enum.
 std::span<const ast::Ident> Checker::nominal_params(const NominalEntry& entry) {
   const ast::ItemNode& node = ast.items[entry.item];
   if (node.kind == ast::ItemKind::Struct) {
@@ -356,9 +348,6 @@ void Checker::pop_generic_scope(usize kept) {
   }
 }
 
-// Interns a nominal's type. A generic declaration defers: its type is
-// fixed later against the expectation or the scrutinee, so the error
-// type marks "resolve from context".
 ir::TypeIdx Checker::nominal_owner_type(NominalEntry* entry) {
   if (!nominal_params(*entry).empty()) {
     return error_type();
@@ -366,8 +355,6 @@ ir::TypeIdx Checker::nominal_owner_type(NominalEntry* entry) {
   return intern_nominal(*entry);
 }
 
-// Infers a generic instantiation from constructor arguments: a field
-// whose declared type is exactly `T` binds `T` to that argument's type.
 // The caller re-checks each argument against the resolved payloads, so
 // this pass only reads types and never commits to a payload check.
 const GenericInstance* Checker::infer_from_payload_args(
@@ -500,9 +487,8 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   return reserved;
 }
 
-// Resolves a type path to its defining module and member name.
-// Resolves all path segments but the last to a module. Shared by
-// type and value paths; `what` names the namespace for diagnostics.
+// Resolves all path segments but the last to a module. Shared by type
+// and value paths; `what` names the namespace for diagnostics.
 bool Checker::walk_module_prefix(u32 module,
                                  ast::PathIdx path,
                                  std::string_view what,
@@ -551,6 +537,7 @@ bool Checker::walk_module_prefix(u32 module,
   return true;
 }
 
+// Resolves a type path to its defining module and member name.
 bool Checker::resolve_type_path(u32 module,
                                 ast::PathIdx path,
                                 u32& module_out,
@@ -1019,8 +1006,6 @@ void Checker::process_module(u32 module) {
                                   target_module, target_name)) {
               NominalEntry* entry = find_nominal(target_module, target_name);
               if (entry != nullptr) {
-                // Generic impls instantiate per method call; eager
-                // registration cannot resolve their parameters yet.
                 if (nominal_params(*entry).empty() &&
                     node.payload.get<ast::ItemImpl>().params.empty()) {
                   self_type = intern_nominal(*entry);
@@ -1353,14 +1338,11 @@ const char* Checker::pretty_tag(ir::TypeTag tag) {
   }
 }
 
-// Structural type equality. Field slots hold copies (ranges demand
-// consecutive fresh nodes), so index equality under-compares:
+// Structural type equality. Field slots hold storage copies, so index
+// equality under-compares: both sides normalize to their origin first,
 // primitives compare by tag, references/tuples/arrays recurse, and
-// nominals (struct/enum) compare by index only. Every cycle passes
-// through a nominal, but a seen-pair set guards regardless. Field
-// slots hold storage copies, so both sides normalize to their origin
-// before comparison; that makes a copied field type equal to the
-// nominal it was copied from.
+// nominals compare by index. Every cycle passes through a nominal, but a
+// seen-pair set guards regardless.
 bool Checker::types_equal(ir::TypeIdx a, ir::TypeIdx b) {
   std::vector<u64> seen;
   return types_equal_inner(type_origin(a), type_origin(b), seen);
@@ -1422,10 +1404,6 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
   }
 }
 
-// Unifies actual against expected, emitting a mismatch diagnostic.
-// Never coerces to anything; Error suppresses follow-on diagnostics.
-// Equality is structural: field slots hold copies, so shared shapes
-// with different indexes still match.
 // `&mut T` coerces to `&T`: one is the other with the unique half
 // dropped, which is a shared reborrow of the same referent.
 bool Checker::coerces_to_shared(ir::TypeIdx expected, ir::TypeIdx actual) {
@@ -1437,6 +1415,8 @@ bool Checker::coerces_to_shared(ir::TypeIdx expected, ir::TypeIdx actual) {
          builder.ref_types()[builder.types()[actual].as_ref()].pointee.idx;
 }
 
+// Unifies actual against expected, emitting a mismatch diagnostic.
+// Never coerces to anything; Error suppresses follow-on diagnostics.
 ir::TypeIdx Checker::unify(ir::TypeIdx expected,
                            ir::TypeIdx actual,
                            diag::Span span,
@@ -1496,10 +1476,10 @@ const Checker::Local* Checker::lookup_local(std::string_view name) const {
   return nullptr;
 }
 
-// Classifies an integer/float literal suffix. Returns true for a
-// recognized suffix (tag set), false when absent (tag untouched).
-// Suffixes mix letters and digits (`i32`, `usize`), so matching runs
-// over known spellings from the end instead of scanning classes.
+// True for a recognized suffix (tag set), false when absent (tag
+// untouched). Suffixes mix letters and digits (`i32`, `usize`), so
+// matching runs over known spellings from the end instead of scanning
+// classes.
 bool Checker::classify_suffix(std::string_view spelling,
                               ir::TypeTag& tag,
                               bool& is_float,
@@ -1681,8 +1661,6 @@ const CheckedModule::StaticInfo* Checker::lookup_static(
   return nullptr;
 }
 
-// A generic free function item in scope, by name. Returns null when
-// the name is not a generic function here or in an import.
 ast::ItemIdx Checker::lookup_generic_fn(u32 module, std::string_view name) {
   for (ast::ItemIdx item : tree.modules[module]->items) {
     if (fn_name(item) == name && !fn_generic_params(item).empty()) {
@@ -1727,7 +1705,6 @@ const CheckedModule::FnSig* Checker::lookup_function(
   return nullptr;
 }
 
-// Searches enum nominals of one module for a variant name.
 bool Checker::find_variant_in(u32 module,
                               std::string_view name,
                               std::vector<VariantMatch>& out) {
@@ -1921,7 +1898,6 @@ std::span<const ast::Ident> Checker::fn_generic_params(
   return {};
 }
 
-// Declared parameters of a function or intrinsic item.
 std::span<const ast::ItemFnParam> Checker::fn_params(ast::ItemIdx item) const {
   const ast::ItemNode& node = ast.items[item];
   if (node.kind == ast::ItemKind::Fn) {
@@ -1933,8 +1909,6 @@ std::span<const ast::ItemFnParam> Checker::fn_params(ast::ItemIdx item) const {
   return {};
 }
 
-// Declared return type of a function or intrinsic item; invalid when
-// the item declares none, which means `()`.
 ast::TypeIdx Checker::fn_return_type(ast::ItemIdx item) const {
   const ast::ItemNode& node = ast.items[item];
   if (node.kind == ast::ItemKind::Fn) {

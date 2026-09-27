@@ -3,6 +3,7 @@
 
 source_set("pkg") {
   sources = [
+    "arena_copy.h",
     "lock.cc",
     "lock.h",
     "manifest.cc",

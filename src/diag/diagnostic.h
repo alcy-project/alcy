@@ -30,8 +30,8 @@ struct Label {
 // Diagnostic is always cheap and never allocates.
 struct Diagnostic {
   Severity severity = Severity::Error;
-  // Numeric code rendered as E<code>/W<code>/N<code>. Ranges are partitioned
-  // by producer; 1000-1999 is reserved for IR verification.
+  // Numeric code rendered as E<code>/W<code>/N<code>. Ranges are
+  // partitioned by producer; see docs/spec/diagnostics.md.
   u32 code = 0;
   std::string_view message;
   bool has_primary_span = false;

@@ -35,9 +35,7 @@ namespace {
 // A list of segments ends at a ".", because the item that follows a
 // segment list is itself length-prefixed and would otherwise be read as
 // one more segment. A list of types ends where a type tag or the end of
-// the string appears, since a tag is a letter and a length is a digit.
-// A tuple and a nominal's argument list carry an explicit count, so
-// their extent does not depend on what follows.
+// the string appears. Tuples and nominals carry explicit counts instead.
 constexpr std::string_view PREFIX = "_A";
 constexpr std::string_view VERSION = "1";
 // Ends a list of length-prefixed segments.
@@ -125,8 +123,7 @@ void append_u64(std::string& out, u64 value) {
 }
 
 // A module path arrives as one `::`-separated string, matching how the
-// module tree spells it. Encoding it segment by segment with explicit
-// lengths means a segment may contain any byte, separators included.
+// module tree spells it.
 void append_path(std::string& out, std::string_view path) {
   constexpr std::string_view SEPARATOR = "::";
   usize start = 0;
@@ -373,8 +370,6 @@ std::string mangle(const Signature& signature,
                    const ir::Storage& types,
                    const str::StringInterner& strings) {
   if (signature.kind == Signature::Kind::Foreign) {
-    // Not ours to encode: a C entry point keeps the name it was
-    // declared with.
     return signature.name;
   }
   std::string out;

@@ -45,8 +45,6 @@ std::span<const ast::ItemIdx> parse(std::string_view bytes, Fixture& f) {
   return std::move(parsed).unwrap();
 }
 
-// Collects binding and use spellings in source order: IdentPattern and
-// MutIdentPattern declarations, single-segment path uses.
 struct NameCollector {
   std::vector<std::string> names;
   ast::AstArena& ast;

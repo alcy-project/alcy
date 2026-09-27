@@ -132,7 +132,7 @@ u64 Lowerer::parse_numeric_value(std::string_view spelling) {
       "u8",    "u16",   "u32", "u64", "f32", "f64",
   };
 
-  // Strip type suffix if present.
+  // Strip the suffix if present.
   for (std::string_view suffix : SUFFIXES) {
     const bool has_suffix =
         spelling.size() > suffix.size() && spelling.ends_with(suffix);
@@ -142,27 +142,23 @@ u64 Lowerer::parse_numeric_value(std::string_view spelling) {
     }
   }
 
-  // Determine base and strip prefix (e.g., "0x", "0b", "0o").
+  // Strip a 0x, 0b, or 0o prefix.
   u32 base = 10;
   const bool has_prefix = spelling.size() > 2 && spelling[0] == '0';
   if (has_prefix) {
     const char prefix_indicator = spelling[1];
     if (prefix_indicator == 'x' || prefix_indicator == 'X') {
-      // hex
       base = 16;
       spelling.remove_prefix(2);
     } else if (prefix_indicator == 'b' || prefix_indicator == 'B') {
-      // bin
       base = 2;
       spelling.remove_prefix(2);
     } else if (prefix_indicator == 'o' || prefix_indicator == 'O') {
-      // oct
       base = 8;
       spelling.remove_prefix(2);
     }
   }
 
-  // Accumulate numerical digits.
   u64 value = 0;
   for (const char ch : spelling) {
     if (ch == '_') {
@@ -704,7 +700,6 @@ bool Lowerer::variant_index(ir::TypeIdx enum_type,
   return false;
 }
 
-// Payload field types of one variant, in order.
 std::vector<ir::TypeIdx> Lowerer::variant_payload(ir::TypeIdx enum_type,
                                                   u32 variant) {
   const ir::EnumType& enum_ty =
@@ -726,12 +721,10 @@ ir::TypeIdxRange Lowerer::variant_fields(ir::TypeIdx enum_type, u32 variant) {
   return builder.state().enum_variant_types[ir::EnumVariantTypeIdx(at)].fields;
 }
 
-// The slot for an enum value: a discriminant, then the payload area.
-// Both halves are appended back to back because a tuple's element types
-// have to be consecutive in the type table. The area is a byte array on
-// a carrier carrying the published alignment, which is the same type the
-// emitter builds, so a field's address resolves identically on both
-// sides.
+// Slot for an enum value: an i32 discriminant followed by the payload
+// area, appended back to back because a tuple's element types must be
+// consecutive in the type table. The area is a byte array on a carrier
+// of the published alignment, matching what the emitter builds.
 ir::TypeIdx Lowerer::enum_slot_type(ir::TypeIdx enum_type) {
   const auto cached = enum_slot_types_.find(enum_type.idx);
   if (cached != enum_slot_types_.end()) {
@@ -818,20 +811,16 @@ Val Lowerer::lower_variant_construct(
   return Val{to_operand(addr, slot), use->enum_type, true, false};
 }
 
-// Address of payload field `field` of the enum whose slot is at
-// `slot_addr`: the slot's payload area, then the field's byte offset
-// within it. Two projections because the area is a byte array, so a
-// second index would be scaled by the carrier rather than counted in
-// bytes.
+// Address of payload field `field` in the slot at `slot_addr`: the
+// slot's payload area, then the field's byte offset. Two projections
+// because the area is a byte array, so a second index would scale by
+// the carrier instead of counting bytes.
 ir::RegisterIdx Lowerer::payload_field_addr(Val slot_addr,
                                             ir::TypeIdxRange fields,
                                             u32 field) {
   const ir::TypeIdx byte = builder.primitive(ir::TypeTag::U8);
   const ir::RegisterIdx area = emit(ir::Opcode::GetElementPtr, byte,
                                     {slot_addr.op, zero_i32, index_operand(1)});
-  // One index, because the area is reached as a byte pointer: a second
-  // level would need a pointer to an aggregate and would scale by the
-  // carrier instead of counting bytes.
   return emit(
       ir::Opcode::GetElementPtr, byte,
       {to_operand(area, byte), index_operand(static_cast<u32>(ir::field_offset(
@@ -845,7 +834,7 @@ ir::OperandIdx Lowerer::disc_operand(u32 discriminant) {
   return to_operand(builder.immutable(imm), i32_ty);
 }
 
-Val Lowerer::lower_call(ast::ExprIdx expr, const ir::TypeIdx* expected) {
+Val Lowerer::lower_call(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
   // Intrinsics by name (checking rejected shadowing definitions).
@@ -948,9 +937,6 @@ Val Lowerer::lower_call(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   if (tag_of(sig.ret) == ir::TypeTag::Void) {
     emit_void(ir::Opcode::Call, ops);
     return Val{size_one, sig.ret, false, false};
-  }
-  if (expected != nullptr) {
-    (void)expected;
   }
   const ir::RegisterIdx dst = emit(ir::Opcode::Call, sig.ret, ops);
   return Val{to_operand(dst, sig.ret), sig.ret, false, false};
@@ -1420,8 +1406,7 @@ Val Lowerer::lower_intrinsic(ast::ExprIdx expr, std::string_view name) {
   const Val material = materialize(arg);
   // Fat strings cross the ABI as (bytes, len).
   const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
-  const ir::TypeIdx usize_ty = builder.primitive(
-      width == ir::PointerWidth::W64 ? ir::TypeTag::U64 : ir::TypeTag::U32);
+  const ir::TypeIdx usize_ty = usize_type();
   const ir::RegisterIdx bytes =
       emit(ir::Opcode::ExtractValue, ptr_ty, {material.op, index_operand(0)});
   const ir::RegisterIdx len =
@@ -1468,12 +1453,6 @@ ir::OperandIdx Lowerer::arg_for(Val arg, ir::TypeIdx param) {
   return address_of(arg).op;
 }
 
-// Address of an enum slot value (spills SSA temporaries).
-Val Lowerer::enum_addr(Val value) {
-  return address_of(value);
-}
-
-// Loads the discriminant of an enum slot address.
 Val Lowerer::load_disc(Val slot_addr) {
   const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
   const ir::RegisterIdx gep = emit(ir::Opcode::GetElementPtr, i32,
@@ -1509,9 +1488,9 @@ ir::TypeIdx Lowerer::payload_tuple(const std::vector<ir::TypeIdx>& fields) {
   return builder.tuple_type(seq.finish());
 }
 
-// Value of payload field i of the enum at slot_addr. The payload
-// pointer is type-erased in the slot, so it reinterprets through
-// the variant payload type before projecting the field.
+// Value of payload field i of the enum at slot_addr. The slot holds the
+// payload's bytes, so the field address comes from the offset
+// ir::field_offset publishes.
 Val Lowerer::load_payload_field(Val slot_addr,
                                 ir::TypeIdxRange fields,
                                 u32 field) {
@@ -1548,8 +1527,7 @@ ir::OperandIdx Lowerer::bool_operand(bool value) {
 
 void Lowerer::emit_panic(ir::OperandIdx message) {
   const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
-  const ir::TypeIdx usize_ty = builder.primitive(
-      width == ir::PointerWidth::W64 ? ir::TypeTag::U64 : ir::TypeTag::U32);
+  const ir::TypeIdx usize_ty = usize_type();
   const ir::RegisterIdx bytes =
       emit(ir::Opcode::ExtractValue, ptr_ty, {message, index_operand(0)});
   const ir::RegisterIdx len =
@@ -1570,7 +1548,7 @@ ir::OperandIdx Lowerer::str_operand(std::string_view message) {
   return to_operand(imm, str);
 }
 
-Val Lowerer::lower_method_call(ast::ExprIdx expr, const ir::TypeIdx* expected) {
+Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   const ast::ExprNode& method = ast.exprs[expr];
   Val receiver =
       lower_expr(method.payload.get<ast::ExprMethodCall>().receiver, nullptr);
@@ -1625,9 +1603,6 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     emit_void(ir::Opcode::Call, ops);
     return Val{size_one, info.ret, false, false};
   }
-  if (expected != nullptr) {
-    (void)expected;
-  }
   const ir::RegisterIdx dst = emit(ir::Opcode::Call, info.ret, ops);
   return Val{to_operand(dst, info.ret), info.ret, false, false};
 }
@@ -1654,8 +1629,17 @@ Val Lowerer::field_addr(Val base, std::string_view name, diag::Span span) {
   }
   u32 index = 0;
   if (tag_of(struct_ty) == ir::TypeTag::Tuple) {
+    bool digits = !name.empty();
     for (char c : name) {
+      if (c < '0' || c > '9') {
+        digits = false;
+        break;
+      }
       index = index * 10 + static_cast<u32>(c - '0');
+    }
+    if (!digits) {
+      internal(span, "field without declaration");
+      return Val{size_one, error_type(), true, false};
     }
   } else if (!struct_field_index(struct_ty, name, index)) {
     internal(span, "field without declaration");
@@ -2178,12 +2162,9 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   emit_void(ir::Opcode::Unreachable, {});
   if (join.is_valid()) {
     switch_to(join);
-    // A by-value match consumes a non-Copy scrutinee, and the arms read
-    // it to do so: its discriminant, and the payload each binding
-    // pattern takes. The move belongs after the arms rather than before
-    // them, so those reads are reads of a value that has not left yet.
-    // Every arm reaches the join, so this marks the scrutinee moved on
-    // every path that finishes the match.
+    // A by-value match consumes a non-Copy scrutinee, but the arms read
+    // its discriminant and payloads to do so, so the move lands after
+    // them. Every arm that falls through reaches the join.
     mark_move(addr);
   }
   if (has_slot) {
@@ -2485,10 +2466,10 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       return Val{to_operand(dst, target), target, false, false};
     }
     case ast::ExprKind::Call: {
-      return lower_call(expr, expected);
+      return lower_call(expr);
     }
     case ast::ExprKind::MethodCall: {
-      return lower_method_call(expr, expected);
+      return lower_method_call(expr);
     }
     case ast::ExprKind::Field: {
       const ast::ExprField& field = node.payload.get<ast::ExprField>();
@@ -2567,10 +2548,9 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     case ast::ExprKind::Return: {
       const ast::ExprReturn& ret = node.payload.get<ast::ExprReturn>();
-      // Leaving the function ends every value still alive, innermost
-      // scope first, so nothing the caller receives outlives a value it
-      // was borrowed from. A result is taken first, which moves it out
-      // of the value it came from.
+      // Leaving the function ends every value still alive, so nothing
+      // the caller receives outlives a value it was borrowed from. The
+      // result is taken first, which moves it out of its origin.
       ir::OperandIdx result(base::kInvalidIdx);
       bool carries_result = false;
       if (ret.value.is_valid()) {
@@ -2675,15 +2655,34 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
       if (failed) {
         return;
       }
-      ir::OperandIdx stored = use_value(value);
       if (reassign.compound) {
+        // `x op= y` reads the place and stores the operation's result,
+        // so the operand order matches `x op y`.
         Val loaded = materialize(place);
-        // Rebuild the compound operation from the operator spelling
-        // is unnecessary: checking validated the shape, and only
-        // plain assignment reaches lowering intact when the operator
-        // needs control flow. Arithmetic compounds lower directly.
-        (void)loaded;
+        if (failed) {
+          return;
+        }
+        const ir::TypeTag tag = tag_of(loaded.type);
+        ir::Opcode op = ir::Opcode::Noop;
+        if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
+          switch (reassign.op) {
+            case ast::BinaryOp::Add: op = ir::Opcode::FAdd; break;
+            case ast::BinaryOp::Sub: op = ir::Opcode::FSub; break;
+            case ast::BinaryOp::Mul: op = ir::Opcode::FMul; break;
+            default: op = ir::Opcode::FDiv; break;
+          }
+        } else {
+          op = int_binop(reassign.op, tag);
+        }
+        if (op == ir::Opcode::Noop) {
+          unsupported(node.span, "compound assignment");
+          return;
+        }
+        const ir::RegisterIdx result =
+            emit(op, loaded.type, {use_value(loaded), use_value(value)});
+        value = Val{to_operand(result, loaded.type), loaded.type, false, false};
       }
+      ir::OperandIdx stored = use_value(value);
       emit_void(ir::Opcode::Store, {stored, place.op});
       return;
     }
@@ -2698,12 +2697,10 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
 Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
   const ast::Block& node = ast.blocks[block];
   const u32 mark = static_cast<u32>(locals.size());
-  // Which of the enclosing values have already left is a property of the
-  // path, not of the function: a value ended on one path out of this
-  // block is still there on the paths that did not take it. Snapshot the
-  // flags the block inherited and put them back on the way out, so a
-  // destructor placed inside a branch does not retire the value for the
-  // code that follows the branch.
+  // Whether an enclosing value has already left is a property of the
+  // path, not of the function: a destructor placed inside a branch
+  // retires the value only there. The inherited flags are restored on
+  // the way out, so the code after the branch still sees it.
   std::vector<bool> inherited;
   inherited.reserve(mark);
   for (u32 i = 0; i < mark; ++i) {
@@ -2741,7 +2738,6 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
       value = lower_expr(node.value, expected);
     }
     if (!failed && !terminated_cur()) {
-      // Falling off the end of the block ends what the block declared.
       emit_drops(mark, node.span);
     }
   } else if (!reachable && node.value.is_valid()) {

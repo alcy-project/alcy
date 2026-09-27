@@ -5,7 +5,6 @@
 
 #include "fpag/debug/check.h"
 
-// DCHECK (debug only)
 #define DCHECK(expr) FPAG_DCHECK(expr)
 #define DCHECK_MSG(expr, msg) FPAG_DCHECK_MSG(expr, msg)
 

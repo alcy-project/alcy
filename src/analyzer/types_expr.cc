@@ -594,7 +594,6 @@ bool Checker::is_core_fmt(const CheckedModule::FnSig* fn) const {
   return false;
 }
 
-// Comp flags of a resolved function item, in parameter order.
 std::vector<bool> Checker::comp_param_flags(ast::ItemIdx item) const {
   std::vector<bool> flags;
   if (!item.is_valid()) {
@@ -702,7 +701,6 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
 
 // Verifies a literal format string against argument element types;
 // other comp-known strings verify in lowering, which holds the bytes.
-// Returns false after diagnosing.
 bool Checker::verify_fmt_literal(ast::ExprIdx fmt_expr,
                                  ast::ExprIdx args_expr,
                                  const std::vector<ir::TypeIdx>& elements,

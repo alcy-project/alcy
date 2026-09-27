@@ -13,6 +13,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
+#include "pkg/arena_copy.h"
 #include "source/source.h"
 
 #pragma clang diagnostic push
@@ -37,19 +38,6 @@ namespace {
 // Diagnostic codes 1000-1099 are reserved for manifest errors.
 constexpr u32 MANIFEST_SYNTAX_ERROR = 1000;
 constexpr u32 MANIFEST_SEMANTIC_ERROR = 1001;
-
-// Copies bytes into the arena for model views.
-std::string_view copy_str(mem::Arena& arena, std::string_view bytes) {
-  if (bytes.empty()) {
-    return {};
-  }
-  char* const mem =
-      static_cast<char*>(arena.alloc(bytes.size(), alignof(char)));
-  for (usize i = 0; i < bytes.size(); ++i) {
-    mem[i] = bytes[i];
-  }
-  return {mem, bytes.size()};
-}
 
 // Converts a 1-based toml line/column into a byte offset, clamped.
 u32 line_col_to_offset(std::string_view bytes, u32 line, u32 column) {
@@ -80,8 +68,8 @@ base::Result<PackageManifest, diag::Reported> semantic_error(
     diag::DiagBag& bag,
     std::string_view filename,
     std::string_view message) {
-  // Semantic errors carry the manifest path in the message; spans attach
-  // once lowering tracks node positions (a later phase).
+  // Semantic errors name the manifest in the message and carry no span;
+  // only syntax errors have a position to report.
   const u32 index = bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
                              "manifest '{}': {}", filename, message);
   (void)index;

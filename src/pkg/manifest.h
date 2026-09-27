@@ -70,8 +70,6 @@ inline base::Result<Version, VersionError> parse_version(
   return base::make_ok(version);
 }
 
-// A path-only dependency (MVP scope: no registry, no git). Views borrow
-// arena storage owned by the caller of parse_manifest().
 // A declared binary target ([[bin]] table). `name` is empty when the
 // table omits it and defaults to the package name. Views borrow arena
 // storage owned by the caller of parse_manifest().
@@ -80,6 +78,8 @@ struct BinTarget {
   std::string_view path;
 };
 
+// A path-only dependency (MVP scope: no registry, no git). Views borrow
+// arena storage owned by the caller of parse_manifest().
 struct Dependency {
   std::string_view name;
   std::string_view path;
@@ -108,7 +108,7 @@ struct PackageManifest {
   u32 dependency_count = 0;
   // Declared build targets ([[bin]] tables). MVP builds a single binary;
   // additional entries are parsed for forward compatibility and rejected
-  // by the cli with guidance.
+  // by the pipeline with guidance.
   const BinTarget* bins = nullptr;
   u32 bin_count = 0;
   // Module membership from the [modules] table. Absent means every
@@ -138,7 +138,7 @@ base::Result<void, ManifestError> verify_manifest(
     const PackageManifest& manifest);
 
 // Entry-point conversion helper: emits `manifest '<name>': <detail>`
-// (code 2001, the manifest semantic range) into bag. Verifiers stay
+// (code 1001, the manifest semantic range) into bag. Verifiers stay
 // pure; this is how an entry turns their structured failure into a
 // diagnostic.
 void report_manifest_error(ManifestError error,

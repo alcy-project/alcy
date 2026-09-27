@@ -17,13 +17,10 @@
 #include "ir/operand.h"
 #include "ir/register.h"
 #include "ir/seq_builder.h"
-// #include "ir/storage.h"
-// #include "ir/storage_builder.h"
 
 namespace ir {
 
-// StringPoolId is a fixed u32 pair (8 bytes) on all platforms, so every
-// layout below is architecture-independent.
+// StringPoolId is a fixed 8-byte pair, so sizes below are host-independent.
 TEST_CASE("Static assertion for IR elements") {
   static_assert(sizeof(Block) == 16);
   static_assert(sizeof(BlockParam) == 8);
@@ -43,10 +40,6 @@ TEST_CASE("Static assertion for IR elements") {
   static_assert(sizeof(TypeTag) == 1);
   static_assert(sizeof(TypeNode) == 8);
   static_assert(sizeof(StructType) == 24);
-
-  // static_assert(sizeof(StorageState) == 360);
-  // static_assert(sizeof(Storage) == 360);
-  // static_assert(sizeof(StorageBuilder) == 360);
 }
 
 TEST_CASE("SeqBuilder accumulates consecutive indexes") {

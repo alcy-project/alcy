@@ -39,7 +39,6 @@ VerifyResult err(const VerifyErrorKind kind, const u32 index) {
 }  // namespace
 
 VerifyResult verify_storage(const Storage& storage) {
-  // Type table and composite metadata.
   for (TypeIdx tidx(0); tidx.idx < storage.types().size(); ++tidx) {
     const TypeNode& node = storage.types()[tidx];
     if (node.tag == TypeTag::Struct) {
@@ -93,7 +92,6 @@ VerifyResult verify_storage(const Storage& storage) {
     }
   }
 
-  // Registers carry types.
   for (RegisterIdx ridx(0); ridx.idx < storage.registers().size(); ++ridx) {
     if (storage.registers()[ridx].type.idx >= storage.types().size()) {
       return err(VerifyErrorKind::TypeIdxOutOfRange, ridx.idx);
@@ -106,7 +104,6 @@ VerifyResult verify_storage(const Storage& storage) {
     }
   }
 
-  // Function-level ranges.
   for (FunctionIdx fidx(0); fidx.idx < storage.functions().size(); ++fidx) {
     const Function& func = storage.functions()[fidx];
     if (!range_in_bounds(func.blocks.head(), func.blocks.size(),
@@ -172,7 +169,7 @@ VerifyResult verify_storage(const Storage& storage) {
       const Instruction& instr = storage.instrs()[iidx];
       const bool last =
           (iidx.idx + 1 == block.instrs.head().idx + block.instrs.size());
-      if (is_terminator(instr.op) != last) {
+      if (last ? !is_terminator(instr.op) : is_terminator(instr.op)) {
         if (last) {
           return err(VerifyErrorKind::UnterminatedBlock, bidx.idx);
         }
@@ -230,7 +227,6 @@ VerifyResult verify_storage(const Storage& storage) {
         if (!head.is<FunctionIdx>() && !head.is<ExternalFunctionIdx>()) {
           return err(VerifyErrorKind::InvalidCallee, iidx.idx);
         }
-        // Argument count must match the callee signature.
         const FunctionMeta& meta =
             head.is<FunctionIdx>()
                 ? storage.functions()[head.as_function()].meta
@@ -317,8 +313,6 @@ VerifyResult verify_storage(const Storage& storage) {
         }
       }
       if (instr.op == Opcode::ElemOffset) {
-        // operands = [base_ptr(register), index(integer)]; dst carries
-        // the element reference type.
         const ir::OperandIdx base = instr.operands.head();
         if (instr.operands.size() != 2 ||
             !storage.operands()[base].is<RegisterIdx>() ||
@@ -332,14 +326,12 @@ VerifyResult verify_storage(const Storage& storage) {
         }
       }
       if (instr.op == Opcode::TypeSizeOf || instr.op == Opcode::TypeAlignOf) {
-        // No operands; the measured type rides on the instruction.
         if (!instr.operands.empty() || !instr.measure.is_valid() ||
             !instr.dst.is_valid()) {
           return err(VerifyErrorKind::InvalidTypeQuery, iidx.idx);
         }
       }
       if (instr.op == Opcode::Borrow) {
-        // operands = [place(register)]; dst carries Ref/MutRef type.
         if (instr.operands.size() != 1) {
           return err(VerifyErrorKind::InvalidBorrow, iidx.idx);
         }
@@ -351,7 +343,6 @@ VerifyResult verify_storage(const Storage& storage) {
         }
       }
       if (instr.op == Opcode::Memcopy) {
-        // operands = [dst_ptr, src_ptr, len(integer)]; discarded value.
         if (instr.operands.size() != 3 || instr.dst.is_valid()) {
           return err(VerifyErrorKind::InvalidMemcopy, iidx.idx);
         }
@@ -389,7 +380,6 @@ VerifyResult verify_storage(const Storage& storage) {
     }
   }
 
-  // Functions must contain at least one block.
   for (FunctionIdx fidx(0); fidx.idx < storage.functions().size(); ++fidx) {
     if (storage.functions()[fidx].blocks.empty()) {
       return err(VerifyErrorKind::UnterminatedBlock, fidx.idx);

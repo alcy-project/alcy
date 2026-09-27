@@ -62,8 +62,6 @@ struct CheckedModule {
   // Inherent methods per impl block, including associated functions
   // (receiver None). Mirrors the resolved signatures above so call
   // checking can match (self type, name) without re-walking AST.
-  // Lazily-instantiated generic methods append during body checking,
-  // so element addresses must stay stable: never reallocate-held.
   enum class ReceiverKind : u8 { None, ByValue, Shared, Exclusive };
   struct MethodInfo {
     ir::TypeIdx self_type;
@@ -85,6 +83,8 @@ struct CheckedModule {
     u32 module = base::kInvalidIdx;
     u32 index = base::kInvalidIdx;
   };
+  // Lazily-instantiated generic methods append during body checking,
+  // so element addresses must stay stable: never reallocate-held.
   std::deque<MethodInfo> methods;
   struct StaticInfo {
     std::string_view name;
@@ -134,7 +134,8 @@ struct FnInstance {
   std::vector<ir::TypeIdx> args;
   u32 sig_index = 0;
   // Key into the shared instantiation numbering that keys lowering
-  // side tables; NO_INST for a function whose body needed no context.
+  // side tables. Claimed for every function before its body is
+  // checked, so a recursive call keys the same context.
   u32 inst = NO_INST;
 };
 

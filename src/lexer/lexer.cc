@@ -43,9 +43,7 @@ bool is_alnum_or_underscore(char c) {
 // materializes the terminating `;` (Go-style insertion), unless the
 // next token continues the construct (see suppress_semi below).
 // Closing braces are included: `Foo { .. }` or `if c { .. }` ending a
-// line still terminate their statement. The parser needs no special
-// brace handling beyond chaining `else` (covered by suppression) and
-// tolerating stray separators.
+// line still terminate their statement.
 bool inserts_semi(TokenKind kind) {
   switch (kind) {
     case TokenKind::Ident:
@@ -65,7 +63,6 @@ bool inserts_semi(TokenKind kind) {
     // A cast target (`1 as u64`, `x as Self`) ends the expression, so
     // type keywords terminate the statement too. `!` is excluded: a
     // trailing `!` negates and always continues the expression.
-    // A postfix `?` likewise ends its expression.
     case TokenKind::Question:
     case TokenKind::Self:
     case TokenKind::SelfType:

@@ -409,7 +409,6 @@ class Resolver {
         Import{name, ns, target, member, use_node.is_pub});
   }
 
-  // Looks a member up in a module's locals.
   bool lookup_local(u32 module, std::string_view member, Namespace ns) const {
     return has_name(ns == Namespace::Type    ? local_types[module]
                     : ns == Namespace::Value ? local_values[module]
@@ -493,7 +492,7 @@ class Resolver {
         node.payload.get<ast::ItemUse>().has_alias
             ? node.payload.get<ast::ItemUse>().alias.name
             : member;
-    // Locals first: no recursion is needed and self-targets never false
+    // Locals first: that needs no recursion, and a self-target cannot
     // cycle. Re-exports follow only for members locals lack.
     bool resolved = false;
     u32 target = NO_MODULE;
@@ -589,8 +588,6 @@ class Resolver {
     // `core/prelude.al` and `core/mem.al` share a fileless `core` root
     // and can reach each other. Only a facade is a prelude, so only its
     // public surface is in scope without a `use`.
-    u32 prelude_root = NO_MODULE;
-    std::vector<std::string> prelude_prefix;
     const u32 modules_before = static_cast<u32>(modules.size());
     for (usize i = 0; i < prelude_data.size(); ++i) {
       const std::string& slash_name = prelude_names[i];
@@ -614,9 +611,7 @@ class Resolver {
               child_path, leaf ? prelude_data[i].id : source::UNKNOWN_FILE,
               leaf ? prelude_data[i].items : std::span<const ast::ItemIdx>{},
               parent);
-          if (parent == NO_MODULE) {
-            prelude_root = child;
-          } else {
+          if (parent != NO_MODULE) {
             module_children[parent].push_back(child);
           }
         } else if (!leaf) {
@@ -631,8 +626,6 @@ class Resolver {
         prelude_modules.push_back(parent);
       }
     }
-    (void)prelude_root;
-    (void)prelude_prefix;
     collect_locals();
     inject_prelude();
     for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {

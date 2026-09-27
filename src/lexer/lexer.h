@@ -18,13 +18,9 @@ namespace lexer {
 
 // Structural failure of a token stream handed to the parser.
 enum class TokenStreamError : u8 {
-  // No tokens at all.
   Empty,
-  // The last token is not Eof.
   MissingEof,
-  // A token names a different file than the bytes it is checked against.
   WrongFile,
-  // A token span runs past the end of the source bytes.
   SpanOutOfRange,
 };
 

@@ -16,10 +16,8 @@
 namespace pipeline {
 
 // Source discovery convention: `<dir>/**/*.al`, walked recursively and
-// sorted lexically for deterministic builds. The extension lives in
-// path::SOURCE_EXTENSION; subdirectories containing alcy.toml are nested
-// packages and skipped (their sources belong to that package). `alcy new`
-// creates `<name>/main.al`, which this rule picks up naturally.
+// sorted lexically for deterministic builds. Subdirectories containing
+// alcy.toml are nested packages and are skipped.
 struct DiscoveredSources {
   // Directory as given (not canonicalized).
   std::string root;
@@ -31,15 +29,14 @@ struct ProjectBuild {
   u32 files_loaded = 0;
 };
 
-// Discovers and loads every source file under dir. Per-file lex/parse
-// attaches to the files list once those phases exist.
+// Discovers and loads every source file under dir. It does not lex or parse.
 base::Result<DiscoveredSources, diag::Reported> discover_sources(
     std::string_view dir,
     source::SourceManager& sources,
     diag::DiagBag& bag);
 
-// Full project flow over resolved packages: discover + load each package.
-// Lexing/parsing/codegen attach per file inside the loop once implemented.
+// Discovers and loads each resolved package's sources. Per-file stages
+// attach inside the loop once they exist.
 base::Result<ProjectBuild, diag::Reported> compile_project(
     std::span<const pkg::ResolvedPackage> packages,
     source::SourceManager& sources,

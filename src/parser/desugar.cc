@@ -88,10 +88,8 @@ class Desugar {
   }
 
   // Declares one pattern-bound name, returning the spelling to store.
-  // Keywords map to themselves; redeclaring a name already present in
-  // the innermost scope is an error. A name bound nowhere stays as-is
-  // while a shadowed name mints a suffixed spelling, keeping
-  // diagnostics clean where nothing is shadowed.
+  // A name bound nowhere keeps its spelling so diagnostics stay clean;
+  // only a shadowed name mints a suffixed one.
   std::string_view declare_named(const ast::Ident& ident) {
     if (is_keyword_name(ident.name)) {
       return ident.name;

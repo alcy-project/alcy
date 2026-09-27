@@ -880,8 +880,8 @@ TEST_CASE("VerifyError converts to diagnostic") {
                           .index = 5};
   const diag::Diagnostic diag = to_diagnostic(error);
   CHECK(diag.severity == diag::Severity::Error);
-  CHECK(diag.code >= 1000);
-  CHECK(diag.code < 2000);
+  CHECK(diag.code >= 7100);
+  CHECK(diag.code < 7200);
   CHECK(diag.message == "UndefinedRegister");
   CHECK(!diag.has_primary_span);
 

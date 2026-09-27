@@ -34,53 +34,6 @@
 
 namespace pipeline {
 
-namespace {
-
-// Creates every missing directory leading to `output_path` so object
-// emission never fails on a missing output directory. Bare file names
-// need nothing; paths that fail validation skip creation and let the
-// subsequent write report the real failure.
-base::Result<void, diag::Reported> ensure_parent_directories(
-    PipelineContext& ctx,
-    const std::string& output_path) {
-  base::Result<path::Path, path::PathError> parsed =
-      path::Path::from_native(output_path);
-  if (parsed.is_err()) {
-    return base::make_ok();
-  }
-  const path::Path parent = std::move(parsed).unwrap().parent();
-  const std::string_view dir = parent.as_view();
-  if (dir == "." || dir == "/") {
-    return base::make_ok();
-  }
-  for (usize i = 1; i < dir.size(); ++i) {
-    if (dir[i] != path::DEFAULT_PATH_SEPARATOR) {
-      continue;
-    }
-    const std::string_view prefix = dir.substr(0, i);
-    if (prefix.ends_with(':')) {
-      continue;
-    }
-    if (!io::create_directory(std::string(prefix))) {
-      const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                     "cannot create directory '{}'", prefix);
-      (void)index;
-      return base::make_err(diag::Reported{});
-    }
-  }
-  if (!io::create_directory(std::string(dir))) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot create directory '{}'", dir);
-    (void)index;
-    return base::make_err(diag::Reported{});
-  }
-  return base::make_ok();
-}
-
-}  // namespace
-
-// Runs type checking, lowering, and borrow checking over a
-// resolved tree.
 base::Result<lower::LoweredPackage, diag::Reported> compile_tree(
     PipelineContext& ctx,
     analyzer::ModuleTree tree) {
@@ -103,7 +56,6 @@ base::Result<lower::LoweredPackage, diag::Reported> compile_tree(
   return base::make_ok(std::move(package));
 }
 
-// Emits one relocatable object for lowered IR.
 base::Result<void, diag::Reported> emit_package_object(
     PipelineContext& ctx,
     lower::LoweredPackage& package,
@@ -125,10 +77,17 @@ base::Result<void, diag::Reported> emit_package_object(
     return base::make_err(diag::Reported{});
   }
   const std::vector<u8>& buffer = std::move(emitted).unwrap();
-  if (ensure_parent_directories(ctx, output_path).is_err()) {
+  base::Result<path::Path, path::PathError> parsed =
+      path::Path::from_native(output_path);
+  if (parsed.is_err()) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
+                                   "invalid output path '{}'", output_path);
+    (void)index;
     return base::make_err(diag::Reported{});
   }
-  if (!io::write_file(buffer, output_path)) {
+  const path::Path parent = std::move(parsed).unwrap().parent();
+  if (ensure_directories(ctx, parent.as_view()).is_err() ||
+      !io::write_file(buffer, output_path)) {
     const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot write object '{}'", output_path);
     (void)index;
@@ -137,8 +96,6 @@ base::Result<void, diag::Reported> emit_package_object(
   return base::make_ok();
 }
 
-// Links one object plus the staged runtime into an executable
-// through the system linker. Empty selects the default toolchain driver.
 base::Result<void, diag::Reported> link_executable(
     PipelineContext& ctx,
     std::string_view linker,
@@ -165,9 +122,8 @@ base::Result<void, diag::Reported> link_executable(
   return base::make_ok();
 }
 
-// Single-file executable build (package builds stay on
-// discovery until wires them). Runs the full frontend plus
-// borrow checking, then lowers and emits one relocatable object.
+// Single-file build: runs the full frontend over one source file, then
+// emits an object and links it with the staged runtime.
 base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
                                                      std::string_view target,
                                                      std::string_view output,
@@ -246,8 +202,10 @@ base::Result<void, diag::Reported> build_package(PipelineContext& ctx,
   lower::LoweredPackage lowered = std::move(package).unwrap();
   std::string exe_path;
   if (output.empty()) {
-    path::Path out_dir = root.join("out");
-    io::create_directory(out_dir.c_str());
+    const path::Path out_dir = root.join("out");
+    if (ensure_directories(ctx, out_dir.as_view()).is_err()) {
+      return base::make_err(diag::Reported{});
+    }
     exe_path =
         out_dir.join(std::string(resolved.bin_name) + std::string(exe_suffix()))
             .as_view();

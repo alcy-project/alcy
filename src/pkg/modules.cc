@@ -16,6 +16,7 @@
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
 #include "path/path.h"
+#include "pkg/arena_copy.h"
 #include "pkg/manifest.h"
 #include "source/source.h"
 
@@ -27,19 +28,8 @@ namespace {
 constexpr u32 MODULES_SEMANTIC_ERROR = 1100;
 constexpr u32 MODULES_UNSELECTED_FILE = 1101;
 
-// Copies bytes into arena storage for name views.
-std::string_view copy_str(mem::Arena& arena, std::string_view bytes) {
-  char* const out =
-      static_cast<char*>(arena.alloc(bytes.size() + 1, alignof(char)));
-  usize i = 0;
-  for (char c : bytes) {
-    out[i++] = c;
-  }
-  out[i] = '\0';
-  return std::string_view(out, bytes.size());
-}
-
-// Strips a root prefix plus one separator; empty when outside root.
+// Strips a root prefix plus any following separators; empty when outside
+// root.
 std::string_view relative_to(std::string_view path, std::string_view root) {
   if (path.size() < root.size() || path.substr(0, root.size()) != root) {
     return {};

@@ -113,7 +113,6 @@ class Lowerer {
     // functions without comp parameters.
     std::string comp_key;
     ir::FunctionIdx idx = ir::FunctionIdx(base::kInvalidIdx);
-    // Lowering work item, filled at reservation time.
     u32 mod = 0;
     std::string name;
     std::vector<ir::TypeIdx> params;
@@ -275,12 +274,12 @@ class Lowerer {
   ir::TypeIdx payload_carrier(u64 align);
 
   // Enum slot types by enum type index: the payload half is inline,
-  // so the slot is no longer one shape shared by every enum.
+  // so the slot shape varies per enum.
   std::unordered_map<u32, ir::TypeIdx> enum_slot_types_;
   Val lower_variant_construct(ast::ExprIdx expr,
                               const analyzer::CheckedModule::VariantUse* use);
   ir::OperandIdx disc_operand(u32 discriminant);
-  Val lower_call(ast::ExprIdx expr, const ir::TypeIdx* expected);
+  Val lower_call(ast::ExprIdx expr);
   Val lower_associated_call(ast::ExprIdx expr);
   Val lower_intrinsic_call(ast::ExprIdx expr,
                            const analyzer::CheckedModule::FnSig& sig,
@@ -293,7 +292,6 @@ class Lowerer {
   Val lower_str_intrinsic(ast::ExprIdx expr, std::string_view name);
   Val lower_intrinsic(ast::ExprIdx expr, std::string_view name);
   ir::OperandIdx arg_for(Val arg, ir::TypeIdx param);
-  Val enum_addr(Val value);
   Val load_disc(Val slot_addr);
   bool is_unit_payload(const std::vector<ir::TypeIdx>& payloads);
   Val void_value();
@@ -310,7 +308,7 @@ class Lowerer {
   ir::OperandIdx bool_operand(bool value);
   void emit_panic(ir::OperandIdx message);
   ir::OperandIdx str_operand(std::string_view message);
-  Val lower_method_call(ast::ExprIdx expr, const ir::TypeIdx* expected);
+  Val lower_method_call(ast::ExprIdx expr);
   Val field_addr(Val base, std::string_view name, diag::Span span);
   Val lower_struct(ast::ExprIdx expr);
   Val lower_tuple(ast::ExprIdx expr);

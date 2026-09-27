@@ -32,8 +32,9 @@ namespace lower {
 // and tuple construction, field access, arithmetic/comparison/cast,
 // calls (free, associated, and methods), borrows, blocks, control
 // flow, `?`, indexing, enums (including generic instantiations), and
-// statics. Anything outside that set diagnoses `LOWER_UNSUPPORTED`
-// and fails the lowering (fail fast: no dangling references).
+// `const` statics. Anything outside that set diagnoses
+// `LOWER_UNSUPPORTED` and fails the lowering (fail fast: no dangling
+// references).
 //
 // Value model (uniform memory, required by codegen's GEP tracking):
 // every local and parameter owns an Alloca; aggregates live in memory
@@ -43,24 +44,23 @@ namespace lower {
 // stored to their allocas on entry. Non-Copy values crossing a move
 // position produce a `Move` marker for the borrow checker.
 //
-// Enum values occupy a shared slot shape: a tuple of an i32
-// discriminant (the variant index) and a payload pointer. Payloads
-// live in their own alloca shaped as a tuple of the variant fields;
-// unit variants store no payload. Matches test the discriminant and
-// project through the payload pointer.
+// Enum values occupy a slot: an i32 discriminant (the variant index)
+// followed by an inline payload area sized and aligned for the widest
+// variant. Unit variants store no payload. Matches test the
+// discriminant and project a field through the area.
 //
 // Joins merge through memory (result allocas with per-branch stores),
 // never through block parameters, matching what the verifier accepts
 // for branch targets.
 //
-// Runtime hooks (codegen provides the bodies):
-// `print` lowers to external `alcy_print(ptr) -> ()`, `println` to
-// external `alcy_prinln(ptr) -> ()`, and `panic` to external
-// `alcy_panic(ptr) -> !` followed by `Unreachable`.
+// Runtime hooks (codegen provides the bodies): `print` lowers to
+// external `alcy_print(ptr, len)`, `println` to
+// `alcy_println(ptr, len)`, and `panic` to `alcy_panic(ptr, len)`
+// returning never, followed by `Unreachable`.
 //
 // Ownership analysis consumes LoweredPackage rather than raw storage:
-// instruction spans locate diagnostics and the address table names
-// places (analysis needs only identity, messages need names).
+// instruction spans locate diagnostics, and the address table names
+// places.
 struct LoweredPackage {
   // Verified when lowering built it; borrow checking and the emitter
   // consume this proof instead of re-verifying.

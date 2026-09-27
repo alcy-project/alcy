@@ -3,21 +3,22 @@
 
 #pragma once
 
-// Abstract syntax tree nodes: plain data allocated in a per-file arena,
+// Abstract syntax tree nodes: plain data owned by a per-file arena,
 // consumed by the parser and later stages. Every node carries its source
-// span. Polymorphism is manual (kind-tagged structs embedding a base as
-// their first member, dispatched by switching on the kind): the project
-// forbids vtables, so there are no virtual methods anywhere here.
+// span. Polymorphism is manual: a `kind` field selects the active member
+// of a `base::Union` payload, and every pass dispatches on the kind
+// before reading `payload.get<T>()`. Vtables are forbidden
+// (PRINCIPLES.md), so nothing here has virtual methods.
 //
 // Grammar coverage (docs/spec/grammar.md):
-//   path        -> Path            params     -> FnParam
-//   primitive   -> PrimitiveKind   struct     -> StructItem, StructField
-//   tuple type  -> TupleType       enum       -> EnumItem, EnumVariant
-//   ref type    -> RefType         impl       -> ImplItem
-//   pattern     -> Pattern family  static     -> StaticItem
-//   literal     -> Literal         const/use  -> ConstItem, UseItem
-//   expressions -> Expr family     statements -> Stmt family, Block
-//   fn          -> FnItem
+//   path        -> Path            params     -> ItemFnParam
+//   primitive   -> PrimitiveKind   struct     -> ItemStruct, ItemStructField
+//   tuple type  -> TypeTuple       enum       -> ItemEnum, ItemEnumVariant
+//   ref type    -> TypeRef         impl       -> ItemImpl
+//   pattern     -> PatternNode     static     -> ItemStatic
+//   literal     -> Literal         const/use  -> ItemConst, ItemUse
+//   expressions -> ExprNode        statements -> StmtNode, Block
+//   fn          -> ItemFn
 
 #include <memory>
 #include <span>
@@ -144,14 +145,6 @@ struct TypeRef {
   bool is_mut;
   TypeIdx inner = TypeIdx::invalid();
 };
-
-// union TypePayload {
-//   TypePayload() {}
-//   TypePrimitive primitive;
-//   TypeTuple tuple;
-//   TypePath path;
-//   TypeRef ref;
-// };
 
 struct TypeNode {
   TypeKind kind;
@@ -497,30 +490,6 @@ struct ExprRange {
   bool inclusive;
 };
 
-// union ExprPayload {
-//   ExprPayload() {}
-//   ExprLiteral literal;
-//   ExprPath path;
-//   ExprStruct strukt;
-//   ExprTuple tuple;
-//   ExprUnary unary;
-//   ExprBorrow borrow;
-//   ExprBinary binary;
-//   ExprCast cast;
-//   ExprCall call;
-//   ExprMethodCall method_call;
-//   ExprField field;
-//   ExprIndex index;
-//   ExprQuestion question;
-//   ExprIf if_expr;
-//   ExprMatch match;
-//   ExprLoop loop;
-//   ExprWhile while_expr;
-//   ExprBlock block;
-//   ExprReturn ret;
-//   ExprRange range;
-// };
-
 struct ExprNode {
   ExprKind kind;
   diag::Span span;
@@ -662,8 +631,8 @@ struct WhileExpr : Expr {
 struct Block {
   diag::Span span;
   std::span<const StmtIdx> statements;
-  // Null for blocks ending in a statement; "{}" has no statements and
-  // no value.
+  // Invalid for blocks ending in a statement; "{}" has no statements
+  // and no value.
   ExprIdx value = ExprIdx::invalid();
 };
 
@@ -718,13 +687,6 @@ struct StmtReassign {
 struct StmtExpr {
   ExprIdx value = ExprIdx::invalid();
 };
-
-// union StmtPayload {
-//   StmtPayload() {}
-//   StmtDecl decl;
-//   StmtReassign reassign;
-//   StmtExpr expr;
-// };
 
 struct StmtNode {
   StmtKind kind;
@@ -848,17 +810,6 @@ struct ItemUse {
   Ident alias;
 };
 
-// union ItemPayload {
-//   ItemPayload() {}
-//   ItemFn fn_item;
-//   ItemStruct struct_item;
-//   ItemEnum enum_item;
-//   ItemImpl impl;
-//   ItemStatic static_item;
-//   ItemConst const_item;
-//   ItemUse use_item;
-// };
-
 struct ItemNode {
   ItemKind kind;
   diag::Span span;
@@ -885,8 +836,8 @@ struct ItemNode {
       case I::Intrinsic: return payload.get<ItemIntrinsic>().name.name;
       case I::Static: return payload.get<ItemStatic>().name.name;
       case I::Const: return payload.get<ItemConst>().name.name;
-      case I::Use:   // return item.get<ItemUse>().name.name;
-      case I::Impl:  // return item.get<ItemImpl>().name.name;
+      case I::Use:
+      case I::Impl:
       default: return "unknown";
     }
   }

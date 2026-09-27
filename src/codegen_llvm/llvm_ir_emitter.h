@@ -44,8 +44,6 @@ class LlvmIrEmitter {
   void check_state();
 
   llvm::Type* type(ir::TypeIdx idx) const;
-  // The payload half of an enum slot: a byte area on a carrier that
-  // carries the alignment ir::type_layout published.
   llvm::Type* enum_payload_area_type(ir::TypeIdx idx) const;
 
   void emit_function(llvm::Function* llvm_function, const ir::Function& func);
@@ -59,7 +57,6 @@ class LlvmIrEmitter {
   void emit_control(const ir::Instruction& instr);
 
   llvm::Function* create_function(const ir::FunctionMeta& function_meta) const;
-  // The linker-visible name of a function.
   std::string linkable_name(const ir::FunctionMeta& function_meta) const;
 
   llvm::Value* resolve_operand_value(const ir::Operand& operand) const;

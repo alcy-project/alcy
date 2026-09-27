@@ -317,8 +317,9 @@ ast::PatternIdx Parser::parse_primary_pattern() {
       return ast_.patterns.push_back(node);
     }
     case lexer::TokenKind::Minus: {
-      // Negative number patterns ("-1"): the span covers the sign so
-      // later stages read the value with its sign.
+      // Negative number patterns ("-1"): the minus is consumed here, so
+      // only the pattern span covers it and the literal keeps the
+      // unsigned spelling.
       advance();
       if (peek_kind() != lexer::TokenKind::Integer &&
           peek_kind() != lexer::TokenKind::Float) {

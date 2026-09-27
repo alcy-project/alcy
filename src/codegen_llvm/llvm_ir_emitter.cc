@@ -114,9 +114,7 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
     case T::Enum: {
       // A discriminant, then the payload in the slot itself. Keeping the
       // payload here rather than behind a pointer is what lets an enum
-      // value outlive the frame that built it. The area is sized from
-      // ir::type_layout, which the lowerer reads the same numbers from,
-      // so a field's address resolves identically on both sides.
+      // value outlive the frame that built it.
       llvm::SmallVector<llvm::Type*, 2> slot_types;
       slot_types.emplace_back(builder_->getInt32Ty());
       slot_types.emplace_back(enum_payload_area_type(idx));
@@ -124,8 +122,7 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
           llvm::StructType::get(module_->getContext(), slot_types);
       // The layout ir::type_layout publishes is what field offsets are
       // computed against, so the type built here has to match it. The
-      // module has no DataLayout this early, so this can only be checked
-      // once one is installed.
+      // module has no DataLayout this early, so the check waits for one.
       const ir::TypeLayout expected =
           ir::type_layout(storage_->state(), idx, width_);
       if (!module_->getDataLayout().isDefault()) {
@@ -146,10 +143,9 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
 // The payload half of an enum's slot: a byte area on the narrowest
 // carrier primitive that carries the alignment ir::type_layout
 // published. A plain byte array would be align 1, which stores correctly
-// on x86 and is still wrong on a strict-alignment target.
-//
-// The carrier is chosen from the published alignment rather than from the
-// module's DataLayout, because a type is built before the module has one.
+// on x86 and is still wrong on a strict-alignment target. The published
+// alignment is used rather than the module's DataLayout because a type is
+// built before the module has one.
 llvm::Type* LlvmIrEmitter::enum_payload_area_type(ir::TypeIdx idx) const {
   const ir::TypeLayout area =
       ir::enum_payload_area(storage_->state(), idx, width_);
@@ -206,7 +202,7 @@ void LlvmIrEmitter::emit() && noexcept {
     }
     values_.add_function(function_idx, llvm_function);
   }
-  // PERF: Consider run this process concurrently.
+  // PERF: consider running this process concurrently.
   for (const ir::FunctionIdx function_idx : storage_->functions().idx_range()) {
     const ir::Function& function = storage_->functions()[function_idx];
     emit_function(values_.function(function_idx), function);
@@ -216,9 +212,7 @@ void LlvmIrEmitter::emit() && noexcept {
   }
 
 #if BUILD_FLAG(IS_DEBUG)
-  // Storage arrives verified (StorageBuilder::build is the only
-  // production path), so only the generated LLVM module is rechecked
-  // here; re-running the alcy verifier would repeat build-time work.
+  // Storage arrives verified, so only the generated module is rechecked.
   if (llvm::verifyModule(*module_, &llvm::errs())) [[unlikely]] {
     DLOG("LLVM verify module failed");
     module_->print(llvm::errs(), nullptr);
@@ -231,7 +225,6 @@ void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
                                   const ir::Function& function) {
   check_state();
 
-  // 3-pass block emission(block declare -> generate phi nodes -> block define)
   for (const ir::BlockIdx block_idx : function.blocks) {
     values_.add_block(block_idx, llvm::BasicBlock::Create(module_->getContext(),
                                                           "", llvm_function));
@@ -369,7 +362,6 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
 
       builder_->CreateBr(target_llvm_block);
 
-      // Add incoming values to target block phi nodes.
       const ir::Block& target_block = storage_->blocks()[target_block_idx];
       for (const ir::BlockParamIdx param_idx : target_block.block_params) {
         const ir::BlockParam& param = storage_->block_params()[param_idx];
@@ -420,14 +412,12 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
     case Op::Call: {
       DCHECK(ops.size() >= 1);
 
-      // Head is callee
       const ir::Operand& callee_op = storage_->operands()[ops.head()];
       llvm::Function* callee_func = resolve_operand_function(callee_op);
 
       llvm::SmallVector<llvm::Value*, FUNCTION_ARGS_SOO_SIZE> args;
       args.reserve(ops.size() - 1);
 
-      // All ops except head are args
       for (u32 idx = 1; idx < ops.size(); ++idx) {
         const ir::Operand& arg_op = storage_->operands()[ops.head() + idx];
         args.push_back(resolve_operand_value(arg_op));
@@ -462,8 +452,8 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
   }
 }
 
-// The linker-visible name of a function. A signature encodes to a
-// symbol; a foreign one keeps the name it was declared with.
+// A signature encodes to a symbol; a foreign one keeps the name it was
+// declared with.
 std::string LlvmIrEmitter::linkable_name(
     const ir::FunctionMeta& function_meta) const {
   if (function_meta.kind == ir::SymbolKind::Foreign) {
@@ -507,9 +497,6 @@ llvm::Function* LlvmIrEmitter::create_function(
       type(function_meta.return_type),
       llvm::ArrayRef<llvm::Type*>(parameter_types), false);
 
-  // A symbol is derived from the signature, so a source name can never
-  // reach the linker. A C entry point keeps the name it was declared
-  // with, and the synthesized program entry is named below.
   const std::string func_name = linkable_name(function_meta);
 
   llvm::Function* llvm_function = llvm::Function::Create(

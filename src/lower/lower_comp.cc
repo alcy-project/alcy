@@ -683,8 +683,7 @@ bool Lowerer::comp_eval_intrinsic(u32 mod,
     return comp_fail(span, "string without value");
   }
   const std::string& bytes = receiver.value.str_value;
-  const ir::TypeIdx usize_ty = builder.primitive(
-      width == ir::PointerWidth::W64 ? ir::TypeTag::U64 : ir::TypeTag::U32);
+  const ir::TypeIdx usize_ty = usize_type();
   if (name == "str_len") {
     out.type = usize_ty;
     out.value.tag = CompValue::Tag::Int;
@@ -1495,8 +1494,6 @@ i64 Lowerer::comp_sign_extend(u64 bits, ir::TypeTag tag) {
 // Formats into a caller buffer by compile-time expansion: literal
 // pieces copy directly, arguments convert per type. Truncation is
 // silent; total reports the untruncated size.
-// Emits one bounded piece copy per format piece into the
-// destination buffer, tracking written/total through the state.
 bool Lowerer::emit_fmt_pieces(diag::Span span,
                               const std::vector<analyzer::FmtPiece>& pieces,
                               ir::OperandIdx tup_op,

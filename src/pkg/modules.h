@@ -20,11 +20,10 @@ struct ModuleFile {
   source::FileId id = source::UNKNOWN_FILE;
 };
 
-// Selects module files for a manifest: explicit `include` entries
-// map to `<entry>.al` under root, while a wildcard adds every
-// discovered file by its root-relative path. Explicit entries must
-// resolve; undiscovered names are errors, and files outside the
-// selection stay out (the cli warns about them separately).
+// Selects module files for a manifest: explicit `include` entries map to
+// `<entry>.al` under root, while a wildcard adds every discovered file by
+// its root-relative path. An include that matches no file is an error; the
+// cli warns separately about files left outside the selection.
 base::Result<std::vector<ModuleFile>, diag::Reported> resolve_module_files(
     const PackageManifest& manifest,
     std::string_view root,

@@ -1456,8 +1456,7 @@ TEST_CASE("Check unused-value warnings") {
   const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
                                       ir::PointerWidth::W64, core_prelude());
   CHECK(result.package.has_value());
-  // The bare `get()` statement warns; `_ :=` discards and `()`
-  // statements do not.
+  // Only the bare get() statement warns; _ := and void calls do not.
   CHECK(f.bag.warning_count() == 1);
 }
 

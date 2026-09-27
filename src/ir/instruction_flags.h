@@ -16,7 +16,8 @@ enum class AtomicRmwOp : u8 {
   Exchange,
 };
 
-// Bit packed 1 B struct for instruction.
+// Packed into every Instruction, so the size is asserted in
+// src/tests/ir/ir_common_test.cc.
 struct InstructionFlags {
   // Meaningful only for AtomicRmw.
   AtomicRmwOp rmw_op : 3 = AtomicRmwOp::Add;

@@ -70,7 +70,7 @@ TEST_CASE("Render with source snippet") {
 
 TEST_CASE("Render clips multi-line spans and rejects out-of-range offsets") {
   BagFixture f;
-  // Length runs past the newline; only the first line is underlined.
+  // The span ends at the line break, so only line 1 is underlined.
   const u32 i =
       f.bag.emit(Severity::Error, 1, Span{.file = 3, .offset = 5, .length = 9},
                  "bad call");

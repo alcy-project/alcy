@@ -6,7 +6,6 @@
 #include "fpag/debug/logger.h"
 #include "fpag/logging/sink/stdout_sink.h"
 #include "fpag/term/console.h"
-// #include "fpag/mem/page_allocator.h"
 
 namespace tests {
 

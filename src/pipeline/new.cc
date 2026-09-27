@@ -29,26 +29,6 @@ namespace pipeline {
 
 namespace {
 
-// TODO: Move this to fpag (maybe io module?)
-bool make_dirs(std::string_view path) {
-  std::string current;
-  for (usize i = 0; i <= path.size(); ++i) {
-    if (i == path.size() || path[i] == path::DEFAULT_PATH_SEPARATOR) {
-      if (!current.empty()) {
-#if BUILD_FLAG(IS_OS_WIN)
-        ::_mkdir(current.c_str());
-#else
-        ::mkdir(current.c_str(), 0755);
-#endif
-      }
-    }
-    if (i < path.size()) {
-      current.push_back(path[i]);
-    }
-  }
-  return true;
-}
-
 bool write_text_file(std::string_view path, std::string_view content) {
   // Copy first: fopen requires a null-terminated path, which only an owned
   // copy guarantees.
@@ -96,7 +76,6 @@ NewResult write_package_files(PipelineContext& ctx,
     }
   }
 
-  // TODO: Add `include = ["*"]` syntax support.
   const std::string manifest_template = fmt::format(R"([package]
 name = "{}"
 version = "0.1.0"
@@ -111,11 +90,7 @@ path = "main.al")",
   static constexpr std::string_view MAIN_TEXT =
       "fn main() {\n  // Write your code here.\n}\n";
 
-  if (!make_dirs(package_dir.as_view())) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot create package directory: '{}'",
-                                   package_dir.as_view());
-    (void)index;
+  if (ensure_directories(ctx, package_dir.as_view()).is_err()) {
     return base::make_err(0);
   }
   if (!write_text_file(manifest_path.as_view(), manifest_template) ||

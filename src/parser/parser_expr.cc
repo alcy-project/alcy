@@ -801,7 +801,6 @@ ast::CondIdx Parser::parse_cond() {
   if (!expect(lexer::TokenKind::ColonEq, "`:=`")) {
     return ast::CondIdx::invalid();
   }
-  // Struct literals stay out so a following "{" reads as the body.
   const bool saved = allow_struct_lit_;
   allow_struct_lit_ = false;
   const ast::ExprIdx init = parse_expr();

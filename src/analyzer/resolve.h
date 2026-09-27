@@ -50,8 +50,9 @@ struct ModuleNode {
 struct ModuleTree {
   std::span<ModuleNode* const> modules;
   u32 root;
-  // Facade modules appended after the package's own: one per staged
-  // prelude package, whose public surface is in scope without a `use`.
+  // Count of facade modules appended after the package's own: one per
+  // staged prelude package, whose public surface is in scope without a
+  // `use`.
   u32 prelude_modules = 0;
   // Every module the staged prelude added, facades and the fileless
   // package roots between them. Reported counts exclude these, since
@@ -84,24 +85,21 @@ std::string_view describe_module_tree_error(ModuleTreeError error);
 // Builds the module tree for one package and resolves its imports.
 // `root` is the package entry file; `modules` assigns every source
 // file its slash-separated module name ("" names the root itself).
-// Every file is lexed, parsed, and desugared here (each in a
-// per-file arena). Module membership comes from the caller, never
-// from source items, so no new files enter the compilation. Value
-// and type expressions are NOT resolved here; that is later
-// semantic work over ModuleNode::items.
+// Every file is lexed, parsed, and desugared here. Module membership
+// comes from the caller, never from source items, so no new files enter
+// the compilation. Value and type expressions are NOT resolved here;
+// that is later semantic work over ModuleNode::items.
 //
 // `prelude` lists additional source files resolved as standalone
-// modules outside the package tree. Every other module implicitly
-// imports their public items (locals and explicit uses win
-// silently); this is where toolchain-provided core sources will
-// attach once they exist.
+// modules outside the package tree. Every facade's public items are
+// implicitly imported by every other module (locals and explicit uses
+// win silently), which is where the toolchain's core sources attach.
 struct ModuleInput {
   std::string_view name;
   source::FileId id = source::UNKNOWN_FILE;
-  // A facade is the root module of a prelude package: its public
-  // surface is what a program sees without a `use`. It is a property of
-  // the staged standard library, not of the module's name, so a
-  // `prelude` module in a user package is just an ordinary module.
+  // A facade's public surface is in scope without a `use`. Set by
+  // std_prelude for a staged `prelude.al`, never from a user's module
+  // name.
   bool is_facade = false;
 };
 

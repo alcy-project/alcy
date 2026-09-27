@@ -12,24 +12,13 @@
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
+#include "pkg/arena_copy.h"
 #include "pkg/manifest.h"
 #include "pkg/resolve.h"
 
 namespace pkg {
 
 namespace {
-
-std::string_view copy_str(mem::Arena& arena, std::string_view bytes) {
-  if (bytes.empty()) {
-    return {};
-  }
-  char* const mem =
-      static_cast<char*>(arena.alloc(bytes.size(), alignof(char)));
-  for (usize i = 0; i < bytes.size(); ++i) {
-    mem[i] = bytes[i];
-  }
-  return {mem, bytes.size()};
-}
 
 void write_escaped(fmt::memory_buffer& out, std::string_view text) {
   static constexpr char HEX[] = "0123456789abcdef";

@@ -13,10 +13,9 @@
 
 namespace pipeline {
 
-// Stages the embedded standard library once per context and returns
-// its prelude inputs (currently the core member). Failure lands in the
-// bag and is reported as a failed Result; the empty span sentinel is
-// never used to signal failure.
+// Stages the embedded standard library once per context and returns its
+// prelude inputs. Failure lands in the bag and is reported as a failed
+// Result.
 base::Result<std::span<const analyzer::ModuleInput>, diag::Reported>
 std_prelude(PipelineContext& ctx);
 

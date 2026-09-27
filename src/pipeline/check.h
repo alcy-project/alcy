@@ -21,9 +21,8 @@ struct CheckResult {
   usize function_count;
 };
 
-// Each entry validates its raw request, then reports success as the
-// stats payload and failure as diag::Reported with diagnostics in the
-// bag. There is no success flag inside the payload.
+// Success is the stats payload itself; failure is diag::Reported with
+// diagnostics in the bag. There is no success flag inside the payload.
 base::Result<CheckResult, diag::Reported>
 finish_check(PipelineContext& ctx, analyzer::ModuleTree tree, usize file_count);
 

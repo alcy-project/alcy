@@ -45,8 +45,7 @@ bool write_all(
   return true;
 }
 
-// Loads rels in order and resolves with the first as an explicit root
-// stand-in: callers pass the root rel separately for clarity.
+// Loads rels in order; root_rel names the entry, which rels also lists.
 struct ResolveCase {
   ModuleTree tree;
   bool ok;
@@ -209,9 +208,7 @@ TEST_CASE("Resolve attaches unreferenced files as modules") {
   }
 
   Fixture f;
-  // Every listed input attaches, so the resolve-level warning only
-  // fires through duplicate collisions (covered above); the
-  // manifest-aware version lands with cli warnings.
+  // Every listed input attaches, so a stray module is not an error.
   const ResolveCase result =
       resolve_case(dir, "main.al", {"main.al", "stray.al"}, f);
   CHECK(result.ok);

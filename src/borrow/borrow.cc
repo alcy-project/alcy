@@ -222,10 +222,10 @@ class Checker {
         }
         flow[instr.dst.idx] = flow[addr];
         // Reading a place of reference type yields the referent, and the
-        // referent is a place: `home`/`path` carry the read place plus a
+        // referent is a place: home/path carry the read place plus a
         // dereference, so a store through the result and a loan of the
-        // source are seen to name the same thing. Any other type yields
-        // a value, which is not a place and keeps no path of its own.
+        // source name the same thing. Any other type yields a value,
+        // which is not a place and keeps no path of its own.
         const ir::TypeIdx loaded_ty = storage.registers()[instr.dst.idx].type;
         const ir::TypeTag loaded = tag_of(loaded_ty);
         if ((loaded == ir::TypeTag::Ref || loaded == ir::TypeTag::MutRef) &&
@@ -316,9 +316,8 @@ class Checker {
           break;
         }
         const ir::Operand& callee = storage.operands()[instr.operands.head()];
-        // External calls have no summary; their results carry no
-        // caller loans (no such external exists in the surface
-        // language).
+        // External calls have no summary, so their results carry no
+        // caller loans.
         if (!callee.is<ir::FunctionIdx>() || !instr.dst.is_valid()) {
           break;
         }
@@ -353,7 +352,6 @@ class Checker {
       }
       default: break;
     }
-    // Last-use positions for every register operand.
     for (u32 offset = 0; offset < instr.operands.size(); ++offset) {
       const ir::Operand& operand =
           storage.operands()[instr.operands.head() + offset];
@@ -471,7 +469,6 @@ class Checker {
         }
         break;
       case ir::Opcode::Switch:
-        // operands = [value, default, (case_imm, case_block)...].
         for (u32 i = 1; i < term.operands.size(); ++i) {
           push_target(term.operands.head() + i);
         }
@@ -618,8 +615,7 @@ class Checker {
     switch (instr.op) {
       case ir::Opcode::Load: {
         // Reading a place is a use, so a read of a moved place is a
-        // use-after-move. Without this the only way a move was ever
-        // noticed was a second move of the same place.
+        // use-after-move.
         Place place;
         if (operand_place(0, place)) {
           check_place_use(moved, place, span, "read");
@@ -679,7 +675,6 @@ class Checker {
         Place place;
         if (operand_place(1, place)) {
           kill_moved(moved, place);
-          // Assignment invalidates outstanding borrows of the place.
           for (const Loan& loan : loans) {
             if (loan.param != NO_ROOT) {
               continue;
@@ -828,10 +823,9 @@ class Checker {
 
   void run() {
     summaries.assign(storage.functions().size(), {});
-    // Bounded summary fixed-point over the call graph.
-    // Sweeping all functions propagates one call edge per sweep;
-    // chains longer than the function count cannot exist, so the
-    // cap only fires on compiler bugs.
+    // Bounded summary fixed-point over the call graph: one call edge
+    // propagates per sweep, so a chain cannot exceed the function count
+    // and the cap only fires on compiler bugs.
     const usize cap = storage.functions().size() + 1;
     bool stable = false;
     for (usize sweep = 0; sweep < cap && !stable; ++sweep) {
@@ -848,7 +842,6 @@ class Checker {
     if (!stable) {
       DCHECK(false);
     }
-    // Checking with final summaries.
     for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
          ++fidx) {
       reset_function();

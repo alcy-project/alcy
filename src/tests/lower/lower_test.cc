@@ -356,11 +356,9 @@ TEST_CASE("Lower emits relocatable objects") {
     return;
   }
   std::vector<u8> object = std::move(emitted).unwrap();
-  // Non-empty relocatable output.
   CHECK(object.size() > 0);
 
-  // Every linked backend emits independently of the host: any alcy
-  // binary produces objects for any supported architecture.
+  // Emission is target-independent, so non-host triples are covered here.
   const std::pair<std::string_view, std::string_view> triples[] = {
       {"x86_64-unknown-linux-gnu", "main_x64.o"},
       {"aarch64-unknown-linux-gnu", "main_a64.o"},

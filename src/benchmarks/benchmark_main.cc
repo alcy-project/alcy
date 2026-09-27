@@ -1,7 +1,6 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// #include "benchmark/benchmark.h"
 #include "fpag/base/numeric.h"
 #include "fpag/debug/signal_handler.h"
 #include "fpag/debug/terminate_handler.h"
@@ -19,20 +18,6 @@ void init() {
 
 i32 main(i32 /* argc */, char** /* argv */) {
   init();
-
-  // benchmark::MaybeReenterWithoutASLR(argc, argv);
-  // char arg0_default[] = "benchmark";
-  // char* args_default = reinterpret_cast<char*>(arg0_default);
-  // if (!argv) {
-  //   argc = 1;
-  //   argv = &args_default;
-  // }
-  // benchmark::Initialize(&argc, argv);
-  // if (benchmark::ReportUnrecognizedArguments(argc, argv)) {
-  //   return 1;
-  // }
-  // benchmark::RunSpecifiedBenchmarks();
-  // benchmark::Shutdown();
   return 0;
 }
 

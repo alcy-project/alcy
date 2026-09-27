@@ -127,8 +127,6 @@ ir::RegisterIdx Lowerer::emit(ir::Opcode op,
   return dst;
 }
 
-// Emits a type query, which measures a type instead of consuming
-// operands: the measured type rides on the instruction.
 ir::RegisterIdx Lowerer::emit_type_query(ir::Opcode op, ir::TypeIdx measure) {
   if (failed) {
     return ir::RegisterIdx(base::kInvalidIdx);
@@ -283,8 +281,6 @@ bool Lowerer::emit_drop_at(ir::OperandIdx place,
 }
 
 void Lowerer::emit_drops(u32 mark, diag::Span span) {
-  // Innermost value first, so a value is ended before whatever it was
-  // declared next to.
   for (u32 i = static_cast<u32>(locals.size()); i > mark; --i) {
     Local& local = locals[i - 1];
     if (!local.needs_drop || local.moved) {
@@ -363,7 +359,6 @@ const analyzer::CheckedModule::CallTarget* Lowerer::call_target(
   return nullptr;
 }
 
-// Comp formal positions of a function item, in order.
 std::vector<u32> Lowerer::comp_positions(ast::ItemIdx item) const {
   std::vector<u32> positions;
   if (!item.is_valid()) {
@@ -383,7 +378,6 @@ std::vector<u32> Lowerer::comp_positions(ast::ItemIdx item) const {
   return positions;
 }
 
-// Deterministic specialization key over comp argument values.
 void Lowerer::comp_key_into(std::string& key, const CompValue& value) {
   switch (value.tag) {
     case CompValue::Tag::Void: key += "v;"; return;
@@ -427,10 +421,8 @@ void Lowerer::comp_key_into(std::string& key, const CompValue& value) {
   }
 }
 
-// Finds or reserves the function index for (item, signature,
-// comp arguments), enqueueing lowering work on first encounter.
-// Recursive calls see the reserved index, so bodies may reference
-// themselves.
+// Enqueues lowering work on first encounter, so a recursive call sees
+// the reserved index and the body may reference itself.
 ir::FunctionIdx Lowerer::fn_index(u32 mod,
                                   ast::ItemIdx item,
                                   std::string_view name,
@@ -486,7 +478,6 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   return idx;
 }
 
-// Type arguments of a nominal type, empty for a plain declaration.
 std::vector<ir::TypeIdx> Lowerer::nominal_arguments(ir::TypeIdx type) const {
   const ir::TypeNode& node = builder.state().types[type.idx];
   ir::TypeIdxRange params{};
@@ -505,8 +496,6 @@ std::vector<ir::TypeIdx> Lowerer::nominal_arguments(ir::TypeIdx type) const {
   return args;
 }
 
-// Type arguments a generic free function or intrinsic bound, for the
-// symbol that names it.
 std::vector<ir::TypeIdx> Lowerer::fn_args_for(ast::ItemIdx item) const {
   for (const analyzer::FnInstance& instance : pkg.fn_insts) {
     if (instance.item == item) {
@@ -516,8 +505,7 @@ std::vector<ir::TypeIdx> Lowerer::fn_args_for(ast::ItemIdx item) const {
   return {};
 }
 
-// Index of a generic instantiation, or NO_INST when the type is not
-// a generic instantiation.
+// NO_INST when the type is not a generic instantiation.
 u32 Lowerer::generic_inst_index(ir::TypeIdx type) const {
   for (u32 i = 0; i < static_cast<u32>(pkg.generic_insts.size()); ++i) {
     if (pkg.generic_insts[i].idx == type.idx) {
@@ -527,14 +515,9 @@ u32 Lowerer::generic_inst_index(ir::TypeIdx type) const {
   return analyzer::NO_INST;
 }
 
-// Lowering context of a call target: the checker recorded the
-// instantiation under which the callee body was checked; that is
-// exactly the context its body reads side tables in.
-// Lowering context of a call target: the instantiation the callee
-// body was checked under. Methods derive it from the receiver's
-// instance type; free functions carry it on their signature. The
-// target's own `inst` records the *caller's* context, so it cannot
-// answer this.
+// Lowering context of a call target: the instantiation its body was
+// checked under, and so the context its side-table reads use.
+// `target->inst` records the caller's context instead.
 u32 Lowerer::callee_inst(
     const analyzer::CheckedModule::CallTarget* target) const {
   if (target == nullptr) {
@@ -686,9 +669,8 @@ void Lowerer::lower_fn(const FnEntry& entry) {
     emit_void(ir::Opcode::Unreachable, {});
     return;
   }
-  // Falling off the end ends the parameters too, so a function that
-  // returns normally releases everything it was given. Taking the
-  // result first moves it out of the value it came from, so the scope
+  // Falling off the end ends the parameters too. The result is taken
+  // first, which moves it out of the value it came from, so the scope
   // exit does not end it again.
   if (body_tag == ir::TypeTag::Void) {
     emit_drops(0, fn.name.span);
@@ -846,7 +828,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   if (lowerer.failed) {
     return base::make_err(diag::Reported{});
   }
-  // Tables leave before the builder moves; aggregate init stays whole.
+  // Side tables move out before the builder, which finish() consumes.
   std::vector<diag::Span> spans = std::move(lowerer.instr_spans_);
   std::vector<LoweredPackage::AddrInfo> addrs = std::move(lowerer.addr_names_);
   const usize prelude_functions = lowerer.prelude_functions_;
@@ -865,7 +847,6 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     return base::make_err(diag::Reported{});
   }
   ir::VerifiedStorage storage = std::move(built).unwrap();
-  // Tables outlive the builder move above; the Lowerer shell is empty.
   LoweredPackage lowered{std::move(storage), std::move(spans), std::move(addrs),
                          prelude_functions};
   return base::make_ok(std::move(lowered));

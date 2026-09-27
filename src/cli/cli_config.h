@@ -26,9 +26,9 @@ struct CliConfig {
   term::ColorMode color_mode = term::ColorMode::Auto;
   Subcommand subcommand = Subcommand::None;
   bool release = false;
-  // Positional target for build (empty when absent; the cli substitutes
-  // "."). Borrows argv storage, so a config must not outlive the argument
-  // vector it was parsed from.
+  // First positional, read as each subcommand's target (empty when
+  // absent; the cli substitutes "."). Borrows argv storage, so a config
+  // must not outlive the argument vector it was parsed from.
   std::string_view target_dir;
   // Object output path for single-file builds (empty selects next to the
   // input with a .o suffix). Borrows argv storage like target_dir.

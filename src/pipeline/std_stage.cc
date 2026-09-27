@@ -64,11 +64,9 @@ std_prelude(PipelineContext& ctx) {
       (void)index;
       return base::make_err(diag::Reported{});
     }
-    // A source named `prelude.al` is its package's facade: the module
-    // whose public surface is in scope without a `use`. Anything else in
-    // the package is an ordinary module beside it. The distinction is
-    // made here, from what was staged, so a `prelude` module in a user
-    // package carries no special meaning.
+    // A source named `prelude.al` is its package's facade: its public
+    // surface is in scope without a `use`. The name is read from what was
+    // staged, so a `prelude` module in a user package stays ordinary.
     const bool facade = ends_with(source.path, "/prelude.al");
     ctx.std_inputs.push_back(
         {std::string_view(source.path), std::move(loaded).unwrap(), facade});

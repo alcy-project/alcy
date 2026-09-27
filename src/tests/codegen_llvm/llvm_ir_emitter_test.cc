@@ -488,9 +488,8 @@ TEST_CASE("Emit control flow") {
     return builder.block({.instrs = instrs.finish(), .block_params = {}});
   };
 
-  // @condbr(i1 %c) -> i32 with entry/then/else blocks. The entry block is
-  // declared empty first (LLVM requires it first in vector order) and
-  // backpatched once the targets exist.
+  // The entry block is declared empty first (LLVM requires it first in
+  // vector order) and backpatched once the targets exist.
   const ir::BlockIdx cond_entry = builder.block({{}, {}});
   const ir::BlockIdx then_block = ret_block(one);
   const ir::BlockIdx else_block = ret_block(zero);
