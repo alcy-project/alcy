@@ -105,11 +105,15 @@ module tree and MVP is single-package. So this lands in two steps.
 **Landed here:** the layout, the manifests, the entry module per package,
 and the ADR. The compiler still injects the whole suite, so behaviour is
 unchanged and the implicit surface is every std item rather than the one
-a package's `prelude.al` re-exports. Each package is one entry module
-today: splitting one into several behind a `prelude.al` facade needs the
-prelude injection to build a nested module tree, and each staged source
-is added as an independent root today, so a facade's `use mem::{...}`
-has no sibling to resolve against.
+a package's `prelude.al` re-exports.
+
+The nested prelude tree a real split needs has landed: staged sources
+attach by slash-separated name, so a package's modules share a root and
+a facade can reach them. Populating it does not work yet — staging
+`core/prelude.al` alongside `core/mem.al` segfaults in the attach path
+before analysis, rather than resolving the facade's `use mem::{...}`. So
+each package is one entry module for now and the split is
+organizational; `deferred.md` records the crash.
 
 **Follow-up:** manifest suite resolution, per-package selection driven by
 `dependencies`, enforcement of `export`, and cross-package `use`. Until
