@@ -1,0 +1,103 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Fuzz targets, built only with `--args=is_fuzz=true`.
+#
+# These are development tools, not part of the compiler: nothing in `src`
+# depends on them and a normal build never sees them. `./fuzz/run.py`
+# builds and drives them, and is the entry point a developer should use
+# rather than invoking the binaries by hand.
+#
+# The oracle is the existing verifier layer rather than a comparison
+# against a known answer. Every byte-level entry point already returns a
+# `base::Result`, and the pipeline already verifies at each stage
+# boundary (docs/adr/0015), so "does not crash, does not trip a
+# sanitizer, and the verifier accepts or rejects cleanly" is a complete
+# statement for the memory-safety class. Two targets go further and abort
+# on a broken invariant, because libFuzzer turns an abort into a
+# minimizing reproducer.
+#
+# This says nothing about a *wrong but non-crashing* answer. That is what
+# the property tests under `src/tests/property` and the exe cases are for.
+
+# Shared shape of a target: the sanitizer flags, the project's own
+# config, and the whole compiler as a library so a target can reach any
+# stage it names.
+template("fuzz_target") {
+  executable(target_name) {
+    testonly = true
+    forward_variables_from(invoker, "*")
+    configs += [
+      ":fuzz_config",
+      "//src:alcy_config",
+      "//src:win_sys_libs",
+    ]
+    deps = [ "//src:alcy_lib" ]
+  }
+}
+
+if (!is_fuzz) {
+  group("fuzz") {
+    testonly = true
+  }
+} else {
+  config("fuzz_config") {
+    # `-fsanitize=fuzzer` both links the runtime, which supplies main(),
+    # and instruments the target for coverage-guided mutation. It is
+    # clang-only, which is why `is_fuzz` gates the whole file rather than
+    # conditionally compiling the sources.
+    cflags = [ "-fsanitize=fuzzer" ]
+    ldflags = [
+      "-fsanitize=fuzzer",
+
+      # The prebuilt fuzzer runtime was compiled with RTTI and defines
+      # `__dynamic_cast`, which the statically linked libc++abi also
+      # defines; the linker rejects the duplicate. The runtime is a
+      # single object, so the symbol cannot be dropped from it, and
+      # libFuzzer only reaches it for an internal downcast that a
+      # program built with -fno-rtti never triggers. Tolerating the
+      # duplicate is scoped to this link alone: the compiler binary
+      # keeps the static libc++abi and stays RTTI-free.
+      "-Wl,--allow-multiple-definition",
+    ]
+  }
+
+  # Every target is a libFuzzer entry point over one boundary: the
+  # narrow ones exist so a failure can be reached without paying for the
+  # stages before it, and the wide one is the honest end-to-end check.
+  fuzz_target("fuzz_lexer") {
+    sources = [ "fuzz_lexer.cc" ]
+  }
+
+  fuzz_target("fuzz_parser") {
+    sources = [ "fuzz_parser.cc" ]
+  }
+
+  fuzz_target("fuzz_path") {
+    sources = [ "fuzz_path.cc" ]
+  }
+
+  fuzz_target("fuzz_manifest") {
+    sources = [ "fuzz_manifest.cc" ]
+  }
+
+  fuzz_target("fuzz_render") {
+    sources = [ "fuzz_render.cc" ]
+  }
+
+  fuzz_target("fuzz_pipeline") {
+    sources = [ "fuzz_pipeline.cc" ]
+  }
+
+  group("fuzz") {
+    testonly = true
+    deps = [
+      ":fuzz_lexer",
+      ":fuzz_manifest",
+      ":fuzz_parser",
+      ":fuzz_path",
+      ":fuzz_pipeline",
+      ":fuzz_render",
+    ]
+  }
+}

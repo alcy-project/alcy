@@ -1,0 +1,29 @@
+{
+  "comment": [
+    "Failures that are already understood, so fuzz/run.py can tell a new",
+    "defect from the same known one. A `target` entry says the target",
+    "cannot be a gate at all; an `input` entry says one specific input",
+    "is expected to fail. See README.md for the policy."
+  ],
+  "targets": [
+    {
+      "target": "fuzz_manifest",
+      "summary": "toml++ aborts on an incomplete table header",
+      "detail": "third_party/toml v3.4.0. impl/parser.inl:3037 (asserted, reachable with a debug build) and :3156 (dereferenced). The project builds with -fno-exceptions, which selects toml++'s impl_noex parser, and that path does not report an error for a table header it cannot finish. `[` followed by a byte that cannot continue a bare key and then a newline is enough, so the failing inputs are a class rather than a set and cannot be enumerated. A release build drops the assert, so the same input is undefined behaviour and a malformed manifest is a memory-safety risk, not a rejected input. Reproduces with no alcy code: compile a program that calls toml::parse on \"[\\n\" against the vendored header and it aborts. The two files in inputs/ are the minimal reproducers. Report upstream; delete this entry once a fixed toml++ is vendored."
+    }
+  ],
+  "inputs": [
+    {
+      "target": "fuzz_manifest",
+      "input": "95d2b1934931691669cc35a87619518015336213dda0a60fe1b09f9b8e3e993d",
+      "summary": "minimal reproducer: a table header and a newline",
+      "detail": "Kept as the artifact to quote in the upstream report; the target-level entry above is what suppresses it."
+    },
+    {
+      "target": "fuzz_manifest",
+      "input": "656215ea431e6717a54341cbb87d11f6ff6e86e01846188dd722fb9398e26c29",
+      "summary": "the same defect through an array-of-tables header",
+      "detail": "See the target-level entry above."
+    }
+  ]
+}

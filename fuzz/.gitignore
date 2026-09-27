@@ -1,0 +1,4 @@
+# libFuzzer's cache of inputs that grew coverage. It improves the next
+# run and is not reproducible state, so it is not checked in; a crash is
+# kept under known/inputs/ instead.
+corpus/

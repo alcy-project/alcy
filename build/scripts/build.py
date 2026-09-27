@@ -36,6 +36,7 @@ def build(
     target_cpu: str = "",
     gen_only: bool = False,
     fast: bool = False,
+    gn_args_extra: str = "",
 ) -> int:
     out_dir = project_root_dir / "out"
     build_dir = out_dir / build_subdir
@@ -47,6 +48,10 @@ def build(
         gn_args += f' target_os="{target_os}"'
     if target_cpu:
         gn_args += f' target_cpu="{target_cpu}"'
+    # Forwarded verbatim, so an opt-in target (the fuzzers, which need
+    # libFuzzer) can be built without invoking gn by hand.
+    if gn_args_extra:
+        gn_args += f" {gn_args_extra}"
 
     try:
         if not fast:
@@ -135,6 +140,13 @@ def main():
         help='GN target_cpu override (e.g. "wasm32"; defaults per target_os)',
     )
     parser.add_argument(
+        "--gn-arg",
+        dest="gn_args_extra",
+        default="",
+        help="Extra GN arguments, passed through verbatim "
+        '(e.g. --gn-arg=is_fuzz=true)',
+    )
+    parser.add_argument(
         "--gen-only",
         action="store_true",
         help="Run gn gen, gn check, and update compdb only (without building target)",
@@ -157,6 +169,7 @@ def main():
         args.target_cpu,
         args.gen_only,
         args.fast,
+        args.gn_args_extra,
     )
 
 

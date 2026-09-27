@@ -53,6 +53,13 @@ declare_args() {
   use_lld = true
 }
 
+# Builds the libFuzzer targets under //fuzz. Off by default: they need
+# clang's fuzzer runtime and are a development tool, so a normal build
+# should not carry them. See //fuzz/BUILD.gn.
+declare_args() {
+  is_fuzz = false
+}
+
 if (!is_win && !is_mac && !is_ios) {
   declare_args() {
     use_mold =
