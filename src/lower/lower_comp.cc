@@ -22,7 +22,9 @@
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
+#include "ir/type_util.h"
 #include "lower/lowerer.h"
+#include "text/unescape.h"
 
 namespace lower {
 
@@ -104,29 +106,7 @@ const Lowerer::CompVal* Lowerer::comp_lookup(const CompScope& scope,
 // Unescapes with exactly the runtime literal rules so comp strings
 // match lowered ones byte for byte.
 std::string Lowerer::comp_unescape(std::string_view spelling) {
-  std::string bytes;
-  if (spelling.size() >= 2) {
-    spelling.remove_prefix(1);
-    spelling.remove_suffix(1);
-  }
-  for (usize i = 0; i < spelling.size(); ++i) {
-    const char c = spelling[i];
-    if (c != '\\' || i + 1 >= spelling.size()) {
-      bytes.push_back(c);
-      continue;
-    }
-    const char esc = spelling[++i];
-    switch (esc) {
-      case 'n': bytes.push_back('\n'); break;
-      case 't': bytes.push_back('\t'); break;
-      case 'r': bytes.push_back('\r'); break;
-      case '\\': bytes.push_back('\\'); break;
-      case '"': bytes.push_back('"'); break;
-      case '0': bytes.push_back('\0'); break;
-      default: bytes.push_back(esc); break;
-    }
-  }
-  return bytes;
+  return text::unescape_string(spelling);
 }
 
 bool Lowerer::comp_eval_literal(u32 mod, ast::ExprIdx expr, CompVal& out) {
@@ -1644,12 +1624,48 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
       }
       continue;
     }
-    // Integers format as decimal through a scratch buffer.
+    // Integers format as decimal through a scratch buffer. A signed
+    // value is split into sign and magnitude first: widening with a
+    // sign-extending cast would print -1 as twenty digits.
     const ir::RegisterIdx loaded =
         emit(ir::Opcode::Load, elem_ty, {to_operand(elem_addr, elem_ty)});
     const ir::TypeIdx u64_ty = builder.primitive(ir::TypeTag::U64);
-    const ir::RegisterIdx wide =
-        emit(ir::Opcode::TypeCast, u64_ty, {to_operand(loaded, elem_ty)});
+    const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+    bool negative = false;
+    ir::RegisterIdx is_negative = ir::RegisterIdx(base::kInvalidIdx);
+    ir::RegisterIdx wide = loaded;
+    if (ir::is_signed_integer_type(tag_of(elem_ty))) {
+      // The sign is a runtime property, so the digits come from a
+      // select between the value and its magnitude. Negating in the
+      // source type gives the two's complement; TypeCast picks zero- or
+      // sign-extension from the *source* tag, so both arms reinterpret
+      // through the same width as an unsigned type before widening.
+      const ir::ImmutableIdx zero =
+          builder.immutable({.type = elem_ty, .data = {.i64_value = 0}});
+      const ir::RegisterIdx magnitude =
+          emit(ir::Opcode::IntSub, elem_ty,
+               {to_operand(zero, elem_ty), to_operand(loaded, elem_ty)});
+      const ir::TypeIdx same_width =
+          builder.primitive(ir::unsigned_integer_type(tag_of(elem_ty)));
+      auto as_unsigned = [&](ir::RegisterIdx value) -> ir::RegisterIdx {
+        const ir::RegisterIdx same = emit(ir::Opcode::TypeCast, same_width,
+                                          {to_operand(value, elem_ty)});
+        return emit(ir::Opcode::TypeCast, u64_ty,
+                    {to_operand(same, same_width)});
+      };
+      const ir::RegisterIdx positive = as_unsigned(loaded);
+      const ir::RegisterIdx abs_value = as_unsigned(magnitude);
+      is_negative =
+          emit(ir::Opcode::Lt, boolean,
+               {to_operand(loaded, elem_ty), to_operand(zero, elem_ty)});
+      wide =
+          emit(ir::Opcode::Select, u64_ty,
+               {to_operand(is_negative, boolean), to_operand(abs_value, u64_ty),
+                to_operand(positive, u64_ty)});
+      negative = true;
+    } else {
+      wide = emit(ir::Opcode::TypeCast, u64_ty, {to_operand(loaded, elem_ty)});
+    }
     const ir::TypeIdx digits_ty =
         builder.array_type(u8_ty, static_cast<u64>(20));
     const ir::RegisterIdx tmp = emit(ir::Opcode::Alloca, digits_ty, {size_one});
@@ -1721,13 +1737,52 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
     }
     const ir::RegisterIdx digits =
         emit(ir::Opcode::Load, usize_ty, {to_operand(count_addr, usize_ty)});
-    const ir::RegisterIdx start =
+    if (negative) {
+      // The sign is a separate one-byte piece in front of the digits.
+      // A zero-length copy is what drops it for a positive value, so
+      // the digits stay at the tail of the scratch buffer.
+      const ir::TypeIdx sign_ty = builder.array_type(u8_ty, 2);
+      const ir::RegisterIdx sign_buf =
+          emit(ir::Opcode::Alloca, sign_ty, {size_one});
+      for (u32 cell = 0; cell < 2; ++cell) {
+        const ir::RegisterIdx slot = emit(
+            ir::Opcode::GetElementPtr, u8_ty,
+            {to_operand(sign_buf, sign_ty), zero_i32, index_operand(cell)});
+        const ir::ImmutableIdx glyph = builder.immutable(
+            {.type = u8_ty,
+             .data = {.u8_value = static_cast<u8>(cell == 0 ? '-' : ' ')}});
+        emit_void(ir::Opcode::Store,
+                  {to_operand(glyph, u8_ty), to_operand(slot, u8_ty)});
+      }
+      const ir::RegisterIdx minus_slot =
+          emit(ir::Opcode::GetElementPtr, u8_ty,
+               {to_operand(sign_buf, sign_ty), zero_i32, usize_imm(0)});
+      const ir::RegisterIdx blank_slot =
+          emit(ir::Opcode::GetElementPtr, u8_ty,
+               {to_operand(sign_buf, sign_ty), zero_i32, usize_imm(1)});
+      const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+      const ir::RegisterIdx sign_ptr = emit(
+          ir::Opcode::Select, ptr_ty,
+          {to_operand(is_negative, boolean), to_operand(minus_slot, ptr_ty),
+           to_operand(blank_slot, ptr_ty)});
+      const ir::RegisterIdx sign_len =
+          emit(ir::Opcode::Select, usize_ty,
+               {to_operand(is_negative, boolean), usize_imm(1), usize_imm(0)});
+      if (!bounded_copy(to_operand(sign_ptr, ptr_ty),
+                        to_operand(sign_len, usize_ty),
+                        to_operand(sign_len, usize_ty))) {
+        return false;
+      }
+    }
+    // The loop filled the scratch buffer from its end backwards, so
+    // the digits start `20 - digits` cells in.
+    const ir::RegisterIdx tail =
         emit(ir::Opcode::IntSub, usize_ty,
              {usize_imm(20), to_operand(digits, usize_ty)});
-    const ir::RegisterIdx first = emit(
+    const ir::RegisterIdx run = emit(
         ir::Opcode::GetElementPtr, u8_ty,
-        {to_operand(tmp, digits_ty), zero_i32, to_operand(start, usize_ty)});
-    if (!bounded_copy(to_operand(first, builder.primitive(ir::TypeTag::Ptr)),
+        {to_operand(tmp, digits_ty), zero_i32, to_operand(tail, usize_ty)});
+    if (!bounded_copy(to_operand(run, builder.primitive(ir::TypeTag::Ptr)),
                       to_operand(digits, usize_ty),
                       to_operand(digits, usize_ty))) {
       return false;

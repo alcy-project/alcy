@@ -48,4 +48,18 @@ inline constexpr bool is_float_type(TypeTag tag) {
   }
 }
 
+// The unsigned tag of the same width, for the tags that have one.
+// Reinterpreting a signed value through it preserves every bit, which
+// is how a magnitude gets widened without re-extending the sign.
+inline constexpr TypeTag unsigned_integer_type(TypeTag tag) {
+  using T = TypeTag;
+  switch (tag) {
+    case T::I8: return T::U8;
+    case T::I16: return T::U16;
+    case T::I32: return T::U32;
+    case T::I64: return T::U64;
+    default: return tag;
+  }
+}
+
 }  // namespace ir

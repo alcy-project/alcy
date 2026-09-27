@@ -36,6 +36,7 @@ executable("tests") {
     "source/source_test.cc",
     "symbol/mangle_test.cc",
     "test_main.cc",
+    "text/unescape_test.cc",
     "util/test_util.cc",
     "util/test_util.h",
   ]

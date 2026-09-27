@@ -29,6 +29,7 @@
 #include "ir/storage_builder.h"
 #include "ir/type.h"
 #include "lower/lowerer.h"
+#include "text/unescape.h"
 
 namespace lower {
 
@@ -241,29 +242,7 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
   const ir::TypeTag tag = literal_tag(lit_idx, expected);
   const ir::TypeIdx type = builder.primitive(tag);
   if (tag == ir::TypeTag::Str) {
-    std::string bytes;
-    std::string_view spelling = lit.spelling;
-    if (spelling.size() >= 2) {
-      spelling.remove_prefix(1);
-      spelling.remove_suffix(1);
-    }
-    for (usize i = 0; i < spelling.size(); ++i) {
-      const char c = spelling[i];
-      if (c != '\\' || i + 1 >= spelling.size()) {
-        bytes.push_back(c);
-        continue;
-      }
-      const char esc = spelling[++i];
-      switch (esc) {
-        case 'n': bytes.push_back('\n'); break;
-        case 't': bytes.push_back('\t'); break;
-        case 'r': bytes.push_back('\r'); break;
-        case '\\': bytes.push_back('\\'); break;
-        case '"': bytes.push_back('"'); break;
-        case '0': bytes.push_back('\0'); break;
-        default: bytes.push_back(esc); break;
-      }
-    }
+    const std::string bytes = text::unescape_string(lit.spelling);
     const str::StringPoolId id = strings.intern(bytes);
     const ir::ImmutableIdx imm =
         builder.immutable({.type = type, .data = {.str_id_value = id}});

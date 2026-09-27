@@ -16,6 +16,7 @@ source_set("lower") {
     "//src/diag",
     "//src/ir",
     "//src/source",
+    "//src/text",
   ]
   configs += [ "//src:alcy_config" ]
 }

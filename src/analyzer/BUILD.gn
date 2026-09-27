@@ -20,6 +20,7 @@ source_set("analyzer") {
     "//src/parser",
     "//src/path",
     "//src/source",
+    "//src/text",
   ]
   configs += [ "//src:alcy_config" ]
 }

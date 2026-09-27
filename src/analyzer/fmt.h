@@ -9,6 +9,7 @@
 
 #include "fpag/base/numeric.h"
 #include "ir/type.h"
+#include "text/unescape.h"
 
 namespace analyzer {
 
@@ -29,31 +30,10 @@ enum class FmtError : u8 {
   Specifier,
 };
 
-// Decodes string-literal escapes exactly like lowering.
+// Decodes string-literal escapes exactly like lowering, which shares
+// the implementation so the two cannot drift.
 inline std::string unescape_format_string(std::string_view spelling) {
-  std::string bytes;
-  if (spelling.size() >= 2) {
-    spelling.remove_prefix(1);
-    spelling.remove_suffix(1);
-  }
-  for (usize i = 0; i < spelling.size(); ++i) {
-    const char c = spelling[i];
-    if (c != '\\' || i + 1 >= spelling.size()) {
-      bytes.push_back(c);
-      continue;
-    }
-    const char esc = spelling[++i];
-    switch (esc) {
-      case 'n': bytes.push_back('\n'); break;
-      case 't': bytes.push_back('\t'); break;
-      case 'r': bytes.push_back('\r'); break;
-      case '\\': bytes.push_back('\\'); break;
-      case '"': bytes.push_back('"'); break;
-      case '0': bytes.push_back('\0'); break;
-      default: bytes.push_back(esc); break;
-    }
-  }
-  return bytes;
+  return text::unescape_string(spelling);
 }
 
 struct FmtParse {

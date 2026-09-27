@@ -38,6 +38,7 @@ group("modules") {
     "pkg",
     "source",
     "symbol",
+    "text",
   ]
 }
 

@@ -10,6 +10,7 @@
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
+#include "ir/type_util.h"
 
 namespace ir {
 
@@ -218,6 +219,19 @@ TEST_CASE("Layout of a nested enum flows into its containing struct") {
       layout_of(storage.state(), outer, PointerWidth::W64);
   CHECK(outer_layout.align == 8);
   CHECK(outer_layout.size == 24);
+}
+
+TEST_CASE("unsigned_integer_type keeps the width") {
+  using T = TypeTag;
+  CHECK(unsigned_integer_type(T::I8) == T::U8);
+  CHECK(unsigned_integer_type(T::I16) == T::U16);
+  CHECK(unsigned_integer_type(T::I32) == T::U32);
+  CHECK(unsigned_integer_type(T::I64) == T::U64);
+  // Already unsigned, and non-integers, are left alone.
+  CHECK(unsigned_integer_type(T::U32) == T::U32);
+  CHECK(unsigned_integer_type(T::I1) == T::I1);
+  CHECK(unsigned_integer_type(T::F64) == T::F64);
+  CHECK(unsigned_integer_type(T::Str) == T::Str);
 }
 
 }  // namespace ir
