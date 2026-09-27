@@ -37,7 +37,7 @@ constexpr const char* NAMES[] = {
     "tab\there",
     "newline\nhere",
     "del\x7f",
-    "caf\xc3\xa9",
+    "na\xc3\xafve",
     "emoji\xf0\x9f\x98\x80",
     "\xc3\xa9\xe2\x82\xac\xf0\x9f\x98\x80",  // multi-byte, mixed widths
     "0123",
@@ -60,7 +60,7 @@ TEST_CASE("Property: a serialized lockfile is always valid TOML") {
   // that keeps a lockfile loadable: any byte a name or path can hold
   // must come out as something TOML accepts. A control character or a
   // byte that is not part of a well-formed UTF-8 sequence written
-  // through raw makes the whole document unparseable, which is how the
+  // through raw makes the whole document unparsable, which is how the
   // escaping bug this covers presented.
   for (const char* name : NAMES) {
     for (const char* source : NAMES) {

@@ -358,6 +358,52 @@ fork is consumed as prebuilt static libraries keyed by the submodule tag,
 with a from-source fallback. Build and platform details are documented in
 [docs/build.md](docs/build.md).
 
+## Verification
+
+Verification is layered by bug class, and no layer substitutes for another. A
+compiler can be memory-safe, crash-free, and still lower a program to the wrong
+value, so each layer names what it can see. The rationale and the rejected
+alternatives are in [ADR 0017](docs/adr/0017-verification-strategy.md); the
+contributor-facing rules are in
+[CONTRIBUTING.md](CONTRIBUTING.md#testing-rules).
+
+| Layer | Oracle | Runs in | Claims |
+| --- | --- | --- | --- |
+| Unit tests | An explicit expected value | every build | One named input produces the stated result |
+| Property tests | A relation between two computations | every build | The relation holds for every input, or names a counterexample |
+| Hostile input | The call returns | every build | A generated or random input does not crash or trip a sanitizer |
+| Sanitizers | AddressSanitizer | every debug build | No use-after-free, no out-of-bounds access |
+| Fuzzing | Coverage-guided mutation | on demand | No input reaches a state the existing oracles miss |
+| Coverage | A recorded baseline | `check.sh` | Line coverage of `src/` did not decrease |
+
+Two properties of this shape matter more than the table:
+
+**A property test routes through an independent implementation where one
+exists.** `symbol::mangle` is verified by `symbol::demangle` round-tripping, so
+an encoder that lost or conflated a field cannot have it invented back. Where no
+second implementation exists, the property is a fixed point or a self-consistency
+of the output. A test that re-asserts the implementation it covers cannot fail
+and is not written.
+
+**A deterministic generator, not a fuzzer, is the regression test.** The
+hostile-input layer is seeded, so a failure is reproducible from the seed and can
+be reported as a bug with a command line. libFuzzer is for finding new inputs; a
+crash it finds is checked in as a seed plus a unit test, because the artifact alone
+is only replayed by a fuzzer.
+
+The recursion budget is part of this design rather than a detail of one pass:
+`base::MAX_NESTING` is shared by the parser, the analyzer, and the lowerer
+because it is a property of the language, so a program accepted at one limit is
+accepted at all of them. The parser and the analyzer both need it and neither
+subsumes the other - a long operator chain parses in a loop, so it is shallow to
+the parser while building a tree the analyzer then walks.
+
+Tests reach the compiler through in-memory sources
+(`pipeline::check_source`, `tests::add_sources`), so a case that has text does not
+create a directory. That keeps the suite hermetic and keeps most cases out of the
+failure modes a shared temporary directory brings; a real directory is reserved
+for testing the filesystem or writing an output artifact.
+
 ## System invariants
 
 - **User-input robustness**: Invalid alcy source must result in diagnostics,
