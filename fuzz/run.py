@@ -150,14 +150,17 @@ def run_fuzzing(
                 f"-artifact_prefix={artifacts}/",
                 f"-jobs={jobs}",
                 f"-workers={jobs}",
-                str(corpus),
+                str(corpus.resolve()),
             ]
             if not verbose:
                 command.append("-print_final_stats=0")
             print(f"==> {name} ({seconds}s, {jobs} job(s))", flush=True)
             completed = subprocess.run(
                 command,
-                cwd=REPO_ROOT,
+                # libFuzzer writes fuzz-<job>.log into the working
+                # directory under -jobs, so the run belongs in the
+                # scratch directory rather than the repository.
+                cwd=artifacts,
                 stdout=subprocess.DEVNULL if not verbose else None,
                 stderr=subprocess.STDOUT if not verbose else None,
             )
