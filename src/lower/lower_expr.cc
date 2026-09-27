@@ -549,8 +549,14 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
       return;
     }
     case ast::PatternKind::Literal:
-    case ast::PatternKind::Or:
       unsupported(node.span, "refutable pattern in lowering");
+      return;
+    case ast::PatternKind::Or:
+      // Nested alternatives need the distributive expansion
+      // `(A | B, x) => (A, x) | (B, x)`, which desugaring does not do.
+      // Rejecting here is honest; the top-level form is handled by
+      // condition_alternatives and expand_or_arms.
+      unsupported(node.span, "or-pattern nested inside another pattern");
       return;
   }
 }
@@ -2090,6 +2096,49 @@ void Lowerer::expand_or_arms(
   for (ast::PatternIdx alt :
        ast.patterns[arm.pattern].payload.or_pat.alternatives) {
     out.emplace_back(alt, arm.body);
+  }
+}
+
+// A condition pattern may itself be an or-pattern, which lower_arm_test
+// rejects because it expands alternatives at the match level instead.
+// Only the top level of a condition is handled; an or-pattern nested
+// inside a tuple or struct pattern needs the distributive expansion
+// desugaring does not yet do, and bind_pattern reports that case.
+std::vector<ast::PatternIdx> Lowerer::condition_alternatives(
+    ast::PatternIdx pattern) {
+  if (ast.patterns[pattern].kind != ast::PatternKind::Or) {
+    return {pattern};
+  }
+  const std::span<const ast::PatternIdx> alts =
+      ast.patterns[pattern].payload.or_pat.alternatives;
+  return {alts.begin(), alts.end()};
+}
+
+// Tests a condition pattern against a scrutinee place: any matching
+// alternative branches to `body_block`, and only a failure of all of
+// them reaches `fail_block`. lower_arm_test leaves the current block on
+// the match path, so a staging block bridges it back to the next
+// alternative.
+void Lowerer::lower_condition_test(ast::PatternIdx pattern,
+                                   Val scrut_addr,
+                                   ir::TypeIdx scrut_type,
+                                   ir::BlockIdx body_block,
+                                   ir::BlockIdx fail_block) {
+  const std::vector<ast::PatternIdx> alternatives =
+      condition_alternatives(pattern);
+  for (usize i = 0; i + 1 < alternatives.size() && !failed; ++i) {
+    const ir::BlockIdx matched = reserve_block();
+    const ir::BlockIdx next = reserve_block();
+    lower_arm_test(alternatives[i], scrut_addr, scrut_type, matched, next);
+    if (failed) {
+      return;
+    }
+    emit_br(body_block);
+    switch_to(next);
+  }
+  if (!failed) {
+    lower_arm_test(alternatives.back(), scrut_addr, scrut_type, body_block,
+                   fail_block);
   }
 }
 

@@ -325,6 +325,16 @@ class Lowerer {
   void expand_or_arms(
       const ast::ExprMatchArm& arm,
       std::vector<std::pair<ast::PatternIdx, ast::ExprIdx>>& out);
+  // Alternatives to test for a condition pattern; a plain pattern is
+  // its own only alternative.
+  std::vector<ast::PatternIdx> condition_alternatives(ast::PatternIdx pattern);
+  // Tests a condition pattern, taking the body on any match and the
+  // failure path only when every alternative misses.
+  void lower_condition_test(ast::PatternIdx pattern,
+                            Val scrut_addr,
+                            ir::TypeIdx scrut_type,
+                            ir::BlockIdx body_block,
+                            ir::BlockIdx fail_block);
   Val lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected);
   Val lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected);
   Val lower_loop(ast::ExprIdx expr);

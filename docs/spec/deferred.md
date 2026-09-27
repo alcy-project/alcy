@@ -47,6 +47,10 @@ relied upon by MVP programs or by the MVP compiler implementation.
 - Closures and spec objects; higher-ranked region polymorphism beyond
   struct projection; two-phase borrows.
 - `match` guards, string literal patterns.
+- An or-pattern nested inside another pattern (`(A | B, x) => ...`),
+  which needs the distributive expansion `(A, x) | (B, x)`. The
+  top-level form works in `match` arms and in `if`/`while`
+  conditions.
 - Struct variants for enums; tuple struct declarations.
 - `async`, parallel constructs, `union` types, `register` operations.
 - `From`-style error conversion; `Debug` printing; combinators
