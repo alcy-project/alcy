@@ -35,6 +35,7 @@ executable("tests") {
     "pkg/manifest_test.cc",
     "pkg/modules_test.cc",
     "pkg/resolve_test.cc",
+    "property/mangle_property_test.cc",
     "source/source_test.cc",
     "symbol/mangle_test.cc",
     "test_main.cc",

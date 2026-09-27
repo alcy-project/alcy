@@ -80,8 +80,9 @@ TEST_CASE("Mangle distinguishes signatures that share a source name") {
   CHECK(a != c);
   CHECK(a != d);
   CHECK(b != c);
-  // The prefix is what keeps a source name away from a C symbol.
-  CHECK(a.starts_with("_A1"));
+  // The prefix and version are what keep a source name away from a C
+  // symbol, and version 2 is the self-delimiting length encoding.
+  CHECK(a.starts_with("_A2"));
 }
 
 TEST_CASE("Mangle distinguishes instantiations of one item") {
@@ -95,6 +96,28 @@ TEST_CASE("Mangle distinguishes instantiations of one item") {
   const ir::Storage types = f.build();
   CHECK(symbol::mangle(a, types, f.strings) !=
         symbol::mangle(b, types, f.strings));
+}
+
+TEST_CASE("Mangle round-trips a name beginning with a digit") {
+  // The lexer never produces such an identifier, but the encoder takes
+  // a plain string, so a length that ran into the name's first digit
+  // would make the decoder read a length of 41 for a four-byte name and
+  // fail. Pinned here because the property test that found it lives in
+  // another directory.
+  Fixture f;
+  const ir::Storage types = f.build();
+  const symbol::Signature original =
+      signature("a::1b", "1name", symbol::Signature::Kind::Free);
+  const std::string encoded = symbol::mangle(original, types, f.strings);
+  base::Result<symbol::Demangled, symbol::DemangleError> decoded =
+      symbol::demangle(encoded);
+  CHECK(decoded.is_ok());
+  if (decoded.is_err()) {
+    return;
+  }
+  const symbol::Demangled back = std::move(decoded).unwrap();
+  CHECK(back.name == "1name");
+  CHECK(back.path.size() == 2);
 }
 
 TEST_CASE("Mangle is deterministic") {

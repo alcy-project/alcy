@@ -37,9 +37,16 @@ namespace {
 // one more segment. A list of types ends where a type tag or the end of
 // the string appears. Tuples and nominals carry explicit counts instead.
 constexpr std::string_view PREFIX = "_A";
-constexpr std::string_view VERSION = "1";
+constexpr std::string_view VERSION = "2";
 // Ends a list of length-prefixed segments.
 constexpr char LIST_END = '.';
+// Ends a length. Without it a length is only delimited by the first
+// non-digit byte, so a name beginning with a digit is read as part of
+// the length: `1abc` is four bytes, encodes as `4` + `1abc`, and a
+// reader greedily takes `41` and runs off the end. Terminating every
+// length keeps the decoding unambiguous for any byte a name can hold,
+// not just for the identifiers this compiler happens to produce.
+constexpr char LENGTH_END = ':';
 
 // Primitives, one character each. The letters are chosen to be
 // memorable; `display` turns them back into source spelling, which is
@@ -122,6 +129,14 @@ void append_u64(std::string& out, u64 value) {
   }
 }
 
+// A length and its terminator. Every length goes through here, so the
+// "a length ends at LENGTH_END" rule holds by construction rather than
+// per call site.
+void append_length(std::string& out, u64 value) {
+  append_u64(out, value);
+  out.push_back(LENGTH_END);
+}
+
 // A module path arrives as one `::`-separated string, matching how the
 // module tree spells it. Every segment is length-prefixed, including an
 // empty one, so the encoding stays injective: dropping empties would
@@ -134,7 +149,7 @@ void append_path(std::string& out, std::string_view path) {
     const std::string_view segment = split == std::string_view::npos
                                          ? path.substr(start)
                                          : path.substr(start, split - start);
-    append_u64(out, segment.size());
+    append_length(out, segment.size());
     out.append(segment);
     if (split == std::string_view::npos) {
       break;
@@ -171,7 +186,7 @@ class Encoder {
       case ir::TypeTag::Array: {
         const ir::ArrayType& array = types_.array_types()[node.as_array()];
         out_.push_back(TAG_ARRAY);
-        append_u64(out_, array.count);
+        append_length(out_, array.count);
         encode_type(array.element);
         return;
       }
@@ -179,7 +194,7 @@ class Encoder {
         const ir::TypeIdxRange elements =
             types_.tuple_types()[node.as_tuple()].elements;
         out_.push_back(TAG_TUPLE);
-        append_u64(out_, elements.size());
+        append_length(out_, elements.size());
         for (const ir::TypeIdx element : elements) {
           encode_type(element);
         }
@@ -211,7 +226,7 @@ class Encoder {
       params = shape.params;
     }
     append_path(out_, name);
-    append_u64(out_, params.size());
+    append_length(out_, params.size());
     for (const ir::TypeIdx param : params) {
       encode_type(param);
     }
@@ -244,6 +259,13 @@ class Decoder {
     return true;
   }
 
+  // Reads a length and its terminator. The terminator is what makes the
+  // field self-delimiting; see LENGTH_END.
+  bool read_length(u64& out) {
+    char end = '\0';
+    return read_u64(out) && read_char(end) && end == LENGTH_END;
+  }
+
   bool read_u64(u64& out) {
     const usize start = at_;
     u64 value = 0;
@@ -260,7 +282,7 @@ class Decoder {
 
   bool read_name(std::string& out) {
     u64 length = 0;
-    if (!read_u64(length) || text_.size() - at_ < length) {
+    if (!read_length(length) || text_.size() - at_ < length) {
       return false;
     }
     out.assign(text_.substr(at_, length));
@@ -314,7 +336,7 @@ class Decoder {
       }
       case TAG_ARRAY: {
         out.kind = DecodedType::Kind::Array;
-        if (!read_u64(out.count)) {
+        if (!read_length(out.count)) {
           return false;
         }
         out.parts.resize(1);
@@ -323,7 +345,7 @@ class Decoder {
       case TAG_TUPLE: {
         out.kind = DecodedType::Kind::Tuple;
         u64 count = 0;
-        if (!read_u64(count) || !plausible_count(count)) {
+        if (!read_length(count) || !plausible_count(count)) {
           return false;
         }
         out.parts.resize(count);
@@ -340,7 +362,7 @@ class Decoder {
           return false;
         }
         u64 count = 0;
-        if (!read_u64(count) || !plausible_count(count)) {
+        if (!read_length(count) || !plausible_count(count)) {
           return false;
         }
         out.args.resize(count);
@@ -379,7 +401,7 @@ std::string mangle(const Signature& signature,
     out.push_back(kind);
   }
   append_path(out, signature.path);
-  append_u64(out, signature.name.size());
+  append_length(out, signature.name.size());
   out.append(signature.name);
   Encoder encoder(types, strings, out);
   for (const ir::TypeIdx generic : signature.generics) {
