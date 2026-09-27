@@ -91,9 +91,7 @@ impl<T> Vec<T> {
       uninit_write(elem_ptr(fresh, i), *uninit_assume(elem_ptr(self.buf, i)))
       i = i + 1
     }
-    if self.cap != 0 {
-      dealloc(self.buf, self.cap)
-    }
+    dealloc(self.buf, self.cap)
     self.buf = fresh
     self.cap = next
   }
