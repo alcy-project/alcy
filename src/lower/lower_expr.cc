@@ -2251,21 +2251,31 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       return Val{size_one, error_type(), false, false};
     }
     Val addr = address_of(init);
-    mark_move(addr);
     const ir::TypeIdx scrut_type = expr_type(cond_node.init);
     ir::BlockIdx body_block = reserve_block();
-    lower_arm_test(cond_node.pattern, addr, scrut_type, body_block, else_block);
+    lower_condition_test(cond_node.pattern, addr, scrut_type, body_block,
+                         else_block);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
+    // The arm test reads the discriminant and payload out of the
+    // scrutinee place, and the body can still reborrow through the
+    // binding, so the move lands after the body — but before the arm's
+    // branch, since a terminated block takes no more instructions.
+    auto finish_pattern_arm = [&](Val produced) {
+      if (!terminated_cur()) {
+        mark_move(addr);
+      }
+      finish_arm(produced);
+    };
     switch_to(body_block);
-    finish_arm(lower_block(if_expr.then_block, expected));
+    finish_pattern_arm(lower_block(if_expr.then_block, expected));
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
     switch_to(else_block);
     if (if_expr.else_block.is_valid()) {
-      finish_arm(lower_block(if_expr.else_block, expected));
+      finish_pattern_arm(lower_block(if_expr.else_block, expected));
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
@@ -2334,13 +2344,15 @@ Val Lowerer::lower_while(ast::ExprIdx expr) {
       return Val{size_one, error_type(), false, false};
     }
     Val addr = address_of(init);
-    mark_move(addr);
     const ir::TypeIdx scrut_type = expr_type(cond_node.init);
-    lower_arm_test(cond_node.pattern, addr, scrut_type, body, exit);
+    lower_condition_test(cond_node.pattern, addr, scrut_type, body, exit);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    switch_to(body);
+    // lower_condition_test leaves the current block on the match path,
+    // which is the loop body. The move lands after the test bound the
+    // payload, and before the body, so neither is use-after-move.
+    mark_move(addr);
   }
   break_targets_.push_back(exit);
   continue_targets_.push_back(header);
@@ -2368,7 +2380,6 @@ Val Lowerer::lower_question(ast::ExprIdx expr) {
     return Val{size_one, error_type(), false, false};
   }
   Val addr = address_of(scrut);
-  mark_move(addr);
   const ir::TypeIdx scrut_type = expr_type(question.inner);
   const std::vector<ir::TypeIdx> first = variant_payload(scrut_type, 0);
   if (first.empty()) {
@@ -2383,17 +2394,23 @@ Val Lowerer::lower_question(ast::ExprIdx expr) {
   const ir::RegisterIdx test =
       emit(ir::Opcode::Eq, boolean, {tag.op, disc_operand(0)});
   emit_cond_br(to_operand(test, boolean), ok_block, err_block);
-  switch_to(err_block);
   // Propagating keeps the original value, so the payload slot still
-  // holds a valid scrutinee to return by value.
+  // holds a valid scrutinee to return by value. This `return` leaves
+  // the function, so it ends every live value first.
+  switch_to(err_block);
   const ir::RegisterIdx propagate =
       emit(ir::Opcode::Load, scrut_type, {addr.op});
+  emit_drops(0, node.span);
   emit_void(ir::Opcode::Ret, {to_operand(propagate, scrut_type)});
   switch_to(ok_block);
   const Val payload =
       load_payload_field(addr, variant_fields(scrut_type, 0), 0);
   emit_br(join_block);
+  // Both arms read the discriminant and payload out of this place, so
+  // the move lands at the join; placing it earlier would report those
+  // very reads as use-after-move.
   switch_to(join_block);
+  mark_move(addr);
   return payload;
 }
 
@@ -2519,6 +2536,11 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
         internal(node.span, "break without loop");
         return Val{size_one, error_type(), false, false};
       }
+      // Same reasoning as continue: the body's own drop point is
+      // skipped by the branch out of it.
+      if (!scope_marks.empty()) {
+        emit_drops(scope_marks.back(), node.span);
+      }
       emit_br(break_targets_.back());
       return Val{size_one, builder.never_type(), false, false};
     }
@@ -2526,6 +2548,13 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       if (continue_targets_.empty()) {
         internal(node.span, "continue without loop");
         return Val{size_one, error_type(), false, false};
+      }
+      // Leaving the body early skips its normal drop point, so the
+      // values the body declared are ended here instead. Without this
+      // a destructor runs at the enclosing scope's exit, after the loop
+      // has finished.
+      if (!scope_marks.empty()) {
+        emit_drops(scope_marks.back(), node.span);
       }
       emit_br(continue_targets_.back());
       return Val{size_one, builder.never_type(), false, false};
@@ -2724,8 +2753,12 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
     inherited.push_back(locals[i].moved);
   }
   scope_marks.push_back(mark);
+  // Comp bindings declared in this block leave with it, so a name from
+  // an inner block is not visible after the block ends.
+  const usize comp_mark = comp_scope_.size();
   auto leave = [&] {
     scope_marks.pop_back();
+    comp_scope_.resize(comp_mark);
     for (u32 i = 0; i < inherited.size(); ++i) {
       locals[i].moved = inherited[i];
     }
