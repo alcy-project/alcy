@@ -2284,6 +2284,46 @@ TEST_CASE("Analyze resolves a generic type's destructor") {
   }
 }
 
+TEST_CASE("Check reads a base prefix as digits, not a suffix") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_hex_prefix_test_");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  _ := 0xFF\n"
+                                      "  _ := 0x1A\n"
+                                      "  _ := 0xdeadbeef\n"
+                                      "  _ := 0b1010\n"
+                                      "  _ := 0o17\n"
+                                      "  _ := 0xFFu8\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects an unknown suffix after a base prefix") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_types_hex_suffix_test_");
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  _ := 0xFFi\n"
+                                      "  _ := 42i128\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Check rejects a remainder or bitwise operator on a float") {
   io::TempDir dir = io::TempDir::create_unique("alcy_types_float_rem_test_");
   const bool setup = write_all(dir, {{"main.al",
@@ -2299,6 +2339,5 @@ TEST_CASE("Check rejects a remainder or bitwise operator on a float") {
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
-
 
 }  // namespace analyzer

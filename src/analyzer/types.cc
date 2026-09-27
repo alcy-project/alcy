@@ -1485,6 +1485,80 @@ bool Checker::classify_suffix(std::string_view spelling,
                               bool& is_float,
                               diag::Span span) {
   using TT = ir::TypeTag;
+  // Split the spelling into its digit body and whatever follows. Both
+  // the base prefix and the digit set belong to the number, so the
+  // suffix starts right after them: `0xFF` has none (its digits are
+  // letters), `0xFFi32` is `i32`, and `42i128` is a suffix this
+  // compiler has no type for. Scanning for a trailing letter run
+  // instead would miss every suffix that carries a digit.
+  usize body = 0;
+  u32 base = 10;
+  if (spelling.size() > 2 && spelling[0] == '0') {
+    switch (spelling[1]) {
+      case 'x':
+      case 'X':
+        body = 2;
+        base = 16;
+        break;
+      case 'b':
+      case 'B':
+        body = 2;
+        base = 2;
+        break;
+      case 'o':
+      case 'O':
+        body = 2;
+        base = 8;
+        break;
+      default: break;
+    }
+  }
+  const auto in_base = [base](char c) {
+    if (c >= '0' && c <= '9') {
+      return static_cast<u32>(c - '0') < base;
+    }
+    if (base == 16) {
+      return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    }
+    return false;
+  };
+  usize digit_end = body;
+  while (digit_end < spelling.size()) {
+    const char c = spelling[digit_end];
+    if (c == '_' || in_base(c)) {
+      ++digit_end;
+      continue;
+    }
+    // A decimal literal may carry a fraction point and an exponent,
+    // and both belong to the number rather than to the suffix. The
+    // exponent only counts when digits actually follow its optional
+    // sign, so `1e` leaves the `e` to be reported.
+    if (base != 10) {
+      break;
+    }
+    if (c == '.') {
+      ++digit_end;
+      continue;
+    }
+    if (c == 'e' || c == 'E') {
+      usize next = digit_end + 1;
+      if (next < spelling.size() &&
+          (spelling[next] == '+' || spelling[next] == '-')) {
+        ++next;
+      }
+      if (next >= spelling.size() || spelling[next] < '0' ||
+          spelling[next] > '9') {
+        break;
+      }
+      digit_end = next;
+      continue;
+    }
+    break;
+  }
+  const std::string_view suffix = spelling.substr(digit_end);
+  if (suffix.empty()) {
+    return false;
+  }
   struct Suffix {
     std::string_view text;
     ir::TypeTag tag;
@@ -1498,33 +1572,21 @@ bool Checker::classify_suffix(std::string_view spelling,
       {"u32", TT::U32, false},   {"u64", TT::U64, false},
       {"f32", TT::F32, true},    {"f64", TT::F64, true},
   };
-  for (const Suffix& suffix : SUFFIXES) {
-    if (spelling.size() > suffix.text.size() &&
-        spelling.substr(spelling.size() - suffix.text.size()) == suffix.text) {
-      tag = suffix.tag;
-      if (suffix.text == "isize") {
-        tag = width == ir::PointerWidth::W64 ? TT::I64 : TT::I32;
-      } else if (suffix.text == "usize") {
-        tag = width == ir::PointerWidth::W64 ? TT::U64 : TT::U32;
-      }
-      is_float = suffix.is_float;
-      return true;
+  for (const Suffix& known : SUFFIXES) {
+    if (suffix != known.text) {
+      continue;
     }
+    tag = known.tag;
+    if (known.text == "isize") {
+      tag = width == ir::PointerWidth::W64 ? TT::I64 : TT::I32;
+    } else if (known.text == "usize") {
+      tag = width == ir::PointerWidth::W64 ? TT::U64 : TT::U32;
+    }
+    is_float = known.is_float;
+    return true;
   }
-  // A trailing alpha run that matches nothing known is an
-  // unsupported suffix (`42i128`); pure digits have no suffix.
-  usize alpha = spelling.size();
-  while (alpha > 0 &&
-         ((spelling[alpha - 1] >= 'a' && spelling[alpha - 1] <= 'z') ||
-          (spelling[alpha - 1] >= 'A' && spelling[alpha - 1] <= 'Z'))) {
-    --alpha;
-  }
-  if (alpha == spelling.size()) {
-    return false;
-  }
-  const u32 index =
-      bag.emit(diag::Severity::Error, ANALYZER_UNSUPPORTED_TYPE, span,
-               "unsupported literal suffix '{}'", spelling.substr(alpha));
+  const u32 index = bag.emit(diag::Severity::Error, ANALYZER_UNSUPPORTED_TYPE,
+                             span, "unsupported literal suffix '{}'", suffix);
   (void)index;
   tag = TT::Error;
   return true;
