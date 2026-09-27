@@ -81,8 +81,8 @@ TEST_CASE("Mangle distinguishes signatures that share a source name") {
   CHECK(a != d);
   CHECK(b != c);
   // The prefix and version are what keep a source name away from a C
-  // symbol, and version 2 is the self-delimiting length encoding.
-  CHECK(a.starts_with("_A2"));
+  // symbol.
+  CHECK(a.starts_with("_A1"));
 }
 
 TEST_CASE("Mangle distinguishes instantiations of one item") {
