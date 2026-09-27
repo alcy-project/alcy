@@ -82,7 +82,7 @@ Notes:
 - **Dependencies:** Respect the dependency direction defined by `ARCHITECTURE.md`. Do not
   introduce dependencies on higher-level modules for convenience, and do not create cyclic
   module dependencies.
-- **Naming & Types:** `PascalCase` for classes/structs/enums, `kPascalCase` for constants,
+- **Naming & Types:** `PascalCase` for classes/structs/enums, `UPPER_SNAKE_CASE` for constants,
   `snake_case_with_trailing_underscore_` for class fields, and `snake_case` otherwise. Use
   numeric types from `"fpag/base/numeric.h"` (`i32`, `usize`, `f64`, etc.) instead of primitive
   C++ types.
