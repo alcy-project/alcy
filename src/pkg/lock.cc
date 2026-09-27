@@ -77,7 +77,7 @@ void write_escaped(fmt::memory_buffer& out, std::string_view text) {
     }
     // A well-formed multi-byte character passes through as itself; a
     // byte that starts no such sequence is escaped as its code unit
-    // rather than written through and producing an unparseable
+    // rather than written through and producing an unparsable
     // document.
     const usize length = u < 0x80 ? 1 : utf8_sequence_length(text, i);
     if (length == 0) {
