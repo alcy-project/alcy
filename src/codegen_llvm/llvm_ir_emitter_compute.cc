@@ -53,6 +53,66 @@ llvm::CmpInst::Predicate float_predicate(ir::Opcode op) {
   }
 }
 
+// Binary arithmetic and bitwise opcodes, each paired with a thunk that
+// builds the LLVM instruction. Every one of these takes exactly two
+// operands and writes `dst`, so a table replaces the switch: a new
+// opcode is one row plus one one-line thunk rather than a case block.
+// The builder methods disagree on their trailing fast-math and
+// metadata parameters, and a member pointer cannot carry their
+// defaults, so each thunk supplies what its method needs.
+using Builder = LlvmIrEmitter::IRBuilder;
+using BinaryEmit = llvm::Value* (*)(Builder&, llvm::Value*, llvm::Value*);
+
+#define ALCY_BINARY(Name, Call)                                   \
+  llvm::Value* Name(Builder& b, llvm::Value* l, llvm::Value* r) { \
+    return Call;                                                  \
+  }
+
+ALCY_BINARY(emit_add, b.CreateAdd(l, r))
+ALCY_BINARY(emit_sub, b.CreateSub(l, r))
+ALCY_BINARY(emit_mul, b.CreateMul(l, r))
+ALCY_BINARY(emit_sdiv, b.CreateSDiv(l, r))
+ALCY_BINARY(emit_udiv, b.CreateUDiv(l, r))
+ALCY_BINARY(emit_srem, b.CreateSRem(l, r))
+ALCY_BINARY(emit_urem, b.CreateURem(l, r))
+ALCY_BINARY(emit_fadd, b.CreateFAdd(l, r))
+ALCY_BINARY(emit_fsub, b.CreateFSub(l, r))
+ALCY_BINARY(emit_fmul, b.CreateFMul(l, r))
+ALCY_BINARY(emit_fdiv, b.CreateFDiv(l, r))
+ALCY_BINARY(emit_and, b.CreateAnd(l, r))
+ALCY_BINARY(emit_or, b.CreateOr(l, r))
+ALCY_BINARY(emit_xor, b.CreateXor(l, r))
+ALCY_BINARY(emit_shl, b.CreateShl(l, r))
+ALCY_BINARY(emit_ashr, b.CreateAShr(l, r))
+ALCY_BINARY(emit_lshr, b.CreateLShr(l, r))
+
+#undef ALCY_BINARY
+
+struct BinaryOp {
+  ir::Opcode op;
+  BinaryEmit emit;
+};
+
+constexpr BinaryOp BINARY_OPS[] = {
+    {ir::Opcode::IntAdd, &emit_add},
+    {ir::Opcode::IntSub, &emit_sub},
+    {ir::Opcode::IntMul, &emit_mul},
+    {ir::Opcode::IntDiv, &emit_sdiv},
+    {ir::Opcode::UintDiv, &emit_udiv},
+    {ir::Opcode::IntRem, &emit_srem},
+    {ir::Opcode::UintRem, &emit_urem},
+    {ir::Opcode::FAdd, &emit_fadd},
+    {ir::Opcode::FSub, &emit_fsub},
+    {ir::Opcode::FMul, &emit_fmul},
+    {ir::Opcode::FDiv, &emit_fdiv},
+    {ir::Opcode::And, &emit_and},
+    {ir::Opcode::Or, &emit_or},
+    {ir::Opcode::Xor, &emit_xor},
+    {ir::Opcode::ShiftLeft, &emit_shl},
+    {ir::Opcode::ArithmeticShiftRight, &emit_ashr},
+    {ir::Opcode::LogicalShiftRight, &emit_lshr},
+};
+
 }  // namespace
 
 void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
@@ -63,119 +123,22 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
 
   using Op = ir::Opcode;
 
-  auto binary = [&](auto emit) {
+  for (const BinaryOp& entry : BINARY_OPS) {
+    if (entry.op != i.op) {
+      continue;
+    }
     DCHECK(ops.size() == 2);
     const ir::Operand& lhs = storage_->operands()[ops.head()];
     const ir::Operand& rhs = storage_->operands()[ops.head() + 1];
     if (i.dst.is_valid()) {
-      values_.add_register(
-          i.dst, emit(resolve_operand_value(lhs), resolve_operand_value(rhs)));
+      values_.add_register(i.dst,
+                           entry.emit(*builder_, resolve_operand_value(lhs),
+                                      resolve_operand_value(rhs)));
     }
-  };
+    return;
+  }
 
   switch (i.op) {
-    case Op::IntAdd: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateAdd(lhs, rhs);
-      });
-      break;
-    }
-    case Op::IntSub: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateSub(lhs, rhs);
-      });
-      break;
-    }
-    case Op::IntMul: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateMul(lhs, rhs);
-      });
-      break;
-    }
-    case Op::IntDiv: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateSDiv(lhs, rhs);
-      });
-      break;
-    }
-    case Op::UintDiv: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateUDiv(lhs, rhs);
-      });
-      break;
-    }
-    case Op::IntRem: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateSRem(lhs, rhs);
-      });
-      break;
-    }
-    case Op::UintRem: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateURem(lhs, rhs);
-      });
-      break;
-    }
-    case Op::FAdd: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateFAdd(lhs, rhs);
-      });
-      break;
-    }
-    case Op::FSub: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateFSub(lhs, rhs);
-      });
-      break;
-    }
-    case Op::FMul: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateFMul(lhs, rhs);
-      });
-      break;
-    }
-    case Op::FDiv: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateFDiv(lhs, rhs);
-      });
-      break;
-    }
-    case Op::And: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateAnd(lhs, rhs);
-      });
-      break;
-    }
-    case Op::Or: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateOr(lhs, rhs);
-      });
-      break;
-    }
-    case Op::Xor: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateXor(lhs, rhs);
-      });
-      break;
-    }
-    case Op::ShiftLeft: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateShl(lhs, rhs);
-      });
-      break;
-    }
-    case Op::ArithmeticShiftRight: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateAShr(lhs, rhs);
-      });
-      break;
-    }
-    case Op::LogicalShiftRight: {
-      binary([this](llvm::Value* lhs, llvm::Value* rhs) {
-        return builder_->CreateLShr(lhs, rhs);
-      });
-      break;
-    }
     case Op::Not: {
       DCHECK(ops.size() == 1);
       const ir::Operand& lhs = storage_->operands()[ops.head()];
