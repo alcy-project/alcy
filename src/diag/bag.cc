@@ -7,6 +7,7 @@
 #include <initializer_list>
 #include <string_view>
 
+#include "debug/dcheck.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -19,7 +20,12 @@ u32 DiagBag::push(Severity severity,
                   bool has_primary,
                   std::string_view message) {
   if (size_ == capacity_) {
-    const u32 grown = capacity_ == 0 ? INITIAL_CAPACITY : capacity_ * 2;
+    // Saturate rather than wrap: a u32 overflow would shrink the
+    // capacity and the next push would write out of bounds.
+    const u32 grown = capacity_ == 0        ? INITIAL_CAPACITY
+                      : capacity_ > ~0u / 2 ? ~0u
+                                            : capacity_ * 2;
+    DCHECK(grown > capacity_);
     Diagnostic* const mem = static_cast<Diagnostic*>(
         arena_->alloc(sizeof(Diagnostic) * grown, alignof(Diagnostic)));
     for (u32 i = 0; i < size_; ++i) {
