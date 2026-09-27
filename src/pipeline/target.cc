@@ -14,6 +14,7 @@
 #include "analyzer/resolve.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "path/path.h"
@@ -150,15 +151,29 @@ base::Result<BinTarget, diag::Reported> resolve_bin_target(
     if (entry.id == bin_file) {
       bin_selected = true;
       inputs.push_back({"", entry.id});
-    } else {
-      std::string_view name = entry.name;
-      if (!bin_dir.empty() && name.size() > bin_dir.size() &&
-          name.substr(0, bin_dir.size()) == bin_dir &&
-          name[bin_dir.size()] == '/') {
-        name.remove_prefix(bin_dir.size() + 1);
-      }
-      inputs.push_back({name, entry.id});
+      continue;
     }
+    std::string_view name = entry.name;
+    if (!bin_dir.empty() && name.size() > bin_dir.size() &&
+        name.substr(0, bin_dir.size()) == bin_dir &&
+        name[bin_dir.size()] == '/') {
+      name.remove_prefix(bin_dir.size() + 1);
+    }
+    // Stripping the bin's directory can map two distinct files onto one
+    // module name; the resolver would report that as a duplicate, which
+    // is true but hides which file collided. Name the pair here.
+    for (const analyzer::ModuleInput& prior : inputs) {
+      if (prior.id != entry.id && prior.name == name) {
+        const u32 index = ctx.bag.emit(
+            diag::Severity::Error, PIPELINE_NO_TARGETS, diag::Span{},
+            "module '{}' is shared by two files relative to the bin's "
+            "directory '{}'",
+            name, bin_dir);
+        (void)index;
+        return base::make_err(diag::Reported{});
+      }
+    }
+    inputs.push_back({name, entry.id});
   }
   if (!bin_selected) {
     const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_NO_TARGETS,

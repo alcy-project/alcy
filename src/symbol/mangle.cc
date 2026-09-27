@@ -123,7 +123,9 @@ void append_u64(std::string& out, u64 value) {
 }
 
 // A module path arrives as one `::`-separated string, matching how the
-// module tree spells it.
+// module tree spells it. Every segment is length-prefixed, including an
+// empty one, so the encoding stays injective: dropping empties would
+// map `a::::b` and `a::b` to the same bytes.
 void append_path(std::string& out, std::string_view path) {
   constexpr std::string_view SEPARATOR = "::";
   usize start = 0;
@@ -132,10 +134,8 @@ void append_path(std::string& out, std::string_view path) {
     const std::string_view segment = split == std::string_view::npos
                                          ? path.substr(start)
                                          : path.substr(start, split - start);
-    if (!segment.empty()) {
-      append_u64(out, segment.size());
-      out.append(segment);
-    }
+    append_u64(out, segment.size());
+    out.append(segment);
     if (split == std::string_view::npos) {
       break;
     }

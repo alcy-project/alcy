@@ -28,17 +28,32 @@ namespace {
 constexpr u32 MODULES_SEMANTIC_ERROR = 1100;
 constexpr u32 MODULES_UNSELECTED_FILE = 1101;
 
-// Strips a root prefix plus any following separators; empty when outside
-// root.
-std::string_view relative_to(std::string_view path, std::string_view root) {
+// Strips a root prefix plus any following separators. False when `path`
+// lies outside `root`; the prefix must end on a separator boundary, so
+// `/proj` does not match `/project/a.al`. An empty remainder means the
+// path *is* the root, which callers treat as "not a source file".
+bool relative_to(std::string_view path,
+                 std::string_view root,
+                 std::string_view& out) {
+  // A `.` root normalizes away: `Path(".").join("a.al")` is `a.al`, so
+  // there is no textual prefix left to strip and every discovered path
+  // is already root-relative.
+  if (root == "." || root.empty()) {
+    out = path;
+    return true;
+  }
   if (path.size() < root.size() || path.substr(0, root.size()) != root) {
-    return {};
+    return false;
   }
   std::string_view rest = path.substr(root.size());
+  if (!rest.empty() && rest.front() != '/' && rest.front() != '\\') {
+    return false;
+  }
   while (!rest.empty() && (rest.front() == '/' || rest.front() == '\\')) {
     rest.remove_prefix(1);
   }
-  return rest;
+  out = rest;
+  return true;
 }
 
 // Derives a module name from a root-relative `.al` path (`utils/io`
@@ -76,13 +91,26 @@ base::Result<std::vector<ModuleFile>, diag::Reported> resolve_module_files(
     return base::make_err(diag::Reported{});
   }
   std::vector<ModuleFile> selected;
-  auto add_module = [&](const std::string& name, source::FileId id) {
+  // Dedup by file id, not by name: two spellings of one path resolve to
+  // one file, and a name collision between two files is a manifest
+  // error rather than a silent drop.
+  auto add_module = [&](const std::string& name, source::FileId id) -> bool {
+    for (const ModuleFile& prior : selected) {
+      if (prior.id == id) {
+        return true;
+      }
+    }
     for (const ModuleFile& prior : selected) {
       if (prior.name == name) {
-        return;
+        const u32 index = bag.emit(
+            diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{},
+            "module '{}' is selected by more than one file", name);
+        (void)index;
+        return false;
       }
     }
     selected.push_back({copy_str(arena, name), id});
+    return true;
   };
 
   for (u32 i = 0; i < manifest.modules.include_count; ++i) {
@@ -109,7 +137,31 @@ base::Result<std::vector<ModuleFile>, diag::Reported> resolve_module_files(
       (void)index;
       return base::make_err(diag::Reported{});
     }
-    add_module(std::string(entry), found);
+    // The name comes from the resolved path, not the manifest entry, so
+    // an entry that only normalizes to a valid spelling (`./util`,
+    // `sub//util`) still yields the module the wildcard would give it.
+    // Otherwise the two spellings register the same file under
+    // different names and it compiles twice.
+    std::string_view relative;
+    if (!relative_to(candidate.as_view(), root, relative)) {
+      const u32 index = bag.emit(
+          diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{},
+          "manifest [modules] include '{}' resolves outside the package",
+          entry);
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
+    const std::string name = module_name_of(relative);
+    if (name.empty()) {
+      const u32 index = bag.emit(
+          diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{},
+          "manifest [modules] include '{}' is not a module path", entry);
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
+    if (!add_module(name, found)) {
+      return base::make_err(diag::Reported{});
+    }
   }
 
   if (manifest.modules.wildcard) {
@@ -118,15 +170,17 @@ base::Result<std::vector<ModuleFile>, diag::Reported> resolve_module_files(
       if (!name.has_value()) {
         continue;
       }
-      const std::string_view relative = relative_to(*name, root);
-      if (relative.empty()) {
+      std::string_view relative;
+      if (!relative_to(*name, root, relative) || relative.empty()) {
         continue;
       }
       const std::string name_str = module_name_of(relative);
       if (name_str.empty()) {
         continue;
       }
-      add_module(name_str, id);
+      if (!add_module(name_str, id)) {
+        return base::make_err(diag::Reported{});
+      }
     }
   }
   for (source::FileId id : files) {
