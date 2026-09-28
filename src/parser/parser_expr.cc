@@ -379,6 +379,10 @@ ast::ExprIdx Parser::parse_cast() {
 }
 
 ast::ExprIdx Parser::parse_unary() {
+  if (nesting_exhausted(peek().span)) {
+    return ast::ExprIdx::invalid();
+  }
+  const base::NestingScope scope(nesting_);
   const usize mark = pos_;
   ast::UnaryOp op = ast::UnaryOp::Neg;
   switch (peek_kind()) {
