@@ -65,13 +65,6 @@ jobs:
         shell: bash
         run: uv run ./build/scripts/build.py --target=all --mode=${{ inputs.build_type }} --build-subdir=build --target-os=emscripten
 
-      - name: Upload Intermediates for Debug
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: wasm-build-out-wasm32-${{ inputs.build_type }}
-          path: out/build/
-          retention-days: 1
-
       - name: Package & Generate Checksum
         shell: bash
         run: |
