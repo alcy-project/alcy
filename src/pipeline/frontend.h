@@ -1,0 +1,29 @@
+// Copyright 2026 The Alcy Project Authors
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#pragma once
+
+#include "analyzer/resolve.h"
+#include "diag/bag.h"
+#include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
+#include "lower/lower.h"
+#include "pipeline/pipeline_context.h"
+
+namespace pipeline {
+
+// One run of the shared frontend: type checking, lowering, and borrow
+// checking over a resolved tree, plus the counts check reports. Build
+// and check lower identical IR through this, so check is a projection
+// of build rather than a second implementation.
+struct FrontendOutput {
+  lower::LoweredPackage package;
+  usize module_count = 0;
+  usize function_count = 0;
+};
+
+base::Result<FrontendOutput, diag::Reported> run_frontend(
+    PipelineContext& ctx,
+    analyzer::ModuleTree tree);
+
+}  // namespace pipeline

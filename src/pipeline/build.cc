@@ -12,8 +12,6 @@
 #include <vector>
 
 #include "analyzer/resolve.h"
-#include "analyzer/types.h"
-#include "borrow/borrow.h"
 #include "codegen_llvm/common.h"
 #include "codegen_llvm/llvm_ir_emitter.h"
 #include "codegen_llvm/llvm_object_emitter.h"
@@ -26,6 +24,7 @@
 #include "fpag/io/temp_dir.h"
 #include "lower/lower.h"
 #include "path/path.h"
+#include "pipeline/frontend.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/runtime_stage.h"
 #include "pipeline/spawn.h"
@@ -38,23 +37,13 @@ namespace pipeline {
 base::Result<lower::LoweredPackage, diag::Reported> compile_tree(
     PipelineContext& ctx,
     analyzer::ModuleTree tree) {
-  base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyzer::check_package(tree, TARGET_WIDTH, ctx.ast, ctx.bag);
-  if (checked.is_err() || ctx.bag.has_errors()) {
+  base::Result<FrontendOutput, diag::Reported> out =
+      run_frontend(ctx, std::move(tree));
+  if (out.is_err()) {
     return base::make_err(diag::Reported{});
   }
-  base::Result<lower::LoweredPackage, diag::Reported> lowered =
-      lower::lower_package(std::move(checked).unwrap(), TARGET_WIDTH, ctx.ast,
-                           ctx.strings, ctx.bag);
-  if (lowered.is_err() || ctx.bag.has_errors()) {
-    return base::make_err(diag::Reported{});
-  }
-  lower::LoweredPackage package = std::move(lowered).unwrap();
-  if (borrow::check_borrows(package, ctx.bag).is_err() ||
-      ctx.bag.has_errors()) {
-    return base::make_err(diag::Reported{});
-  }
-  return base::make_ok(std::move(package));
+  FrontendOutput done = std::move(out).unwrap();
+  return base::make_ok(std::move(done.package));
 }
 
 std::optional<EmitMode> parse_emit_mode(std::string_view text) {

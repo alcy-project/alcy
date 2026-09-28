@@ -9,14 +9,12 @@
 #include <vector>
 
 #include "analyzer/resolve.h"
-#include "analyzer/types.h"
-#include "borrow/borrow.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "lower/lower.h"
 #include "path/path.h"
+#include "pipeline/frontend.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_stage.h"
 #include "pipeline/target.h"
@@ -36,45 +34,17 @@ base::Result<CheckResult, diag::Reported> finish_check(
     PipelineContext& ctx,
     analyzer::ModuleTree tree,
     usize file_count) {
-  base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyzer::check_package(tree, TARGET_WIDTH, ctx.ast, ctx.bag);
-  usize module_count = 0;
-  usize function_count = 0;
-  if (checked.is_err() || ctx.bag.has_errors()) {
+  base::Result<FrontendOutput, diag::Reported> out =
+      run_frontend(ctx, std::move(tree));
+  if (out.is_err() || ctx.bag.has_errors()) {
     return fail();
-  } else {
-    analyzer::CheckedPackage package = std::move(checked).unwrap();
-    // Staged prelude modules check with the package but read as
-    // toolchain sources, so reported counts exclude them.
-    module_count = package.modules.size() > tree.staged_modules
-                       ? package.modules.size() - tree.staged_modules
-                       : 0;
-    base::Result<lower::LoweredPackage, diag::Reported> lowered =
-        lower::lower_package(std::move(package), TARGET_WIDTH, ctx.ast,
-                             ctx.strings, ctx.bag);
-    if (lowered.is_err()) {
-      return fail();
-    } else {
-      lower::LoweredPackage package_ir = std::move(lowered).unwrap();
-      function_count =
-          package_ir.storage->functions().size() > package_ir.prelude_functions
-              ? package_ir.storage->functions().size() -
-                    package_ir.prelude_functions
-              : 0;
-      if (borrow::check_borrows(package_ir, ctx.bag).is_err()) {
-        return fail();
-      }
-    }
   }
-
-  if (!ctx.bag.has_errors()) {
-    return base::make_ok(CheckResult{
-        .file_count = file_count,
-        .module_count = module_count,
-        .function_count = function_count,
-    });
-  }
-  return fail();
+  FrontendOutput done = std::move(out).unwrap();
+  return base::make_ok(CheckResult{
+      .file_count = file_count,
+      .module_count = done.module_count,
+      .function_count = done.function_count,
+  });
 }
 
 base::Result<CheckResult, diag::Reported> check_single_file(
