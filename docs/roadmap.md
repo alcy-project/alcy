@@ -18,8 +18,8 @@ Near-term tasks only. Checked when shipped.
 - [ ] alcy IR text format: define, serialize, deserialize; ahead of
   `--emit=ir` and any cache.
 - [ ] Lib packages: the suite's other half next to `[[bin]]`.
-- [ ] Version control option for `new`/`init`: scaffold the ignore
+- [x] Version control option for `new`/`init`: scaffold the ignore
   file for the chosen VCS, never initialize a repository.
-- [ ] Command result envelope: one output path rendering as text or
+- [x] Command result envelope: one output path rendering as text or
   `--json`, with statistics in the text line and the time trace
   embedded alongside it.
