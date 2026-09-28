@@ -76,7 +76,7 @@ ResolveCase resolve_case(VirtualDir& dir,
     if (rel == root_rel) {
       root = input->id;
     }
-    inputs.push_back(*std::move(input));
+    inputs.push_back(*input);
   }
   base::Result<ModuleTree, diag::Reported> result =
       resolve_modules(root, inputs, package_name, f.sources, f.ast, f.bag);
@@ -473,7 +473,7 @@ ResolveCase resolve_case_with_prelude(
     if (rel == root_rel) {
       root = input->id;
     }
-    inputs.push_back(*std::move(input));
+    inputs.push_back(*input);
   }
   std::deque<std::string> prelude_storage;
   std::vector<ModuleInput> prelude_inputs;

@@ -139,11 +139,11 @@ TEST_CASE("Deeply nested tuple patterns are a diagnostic") {
   // `(((x)))` would collapse back to a single binding.
   std::string pattern;
   for (usize i = 0; i < WAY_PAST; ++i) {
-    pattern += "(";
+    pattern.push_back('(');
   }
   pattern += "x, y";
   for (usize i = 0; i < WAY_PAST; ++i) {
-    pattern += ")";
+    pattern.push_back(')');
   }
   const CheckOutcome patterns =
       run_check("fn main() {\n  " + pattern + " := ()\n}\n");

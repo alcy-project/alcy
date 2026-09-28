@@ -86,7 +86,7 @@ LowerCase lower_case(VirtualDir& dir,
     if (rel == root_rel) {
       root = input->id;
     }
-    inputs.push_back(*std::move(input));
+    inputs.push_back(*input);
   }
   base::Result<analyzer::ModuleTree, diag::Reported> tree_result =
       analyzer::resolve_modules(root, inputs, "testpkg", f.sources, f.ast,
