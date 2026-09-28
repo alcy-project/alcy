@@ -1,0 +1,159 @@
+(* alcy grammar, EBNF transcription.
+ *
+ * A living document: it follows the parser, not the other way around.
+ * Changing the grammar means changing this file in the same commit.
+ * Transcribed from docs/spec/grammar.md, docs/spec/keywords.md, and
+ * the comp annotation sites in docs/spec/comp.md.
+ *
+ * Notation: ISO/IEC 14977 EBNF. `=` defines, `|` alternates, `[ ]`
+ * is optional, `{ }` repeats zero or more, `( )` groups, `"x"` is a
+ * literal token, `(* *)` is a comment. Lowercase names are syntactic;
+ * UPPER names are lexical and only sketched at the end.
+ *
+ * What EBNF cannot say lives in trailing comments: longest-match
+ * lexing, significant newlines, the nesting budget, and the two
+ * disambiguations (struct literal vs block, `..` after a literal).
+ * See docs/spec/grammar.md for those rules.
+ *)
+
+file        = { item } ;
+
+(* Items *)
+
+item        = [ vis ] , ( fn_item | struct_item | enum_item | impl_item
+                        | static_item | const_item | use_item ) ;
+vis         = "pub" ;
+fn_item     = "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
+            , [ "->" , type ] , block ;
+type_params = "<" , IDENT , { "," , IDENT } , ">" ;
+params      = [ [ "comp" ] , pattern , ":" , type ,
+                { "," , [ "comp" ] , pattern , ":" , type } , [ "," ] ] ;
+              (* "comp" marks a compile-time parameter; plain functions
+                 use the same shape without it. See docs/spec/comp.md. *)
+struct_item = "struct" , IDENT , [ type_params ] , "{"
+            , field , { "," , field } , [ "," ] , "}" ;
+field       = IDENT , ":" , type ;
+enum_item   = "enum" , IDENT , [ type_params ] , "{"
+            , variant , { "," , variant } , [ "," ] , "}" ;
+variant     = IDENT | IDENT , "(" , [ type , { "," , type } ] , ")" ;
+impl_item   = "impl" , [ type_params ] , type , "{" , { fn_item } , "}" ;
+static_item = "static" , IDENT , ":" , type , "=" , expr ;
+const_item  = "const" , IDENT , ":" , type , "=" , literal ;
+use_item    = [ "pub" ] , "use" , path , [ "as" , IDENT ] , ";" ;
+
+(* Types *)
+
+type        = primitive | "()" | "!" | "str"
+            | tuple_type | array_type | ref_type | path_type ;
+primitive   = integer_type | float_type | "bool" ;
+tuple_type  = "(" , type , "," , type , { "," , type } , [ "," ] , ")" ;
+array_type  = "[" , type , ";" , INTEGER , "]" ;
+ref_type    = "&" , [ "mut" ] , type ;
+path_type   = path , [ "<" , type , { "," , type } , ">" ] ;
+
+(* Patterns *)
+
+pattern     = "_" | IDENT | "mut" , IDENT | literal
+            | "-" , literal
+            | path , "(" , [ pattern , { "," , pattern } ] , ")"
+            | path , "{" , field_pat , { "," , field_pat } , "}"
+            | "&" , [ "mut" ] , pattern
+            | pattern , "|" , pattern ;
+field_pat   = IDENT | IDENT , ":" , pattern ;
+
+(* Expressions, lowest to highest precedence *)
+
+expr          = range_expr ;
+range_expr    = or_expr , [ ( "..=" | "..<" ) , [ or_expr ] ]
+              | ".." , or_expr ;
+or_expr       = and_expr , { "||" , and_expr } ;
+and_expr      = cmp_expr , { "&&" , cmp_expr } ;
+cmp_expr      = bit_or_expr , [ ( "==" | "!=" | ">" | "<" | ">=" | "<=" ) ,
+                                bit_or_expr ] ;
+bit_or_expr   = bit_xor_expr , { "|" , bit_xor_expr } ;
+bit_xor_expr  = bit_and_expr , { "^" , bit_and_expr } ;
+bit_and_expr  = shift_expr , { "&" , shift_expr } ;
+shift_expr    = add_expr , { ( "<<" | ">>" ) , add_expr } ;
+add_expr      = mul_expr , { ( "+" | "-" ) , mul_expr } ;
+mul_expr      = pow_expr , { ( "*" | "/" | "%" ) , pow_expr } ;
+pow_expr      = cast_expr , [ "**" , pow_expr ] ;
+cast_expr     = unary_expr , [ "as" , type ] ;
+unary_expr    = ( "-" | "!" | "~" | "&" , [ "mut" ] | "*" ) , unary_expr
+              | question_expr ;
+question_expr = postfix_expr , [ "?" ] ;
+postfix_expr  = primary , { call | field | method | index } ;
+call          = [ turbofish ] , "(" , [ expr , { "," , expr } ] , ")" ;
+turbofish     = "::" , "<" , type , { "," , type } , ">" ;
+field         = "." , ( IDENT | INTEGER ) ;
+method        = "." , IDENT , "(" , [ expr , { "," , expr } ] , ")" ;
+index         = "[" , expr , "]" ;
+primary       = literal | path | struct_expr | tuple_expr | array_expr
+              | paren_expr | block_like | comp_block
+              | ret_expr | break_expr | continue_expr ;
+ret_expr      = "ret" , [ expr ] ;
+break_expr    = "break" ;
+continue_expr = "continue" ;
+paren_expr    = "(" , expr , ")" ;
+struct_expr   = path , "{" , field_init , { "," , field_init } ,
+                [ "," ] , [ ".." , expr ] , "}" ;
+field_init    = IDENT , ":" , expr ;
+tuple_expr    = "(" , expr , "," , expr , { "," , expr } , [ "," ] , ")"
+              | "(" , ")" ;
+array_expr    = "[" , [ expr , { "," , expr } , [ "," ] ] , "]"
+              | "[" , expr , ";" , INTEGER , "]" ;
+block_like    = block | if_expr | match_expr | loop_expr | while_expr ;
+comp_block    = "comp" , block ;
+
+(* Statements and blocks *)
+
+block       = "{" , { statement } , [ expr ] , "}" ;
+statement   = decl_stmt | reassign_stmt | expr_stmt ;
+decl_stmt   = [ "comp" ] , pattern , [ ":" , type ] , ":=" , expr ;
+              (* `mut` in declaration position folds into the pattern
+                 (`mut` ident); only `comp` is a decl-level modifier. *)
+reassign_stmt = place , "=" , expr ;
+place       = deref , { field | index } ;
+deref       = "*" , unary_expr | path ;
+expr_stmt   = expr ;
+if_expr     = "if" , ( expr | pattern , ":=" , expr ) , block ,
+              [ "else" , block ] ;
+while_expr  = "while" , ( expr | pattern , ":=" , expr ) , block ;
+loop_expr   = "loop" , block ;
+match_expr  = "match" , expr , "{" , { match_arm , ( "," | ";" ) } , "}" ;
+match_arm   = pattern , "=>" , expr ;
+
+(* Modules and paths *)
+
+path = ( "package" | "self" | "super" | DEP | IDENT ) , { "::" , IDENT } ;
+
+(* Lexical appendix (sketch only) *)
+
+IDENT     = ALPHA , { ALPHA | DIGIT | "_" } ;
+INTEGER   = DIGIT , { DIGIT | "_" } , [ TYPE_SUFFIX ]
+          | ( "0b" | "0o" | "0x" ) , DIGIT , { DIGIT | "_" } ,
+            [ TYPE_SUFFIX ] ;
+FLOAT     = DIGIT , { DIGIT | "_" } , "." , DIGIT , { DIGIT | "_" } ,
+            [ TYPE_SUFFIX ] ;
+STRING    = '"' , { STRING_CHAR | ESCAPE } , '"' ;
+ESCAPE    = "\n" | "\t" | "\r" | "\\" | '\"' | "\0" | "\u{" , HEXDIGIT ,
+            { HEXDIGIT } , "}" ;
+CHAR      = "'" , ( CHAR_CHAR | ESCAPE ) , "'" ;
+LINE_COMMENT  = "//" , { ANY_BUT_NEWLINE } ;
+BLOCK_COMMENT = "/*" , { ANY | BLOCK_COMMENT } , "*/" ;
+DOC_COMMENT   = "///" , { ANY_BUT_NEWLINE } ;
+
+(* Keywords: fn struct enum impl static pub const mut use
+ *   if else loop while break continue ret match
+ *   package self super Self as
+ *   i8 i16 i32 i64 isize u8 u16 u32 u64 usize f32 f64 bool str
+ * Reserved: async await union register extern unsafe for in
+ *   where dyn comp intrinsic
+ *
+ * Nesting is bounded at 256 levels on expressions, types, blocks,
+ * patterns, and items alike; exceeding it reports E3004/E4050/E5005.
+ * Newlines are significant outside brackets (lexed as `;` after a
+ * statement-ending token, with continuation positions); block openers
+ * stay on their header line. `1..2` lexes as range, never float.
+ * `match`/`if`/`while` conditions and `else` never open a struct
+ * literal: `{` after them always opens the body block.
+ *)

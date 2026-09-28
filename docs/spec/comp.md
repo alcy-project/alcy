@@ -12,14 +12,15 @@ domain. It extends `grammar.md` (which covers MVP only).
 
 ```
 params    := (("comp")? pattern ":" type ("," ...)* ","?)?
-decl_stmt := ("comp")? ("mut")? pattern (":" type)? ":=" expr
+decl_stmt := ("comp")? pattern (":" type)? ":=" expr
 primary   := ... | comp_block
 comp_block := "comp" block
 ```
 
 - `fn repeat(comp n: usize, x: i32)` declares a compile-time parameter.
-- `comp count := 3` declares a compile-time variable (`comp mut`
-  permits compile-time-only mutation).
+- `comp count := 3` declares a compile-time variable. `mut` in
+  declaration position folds into the pattern, so `comp mut x := 3`
+  declares a mutable compile-time variable.
 - `comp { ... }` is an expression evaluated at compile time; its value
   splices into the surrounding runtime code.
 - Brace placement follows the Go-style rule in `grammar.md`: the `{`

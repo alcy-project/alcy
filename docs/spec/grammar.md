@@ -1,10 +1,10 @@
 # MVP Grammar
 
-Notation is EBNF-ish: `A*` repetition, `A?` optional, `A | B`
-alternation, `"x"` literal tokens. Newlines are significant except
-inside brackets (see statements). Longest-match lexing applies
-throughout. This grammar covers MVP only; reserved forms are
-rejected with guidance diagnostics.
+The normative grammar lives in [`grammar.ebnf`](grammar.ebnf). This
+document keeps what EBNF cannot say: lexical rules, precedence notes,
+and the disambiguations. Changing the grammar means changing both
+files in the same commit. This grammar covers MVP only; reserved forms
+are rejected with guidance diagnostics.
 
 ## Lexical notes
 
@@ -33,60 +33,22 @@ rejected with guidance diagnostics.
   to `i32`, floats to `f64`.
 - String escapes: `\n \t \r \\ \" \0 \u{HEX}`. `'x'` character
   syntax exists but resolves only with core (see `types.md`).
+- Longest-match lexing applies throughout.
 
 ## Items
 
-```
-item      := vis? (fn_item | struct_item | enum_item | impl_item |
-                   static_item | const_item | use_item)
-vis       := "pub"
-fn_item   := "fn" ident type_params? "(" params ")" ("->" type)? block
-            # omitted return type means "()"
-type_params := "<" ident ("," ident)* ">"   # free functions only
-params    := (pattern ":" type ("," pattern ":" type)* ","?)?
-struct_item := "struct" ident ("<" ident ("," ident)* ">")? "{" field ("," field)* ","? "}"
-field     := ident ":" type
-enum_item := "enum" ident ("<" ident ("," ident)* ">")? "{" variant ("," variant)* ","? "}"
-variant   := ident | ident "(" (type ("," type)*)? ")"
-impl_item := "impl" ("<" ident ("," ident)* ">")? type "{" fn_item* "}"
-            # methods take self, &self, or &mut self first; other
-            # functions in the block are associated functions
-
-static_item := "static" ident ":" type "=" expr
-const_item  := "const" ident ":" type "=" literal_expr
-literal_expr := literal   # MVP const items admit literals only
-use_item  := ("pub")? "use" path ("as" ident)? ";"
-```
-
 Methods take explicit receivers: `self`, `&self`, `&mut self`.
-`Self` denotes the implementing type inside `impl` blocks.
+`Self` denotes the implementing type inside `impl` blocks. An omitted
+return type means `()`; only free functions take type parameters.
 
 ## Types
 
-```
-type := primitive | "()" | "!" | "str" | tuple_type | array_type | path_type | ref_type
-primitive := integer | float | "bool"
-tuple_type := "(" type ("," type)+ ","? ")"
-array_type := "[" type ";" integer "]"   # fixed-size array, decimal length
-ref_type  := "&" type | "&" "mut" type
-path_type := path ("<" type ("," type)* ">")?   # generic enums and structs only
-            # Closing ">>" splits into two ">" (dangling halves error).
-```
-
 `()` is the unit type. `!` is the never type and coerces to any type.
 Tuple types are structural and concrete (no polymorphism in MVP).
+A path takes type arguments for generic enums and structs only, and a
+closing `>>` splits into two `>` (dangling halves error).
 
 ## Patterns (shared by declarations and `match`)
-
-```
-pattern := "_" | ident | "mut" ident | literal
-         | "-" literal                          # negative number patterns
-         | path "(" pattern ("," pattern)* ")"   # tuple variants, tuples
-         | path "{" field_pat ("," field_pat)* "}"  # struct patterns
-         | "&" pattern | "&" "mut" pattern
-         | pattern "|" pattern                    # or-patterns
-field_pat := ident | ident ":" pattern
-```
 
 A `-` binds only to an integer or float literal, so `-1` is one
 pattern and `x - 1` never parses as a pattern. The sign is not part of
@@ -97,45 +59,6 @@ Declaration left-hand sides use this grammar with `:=`
 (`(c, _) := ...`, `_ := ...`). Range patterns are deferred.
 
 ## Expressions (lowest to highest precedence)
-
-```
-expr      := range_expr
-range_expr := or_expr (("..=" | "..<") or_expr?)? | ".." or_expr?
-            # bare ".." with an endpoint is rejected: mark "=" or "<".
-            # (range expressions type-check once Range types exist;
-            #  see deferred.md)
-or_expr   := and_expr ("||" and_expr)*
-and_expr  := cmp_expr ("&&" cmp_expr)*
-cmp_expr  := bit_or_expr (("==" | "!=" | ">" | "<" | ">=" | "<=") bit_or_expr)?
-            # no chaining
-bit_or_expr := bit_xor_expr ("|" bit_xor_expr)*
-bit_xor_expr := bit_and_expr ("^" bit_and_expr)*
-bit_and_expr := shift_expr ("&" shift_expr)*
-shift_expr := add_expr ("<<" | ">>" add_expr)*
-add_expr  := mul_expr (("+" | "-") mul_expr)*
-mul_expr  := pow_expr (("*" | "/" | "%") pow_expr)*
-pow_expr  := cast_expr ("**" pow_expr)?      # right associative
-cast_expr := unary_expr ("as" type)?
-unary_expr := ("-" | "!" | "~" | "&" | "&" "mut" | "*") unary_expr
-             | question_expr
-question_expr := postfix_expr "?"?
-postfix_expr := primary (call | field | method | index)*
-call      := turbofish? "(" (expr ("," expr)*)? ")"
-turbofish := "::" "<" type ("," type)* ">"   # explicit type arguments
-field     := "." ident | "." integer        # tuple ".0" access
-method    := "." ident "(" (expr ("," expr)*)? ")"
-            # the receiver is the postfix base, not listed
-index     := "[" expr "]"                    # builtin fixed-array index
-primary   := literal | path | struct_expr | tuple_expr | array_expr
-             | paren_expr | block_like
-paren_expr  := "(" expr ")"
-struct_expr := path "{" field_init ("," field_init)* ","? (".." expr)? "}"
-field_init  := ident ":" expr
-tuple_expr  := "(" expr "," expr ("," expr)* ","? ")" | "()"
-array_expr  := "[" expr ("," expr)* ","? "]" | "[" expr ";" integer "]"
-              # list literal, or repeat with a decimal count
-block_like  := block | if_expr | match_expr | loop_expr | while_expr
-```
 
 - `?` binds tighter than all binary operators.
 - `%`, `&`, `|`, `^`, `<<`, and `>>` are integer-only; applying one to
@@ -156,16 +79,6 @@ block_like  := block | if_expr | match_expr | loop_expr | while_expr
 
 ## Statements and blocks
 
-```
-block  := "{" statement* expr? "}"
-statement := decl_stmt | expr_stmt
-decl_stmt  := pattern (":" type)? ":=" expr
-reassign   := place "=" expr           # existing mut binding only
-place      := deref (field | index)*
-deref     := "*" unary_expr | path
-expr_stmt  := expr
-```
-
 - Newlines terminate statements; `;` separates multiple statements on
   one line only (a trailing `;` is an allowed no-op). Stray `;` are
   skipped in item, block, and arm lists; `match` arms accept runs of
@@ -180,11 +93,6 @@ expr_stmt  := expr
 - `ret expr?` returns early from the enclosing function.
 
 ## Modules and paths
-
-```
-path := ("package" | "self" | "super" | "<dep>" | ident)
-        ("::" ident)*
-```
 
 Module declarations come exclusively from `alcy.toml` `[modules]`.
 Files not included in `include` and unreachable from declared modules
