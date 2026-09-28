@@ -22,6 +22,7 @@ constexpr char DEFAULT_PATH_SEPARATOR = '/';
 constexpr char WINDOWS_PATH_SEPARATOR = '\\';
 
 constexpr std::string_view SOURCE_EXTENSION = ".al";
+constexpr std::string_view DEFAULT_OUT_DIR = "out";
 
 enum class PathError : u8 { ContainsNul };
 

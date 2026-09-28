@@ -65,7 +65,8 @@ NewResult write_package_files(PipelineContext& ctx,
                               std::string_view name) {
   const path::Path manifest_path = package_dir.join(pkg::MANIFEST_FILE_NAME);
   const path::Path main_path = package_dir.join("main.al");
-  for (const path::Path& path : {manifest_path, main_path}) {
+  const path::Path git_ignore_path = package_dir.join(".gitignore");
+  for (const path::Path& path : {manifest_path, main_path, git_ignore_path}) {
     io::FileHandle probe;
     if (probe.open(path.c_str(), io::FileAccess::Read)) {
       const u32 index = ctx.bag.emit(
@@ -88,13 +89,15 @@ name = "{}"
 path = "main.al")",
                                                     name, name);
   static constexpr std::string_view MAIN_TEXT =
-      "fn main() {\n  // Write your code here.\n}\n";
+      "fn main() {\n  println(\"hello world\")\n}\n";
+  static constexpr std::string_view GIT_IGNORE_TEXT = "/out/\n";
 
   if (ensure_directories(ctx, package_dir.as_view()).is_err()) {
     return base::make_err(0);
   }
   if (!write_text_file(manifest_path.as_view(), manifest_template) ||
-      !write_text_file(main_path.as_view(), MAIN_TEXT)) {
+      !write_text_file(main_path.as_view(), MAIN_TEXT) ||
+      !write_text_file(git_ignore_path.as_view(), GIT_IGNORE_TEXT)) {
     const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot create package files: '{}'",
                                    package_dir.as_view());

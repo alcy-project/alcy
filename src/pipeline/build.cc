@@ -262,7 +262,7 @@ base::Result<void, diag::Reported> build_package(PipelineContext& ctx,
   // An executable goes where the manifest says builds go; the other two
   // are inspection outputs, so they land beside the manifest unless the
   // caller named a path.
-  const path::Path out_dir = root.join("out");
+  const path::Path out_dir = root.join(path::DEFAULT_OUT_DIR);
   std::string output_path;
   if (output.empty()) {
     if (mode == EmitMode::Executable) {
