@@ -19,7 +19,7 @@
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
-#include "pipeline/build.h"
+#include "pipeline/emit_mode.h"
 
 namespace cli {
 
@@ -46,9 +46,8 @@ CliConfig extract_from_matches(arg::Matches&& matches) {
   // The choices above already rejected anything else, so an unknown value
   // here means the default, not an error to report a second time.
   c.stdin_source = matches.get<bool>("stdin").unwrap_or(false);
-  c.emit = pipeline::parse_emit_mode(
-               matches.get<std::string_view>("emit").unwrap_or("executable"))
-               .value_or(pipeline::EmitMode::Executable);
+  c.emit = matches.get<pipeline::EmitMode>("emit")
+               .unwrap_or(pipeline::EmitMode::Executable);
   c.output = matches.get<std::string_view>("output").unwrap_or(c.output);
   c.linker = matches.get<std::string_view>("linker").unwrap_or(c.linker);
 

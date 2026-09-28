@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <optional>
 #include <string>
 #include <string_view>
 
@@ -13,28 +12,11 @@
 #include "fpag/base/result.h"
 #include "lower/lower.h"
 #include "path/path.h"
+#include "pipeline/emit_mode.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
 
 namespace pipeline {
-
-// What a build writes. The mode is chosen explicitly rather than inferred
-// from the output's extension, because an extension says what a file is
-// called and not what was asked for: `main.o` as a *name* is just as valid
-// a request for an executable as `main` is a request for an object.
-enum class EmitMode : u8 {
-  // Compile, link against the runtime, and write an executable.
-  Executable,
-  // Write one relocatable object and stop.
-  Object,
-  // Write the module as LLVM's textual IR and stop. Needs no target, so it
-  // is the one mode that works before a backend is chosen.
-  LlvmIr,
-};
-
-// The mode named by `text`, or std::nullopt when it names no mode. The
-// spelling is the CLI's: what follows `emit=`.
-std::optional<EmitMode> parse_emit_mode(std::string_view text);
 
 // Shared frontend: type checking, lowering, and borrow checking over a
 // resolved tree. Used by build and run so both lower identical IR.

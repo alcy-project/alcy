@@ -4,7 +4,6 @@
 #include "pipeline/build.h"
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -42,19 +41,6 @@ base::Result<lower::LoweredPackage, diag::Reported> compile_tree(
   }
   FrontendOutput done = std::move(out).unwrap();
   return base::make_ok(std::move(done.package));
-}
-
-std::optional<EmitMode> parse_emit_mode(std::string_view text) {
-  if (text == "executable" || text == "exe") {
-    return EmitMode::Executable;
-  }
-  if (text == "object" || text == "obj") {
-    return EmitMode::Object;
-  }
-  if (text == "llvm-ir" || text == "ir") {
-    return EmitMode::LlvmIr;
-  }
-  return std::nullopt;
 }
 
 // The extension an unnamed output gets. It follows the mode rather than

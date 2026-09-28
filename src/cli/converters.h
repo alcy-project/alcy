@@ -8,6 +8,7 @@
 #include "fpag/arg/converter.h"
 #include "fpag/base/result.h"
 #include "fpag/term/color_mode.h"
+#include "pipeline/emit_mode.h"
 
 template <>
 struct arg::Converter<term::ColorMode> {
@@ -20,6 +21,23 @@ struct arg::Converter<term::ColorMode> {
       return make_ok(ColorMode::Always);
     } else if (v == "never") {
       return make_ok(ColorMode::Never);
+    } else {
+      return make_err(GetError::InvalidArgument);
+    }
+  }
+};
+
+template <>
+struct arg::Converter<pipeline::EmitMode> {
+  static base::Result<pipeline::EmitMode, arg::GetError> from_string(
+      std::string_view v) {
+    using arg::GetError, base::make_err, base::make_ok, pipeline::EmitMode;
+    if (v == "executable") {
+      return make_ok(EmitMode::Executable);
+    } else if (v == "object") {
+      return make_ok(EmitMode::Object);
+    } else if (v == "llvm-ir") {
+      return make_ok(EmitMode::LlvmIr);
     } else {
       return make_err(GetError::InvalidArgument);
     }

@@ -38,27 +38,6 @@ constexpr std::string_view PROGRAM =
 
 }  // namespace
 
-TEST_CASE("Emit modes are named by their CLI spelling") {
-  CHECK(parse_emit_mode("executable") == EmitMode::Executable);
-  CHECK(parse_emit_mode("object") == EmitMode::Object);
-  CHECK(parse_emit_mode("llvm-ir") == EmitMode::LlvmIr);
-  // The aliases the parser offers, so a user is not forced to remember
-  // which spelling the flag prefers.
-  CHECK(parse_emit_mode("exe") == EmitMode::Executable);
-  CHECK(parse_emit_mode("obj") == EmitMode::Object);
-  CHECK(parse_emit_mode("ir") == EmitMode::LlvmIr);
-}
-
-TEST_CASE("An unknown emit mode is not a mode") {
-  // The parser rejects these first, through the argument's choices; this
-  // is the second line of defence for a caller that builds a config
-  // directly.
-  CHECK(!parse_emit_mode("").has_value());
-  CHECK(!parse_emit_mode("bitcode").has_value());
-  CHECK(!parse_emit_mode("LLVM-IR").has_value());
-  CHECK(!parse_emit_mode(".o").has_value());
-}
-
 // An object needs a target machine, and the wasm build has none linked in,
 // so the object half of these cases is compiled out there. The IR half is
 // not: printing a module needs no backend, which is the property that makes

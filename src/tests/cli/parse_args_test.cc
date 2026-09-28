@@ -11,6 +11,7 @@
 #include "doctest/doctest.h"
 #include "fpag/arg/parser.h"
 #include "fpag/term/color_mode.h"
+#include "pipeline/emit_mode.h"
 
 namespace cli {
 
@@ -58,6 +59,26 @@ TEST_CASE("Parse build linker flag") {
   const CliConfig config = parse_ok(args);
   CHECK(config.subcommand == Subcommand::Build);
   CHECK(config.linker == "clang++");
+}
+
+TEST_CASE("Parse emit modes") {
+  const std::string_view exe[] = {"alcy", "build", "--emit=executable"};
+  CHECK(parse_ok(exe).emit == pipeline::EmitMode::Executable);
+  const std::string_view obj[] = {"alcy", "build", "--emit=object"};
+  CHECK(parse_ok(obj).emit == pipeline::EmitMode::Object);
+  const std::string_view llvm[] = {"alcy", "build", "--emit=llvm-ir"};
+  CHECK(parse_ok(llvm).emit == pipeline::EmitMode::LlvmIr);
+}
+
+TEST_CASE("Parse rejects the reserved ir spelling") {
+  // The argument's choices gate first; the converter is the second line
+  // of defence. `ir` names alcy's own IR, so it must not spell LLVM IR.
+  const std::string_view ir[] = {"alcy", "build", "--emit=ir"};
+  CHECK(parse(ir).is<ParseFailure>());
+  const std::string_view exe[] = {"alcy", "build", "--emit=exe"};
+  CHECK(parse(exe).is<ParseFailure>());
+  const std::string_view bitcode[] = {"alcy", "build", "--emit=bitcode"};
+  CHECK(parse(bitcode).is<ParseFailure>());
 }
 
 TEST_CASE("Parse build defaults") {

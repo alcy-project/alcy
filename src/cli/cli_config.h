@@ -8,7 +8,7 @@
 
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
-#include "pipeline/build.h"
+#include "pipeline/emit_mode.h"
 
 namespace cli {
 

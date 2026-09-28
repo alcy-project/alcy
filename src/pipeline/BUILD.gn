@@ -50,6 +50,8 @@ source_set("pipeline") {
     "check.h",
     "embedded_runtime.h",
     "embedded_std.h",
+    "emit_mode.cc",
+    "emit_mode.h",
     "frontend.cc",
     "frontend.h",
     "new.cc",
