@@ -4,6 +4,7 @@
 #include "cli/run_command.h"
 
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -25,30 +26,11 @@ namespace cli {
 i32 run_run(const CliConfig& config, const diag::RenderOptions& options) {
   pipeline::PipelineContext ctx;
   TraceSession trace(ctx, config.time_trace);
+  // Validation keeps single files out: `run` takes a package directory,
+  // and `compile` takes the file.
   const std::string_view raw_dir =
       config.target_dir.empty() ? "." : config.target_dir;
   const std::span<const std::string_view> args(config.program_args);
-
-  if (raw_dir.size() >= path::SOURCE_EXTENSION.size() &&
-      raw_dir.substr(raw_dir.size() - path::SOURCE_EXTENSION.size()) ==
-          path::SOURCE_EXTENSION) {
-    base::Result<pipeline::RunOutcome, diag::Reported> result =
-        pipeline::run_single_file(ctx, raw_dir, config.release, config.linker,
-                                  args);
-    if (!trace.finish()) {
-      const u32 index = ctx.bag.emit(
-          diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
-          "cannot write trace '{}'", trace.path());
-      (void)index;
-    }
-    // Report before branching: a run that reaches the program still
-    // carries the warnings the bag collected along the way.
-    report_diagnostics(ctx.bag, ctx.sources, options);
-    if (result.is_err()) {
-      return result_code(ResultCode::RunFailed);
-    }
-    return std::move(result).unwrap().exit_code;
-  }
 
   base::Result<pipeline::ManifestProbe, path::PathError> probe =
       pipeline::find_package_manifest(ctx, raw_dir);
@@ -58,9 +40,9 @@ i32 run_run(const CliConfig& config, const diag::RenderOptions& options) {
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
   if (!found.found) {
-    const u32 index = ctx.bag.emit(
-        diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
-        "no manifest found at '{}'; run a file or add alcy.toml", raw_dir);
+    const u32 index =
+        ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
+                     "no manifest found at '{}'; add alcy.toml", raw_dir);
     (void)index;
     report_diagnostics(ctx.bag, ctx.sources, options);
     return result_code(ResultCode::RunFailed);
@@ -76,11 +58,13 @@ i32 run_run(const CliConfig& config, const diag::RenderOptions& options) {
                             found.manifest_name, config.release, config.linker,
                             args);
   if (!trace.finish()) {
-    const u32 index = ctx.bag.emit(
-        diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
-        "cannot write trace '{}'", trace.path());
+    const u32 index =
+        ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
+                     "cannot write trace '{}'", trace.path());
     (void)index;
   }
+  // Report before branching: a run that reaches the program still
+  // carries the warnings the bag collected along the way.
   report_diagnostics(ctx.bag, ctx.sources, options);
   if (result.is_err()) {
     return result_code(ResultCode::RunFailed);

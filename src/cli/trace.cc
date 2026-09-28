@@ -11,6 +11,7 @@
 #include "fpag/debug/profiler/profile_event.h"
 #include "fpag/debug/profiler/profiler.h"
 #include "fpag/debug/profiler/time_trace_formatter.h"
+#include "pipeline/pipeline_context.h"
 
 namespace cli {
 
@@ -29,7 +30,9 @@ TraceSession::~TraceSession() {
   }
 }
 
-void TraceSession::set_path(std::string path) { path_ = std::move(path); }
+void TraceSession::set_path(std::string path) {
+  path_ = std::move(path);
+}
 
 bool TraceSession::finish() {
   done_ = true;

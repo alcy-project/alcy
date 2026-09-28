@@ -3,6 +3,7 @@
 
 #include "cli/build_command.h"
 
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -26,31 +27,10 @@ ResultCode run_build(const CliConfig& config,
                      const diag::RenderOptions& options) {
   pipeline::PipelineContext ctx;
   TraceSession trace(ctx, config.time_trace);
+  // Validation keeps single files out: `build` takes a package
+  // directory, and `compile` takes the file.
   const bool build_current_dir = config.target_dir.empty();
   const std::string_view raw_dir = build_current_dir ? "." : config.target_dir;
-
-  if (raw_dir.size() >= path::SOURCE_EXTENSION.size() &&
-      raw_dir.substr(raw_dir.size() - path::SOURCE_EXTENSION.size()) ==
-          path::SOURCE_EXTENSION) {
-    trace.set_path(trace_path_beside(config.output));
-    base::Result<void, diag::Reported> res =
-        pipeline::build_single_file(ctx, raw_dir, config.output, config.release,
-                                    config.linker, config.emit);
-    if (!trace.finish()) {
-      const u32 index = ctx.bag.emit(
-          diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
-          "cannot write trace '{}'", trace.path());
-      (void)index;
-    }
-    // Report before branching: a successful build still carries the
-    // warnings the bag collected along the way.
-    report_diagnostics(ctx.bag, ctx.sources, options);
-    if (res.is_err() || ctx.bag.has_errors()) {
-      return ResultCode::BuildFailed;
-    }
-    base::logger.wo_prefix("built successfully");
-    return ResultCode::Success;
-  }
 
   base::Result<pipeline::ManifestProbe, path::PathError> probe =
       pipeline::find_package_manifest(ctx, raw_dir);
@@ -70,9 +50,9 @@ ResultCode run_build(const CliConfig& config,
         ctx, found.root, found.manifest, found.manifest_name, config.output,
         config.release, config.linker, config.emit);
     if (!trace.finish()) {
-      const u32 index = ctx.bag.emit(
-          diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
-          "cannot write trace '{}'", trace.path());
+      const u32 index =
+          ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
+                       "cannot write trace '{}'", trace.path());
       (void)index;
     }
     report_diagnostics(ctx.bag, ctx.sources, options);
@@ -88,13 +68,12 @@ ResultCode run_build(const CliConfig& config,
   if (build_current_dir) {
     const u32 index =
         ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
-                     "no manifest found at current directory; build a file or "
-                     "add alcy.toml");
+                     "no manifest found at current directory; add alcy.toml");
     (void)index;
   } else {
-    const u32 index = ctx.bag.emit(
-        diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
-        "no manifest found at '{}'; build a file or add alcy.toml", raw_dir);
+    const u32 index =
+        ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
+                     "no manifest found at '{}'; add alcy.toml", raw_dir);
     (void)index;
   }
   report_diagnostics(ctx.bag, ctx.sources, options);

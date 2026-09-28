@@ -7,7 +7,7 @@
 
 Each case is a directory under e2e/cases/<name>/ holding either an
 alcy.toml package (checked as `alcy check .` with the case directory
-as cwd) or a single main.al file (checked as `alcy check main.al`).
+as cwd) or a single main.al file (checked as `alcy check --file main.al`).
 An expect.toml file declares the outcome:
 
     exit = 0
@@ -67,7 +67,18 @@ def run_case(alcy: Path, case_dir: Path):
         argv = [str(alcy), *extra_args, subcommand, "."]
         cwd = case_dir
     elif (case_dir / "main.al").is_file():
-        argv = [str(alcy), *extra_args, subcommand, str(case_dir / "main.al")]
+        # Single files name their verb explicitly: `check` takes --file
+        # and `build` is spelled `compile`.
+        if subcommand == "build":
+            argv = [str(alcy), *extra_args, "compile", str(case_dir / "main.al")]
+        else:
+            argv = [
+                str(alcy),
+                *extra_args,
+                subcommand,
+                "--file",
+                str(case_dir / "main.al"),
+            ]
         cwd = project_root_dir
     else:
         return False, "no alcy.toml or main.al found"

@@ -32,8 +32,7 @@ base::Result<CheckResult, diag::Reported> finish_check(
     PipelineContext& ctx,
     analyzer::ModuleTree tree,
     usize file_count) {
-  base::Result<FrontendOutput, diag::Reported> out =
-      run_frontend(ctx, std::move(tree));
+  base::Result<FrontendOutput, diag::Reported> out = run_frontend(ctx, tree);
   if (out.is_err() || ctx.bag.has_errors()) {
     return fail();
   }

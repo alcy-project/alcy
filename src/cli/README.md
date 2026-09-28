@@ -19,7 +19,8 @@ both, so parsing stays pure and testable.
 - `cli_main(argc, argv)` -> exit code. Grammar failures exit
   `ArgParseError`; semantic failures print `error: <detail>` and
   exit the same way; dispatch only ever sees a validated config.
-- `run_build` / `run_check` / `run_run` / `run_new` / `run_init`.
+- `run_build` / `run_compile` / `run_check` / `run_run` / `run_new` /
+  `run_init`.
 - `trace` owns `--time-trace` sessions: `TraceSession` points the
   context at the global profiler while a command runs and writes the
   Chromium trace JSON on `finish()`.

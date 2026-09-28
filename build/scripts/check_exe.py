@@ -18,8 +18,9 @@ exactly when present; `*_contains` lists must all appear in the
 respective stream.
 
 Cases are copied to a scratch directory, built to executables with
-`alcy build` (which links the embedded runtime), executed, and
-asserted. Directories holding alcy.toml build as packages.
+`alcy compile` for a single file or `alcy build` for a package (which
+links the embedded runtime), executed, and asserted. Directories
+holding alcy.toml build as packages.
 """
 
 import argparse
@@ -78,7 +79,8 @@ def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path):
     --emit=llvm-ir exists, and this is what it is for.
     """
     ir = work / "main.ll"
-    argv = [str(alcy), "build", "." if is_package else "main.al",
+    command = "build" if is_package else "compile"
+    argv = [str(alcy), command, "." if is_package else "main.al",
             "--emit=llvm-ir", "-o", str(ir)]
     proc = subprocess.run(argv, capture_output=True, text=True, cwd=work)
     if proc.returncode != 0 or not ir.is_file():
@@ -125,12 +127,13 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
             shutil.copy(main_al, work / "main.al")
             target = "main.al"
 
+        command = "build" if is_package else "compile"
         if sanitize:
             proc, why = build_sanitized(alcy, work, is_package, work / exe_name)
             if why:
                 return False, f"{why}\n--- stderr ---\n{proc.stderr}"
         else:
-            build_argv = [str(alcy), "build", target, "-o", exe_name]
+            build_argv = [str(alcy), command, target, "-o", exe_name]
             proc = subprocess.run(
                 build_argv,
                 capture_output=True,
@@ -139,7 +142,7 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
             )
         if proc.returncode != 0:
             return False, (
-                f"alcy build failed: exit={proc.returncode}\n"
+                f"alcy {command} failed: exit={proc.returncode}\n"
                 f"--- build stdout ---\n{proc.stdout}"
                 f"--- build stderr ---\n{proc.stderr}"
             )

@@ -10,12 +10,13 @@
 #include "analyzer/types.h"
 #include "borrow/borrow.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
 #include "lower/lower.h"
+#include "pipeline/pipeline_context.h"
 #include "pipeline/std_stage.h"
 #include "pipeline/target.h"
+#include "source/source.h"
 
 namespace pipeline {
 
@@ -33,13 +34,11 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
   analyzer::CheckedPackage package = std::move(checked).unwrap();
   // Staged prelude modules check with the package but read as
   // toolchain sources, so reported counts exclude them.
-  const usize module_count =
-      package.modules.size() > tree.staged_modules
-          ? package.modules.size() - tree.staged_modules
-          : 0;
+  const usize module_count = package.modules.size() > tree.staged_modules
+                                 ? package.modules.size() - tree.staged_modules
+                                 : 0;
   base::Result<lower::LoweredPackage, diag::Reported> lowered = [&] {
-    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "lower",
-                                             "frontend");
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "lower", "frontend");
     return lower::lower_package(std::move(package), TARGET_WIDTH, ctx.ast,
                                 ctx.strings, ctx.bag);
   }();

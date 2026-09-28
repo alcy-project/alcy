@@ -23,6 +23,7 @@
 #include "fpag/io/temp_dir.h"
 #include "lower/lower.h"
 #include "path/path.h"
+#include "pipeline/emit_mode.h"
 #include "pipeline/frontend.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/runtime_stage.h"
@@ -35,8 +36,7 @@ namespace pipeline {
 base::Result<lower::LoweredPackage, diag::Reported> compile_tree(
     PipelineContext& ctx,
     analyzer::ModuleTree tree) {
-  base::Result<FrontendOutput, diag::Reported> out =
-      run_frontend(ctx, std::move(tree));
+  base::Result<FrontendOutput, diag::Reported> out = run_frontend(ctx, tree);
   if (out.is_err()) {
     return base::make_err(diag::Reported{});
   }
@@ -199,6 +199,23 @@ base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
     return base::make_err(diag::Reported{});
   }
   const source::FileId root = std::move(file).unwrap();
+  std::string output_path =
+      output.empty() ? std::string(target) : std::string(output);
+  if (output.empty()) {
+    // The target spells a source file, so an extension is present.
+    const usize dot = output_path.rfind('.');
+    DCHECK(dot != std::string::npos);
+    output_path.replace(dot, std::string::npos, suffix_for(mode));
+  }
+  return build_single_root(ctx, root, output_path, optimize, linker, mode);
+}
+
+base::Result<void, diag::Reported> build_single_root(PipelineContext& ctx,
+                                                     source::FileId root,
+                                                     std::string_view output,
+                                                     bool optimize,
+                                                     std::string_view linker,
+                                                     EmitMode mode) {
   base::Result<analyzer::ModuleTree, diag::Reported> tree =
       front_end_root(ctx, root);
   if (tree.is_err() || ctx.bag.has_errors()) {
@@ -210,15 +227,7 @@ base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
     return base::make_err(diag::Reported{});
   }
   lower::LoweredPackage lowered = std::move(package).unwrap();
-  std::string output_path =
-      output.empty() ? std::string(target) : std::string(output);
-  if (output.empty()) {
-    // The target spells a source file, so an extension is present.
-    const usize dot = output_path.rfind('.');
-    DCHECK(dot != std::string::npos);
-    output_path.replace(dot, std::string::npos, suffix_for(mode));
-  }
-  return emit_output(ctx, lowered, optimize, linker, mode, output_path);
+  return emit_output(ctx, lowered, optimize, linker, mode, std::string(output));
 }
 
 base::Result<void, diag::Reported> build_package(PipelineContext& ctx,

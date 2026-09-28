@@ -13,6 +13,7 @@
 #include "cli/build_command.h"
 #include "cli/check_command.h"
 #include "cli/cli_config.h"
+#include "cli/compile_command.h"
 #include "cli/init_command.h"
 #include "cli/init_handler.h"
 #include "cli/new_command.h"
@@ -36,6 +37,7 @@ namespace {
 i32 dispatch(const CliConfig& config, const diag::RenderOptions& options) {
   switch (config.subcommand) {
     case Subcommand::Build: return result_code(run_build(config, options));
+    case Subcommand::Compile: return result_code(run_compile(config, options));
     case Subcommand::Run: return run_run(config, options);
     case Subcommand::New:
       return result_code(run_new(config.target_dir, options));

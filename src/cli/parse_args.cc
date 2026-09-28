@@ -33,6 +33,8 @@ CliConfig extract_from_matches(arg::Matches&& matches) {
   const std::string_view selected = matches.selected_command();
   if (selected == "build") {
     c.subcommand = Subcommand::Build;
+  } else if (selected == "compile") {
+    c.subcommand = Subcommand::Compile;
   } else if (selected == "run") {
     c.subcommand = Subcommand::Run;
   } else if (selected == "new") {
@@ -46,8 +48,9 @@ CliConfig extract_from_matches(arg::Matches&& matches) {
   // The choices above already rejected anything else, so an unknown value
   // here means the default, not an error to report a second time.
   c.stdin_source = matches.get<bool>("stdin").unwrap_or(false);
-  c.emit = matches.get<pipeline::EmitMode>("emit")
-               .unwrap_or(pipeline::EmitMode::Executable);
+  c.file = matches.get<std::string_view>("file").unwrap_or(c.file);
+  c.emit = matches.get<pipeline::EmitMode>("emit").unwrap_or(
+      pipeline::EmitMode::Executable);
   c.output = matches.get<std::string_view>("output").unwrap_or(c.output);
   c.linker = matches.get<std::string_view>("linker").unwrap_or(c.linker);
 
@@ -103,15 +106,15 @@ arg::Parser build_parser() {
                       .is_flag(true)
                       .build());
   builder.add_subcommand(
-      build_subcommand("build", "Build a package or source directory")
+      build_subcommand("build", "Build a package directory")
           .add_arg(arg::ArgBuilder("release")
                        .help("Build with optimizations.")
                        .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("output")
                        .short_name('o')
-                       .help("Where the output goes. Empty picks a path "
-                             "beside the input.")
+                       .help("Where the output goes. Empty picks the "
+                             "package's out/ directory.")
                        .default_value("")
                        .build())
           .add_arg(arg::ArgBuilder("emit")
@@ -127,7 +130,37 @@ arg::Parser build_parser() {
                        .build())
           .build());
   builder.add_subcommand(
-      build_subcommand("run", "Build and run a package or source file")
+      build_subcommand("compile", "Compile a single source file")
+          .add_arg(arg::ArgBuilder("release")
+                       .help("Build with optimizations.")
+                       .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("output")
+                       .short_name('o')
+                       .help("Where the output goes. Empty picks a path "
+                             "beside the input; required with --stdin.")
+                       .default_value("")
+                       .build())
+          .add_arg(arg::ArgBuilder("emit")
+                       .help("What to write: executable (default), object, "
+                             "or llvm-ir. The output's extension no longer "
+                             "decides.")
+                       .choices({"executable", "object", "llvm-ir"})
+                       .default_value("executable")
+                       .build())
+          .add_arg(arg::ArgBuilder("linker")
+                       .help("System linker driver for executable builds.")
+                       .default_value("")
+                       .build())
+          .add_arg(arg::ArgBuilder("stdin")
+                       .help("Read the program from standard input instead of "
+                             "a file, and report against the name <stdin>. "
+                             "For an editor buffer that has never been saved.")
+                       .is_flag(true)
+                       .build())
+          .build());
+  builder.add_subcommand(
+      build_subcommand("run", "Build and run a package directory")
           .add_arg(arg::ArgBuilder("release")
                        .help("Build with optimizations.")
                        .is_flag(true)
@@ -144,11 +177,10 @@ arg::Parser build_parser() {
           .build());
   builder.add_subcommand(
       build_subcommand("check", "Check a package without emitting code")
-          .add_arg(arg::ArgBuilder("stdin")
-                       .help("Read the program from standard input instead of "
-                             "a file, and report against the name <stdin>. "
-                             "For an editor buffer that has never been saved.")
-                       .is_flag(true)
+          .add_arg(arg::ArgBuilder("file")
+                       .help("Check one source file instead of a package "
+                             "directory.")
+                       .default_value("")
                        .build())
           .build());
   return arg::Parser(std::move(builder).build());

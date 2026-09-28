@@ -39,4 +39,43 @@ TEST_CASE("Config validation accepts a plain command config") {
   CHECK(validate_cli_config(config).is_ok());
 }
 
+TEST_CASE("Config validation splits files from packages") {
+  CliConfig build{};
+  build.subcommand = Subcommand::Build;
+  build.target_dir = "main.al";
+  CHECK(validate_cli_config(build).is_err());
+
+  CliConfig run{};
+  run.subcommand = Subcommand::Run;
+  run.target_dir = "main.al";
+  CHECK(validate_cli_config(run).is_err());
+
+  CliConfig compile{};
+  compile.subcommand = Subcommand::Compile;
+  CHECK(validate_cli_config(compile).is_err());
+
+  CliConfig both{};
+  both.subcommand = Subcommand::Compile;
+  both.stdin_source = true;
+  both.target_dir = "main.al";
+  CHECK(validate_cli_config(both).is_err());
+
+  CliConfig piped{};
+  piped.subcommand = Subcommand::Compile;
+  piped.stdin_source = true;
+  CHECK(validate_cli_config(piped).is_err());
+
+  CliConfig named{};
+  named.subcommand = Subcommand::Compile;
+  named.stdin_source = true;
+  named.output = "main";
+  CHECK(validate_cli_config(named).is_ok());
+
+  CliConfig check{};
+  check.subcommand = Subcommand::Check;
+  check.target_dir = "pkg";
+  check.file = "main.al";
+  CHECK(validate_cli_config(check).is_err());
+}
+
 }  // namespace cli

@@ -41,6 +41,7 @@ TEST_CASE("Parse build subcommand") {
                             .subcommand = Subcommand::Build,
                             .release = true,
                             .target_dir = "mydir",
+                            .file = "",
                             .output = "",
                             .linker = "",
                             .program_args = {}});
@@ -94,12 +95,35 @@ TEST_CASE("Parse other subcommands") {
   const std::string_view created[] = {"alcy", "new", "mypkg"};
   const std::string_view init[] = {"alcy", "init", "existing"};
   const std::string_view check[] = {"alcy", "check"};
+  const std::string_view compile[] = {"alcy", "compile", "main.al"};
   CHECK(parse_ok(run).subcommand == Subcommand::Run);
   CHECK(parse_ok(created).subcommand == Subcommand::New);
   CHECK(parse_ok(created).target_dir == "mypkg");
   CHECK(parse_ok(init).subcommand == Subcommand::Init);
   CHECK(parse_ok(init).target_dir == "existing");
   CHECK(parse_ok(check).subcommand == Subcommand::Check);
+  CHECK(parse_ok(compile).subcommand == Subcommand::Compile);
+  CHECK(parse_ok(compile).target_dir == "main.al");
+}
+
+TEST_CASE("Parse compile flags") {
+  const std::string_view args[] = {"alcy",          "compile", "main.al",
+                                   "--release",     "-o",      "main.o",
+                                   "--emit=object", "--stdin"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.subcommand == Subcommand::Compile);
+  CHECK(config.release);
+  CHECK(config.output == "main.o");
+  CHECK(config.emit == pipeline::EmitMode::Object);
+  CHECK(config.stdin_source);
+}
+
+TEST_CASE("Parse check file flag") {
+  const std::string_view args[] = {"alcy", "check", "--file", "main.al"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.subcommand == Subcommand::Check);
+  CHECK(config.file == "main.al");
+  CHECK(config.target_dir.empty());
 }
 
 TEST_CASE("Parse run forwards trailing positionals") {

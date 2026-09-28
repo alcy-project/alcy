@@ -19,6 +19,18 @@ enum class ConfigError : u8 {
   MissingSubcommand,
   // Trailing program arguments are only meaningful for `run`.
   UnexpectedProgramArgs,
+  // `build` takes a package directory; a single file is `compile`'s.
+  BuildSingleFile,
+  // `run` takes a package directory; a single file is `compile`'s.
+  RunSingleFile,
+  // `compile` needs something to compile: a file or `--stdin`.
+  CompileNeedsTarget,
+  // Reading the pipe and also naming a target is a contradiction.
+  CompileTargetWithStdin,
+  // `--stdin` names no file, so the output needs a name.
+  CompileStdinNeedsOutput,
+  // `check` takes a directory or `--file`, not both.
+  CheckFileWithTarget,
 };
 
 // Semantic validation of a parsed config, kept separate from grammar

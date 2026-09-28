@@ -22,13 +22,6 @@ struct RunOutcome {
   i32 exit_code = 0;
 };
 
-base::Result<RunOutcome, diag::Reported> run_single_file(
-    PipelineContext& ctx,
-    std::string_view target,
-    bool optimize,
-    std::string_view linker,
-    std::span<const std::string_view> args);
-
 base::Result<RunOutcome, diag::Reported> run_package(
     PipelineContext& ctx,
     const path::Path& root,

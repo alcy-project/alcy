@@ -15,6 +15,7 @@ namespace cli {
 enum class Subcommand : u8 {
   None,
   Build,
+  Compile,
   Run,
   New,
   Init,
@@ -31,13 +32,17 @@ struct CliConfig {
   // absent; the cli substitutes "."). Borrows argv storage, so a config
   // must not outlive the argument vector it was parsed from.
   std::string_view target_dir;
+  // Single file for `check --file`, naming one source explicitly so the
+  // positional stays a package directory. Borrows argv storage like
+  // target_dir.
+  std::string_view file;
   // Where the output goes (empty selects a path beside the input, or the
   // package's out/ directory). Borrows argv storage like target_dir.
   std::string_view output;
   // What the build writes. Defaults to an executable, so the name says
   // which one only when it is not the default.
   pipeline::EmitMode emit = pipeline::EmitMode::Executable;
-  // Check the program on standard input rather than a target. The name it
+  // Compile the program on standard input rather than a target. The name it
   // is reported under is <stdin>, since a pipe carries no file behind it.
   bool stdin_source = false;
   // System linker driver for executable builds (empty selects the default

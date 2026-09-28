@@ -13,6 +13,7 @@
 #include "fpag/io/temp_dir.h"
 #include "path/path.h"
 #include "pipeline/build.h"
+#include "pipeline/emit_mode.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_stage.h"
 #include "source/source.h"

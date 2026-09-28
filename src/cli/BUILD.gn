@@ -11,6 +11,8 @@ source_set("cli") {
     "cli_config.h",
     "cli_main.cc",
     "cli_main.h",
+    "compile_command.cc",
+    "compile_command.h",
     "converters.cc",
     "converters.h",
     "diagnostic_output.cc",

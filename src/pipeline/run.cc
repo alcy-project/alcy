@@ -9,17 +9,14 @@
 #include <utility>
 #include <vector>
 
-#include "analyzer/resolve.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/debug/profiler/profile_scope.h"
 #include "fpag/io/temp_dir.h"
 #include "lower/lower.h"
 #include "path/path.h"
 #include "pipeline/build.h"
-#include "pipeline/frontend.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/runtime_stage.h"
 #include "pipeline/spawn.h"
@@ -68,37 +65,6 @@ base::Result<RunOutcome, diag::Reported> link_and_run(
 }
 
 }  // namespace
-
-base::Result<RunOutcome, diag::Reported> run_single_file(
-    PipelineContext& ctx,
-    std::string_view target,
-    bool optimize,
-    std::string_view linker,
-    std::span<const std::string_view> args) {
-  base::Result<source::FileId, source::SourceError> file = [&] {
-    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "load", "frontend");
-    return ctx.sources.load(target);
-  }();
-  if (file.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot read '{}'", target);
-    (void)index;
-    return base::make_err(diag::Reported{});
-  }
-  const source::FileId root = std::move(file).unwrap();
-  base::Result<analyzer::ModuleTree, diag::Reported> tree =
-      front_end_root(ctx, root);
-  if (tree.is_err() || ctx.bag.has_errors()) {
-    return base::make_err(diag::Reported{});
-  }
-  base::Result<lower::LoweredPackage, diag::Reported> package =
-      compile_tree(ctx, std::move(tree).unwrap());
-  if (package.is_err() || ctx.bag.has_errors()) {
-    return base::make_err(diag::Reported{});
-  }
-  lower::LoweredPackage lowered = std::move(package).unwrap();
-  return link_and_run(ctx, lowered, optimize, linker, args);
-}
 
 base::Result<RunOutcome, diag::Reported> run_package(
     PipelineContext& ctx,
