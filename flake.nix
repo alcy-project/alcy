@@ -10,8 +10,7 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        # TODO: move to llvmPackages_23 once it points at a stable release (currently an RC).
-        llvmPkgs = pkgs.llvmPackages_22;
+        llvmPkgs = pkgs.llvmPackages_23;
 
         stdenv = llvmPkgs.libcxxStdenv;
 
