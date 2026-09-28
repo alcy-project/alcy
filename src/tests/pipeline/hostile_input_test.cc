@@ -17,6 +17,8 @@
 
 namespace pipeline {
 
+#if !BUILD_FLAG(IS_OS_ASMJS)
+
 namespace {
 
 // A deterministic generator, so a failure reproduces exactly. The
@@ -171,8 +173,6 @@ std::string generate(Rng& rng) {
 }
 
 }  // namespace
-
-#if !BUILD_FLAG(IS_OS_ASMJS)
 
 TEST_CASE("Hostile input never crashes the checker") {
   // Enough shapes to reach every branch, still fast enough for the

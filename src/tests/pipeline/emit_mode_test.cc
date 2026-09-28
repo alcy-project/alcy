@@ -6,6 +6,7 @@
 #include <string_view>
 #include <utility>
 
+#include "config/build_config.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
@@ -57,13 +58,18 @@ TEST_CASE("An unknown emit mode is not a mode") {
   CHECK(!parse_emit_mode(".o").has_value());
 }
 
-TEST_CASE("A build writes what the mode asked for") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_emit_mode_test_");
+// An object needs a target machine, and the wasm build has none linked in,
+// so the object half of these cases is compiled out there. The IR half is
+// not: printing a module needs no backend, which is the property that makes
+// it the one output available before a target is chosen.
+#if !BUILD_FLAG(IS_OS_ASMJS)
+TEST_CASE("A build writes an object where it was asked for one") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_emit_object_test_");
   const std::string source = dir.join("main.al");
   CHECK(dir.write_file("main.al", PROGRAM));
 
-  // The extension is a default, not a switch: an object called `out.bin`
-  // and a module called `out` are both what was asked for.
+  // The extension is a default, not a switch: an object called `out.bin` is
+  // still what was asked for.
   const std::string object_path = dir.join("out.bin");
   {
     PipelineContext ctx;
@@ -79,6 +85,13 @@ TEST_CASE("A build writes what the mode asked for") {
                          "\x7f"
                          "ELF") == 0);
   }
+}
+#endif  // !BUILD_FLAG(IS_OS_ASMJS
+
+TEST_CASE("A build writes the module as textual IR") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_emit_ir_test_");
+  const std::string source = dir.join("main.al");
+  CHECK(dir.write_file("main.al", PROGRAM));
 
   const std::string ir_path = dir.join("out");
   {
@@ -108,6 +121,7 @@ TEST_CASE("The default extension follows the mode") {
     CHECK(built.is_ok());
   }
   CHECK(io::is_file(dir.join("main.ll")));
+#if !BUILD_FLAG(IS_OS_ASMJS)
   CHECK(!io::is_file(dir.join("main.o")));
 
   {
@@ -117,6 +131,7 @@ TEST_CASE("The default extension follows the mode") {
     CHECK(built.is_ok());
   }
   CHECK(io::is_file(dir.join("main.o")));
+#endif  // !BUILD_FLAG(IS_OS_ASMJS
 }
 
 TEST_CASE("A package build honours the mode too") {
@@ -139,8 +154,10 @@ TEST_CASE("A package build honours the mode too") {
     const char* relative;
   };
   const Case cases[] = {
-      {EmitMode::Object, "proj/app.o"},
       {EmitMode::LlvmIr, "proj/app.ll"},
+#if !BUILD_FLAG(IS_OS_ASMJS)
+      {EmitMode::Object, "proj/app.o"},
+#endif  // !BUILD_FLAG(IS_OS_ASMJS
   };
   for (const Case& one : cases) {
     INFO("mode " << static_cast<u32>(one.mode));
@@ -163,9 +180,10 @@ TEST_CASE("A package build honours the mode too") {
                       "", false, "", one.mode);
     CHECK(built.is_ok());
     CHECK(io::is_file(dir.join(one.relative)));
-    // An object never ends up in the executable's directory, and an
-    // executable is never what the other two asked for.
+#if !BUILD_FLAG(IS_OS_ASMJS)
+    // An object never ends up in the executable's directory.
     CHECK(!io::is_file(dir.join("proj/out/app.o")));
+#endif  // !BUILD_FLAG(IS_OS_ASMJS
   }
 }
 

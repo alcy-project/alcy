@@ -14,6 +14,8 @@
 
 namespace pipeline {
 
+#if !BUILD_FLAG(IS_OS_ASMJS)
+
 namespace {
 
 struct CheckOutcome {
@@ -68,8 +70,6 @@ std::string nested(const std::string_view& open,
 constexpr usize WAY_PAST = static_cast<usize>(base::MAX_NESTING) * 8;
 
 }  // namespace
-
-#if !BUILD_FLAG(IS_OS_ASMJS)
 
 // Well under the budget, so these must still compile: a guard that
 // rejected ordinary nesting would be worse than the crash it prevents.
