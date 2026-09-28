@@ -41,6 +41,15 @@ constexpr u32 NO_ROOT = 0xFFFFFFFFu;
 // table's size bounds every index.
 constexpr u32 DEREF_STEP = 0xFFFFFFFFu;
 
+// A path step for a buffer element. The index is a runtime value, so
+// the step names no particular element: a loan through it overlaps the
+// whole buffer, which is what makes a reallocating write conflict with a
+// loan into the old block. Two such steps never compare equal to each
+// other, so two loans into distinct elements of one buffer do not
+// conflict — the granularity a `&T` accessor can express, since nothing
+// in the source names the index at the borrow.
+constexpr u32 ELEMENT_STEP = 0xFFFFFFFEu;
+
 // A place: a root register (alloca or block parameter) plus a path.
 // Moves, borrows, and revives name overlapping places: one path prefixes
 // the other (or they are equal).
@@ -49,6 +58,18 @@ struct Place {
   std::vector<u32> path;
 };
 
+bool steps_match(u32 a, u32 b) {
+  // An element step stands for whichever element a runtime index named,
+  // so it matches any index and any other element step. Comparing two
+  // element steps as equal would report a conflict between loans into
+  // distinct elements of one buffer, which the source never tied
+  // together.
+  if (a == ELEMENT_STEP || b == ELEMENT_STEP) {
+    return true;
+  }
+  return a == b;
+}
+
 bool overlaps(const Place& a, const Place& b) {
   if (a.root != b.root) {
     return false;
@@ -56,7 +77,7 @@ bool overlaps(const Place& a, const Place& b) {
   const usize common =
       a.path.size() < b.path.size() ? a.path.size() : b.path.size();
   for (usize i = 0; i < common; ++i) {
-    if (a.path[i] != b.path[i]) {
+    if (!steps_match(a.path[i], b.path[i])) {
       return false;
     }
   }
@@ -262,6 +283,32 @@ class Checker {
         flow[instr.dst.idx] = flow[base];
         break;
       }
+      case ir::Opcode::ElemOffset:
+      case ir::Opcode::TypeCast: {
+        // `elem_ref` and `uninit_ref` lower to these, and a container's
+        // read accessors are built from them, so a loan has to survive
+        // both or `Vec::at` hands back a pointer the checker never saw.
+        // An element offset names a place inside the buffer it walks
+        // from, and the wrapper is representation-transparent, so both
+        // keep the source's place and its loans.
+        u32 src = NO_ROOT;
+        if (!operand_reg(0, src) || !instr.dst.is_valid()) {
+          break;
+        }
+        if (home[src] == NO_ROOT) {
+          break;
+        }
+        home[instr.dst.idx] = home[src];
+        path[instr.dst.idx] = path[src];
+        if (instr.op == ir::Opcode::ElemOffset) {
+          // The index is a runtime value, so it is a step that names no
+          // field: any element of the buffer, which is what lets a store
+          // to the buffer itself conflict with a loan into one element.
+          path[instr.dst.idx].push_back(ELEMENT_STEP);
+        }
+        flow[instr.dst.idx] = flow[src];
+        break;
+      }
       case ir::Opcode::Move: {
         u32 src = NO_ROOT;
         if (operand_reg(0, src) && instr.dst.is_valid()) {
@@ -276,9 +323,16 @@ class Checker {
         }
         Place place;
         if (place_of(storage.operands()[instr.operands.head()], place)) {
-          flow[instr.dst.idx].push_back(static_cast<u32>(loans.size()));
           const bool exclusive = tag_of(storage.registers()[instr.dst].type) ==
                                  ir::TypeTag::MutRef;
+          // A reborrow stands behind the loans already reaching the place
+          // it borrows: `&b.n` on a `&Box` is derived from the loan the
+          // caller made on `b`. Carrying those forward is what lets a
+          // return name the parameter it reborrows from, so
+          // `fn get(b: &Box) -> &i32 { ret &b.n }` reaches the caller as a
+          // loan on the caller's argument rather than a bare pointer.
+          flow[instr.dst.idx] = flow[place_reg];
+          flow[instr.dst.idx].push_back(static_cast<u32>(loans.size()));
           loans.push_back({instr.dst.idx, place, exclusive, pos, pos});
         }
         break;

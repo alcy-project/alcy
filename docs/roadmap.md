@@ -6,18 +6,15 @@ peripheral work lives in `backlog.md`.
 
 ## Next
 
-- [ ] Loans exist wherever a reborrow happens.
+- [ ] A loan's extent is a region, not a span.
 
-  A reborrow at an argument or receiver position lowers to a `Load`,
-  so the borrow checker never sees a `Borrow` and no loan is created;
-  a function taking `&Self` and returning `&T` therefore hands back a
-  pointer it never recorded as borrowed. `ElemOffset` and `TypeCast`,
-  which the reborrow intrinsics lower to, are absent from the checker
-  entirely, so `Vec::at`'s result carries no loan either. A `push` that
-  reallocates goes undiagnosed and the program reads the freed block.
-  `Borrow` at those positions, the two opcodes in the checker, and a
-  regression test that reads `at`'s result across a reallocating
-  `push`.
+  A loan's extent is computed per function, so one live on a single
+  branch is taken as live on all of them and an early return on a branch
+  where the loan is already dead reports a conflict that is not one.
+  This is the region solver's input, and the widest remaining piece of
+  ADR-0012. The loans themselves now exist wherever a reborrow happens,
+  so this is the only thing standing between the checker and programs
+  that read through a loan across a branch.
 
 ## Queue
 
@@ -29,8 +26,9 @@ peripheral work lives in `backlog.md`.
   means the expander allocates at run time; `docs/spec/fmt.md`
   records the two ways to agree the size, and the first — the format
   string is handed its scratch as an argument — is the honest one.
-  Needs the loans above: without them this task's realloc conflicts
-  would be written, and would not be detected.
+  A heap buffer puts `String` in the position `Vec<T>` was in, so this
+  is the first exercise of the realloc-conflict rule on a type the
+  standard library owns.
 - [ ] Slices, `&[T]`.
 
   The generalization of `str`, and the ground the borrowed APIs and
@@ -44,7 +42,3 @@ peripheral work lives in `backlog.md`.
 
   The baremetal case proper: no heap, so no realloc hazard, and the
   growth logic it shares with `Vec`.
-- [ ] The narrow scope for borrow against realloc.
-
-  With loans in place, the remaining question is what a loan into a
-  buffer has to say about a reallocation of it.

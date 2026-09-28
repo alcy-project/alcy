@@ -1440,16 +1440,25 @@ ir::OperandIdx Lowerer::arg_for(Val arg, ir::TypeIdx param) {
   if (!is_ref_tag(tag_of(param))) {
     return use_value(arg);
   }
+  // A reborrow is implicit at an argument and at a receiver, so the
+  // place is loaned here whether or not the source wrote a `&`. Without
+  // the instruction the borrow checker has nothing to record, and a
+  // `&Self -> &T` accessor hands back a pointer no loan covers.
+  const auto loan_place = [&](const Val& place, bool exclusive) {
+    const ir::TypeIdx ref = builder.reference_type(place.type, exclusive);
+    const ir::RegisterIdx loan = emit(ir::Opcode::Borrow, ref, {place.op});
+    return Val{to_operand(loan, ref), ref, false, false};
+  };
   if (arg.address) {
     if (is_ref_tag(tag_of(arg.type))) {
       return materialize(arg).op;
     }
-    return arg.op;
+    return loan_place(arg, tag_of(param) == ir::TypeTag::MutRef).op;
   }
   if (is_ref_tag(tag_of(arg.type))) {
     return arg.op;
   }
-  return address_of(arg).op;
+  return loan_place(address_of(arg), tag_of(param) == ir::TypeTag::MutRef).op;
 }
 
 Val Lowerer::load_disc(Val slot_addr) {
