@@ -1,0 +1,2 @@
+exit = 4
+contains = ["is a suite, not a package"]

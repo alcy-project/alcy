@@ -14,6 +14,7 @@
 #include "path/path.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_select.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -57,22 +58,26 @@ base::Result<void, diag::Reported> emit_output(PipelineContext& ctx,
                                                EmitMode mode,
                                                const std::string& output_path);
 
-base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
-                                                     std::string_view target,
-                                                     std::string_view output,
-                                                     bool optimize,
-                                                     std::string_view linker,
-                                                     EmitMode mode);
+base::Result<void, diag::Reported> build_single_file(
+    PipelineContext& ctx,
+    std::string_view target,
+    std::string_view output,
+    bool optimize,
+    std::string_view linker,
+    EmitMode mode,
+    const StdSelection& selection);
 
 // The target-independent tail of a single-file build: everything from
 // a loaded root onwards, which does not care whether the bytes came
 // from a file or a pipe. `output` names the artifact unconditionally.
-base::Result<void, diag::Reported> build_single_root(PipelineContext& ctx,
-                                                     source::FileId root,
-                                                     std::string_view output,
-                                                     bool optimize,
-                                                     std::string_view linker,
-                                                     EmitMode mode);
+base::Result<void, diag::Reported> build_single_root(
+    PipelineContext& ctx,
+    source::FileId root,
+    std::string_view output,
+    bool optimize,
+    std::string_view linker,
+    EmitMode mode,
+    const StdSelection& selection);
 
 base::Result<void, diag::Reported> build_package(PipelineContext& ctx,
                                                  const path::Path& root,

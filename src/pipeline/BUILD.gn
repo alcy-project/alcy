@@ -19,6 +19,18 @@ action("embed_runtime") {
 action("embed_std") {
   script = "//build/scripts/embed_std.py"
   inputs = [
+    "//lib/std/alcy.toml",
+    "//lib/std/core/alcy.toml",
+    "//lib/std/alloc/alcy.toml",
+    "//lib/std/fmt/alcy.toml",
+    "//lib/std/atomic/alcy.toml",
+    "//lib/std/sync/alcy.toml",
+    "//lib/std/io/alcy.toml",
+    "//lib/std/network/alcy.toml",
+    "//lib/std/thread/alcy.toml",
+    "//lib/std/arch/alcy.toml",
+    "//lib/std/simd/alcy.toml",
+    "//lib/std/time/alcy.toml",
     "//lib/std/core/prelude.al",
     "//lib/std/core/mem.al",
     "//lib/std/core/text.al",
@@ -74,6 +86,8 @@ source_set("pipeline") {
     "runtime_stage.h",
     "spawn.cc",
     "spawn.h",
+    "std_select.cc",
+    "std_select.h",
     "std_stage.cc",
     "std_stage.h",
     "target.cc",

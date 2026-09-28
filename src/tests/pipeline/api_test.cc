@@ -16,6 +16,7 @@
 #include "pipeline/emit_mode.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/spawn.h"
+#include "pipeline/std_select.h"
 #include "pipeline/std_stage.h"
 #include "source/source.h"
 
@@ -25,7 +26,7 @@ namespace pipeline {
 TEST_CASE("Pipeline stages the standard library prelude") {
   PipelineContext ctx;
   base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> prelude =
-      std_prelude(ctx);
+      std_prelude(ctx, pipeline::full_std_selection());
   CHECK(prelude.is_ok());
   CHECK(!ctx.bag.has_errors());
   if (prelude.is_err()) {
@@ -64,7 +65,8 @@ TEST_CASE("Pipeline build produces object file") {
 
   const std::string obj_path = std::string(dir.path()) + "/main.o";
   auto res = pipeline::build_single_file(ctx, dir.join("main.al"), obj_path,
-                                         false, "", pipeline::EmitMode::Object);
+                                         false, "", pipeline::EmitMode::Object,
+                                         pipeline::full_std_selection());
   CHECK(res.is_ok());
 }
 
@@ -79,9 +81,9 @@ TEST_CASE("Pipeline build produces executable") {
 
   PipelineContext ctx;
   const std::string exe_path = std::string(dir.path()) + "/main_exe";
-  auto res =
-      pipeline::build_single_file(ctx, dir.join("main.al"), exe_path, false, "",
-                                  pipeline::EmitMode::Executable);
+  auto res = pipeline::build_single_file(
+      ctx, dir.join("main.al"), exe_path, false, "",
+      pipeline::EmitMode::Executable, pipeline::full_std_selection());
   CHECK(res.is_ok());
 }
 
@@ -97,9 +99,9 @@ TEST_CASE("Pipeline release build produces a working executable") {
   PipelineContext ctx;
   const std::string exe_path =
       std::string(dir.path()) + "/main_exe" + std::string(exe_suffix());
-  auto res =
-      pipeline::build_single_file(ctx, dir.join("main.al"), exe_path, true, "",
-                                  pipeline::EmitMode::Executable);
+  auto res = pipeline::build_single_file(
+      ctx, dir.join("main.al"), exe_path, true, "",
+      pipeline::EmitMode::Executable, pipeline::full_std_selection());
   CHECK(res.is_ok());
   if (res.is_err()) {
     return;
@@ -126,7 +128,8 @@ TEST_CASE("Pipeline build reports an unwritable object path") {
   // parent nor writing the object can succeed.
   const std::string bad_path = std::string(dir.path()) + "/blocker/main.o";
   auto res = pipeline::build_single_file(ctx, dir.join("main.al"), bad_path,
-                                         false, "", pipeline::EmitMode::Object);
+                                         false, "", pipeline::EmitMode::Object,
+                                         pipeline::full_std_selection());
   CHECK(res.is_err());
   CHECK(ctx.bag.has_errors());
 }

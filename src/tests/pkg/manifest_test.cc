@@ -182,8 +182,8 @@ TEST_CASE("Manifest semantic errors are diagnosed") {
 namespace {
 
 PackageManifest parse_ok(std::string_view bytes, Fixture& f) {
-  base::Result<PackageManifest, diag::Reported> result = parse_manifest(
-      bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
+  base::Result<PackageManifest, diag::Reported> result =
+      parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
   CHECK(result.is_ok());
   CHECK(!f.bag.has_errors());
   if (result.is_err()) {
@@ -277,9 +277,9 @@ TEST_CASE("Manifest rejects malformed specifiers and sources") {
     Fixture f;
     std::string bytes(DEPS_HEAD);
     bytes += c.entry;
-    CHECK(parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag,
-                         f.arena)
-              .is_err());
+    CHECK(
+        parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena)
+            .is_err());
   }
 }
 

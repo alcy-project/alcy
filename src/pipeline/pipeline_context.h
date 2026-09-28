@@ -35,9 +35,12 @@ struct PipelineContext {
   // Long-lived string pool for lowering and codegen (function names,
   // string literals). Must outlive every phase that reads its ids.
   str::StringInterner strings;
-  // Staged standard library, populated once by std_prelude and kept
-  // alive for the command. Inputs borrow the scratch paths.
+  // Staged standard library, populated by std_prelude and kept alive
+  // for the command. Inputs borrow the scratch paths. Restaged when a
+  // later call selects different members; the members borrow the
+  // generated tables either way.
   bool std_staged = false;
+  std::vector<std::string_view> std_selected;
   std::optional<io::TempDir> std_scratch;
   std::vector<analyzer::ModuleInput> std_inputs;
   // Profiler the phase scopes record into; null records nothing. The cli

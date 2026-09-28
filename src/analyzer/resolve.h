@@ -9,6 +9,8 @@
 
 #include "ast/ast.h"
 #include "diag/bag.h"
+#include "diag/diagnostic.h"
+#include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "source/source.h"
@@ -134,6 +136,51 @@ struct ModuleInput {
   bool is_facade = false;
 };
 
+// One public name of one embedded suite member, for the
+// missing-dependency hint. Views borrow the generated tables, so no
+// arena is involved.
+struct StdHint {
+  std::string_view package;
+  std::string_view name;
+};
+
+// Names the embedded member carrying `name` — a public item of it,
+// or the member itself. Empty when the name is not standard library.
+inline std::string_view std_hint_package(std::span<const StdHint> hints,
+                                         std::string_view name) {
+  for (const StdHint& hint : hints) {
+    if (hint.name == name || hint.package == name) {
+      return hint.package;
+    }
+  }
+  return {};
+}
+
+// Emits an unresolved-name error, naming the embedded member when the
+// name is a public item of one. The hint tells a manifest without the
+// package exactly what to add; anything else reads the plain message.
+inline void emit_unresolved(diag::DiagBag& bag,
+                            u32 code,
+                            diag::Span span,
+                            std::span<const StdHint> hints,
+                            std::string_view kind,
+                            std::string_view name) {
+  const std::string_view package = std_hint_package(hints, name);
+  if (!package.empty()) {
+    const u32 index = bag.emit(diag::Severity::Error, code, span,
+                               "unresolved {} '{}'; `{}` is in "
+                               "the standard library "
+                               "(alcy/std/{}); add it to "
+                               "[dependencies]",
+                               kind, name, name, package);
+    (void)index;
+    return;
+  }
+  const u32 index = bag.emit(diag::Severity::Error, code, span,
+                             "unresolved {} '{}'", kind, name);
+  (void)index;
+}
+
 base::Result<ModuleTree, diag::Reported> resolve_modules(
     source::FileId root,
     std::span<const ModuleInput> modules,
@@ -141,6 +188,7 @@ base::Result<ModuleTree, diag::Reported> resolve_modules(
     source::SourceManager& sources,
     ast::AstArena& ast,
     diag::DiagBag& bag,
-    std::span<const ModuleInput> prelude = {});
+    std::span<const ModuleInput> prelude = {},
+    std::span<const StdHint> std_hints = {});
 
 }  // namespace analyzer

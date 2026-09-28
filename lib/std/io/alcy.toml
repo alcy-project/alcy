@@ -1,11 +1,6 @@
 # Part of the `alcy/std` suite; see docs/adr/0016.
 #
 # Files, readers, writers, and the standard streams.
-#
-# `dependencies` and `export` are in the form ADR-0016 specifies.
-# The manifest parser does not read them yet: the compiler still
-# embeds these sources directly, so `dependencies` is inert and
-# nothing enforces `export`.
 
 [package]
 name = "io"
@@ -15,15 +10,14 @@ version = "0.1.0"
 include = [
   "prelude",
 ]
+# The public surface, in the form ADR-0007 specifies. Nothing
+# enforces it yet. Its `pub` items are also the implicit surface:
+# a program depending on this package sees them with no `use`.
+export = [
+  "prelude",
+]
 
 [dependencies]
-paths = [
-  "alcy/std/core",
-  "alcy/std/alloc",
-  "alcy/std/arch",
-]
-
-# The public surface. `prelude.al` re-exports the subset of these
-# that needs no `use` declaration.
-export = [
-]
+"alcy/std/core" = {}
+"alcy/std/alloc" = {}
+"alcy/std/arch" = {}

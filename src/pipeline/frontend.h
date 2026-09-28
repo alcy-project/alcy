@@ -9,6 +9,7 @@
 #include "fpag/base/result.h"
 #include "lower/lower.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_select.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -32,6 +33,7 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
 // manifest instead.
 base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
     PipelineContext& ctx,
-    source::FileId root);
+    source::FileId root,
+    const StdSelection& selection);
 
 }  // namespace pipeline

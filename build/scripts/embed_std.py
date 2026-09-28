@@ -32,27 +32,79 @@ def main():
     args = parser.parse_args()
 
     std_dir = Path(args.std_dir)
-    # Every module of every package of the `alcy/std` suite, in a fixed
-    # order so the generated file is byte-stable. The suite is injected
-    # whole until package selection lands; see docs/adr/0016.
-    order = [
-        ("core", ["prelude", "mem", "text", "option"]),
-        ("alloc", ["prelude", "heap", "vec", "text"]),
-        ("fmt", ["prelude", "write", "format"]),
-        ("atomic", ["prelude"]),
-        ("sync", ["prelude"]),
-        ("io", ["prelude"]),
-        ("network", ["prelude"]),
-        ("thread", ["prelude"]),
-        ("arch", ["prelude"]),
-        ("simd", ["prelude"]),
-        ("time", ["prelude"]),
-    ]
-    files = {
-        ("STD_%s_%s" % (name.upper(), mod.upper())): std_dir / name / (mod + ".al")
-        for name, mods in order
-        for mod in mods
-    }
+    if sys.version_info < (3, 11):
+        raise SystemExit("embed_std.py needs tomllib (python 3.11+)")
+    import tomllib
+
+    # The suite manifest names the members in order; each package
+    # manifest names its staged modules and its dependencies on other
+    # members. The manifests are the single source of truth: the
+    # generated tables below carry them into the binary.
+    with open(std_dir / "alcy.toml", "rb") as f:
+        suite = tomllib.load(f)["suite"]
+    if suite["owner"] != "alcy" or suite["name"] != "std":
+        raise SystemExit("lib/std/alcy.toml is not the alcy/std suite")
+    members = suite["packages"]
+    if sorted(members) != sorted(
+        [q.name for q in std_dir.iterdir() if q.is_dir()]
+    ):
+        raise SystemExit("suite members and lib/std directories disagree")
+    pkg_modules = {}
+    pkg_deps = {}
+    for name in members:
+        with open(std_dir / name / "alcy.toml", "rb") as f:
+            manifest = tomllib.load(f)
+        if manifest["package"]["name"] != name:
+            raise SystemExit(f"lib/std/{name}/alcy.toml names another package")
+        pkg_modules[name] = manifest["modules"]["include"]
+        deps = []
+        for spec in manifest.get("dependencies", {}):
+            parts = spec.split("/")
+            # Only suite-internal edges are embedded; anything else is
+            # for a resolver the compiler does not have yet.
+            if len(parts) != 3 or parts[0] != "alcy" or parts[1] != "std":
+                raise SystemExit(
+                    f"lib/std/{name}/alcy.toml depends outside the suite: {spec}"
+                )
+            if parts[2] == "*":
+                raise SystemExit(
+                    f"lib/std/{name}/alcy.toml globs the suite; name members"
+                )
+            deps.append(parts[2])
+        pkg_deps[name] = deps
+    # Every dependency edge must name a member, and the graph must be
+    # acyclic; an embedded cycle would hang staging with no diagnostic.
+    for name, deps in pkg_deps.items():
+        for dep in deps:
+            if dep not in members:
+                raise SystemExit(
+                    f"lib/std/{name}/alcy.toml depends on unknown member {dep}"
+                )
+    visiting = set()
+    visited = set()
+
+    def visit(node, stack):
+        if node in visited:
+            return
+        if node in visiting:
+            raise SystemExit(
+                "dependency cycle in the suite: " + " -> ".join(stack + [node])
+            )
+        visiting.add(node)
+        for dep in pkg_deps[node]:
+            visit(dep, stack + [node])
+        visiting.remove(node)
+        visited.add(node)
+
+    for name in members:
+        visit(name, [])
+
+    files = {}
+    for name in members:
+        for mod in pkg_modules[name]:
+            symbol = "STD_%s_%s" % (name.upper(), mod.upper())
+            files[symbol] = std_dir / name / (mod + ".al")
+
     with open(args.output, "w", encoding="utf-8") as out:
         out.write(
             "// Copyright 2026 The Alcy Project Authors\n"
@@ -80,6 +132,75 @@ def main():
         out.write(
             "const usize STAGED_SOURCE_COUNT = "
             "sizeof(STAGED_SOURCES) / sizeof(STAGED_SOURCES[0]);\n\n"
+        )
+        # The dependency edges each package manifest declares, as member
+        # names. The selection layer expands suite globs against these
+        # and rejects a selection whose closure is incomplete.
+        for name in members:
+            deps = pkg_deps[name]
+            if deps:
+                out.write(
+                    "const char* const STD_DEPS_%s[] = {%s};\n\n"
+                    % (
+                        name.upper(),
+                        ", ".join('"%s"' % d for d in deps),
+                    )
+                )
+        out.write("const StdPackageDeps STD_PACKAGE_DEPS[] = {\n")
+        for name in members:
+            deps = pkg_deps[name]
+            out.write(
+                '  {"%s", %s, %d},\n'
+                % (
+                    name,
+                    ("STD_DEPS_%s" % name.upper()) if deps else "nullptr",
+                    len(deps),
+                )
+            )
+        out.write("};\n\n")
+        out.write(
+            "const usize STD_PACKAGE_COUNT = "
+            "sizeof(STD_PACKAGE_DEPS) / sizeof(STD_PACKAGE_DEPS[0]);\n\n"
+        )
+        # Every public name each package carries, for the missing
+        # dependency hint: an unresolved name found here names the
+        # package to add. Top-level `pub` items only; methods are
+        # indented and never match the anchor.
+        import re
+
+        item_re = re.compile(
+            r"^pub\s+(?:intrinsic\s+)?(?:fn|struct|enum)\s+([A-Za-z_][A-Za-z0-9_]*)"
+        )
+        use_re = re.compile(r"^pub\s+use\s+.*::([A-Za-z_][A-Za-z0-9_]*)\s*;")
+        symbols = []
+        seen = set()
+        for name in members:
+            for mod in pkg_modules[name]:
+                text = (std_dir / name / (mod + ".al")).read_text(
+                    encoding="utf-8"
+                )
+                for line in text.split("\n"):
+                    m = item_re.match(line) or use_re.match(line)
+                    if m is not None and (name, m.group(1)) not in seen:
+                        seen.add((name, m.group(1)))
+                        symbols.append((name, m.group(1)))
+        out.write("const StdSymbol STD_SYMBOLS[] = {\n")
+        for package, item in symbols:
+            out.write('  {"%s", "%s"},\n' % (package, item))
+        out.write("};\n\n")
+        out.write(
+            "const usize STD_SYMBOL_COUNT = "
+            "sizeof(STD_SYMBOLS) / sizeof(STD_SYMBOLS[0]);\n\n"
+        )
+        # The same names as analyzer hints: the analyzer names a missing
+        # package from these without depending on the pipeline.
+        out.write("const analyzer::StdHint STD_HINTS[] = {\n")
+        for package, item in symbols:
+            out.write('  {"%s", "%s"},\n' % (package, item))
+        out.write("};\n\n")
+        out.write(
+            "const usize STD_HINT_COUNT = "
+            "sizeof(STD_HINTS) / sizeof(STD_HINTS[0]);\n\n"
         )
         out.write("}  // namespace pipeline\n")
     return 0

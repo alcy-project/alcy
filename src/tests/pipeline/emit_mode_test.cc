@@ -18,6 +18,7 @@
 #include "path/path.h"
 #include "pipeline/build.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_select.h"
 #include "source/source.h"
 #include "tests/util/test_util.h"
 
@@ -56,8 +57,9 @@ TEST_CASE("A build writes an object where it was asked for one") {
   const std::string object_path = dir.join("out.bin");
   {
     PipelineContext ctx;
-    base::Result<void, diag::Reported> built = build_single_file(
-        ctx, source, object_path, false, "", EmitMode::Object);
+    base::Result<void, diag::Reported> built =
+        build_single_file(ctx, source, object_path, false, "", EmitMode::Object,
+                          pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
   const std::string object = read_file(object_path);
@@ -75,7 +77,8 @@ TEST_CASE("A build writes the module as textual IR") {
   {
     PipelineContext ctx;
     base::Result<void, diag::Reported> built =
-        build_single_file(ctx, source, ir_path, false, "", EmitMode::LlvmIr);
+        build_single_file(ctx, source, ir_path, false, "", EmitMode::LlvmIr,
+                          pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
   const std::string ir = read_file(ir_path);
@@ -94,8 +97,9 @@ TEST_CASE("The default extension follows the mode") {
 
   {
     PipelineContext ctx;
-    base::Result<void, diag::Reported> built = build_single_file(
-        ctx, dir.join("main.al"), "", false, "", EmitMode::LlvmIr);
+    base::Result<void, diag::Reported> built =
+        build_single_file(ctx, dir.join("main.al"), "", false, "",
+                          EmitMode::LlvmIr, pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
   CHECK(io::is_file(dir.join("main.ll")));
@@ -104,8 +108,9 @@ TEST_CASE("The default extension follows the mode") {
 
   {
     PipelineContext ctx;
-    base::Result<void, diag::Reported> built = build_single_file(
-        ctx, dir.join("main.al"), "", false, "", EmitMode::Object);
+    base::Result<void, diag::Reported> built =
+        build_single_file(ctx, dir.join("main.al"), "", false, "",
+                          EmitMode::Object, pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
   CHECK(io::is_file(dir.join("main.o")));

@@ -13,7 +13,9 @@
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
 #include "lower/lower.h"
+#include "pipeline/embedded_std.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_select.h"
 #include "pipeline/std_stage.h"
 #include "pipeline/target.h"
 #include "source/source.h"
@@ -26,7 +28,8 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
   base::Result<analyzer::CheckedPackage, diag::Reported> checked = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "analyze",
                                              "frontend");
-    return analyzer::check_package(tree, TARGET_WIDTH, ctx.ast, ctx.bag);
+    const std::span<const analyzer::StdHint> hints(STD_HINTS, STD_HINT_COUNT);
+    return analyzer::check_package(tree, TARGET_WIDTH, ctx.ast, ctx.bag, hints);
   }();
   if (checked.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
@@ -68,13 +71,14 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
 
 base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
     PipelineContext& ctx,
-    source::FileId root) {
+    source::FileId root,
+    const StdSelection& selection) {
   const analyzer::ModuleInput single_input{"", root};
   base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> prelude =
       [&] {
         PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "prelude",
                                                  "frontend");
-        return std_prelude(ctx);
+        return std_prelude(ctx, selection);
       }();
   if (prelude.is_err()) {
     return base::make_err(diag::Reported{});
@@ -82,9 +86,10 @@ base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
   return [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve",
                                              "frontend");
+    const std::span<const analyzer::StdHint> hints(STD_HINTS, STD_HINT_COUNT);
     return analyzer::resolve_modules(root, {&single_input, 1}, "", ctx.sources,
                                      ctx.ast, ctx.bag,
-                                     std::move(prelude).unwrap());
+                                     std::move(prelude).unwrap(), hints);
   }();
 }
 

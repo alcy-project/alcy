@@ -20,6 +20,7 @@
 #include "fpag/io/io_util.h"
 #include "pipeline/build.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_select.h"
 #include "source/source.h"
 
 namespace cli {
@@ -75,7 +76,8 @@ ResultCode run_compile(const CliConfig& config,
     const source::FileId root =
         ctx.sources.add_virtual(STDIN_NAME, std::move(text).unwrap());
     base::Result<void, diag::Reported> res = pipeline::build_single_root(
-        ctx, root, config.output, config.release, config.linker, config.emit);
+        ctx, root, config.output, config.release, config.linker, config.emit,
+        pipeline::full_std_selection());
     if (!trace.finish()) {
       const u32 index =
           ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
@@ -91,9 +93,9 @@ ResultCode run_compile(const CliConfig& config,
   }
 
   trace.set_path(trace_path_beside(config.output));
-  base::Result<void, diag::Reported> res =
-      pipeline::build_single_file(ctx, config.target_dir, config.output,
-                                  config.release, config.linker, config.emit);
+  base::Result<void, diag::Reported> res = pipeline::build_single_file(
+      ctx, config.target_dir, config.output, config.release, config.linker,
+      config.emit, pipeline::full_std_selection());
   if (!trace.finish()) {
     const u32 index =
         ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,

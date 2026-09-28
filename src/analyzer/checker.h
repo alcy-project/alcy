@@ -85,12 +85,14 @@ class Checker {
   Checker(const ModuleTree& tree,
           ir::PointerWidth width,
           ast::AstArena& ast,
-          diag::DiagBag& bag);
+          diag::DiagBag& bag,
+          std::span<const StdHint> std_hints = {});
 
   const ModuleTree& tree;
   ast::AstArena& ast;
   ir::PointerWidth width;
   diag::DiagBag& bag;
+  std::span<const StdHint> std_hints;
   ir::StorageBuilder builder;
   str::StringInterner interner;
   std::vector<NominalEntry> nominals;

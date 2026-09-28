@@ -16,6 +16,7 @@
 #include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_select.h"
 
 namespace pipeline {
 
@@ -30,7 +31,7 @@ namespace {
 // the symptom, which needs a race to reproduce.
 base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> stage(
     PipelineContext& ctx) {
-  return std_prelude(ctx);
+  return std_prelude(ctx, full_std_selection());
 }
 
 // Staging only records the directory on success, so this hands back null

@@ -240,8 +240,8 @@ base::Result<Dependency, diag::Reported> parse_dependency(
       dep_string(bag, filename, spec, table, "rev", &has_rev);
   base::Result<std::string_view, diag::Reported> registry =
       dep_string(bag, filename, spec, table, "registry", &has_registry);
-  if (path.is_err() || version.is_err() || git.is_err() ||
-      branch.is_err() || tag.is_err() || rev.is_err() || registry.is_err()) {
+  if (path.is_err() || version.is_err() || git.is_err() || branch.is_err() ||
+      tag.is_err() || rev.is_err() || registry.is_err()) {
     return base::make_err(diag::Reported{});
   }
   const std::string_view path_text = std::move(path).unwrap();
@@ -316,6 +316,10 @@ base::Result<Dependency, diag::Reported> parse_dependency(
     } else {
       dep.member = copy_str(arena, segments[2]);
     }
+  } else {
+    // Two segments name a package directly; the suite stays empty so
+    // selection can tell it from a package in a suite.
+    dep.member = copy_str(arena, segments[1]);
   }
   if (has_git) {
     dep.source = DependencySource::Git;
@@ -523,12 +527,12 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
       const std::string_view dep_name = key.str();
       if (!node.is_table()) {
         bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-                 "manifest '{}': dependency '{}' must be a table",
-                 filename, dep_name);
+                 "manifest '{}': dependency '{}' must be a table", filename,
+                 dep_name);
         return base::make_err(diag::Reported{});
       }
-      base::Result<Dependency, diag::Reported> parsed = parse_dependency(
-          bag, filename, arena, dep_name, *node.as_table());
+      base::Result<Dependency, diag::Reported> parsed =
+          parse_dependency(bag, filename, arena, dep_name, *node.as_table());
       if (parsed.is_err()) {
         return base::make_err(diag::Reported{});
       }

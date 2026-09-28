@@ -17,11 +17,25 @@
 #include "fpag/io/temp_dir.h"
 #include "pipeline/embedded_std.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_select.h"
 #include "source/source.h"
 
 namespace pipeline {
 
 namespace {
+
+bool selected(const std::vector<std::string_view>& members,
+              std::string_view path) {
+  const usize slash = path.find('/');
+  const std::string_view package =
+      slash == std::string_view::npos ? path : path.substr(0, slash);
+  for (std::string_view member : members) {
+    if (member == package) {
+      return true;
+    }
+  }
+  return false;
+}
 
 bool ends_with(std::string_view text, std::string_view suffix) {
   return text.size() >= suffix.size() &&
@@ -35,11 +49,13 @@ std::string_view as_view(const unsigned char* data, u64 len) {
 }  // namespace
 
 base::Result<std::span<const analyzer::ModuleInput>, diag::Reported>
-std_prelude(PipelineContext& ctx) {
-  if (ctx.std_staged) {
+std_prelude(PipelineContext& ctx, const StdSelection& selection) {
+  if (ctx.std_staged && ctx.std_selected == selection.members) {
     return base::make_ok(
         std::span<const analyzer::ModuleInput>(ctx.std_inputs));
   }
+  ctx.std_inputs.clear();
+  ctx.std_selected = selection.members;
   // The scratch directory must be unique per process. A fixed name is
   // wiped and recreated on construction, and each staged file is then
   // written with "wb", which truncates the existing inode rather than
@@ -49,11 +65,14 @@ std_prelude(PipelineContext& ctx) {
   // concurrent editor integrations hit this routinely.
   ctx.std_scratch.emplace(io::TempDir::create_unique("alcy_std_"));
   io::TempDir& scratch = *ctx.std_scratch;
-  // One entry module per package of the `alcy/std` suite, named by its
-  // path within the suite. The suite is injected whole until package
-  // selection lands; see docs/adr/0016.
+  // One facade per selected member plus the modules beside it,
+  // named by the path within the suite. Anything unselected is absent,
+  // not merely out of scope.
   for (usize i = 0; i < STAGED_SOURCE_COUNT; ++i) {
     const StagedSource& source = STAGED_SOURCES[i];
+    if (!selected(selection.members, std::string_view(source.path))) {
+      continue;
+    }
     if (!scratch.write_file(
             std::string_view(source.path),
             as_view(source.data,

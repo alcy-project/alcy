@@ -73,6 +73,7 @@ class Resolver {
   // as their own tree, never into the package tree. A facade is the
   // root of one prelude package; the rest of that package's modules sit
   // beside it and are ordinary modules.
+  std::span<const StdHint> std_hints_;
   std::vector<FileData> prelude_data;
   std::vector<std::string> prelude_names;
   std::vector<bool> prelude_facades;
@@ -512,20 +513,16 @@ class Resolver {
     } else {
       current = find_child_module(module, head);
       if (current == NO_MODULE) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT,
-                     node.span, "unresolved import '{}'", head);
-        (void)index;
+        emit_unresolved(bag, ANALYZER_UNRESOLVED_IMPORT, node.span, std_hints_,
+                        "import", head);
         return;
       }
     }
     for (usize i = 1; i + 1 < segments.size(); ++i) {
       current = find_child_module(current, segments[i]);
       if (current == NO_MODULE) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT,
-                     node.span, "unresolved import '{}'", segments[i]);
-        (void)index;
+        emit_unresolved(bag, ANALYZER_UNRESOLVED_IMPORT, node.span, std_hints_,
+                        "import", segments[i]);
         return;
       }
     }
@@ -560,10 +557,8 @@ class Resolver {
       }
     }
     if (!resolved) {
-      const u32 index =
-          bag.emit(diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT, node.span,
-                   "unresolved import '{}'", member);
-      (void)index;
+      emit_unresolved(bag, ANALYZER_UNRESOLVED_IMPORT, node.span, std_hints_,
+                      "import", member);
     }
   }
 
@@ -572,9 +567,11 @@ class Resolver {
   ModuleTree run(source::FileId root_id,
                  std::span<const ModuleInput> inputs,
                  std::string_view package_name_in,
-                 std::span<const ModuleInput> prelude = {}) {
+                 std::span<const ModuleInput> prelude = {},
+                 std::span<const StdHint> std_hints = {}) {
     package_name = package_name_in;
     root = root_id;
+    std_hints_ = std_hints;
     file_data.reserve(inputs.size());
     for (const ModuleInput& input : inputs) {
       const std::optional<std::string_view> source_name =
@@ -716,9 +713,11 @@ base::Result<ModuleTree, diag::Reported> resolve_modules(
     source::SourceManager& sources,
     ast::AstArena& ast,
     diag::DiagBag& bag,
-    std::span<const ModuleInput> prelude) {
+    std::span<const ModuleInput> prelude,
+    std::span<const StdHint> std_hints) {
   Resolver resolver{sources, ast, bag};
-  ModuleTree tree = resolver.run(root, modules, package_name, prelude);
+  ModuleTree tree =
+      resolver.run(root, modules, package_name, prelude, std_hints);
   if (bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }

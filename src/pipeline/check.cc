@@ -15,6 +15,7 @@
 #include "path/path.h"
 #include "pipeline/frontend.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_select.h"
 #include "pipeline/target.h"
 #include "source/source.h"
 
@@ -66,10 +67,12 @@ base::Result<CheckResult, diag::Reported> check_source(PipelineContext& ctx,
   return check_root(ctx, ctx.sources.add_virtual(name, bytes));
 }
 
+// Single-file checks name the whole suite: there is no manifest to
+// select from, and no flags to narrow it with.
 base::Result<CheckResult, diag::Reported> check_root(PipelineContext& ctx,
                                                      source::FileId root) {
   base::Result<analyzer::ModuleTree, diag::Reported> tree =
-      front_end_root(ctx, root);
+      front_end_root(ctx, root, full_std_selection());
   if (tree.is_err()) {
     return fail();
   }

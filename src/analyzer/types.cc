@@ -33,11 +33,13 @@ namespace analyzer {
 Checker::Checker(const ModuleTree& tree,
                  ir::PointerWidth width,
                  ast::AstArena& ast,
-                 diag::DiagBag& bag)
+                 diag::DiagBag& bag,
+                 std::span<const StdHint> std_hints)
     : tree(tree),
       ast(ast),
       width(width),
       bag(bag),
+      std_hints(std_hints),
       interner(INTERNER_CAPACITY) {}
 
 // Pass 1: registers every nominal definition, diagnosing duplicates
@@ -663,6 +665,17 @@ ir::TypeIdx Checker::resolve_type(u32 module,
         }
       }
       if (entry == nullptr) {
+        const std::string_view package =
+            std_hint_package(std_hints, target_name);
+        if (!package.empty()) {
+          const u32 index =
+              bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_TYPE, node.span,
+                       "'{}' is not a type; `{}` is in the standard library "
+                       "(alcy/std/{}); add it to [dependencies]",
+                       target_name, target_name, package);
+          (void)index;
+          return error_type();
+        }
         const u32 index =
             bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_TYPE, node.span,
                      "'{}' is not a type", target_name);
@@ -2324,9 +2337,8 @@ bool Checker::resolve_value_path(u32 module,
       out.kind = PathValue::Kind::Type;
       return true;
     }
-    const u32 index = bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
-                               node.span, "unresolved value '{}'", name);
-    (void)index;
+    emit_unresolved(bag, ANALYZER_UNKNOWN_VALUE, node.span, std_hints, "value",
+                    name);
     return false;
   }
   if (node.segments.size() == 2) {
@@ -2365,9 +2377,8 @@ bool Checker::resolve_value_path(u32 module,
                        : PathValue::Kind::TupleVariant;
         return true;
       }
-      const u32 index = bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
-                                 node.span, "unresolved value '{}'", member);
-      (void)index;
+      emit_unresolved(bag, ANALYZER_UNKNOWN_VALUE, node.span, std_hints,
+                      "value", member);
       return false;
     }
     // Nominal prefix: `Enum::Variant` or `Type::assoc`.
@@ -2435,6 +2446,16 @@ bool Checker::resolve_value_path(u32 module,
         }
       }
     }
+    const std::string_view package = std_hint_package(std_hints, head);
+    if (!package.empty()) {
+      const u32 index =
+          bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE, node.span,
+                   "unresolved value '{}::{}'; `{}` is in the standard library "
+                   "(alcy/std/{}); add it to [dependencies]",
+                   head, member, head, package);
+      (void)index;
+      return false;
+    }
     const u32 index =
         bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE, node.span,
                  "unresolved value '{}::{}'", head, member);
@@ -2456,9 +2477,8 @@ bool Checker::resolve_value_path(u32 module,
     out.function = fn;
     return true;
   }
-  const u32 index = bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
-                             node.span, "unresolved value '{}'", member);
-  (void)index;
+  emit_unresolved(bag, ANALYZER_UNKNOWN_VALUE, node.span, std_hints, "value",
+                  member);
   return false;
 }
 
@@ -2563,10 +2583,8 @@ NominalEntry* Checker::resolve_struct_path(u32 module, ast::PathIdx path) {
         ast.items[nominal->item].kind == ast::ItemKind::Struct) {
       return nominal;
     }
-    const u32 index =
-        bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE, node.span,
-                 "unresolved struct '{}'", node.segments[0].name);
-    (void)index;
+    emit_unresolved(bag, ANALYZER_UNKNOWN_VALUE, node.span, std_hints, "struct",
+                    node.segments[0].name);
     return nullptr;
   }
   u32 target = NO_MODULE;
@@ -2578,10 +2596,8 @@ NominalEntry* Checker::resolve_struct_path(u32 module, ast::PathIdx path) {
       ast.items[nominal->item].kind == ast::ItemKind::Struct) {
     return nominal;
   }
-  const u32 index =
-      bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_VALUE, node.span,
-               "unresolved struct '{}'", node.segments.back().name);
-  (void)index;
+  emit_unresolved(bag, ANALYZER_UNKNOWN_VALUE, node.span, std_hints, "struct",
+                  node.segments.back().name);
   return nullptr;
 }
 
@@ -2813,7 +2829,8 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     const ModuleTree& tree,
     ir::PointerWidth width,
     ast::AstArena& ast,
-    diag::DiagBag& bag) {
+    diag::DiagBag& bag,
+    std::span<const StdHint> std_hints) {
   // Consumer precondition: the tree shape and every arena index the
   // checker dereferences are validated before any pass runs, so
   // hand-built trees fail with a diagnostic instead of UB.
@@ -2835,7 +2852,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  Checker checker{tree, width, ast, bag};
+  Checker checker{tree, width, ast, bag, std_hints};
   checker.uninit_name_id = checker.interner.intern("MaybeUninit");
   checker.register_nominals();
   checker.parents.assign(tree.modules.size(), NO_MODULE);

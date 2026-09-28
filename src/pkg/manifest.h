@@ -95,10 +95,11 @@ struct Dependency {
   // The specifier as written, e.g. "alcy/std/*".
   std::string_view spec;
   // One segment (`foo`): a local directory aliased `foo`, exactly the
-  // old shape. Two (`acme/hash`): package `hash` of owner `acme`.
-  // Three (`acme/tools/cli`): package `cli` of suite `tools`. A suite
-  // is selected with a trailing `/*`, never bare: bare "alcy/std" is
-  // rejected at selection with the two spellings it could mean.
+  // old shape. Two (`acme/hash`): package `hash` of owner `acme`, held
+  // in `member` with `suite` empty. Three (`acme/tools/cli`): package
+  // `cli` of suite `tools`. A suite is selected with a trailing `/*`,
+  // never bare: bare "alcy/std" is rejected at selection with the two
+  // spellings it could mean.
   std::string_view owner;
   std::string_view suite;
   std::string_view member;

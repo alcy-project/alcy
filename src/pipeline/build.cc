@@ -28,6 +28,7 @@
 #include "pipeline/pipeline_context.h"
 #include "pipeline/runtime_stage.h"
 #include "pipeline/spawn.h"
+#include "pipeline/std_select.h"
 #include "pipeline/target.h"
 #include "source/source.h"
 
@@ -180,13 +181,14 @@ base::Result<void, diag::Reported> emit_output(PipelineContext& ctx,
 
 // Single-file build: runs the full frontend over one source file, then
 // emits an object and links it with the staged runtime.
-base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
-                                                     std::string_view target,
-                                                     std::string_view output,
-                                                     bool optimize,
-                                                     std::string_view linker,
-                                                     EmitMode mode,
-                                                     const StdSelection& selection) {
+base::Result<void, diag::Reported> build_single_file(
+    PipelineContext& ctx,
+    std::string_view target,
+    std::string_view output,
+    bool optimize,
+    std::string_view linker,
+    EmitMode mode,
+    const StdSelection& selection) {
   base::Result<source::FileId, source::SourceError> file = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "load", "frontend");
     return ctx.sources.load(target);
@@ -207,16 +209,17 @@ base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
     output_path.replace(dot, std::string::npos, suffix_for(mode));
   }
   return build_single_root(ctx, root, output_path, optimize, linker, mode,
-                             selection);
+                           selection);
 }
 
-base::Result<void, diag::Reported> build_single_root(PipelineContext& ctx,
-                                                     source::FileId root,
-                                                     std::string_view output,
-                                                     bool optimize,
-                                                     std::string_view linker,
-                                                     EmitMode mode,
-                                                     const StdSelection& selection) {
+base::Result<void, diag::Reported> build_single_root(
+    PipelineContext& ctx,
+    source::FileId root,
+    std::string_view output,
+    bool optimize,
+    std::string_view linker,
+    EmitMode mode,
+    const StdSelection& selection) {
   base::Result<analyzer::ModuleTree, diag::Reported> tree =
       front_end_root(ctx, root, selection);
   if (tree.is_err() || ctx.bag.has_errors()) {

@@ -1,9 +1,9 @@
 # The alcy standard library, as a suite.
 #
-# A suite is a named set of packages. `dependencies = ["alcy/std"]`
-# pulls every member below; `dependencies = ["alcy/std/core"]` pulls
-# one. There are no suites in suites, so a three-segment path is always
-# a package. See docs/adr/0016.
+# A suite is a named set of packages. `"alcy/std/*" = {}` pulls every
+# member below; `"alcy/std/core" = {}` pulls one. There are no suites
+# in suites, so a three-segment path is always a package. See
+# docs/adr/0016.
 [suite]
 name = "std"
 owner = "alcy"

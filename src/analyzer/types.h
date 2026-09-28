@@ -4,6 +4,7 @@
 #pragma once
 
 #include <deque>
+#include <span>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -174,6 +175,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     const ModuleTree& tree,
     ir::PointerWidth width,
     ast::AstArena& ast,
-    diag::DiagBag& bag);
+    diag::DiagBag& bag,
+    std::span<const StdHint> std_hints = {});
 
 }  // namespace analyzer

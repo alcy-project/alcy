@@ -19,8 +19,10 @@
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
 #include "path/path.h"
+#include "pipeline/embedded_std.h"
 #include "pipeline/pipeline.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_select.h"
 #include "pipeline/std_stage.h"
 #include "pkg/manifest.h"
 #include "pkg/modules.h"
@@ -185,11 +187,18 @@ base::Result<BinTarget, diag::Reported> resolve_bin_target(
     return base::make_err(diag::Reported{});
   }
 
+  // The manifest's dependencies select the staged members; anything
+  // unselected is absent, not merely out of scope.
+  base::Result<StdSelection, diag::Reported> selected = resolve_std_selection(
+      {manifest.dependencies, manifest.dependency_count}, ctx.bag);
+  if (selected.is_err() || ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
   base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> prelude =
       [&] {
         PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "prelude",
                                                  "frontend");
-        return std_prelude(ctx);
+        return std_prelude(ctx, std::move(selected).unwrap());
       }();
   if (prelude.is_err()) {
     return base::make_err(diag::Reported{});
@@ -197,9 +206,10 @@ base::Result<BinTarget, diag::Reported> resolve_bin_target(
   base::Result<analyzer::ModuleTree, diag::Reported> tree = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve",
                                              "frontend");
+    const std::span<const analyzer::StdHint> hints(STD_HINTS, STD_HINT_COUNT);
     return analyzer::resolve_modules(bin_file, inputs, manifest.name,
                                      ctx.sources, ctx.ast, ctx.bag,
-                                     std::move(prelude).unwrap());
+                                     std::move(prelude).unwrap(), hints);
   }();
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
