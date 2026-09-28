@@ -9,7 +9,8 @@ project_root_dir: Path = Path(__file__).resolve().parent.parent.parent.parent
 
 build_dir: Path = project_root_dir / "build"
 scripts_dir: Path = build_dir / "scripts"
-default_out_dir: Path = project_root_dir / "out" / "build"
+out_dir: Path = project_root_dir / "out"
+default_out_dir: Path = out_dir / "build"
 
 config_toml_file: Path = project_root_dir / "config.toml"
 

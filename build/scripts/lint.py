@@ -7,13 +7,15 @@ import argparse
 import json
 from pathlib import Path
 import sys
+import subprocess
 import os
 
 import format
 import gn_check
+from build import build
 from utils.command import run_commands_in_parallel
 from utils.paths import (
-    default_out_dir,
+    out_dir,
     project_root_dir,
     project_source_dirs,
 )
@@ -65,9 +67,7 @@ def exclusion_errors(build_path: Path) -> list[str]:
         if not (project_root_dir / excluded).is_file():
             errors.append(f"Excluded header no longer exists: {excluded}")
         elif (project_root_dir / excluded).resolve() in siblings:
-            errors.append(
-                f"Excluded header gained a translation unit: {excluded}"
-            )
+            errors.append(f"Excluded header gained a translation unit: {excluded}")
     return errors
 
 
@@ -125,12 +125,31 @@ def create_commands(
 
 
 def lint_files(
-    build_path: Path,
+    build_subdir: str,
     fix: bool,
     fix_errors: bool,
     verbose: bool,
 ):
+    ret = build(
+        target="all",
+        mode="debug",
+        is_clang="true",
+        use_lld="true",
+        build_subdir=build_subdir,
+        target_os="",
+        target_cpu="",
+        gen_only=True,
+        fast=False,
+        gn_args_extra="",
+    )
+    if ret != 0:
+        return -1
+
     failed = False
+    build_dir = out_dir / build_subdir
+    ret = subprocess.run(["ninja", "-C", build_dir, "setup_llvm"]).returncode
+    if ret != 0:
+        return -2
 
     target_dirs = []
     for d in project_source_dirs:
@@ -142,27 +161,27 @@ def lint_files(
 
     format.format_files(dry_run=True)
 
-    compdb = build_path / "compile_commands.json"
+    compdb = build_dir / "compile_commands.json"
     if not os.path.isfile(compdb):
         print(f"Compilation database not found at: {compdb}")
 
     for src_dir in project_source_dirs:
-        ret = gn_check.check_sources(build_path, src_dir)
+        ret = gn_check.check_sources(build_dir, src_dir)
         if ret != 0:
             failed = True
 
     files, comp_files, header_files = target_files(target_dirs)
-    for error in exclusion_errors(build_path):
+    for error in exclusion_errors(build_dir):
         print(error)
         failed = True
     header_files = [
         h
-        for h in analysable_headers(build_path, header_files)
+        for h in analysable_headers(build_dir, header_files)
         if h not in GENERATED_HEADER_EXCLUSIONS
     ]
 
     commands = create_commands(
-        files, comp_files, header_files, build_path, fix, fix_errors, verbose
+        files, comp_files, header_files, build_dir, fix, fix_errors, verbose
     )
     if not run_commands_in_parallel(commands):
         failed = True
@@ -184,11 +203,9 @@ def lint_files(
 def main():
     parser = argparse.ArgumentParser(description="Run lint checks on source files.")
     parser.add_argument(
-        "-p",
-        "--build-path",
-        type=Path,
-        default=default_out_dir,
-        help="Path to the build directory containing compile_commands.json",
+        "--build-subdir",
+        default="lint_compdb",
+        help="Subdirectory inside out/ (default: lint_compdb)",
     )
     parser.add_argument(
         "--fix", action="store_true", help="Automatically fix standard lint issues"
@@ -213,7 +230,7 @@ def main():
         elif fix:
             print(f"{os.path.basename(__file__)}: fix enabled")
 
-    return lint_files(args.build_path, fix, fix_errors, args.verbose)
+    return lint_files(args.build_subdir, fix, fix_errors, args.verbose)
 
 
 if __name__ == "__main__":
