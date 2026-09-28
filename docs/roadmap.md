@@ -2,7 +2,7 @@
 
 Near-term tasks only. Checked when shipped.
 
-- [ ] Optimized builds: wire the optimization level through to LLVM
+- [x] Optimized builds: wire the optimization level through to LLVM
   behind the existing `--release`.
 - [ ] Benchmark harness: microbenchmark engine plus a process runner
   over the real binary, on top of O3 and the Chromium trace output.
