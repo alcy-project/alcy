@@ -66,7 +66,7 @@ jobs:
           llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
       - name: Check Formatting
-        run: uv run ./build/scripts/format.py --dry-run
+        run: uv run ./tools/format.py --dry-run
 
   lint:
     name: Lint
@@ -89,4 +89,4 @@ jobs:
       - name: Lint
         shell: bash
         run: |
-          uv run ./build/scripts/lint.py
+          uv run ./tools/lint.py

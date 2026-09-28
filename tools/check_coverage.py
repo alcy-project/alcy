@@ -18,10 +18,10 @@ exercised end to end by the exe cases rather than by unit tests, and a
 report that called them untested would send the next test to the wrong
 place.
 
-    ./build/scripts/check_coverage.py            build, run, gate
-    ./build/scripts/check_coverage.py --no-build reuse the last build
-    ./build/scripts/check_coverage.py --report   print the report, no gate
-    ./build/scripts/check_coverage.py --update   record the current numbers
+    ./tools/check_coverage.py            build, run, gate
+    ./tools/check_coverage.py --no-build reuse the last build
+    ./tools/check_coverage.py --report   print the report, no gate
+    ./tools/check_coverage.py --update   record the current numbers
 
 Only `src/` counts. The vendored dependencies are compiled into the test
 binary and would otherwise dominate the total, and a number that mostly
@@ -44,7 +44,7 @@ from pathlib import Path
 from utils.paths import project_root_dir
 
 REPO_ROOT = project_root_dir
-SCRIPTS = REPO_ROOT / "build" / "scripts"
+TOOLS = REPO_ROOT / "tools"
 BASELINE = REPO_ROOT / "build" / "coverage_baseline.json"
 BUILD_SUBDIR = "coverage"
 OUT_DIR = REPO_ROOT / "out" / BUILD_SUBDIR
@@ -54,9 +54,9 @@ ALCY_BINARY = OUT_DIR / "alcy"
 # The suites that run the compiler, in the order they are reported.
 SUITES = (
     ("unit tests", [str(TEST_BINARY)]),
-    ("e2e cases", ["uv", "run", str(SCRIPTS / "check_e2e.py"),
+    ("e2e cases", ["uv", "run", str(TOOLS / "check_e2e.py"),
                    f"--build-subdir={BUILD_SUBDIR}"]),
-    ("exe cases", ["uv", "run", str(SCRIPTS / "check_exe.py"),
+    ("exe cases", ["uv", "run", str(TOOLS / "check_exe.py"),
                    f"--build-subdir={BUILD_SUBDIR}"]),
 )
 
@@ -80,7 +80,7 @@ def build(verbose: bool = False) -> int:
     command = [
         "uv",
         "run",
-        str(SCRIPTS / "build.py"),
+        str(TOOLS / "build.py"),
         f"--build-subdir={BUILD_SUBDIR}",
         "--gn-arg=is_coverage=true",
     ]
@@ -256,7 +256,7 @@ def gate(current: dict) -> int:
 def write_baseline(current: dict) -> None:
     payload = {
         "comment": [
-            "Recorded by build/scripts/check_coverage.py --update.",
+            "Recorded by tools/check_coverage.py --update.",
             "A ratchet: check_coverage.py fails when the measured line",
             "coverage of src/ drops below this. Move it only on purpose.",
         ],

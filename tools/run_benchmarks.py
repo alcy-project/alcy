@@ -19,9 +19,9 @@ Results are written as JSONL, one record per case, keeping the raw
 samples: an aggregate whose samples were discarded cannot be checked
 against a re-run.
 
-    uv run ./build/scripts/run_benchmarks.py
-    uv run ./build/scripts/run_benchmarks.py --cases compile/executable
-    uv run ./build/scripts/run_benchmarks.py --compare before.jsonl after.jsonl
+    uv run ./tools/run_benchmarks.py
+    uv run ./tools/run_benchmarks.py --cases compile/executable
+    uv run ./tools/run_benchmarks.py --compare before.jsonl after.jsonl
 """
 
 import argparse

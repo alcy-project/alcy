@@ -6,9 +6,8 @@ replaced. The foundations are in `roadmap.md`.
 - [x] Optimized builds: wire the optimization level through to LLVM
   behind the existing `--release`.
 - [ ] Benchmark harness: the microbenchmark engine, on top of the
-  process runner in `build/scripts/run_benchmarks.py` and the phase
-  timings the result envelope now reports.
-- [ ] `build/scripts` → `tools/` rename, in one shot.
+  process runner in `tools/run_benchmarks.py` and the phase timings
+  the result envelope now reports.
 - [ ] `grammar.ebnf` maintenance: every grammar change diffs the file
   in the same commit.
 - [ ] Noun-form audit: modules, structs, and classes read as nouns

@@ -14,7 +14,7 @@ template("embed_asset") {
   }
 
   action(action_target_name) {
-    script = "//build/scripts/embed_asset.py"
+    script = "//tools/embed_asset.py"
 
     asset_file = invoker.asset_path
 

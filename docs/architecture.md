@@ -101,8 +101,12 @@ runtime polymorphism.
 ## Repository layout
 
 - `src/` - the compiler. One directory per module, each with a `BUILD.gn`.
-- `build/` - GN build configuration: toolchains (`build/toolchains/`),
-  compiler flags (`build/config/`), and helper scripts (`build/scripts/`).
+- `build/` - GN build configuration: toolchains (`build/toolchains/`) and
+  compiler flags (`build/config/`).
+- `tools/` - the helper scripts: build, run, check, lint, format, package.
+  `build.py` and `run.py` drive GN; the `check_*.py` scripts are the
+  acceptance suites. They sit beside the sources they drive rather than
+  inside `build/`, which holds only what GN itself reads.
 - `third_party/` - vendored dependencies as submodules (`llvm`, `fpag`,
   `fmt`, `doctest`, `xxhash`), each wrapped with a `BUILD.gn`.
 - `lib/` - the toolchain standard library as source suites

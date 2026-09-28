@@ -4,7 +4,7 @@
 import("llvm.gni")
 
 action("setup_llvm") {
-  script = "//build/scripts/llvm/setup_llvm.py"
+  script = "//tools/llvm/setup_llvm.py"
   tag_cache_file = "$install_dir/.llvm_tag_cache"
 
   args = [
@@ -21,9 +21,9 @@ action("setup_llvm") {
   inputs = [
     script,
     "//config.toml",
-    "//build/scripts/llvm/download_llvm.py",
-    "//build/scripts/utils/config.py",
-    "//build/scripts/utils/paths.py",
+    "//tools/llvm/download_llvm.py",
+    "//tools/utils/config.py",
+    "//tools/utils/paths.py",
   ]
 
   outputs = [ "$install_dir/" ]

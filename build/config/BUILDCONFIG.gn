@@ -63,7 +63,7 @@ declare_args() {
 # Instruments the build for source-based coverage. Off by default, and
 # meant for a debug build: optimising code attributes lines to the wrong
 # place, so the report would describe the compiler rather than the
-# source. Checked by build/scripts/check_coverage.py, which ratchets
+# source. Checked by tools/check_coverage.py, which ratchets
 # against build/coverage_baseline.json.
 declare_args() {
   is_coverage = false

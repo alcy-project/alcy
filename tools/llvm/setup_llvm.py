@@ -11,11 +11,11 @@ import platform
 import download_llvm
 
 script_dir = os.path.dirname(__file__)
-scripts_root = os.path.dirname(script_dir)
-sys.path.append(scripts_root)
+tools_root = os.path.dirname(script_dir)
+sys.path.append(tools_root)
 from utils.config import get_llvm_fork_tag
 
-root_dir = os.path.dirname(scripts_root)
+root_dir = os.path.dirname(tools_root)
 default_llvm_out_dir = os.path.join(root_dir, "out", "third_party", "llvm")
 default_llvm_install_dir = os.path.join(default_llvm_out_dir, "install")
 default_llvm_download_dir = os.path.join(default_llvm_out_dir, "download")

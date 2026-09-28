@@ -13,7 +13,7 @@ namespace pipeline {
 // One embedded standard library source, named by its suite-relative
 // path (`core/prelude.al`). Staged to a scratch directory and injected
 // as a prelude module, so compilations need no install-layout
-// assumptions. The table is generated; see build/scripts/embed_std.py.
+// assumptions. The table is generated; see tools/embed_std.py.
 struct StagedSource {
   const char* path;
   const unsigned char* data;
@@ -25,7 +25,7 @@ extern const usize STAGED_SOURCE_COUNT;
 
 // One member of the embedded suite and the members it depends on, by
 // member name. Generated from the package manifests, which stay the
-// single source of truth; see build/scripts/embed_std.py.
+// single source of truth; see tools/embed_std.py.
 struct StdPackageDeps {
   const char* name;
   const char* const* deps;

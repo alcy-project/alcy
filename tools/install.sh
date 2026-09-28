@@ -6,8 +6,8 @@
 set -e
 
 script_dir=$(dirname "$0")
-cd "$script_dir/../.." && root_dir=$(pwd)
-tool_scripts_dir="$root_dir/build/scripts"
+cd "$script_dir/.." && root_dir=$(pwd)
+tools_dir="$root_dir/tools"
 
 if [ -z "$IN_NIX_SHELL" ]; then
   exec nix develop -c "$0" "$@"
@@ -15,7 +15,7 @@ fi
 
 release_subdir="build_release"
 
-uv run "$tool_scripts_dir/build.py" \
+uv run "$tools_dir/build.py" \
   --target=default \
   --mode=release \
   --build-subdir=$release_subdir

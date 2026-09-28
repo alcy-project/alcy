@@ -2,7 +2,7 @@
 
 Two runners, kept apart because they measure different things.
 
-- The **process runner** (`build/scripts/run_benchmarks.py`) times the
+- The **process runner** (`tools/run_benchmarks.py`) times the
   real `alcy` binary as a process, so it includes startup, argument
   parsing, the filesystem, the linker, and process overhead. This is
   what a user waits for.
@@ -21,9 +21,9 @@ fixture directory under `benchmarks/fixtures/`. The command is an
 argument vector, never a shell string, and the runner accepts no
 arbitrary flags beyond the ones the case declares.
 
-    uv run ./build/scripts/run_benchmarks.py --build-subdir build_release
-    uv run ./build/scripts/run_benchmarks.py --cases compile/executable
-    uv run ./build/scripts/run_benchmarks.py --compare before.jsonl after.jsonl
+    uv run ./tools/run_benchmarks.py --build-subdir build_release
+    uv run ./tools/run_benchmarks.py --cases compile/executable
+    uv run ./tools/run_benchmarks.py --compare before.jsonl after.jsonl
 
 Results are JSONL, one object per case, and the raw samples are always
 kept: an aggregate without its samples cannot be checked against a

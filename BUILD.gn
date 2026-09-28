@@ -15,7 +15,7 @@ group("benchmarks") {
 
 # Fuzz targets are a development tool and are not part of `all`: they
 # need libFuzzer, and a normal build should not pay for them. Build them
-# with `./build/scripts/build.py --target=fuzz --args=is_fuzz=true`.
+# with `./tools/build.py --target=fuzz --args=is_fuzz=true`.
 group("fuzz") {
   testonly = true
   deps = [ "//fuzz" ]

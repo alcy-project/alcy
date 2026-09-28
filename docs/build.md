@@ -10,16 +10,16 @@
 
 ```bash
 # Debug build of the compiler:
-uv run ./build/scripts/build.py --target=default --mode=debug
+uv run ./tools/build.py --target=default --mode=debug
 
 # Release build into a separate directory:
-uv run ./build/scripts/build.py --target=default --mode=release --build-subdir=build_release
+uv run ./tools/build.py --target=default --mode=release --build-subdir=build_release
 
 # Build and run the unit tests:
-uv run ./build/scripts/run.py --target=tests --mode=debug
+uv run ./tools/run.py --target=tests --mode=debug
 
 # All targets (compiler, tests, benchmarks):
-uv run ./build/scripts/build.py --target=all --mode=release
+uv run ./tools/build.py --target=all --mode=release
 
 ```
 

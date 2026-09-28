@@ -16,8 +16,8 @@ else
 fi
 
 script_dir=$(dirname "$0")
-cd "$script_dir/../.." && root_dir=$(pwd)
-tool_scripts_dir="$root_dir/build/scripts"
+cd "$script_dir/.." && root_dir=$(pwd)
+tools_dir="$root_dir/tools"
 
 # Switches rather than a mode, so any order and any subset work.
 #
@@ -53,41 +53,41 @@ release_subdir="build_release"
 debug_subdir="build"
 wasm_subdir="build_wasm"
 
-"${py_runner[@]}" "$tool_scripts_dir/build.py" \
+"${py_runner[@]}" "$tools_dir/build.py" \
   --target=all \
   --mode=debug \
   --build-subdir=$debug_subdir
 
-"${py_runner[@]}" "$tool_scripts_dir/run.py" \
+"${py_runner[@]}" "$tools_dir/run.py" \
   --target=tests \
   --mode=debug \
   --build-subdir=$debug_subdir \
   -- --no-skip
 
-"${py_runner[@]}" "$tool_scripts_dir/build.py" \
+"${py_runner[@]}" "$tools_dir/build.py" \
   --target=all \
   --mode=release \
   --build-subdir=$release_subdir
 
-"${py_runner[@]}" "$tool_scripts_dir/check_e2e.py" \
+"${py_runner[@]}" "$tools_dir/check_e2e.py" \
   --build-subdir=$debug_subdir
 
-"${py_runner[@]}" "$tool_scripts_dir/check_runtime.py"
+"${py_runner[@]}" "$tools_dir/check_runtime.py"
 
-"${py_runner[@]}" "$tool_scripts_dir/check_exe.py" \
+"${py_runner[@]}" "$tools_dir/check_exe.py" \
   --build-subdir=$debug_subdir
 
 # The same cases again through --emit=llvm-ir, so the code alcy generates
 # is compiled by an external toolchain that can instrument it. Skipped
 # where clang is absent, and slow, so it is a separate step.
 if [[ $run_sanitize == true ]]; then
-  "${py_runner[@]}" "$tool_scripts_dir/check_exe.py" \
+  "${py_runner[@]}" "$tools_dir/check_exe.py" \
     --build-subdir=$debug_subdir \
     --sanitize
 fi
 
-"${py_runner[@]}" "$tool_scripts_dir/format.py" --dry-run
-"${py_runner[@]}" "$tool_scripts_dir/lint.py"
+"${py_runner[@]}" "$tools_dir/format.py" --dry-run
+"${py_runner[@]}" "$tools_dir/lint.py"
 
 # The coverage ratchet rebuilds instrumented binaries, so it runs after
 # the format and lint gates and reuses its own output directory. Skip it
@@ -97,12 +97,12 @@ if [[ $run_coverage == true ]]; then
     echo "error: llvm-cov not found; pass --no-coverage to skip" >&2
     exit 1
   }
-  "${py_runner[@]}" "$tool_scripts_dir/check_coverage.py"
+  "${py_runner[@]}" "$tools_dir/check_coverage.py"
 fi
 
-"${py_runner[@]}" "$tool_scripts_dir/verify_static_linkage.py" \
+"${py_runner[@]}" "$tools_dir/verify_static_linkage.py" \
   --build-dir="$root_dir/out/$release_subdir"
-"${py_runner[@]}" "$tool_scripts_dir/verify_static_linkage.py" \
+"${py_runner[@]}" "$tools_dir/verify_static_linkage.py" \
   --build-dir="$root_dir/out/$debug_subdir"
 
 if [[ $run_wasm == true ]]; then
@@ -114,7 +114,7 @@ if [[ $run_wasm == true ]]; then
     echo "error: node not found; install node first" >&2
     exit 1
   }
-  "${py_runner[@]}" "$tool_scripts_dir/run.py" \
+  "${py_runner[@]}" "$tools_dir/run.py" \
     --target=tests \
     --mode=debug \
     --build-subdir=$wasm_subdir \

@@ -6,13 +6,13 @@
 set -e
 
 script_dir=$(dirname "$0")
-cd "$script_dir/../.." && root_dir=$(pwd)
-tool_scripts_dir="$root_dir/build/scripts"
+cd "$script_dir/.." && root_dir=$(pwd)
+tools_dir="$root_dir/tools"
 
 echo "running cross os gen-only check..."
 for os in linux win mac; do
   for mode in debug release; do
-    uv run "$tool_scripts_dir/build.py" \
+    uv run "$tools_dir/build.py" \
       --gen-only \
       --mode=$mode \
       --build-subdir="cross-$os-$mode" \
@@ -23,7 +23,7 @@ done
 echo "running cross arch build test..."
 for arch in x64 x86 arm64 arm riscv64; do
   for mode in debug release; do
-    uv run "$tool_scripts_dir/build.py" \
+    uv run "$tools_dir/build.py" \
       --target=all \
       --mode=$mode \
       --build-subdir="cross-$arch-$mode" \

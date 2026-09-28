@@ -5,10 +5,10 @@
 
 from pathlib import Path
 
-project_root_dir: Path = Path(__file__).resolve().parent.parent.parent.parent
+project_root_dir: Path = Path(__file__).resolve().parents[2]
 
 build_dir: Path = project_root_dir / "build"
-scripts_dir: Path = build_dir / "scripts"
+tools_dir: Path = project_root_dir / "tools"
 out_dir: Path = project_root_dir / "out"
 default_out_dir: Path = out_dir / "build"
 

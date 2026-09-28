@@ -20,19 +20,19 @@ for details).
 ```bash
 # Using Nix (Linux / macOS):
 nix develop
-uv run ./build/scripts/build.py
+uv run ./tools/build.py
 
 # Without Nix (after installing the toolchain above):
-uv run ./build/scripts/build.py
+uv run ./tools/build.py
 
 # Build and install (requires nix)
-./build/scripts/install.sh
+./tools/install.sh
 ```
 
 Run the tests with:
 
 ```bash
-uv run ./build/scripts/run.py --target=tests
+uv run ./tools/run.py --target=tests
 ```
 
 ## Contributing

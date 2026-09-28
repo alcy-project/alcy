@@ -79,12 +79,12 @@ jobs:
 
       - name: Build All
         shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/build.py --target=all --mode=${{ inputs.build_type }} --build-subdir=build
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/build.py --target=all --mode=${{ inputs.build_type }} --build-subdir=build
 
       - name: Package & Generate Checksum
         shell: bash
         run: |
-          ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run python ./build/scripts/package.py \
+          ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run python ./tools/package.py \
             --plat="${{ matrix.plat }}" \
             --arch="${{ matrix.arch }}" \
             --mode="${{ inputs.build_type }}" \
@@ -103,23 +103,23 @@ jobs:
 
       - name: Run Tests
         shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build
 
       - name: Run e2e Acceptance
         shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/check_e2e.py --build-subdir=build
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_e2e.py --build-subdir=build
 
       - name: Check Runtime
         shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/check_runtime.py --build-subdir=build
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_runtime.py --build-subdir=build
 
       - name: Run exe Acceptance
         shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./build/scripts/check_exe.py --build-subdir=build
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_exe.py --build-subdir=build
 
       - name: Verify Static Linkage
         shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run python ./build/scripts/verify_static_linkage.py --build-dir=out/build
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run python ./tools/verify_static_linkage.py --build-dir=out/build
 
       - name: Run Smoke Test
         shell: bash

@@ -10,7 +10,7 @@ from pathlib import Path
 from re import Pattern
 from utils.paths import (
     project_source_dirs,
-    scripts_dir,
+    tools_dir,
 )
 from utils.source import (
     source_extensions,
@@ -108,7 +108,7 @@ def apply_to_files(dry_run: bool) -> bool:
                     has_error = True
                 applied_any = True
 
-    for file_path in scripts_dir.rglob("*"):
+    for file_path in tools_dir.rglob("*"):
         if file_path.is_file() and file_path.suffix in script_extensions:
             success = apply_license(
                 file_path,

@@ -63,12 +63,12 @@ jobs:
 
       - name: Build All
         shell: bash
-        run: uv run ./build/scripts/build.py --target=all --mode=${{ inputs.build_type }} --build-subdir=build --target-os=emscripten
+        run: uv run ./tools/build.py --target=all --mode=${{ inputs.build_type }} --build-subdir=build --target-os=emscripten
 
       - name: Package & Generate Checksum
         shell: bash
         run: |
-          uv run python ./build/scripts/package.py \
+          uv run python ./tools/package.py \
             --plat=wasm \
             --arch=wasm32 \
             --mode="${{ inputs.build_type }}" \
@@ -86,4 +86,4 @@ jobs:
 
       - name: Run Tests
         shell: bash
-        run: uv run ./build/scripts/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build --target-os=emscripten
+        run: uv run ./tools/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build --target-os=emscripten

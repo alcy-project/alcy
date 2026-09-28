@@ -13,20 +13,20 @@ Build, test, and check from the repository root:
 
 ```bash
 typos
-uv run ./build/scripts/build.py --target=default --mode=debug
-uv run ./build/scripts/run.py --target=tests --mode=debug
-uv run ./build/scripts/check_e2e.py
-uv run ./build/scripts/check_runtime.py
-uv run ./build/scripts/check_exe.py
-uv run ./build/scripts/lint.py
-uv run ./build/scripts/format.py --dry-run
-uv run ./build/scripts/verify_static_linkage.py
+uv run ./tools/build.py --target=default --mode=debug
+uv run ./tools/run.py --target=tests --mode=debug
+uv run ./tools/check_e2e.py
+uv run ./tools/check_runtime.py
+uv run ./tools/check_exe.py
+uv run ./tools/lint.py
+uv run ./tools/format.py --dry-run
+uv run ./tools/verify_static_linkage.py
 
 # Or run all of the above commands:
-./build/scripts/check.sh
+./tools/check.sh
 
 # Faster iteration (skips gn gen, gn check, and compdb; never for CI):
-uv run ./build/scripts/build.py --target=tests --fast
+uv run ./tools/build.py --target=tests --fast
 ```
 
 End-to-end acceptance cases live in `e2e/cases/<name>/` (sources plus
@@ -39,13 +39,13 @@ To automatically fix code style and lint issues:
 
 ```bash
 # Apply code formatting
-uv run ./build/scripts/format.py
+uv run ./tools/format.py
 
 # Fix lint issues (clang-tidy, clang-include-cleaner, etc.)
-uv run ./build/scripts/lint.py --fix
+uv run ./tools/lint.py --fix
 
 # Also apply fixes that may require manual verification
-uv run ./build/scripts/lint.py --fix-errors
+uv run ./tools/lint.py --fix-errors
 
 ```
 
@@ -53,10 +53,10 @@ Please make sure the CI pass before requesting a review.
 
 ```bash
 # Locally (requires emcc and node on PATH):
-./build/scripts/check.sh --wasm
+./tools/check.sh --wasm
 
 # Or directly:
-uv run ./build/scripts/run.py --target=tests --mode=debug \
+uv run ./tools/run.py --target=tests --mode=debug \
   --build-subdir=build_wasm --target-os=emscripten
 ```
 
@@ -153,7 +153,7 @@ so it is not a test.
    AddressSanitizer catches this in debug; do not suppress it.
 6. **A failure found by a fuzzer is checked in as a seed and a unit test.** The
    artifact alone is not a regression test, because it is only replayed by a fuzzer.
-7. **Coverage may not go down.** `./build/scripts/check_coverage.py` fails when line
+7. **Coverage may not go down.** `./tools/check_coverage.py` fails when line
    coverage of `src/` drops below the recorded baseline. Move the baseline with
    `--update` only in a commit that says so.
 8. **`fmt`, `lint`, and the unit suite are clean before you push.** Coverage and the
@@ -161,7 +161,7 @@ so it is not a test.
 
 Which tool to reach for, in order: a unit test with an explicit expected value, a
 property test, a sanitized hostile-input case, and libFuzzer for coverage-guided
-exploration. Re-run everything with `./build/scripts/check.sh`.
+exploration. Re-run everything with `./tools/check.sh`.
 
 The project is pre-MVP, so APIs and the IR are still allowed to change, but please call out
 breaking changes in the commit message.

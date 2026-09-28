@@ -1,6 +1,6 @@
 {
   "comment": [
-    "Recorded by build/scripts/check_coverage.py --update.",
+    "Recorded by tools/check_coverage.py --update.",
     "A ratchet: check_coverage.py fails when the measured line",
     "coverage of src/ drops below this. Move it only on purpose."
   ],

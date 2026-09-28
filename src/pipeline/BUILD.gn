@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 action("embed_runtime") {
-  script = "//build/scripts/embed_runtime.py"
+  script = "//tools/embed_runtime.py"
   inputs = [
     "//runtime/alcy_runtime.c",
     "//runtime/alcy_runtime.h",
@@ -17,7 +17,7 @@ action("embed_runtime") {
 }
 
 action("embed_std") {
-  script = "//build/scripts/embed_std.py"
+  script = "//tools/embed_std.py"
   inputs = [
     "//lib/std/alcy.toml",
     "//lib/std/core/alcy.toml",
