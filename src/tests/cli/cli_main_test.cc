@@ -286,6 +286,41 @@ TEST_CASE("Build creates nonexistent directory") {
   CHECK(io::is_file(dir.join("no-such-dir/main.o")));
 }
 
+#if !BUILD_FLAG(IS_OS_ASMJS)
+TEST_CASE("Time trace writes a json file") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_trace_test_");
+  const bool setup = write_all(dir, "main.al",
+                               "fn main() -> i32 {\n"
+                               "  print(\"hi\")\n"
+                               "  ret 0\n"
+                               "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  // Textual IR needs no backend, so the trace covers every phase on
+  // every host. The trace sits beside the named output.
+  const std::string target = dir.join("main.al");
+  const std::string out = dir.join("main.ll");
+  std::vector<std::string> storage{"alcy", "-t",   "build", target,
+                                   "-o",   out,    "--emit", "llvm-ir"};
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) == 0);
+  const std::optional<std::string> trace = io::read_file(out + ".trace.json");
+  CHECK(trace.has_value());
+  if (trace.has_value()) {
+    CHECK(trace->find("\"traceEvents\"") != std::string::npos);
+    CHECK(trace->find("\"analyze\"") != std::string::npos);
+    CHECK(trace->find("\"lower\"") != std::string::npos);
+    CHECK(trace->find("\"borrow\"") != std::string::npos);
+  }
+}
+#endif  // !BUILD_FLAG(IS_OS_ASMJS
+
 i32 run_run_on(io::TempDir& dir,
                std::string_view rel,
                const std::vector<std::string>& extra = {}) {

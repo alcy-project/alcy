@@ -7,6 +7,7 @@
 
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profile_scope.h"
 #include "ir/block.h"
 #include "ir/common.h"
 #include "ir/function.h"
@@ -39,6 +40,10 @@ VerifyResult err(const VerifyErrorKind kind, const u32 index) {
 }  // namespace
 
 VerifyResult verify_storage(const Storage& storage) {
+  PROFILE_SCOPE_WITH_CATEGORY("verify-ir", "frontend");
+  // The global profiler is deliberate: this takes no context, so an
+  // explicit instance would thread a pointer through StorageBuilder and
+  // every caller. Thread it down once this slice earns its own timeline.
   for (TypeIdx tidx(0); tidx.idx < storage.types().size(); ++tidx) {
     const TypeNode& node = storage.types()[tidx];
     if (node.tag == TypeTag::Struct) {

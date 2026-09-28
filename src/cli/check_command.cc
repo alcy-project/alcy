@@ -12,6 +12,7 @@
 #include "cli/cli_config.h"
 #include "cli/diagnostic_output.h"
 #include "cli/result_code.h"
+#include "cli/trace.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
@@ -63,6 +64,9 @@ void log_check_result(const pipeline::CheckResult& result) {
 ResultCode run_check(const CliConfig& config,
                      const diag::RenderOptions& options) {
   pipeline::PipelineContext ctx;
+  // The trace lands in the working directory: check writes nothing, so
+  // there is no output to sit beside.
+  TraceSession trace(ctx, config.time_trace);
   if (config.stdin_source) {
     // Reading the pipe and also naming a target is a contradiction, and
     // quietly preferring one of them would leave the user guessing which.
@@ -88,6 +92,12 @@ ResultCode run_check(const CliConfig& config,
     // The manager copies the text, so the buffer can go straight after.
     base::Result<pipeline::CheckResult, diag::Reported> result =
         pipeline::check_source(ctx, STDIN_NAME, std::move(text).unwrap());
+    if (!trace.finish()) {
+      const u32 index = ctx.bag.emit(
+          diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
+          "cannot write trace '{}'", trace.path());
+      (void)index;
+    }
     report_diagnostics(ctx.bag, ctx.sources, options);
     if (result.is_err()) {
       return ResultCode::CheckFailed;
@@ -110,6 +120,12 @@ ResultCode run_check(const CliConfig& config,
     base::Result<pipeline::CheckResult, diag::Reported> result =
         pipeline::check_package(ctx, found.root, found.manifest,
                                 found.manifest_name);
+    if (!trace.finish()) {
+      const u32 index = ctx.bag.emit(
+          diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
+          "cannot write trace '{}'", trace.path());
+      (void)index;
+    }
     report_diagnostics(ctx.bag, ctx.sources, options);
     if (result.is_err()) {
       return ResultCode::CheckFailed;
@@ -141,6 +157,12 @@ ResultCode run_check(const CliConfig& config,
   }
   base::Result<pipeline::CheckResult, diag::Reported> result =
       pipeline::check_single_file(ctx, raw_target);
+  if (!trace.finish()) {
+    const u32 index = ctx.bag.emit(
+        diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
+        "cannot write trace '{}'", trace.path());
+    (void)index;
+  }
   report_diagnostics(ctx.bag, ctx.sources, options);
   if (result.is_err()) {
     return ResultCode::CheckFailed;

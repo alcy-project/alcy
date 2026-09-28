@@ -12,6 +12,7 @@
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profile_scope.h"
 #include "lower/lower.h"
 #include "pipeline/std_stage.h"
 #include "pipeline/target.h"
@@ -21,8 +22,11 @@ namespace pipeline {
 base::Result<FrontendOutput, diag::Reported> run_frontend(
     PipelineContext& ctx,
     analyzer::ModuleTree tree) {
-  base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyzer::check_package(tree, TARGET_WIDTH, ctx.ast, ctx.bag);
+  base::Result<analyzer::CheckedPackage, diag::Reported> checked = [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "analyze",
+                                             "frontend");
+    return analyzer::check_package(tree, TARGET_WIDTH, ctx.ast, ctx.bag);
+  }();
   if (checked.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
@@ -33,9 +37,12 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
       package.modules.size() > tree.staged_modules
           ? package.modules.size() - tree.staged_modules
           : 0;
-  base::Result<lower::LoweredPackage, diag::Reported> lowered =
-      lower::lower_package(std::move(package), TARGET_WIDTH, ctx.ast,
-                           ctx.strings, ctx.bag);
+  base::Result<lower::LoweredPackage, diag::Reported> lowered = [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "lower",
+                                             "frontend");
+    return lower::lower_package(std::move(package), TARGET_WIDTH, ctx.ast,
+                                ctx.strings, ctx.bag);
+  }();
   if (lowered.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
@@ -45,8 +52,12 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
           ? package_ir.storage->functions().size() -
                 package_ir.prelude_functions
           : 0;
-  if (borrow::check_borrows(package_ir, ctx.bag).is_err() ||
-      ctx.bag.has_errors()) {
+  const bool borrows_ok = [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "borrow",
+                                             "frontend");
+    return borrow::check_borrows(package_ir, ctx.bag).is_ok();
+  }();
+  if (!borrows_ok || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
   return base::make_ok(FrontendOutput{
@@ -61,13 +72,21 @@ base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
     source::FileId root) {
   const analyzer::ModuleInput single_input{"", root};
   base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> prelude =
-      std_prelude(ctx);
+      [&] {
+        PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "prelude",
+                                                 "frontend");
+        return std_prelude(ctx);
+      }();
   if (prelude.is_err()) {
     return base::make_err(diag::Reported{});
   }
-  return analyzer::resolve_modules(root, {&single_input, 1}, "", ctx.sources,
-                                   ctx.ast, ctx.bag,
-                                   std::move(prelude).unwrap());
+  return [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve",
+                                             "frontend");
+    return analyzer::resolve_modules(root, {&single_input, 1}, "", ctx.sources,
+                                     ctx.ast, ctx.bag,
+                                     std::move(prelude).unwrap());
+  }();
 }
 
 }  // namespace pipeline

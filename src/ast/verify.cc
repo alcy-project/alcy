@@ -8,6 +8,7 @@
 #include "ast/ast.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profile_scope.h"
 
 namespace ast {
 
@@ -387,6 +388,7 @@ bool verify_item_children(const ItemNode& node, const AstArena& arena) {
 }  // namespace
 
 base::Result<void, VerifyError> verify_file(const AstArena& arena) {
+  PROFILE_SCOPE_WITH_CATEGORY("verify-ast", "frontend");
   for (usize i = 0; i < arena.conds.size(); ++i) {
     if (!verify_cond_children(arena.conds[i], arena)) {
       return base::make_err(VerifyError::DanglingCond);

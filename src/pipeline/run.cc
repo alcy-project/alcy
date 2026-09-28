@@ -14,6 +14,7 @@
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profile_scope.h"
 #include "fpag/io/temp_dir.h"
 #include "lower/lower.h"
 #include "path/path.h"
@@ -74,8 +75,10 @@ base::Result<RunOutcome, diag::Reported> run_single_file(
     bool optimize,
     std::string_view linker,
     std::span<const std::string_view> args) {
-  base::Result<source::FileId, source::SourceError> file =
-      ctx.sources.load(target);
+  base::Result<source::FileId, source::SourceError> file = [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "load", "frontend");
+    return ctx.sources.load(target);
+  }();
   if (file.is_err()) {
     const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot read '{}'", target);

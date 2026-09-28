@@ -17,6 +17,7 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profile_scope.h"
 #include "path/path.h"
 #include "pipeline/pipeline.h"
 #include "pipeline/pipeline_context.h"
@@ -184,13 +185,21 @@ base::Result<BinTarget, diag::Reported> resolve_bin_target(
   }
 
   base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> prelude =
-      std_prelude(ctx);
+      [&] {
+        PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "prelude",
+                                                 "frontend");
+        return std_prelude(ctx);
+      }();
   if (prelude.is_err()) {
     return base::make_err(diag::Reported{});
   }
-  base::Result<analyzer::ModuleTree, diag::Reported> tree =
-      analyzer::resolve_modules(bin_file, inputs, manifest.name, ctx.sources,
-                                ctx.ast, ctx.bag, std::move(prelude).unwrap());
+  base::Result<analyzer::ModuleTree, diag::Reported> tree = [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve",
+                                             "frontend");
+    return analyzer::resolve_modules(bin_file, inputs, manifest.name,
+                                     ctx.sources, ctx.ast, ctx.bag,
+                                     std::move(prelude).unwrap());
+  }();
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }

@@ -18,6 +18,7 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profile_scope.h"
 #include "lexer/lexer.h"
 #include "lexer/token.h"
 #include "parser/desugar.h"
@@ -140,17 +141,26 @@ class Resolver {
     const std::string_view bytes = file_bytes.value_or(std::string_view{});
     lexer::Lexer lexer(bytes, file.id, bag);
     std::vector<lexer::Token> tokens;
-    lexer.tokenize(tokens);
+    {
+      PROFILE_SCOPE_WITH_CATEGORY("tokenize", "frontend");
+      lexer.tokenize(tokens);
+    }
     parser::Parser parser(
         std::span<const lexer::Token>(tokens.data(), tokens.size()), bytes,
         file.id, ast, bag);
-    base::Result<std::span<const ast::ItemIdx>, diag::Reported> parsed =
-        parser.parse();
+    base::Result<std::span<const ast::ItemIdx>, diag::Reported> parsed = [&] {
+      PROFILE_SCOPE_WITH_CATEGORY("parse", "frontend");
+      return parser.parse();
+    }();
     if (parsed.is_err()) {
       return;
     }
     file.items = std::move(parsed).unwrap();
-    if (parser::desugar_shadowing(file.items, ast, bag).is_err()) {
+    const bool desugared = [&] {
+      PROFILE_SCOPE_WITH_CATEGORY("desugar", "frontend");
+      return parser::desugar_shadowing(file.items, ast, bag).is_ok();
+    }();
+    if (!desugared) {
       return;
     }
   }
@@ -689,6 +699,7 @@ base::Result<ModuleTree, diag::Reported> resolve_modules(
 }
 
 base::Result<void, ModuleTreeError> verify_module_tree(const ModuleTree& tree) {
+  PROFILE_SCOPE_WITH_CATEGORY("verify-tree", "frontend");
   if (tree.modules.empty()) {
     return base::make_err(ModuleTreeError::Empty);
   }

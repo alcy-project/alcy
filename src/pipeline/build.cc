@@ -18,6 +18,7 @@
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profile_scope.h"
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "lower/lower.h"
@@ -61,6 +62,8 @@ base::Result<void, diag::Reported> emit_package_object(
     lower::LoweredPackage& package,
     bool optimize,
     const std::string& output_path) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-object",
+                                           "backend");
   llvm::LLVMContext context;
   // TODO: Add optimization level enum
   (void)optimize;
@@ -100,6 +103,7 @@ base::Result<void, diag::Reported> emit_package_ir(
     PipelineContext& ctx,
     lower::LoweredPackage& package,
     const std::string& output_path) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-ir", "backend");
   llvm::LLVMContext context;
   auto module = std::make_unique<llvm::Module>("alcy_module", context);
   codegen_llvm::LlvmIrEmitter emitter(module.get(), std::move(package.storage),
@@ -133,6 +137,7 @@ base::Result<void, diag::Reported> link_executable(
     const std::string& object_path,
     const std::string& runtime_path,
     const std::string& exe_path) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "link", "backend");
   const std::string driver = linker.empty() ? "clang" : std::string(linker);
 
   base::Result<i32, SpawnError> linked =
@@ -183,8 +188,10 @@ base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
                                                      bool optimize,
                                                      std::string_view linker,
                                                      EmitMode mode) {
-  base::Result<source::FileId, source::SourceError> file =
-      ctx.sources.load(target);
+  base::Result<source::FileId, source::SourceError> file = [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "load", "frontend");
+    return ctx.sources.load(target);
+  }();
   if (file.is_err()) {
     const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot read '{}'", target);

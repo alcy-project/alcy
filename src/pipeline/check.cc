@@ -11,6 +11,7 @@
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profile_scope.h"
 #include "path/path.h"
 #include "pipeline/frontend.h"
 #include "pipeline/pipeline_context.h"
@@ -47,8 +48,10 @@ base::Result<CheckResult, diag::Reported> finish_check(
 base::Result<CheckResult, diag::Reported> check_single_file(
     PipelineContext& ctx,
     std::string_view target) {
-  base::Result<source::FileId, source::SourceError> file =
-      ctx.sources.load(target);
+  base::Result<source::FileId, source::SourceError> file = [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "load", "frontend");
+    return ctx.sources.load(target);
+  }();
   if (file.is_err()) {
     const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot read '{}'", target);

@@ -12,6 +12,7 @@
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profiler.h"
 #include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
 #include "fpag/str/string_interner.h"
@@ -39,6 +40,10 @@ struct PipelineContext {
   bool std_staged = false;
   std::optional<io::TempDir> std_scratch;
   std::vector<analyzer::ModuleInput> std_inputs;
+  // Profiler the phase scopes record into; null records nothing. The cli
+  // points it at Profiler::global() when --time-trace is given; a host
+  // embedding the pipeline points it at its own instance.
+  debug::Profiler* profiler = nullptr;
 
   PipelineContext();
 };
