@@ -139,6 +139,7 @@ const CheckedModule::NamedType* find_type(const CheckedModule& module,
 // tests that mention them inject a matching declaration set.
 constexpr std::string_view CORE_PRELUDE =
     R"(pub intrinsic fn panic(msg: str) -> !;
+pub fn print(msg: str) {}
 pub enum Option<T> { Some(T), None }
 pub enum Result<T, E> { Ok(T), Err(E) }
 )";
@@ -992,14 +993,16 @@ TEST_CASE("Check expressions accept well-typed programs") {
                                       "  _ := t\n"
                                       "  _ := c\n"
                                       "  _ := d\n"
-                                      "}\n"}});
+                                      "}\n"},
+                                     {CORE_PRELUDE_FILE, CORE_PRELUDE}});
   CHECK(setup);
   if (!setup) {
     return;
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                      ir::PointerWidth::W64, core_prelude());
   CHECK(result.package.has_value());
 }
 

@@ -122,10 +122,10 @@ TEST_CASE("A package build honours the mode too") {
   // manifest, so the two modes do not land in the same place.
   io::TempDir dir = io::TempDir::create_unique("alcy_emit_package_test_");
   const bool setup =
-      dir.write_file(
-          "proj/alcy.toml",
-          "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[[bin]]\n"
-          "name = \"app\"\npath = \"main.al\"\n") &&
+      dir.write_file("proj/alcy.toml",
+                     "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+                     "[dependencies]\n\"alcy/std/*\" = {}\n\n[[bin]]\n"
+                     "name = \"app\"\npath = \"main.al\"\n") &&
       dir.write_file("proj/main.al", PROGRAM);
   CHECK(setup);
   if (!setup) {

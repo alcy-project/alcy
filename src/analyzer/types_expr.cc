@@ -919,57 +919,12 @@ ir::TypeIdx Checker::check_call(u32 module,
     }
     return error_type();
   }
+  // No fallback for `print`, `println`, or `panic`: an unresolved name
+  // is an error like any other, so every name in scope traces to a
+  // manifest entry. The prelude provides them whenever `core` is
+  // selected, and the missing-dependency hint names the package when it
+  // is not.
   const ast::PathIdx path = ast.exprs[callee].payload.get<ast::ExprPath>().idx;
-  const std::span<const ast::Ident> segments = ast.paths[path].segments;
-  if (segments.size() == 1 && lookup_local(segments[0].name) == nullptr &&
-      lookup_static(module, segments[0].name) == nullptr &&
-      lookup_function(module, segments[0].name) == nullptr) {
-    const std::string_view name = segments[0].name;
-    if (name == "print" || name == "println") {
-      if (comp_depth > 0) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, ANALYZER_INVALID_COMP, span,
-                     "'{}' is not allowed in comp evaluation", name);
-        (void)index;
-        return error_type();
-      }
-      if (args.size() != 1) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, ANALYZER_ARITY_ERROR, span,
-                     "'{}' expects 1 argument, found {}", name, args.size());
-        (void)index;
-        return error_type();
-      }
-      const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
-      const ir::TypeIdx actual = check_expr(module, args[0], &str);
-      unify(str, actual, ast.exprs[args[0]].span, "print argument");
-      const ir::TypeIdx unit = builder.primitive(ir::TypeTag::Void);
-      if (expected != nullptr) {
-        return unify(*expected, unit, span, "call");
-      }
-      return unit;
-    }
-    if (name == "panic") {
-      if (comp_depth > 0) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, ANALYZER_INVALID_COMP, span,
-                     "'panic' is not allowed in comp evaluation");
-        (void)index;
-        return error_type();
-      }
-      if (args.size() != 1) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, ANALYZER_ARITY_ERROR, span,
-                     "'panic' expects 1 argument, found {}", args.size());
-        (void)index;
-        return error_type();
-      }
-      const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
-      const ir::TypeIdx actual = check_expr(module, args[0], &str);
-      unify(str, actual, ast.exprs[args[0]].span, "panic argument");
-      return builder.never_type();
-    }
-  }
   PathValue resolved;
   if (!resolve_value_path(
           module, path,

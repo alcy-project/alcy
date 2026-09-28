@@ -70,10 +70,13 @@ struct LowerCase {
   bool ok;
 };
 
-LowerCase lower_case(VirtualDir& dir,
-                     std::string_view root_rel,
-                     std::initializer_list<std::string_view> rels,
-                     Fixture& f) {
+LowerCase lower_case(
+    VirtualDir& dir,
+    std::string_view root_rel,
+    std::initializer_list<std::string_view> rels,
+    Fixture& f,
+    std::initializer_list<std::pair<std::string_view, std::string_view>>
+        prelude = {}) {
   std::vector<analyzer::ModuleInput> inputs;
   source::FileId root = source::UNKNOWN_FILE;
   std::deque<std::string> name_storage;
@@ -88,9 +91,23 @@ LowerCase lower_case(VirtualDir& dir,
     }
     inputs.push_back(*input);
   }
+  std::deque<std::string> prelude_storage;
+  std::vector<analyzer::ModuleInput> prelude_inputs;
+  for (const auto& [name, rel] : prelude) {
+    const tests::VirtualSource* const file = dir.find(rel);
+    if (file == nullptr) {
+      continue;
+    }
+    prelude_storage.emplace_back(name);
+    // A staged prelude source is a package facade, so its public
+    // surface is in scope without a `use`.
+    prelude_inputs.push_back({prelude_storage.back(),
+                              f.sources.add_virtual(file->name, file->bytes),
+                              true});
+  }
   base::Result<analyzer::ModuleTree, diag::Reported> tree_result =
       analyzer::resolve_modules(root, inputs, "testpkg", f.sources, f.ast,
-                                f.bag);
+                                f.bag, prelude_inputs);
   if (tree_result.is_err() || f.bag.has_errors()) {
     return {std::nullopt, false};
   }
@@ -280,17 +297,20 @@ TEST_CASE("Lower emits verifiable LLVM IR") {
 
 TEST_CASE("Lower emits verifiable LLVM IR for print") {
   VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "fn main() {\n"
-                                      "  print(\"hi\")\n"
-                                      "}\n"}});
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn main() {\n"
+                       "  print(\"hi\")\n"
+                       "}\n"},
+                      {"core.al", "pub intrinsic fn print(msg: str);\n"}});
   CHECK(setup);
   if (!setup) {
     return;
   }
 
   Fixture f;
-  LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  LowerCase result =
+      lower_case(dir, "main.al", {"main.al"}, f, {{"core", "core.al"}});
   CHECK(result.ok);
   CHECK(result.lowered.has_value());
   if (!result.ok || !result.lowered.has_value()) {
@@ -317,21 +337,24 @@ TEST_CASE("Lower emits verifiable LLVM IR for print") {
 #if !defined(OS_ASMJS)
 TEST_CASE("Lower emits relocatable objects") {
   VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "fn add(a: i32, b: i32) -> i32 {\n"
-                                      "  ret a + b\n"
-                                      "}\n"
-                                      "fn main() {\n"
-                                      "  print(\"hi\")\n"
-                                      "  _ := add(40, 2)\n"
-                                      "}\n"}});
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn add(a: i32, b: i32) -> i32 {\n"
+                       "  ret a + b\n"
+                       "}\n"
+                       "fn main() {\n"
+                       "  print(\"hi\")\n"
+                       "  _ := add(40, 2)\n"
+                       "}\n"},
+                      {"core.al", "pub intrinsic fn print(msg: str);\n"}});
   CHECK(setup);
   if (!setup) {
     return;
   }
 
   Fixture f;
-  LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  LowerCase result =
+      lower_case(dir, "main.al", {"main.al"}, f, {{"core", "core.al"}});
   CHECK(result.ok);
   CHECK(result.lowered.has_value());
   if (!result.ok || !result.lowered.has_value()) {
@@ -431,14 +454,17 @@ TEST_CASE("Lower wraps all main forms in a C entry") {
   };
   for (const std::string_view source : cases) {
     VirtualDir dir;
-    const bool setup = write_all(dir, {{"main.al", source}});
+    const bool setup =
+        write_all(dir, {{"main.al", source},
+                        {"core.al", "pub intrinsic fn print(msg: str);\n"}});
     CHECK(setup);
     if (!setup) {
       continue;
     }
 
     Fixture f;
-    LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+    LowerCase result =
+        lower_case(dir, "main.al", {"main.al"}, f, {{"core", "core.al"}});
     CHECK(result.ok);
     CHECK(result.lowered.has_value());
     if (!result.ok || !result.lowered.has_value()) {

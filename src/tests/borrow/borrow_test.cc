@@ -57,10 +57,13 @@ bool write_all(
   return true;
 }
 
-bool check_case(VirtualDir& dir,
-                std::string_view root_rel,
-                std::initializer_list<std::string_view> rels,
-                Fixture& f) {
+bool check_case(
+    VirtualDir& dir,
+    std::string_view root_rel,
+    std::initializer_list<std::string_view> rels,
+    Fixture& f,
+    std::initializer_list<std::pair<std::string_view, std::string_view>>
+        prelude = {}) {
   std::vector<analyzer::ModuleInput> inputs;
   source::FileId root = source::UNKNOWN_FILE;
   std::deque<std::string> name_storage;
@@ -75,9 +78,23 @@ bool check_case(VirtualDir& dir,
     }
     inputs.push_back(*input);
   }
+  std::deque<std::string> prelude_storage;
+  std::vector<analyzer::ModuleInput> prelude_inputs;
+  for (const auto& [name, rel] : prelude) {
+    const tests::VirtualSource* const file = dir.find(rel);
+    if (file == nullptr) {
+      continue;
+    }
+    prelude_storage.emplace_back(name);
+    // A staged prelude source is a package facade, so its public
+    // surface is in scope without a `use`.
+    prelude_inputs.push_back({prelude_storage.back(),
+                              f.sources.add_virtual(file->name, file->bytes),
+                              true});
+  }
   base::Result<analyzer::ModuleTree, diag::Reported> tree_result =
       analyzer::resolve_modules(root, inputs, "testpkg", f.sources, f.ast,
-                                f.bag);
+                                f.bag, prelude_inputs);
   if (tree_result.is_err() || f.bag.has_errors()) {
     return false;
   }
@@ -229,24 +246,26 @@ TEST_CASE("Borrow rejects a read after a by-value call move") {
 
 TEST_CASE("Borrow reads a moved value into the call that moved it") {
   VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "struct H { n: i32 }\n"
-                                      "fn consume(h: H) -> i32 {\n"
-                                      "  ret h.n\n"
-                                      "}\n"
-                                      "fn main() {\n"
-                                      "  h := H { n: 1 }\n"
-                                      "  if consume(h) != 1 {\n"
-                                      "    panic(\"bad\")\n"
-                                      "  }\n"
-                                      "}\n"}});
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct H { n: i32 }\n"
+                       "fn consume(h: H) -> i32 {\n"
+                       "  ret h.n\n"
+                       "}\n"
+                       "fn main() {\n"
+                       "  h := H { n: 1 }\n"
+                       "  if consume(h) != 1 {\n"
+                       "    panic(\"bad\")\n"
+                       "  }\n"
+                       "}\n"},
+                      {"core.al", "pub intrinsic fn panic(msg: str) -> !;\n"}});
   CHECK(setup);
   if (!setup) {
     return;
   }
 
   Fixture f;
-  CHECK(check_case(dir, "main.al", {"main.al"}, f));
+  CHECK(check_case(dir, "main.al", {"main.al"}, f, {{"core", "core.al"}}));
   CHECK(!f.bag.has_errors());
 }
 
