@@ -5,7 +5,6 @@
 
 #include <memory>
 #include <optional>
-#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -28,7 +27,6 @@
 #include "pipeline/pipeline_context.h"
 #include "pipeline/runtime_stage.h"
 #include "pipeline/spawn.h"
-#include "pipeline/std_stage.h"
 #include "pipeline/target.h"
 #include "source/source.h"
 
@@ -169,6 +167,28 @@ base::Result<void, diag::Reported> link_executable(
   return base::make_ok();
 }
 
+base::Result<void, diag::Reported> emit_output(PipelineContext& ctx,
+                                               lower::LoweredPackage& lowered,
+                                               bool optimize,
+                                               std::string_view linker,
+                                               EmitMode mode,
+                                               const std::string& output_path) {
+  if (mode == EmitMode::Object) {
+    return emit_package_object(ctx, lowered, optimize, output_path);
+  }
+  if (mode == EmitMode::LlvmIr) {
+    return emit_package_ir(ctx, lowered, output_path);
+  }
+  io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
+  const std::string object_path = scratch.join("main.o");
+  if (emit_package_object(ctx, lowered, optimize, object_path).is_err() ||
+      stage_runtime(scratch, ctx.bag).is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  const std::string runtime_path = scratch.join(runtime_source_name());
+  return link_executable(ctx, linker, object_path, runtime_path, output_path);
+}
+
 // Single-file build: runs the full frontend over one source file, then
 // emits an object and links it with the staged runtime.
 base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
@@ -186,15 +206,8 @@ base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
     return base::make_err(diag::Reported{});
   }
   const source::FileId root = std::move(file).unwrap();
-  const analyzer::ModuleInput single_input{"", root};
-  base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> prelude =
-      std_prelude(ctx);
-  if (prelude.is_err()) {
-    return base::make_err(diag::Reported{});
-  }
   base::Result<analyzer::ModuleTree, diag::Reported> tree =
-      analyzer::resolve_modules(root, {&single_input, 1}, "", ctx.sources,
-                                ctx.ast, ctx.bag, std::move(prelude).unwrap());
+      front_end_root(ctx, root);
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
@@ -212,20 +225,7 @@ base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
     DCHECK(dot != std::string::npos);
     output_path.replace(dot, std::string::npos, suffix_for(mode));
   }
-  if (mode == EmitMode::Object) {
-    return emit_package_object(ctx, lowered, optimize, output_path);
-  }
-  if (mode == EmitMode::LlvmIr) {
-    return emit_package_ir(ctx, lowered, output_path);
-  }
-  io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
-  const std::string object_path = scratch.join("main.o");
-  if (emit_package_object(ctx, lowered, optimize, object_path).is_err() ||
-      stage_runtime(scratch, ctx.bag).is_err()) {
-    return base::make_err(diag::Reported{});
-  }
-  const std::string runtime_path = scratch.join(runtime_source_name());
-  return link_executable(ctx, linker, object_path, runtime_path, output_path);
+  return emit_output(ctx, lowered, optimize, linker, mode, output_path);
 }
 
 base::Result<void, diag::Reported> build_package(PipelineContext& ctx,
@@ -269,20 +269,7 @@ base::Result<void, diag::Reported> build_package(PipelineContext& ctx,
   } else {
     output_path = std::string(output);
   }
-  if (mode == EmitMode::Object) {
-    return emit_package_object(ctx, lowered, optimize, output_path);
-  }
-  if (mode == EmitMode::LlvmIr) {
-    return emit_package_ir(ctx, lowered, output_path);
-  }
-  io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
-  const std::string object_path = scratch.join("main.o");
-  if (emit_package_object(ctx, lowered, optimize, object_path).is_err() ||
-      stage_runtime(scratch, ctx.bag).is_err()) {
-    return base::make_err(diag::Reported{});
-  }
-  const std::string runtime_path = scratch.join(runtime_source_name());
-  return link_executable(ctx, linker, object_path, runtime_path, output_path);
+  return emit_output(ctx, lowered, optimize, linker, mode, output_path);
 }
 
 }  // namespace pipeline

@@ -3,10 +3,8 @@
 
 #include "pipeline/check.h"
 
-#include <span>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 #include "analyzer/resolve.h"
 #include "diag/bag.h"
@@ -16,7 +14,6 @@
 #include "path/path.h"
 #include "pipeline/frontend.h"
 #include "pipeline/pipeline_context.h"
-#include "pipeline/std_stage.h"
 #include "pipeline/target.h"
 #include "source/source.h"
 
@@ -69,15 +66,8 @@ base::Result<CheckResult, diag::Reported> check_source(PipelineContext& ctx,
 
 base::Result<CheckResult, diag::Reported> check_root(PipelineContext& ctx,
                                                      source::FileId root) {
-  const analyzer::ModuleInput single_input{"", root};
-  base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> prelude =
-      std_prelude(ctx);
-  if (prelude.is_err()) {
-    return fail();
-  }
   base::Result<analyzer::ModuleTree, diag::Reported> tree =
-      analyzer::resolve_modules(root, {&single_input, 1}, "", ctx.sources,
-                                ctx.ast, ctx.bag, std::move(prelude).unwrap());
+      front_end_root(ctx, root);
   if (tree.is_err()) {
     return fail();
   }

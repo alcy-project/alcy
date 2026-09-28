@@ -9,6 +9,7 @@
 #include "fpag/base/result.h"
 #include "lower/lower.h"
 #include "pipeline/pipeline_context.h"
+#include "source/source.h"
 
 namespace pipeline {
 
@@ -25,5 +26,12 @@ struct FrontendOutput {
 base::Result<FrontendOutput, diag::Reported> run_frontend(
     PipelineContext& ctx,
     analyzer::ModuleTree tree);
+
+// Prelude plus module resolution for one root file. The three
+// single-file entries share it; packages resolve through their
+// manifest instead.
+base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
+    PipelineContext& ctx,
+    source::FileId root);
 
 }  // namespace pipeline

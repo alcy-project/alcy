@@ -65,6 +65,16 @@ base::Result<void, diag::Reported> link_executable(
     const std::string& runtime_path,
     const std::string& exe_path);
 
+// Emits lowered IR according to the mode: one object, textual IR, or
+// an object staged with the runtime and linked into an executable.
+// Both single-file and package builds end here.
+base::Result<void, diag::Reported> emit_output(PipelineContext& ctx,
+                                               lower::LoweredPackage& lowered,
+                                               bool optimize,
+                                               std::string_view linker,
+                                               EmitMode mode,
+                                               const std::string& output_path);
+
 base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
                                                      std::string_view target,
                                                      std::string_view output,

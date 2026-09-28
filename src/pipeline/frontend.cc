@@ -3,14 +3,17 @@
 
 #include "pipeline/frontend.h"
 
+#include <span>
 #include <utility>
 
+#include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "borrow/borrow.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "fpag/base/result.h"
 #include "lower/lower.h"
+#include "pipeline/std_stage.h"
 #include "pipeline/target.h"
 
 namespace pipeline {
@@ -51,6 +54,20 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
       .module_count = module_count,
       .function_count = function_count,
   });
+}
+
+base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
+    PipelineContext& ctx,
+    source::FileId root) {
+  const analyzer::ModuleInput single_input{"", root};
+  base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> prelude =
+      std_prelude(ctx);
+  if (prelude.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  return analyzer::resolve_modules(root, {&single_input, 1}, "", ctx.sources,
+                                   ctx.ast, ctx.bag,
+                                   std::move(prelude).unwrap());
 }
 
 }  // namespace pipeline
