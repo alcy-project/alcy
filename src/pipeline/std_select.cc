@@ -185,13 +185,4 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
   return base::make_ok(std::move(selection));
 }
 
-std::string_view std_symbol_package(std::string_view name) {
-  for (usize i = 0; i < STD_SYMBOL_COUNT; ++i) {
-    if (STD_SYMBOLS[i].name == name) {
-      return STD_SYMBOLS[i].package;
-    }
-  }
-  return {};
-}
-
 }  // namespace pipeline

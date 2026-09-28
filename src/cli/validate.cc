@@ -51,6 +51,10 @@ base::Result<void, ConfigError> validate_cli_config(const CliConfig& config) {
       !config.target_dir.empty()) {
     return base::make_err(ConfigError::CheckFileWithTarget);
   }
+  if (config.subcommand != Subcommand::Compile &&
+      (config.no_std || !config.deps.empty())) {
+    return base::make_err(ConfigError::DepsWithoutCompile);
+  }
   return base::make_ok();
 }
 
@@ -71,6 +75,8 @@ std::string_view describe_config_error(ConfigError error) {
       return "`compile --stdin` needs `-o` to name the output";
     case ConfigError::CheckFileWithTarget:
       return "`check` takes a directory or `--file`, not both";
+    case ConfigError::DepsWithoutCompile:
+      return "`--no-std` and `--deps` only mean anything for `compile`";
   }
   return "invalid configuration";
 }

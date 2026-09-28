@@ -21,6 +21,7 @@
 #include "pipeline/build.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
+#include "pkg/manifest.h"
 #include "source/source.h"
 
 namespace cli {
@@ -55,10 +56,43 @@ base::Result<std::string, std::string_view> read_stdin() {
 
 }  // namespace
 
+// The standard library a single file sees: the default suite, or
+// nothing with `--no-std`, plus every `--deps` fragment. Fragments parse
+// with the manifest grammar, so a typo fails the same way in both.
+base::Result<pipeline::StdSelection, diag::Reported> compile_selection(
+    const CliConfig& config,
+    pipeline::PipelineContext& ctx) {
+  std::vector<pkg::Dependency> deps;
+  if (!config.no_std) {
+    base::Result<pkg::Dependency, diag::Reported> suite =
+        pkg::parse_dependency_flag(ctx.bag, ctx.arena, "alcy/std/*");
+    if (suite.is_err()) {
+      return base::make_err(diag::Reported{});
+    }
+    deps.push_back(std::move(suite).unwrap());
+  }
+  for (std::string_view fragment : config.deps) {
+    base::Result<pkg::Dependency, diag::Reported> parsed =
+        pkg::parse_dependency_flag(ctx.bag, ctx.arena, fragment);
+    if (parsed.is_err()) {
+      return base::make_err(diag::Reported{});
+    }
+    deps.push_back(std::move(parsed).unwrap());
+  }
+  return pipeline::resolve_std_selection(deps, ctx.bag);
+}
+
 ResultCode run_compile(const CliConfig& config,
                        const diag::RenderOptions& options) {
   pipeline::PipelineContext ctx;
   TraceSession trace(ctx, config.time_trace);
+  base::Result<pipeline::StdSelection, diag::Reported> selected =
+      compile_selection(config, ctx);
+  if (selected.is_err() || ctx.bag.has_errors()) {
+    report_diagnostics(ctx.bag, ctx.sources, options);
+    return ResultCode::BuildFailed;
+  }
+  const pipeline::StdSelection selection = std::move(selected).unwrap();
   // Validation guarantees one of these: a target, or the pipe with a
   // named output.
   if (config.stdin_source) {
@@ -75,9 +109,9 @@ ResultCode run_compile(const CliConfig& config,
     // The manager copies the text, so the buffer can go straight after.
     const source::FileId root =
         ctx.sources.add_virtual(STDIN_NAME, std::move(text).unwrap());
-    base::Result<void, diag::Reported> res = pipeline::build_single_root(
-        ctx, root, config.output, config.release, config.linker, config.emit,
-        pipeline::full_std_selection());
+    base::Result<void, diag::Reported> res =
+        pipeline::build_single_root(ctx, root, config.output, config.release,
+                                    config.linker, config.emit, selection);
     if (!trace.finish()) {
       const u32 index =
           ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
@@ -95,7 +129,7 @@ ResultCode run_compile(const CliConfig& config,
   trace.set_path(trace_path_beside(config.output));
   base::Result<void, diag::Reported> res = pipeline::build_single_file(
       ctx, config.target_dir, config.output, config.release, config.linker,
-      config.emit, pipeline::full_std_selection());
+      config.emit, selection);
   if (!trace.finish()) {
     const u32 index =
         ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,

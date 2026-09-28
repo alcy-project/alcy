@@ -4,6 +4,7 @@
 #include "pkg/manifest.h"
 
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -85,6 +86,13 @@ diag::Span toml_span(std::string_view bytes,
   return {.file = file, .offset = begin, .length = length};
 }
 
+base::Result<Dependency, diag::Reported> parse_dependency(
+    diag::DiagBag& bag,
+    std::string_view filename,
+    mem::Arena& arena,
+    std::string_view spec,
+    const toml::node& node);
+
 base::Result<PackageManifest, diag::Reported> semantic_error(
     diag::DiagBag& bag,
     std::string_view filename,
@@ -153,7 +161,13 @@ base::Result<Dependency, diag::Reported> parse_dependency(
     std::string_view filename,
     mem::Arena& arena,
     std::string_view spec,
-    const toml::table& table) {
+    const toml::node& node) {
+  if (!node.is_table()) {
+    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
+             "manifest '{}': dependency '{}' must be a table", filename, spec);
+    return base::make_err(diag::Reported{});
+  }
+  const toml::table& table = *node.as_table();
   // The specifier is one to three slash-separated segments. One is a
   // local directory aliased by the key; two name a package; three name
   // a package in a suite, or every member of one with a trailing `/*`.
@@ -525,14 +539,8 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
   if (deps_table != nullptr) {
     for (const auto& [key, node] : *deps_table) {
       const std::string_view dep_name = key.str();
-      if (!node.is_table()) {
-        bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-                 "manifest '{}': dependency '{}' must be a table", filename,
-                 dep_name);
-        return base::make_err(diag::Reported{});
-      }
       base::Result<Dependency, diag::Reported> parsed =
-          parse_dependency(bag, filename, arena, dep_name, *node.as_table());
+          parse_dependency(bag, filename, arena, dep_name, node);
       if (parsed.is_err()) {
         return base::make_err(diag::Reported{});
       }
@@ -674,6 +682,82 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
       .bin_count = bin_count,
       .modules = modules,
   });
+}
+
+// Trims ASCII whitespace from both ends; fragments arrive raw from argv.
+std::string_view trim_flag(std::string_view text) {
+  while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
+    text.remove_prefix(1);
+  }
+  while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) {
+    text.remove_suffix(1);
+  }
+  return text;
+}
+
+base::Result<Dependency, diag::Reported> parse_dependency_flag(
+    diag::DiagBag& bag,
+    mem::Arena& arena,
+    std::string_view fragment) {
+  constexpr std::string_view filename = "command line";
+  std::string_view body = trim_flag(fragment);
+  std::string table;
+  const usize eq = body.find('=');
+  if (eq == std::string_view::npos) {
+    // A bare specifier selects the embedded member with no source.
+    table = "\"";
+    table += std::string(body);
+    table += "\" = {}";
+  } else {
+    std::string_view key = trim_flag(body.substr(0, eq));
+    std::string_view value = trim_flag(body.substr(eq + 1));
+    if (value.empty()) {
+      bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
+               "manifest '{}': dependency '{}' must be a specifier or "
+               "`specifier = {{ ... }}`",
+               filename, fragment);
+      return base::make_err(diag::Reported{});
+    }
+    // Slashes need quoting for TOML, so a bare key is quoted here
+    // rather than at every call site.
+    if (key.empty() || key.front() != '"') {
+      table = "\"";
+      table += std::string(key);
+      table += "\" = ";
+    } else {
+      table = std::string(key);
+      table += " = ";
+    }
+    table += std::string(value);
+  }
+  toml::parse_result parsed =
+      toml::parse("[dependencies]\n" + table + "\n", filename);
+  if (!parsed) {
+    bag.emit(diag::Severity::Error, MANIFEST_SYNTAX_ERROR,
+             "manifest '{}': dependency '{}' does not parse", filename,
+             fragment);
+    return base::make_err(diag::Reported{});
+  }
+  const toml::table& root = parsed.table();
+  const auto deps_it = root.find("dependencies");
+  if (deps_it == root.end() || !deps_it->second.is_table() ||
+      deps_it->second.as_table()->empty()) {
+    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
+             "manifest '{}': dependency '{}' must be a specifier or "
+             "`specifier = {{ ... }}`",
+             filename, fragment);
+    return base::make_err(diag::Reported{});
+  }
+  const toml::table* const deps = deps_it->second.as_table();
+  if (deps->size() != 1) {
+    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
+             "manifest '{}': dependency '{}' names more than one entry",
+             filename, fragment);
+    return base::make_err(diag::Reported{});
+  }
+  const auto entry = deps->begin();
+  return parse_dependency(bag, filename, arena, entry->first.str(),
+                          entry->second);
 }
 
 }  // namespace pkg

@@ -31,6 +31,9 @@ enum class ConfigError : u8 {
   CompileStdinNeedsOutput,
   // `check` takes a directory or `--file`, not both.
   CheckFileWithTarget,
+  // `--no-std` and `--deps` select the prelude of a single file, so
+  // they only mean anything for `compile`.
+  DepsWithoutCompile,
 };
 
 // Semantic validation of a parsed config, kept separate from grammar

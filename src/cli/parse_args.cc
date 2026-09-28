@@ -53,6 +53,14 @@ CliConfig extract_from_matches(arg::Matches&& matches) {
       pipeline::EmitMode::Executable);
   c.output = matches.get<std::string_view>("output").unwrap_or(c.output);
   c.linker = matches.get<std::string_view>("linker").unwrap_or(c.linker);
+  c.no_std = matches.get<bool>("no-std").unwrap_or(false);
+  if (auto deps = matches.get_all<std::string_view>("deps"); deps.is_ok()) {
+    for (std::string_view fragment : std::move(deps).unwrap()) {
+      if (!fragment.empty()) {
+        c.deps.push_back(fragment);
+      }
+    }
+  }
 
   const std::span<const std::string_view> positionals = matches.positionals();
   if (!positionals.empty()) {
@@ -158,6 +166,17 @@ arg::Parser build_parser() {
                              "a file, and report against the name <stdin>. "
                              "For an editor buffer that has never been saved.")
                        .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("no-std")
+                       .help("Start with no standard library instead of the "
+                             "default suite. Add back with --deps.")
+                       .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("deps")
+                       .help("A dependency on top of the default suite, as a "
+                             "specifier (`alcy/std/core`) or `specifier = "
+                             "{ ... }`. Repeatable.")
+                       .default_value("")
                        .build())
           .build());
   builder.add_subcommand(

@@ -181,6 +181,15 @@ void report_manifest_error(ManifestError error,
 
 // Parses manifest bytes; all strings reference arena copies. `file` backs
 // spans for syntax errors (pass source::UNKNOWN_FILE when unknown).
+// Parses one `--deps` fragment with the same grammar as a
+// [dependencies] entry: either a bare specifier (`alcy/std/*`) or
+// `specifier = { ... }` with an optional value table. A bare key without
+// quotes is quoted before parsing, so slashes need no escaping.
+base::Result<Dependency, diag::Reported> parse_dependency_flag(
+    diag::DiagBag& bag,
+    mem::Arena& arena,
+    std::string_view fragment);
+
 base::Result<PackageManifest, diag::Reported> parse_manifest(
     std::string_view bytes,
     std::string_view filename,

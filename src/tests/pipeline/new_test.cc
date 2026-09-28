@@ -7,6 +7,7 @@
 
 #include "doctest/doctest.h"
 #include "fpag/io/file_handle.h"
+#include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "pipeline/pipeline_context.h"
 
@@ -37,6 +38,17 @@ TEST_CASE("Init derives the package name from the directory") {
   CHECK(main.open(dir.join("myproj/main.al"), io::FileAccess::Read));
   io::FileHandle gitignore;
   CHECK(gitignore.open(dir.join("myproj/.gitignore"), io::FileAccess::Read));
+}
+
+TEST_CASE("Init depends on the standard suite by default") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_init_deps_test_");
+  PipelineContext ctx;
+  const std::string target = dir.join("myproj");
+  CHECK(init_package(ctx, target).is_ok());
+  // The default program prints, so the default manifest names the suite
+  // that provides it.
+  const std::string text = io::read_file(dir.join("myproj/alcy.toml"));
+  CHECK(text.find("\"alcy/std/*\"") != std::string::npos);
 }
 
 TEST_CASE("Init refuses to overwrite an existing package") {

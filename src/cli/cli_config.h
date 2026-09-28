@@ -51,6 +51,13 @@ struct CliConfig {
   // Trailing positionals after the target, passed to the program by
   // `run`. Views borrow argv storage like target_dir.
   std::vector<std::string_view> program_args;
+  // `compile` starts with no standard library: nothing is staged unless
+  // `--deps` names it. Views borrow argv storage like target_dir.
+  bool no_std = false;
+  // `compile` dependencies on top of the default suite, in `--deps`
+  // fragment form (`alcy/std/core`, or `name = { ... }`). Views borrow
+  // argv storage like target_dir.
+  std::vector<std::string_view> deps;
 
   constexpr bool operator==(const CliConfig&) const = default;
 };

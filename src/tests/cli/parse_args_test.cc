@@ -44,7 +44,29 @@ TEST_CASE("Parse build subcommand") {
                             .file = "",
                             .output = "",
                             .linker = "",
-                            .program_args = {}});
+                            .program_args = {},
+                            .no_std = false,
+                            .deps = {}});
+}
+
+TEST_CASE("Parse compile standard library flags") {
+  const std::string_view args[] = {"alcy",
+                                   "compile",
+                                   "--no-std",
+                                   "--deps",
+                                   "alcy/std/core",
+                                   "--deps",
+                                   "acme/json = { version = \"1\" }",
+                                   "main.al"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.subcommand == Subcommand::Compile);
+  CHECK(config.no_std);
+  CHECK(config.deps.size() == 2);
+  if (config.deps.size() != 2) {
+    return;
+  }
+  CHECK(config.deps[0] == "alcy/std/core");
+  CHECK(config.deps[1] == "acme/json = { version = \"1\" }");
 }
 
 TEST_CASE("Parse build output flag") {

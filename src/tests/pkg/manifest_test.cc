@@ -254,6 +254,29 @@ TEST_CASE("Manifest parses registry and git sources") {
   CHECK(manifest.dependencies[4].git_ref_kind.empty());
 }
 
+TEST_CASE("Manifest parses --deps fragments like manifest entries") {
+  Fixture f;
+  base::Result<Dependency, diag::Reported> bare =
+      parse_dependency_flag(f.bag, f.arena, "alcy/std/*");
+  CHECK(bare.is_ok());
+  if (bare.is_ok()) {
+    CHECK(std::move(bare).unwrap().suite_glob);
+  }
+  base::Result<Dependency, diag::Reported> valued =
+      parse_dependency_flag(f.bag, f.arena, "acme/json = { version = \"1\" }");
+  CHECK(valued.is_ok());
+  if (valued.is_ok()) {
+    const Dependency dep = std::move(valued).unwrap();
+    CHECK(dep.owner == "acme");
+    CHECK(dep.source == DependencySource::Registry);
+    CHECK(dep.version == "1");
+  }
+  CHECK(parse_dependency_flag(f.bag, f.arena, "acme/x = { frobnicate = 1 }")
+            .is_err());
+  CHECK(parse_dependency_flag(f.bag, f.arena, "acme/x = ").is_err());
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Manifest rejects malformed specifiers and sources") {
   struct Case {
     std::string_view entry;

@@ -84,6 +84,9 @@ version = "0.1.0"
 [modules]
 include = ["main"]
 
+[dependencies]
+"alcy/std/*" = {{}}
+
 [[bin]]
 name = "{}"
 path = "main.al")",

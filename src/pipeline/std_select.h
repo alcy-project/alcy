@@ -43,9 +43,4 @@ inline StdSelection full_std_selection() {
   return selection;
 }
 
-// Whether `name` is a public item of any embedded member, naming the
-// member. Backs the missing-dependency hint: an unresolved name found
-// here is a dependency the manifest does not name.
-std::string_view std_symbol_package(std::string_view name);
-
 }  // namespace pipeline
