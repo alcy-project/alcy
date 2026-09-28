@@ -45,6 +45,11 @@ struct ModuleNode {
   std::span<const Import> imports;
   // Toolchain prelude sources; user modules never set this.
   bool is_prelude = false;
+  // Any module the staged standard library added: facades, their
+  // siblings, and the fileless package roots between them. A facade is
+  // the subset whose public surface is in scope without a `use`; the
+  // rest are ordinary modules that happen to be toolchain sources.
+  bool is_staged = false;
 };
 
 struct ModuleTree {
@@ -78,6 +83,32 @@ enum class ModuleTreeError : u8 {
 // trees must pass before crossing into check_package. No I/O, no
 // logging, no bag writes.
 base::Result<void, ModuleTreeError> verify_module_tree(const ModuleTree& tree);
+
+// The `fmt` package of the staged standard library: the `fmt` root
+// and everything under it. Compiler-known `write`/`format` expansions
+// key on this rather than on a name, so a user function called `write`
+// stays ordinary. See docs/adr/0016.
+inline bool is_fmt_package(std::string_view path) {
+  return path == "fmt" || (path.size() > 5 && path.substr(0, 5) == "fmt::");
+}
+
+// Whether `item` is declared by the staged `fmt` package. Only the
+// embedded standard library is staged, so a path check plus the staged
+// flag is exactly package identity for now; registry packages will need
+// a real one.
+inline bool is_fmt_item(const ModuleTree& tree, ast::ItemIdx item) {
+  for (const ModuleNode* module : tree.modules) {
+    if (!module->is_staged || !is_fmt_package(module->path)) {
+      continue;
+    }
+    for (ast::ItemIdx candidate : module->items) {
+      if (candidate == item) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 // Short human-readable detail for a module tree failure.
 std::string_view describe_module_tree_error(ModuleTreeError error);

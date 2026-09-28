@@ -14,6 +14,9 @@ version = "0.1.0"
 [modules]
 include = [
   "prelude",
+  "heap",
+  "vec",
+  "text",
 ]
 
 [dependencies]
@@ -25,4 +28,7 @@ paths = [
 # surface: a program depending on this package sees them with no `use`.
 export = [
   "prelude",
+  "heap",
+  "vec",
+  "text",
 ]

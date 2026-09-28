@@ -20,8 +20,16 @@ action("embed_std") {
   script = "//build/scripts/embed_std.py"
   inputs = [
     "//lib/std/core/prelude.al",
-    "//lib/std/fmt/prelude.al",
+    "//lib/std/core/mem.al",
+    "//lib/std/core/text.al",
+    "//lib/std/core/option.al",
     "//lib/std/alloc/prelude.al",
+    "//lib/std/alloc/heap.al",
+    "//lib/std/alloc/vec.al",
+    "//lib/std/alloc/text.al",
+    "//lib/std/fmt/prelude.al",
+    "//lib/std/fmt/write.al",
+    "//lib/std/fmt/format.al",
     "//lib/std/atomic/prelude.al",
     "//lib/std/sync/prelude.al",
     "//lib/std/io/prelude.al",

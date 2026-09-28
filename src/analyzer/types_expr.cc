@@ -576,23 +576,14 @@ void Checker::check_call_args(u32 module,
   }
 }
 
-// A core prelude formatting helper: resolved through the prelude,
-// never through a user module (locals shadow the prelude first).
+// A formatting helper of the staged `fmt` package: recognized by the
+// package its item is declared in, never by a user module (locals
+// shadow the prelude first, and a user `write` is not staged).
 bool Checker::is_core_fmt(const CheckedModule::FnSig* fn) const {
   if (fn->name != "write" && fn->name != "format") {
     return false;
   }
-  for (const ModuleNode* module : tree.modules) {
-    if (!module->is_prelude) {
-      continue;
-    }
-    for (ast::ItemIdx item : module->items) {
-      if (item == fn->item) {
-        return true;
-      }
-    }
-  }
-  return false;
+  return is_fmt_item(tree, fn->item);
 }
 
 std::vector<bool> Checker::comp_param_flags(ast::ItemIdx item) const {

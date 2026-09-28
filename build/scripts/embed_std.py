@@ -32,15 +32,26 @@ def main():
     args = parser.parse_args()
 
     std_dir = Path(args.std_dir)
-    # One entry module per package of the `alcy/std` suite, in a fixed
-    # order so the generated file is byte-stable. See docs/adr/0016.
+    # Every module of every package of the `alcy/std` suite, in a fixed
+    # order so the generated file is byte-stable. The suite is injected
+    # whole until package selection lands; see docs/adr/0016.
     order = [
-        "core", "fmt", "alloc", "atomic", "sync", "io", "network",
-        "thread", "arch", "simd", "time",
+        ("core", ["prelude", "mem", "text", "option"]),
+        ("alloc", ["prelude", "heap", "vec", "text"]),
+        ("fmt", ["prelude", "write", "format"]),
+        ("atomic", ["prelude"]),
+        ("sync", ["prelude"]),
+        ("io", ["prelude"]),
+        ("network", ["prelude"]),
+        ("thread", ["prelude"]),
+        ("arch", ["prelude"]),
+        ("simd", ["prelude"]),
+        ("time", ["prelude"]),
     ]
     files = {
-        ("STD_%s_PRELUDE" % name.upper()): std_dir / name / "prelude.al"
-        for name in order
+        ("STD_%s_%s" % (name.upper(), mod.upper())): std_dir / name / (mod + ".al")
+        for name, mods in order
+        for mod in mods
     }
     with open(args.output, "w", encoding="utf-8") as out:
         out.write(

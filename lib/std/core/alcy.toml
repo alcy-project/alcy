@@ -14,10 +14,16 @@ version = "0.1.0"
 [modules]
 include = [
   "prelude",
+  "mem",
+  "text",
+  "option",
 ]
 
 # The public surface. Its `pub` items are also the implicit
 # surface: a program depending on this package sees them with no `use`.
 export = [
   "prelude",
+  "mem",
+  "text",
+  "option",
 ]

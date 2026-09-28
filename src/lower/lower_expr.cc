@@ -888,10 +888,10 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
     return lower_intrinsic_call(
         expr, sig, fn_instance_args(target->module, target->index));
   }
-  if (sig.name == "write" && pkg.tree.modules[target->module]->is_prelude) {
+  if (sig.name == "write" && analyzer::is_fmt_item(pkg.tree, sig.item)) {
     return lower_fmt_write(expr, sig);
   }
-  if (sig.name == "format" && pkg.tree.modules[target->module]->is_prelude) {
+  if (sig.name == "format" && analyzer::is_fmt_item(pkg.tree, sig.item)) {
     return lower_fmt_format(expr, sig);
   }
   const std::vector<u32> comp = comp_positions(sig.item);

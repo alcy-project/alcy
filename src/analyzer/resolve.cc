@@ -653,6 +653,9 @@ class Resolver {
               child_path, leaf ? prelude_data[i].id : source::UNKNOWN_FILE,
               leaf ? prelude_data[i].items : std::span<const ast::ItemIdx>{},
               parent);
+          // The whole staged tree is toolchain sources, facades and
+          // siblings alike; only facades are preludes.
+          modules[child]->is_staged = true;
         } else if (leaf) {
           // Two staged sources resolved to the same leaf: the later one
           // would silently overwrite the earlier module's items.

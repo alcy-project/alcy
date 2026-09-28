@@ -785,7 +785,9 @@ void Lowerer::run() {
     return;
   }
   for (const Done& entry : done) {
-    if (pkg.tree.modules[entry.entry.mod]->is_prelude) {
+    // Every staged module is toolchain sources, facades and siblings
+    // alike; only facades are preludes.
+    if (pkg.tree.modules[entry.entry.mod]->is_staged) {
       ++prelude_functions_;
     }
   }
