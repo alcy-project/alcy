@@ -11,7 +11,7 @@ as cwd) or a single main.al file (checked as `alcy check --file main.al`).
 An expect.toml file declares the outcome:
 
     exit = 0
-    contains = ["checked 1 file(s)"]
+    contains = ["checked: 1 file(s)"]
     not_contains = ["error"]
 
 `exit` is required (integer value or "non-zero"); `contains` lines must

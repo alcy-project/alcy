@@ -6,15 +6,19 @@
 #include "cli/cli_config.h"
 #include "cli/result_code.h"
 
-namespace diag {
+namespace pipeline {
 
-struct RenderOptions;
+struct PipelineContext;
 
-}  // namespace diag
+}  // namespace pipeline
 
 namespace cli {
 
+struct Envelope;
+
+// Compiles a single source file.
 ResultCode run_compile(const CliConfig& config,
-                       const diag::RenderOptions& options);
+                       pipeline::PipelineContext& ctx,
+                       Envelope& envelope);
 
 }  // namespace cli

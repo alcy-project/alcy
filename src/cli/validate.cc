@@ -55,6 +55,11 @@ base::Result<void, ConfigError> validate_cli_config(const CliConfig& config) {
       (config.no_std || !config.deps.empty())) {
     return base::make_err(ConfigError::DepsWithoutCompile);
   }
+  if (config.json && config.subcommand != Subcommand::Build &&
+      config.subcommand != Subcommand::Compile &&
+      config.subcommand != Subcommand::Check) {
+    return base::make_err(ConfigError::JsonWithoutResult);
+  }
   return base::make_ok();
 }
 
@@ -77,6 +82,9 @@ std::string_view describe_config_error(ConfigError error) {
       return "`check` takes a directory or `--file`, not both";
     case ConfigError::DepsWithoutCompile:
       return "`--no-std` and `--deps` only mean anything for `compile`";
+    case ConfigError::JsonWithoutResult:
+      return "`--json` only means anything for `build`, `compile`, and "
+             "`check`";
   }
   return "invalid configuration";
 }

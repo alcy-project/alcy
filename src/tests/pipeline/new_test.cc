@@ -13,6 +13,7 @@
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/vcs.h"
 
 namespace pipeline {
 

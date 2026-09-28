@@ -29,6 +29,7 @@ namespace {
 CliConfig extract_from_matches(arg::Matches&& matches) {
   CliConfig c{};
   c.time_trace = matches.get<bool>("time-trace").unwrap_or(c.time_trace);
+  c.json = matches.get<bool>("json").unwrap_or(c.json);
   c.color_mode = matches.get<term::ColorMode>("color").unwrap_or(c.color_mode);
 
   const std::string_view selected = matches.selected_command();
@@ -125,9 +126,19 @@ arg::Parser build_parser() {
                       .build());
   builder.add_arg(arg::ArgBuilder("time-trace")
                       .short_name('t')
-                      .help("Enable time profiling and generate the json file.")
+                      .help("Time the compilation phases and report where "
+                            "the run went. With --json the phases are "
+                            "embedded in the document; on their own they "
+                            "are a summary table.")
                       .is_flag(true)
                       .build());
+  builder.add_arg(
+      arg::ArgBuilder("json")
+          .help("Report the result as one JSON document on standard output, "
+                "for a tool reading it. Applies to build, compile, and "
+                "check.")
+          .is_flag(true)
+          .build());
   builder.add_subcommand(
       build_subcommand("build", "Build a package directory")
           .add_arg(arg::ArgBuilder("release")

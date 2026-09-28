@@ -50,15 +50,18 @@ base::Result<void, diag::Reported> link_executable(
 
 // Emits lowered IR according to the mode: one object, textual IR, or
 // an object staged with the runtime and linked into an executable.
-// Both single-file and package builds end here.
-base::Result<void, diag::Reported> emit_output(PipelineContext& ctx,
-                                               lower::LoweredPackage& lowered,
-                                               bool optimize,
-                                               std::string_view linker,
-                                               EmitMode mode,
-                                               const std::string& output_path);
+// Both single-file and package builds end here. Success carries the
+// path written, which the caller cannot work out on its own when the
+// caller left the path empty.
+base::Result<std::string, diag::Reported> emit_output(
+    PipelineContext& ctx,
+    lower::LoweredPackage& lowered,
+    bool optimize,
+    std::string_view linker,
+    EmitMode mode,
+    const std::string& output_path);
 
-base::Result<void, diag::Reported> build_single_file(
+base::Result<std::string, diag::Reported> build_single_file(
     PipelineContext& ctx,
     std::string_view target,
     std::string_view output,
@@ -70,7 +73,7 @@ base::Result<void, diag::Reported> build_single_file(
 // The target-independent tail of a single-file build: everything from
 // a loaded root onwards, which does not care whether the bytes came
 // from a file or a pipe. `output` names the artifact unconditionally.
-base::Result<void, diag::Reported> build_single_root(
+base::Result<std::string, diag::Reported> build_single_root(
     PipelineContext& ctx,
     source::FileId root,
     std::string_view output,
@@ -79,13 +82,14 @@ base::Result<void, diag::Reported> build_single_root(
     EmitMode mode,
     const StdSelection& selection);
 
-base::Result<void, diag::Reported> build_package(PipelineContext& ctx,
-                                                 const path::Path& root,
-                                                 source::FileId manifest_file,
-                                                 std::string_view manifest_name,
-                                                 std::string_view output,
-                                                 bool optimize,
-                                                 std::string_view linker,
-                                                 EmitMode mode);
+base::Result<std::string, diag::Reported> build_package(
+    PipelineContext& ctx,
+    const path::Path& root,
+    source::FileId manifest_file,
+    std::string_view manifest_name,
+    std::string_view output,
+    bool optimize,
+    std::string_view linker,
+    EmitMode mode);
 
 }  // namespace pipeline

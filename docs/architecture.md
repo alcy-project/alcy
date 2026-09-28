@@ -131,7 +131,7 @@ state between stages beyond the data explicitly passed along.
 | `codegen_llvm`            | Emits LLVM IR from analyzed IR. The active MVP code-generation path.                                                                   | Local API buffers only.                                                           |
 | `codegen`                 | Reserved native code generation backend; no committed design yet.                                                                      | N/A - not yet implemented.                                                        |
 | `diag`                    | Stands for `diagnostic`. Source spans, diagnostics, arena-backed bags, and the fmtlib renderer.                                        | Zero heap allocation on hot paths; message bytes use an injected arena.           |
-| `base`, `debug`, `config` | Low-level shared facilities for numeric types, logging, diagnostics/assertion helpers, and build-time flags.                           | Zero heap allocations.                                                            |
+| `base`, `debug`, `config` | Low-level shared facilities for numeric types, nesting limits, diagnostics/assertion helpers, and build-time flags.                  | Zero heap allocations.                                                            |
 
 Supporting targets include `tests` and `benchmarks`.
 

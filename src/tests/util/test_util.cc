@@ -12,11 +12,7 @@
 
 namespace tests {
 
-TestLogger logger;
-
 void init_logger() {
-  logger.init(logging::StdoutSink(
-      nullptr, 0, term::console_color_style(term::Stream::Stdout), false));
   debug::init_debug_logger();
 }
 

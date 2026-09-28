@@ -5,17 +5,20 @@
 
 #include "cli/result_code.h"
 
-namespace diag {
+namespace pipeline {
 
-struct RenderOptions;
+struct PipelineContext;
 
-}  // namespace diag
+}  // namespace pipeline
 
 namespace cli {
 
 struct CliConfig;
+struct Envelope;
 
+// Creates a package in an existing directory.
 ResultCode run_init(const CliConfig& config,
-                    const diag::RenderOptions& options);
+                    pipeline::PipelineContext& ctx,
+                    Envelope& envelope);
 
 }  // namespace cli

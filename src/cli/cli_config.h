@@ -63,6 +63,9 @@ struct CliConfig {
   // that is the version control most packages are kept in, and the
   // choice only selects a file: no repository is created either way.
   pipeline::Vcs vcs = pipeline::Vcs::Git;
+  // Emit the result as one JSON document on standard output instead of
+  // the text report, for an editor or another tool reading it.
+  bool json = false;
 
   constexpr bool operator==(const CliConfig&) const = default;
 };

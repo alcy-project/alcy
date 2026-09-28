@@ -57,7 +57,7 @@ TEST_CASE("A build writes an object where it was asked for one") {
   const std::string object_path = dir.join("out.bin");
   {
     PipelineContext ctx;
-    base::Result<void, diag::Reported> built =
+    base::Result<std::string, diag::Reported> built =
         build_single_file(ctx, source, object_path, false, "", EmitMode::Object,
                           pipeline::full_std_selection());
     CHECK(built.is_ok());
@@ -76,7 +76,7 @@ TEST_CASE("A build writes the module as textual IR") {
   const std::string ir_path = dir.join(path::DEFAULT_OUT_DIR);
   {
     PipelineContext ctx;
-    base::Result<void, diag::Reported> built =
+    base::Result<std::string, diag::Reported> built =
         build_single_file(ctx, source, ir_path, false, "", EmitMode::LlvmIr,
                           pipeline::full_std_selection());
     CHECK(built.is_ok());
@@ -97,7 +97,7 @@ TEST_CASE("The default extension follows the mode") {
 
   {
     PipelineContext ctx;
-    base::Result<void, diag::Reported> built =
+    base::Result<std::string, diag::Reported> built =
         build_single_file(ctx, dir.join("main.al"), "", false, "",
                           EmitMode::LlvmIr, pipeline::full_std_selection());
     CHECK(built.is_ok());
@@ -108,7 +108,7 @@ TEST_CASE("The default extension follows the mode") {
 
   {
     PipelineContext ctx;
-    base::Result<void, diag::Reported> built =
+    base::Result<std::string, diag::Reported> built =
         build_single_file(ctx, dir.join("main.al"), "", false, "",
                           EmitMode::Object, pipeline::full_std_selection());
     CHECK(built.is_ok());
@@ -158,7 +158,7 @@ TEST_CASE("A package build honours the mode too") {
     if (manifest.is_err()) {
       return;
     }
-    base::Result<void, diag::Reported> built =
+    base::Result<std::string, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", false, "", one.mode);
     CHECK(built.is_ok());

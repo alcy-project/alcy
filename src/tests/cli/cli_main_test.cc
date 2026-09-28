@@ -3,6 +3,7 @@
 
 #include "cli/cli_main.h"
 
+#include <iostream>
 #include <optional>
 #include <span>
 #include <string>
@@ -20,6 +21,8 @@
 #if !BUILD_FLAG(IS_OS_ASMJS) && !BUILD_FLAG(IS_OS_WIN)
 #include <fcntl.h>
 #include <unistd.h>
+
+#include <cstdio>
 #endif
 
 namespace cli {
@@ -43,6 +46,73 @@ i32 run_check_on(io::TempDir& dir, std::string_view rel) {
 
 #if !BUILD_FLAG(IS_OS_ASMJS)
 #if !BUILD_FLAG(IS_OS_WIN)
+// Standard output is the test process's own, so a case that reads what
+// the compiler reported has to capture it: the descriptor is replaced
+// for the duration and put back afterwards, because doctest writes its
+// own results there.
+class CapturedStdout {
+ public:
+  explicit CapturedStdout(const std::string& path) : path_(path) {
+    // doctest reports through std::cout, whose buffer belongs to the
+    // descriptor that is about to be replaced. Flushing it here keeps its
+    // pending lines out of the capture, and there they would read as part
+    // of what the compiler wrote.
+    std::cout.flush();
+    file_ = static_cast<i32>(
+        ::open(path.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644));
+    if (file_ < 0) {
+      return;
+    }
+    saved_ = static_cast<i32>(::dup(STDOUT_FILENO));
+    if (saved_ < 0) {
+      ::close(file_);
+      file_ = -1;
+      return;
+    }
+    ::dup2(file_, STDOUT_FILENO);
+  }
+
+  ~CapturedStdout() { finish(); }
+
+  CapturedStdout(const CapturedStdout&) = delete;
+  CapturedStdout& operator=(const CapturedStdout&) = delete;
+
+  // Restores the descriptor and reads back what was written. Idempotent,
+  // so the destructor can call it for the cases that never got this far.
+  void finish() {
+    if (file_ < 0) {
+      return;
+    }
+    // The compiler writes through the descriptor, so the C stream has
+    // nothing pending; std::cout is flushed anyway so that whatever
+    // doctest queued goes back to the terminal rather than into the next
+    // capture.
+    std::cout.flush();
+    ::fflush(stdout);
+    ::close(STDOUT_FILENO);
+    ::dup2(saved_, STDOUT_FILENO);
+    ::close(saved_);
+    ::close(file_);
+    file_ = -1;
+    text_ = io::read_file(path_);
+    ::remove(path_.c_str());
+  }
+
+  bool ok() const { return file_ >= 0; }
+  // What the compiler wrote. Empty until finish(), since the bytes are
+  // only readable once the descriptor is back.
+  std::string text() {
+    finish();
+    return text_;
+  }
+
+ private:
+  std::string path_;
+  i32 file_ = -1;
+  i32 saved_ = -1;
+  std::string text_;
+};
+
 // Standard input is the test process's own, so a case that feeds the
 // compiler has to put the program there: the descriptor is replaced for the
 // duration and put back afterwards, because the rest of the suite reads it.
@@ -394,7 +464,8 @@ TEST_CASE("Build treats an empty linker as the default") {
 }
 
 #if !BUILD_FLAG(IS_OS_ASMJS)
-TEST_CASE("Time trace writes a json file") {
+#if !BUILD_FLAG(IS_OS_WIN)
+TEST_CASE("Time trace embeds its phases in the json result") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_trace_test_");
   const bool setup = write_all(dir, "main.al",
                                "fn main() -> i32 {\n"
@@ -406,27 +477,124 @@ TEST_CASE("Time trace writes a json file") {
     return;
   }
   // Textual IR needs no backend, so the trace covers every phase on
-  // every host. The trace sits beside the named output.
+  // every host.
   const std::string target = dir.join("main.al");
   const std::string out = dir.join("main.ll");
-  std::vector<std::string> storage{"alcy", "-t", "compile", target,
-                                   "-o",   out,  "--emit",  "llvm-ir"};
+  std::vector<std::string> storage{"alcy", "-t",     "compile", target,  "-o",
+                                   out,    "--emit", "llvm-ir", "--json"};
   std::vector<char*> argv;
   argv.reserve(storage.size());
   for (std::string& arg : storage) {
     argv.push_back(arg.data());
   }
-  CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) == 0);
-  const std::optional<std::string> trace = io::read_file(out + ".trace.json");
-  CHECK(trace.has_value());
-  if (trace.has_value()) {
-    CHECK(trace->find("\"traceEvents\"") != std::string::npos);
-    CHECK(trace->find("\"analyze\"") != std::string::npos);
-    CHECK(trace->find("\"lower\"") != std::string::npos);
-    CHECK(trace->find("\"borrow\"") != std::string::npos);
+  CapturedStdout captured(dir.join("captured.txt"));
+  CHECK(captured.ok());
+  if (!captured.ok()) {
+    return;
   }
+  CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) == 0);
+  const std::string document = captured.text();
+  CHECK(document.find("\"traceEvents\"") != std::string::npos);
+  CHECK(document.find("\"analyze\"") != std::string::npos);
+  CHECK(document.find("\"lower\"") != std::string::npos);
+  CHECK(document.find("\"borrow\"") != std::string::npos);
+  // One document, ending in a newline, with nothing beside it: the
+  // trace is no longer a second file to correlate with this one.
+  CHECK(!document.empty());
+  CHECK(document.back() == '\n');
+  CHECK(document.find('\n') == document.size() - 1);
+  CHECK(!io::is_file(out + ".trace.json"));
 }
-#endif  // !BUILD_FLAG(IS_OS_ASMJS
+
+TEST_CASE("Time trace alone summarizes the phases as text") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_trace_text_test_");
+  const bool setup =
+      write_all(dir, "main.al", "fn main() -> i32 {\n  ret 0\n}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  std::vector<std::string> storage{"alcy", "-t", "check", "--file",
+                                   dir.join("main.al")};
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  CapturedStdout captured(dir.join("captured.txt"));
+  CHECK(captured.ok());
+  if (!captured.ok()) {
+    return;
+  }
+  CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) == 0);
+  const std::string text = captured.text();
+  CHECK(text.find("phase timings") != std::string::npos);
+  CHECK(text.find("parse") != std::string::npos);
+  CHECK(text.find("\"traceEvents\"") == std::string::npos);
+}
+
+TEST_CASE("Json result carries diagnostics as data") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_json_diag_test_");
+  const bool setup =
+      write_all(dir, "bad.al", "fn main() -> i32 {\n  ret \"x\"\n}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  std::vector<std::string> storage{"alcy", "check", "--file",
+                                   dir.join("bad.al"), "--json"};
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  CapturedStdout captured(dir.join("captured.txt"));
+  CHECK(captured.ok());
+  if (!captured.ok()) {
+    return;
+  }
+  CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) != 0);
+  const std::string document = captured.text();
+  // The resolved span is what an editor needs to place the squiggle, so
+  // the document carries it rather than leaving it to be located again.
+  CHECK(document.find("\"status\":\"error\"") != std::string::npos);
+  CHECK(document.find("\"severity\":\"error\"") != std::string::npos);
+  CHECK(document.find("\"code\":") != std::string::npos);
+  CHECK(document.find("\"file\":\"") != std::string::npos);
+  CHECK(document.find("bad.al") != std::string::npos);
+  CHECK(document.find("\"offset\":") != std::string::npos);
+  CHECK(document.find("\"length\":") != std::string::npos);
+  // The rendered form is an alternative to this, not an addition to it.
+  CHECK(document.find("error[E") == std::string::npos);
+}
+
+TEST_CASE("Text result reports the statistics it measured") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_stats_test_");
+  const bool setup =
+      write_all(dir, "main.al", "fn main() -> i32 {\n  ret 0\n}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  std::vector<std::string> storage{"alcy", "check", "--file",
+                                   dir.join("main.al")};
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  CapturedStdout captured(dir.join("captured.txt"));
+  CHECK(captured.ok());
+  if (!captured.ok()) {
+    return;
+  }
+  CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) == 0);
+  CHECK(
+      captured.text().find("checked: 1 file(s), 1 module(s), 1 function(s)") !=
+      std::string::npos);
+}
+#endif  // !BUILD_FLAG(IS_OS_WIN)
+#endif  // !BUILD_FLAG(IS_OS_ASMJS)
 
 i32 run_run_on(io::TempDir& dir,
                std::string_view rel,

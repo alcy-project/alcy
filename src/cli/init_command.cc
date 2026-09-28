@@ -3,11 +3,11 @@
 
 #include "cli/init_command.h"
 
+#include <string>
 #include <string_view>
 
-#include "base/logger.h"
 #include "cli/cli_config.h"
-#include "cli/diagnostic_output.h"
+#include "cli/output.h"
 #include "cli/result_code.h"
 #include "pipeline/new.h"
 #include "pipeline/pipeline_context.h"
@@ -15,16 +15,19 @@
 namespace cli {
 
 ResultCode run_init(const CliConfig& config,
-                    const diag::RenderOptions& options) {
-  pipeline::PipelineContext ctx;
-  const std::string_view raw_dir =
+                    pipeline::PipelineContext& ctx,
+                    Envelope& envelope) {
+  const std::string_view target =
       config.target_dir.empty() ? "." : config.target_dir;
-  pipeline::NewResult result = pipeline::init_package(ctx, raw_dir, config.vcs);
+  pipeline::NewResult result = pipeline::init_package(ctx, target, config.vcs);
+  envelope.bag = &ctx.bag;
+  envelope.sources = &ctx.sources;
   if (result.is_ok() && !ctx.bag.has_errors()) {
-    base::logger.wo_prefix("created package in '{}'", raw_dir);
+    envelope.status = Status::Ok;
+    envelope.summary = "created package";
     return ResultCode::Success;
   }
-  report_diagnostics(ctx.bag, ctx.sources, options);
+  envelope.status = Status::Error;
   return ResultCode::NewFailed;
 }
 

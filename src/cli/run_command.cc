@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "cli/cli_config.h"
-#include "cli/diagnostic_output.h"
+#include "cli/output.h"
 #include "cli/result_code.h"
 #include "cli/trace.h"
 #include "diag/bag.h"
@@ -24,9 +24,13 @@
 
 namespace cli {
 
-i32 run_run(const CliConfig& config, const diag::RenderOptions& options) {
-  pipeline::PipelineContext ctx;
+i32 run_run(const CliConfig& config,
+            pipeline::PipelineContext& ctx,
+            Envelope& envelope) {
   TraceSession trace(ctx, config.time_trace);
+  envelope.bag = &ctx.bag;
+  envelope.sources = &ctx.sources;
+  const i32 failed = result_code(ResultCode::RunFailed);
   // Validation keeps single files out: `run` takes a package directory,
   // and `compile` takes the file.
   const std::string_view raw_dir =
@@ -36,8 +40,7 @@ i32 run_run(const CliConfig& config, const diag::RenderOptions& options) {
   base::Result<pipeline::ManifestProbe, path::PathError> probe =
       pipeline::find_package_manifest(ctx, raw_dir);
   if (probe.is_err()) {
-    report_diagnostics(ctx.bag, ctx.sources, options);
-    return result_code(ResultCode::RunFailed);
+    return failed;
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
   if (!found.found) {
@@ -45,20 +48,12 @@ i32 run_run(const CliConfig& config, const diag::RenderOptions& options) {
         ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
                      "no manifest found at '{}'; add alcy.toml", raw_dir);
     (void)index;
-    report_diagnostics(ctx.bag, ctx.sources, options);
-    return result_code(ResultCode::RunFailed);
-  }
-  if (config.time_trace) {
-    const path::Path out_dir = found.root.join(path::DEFAULT_OUT_DIR);
-    if (pipeline::ensure_directories(ctx, out_dir.as_view()).is_ok()) {
-      trace.set_path(std::string(out_dir.join("trace.json").as_view()));
-    }
+    return failed;
   }
   base::Result<pkg::Toolchain, diag::Reported> toolchain =
       pipeline::load_toolchain(ctx, found.root);
   if (toolchain.is_err()) {
-    report_diagnostics(ctx.bag, ctx.sources, options);
-    return result_code(ResultCode::RunFailed);
+    return failed;
   }
   // An explicit driver wins; the file names the default.
   const pkg::Toolchain tool = std::move(toolchain).unwrap();
@@ -67,18 +62,14 @@ i32 run_run(const CliConfig& config, const diag::RenderOptions& options) {
   base::Result<pipeline::RunOutcome, diag::Reported> result =
       pipeline::run_package(ctx, found.root, found.manifest,
                             found.manifest_name, config.release, linker, args);
-  if (!trace.finish()) {
-    const u32 index =
-        ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
-                     "cannot write trace '{}'", trace.path());
-    (void)index;
-  }
-  // Report before branching: a run that reaches the program still
-  // carries the warnings the bag collected along the way.
-  report_diagnostics(ctx.bag, ctx.sources, options);
+  envelope.trace = trace.take_events();
   if (result.is_err()) {
-    return result_code(ResultCode::RunFailed);
+    return failed;
   }
+  // A run that reaches the program still carries the warnings the bag
+  // collected along the way, so the report is not a success-only line.
+  envelope.status = Status::Ok;
+  envelope.summary = "ran";
   return std::move(result).unwrap().exit_code;
 }
 

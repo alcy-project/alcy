@@ -19,9 +19,12 @@ reporter. The `diag` renderer emits base ANSI SGR sequences and never queries
 the terminal. `fpag::term` remains the source of terminal capability detection,
 including Windows virtual-terminal initialization.
 
-Diagnostics continue to be written through the existing stdout logger. The
+Diagnostics are written by the CLI-owned output path. The
 renderer uses the ANSI 16-color palette for error, warning, note, path, line
 number, and caret elements, with resets around each styled span.
+
+Superseded in part by ADR-0020, which replaced the stdout logger with a
+result envelope and a pair of renderers.
 
 ## Consequences
 

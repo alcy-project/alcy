@@ -8,9 +8,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/logger.h"
 #include "cli/cli_config.h"
-#include "cli/diagnostic_output.h"
+#include "cli/output.h"
 #include "cli/result_code.h"
 #include "cli/trace.h"
 #include "diag/bag.h"
@@ -82,67 +81,66 @@ base::Result<pipeline::StdSelection, diag::Reported> compile_selection(
   return pipeline::resolve_std_selection(deps, ctx.bag);
 }
 
+// What was written is what the reader wants to know after a compile, and
+// the pipeline resolved the path, so it hands the path back rather than
+// leaving the caller to guess which file to measure.
+void record_output_size(std::string_view output, Envelope& envelope) {
+  const isize size = io::file_size(std::string(output));
+  if (size > 0) {
+    envelope.output_bytes = static_cast<u64>(size);
+  }
+}
+
 ResultCode run_compile(const CliConfig& config,
-                       const diag::RenderOptions& options) {
-  pipeline::PipelineContext ctx;
+                       pipeline::PipelineContext& ctx,
+                       Envelope& envelope) {
   TraceSession trace(ctx, config.time_trace);
+  envelope.bag = &ctx.bag;
+  envelope.sources = &ctx.sources;
+  const ResultCode failed = ResultCode::BuildFailed;
   base::Result<pipeline::StdSelection, diag::Reported> selected =
       compile_selection(config, ctx);
   if (selected.is_err() || ctx.bag.has_errors()) {
-    report_diagnostics(ctx.bag, ctx.sources, options);
-    return ResultCode::BuildFailed;
+    return failed;
   }
   const pipeline::StdSelection selection = std::move(selected).unwrap();
   // Validation guarantees one of these: a target, or the pipe with a
   // named output.
   if (config.stdin_source) {
-    trace.set_path(trace_path_beside(config.output));
     base::Result<std::string, std::string_view> text = read_stdin();
     if (text.is_err()) {
       const u32 index =
           ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
                        "cannot read standard input");
       (void)index;
-      report_diagnostics(ctx.bag, ctx.sources, options);
-      return ResultCode::BuildFailed;
+      return failed;
     }
     // The manager copies the text, so the buffer can go straight after.
     const source::FileId root =
         ctx.sources.add_virtual(STDIN_NAME, std::move(text).unwrap());
-    base::Result<void, diag::Reported> res =
+    base::Result<std::string, diag::Reported> res =
         pipeline::build_single_root(ctx, root, config.output, config.release,
                                     config.linker, config.emit, selection);
-    if (!trace.finish()) {
-      const u32 index =
-          ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
-                       "cannot write trace '{}'", trace.path());
-      (void)index;
-    }
-    report_diagnostics(ctx.bag, ctx.sources, options);
+    envelope.trace = trace.take_events();
     if (res.is_err() || ctx.bag.has_errors()) {
-      return ResultCode::BuildFailed;
+      return failed;
     }
-    base::logger.wo_prefix("compiled successfully");
+    envelope.status = Status::Ok;
+    envelope.summary = "compiled";
+    record_output_size(std::move(res).unwrap(), envelope);
     return ResultCode::Success;
   }
 
-  trace.set_path(trace_path_beside(config.output));
-  base::Result<void, diag::Reported> res = pipeline::build_single_file(
+  base::Result<std::string, diag::Reported> res = pipeline::build_single_file(
       ctx, config.target_dir, config.output, config.release, config.linker,
       config.emit, selection);
-  if (!trace.finish()) {
-    const u32 index =
-        ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
-                     "cannot write trace '{}'", trace.path());
-    (void)index;
-  }
-  // Report before branching: a successful compile still carries the
-  // warnings the bag collected along the way.
-  report_diagnostics(ctx.bag, ctx.sources, options);
+  envelope.trace = trace.take_events();
   if (res.is_err() || ctx.bag.has_errors()) {
-    return ResultCode::BuildFailed;
+    return failed;
   }
-  base::logger.wo_prefix("compiled successfully");
+  envelope.status = Status::Ok;
+  envelope.summary = "compiled";
+  record_output_size(std::move(res).unwrap(), envelope);
   return ResultCode::Success;
 }
 

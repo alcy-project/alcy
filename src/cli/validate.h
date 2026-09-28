@@ -34,6 +34,9 @@ enum class ConfigError : u8 {
   // `--no-std` and `--deps` select the prelude of a single file, so
   // they only mean anything for `compile`.
   DepsWithoutCompile,
+  // `--json` reports a result a tool reads, and only the verbs that
+  // produce one accept it.
+  JsonWithoutResult,
 };
 
 // Semantic validation of a parsed config, kept separate from grammar

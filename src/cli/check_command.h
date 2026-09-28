@@ -6,16 +6,19 @@
 #include "cli/cli_config.h"
 #include "cli/result_code.h"
 
-namespace diag {
+namespace pipeline {
 
-struct RenderOptions;
+struct PipelineContext;
 
-}  // namespace diag
+}  // namespace pipeline
 
 namespace cli {
 
+struct Envelope;
+
+// Checks a package or a single file without emitting code.
 ResultCode run_check(const CliConfig& config,
-                     const diag::RenderOptions& options);
+                     pipeline::PipelineContext& ctx,
+                     Envelope& envelope);
 
 }  // namespace cli
-

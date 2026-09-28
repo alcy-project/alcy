@@ -5,17 +5,11 @@
 
 #include <string_view>
 
-#include "fpag/logging/log_level.h"
-#include "fpag/logging/sink/stdout_sink.h"
-#include "fpag/logging/sync/sync_logger.h"
-
 namespace tests {
 
-using TestLogger =
-    logging::SyncLogger<logging::StdoutSink, logging::LogLevel::Debug>;
-
-extern TestLogger logger;
-
+// Wires up fpag's debug logger, which is what reports a failed internal
+// check. Test output goes through doctest and the cli, so the test
+// binary has no logger of its own.
 void init_logger();
 
 // True when `bytes` starts with the platform's relocatable-object

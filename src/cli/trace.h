@@ -3,42 +3,34 @@
 
 #pragma once
 
-#include <string>
-#include <string_view>
+#include <vector>
 
+#include "fpag/debug/profiler/profile_event.h"
 #include "pipeline/pipeline_context.h"
 
 namespace cli {
 
 // A --time-trace session for one command. While alive it points the
-// context at the global profiler; finish() stops the profiler and
-// writes its events as Chromium trace JSON to the path. The
-// destructor aborts an unfinished session, so early returns never
-// leak a running profiler into the next command in the process.
+// context at the global profiler; take_events() stops the profiler and
+// hands over what it recorded, for the result envelope to carry. The
+// destructor stops an unfinished session, so early returns never leak a
+// running profiler into the next command in the process.
 class TraceSession {
  public:
   TraceSession(pipeline::PipelineContext& ctx, bool enabled);
   ~TraceSession();
 
   TraceSession(const TraceSession&) = delete;
-  TraceSession& operator=(const TraceSession&) = delete;
+  TraceSession& operator=(TraceSession&) = delete;
 
-  void set_path(std::string path);
-  std::string_view path() const { return path_; }
-
-  // Writes the trace. True when tracing was off or the write
-  // succeeded; false names a write the caller must report.
-  bool finish();
+  // Stops the profiler and returns its events, newest last. Empty when
+  // tracing was off. Safe to call once; later calls return nothing.
+  std::vector<debug::ProfileEvent> take_events();
 
  private:
   pipeline::PipelineContext& ctx_;
   bool enabled_;
   bool done_ = false;
-  std::string path_ = "trace.json";
 };
-
-// Trace path beside an output: `<output>.trace.json`, or `trace.json`
-// in the working directory when no output was named.
-std::string trace_path_beside(std::string_view output);
 
 }  // namespace cli

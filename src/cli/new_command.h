@@ -3,22 +3,22 @@
 
 #pragma once
 
-#include <string_view>
-
 #include "cli/result_code.h"
-#include "pipeline/vcs.h"
 
-namespace diag {
+namespace pipeline {
 
-struct RenderOptions;
+struct PipelineContext;
 
-}  // namespace diag
+}  // namespace pipeline
 
 namespace cli {
 
-// Scaffolds a new package directory.
-ResultCode run_new(std::string_view target_dir,
-                   pipeline::Vcs vcs,
-                   const diag::RenderOptions& options);
+struct CliConfig;
+struct Envelope;
+
+// Builds a package directory, filling in what it created.
+ResultCode run_new(const CliConfig& config,
+                   pipeline::PipelineContext& ctx,
+                   Envelope& envelope);
 
 }  // namespace cli

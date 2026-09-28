@@ -157,31 +157,39 @@ base::Result<void, diag::Reported> link_executable(
   return base::make_ok();
 }
 
-base::Result<void, diag::Reported> emit_output(PipelineContext& ctx,
-                                               lower::LoweredPackage& lowered,
-                                               bool optimize,
-                                               std::string_view linker,
-                                               EmitMode mode,
-                                               const std::string& output_path) {
-  if (mode == EmitMode::Object) {
-    return emit_package_object(ctx, lowered, optimize, output_path);
+base::Result<std::string, diag::Reported> emit_output(
+    PipelineContext& ctx,
+    lower::LoweredPackage& lowered,
+    bool optimize,
+    std::string_view linker,
+    EmitMode mode,
+    const std::string& output_path) {
+  base::Result<void, diag::Reported> written =
+      [&]() -> base::Result<void, diag::Reported> {
+    if (mode == EmitMode::Object) {
+      return emit_package_object(ctx, lowered, optimize, output_path);
+    }
+    if (mode == EmitMode::LlvmIr) {
+      return emit_package_ir(ctx, lowered, output_path);
+    }
+    io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
+    const std::string object_path = scratch.join("main.o");
+    if (emit_package_object(ctx, lowered, optimize, object_path).is_err() ||
+        stage_runtime(scratch, ctx.bag).is_err()) {
+      return base::make_err(diag::Reported{});
+    }
+    const std::string runtime_path = scratch.join(runtime_source_name());
+    return link_executable(ctx, linker, object_path, runtime_path, output_path);
+  }();
+  if (written.is_err()) {
+    return base::make_err(std::move(written).unwrap_err());
   }
-  if (mode == EmitMode::LlvmIr) {
-    return emit_package_ir(ctx, lowered, output_path);
-  }
-  io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
-  const std::string object_path = scratch.join("main.o");
-  if (emit_package_object(ctx, lowered, optimize, object_path).is_err() ||
-      stage_runtime(scratch, ctx.bag).is_err()) {
-    return base::make_err(diag::Reported{});
-  }
-  const std::string runtime_path = scratch.join(runtime_source_name());
-  return link_executable(ctx, linker, object_path, runtime_path, output_path);
+  return base::make_ok(output_path);
 }
 
 // Single-file build: runs the full frontend over one source file, then
 // emits an object and links it with the staged runtime.
-base::Result<void, diag::Reported> build_single_file(
+base::Result<std::string, diag::Reported> build_single_file(
     PipelineContext& ctx,
     std::string_view target,
     std::string_view output,
@@ -212,7 +220,7 @@ base::Result<void, diag::Reported> build_single_file(
                            selection);
 }
 
-base::Result<void, diag::Reported> build_single_root(
+base::Result<std::string, diag::Reported> build_single_root(
     PipelineContext& ctx,
     source::FileId root,
     std::string_view output,
@@ -234,14 +242,15 @@ base::Result<void, diag::Reported> build_single_root(
   return emit_output(ctx, lowered, optimize, linker, mode, std::string(output));
 }
 
-base::Result<void, diag::Reported> build_package(PipelineContext& ctx,
-                                                 const path::Path& root,
-                                                 source::FileId manifest_file,
-                                                 std::string_view manifest_name,
-                                                 std::string_view output,
-                                                 bool optimize,
-                                                 std::string_view linker,
-                                                 EmitMode mode) {
+base::Result<std::string, diag::Reported> build_package(
+    PipelineContext& ctx,
+    const path::Path& root,
+    source::FileId manifest_file,
+    std::string_view manifest_name,
+    std::string_view output,
+    bool optimize,
+    std::string_view linker,
+    EmitMode mode) {
   base::Result<BinTarget, diag::Reported> target =
       resolve_package_target(ctx, root, manifest_file, manifest_name);
   if (target.is_err() || ctx.bag.has_errors()) {
