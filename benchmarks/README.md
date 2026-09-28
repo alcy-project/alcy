@@ -8,7 +8,7 @@ Two runners, kept apart because they measure different things.
   what a user waits for.
 - The **microbenchmark engine** (`src/benchmarks`) times compiler
   modules in process, so it excludes all of the above and can attribute
-  time to a phase. It is not written yet; the roadmap tracks it.
+  time to a phase. It is not written yet; `docs/backlog.md` tracks it.
 
 The two write the same result schema, so a comparison reads the same
 either way. What differs is the fixture lifecycle and what the number
