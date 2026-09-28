@@ -8,8 +8,9 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] Benchmark harness: the microbenchmark engine, on top of the
   process runner in `tools/run_benchmarks.py` and the phase timings
   the result envelope now reports.
-- [ ] `grammar.ebnf` maintenance: every grammar change diffs the file
+- [x] `grammar.ebnf` maintenance: every grammar change diffs the file
   in the same commit.
+- [x] `build/scripts` → `tools/` rename, in one shot.
 - [ ] Noun-form audit: modules, structs, and classes read as nouns
   (stdlib and compiler alike).
 - [ ] `unsafe` design as an ADR; implementation waits for the package
