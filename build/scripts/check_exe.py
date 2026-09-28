@@ -173,7 +173,9 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
             problems.append(f"exit: got {proc.returncode}, want {expected_exit}")
 
         if expected_stdout is not None and proc.stdout != expected_stdout:
-            problems.append(f"stdout: got {proc.stdout!r}")
+            problems.append(
+                f"stdout: got {proc.stdout!r}, want {expected_stdout!r}"
+            )
         for needle in stdout_contains:
             if needle not in proc.stdout:
                 problems.append(f"missing stdout: {needle!r}")
