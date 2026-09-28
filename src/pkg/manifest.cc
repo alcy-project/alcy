@@ -97,6 +97,257 @@ base::Result<PackageManifest, diag::Reported> semantic_error(
   return base::make_err(diag::Reported{});
 }
 
+// Reads an optional string field of a dependency table. Empty and
+// non-string values are both errors, since neither can name a source.
+base::Result<std::string_view, diag::Reported> dep_string(
+    diag::DiagBag& bag,
+    std::string_view filename,
+    std::string_view dep,
+    const toml::table& table,
+    std::string_view field,
+    bool* present) {
+  const auto it = table.find(field);
+  if (it == table.end()) {
+    *present = false;
+    return base::make_ok(std::string_view{});
+  }
+  *present = true;
+  const auto value = it->second.value<std::string_view>();
+  if (!value.has_value() || value->empty()) {
+    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
+             "manifest '{}': dependency '{}' needs '{}' to be a non-empty "
+             "string",
+             filename, dep, field);
+    return base::make_err(diag::Reported{});
+  }
+  return base::make_ok(*value);
+}
+
+// A registry requirement is `=1.2.3`, `1.2`, or `1`: an optional `=`
+// followed by one to three dot-separated numbers. Anything else is a
+// range the resolver does not speak yet.
+bool valid_version_req(std::string_view text) {
+  usize at = 0;
+  if (at < text.size() && text[at] == '=') {
+    ++at;
+  }
+  for (u32 part = 0;; ++part) {
+    if (at >= text.size() || text[at] < '0' || text[at] > '9') {
+      return false;
+    }
+    while (at < text.size() && text[at] >= '0' && text[at] <= '9') {
+      ++at;
+    }
+    if (at == text.size()) {
+      return part <= 2;
+    }
+    if (text[at] != '.' || part >= 2) {
+      return false;
+    }
+    ++at;
+  }
+}
+
+base::Result<Dependency, diag::Reported> parse_dependency(
+    diag::DiagBag& bag,
+    std::string_view filename,
+    mem::Arena& arena,
+    std::string_view spec,
+    const toml::table& table) {
+  // The specifier is one to three slash-separated segments. One is a
+  // local directory aliased by the key; two name a package; three name
+  // a package in a suite, or every member of one with a trailing `/*`.
+  // A glob anywhere else is not a pattern the resolver speaks.
+  std::string_view segments[3];
+  u32 parts = 0;
+  usize start = 0;
+  while (start <= spec.size() && parts < 4) {
+    usize slash = spec.find('/', start);
+    if (slash == std::string_view::npos) {
+      slash = spec.size();
+    }
+    if (parts < 3) {
+      segments[parts] = spec.substr(start, slash - start);
+    }
+    ++parts;
+    start = slash + 1;
+  }
+  if (parts < 1 || parts > 3) {
+    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
+             "manifest '{}': dependency '{}' is not of the form name, "
+             "owner/name, or owner/suite/package",
+             filename, spec);
+    return base::make_err(diag::Reported{});
+  }
+  for (u32 i = 0; i < parts; ++i) {
+    const bool glob_here = segments[i] == "*";
+    if (segments[i].empty() || (glob_here && !(i == 2 && parts == 3))) {
+      bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
+               "manifest '{}': dependency '{}' is not of the form name, "
+               "owner/name, or owner/suite/package",
+               filename, spec);
+      return base::make_err(diag::Reported{});
+    }
+  }
+  if (parts == 1) {
+    // The old shape, unchanged: a local directory under an alias.
+    bool has_path = false;
+    base::Result<std::string_view, diag::Reported> path =
+        dep_string(bag, filename, spec, table, "path", &has_path);
+    if (path.is_err()) {
+      return base::make_err(diag::Reported{});
+    }
+    if (!has_path) {
+      bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
+               "manifest '{}': dependency '{}' needs {{ path = ... }}",
+               filename, spec);
+      return base::make_err(diag::Reported{});
+    }
+    return base::make_ok(Dependency{
+        .spec = copy_str(arena, spec),
+        .owner = {},
+        .suite = {},
+        .member = {},
+        .suite_glob = false,
+        .source = DependencySource::Path,
+        .path = copy_str(arena, std::move(path).unwrap()),
+        .version = {},
+        .git = {},
+        .git_ref_kind = {},
+        .git_ref = {},
+        .registry = {},
+        .name = copy_str(arena, spec),
+    });
+  }
+  bool has_path = false;
+  bool has_version = false;
+  bool has_git = false;
+  bool has_branch = false;
+  bool has_tag = false;
+  bool has_rev = false;
+  bool has_registry = false;
+  base::Result<std::string_view, diag::Reported> path =
+      dep_string(bag, filename, spec, table, "path", &has_path);
+  base::Result<std::string_view, diag::Reported> version =
+      dep_string(bag, filename, spec, table, "version", &has_version);
+  base::Result<std::string_view, diag::Reported> git =
+      dep_string(bag, filename, spec, table, "git", &has_git);
+  base::Result<std::string_view, diag::Reported> branch =
+      dep_string(bag, filename, spec, table, "branch", &has_branch);
+  base::Result<std::string_view, diag::Reported> tag =
+      dep_string(bag, filename, spec, table, "tag", &has_tag);
+  base::Result<std::string_view, diag::Reported> rev =
+      dep_string(bag, filename, spec, table, "rev", &has_rev);
+  base::Result<std::string_view, diag::Reported> registry =
+      dep_string(bag, filename, spec, table, "registry", &has_registry);
+  if (path.is_err() || version.is_err() || git.is_err() ||
+      branch.is_err() || tag.is_err() || rev.is_err() || registry.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  const std::string_view path_text = std::move(path).unwrap();
+  const std::string_view version_text = std::move(version).unwrap();
+  const std::string_view git_text = std::move(git).unwrap();
+  const std::string_view branch_text = std::move(branch).unwrap();
+  const std::string_view tag_text = std::move(tag).unwrap();
+  const std::string_view rev_text = std::move(rev).unwrap();
+  const std::string_view registry_text = std::move(registry).unwrap();
+  for (const auto& [key, node] : table) {
+    const std::string_view field = key.str();
+    if (field != "path" && field != "version" && field != "git" &&
+        field != "branch" && field != "tag" && field != "rev" &&
+        field != "registry") {
+      bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
+               "manifest '{}': dependency '{}' has an unknown field '{}'",
+               filename, spec, field);
+      return base::make_err(diag::Reported{});
+    }
+    (void)node;
+  }
+  const u32 refs =
+      (has_branch ? 1u : 0u) + (has_tag ? 1u : 0u) + (has_rev ? 1u : 0u);
+  if (refs > 1) {
+    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
+             "manifest '{}': dependency '{}' names more than one of branch, "
+             "tag, rev",
+             filename, spec);
+    return base::make_err(diag::Reported{});
+  }
+  if (refs > 0 && !has_git) {
+    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
+             "manifest '{}': dependency '{}' names a ref without a git "
+             "remote",
+             filename, spec);
+    return base::make_err(diag::Reported{});
+  }
+  // A `path` beside `git` is the subpath inside the repository; beside
+  // `version` it would be two sources at once.
+  if (has_version && (has_git || has_path)) {
+    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
+             "manifest '{}': dependency '{}' names more than one source",
+             filename, spec);
+    return base::make_err(diag::Reported{});
+  }
+  if (has_version && !valid_version_req(version_text)) {
+    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
+             "manifest '{}': dependency '{}' needs a version of the form "
+             "=1.2.3, 1.2, or 1",
+             filename, spec);
+    return base::make_err(diag::Reported{});
+  }
+  Dependency dep{
+      .spec = copy_str(arena, spec),
+      .owner = copy_str(arena, segments[0]),
+      .suite = {},
+      .member = {},
+      .suite_glob = false,
+      .source = DependencySource::Unspecified,
+      .path = {},
+      .version = {},
+      .git = {},
+      .git_ref_kind = {},
+      .git_ref = {},
+      .registry = {},
+      .name = copy_str(arena, spec),
+  };
+  if (parts == 3) {
+    dep.suite = copy_str(arena, segments[1]);
+    if (segments[2] == "*") {
+      dep.suite_glob = true;
+    } else {
+      dep.member = copy_str(arena, segments[2]);
+    }
+  }
+  if (has_git) {
+    dep.source = DependencySource::Git;
+    dep.git = copy_str(arena, git_text);
+    if (has_path) {
+      dep.path = copy_str(arena, path_text);
+    }
+    if (has_branch) {
+      dep.git_ref_kind = "branch";
+      dep.git_ref = copy_str(arena, branch_text);
+    } else if (has_tag) {
+      dep.git_ref_kind = "tag";
+      dep.git_ref = copy_str(arena, tag_text);
+    } else if (has_rev) {
+      dep.git_ref_kind = "rev";
+      dep.git_ref = copy_str(arena, rev_text);
+    }
+  } else if (has_version) {
+    dep.source = DependencySource::Registry;
+    dep.version = copy_str(arena, version_text);
+  } else if (has_path) {
+    dep.source = DependencySource::Path;
+    dep.path = copy_str(arena, path_text);
+  } else {
+    dep.source = DependencySource::Unspecified;
+  }
+  if (has_registry) {
+    dep.registry = copy_str(arena, registry_text);
+  }
+  return base::make_ok(dep);
+}
+
 }  // namespace
 
 base::Result<void, ManifestError> verify_manifest(
@@ -123,7 +374,14 @@ base::Result<void, ManifestError> verify_manifest(
     if (dependency.name.empty()) {
       return base::make_err(ManifestError::EmptyDependencyName);
     }
-    if (dependency.path.empty()) {
+    // Only a path source must name a directory; a registry entry may
+    // leave the version to latest, and an empty table is for the
+    // selection layer to accept or reject.
+    if (dependency.source == DependencySource::Path &&
+        dependency.path.empty()) {
+      return base::make_err(ManifestError::EmptyDependencyPath);
+    }
+    if (dependency.source == DependencySource::Git && dependency.git.empty()) {
       return base::make_err(ManifestError::EmptyDependencyPath);
     }
   }
@@ -264,31 +522,17 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
     for (const auto& [key, node] : *deps_table) {
       const std::string_view dep_name = key.str();
       if (!node.is_table()) {
-        // Registry-style `foo = "1.0"` has no path to follow.
         bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-                 "manifest '{}': dependency '{}' needs {{ path = ... }}; "
-                 "registry dependencies are not supported",
+                 "manifest '{}': dependency '{}' must be a table",
                  filename, dep_name);
         return base::make_err(diag::Reported{});
       }
-      const toml::table* const dep_table = node.as_table();
-      const auto path_it = dep_table->find("path");
-      if (path_it == dep_table->end()) {
-        bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-                 "manifest '{}': dependency '{}' needs {{ path = ... }}; "
-                 "registry dependencies are not supported",
-                 filename, dep_name);
+      base::Result<Dependency, diag::Reported> parsed = parse_dependency(
+          bag, filename, arena, dep_name, *node.as_table());
+      if (parsed.is_err()) {
         return base::make_err(diag::Reported{});
       }
-      const auto path = path_it->second.value<std::string_view>();
-      if (!path.has_value() || path->empty()) {
-        return semantic_error(bag, filename,
-                              "dependency path must be a string");
-      }
-      dependencies[filled++] = Dependency{
-          .name = copy_str(arena, dep_name),
-          .path = copy_str(arena, *path),
-      };
+      dependencies[filled++] = std::move(parsed).unwrap();
     }
   }
 

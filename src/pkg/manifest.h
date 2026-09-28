@@ -78,11 +78,44 @@ struct BinTarget {
   std::string_view path;
 };
 
-// A path-only dependency (MVP scope: no registry, no git). Views borrow
-// arena storage owned by the caller of parse_manifest().
+// Where a dependency comes from. `Path` is a local directory (the
+// only resolved source today); `Registry` and `Git` parse and validate
+// but resolve to an explicit "not implemented" until their fetchers
+// land. `Unspecified` is an empty table, which the selection layer
+// accepts only for the embedded standard library. Views borrow arena
+// storage owned by the caller of parse_manifest().
+enum class DependencySource : u8 {
+  Path,
+  Registry,
+  Git,
+  Unspecified,
+};
+
 struct Dependency {
-  std::string_view name;
+  // The specifier as written, e.g. "alcy/std/*".
+  std::string_view spec;
+  // One segment (`foo`): a local directory aliased `foo`, exactly the
+  // old shape. Two (`acme/hash`): package `hash` of owner `acme`.
+  // Three (`acme/tools/cli`): package `cli` of suite `tools`. A suite
+  // is selected with a trailing `/*`, never bare: bare "alcy/std" is
+  // rejected at selection with the two spellings it could mean.
+  std::string_view owner;
+  std::string_view suite;
+  std::string_view member;
+  bool suite_glob = false;
+  DependencySource source = DependencySource::Unspecified;
+  // Local directory for `Path`, repo-relative subpath for `Git`.
   std::string_view path;
+  // Registry requirement (`=1.2.3`, `1.2`, `1`); empty means latest.
+  std::string_view version;
+  std::string_view git;
+  // At most one of branch, tag, rev; empty means the default branch.
+  std::string_view git_ref_kind;
+  std::string_view git_ref;
+  std::string_view registry;
+  // Legacy alias for one-segment entries, kept so existing manifests
+  // keep meaning exactly what they meant.
+  std::string_view name;
 };
 
 // Module set from the [modules] table. `include` lists module paths

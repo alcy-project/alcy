@@ -78,6 +78,17 @@ base::Result<std::vector<ResolvedPackage>, diag::Reported> resolve_into(
   const u32 root_dep_count = resolved.front().manifest.dependency_count;
   for (u32 i = 0; i < root_dep_count; ++i) {
     const Dependency& dep = root_deps[i];
+    if (dep.source != DependencySource::Path) {
+      // Only local directories resolve by inclusion; registry and git
+      // sources have no fetcher yet, and embedded entries never reach
+      // a path walk.
+      const u32 index = bag.emit(
+          diag::Severity::Error, RESOLVE_IO_ERROR,
+          "dependency '{}' needs a fetcher the resolver does not have yet",
+          dep.spec);
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
     base::Result<std::vector<ResolvedPackage>, diag::Reported> child =
         resolve_into(canonical_dir.join(dep.path), sources, arena, bag,
                      visited);
