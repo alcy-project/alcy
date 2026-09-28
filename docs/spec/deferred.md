@@ -68,23 +68,14 @@ relied upon by MVP programs or by the MVP compiler implementation.
 
 ## Toolchain
 
-- The `alcy/std` suite is laid out and documented (ADR-0016) but the
-  compiler does not read it. `dependencies` is still the
-  `[dependencies.<name>] path = ...` table and selects nothing, `[modules]
-  export` is parsed and never enforced, and the whole suite is injected
-  as prelude modules, so a program's implicit surface is currently every
-  std item rather than the one its `prelude.al` re-exports. The manifest
-  schema change to `dependencies = ["alcy/std"]`, per-package selection,
-  export enforcement and cross-package `use` are all still to come.
-- A std package is one entry module today, so its facade holds the
-  definitions and the split is organizational. The nested prelude tree
-  that a real split needs has landed (ADR-0016), but populating it
-  segfaults in the attach path, so the split is not done: a staged
-  `core/prelude.al` plus `core/mem.al` crashes before analysis rather
-  than resolving the facade's `use mem::{...}`. The layout and the
-  manifests do not depend on the split.
-
-
+- The `alcy/std` suite is selected per manifest and staged in pieces
+  (ADR-0016): `[dependencies]` names members or the whole suite, the
+  closure is required rather than pulled in, and only the selected
+  members become prelude facades. What remains is `[modules] export`
+  enforcement, cross-package `use` between members, and the registry or
+  git fetchers that every other owner and suite needs — a specifier
+  naming a source the compiler cannot fetch is an explicit error, not a
+  silent skip.
 - Summary-carrying package artifacts (`[lib]` targets, cross-package
   compilation).
 - Custom linker, incremental compilation and linking.

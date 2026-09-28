@@ -52,8 +52,7 @@ place to look.
 A package's implicit surface is a subset of its public surface. A suite
 guarantees that no name appears in two members' implicit surfaces, so
 selecting a whole suite cannot produce an ambiguity; that guarantee is
-the thing `dependencies = ["alcy/std"]` buys over naming packages one by
-one.
+the thing `"alcy/std/*" = {}` buys over naming packages one by one.
 
 ### The split
 
@@ -98,27 +97,31 @@ package with no dependencies at all.
 
 ## Staged landing
 
-The compiler cannot yet select packages, resolve a suite, enforce
-`export`, or resolve a `use` across packages — `Import` indexes one
-module tree and MVP is single-package. So this lands in two steps.
+Selection, staging, and the facades landed in steps; `export`
+enforcement and a `use` across packages have not, because `Import`
+indexes one module tree and MVP is single-package.
 
 **Landed here:** the layout, the manifests, the entry module per package,
-and the ADR. The compiler still injects the whole suite, so behaviour is
-unchanged and the implicit surface is every std item rather than the one
-a package's `prelude.al` re-exports.
+and the ADR.
 
-The nested prelude tree a real split needs has landed: staged sources
-attach by slash-separated name, so a package's modules share a root and
-a facade can reach them. Populating it does not work yet — staging
-`core/prelude.al` alongside `core/mem.al` segfaults in the attach path
-before analysis, rather than resolving the facade's `use mem::{...}`. So
-each package is one entry module for now and the split is
-organizational; `deferred.md` records the crash.
+**Landed since:** staged sources attach by slash-separated name, so a
+package's modules share a root and a facade reaches them; each package is
+split into modules behind its `prelude.al`. Selection is manifest-driven:
+`[dependencies]` names members or the whole suite, the closure is required
+rather than pulled in, and only the selected members are staged — a
+program sees exactly what its manifest names. The suite manifests are the
+single source of truth: the embed script validates them and generates the
+tables, so a manifest edit needs no script edit beside it. An unresolved
+name that a member carries names that member, which is what makes an
+opt-in `core` diagnosable rather than mysterious. `alcy compile` selects
+the same way, with `--no-std` and `--deps`, since a single file has no
+manifest to select from.
 
-**Follow-up:** manifest suite resolution, per-package selection driven by
-`dependencies`, enforcement of `export`, and cross-package `use`. Until
-those land, `dependencies` is parsed and ignored, and the compiler is
-more permissive than this ADR describes.
+**Follow-up:** enforcement of `export`, cross-package `use` between
+members, and the fetchers every other owner and suite needs. Until those
+land the compiler is more permissive than this ADR describes: an
+unselected member is absent, but a selected one is not yet trimmed to its
+`export` list.
 
 ## Alternatives considered
 

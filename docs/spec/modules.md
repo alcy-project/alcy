@@ -35,15 +35,25 @@
 
 ## Suites
 
-A **suite** is a named set of packages. It is addressed as
-`<owner>/<suite>` and a package within one as
-`<owner>/<suite>/<package>`; a dependency entry is either form, and a
-suite entry pulls every member. There are no suites in suites, so a
-three-segment path is always a package.
+A **suite** is a named set of packages, addressed as `<owner>/<suite>`
+with a member at `<owner>/<suite>/<package>`. A dependency is a table
+keyed by specifier, so the value carries a source: one segment is a local
+directory to include, two name a package of an owner, and three name a
+package in a suite. There are no suites in suites, so a three-segment
+path is always a package. A whole suite is `<owner>/<suite>/*`; the bare
+`<owner>/<suite>` is an error, because the two things it could mean are
+one character apart. Globbing the suite and naming a member of it is
+also an error: the selection would name the same package twice.
 
 **Every package is opt-in, `core` included.** A program that wants
 `Option` asks for `alcy/std/core`. A name in scope then always traces
-to a line in a manifest.
+to a line in a manifest. A selected package that needs another names it
+in its own manifest, and a selection missing that edge is an error rather
+than a silent addition.
+
+`alcy compile` has no manifest, so it selects the whole suite by default
+and takes `--no-std` to start from nothing, plus `--deps` in the same
+grammar to name members or other packages.
 
 A package has two surfaces:
 
@@ -63,8 +73,9 @@ member list and the dependency graph.
 
 - A binary package declares exactly one `[[bin]]` target with an
   explicit `path` in `alcy.toml`; the target name defaults to the
-  package name. A manifest without targets is an error; a directory
-  without a manifest falls back to bare-directory mode.
+  package name. A manifest without targets is an error, and so is a
+  directory without a manifest: a directory is a package, and a package
+  says which files it is.
 - Library artifacts do not exist in MVP: path dependencies are
   source-included. `[lib]` targets arrive with summary-carrying
   artifacts, post-MVP.
