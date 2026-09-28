@@ -3,7 +3,9 @@
 
 source_set("analyzer") {
   sources = [
+    "checker.cc",
     "checker.h",
+    "fmt.cc",
     "fmt.h",
     "resolve.cc",
     "resolve.h",

@@ -5,6 +5,7 @@ source_set("base") {
   sources = [
     "logger.cc",
     "logger.h",
+    "nesting.cc",
     "nesting.h",
   ]
   configs += [ "//src:alcy_config" ]

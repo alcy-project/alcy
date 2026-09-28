@@ -3,10 +3,15 @@
 
 source_set("debug") {
   sources = [
+    "check.cc",
     "check.h",
+    "dcheck.cc",
     "dcheck.h",
+    "dlog.cc",
     "dlog.h",
+    "fatal.cc",
     "fatal.h",
   ]
   configs += [ "//src:alcy_config" ]
+  deps = [ "//third_party/fpag" ]
 }

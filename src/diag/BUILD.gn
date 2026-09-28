@@ -5,9 +5,11 @@ source_set("diag") {
   sources = [
     "bag.cc",
     "bag.h",
+    "diagnostic.cc",
     "diagnostic.h",
     "render.cc",
     "render.h",
+    "span.cc",
     "span.h",
   ]
 

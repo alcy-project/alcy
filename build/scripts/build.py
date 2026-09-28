@@ -4,10 +4,12 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import argparse
+import json
 import subprocess
 import sys
 import os
 from utils.paths import project_root_dir
+from utils.source import source_extensions
 
 
 def update_compdb(build_dir) -> bool:
@@ -19,7 +21,19 @@ def update_compdb(build_dir) -> bool:
             check=True,
             cwd=project_root_dir,
         )
-        (build_dir / "compile_commands.json").write_text(compdb_result.stdout)
+        # ninja emits an entry per target, not per compilation, so the
+        # output also holds phony targets, archives, link steps and script
+        # invocations. Some of those share a name with a source, which is
+        # enough for a consumer matching a header to a command to pick a
+        # link line and then fail to resolve anything. An entry belongs in
+        # a compilation database when it names a source.
+        entries = [
+            entry
+            for entry in json.loads(compdb_result.stdout)
+            if entry.get("command")
+            and os.path.splitext(entry["file"])[1] in source_extensions
+        ]
+        (build_dir / "compile_commands.json").write_text(json.dumps(entries))
         return True
     except subprocess.CalledProcessError as e:
         print(f"Failed to generate compdb: {e}", file=sys.stderr)

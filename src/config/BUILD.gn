@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 source_set("config") {
-  sources = [ "build_config.h" ]
+  sources = [
+    "build_config.cc",
+    "build_config.h",
+  ]
   configs += [ "//src:alcy_config" ]
+  deps = [ "//third_party/fpag" ]
 }

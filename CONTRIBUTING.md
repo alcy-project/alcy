@@ -89,6 +89,15 @@ Notes:
 - **Code style:** Use `#pragma once` for include guards and relative includes from project root.
   Prefer `std::string_view` over `std::string` and `std::span` over `std::vector` unless
   ownership retention is required.
+- **One translation unit per header:** Every header under `src/` gets a sibling `.cc`, listed in
+  its module's `BUILD.gn`. Put the header's out-of-line definitions in it; when it declares none,
+  it holds only the license header and an `#include` of the header.
+
+  The point is that the header becomes a translation unit of its own, which proves it is
+  self-contained and lets `clang-tidy` and `clangd` analyse it directly. Without one, a missing
+  include goes unseen: `clang-tidy` ran only on `.c`/`.cc`, and a header with no translation
+  unit is compiled with a command that has no include paths, so the check reports nothing
+  rather than failing.
 - **Comments:** English only. Write comments sparingly-only for design rationale, invariants or
   safety explanations, non-obvious code, or `TODO`s. Do not restate code that is already clear.
 - **Tooling is authoritative:** `.clang-format`, `.clang-tidy`, `CPPLINT.cfg`, and `typos.toml`

@@ -3,6 +3,7 @@
 
 source_set("ast") {
   sources = [
+    "ast.cc",
     "ast.h",
     "verify.cc",
     "verify.h",

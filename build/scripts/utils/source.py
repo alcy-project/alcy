@@ -5,5 +5,6 @@
 
 source_extensions = {".c", ".cc", ".h"}
 compile_unit_extensions = {".c", ".cc"}
+header_extensions = source_extensions - compile_unit_extensions
 gn_extensions = {".gn", ".gni"}
 script_extensions = {".sh", ".py"}

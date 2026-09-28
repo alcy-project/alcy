@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <deque>
 #include <initializer_list>
 #include <optional>

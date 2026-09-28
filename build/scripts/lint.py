@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import argparse
+import json
 from pathlib import Path
 import sys
 import os
@@ -18,6 +19,7 @@ from utils.paths import (
 )
 from utils.source import (
     compile_unit_extensions,
+    header_extensions,
     source_extensions,
 )
 
@@ -25,6 +27,7 @@ from utils.source import (
 def target_files(target_dirs: list[Path]):
     files: list[str] = []
     comp_files: list[str] = []
+    header_files: list[str] = []
     for d in target_dirs:
         assert d.is_dir()
         for f in d.rglob("*"):
@@ -34,12 +37,33 @@ def target_files(target_dirs: list[Path]):
                     files.append(relative_path)
                 if f.suffix in compile_unit_extensions:
                     comp_files.append(relative_path)
-    return files, comp_files
+                if f.suffix in header_extensions:
+                    header_files.append(relative_path)
+    return files, comp_files, header_files
+
+
+def analysable_headers(build_path: Path, header_files: list[str]) -> list[str]:
+    """The headers that have a sibling translation unit in the database.
+
+    Without one, clang-tidy synthesises a command that has no include paths,
+    so the file does not parse and the check reports nothing rather than
+    failing. Same directory as well as same stem: a stem alone matches an
+    unrelated module's file, and that module's flags are not this header's.
+    """
+    compdb = build_path / "compile_commands.json"
+    if not compdb.is_file():
+        return []
+    siblings = {
+        (build_path / Path(e["file"])).resolve().with_suffix(".h")
+        for e in json.loads(compdb.read_text())
+    }
+    return [h for h in header_files if (project_root_dir / h).resolve() in siblings]
 
 
 def create_commands(
     files: list[str],
     comp_files: list[str],
+    header_files: list[str],
     build_path: Path,
     fix: bool,
     fix_errors: bool,
@@ -57,7 +81,7 @@ def create_commands(
     elif fix:
         base_clang_tidy_cmd.append("--fix")
 
-    for f in comp_files:
+    for f in comp_files + header_files:
         commands.append(base_clang_tidy_cmd + [f])
 
     # cpplint
@@ -98,9 +122,12 @@ def lint_files(
         if ret != 0:
             failed = True
 
-    files, comp_files = target_files(target_dirs)
+    files, comp_files, header_files = target_files(target_dirs)
+    header_files = analysable_headers(build_path, header_files)
 
-    commands = create_commands(files, comp_files, build_path, fix, fix_errors, verbose)
+    commands = create_commands(
+        files, comp_files, header_files, build_path, fix, fix_errors, verbose
+    )
     if not run_commands_in_parallel(commands):
         failed = True
 
