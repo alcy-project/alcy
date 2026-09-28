@@ -12,6 +12,7 @@
 #include "diag/diagnostic.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "ir/common.h"
 #include "ir/function.h"
 #include "ir/instruction.h"

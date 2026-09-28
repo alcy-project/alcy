@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "analyzer/fmt.h"
-#include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "base/nesting.h"
@@ -21,11 +20,14 @@
 #include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"
 #include "ir/common.h"
+#include "ir/function.h"
+#include "ir/opcode.h"
 #include "ir/seq_builder.h"
+#include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
+#include "ir/verifier.h"
 #include "lower/lower.h"
-#include "source/source.h"
 
 namespace lower {
 

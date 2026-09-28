@@ -19,6 +19,7 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-literal-operator"
 #pragma clang diagnostic ignored "-Wswitch"
+// clang-format off
 // Umbrella header provides the .inl implementations; keep it whole.
 #include "toml++/toml.hpp"  // IWYU pragma: keep
 // Other headers must be included after toml.hpp
@@ -29,6 +30,7 @@
 #include "toml++/impl/parser.hpp"
 #include "toml++/impl/source_region.hpp"
 #include "toml++/impl/table.hpp"
+// clang-format on
 #pragma clang diagnostic pop
 
 namespace pkg {

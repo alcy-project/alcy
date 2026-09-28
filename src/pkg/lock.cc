@@ -11,6 +11,7 @@
 #include "fmt/core.h"
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
 #include "pkg/arena_copy.h"
 #include "pkg/manifest.h"

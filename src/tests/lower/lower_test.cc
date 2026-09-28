@@ -22,7 +22,6 @@
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/io/file_handle.h"
 #include "fpag/mem/arena.h"
 #include "fpag/mem/page_allocator.h"
 #include "fpag/str/string_interner.h"

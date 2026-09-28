@@ -5,6 +5,7 @@
 
 #include <string_view>
 
+#include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
 
 namespace pkg {

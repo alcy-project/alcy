@@ -1,10 +1,10 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include <cstdint>
 #include <utility>
 
 #include "doctest/doctest.h"
+#include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 #include "ir/seq_builder.h"
 #include "ir/storage.h"

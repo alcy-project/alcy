@@ -10,6 +10,7 @@
 
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "pkg/resolve.h"
 #include "source/source.h"
 

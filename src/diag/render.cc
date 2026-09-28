@@ -9,6 +9,7 @@
 
 #include "diag/diagnostic.h"
 #include "diag/span.h"
+#include "fmt/core.h"
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/term/style.h"

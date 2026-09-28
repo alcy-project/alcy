@@ -16,6 +16,7 @@
 #include "ast/ast.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
+#include "fpag/base/idx.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
 #include "ir/common.h"

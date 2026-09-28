@@ -10,7 +10,6 @@
 #include "cli/cli_config.h"
 #include "doctest/doctest.h"
 #include "fpag/arg/parser.h"
-#include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
 
 namespace cli {

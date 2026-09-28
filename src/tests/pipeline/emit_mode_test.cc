@@ -9,6 +9,7 @@
 #include "config/build_config.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
+#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
@@ -93,7 +94,7 @@ TEST_CASE("A build writes the module as textual IR") {
   const std::string source = dir.join("main.al");
   CHECK(dir.write_file("main.al", PROGRAM));
 
-  const std::string ir_path = dir.join("out");
+  const std::string ir_path = dir.join(path::DEFAULT_OUT_DIR);
   {
     PipelineContext ctx;
     base::Result<void, diag::Reported> built =

@@ -4,7 +4,6 @@
 #pragma once
 
 #include "diag/bag.h"
-#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "lower/lower.h"
 

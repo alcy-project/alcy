@@ -5,11 +5,13 @@
 
 #include <deque>
 #include <initializer_list>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "analyzer/resolve.h"
+#include "fpag/base/numeric.h"
 #include "source/source.h"
 
 namespace tests {
@@ -43,7 +45,7 @@ class DeclaredSources {
     return nullptr;
   }
 
-  std::size_t size() const { return files_.size(); }
+  usize size() const { return files_.size(); }
 
  private:
   std::vector<VirtualSource> files_;

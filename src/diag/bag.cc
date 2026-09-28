@@ -11,6 +11,7 @@
 #include "diag/diagnostic.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 
 namespace diag {
 

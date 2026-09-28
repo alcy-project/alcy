@@ -11,6 +11,7 @@
 #include "ast/ast.h"
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
 #include "fpag/str/string_interner.h"

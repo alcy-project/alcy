@@ -10,6 +10,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"
+#include "ir/common.h"
 #include "ir/storage.h"
 
 // Deterministic encoding of a linkable symbol from the signature it

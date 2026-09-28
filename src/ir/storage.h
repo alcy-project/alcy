@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "debug/fatal.h"
+#include "fpag/base/numeric.h"
 #include "fpag/base/vec.h"
 #include "ir/block.h"
 #include "ir/block_param.h"

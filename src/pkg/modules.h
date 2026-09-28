@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "diag/bag.h"
+#include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
 #include "pkg/manifest.h"
 #include "source/source.h"

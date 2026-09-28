@@ -4,7 +4,6 @@
 #pragma once
 
 #include <span>
-#include <string_view>
 
 #include "analyzer/resolve.h"
 #include "diag/bag.h"

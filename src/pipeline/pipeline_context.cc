@@ -5,11 +5,11 @@
 
 #include <string>
 #include <string_view>
-#include <utility>
 
 #include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
 #include "fpag/mem/page_allocator.h"

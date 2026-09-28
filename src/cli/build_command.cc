@@ -24,8 +24,8 @@ namespace cli {
 ResultCode run_build(const CliConfig& config,
                      const diag::RenderOptions& options) {
   pipeline::PipelineContext ctx;
-  const std::string_view raw_dir =
-      config.target_dir.empty() ? "." : config.target_dir;
+  const bool build_current_dir = config.target_dir.empty();
+  const std::string_view raw_dir = build_current_dir ? "." : config.target_dir;
 
   if (raw_dir.size() >= path::SOURCE_EXTENSION.size() &&
       raw_dir.substr(raw_dir.size() - path::SOURCE_EXTENSION.size()) ==
@@ -64,10 +64,18 @@ ResultCode run_build(const CliConfig& config,
 
   // Without a manifest there is no module structure to build: report
   // the error instead of claiming a build that never ran.
-  const u32 index = ctx.bag.emit(
-      diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
-      "no manifest found at '{}'; build a file or add alcy.toml", raw_dir);
-  (void)index;
+  if (build_current_dir) {
+    const u32 index =
+        ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
+                     "no manifest found at current directory; build a file or "
+                     "add alcy.toml");
+    (void)index;
+  } else {
+    const u32 index = ctx.bag.emit(
+        diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
+        "no manifest found at '{}'; build a file or add alcy.toml", raw_dir);
+    (void)index;
+  }
   report_diagnostics(ctx.bag, ctx.sources, options);
   return ResultCode::BuildFailed;
 }

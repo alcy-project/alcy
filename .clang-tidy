@@ -131,4 +131,4 @@ CheckOptions:
   - key:          modernize-loop-convert.MakeReverseRangeHeader
     value:        1
   - key: misc-include-cleaner.IgnoreHeaders
-    value:        '^.*(third_party|src[\\/]build|include|catch2).*$'
+    value:        '^.*[\\/](third_party|src[\\/]build|include|catch2)[\\/].*$'

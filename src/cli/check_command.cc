@@ -95,8 +95,10 @@ ResultCode run_check(const CliConfig& config,
     log_check_result(std::move(result).unwrap());
     return ResultCode::Success;
   }
+
+  const bool check_current_dir = config.target_dir.empty();
   const std::string_view raw_target =
-      config.target_dir.empty() ? "." : config.target_dir;
+      check_current_dir ? "." : config.target_dir;
   base::Result<pipeline::ManifestProbe, path::PathError> probe =
       pipeline::find_package_manifest(ctx, raw_target);
   if (probe.is_err()) {
@@ -121,10 +123,19 @@ ResultCode run_check(const CliConfig& config,
   if (raw_target.size() < path::SOURCE_EXTENSION.size() ||
       raw_target.substr(raw_target.size() - path::SOURCE_EXTENSION.size()) !=
           path::SOURCE_EXTENSION) {
-    const u32 index = ctx.bag.emit(
-        diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
-        "no manifest found at '{}'; check a file or add alcy.toml", raw_target);
-    (void)index;
+    if (check_current_dir) {
+      const u32 index =
+          ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
+                       "no manifest found at current directory; check a file "
+                       "or add alcy.toml");
+      (void)index;
+    } else {
+      const u32 index = ctx.bag.emit(
+          diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
+          "no manifest found at '{}'; check a file or add alcy.toml",
+          raw_target);
+      (void)index;
+    }
     report_diagnostics(ctx.bag, ctx.sources, options);
     return ResultCode::CheckFailed;
   }

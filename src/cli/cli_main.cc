@@ -87,9 +87,8 @@ i32 cli_main(i32 argc, char** argv) {
     // dispatch so no command ever sees a nonsensical field combination.
     base::Result<void, ConfigError> validated = validate_cli_config(config);
     if (validated.is_err()) {
-      base::logger.wo_prefix(
-          "error: {}",
-          describe_config_error(std::move(validated).unwrap_err()));
+      base::logger.error(
+          "{}", describe_config_error(std::move(validated).unwrap_err()));
       exit_code = result_code(ResultCode::ArgParseError);
     } else {
       exit_code = dispatch(config, options);

@@ -8,7 +8,9 @@
 #include <utility>
 #include <vector>
 
+#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 

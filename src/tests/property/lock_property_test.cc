@@ -2,24 +2,27 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <string>
-#include <utility>
+#include <string_view>
 #include <vector>
 
 #include "doctest/doctest.h"
 #include "fmt/format.h"
+#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "pkg/lock.h"
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-literal-operator"
 #pragma clang diagnostic ignored "-Wswitch"
+// clang-format off
 // Umbrella header provides the .inl implementations; keep it whole.
 #include "toml++/toml.hpp"  // IWYU pragma: keep
 // Other headers must be included after toml.hpp
 #include "toml++/impl/array.hpp"
 #include "toml++/impl/parse_result.hpp"
+#include "toml++/impl/parser.hpp"
 #include "toml++/impl/table.hpp"
-#include "toml++/impl/value.hpp"
+// clang-format on
 #pragma clang diagnostic pop
 
 namespace pkg {

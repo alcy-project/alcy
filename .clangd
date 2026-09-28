@@ -3,3 +3,4 @@ Diagnostics:
   MissingIncludes: Strict
 CompileFlags:
   Remove: [-cfg=*, -exec_root=*, -inputs=*]
+  CompilationDatabase: out/build

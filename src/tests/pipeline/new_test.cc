@@ -35,6 +35,8 @@ TEST_CASE("Init derives the package name from the directory") {
   CHECK(manifest.open(dir.join("myproj/alcy.toml"), io::FileAccess::Read));
   io::FileHandle main;
   CHECK(main.open(dir.join("myproj/main.al"), io::FileAccess::Read));
+  io::FileHandle gitignore;
+  CHECK(gitignore.open(dir.join("myproj/.gitignore"), io::FileAccess::Read));
 }
 
 TEST_CASE("Init refuses to overwrite an existing package") {

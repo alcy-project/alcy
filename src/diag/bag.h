@@ -8,7 +8,6 @@
 #include <string_view>
 #include <utility>
 
-#include "debug/dcheck.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
 #include "fmt/core.h"
