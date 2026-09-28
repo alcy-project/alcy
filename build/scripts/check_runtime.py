@@ -32,7 +32,9 @@ def system_cc():
 
 
 def run(argv, **kwargs):
-    proc = subprocess.run(argv, capture_output=True, text=True, **kwargs)
+    proc = subprocess.run(
+        argv, capture_output=True, text=True, encoding="utf-8", **kwargs
+    )
     return proc
 
 
@@ -42,6 +44,10 @@ def executable(name):
 
 
 def main():
+    # Program output is UTF-8 on every platform; report it as such
+    # instead of the console locale, so a unicode mismatch prints
+    # rather than crashing the runner.
+    sys.stdout.reconfigure(encoding="utf-8")
     cc = system_cc()
     runtime_dir = project_root_dir / "runtime"
     failures = []

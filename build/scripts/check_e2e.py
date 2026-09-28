@@ -88,9 +88,13 @@ def run_case(alcy: Path, case_dir: Path):
     if subcommand == "build":
         with tempfile.TemporaryDirectory() as scratch:
             argv = [*argv, "-o", str(Path(scratch) / "out")]
-            proc = subprocess.run(argv, capture_output=True, text=True, cwd=cwd)
+            proc = subprocess.run(
+                argv, capture_output=True, text=True, encoding="utf-8", cwd=cwd
+            )
             return compare(proc, expected_exit, contains, not_contains)
-    proc = subprocess.run(argv, capture_output=True, text=True, cwd=cwd)
+    proc = subprocess.run(
+        argv, capture_output=True, text=True, encoding="utf-8", cwd=cwd
+    )
     return compare(proc, expected_exit, contains, not_contains)
 
 
@@ -121,6 +125,10 @@ def compare(proc, expected_exit, contains, not_contains):
 
 
 def main():
+    # Program output is UTF-8 on every platform; report it as such
+    # instead of the console locale, so a unicode mismatch prints
+    # rather than crashing the runner.
+    sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Run file-based e2e cases.")
     parser.add_argument(
         "--build-subdir",

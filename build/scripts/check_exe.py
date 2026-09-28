@@ -82,7 +82,9 @@ def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path):
     command = "build" if is_package else "compile"
     argv = [str(alcy), command, "." if is_package else "main.al",
             "--emit=llvm-ir", "-o", str(ir)]
-    proc = subprocess.run(argv, capture_output=True, text=True, cwd=work)
+    proc = subprocess.run(
+        argv, capture_output=True, text=True, encoding="utf-8", cwd=work
+    )
     if proc.returncode != 0 or not ir.is_file():
         return proc, "alcy --emit=llvm-ir did not produce a module"
 
@@ -90,7 +92,9 @@ def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path):
     # named again rather than left inheriting it.
     link = [SYSTEM_CLANG, "-x", "ir", str(ir), "-x", "c", str(RUNTIME_SOURCE),
             *SANITIZERS, "-o", str(exe)]
-    proc = subprocess.run(link, capture_output=True, text=True, cwd=work)
+    proc = subprocess.run(
+        link, capture_output=True, text=True, encoding="utf-8", cwd=work
+    )
     if proc.returncode != 0:
         return proc, "clang could not compile the generated IR"
     return proc, ""
@@ -138,6 +142,7 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
                 build_argv,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 cwd=work,
             )
         if proc.returncode != 0:
@@ -157,7 +162,11 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
 
         try:
             proc = subprocess.run(
-                [str(exe_path)], capture_output=True, text=True, cwd=work
+                [str(exe_path)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                cwd=work,
             )
         except OSError as e:
             return False, f"cannot execute '{exe_name}': {e}"
@@ -204,6 +213,10 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
 
 
 def main():
+    # Program output is UTF-8 on every platform; report it as such
+    # instead of the console locale, so a unicode mismatch prints
+    # rather than crashing the runner.
+    sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Run execution cases.")
     parser.add_argument(
         "--build-subdir",
