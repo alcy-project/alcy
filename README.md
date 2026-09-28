@@ -8,9 +8,9 @@ The project is in early development and not yet usable.
 Pre-MVP. The language specification, standard library, and most of the
 compiler pipeline are still being designed and implemented.
 
-- [PRINCIPLES.md](PRINCIPLES.md) - where the language is going, and the
+- [principles.md](docs/principles.md) - where the language is going, and the
   properties that decide design questions.
-- [ARCHITECTURE.md](ARCHITECTURE.md) - the planned compiler design.
+- [architecture.md](docs/architecture.md) - the planned compiler design.
 
 ## Build & Install
 

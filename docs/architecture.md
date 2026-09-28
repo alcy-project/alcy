@@ -15,7 +15,7 @@ belongs in `docs/`.
 
 These govern the compiler's implementation. For the principles the
 *language* is built to hold - which decide language design questions
-rather than code layout - see [PRINCIPLES.md](PRINCIPLES.md).
+rather than code layout - see [principles.md](principles.md).
 
 When implementing or modifying any component in alcy, preserve the following
 principles:

@@ -1,7 +1,7 @@
 # pipeline
 
 Compilation pipeline: the linear stage flow that wires every module
-together (see `ARCHITECTURE.md`).
+together (see `docs/architecture.md`).
 
 Stages run frontend (discovery, std/runtime staging) -> analyzer
 (resolve, check) -> lower -> borrow -> codegen_llvm (emit, link) ->

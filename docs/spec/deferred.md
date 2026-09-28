@@ -91,7 +91,7 @@ relied upon by MVP programs or by the MVP compiler implementation.
 - Parallel compilation engine with demand-driven summaries.
 - Refinement types over a decidable predicate fragment.
 - Language server, formatter, linter, and other surrounding tools
-  (see the bootstrap vision in `ARCHITECTURE.md`).
+  (see the bootstrap vision in `../architecture.md`).
 
 ## Keywords reserved for the above
 

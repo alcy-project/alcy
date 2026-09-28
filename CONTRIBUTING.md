@@ -67,7 +67,7 @@ Notes:
 
 ## Conventions
 
-- **Architecture:** Follow [ARCHITECTURE.md](ARCHITECTURE.md) for module responsibilities,
+- **Architecture:** Follow [docs/architecture.md](docs/architecture.md) for module responsibilities,
   dependency direction, ownership/lifetime boundaries, allocation contracts, and core design
   principles. IR construction rules (type currency, operand factories, `SeqBuilder`, opcode
   conventions) live in [docs/ir.md](docs/ir.md).
@@ -79,7 +79,7 @@ Notes:
   (unnamed numbers or strings) in domain logic; bind them to meaningful constants.
 - **Ownership:** Make ownership and lifetime explicit in APIs. Prefer non-owning views for
   non-owning relationships and owning types only where ownership is part of the contract.
-- **Dependencies:** Respect the dependency direction defined by `ARCHITECTURE.md`. Do not
+- **Dependencies:** Respect the dependency direction defined by `docs/architecture.md`. Do not
   introduce dependencies on higher-level modules for convenience, and do not create cyclic
   module dependencies.
 - **Naming & Types:** `PascalCase` for classes/structs/enums, `UPPER_SNAKE_CASE` for constants,
@@ -107,7 +107,7 @@ Notes:
   enforce repository style. Use `format.py` and `lint.py --fix` to fix most issues automatically.
   New source files must carry the license header.
 - **Module naming:** Module names stay abbreviated (`pkg`, `diag`, `cfg`). Directory, GN module,
-  and namespace names must always match; full forms live in `ARCHITECTURE.md`.
+  and namespace names must always match; full forms live in `docs/architecture.md`.
 - **Wording:** The private LLVM fork is `llvm-alcy-fork` on first mention per document,
   and `the fork` thereafter.
 - **Architecture decisions:** One decision, one record. Significant technical decisions get an ADR
@@ -118,7 +118,7 @@ Notes:
 Keep changes focused; avoid mixing refactors with behavior changes unless they are inseparable.
 
 When changing architecture, module boundaries, invariants, ownership/lifetime rules, or other
-design-level contracts, update `ARCHITECTURE.md` and add or update an ADR when appropriate.
+design-level contracts, update `docs/architecture.md` and add or update an ADR when appropriate.
 
 When changing language behavior, update `docs/spec/` in the same change; spec and implementation
 must not drift apart.

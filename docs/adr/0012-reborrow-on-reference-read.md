@@ -240,4 +240,4 @@ is every element reference it hands out.
 - **Field-sensitive borrows.** Rejected in favour of whole-referent
   freezing, for the reason in rule 5.
 - **Making the safe subset unable to express a systems program.** Not on
-  the table; see `PRINCIPLES.md`.
+  the table; see `../principles.md`.

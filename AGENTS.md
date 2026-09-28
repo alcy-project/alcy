@@ -5,7 +5,7 @@ This workspace contains `alcy`, a high-performance programming language compiler
 # Reference Documentation
 
 Prior to generating, refactoring, or reviewing code, strictly follow the specifications in:
-- `ARCHITECTURE.md`: Pipeline architecture, intermediate representation design, LLVM integration, and repository structure.
+- `docs/architecture.md`: Pipeline architecture, intermediate representation design, LLVM integration, and repository structure.
 - `CONTRIBUTING.md`: Workflow scripts (`build.py`, `lint.py`), tooling setup, formatting, and commit conventions.
 
 # Code Quality & Refactoring Directives
@@ -28,6 +28,6 @@ Prior to generating, refactoring, or reviewing code, strictly follow the specifi
 
 # Code Generation Directives
 
-- Respect module boundaries inside `src/*` and adhere strictly to the linear pipeline flow defined in `ARCHITECTURE.md`.
+- Respect module boundaries inside `src/*` and adhere strictly to the linear pipeline flow defined in `docs/architecture.md`.
 - Ensure new files include the project license header and have corresponding target entries in their module's `BUILD.gn`.
 - Code generation, comments, documentation, and commit messages must be written in English.
