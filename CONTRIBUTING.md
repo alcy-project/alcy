@@ -97,7 +97,10 @@ Notes:
   self-contained and lets `clang-tidy` and `clangd` analyse it directly. Without one, a missing
   include goes unseen: `clang-tidy` ran only on `.c`/`.cc`, and a header with no translation
   unit is compiled with a command that has no include paths, so the check reports nothing
-  rather than failing.
+  rather than failing. Generated translation units are the exception:
+  `src/pipeline/embedded_std.h` and `src/pipeline/embedded_runtime.h` are implemented by
+  generated files that already occupy the sibling name, so they are listed in `lint.py`
+  until the generator is renamed.
 - **Comments:** English only. Write comments sparingly-only for design rationale, invariants or
   safety explanations, non-obvious code, or `TODO`s. Do not restate code that is already clear.
 - **Tooling is authoritative:** `.clang-format`, `.clang-tidy`, `CPPLINT.cfg`, and `typos.toml`

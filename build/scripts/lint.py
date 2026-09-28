@@ -42,6 +42,35 @@ def target_files(target_dirs: list[Path]):
     return files, comp_files, header_files
 
 
+# Headers whose translation unit is generated: the generator already
+# occupies the sibling name, so no source .cc can exist. They stay
+# outside the header gate until the generator is renamed. A stale
+# entry fails the run instead of silently passing.
+GENERATED_HEADER_EXCLUSIONS = [
+    "src/pipeline/embedded_runtime.h",
+    "src/pipeline/embedded_std.h",
+]
+
+
+def exclusion_errors(build_path: Path) -> list[str]:
+    siblings = set()
+    compdb = build_path / "compile_commands.json"
+    if compdb.is_file():
+        siblings = {
+            (build_path / Path(e["file"])).resolve().with_suffix(".h")
+            for e in json.loads(compdb.read_text())
+        }
+    errors = []
+    for excluded in GENERATED_HEADER_EXCLUSIONS:
+        if not (project_root_dir / excluded).is_file():
+            errors.append(f"Excluded header no longer exists: {excluded}")
+        elif (project_root_dir / excluded).resolve() in siblings:
+            errors.append(
+                f"Excluded header gained a translation unit: {excluded}"
+            )
+    return errors
+
+
 def analysable_headers(build_path: Path, header_files: list[str]) -> list[str]:
     """The headers that have a sibling translation unit in the database.
 
@@ -123,7 +152,14 @@ def lint_files(
             failed = True
 
     files, comp_files, header_files = target_files(target_dirs)
-    header_files = analysable_headers(build_path, header_files)
+    for error in exclusion_errors(build_path):
+        print(error)
+        failed = True
+    header_files = [
+        h
+        for h in analysable_headers(build_path, header_files)
+        if h not in GENERATED_HEADER_EXCLUSIONS
+    ]
 
     commands = create_commands(
         files, comp_files, header_files, build_path, fix, fix_errors, verbose
