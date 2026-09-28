@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "cli/result_code.h"
+#include "pipeline/vcs.h"
 
 namespace diag {
 
@@ -17,6 +18,7 @@ namespace cli {
 
 // Scaffolds a new package directory.
 ResultCode run_new(std::string_view target_dir,
+                   pipeline::Vcs vcs,
                    const diag::RenderOptions& options);
 
 }  // namespace cli

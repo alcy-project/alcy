@@ -20,6 +20,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
 #include "pipeline/emit_mode.h"
+#include "pipeline/vcs.h"
 
 namespace cli {
 
@@ -54,6 +55,9 @@ CliConfig extract_from_matches(arg::Matches&& matches) {
   c.output = matches.get<std::string_view>("output").unwrap_or(c.output);
   c.linker = matches.get<std::string_view>("linker").unwrap_or(c.linker);
   c.no_std = matches.get<bool>("no-std").unwrap_or(false);
+  // `vcs` is declared on the two scaffolding verbs only, so the default
+  // stands wherever it is absent.
+  c.vcs = matches.get<pipeline::Vcs>("vcs").unwrap_or(c.vcs);
   if (auto deps = matches.get_all<std::string_view>("deps"); deps.is_ok()) {
     for (std::string_view fragment : std::move(deps).unwrap()) {
       if (!fragment.empty()) {
@@ -95,6 +99,17 @@ arg::CommandBuilder build_subcommand(std::string name, std::string about) {
   arg::CommandBuilder builder(std::move(name));
   builder.about(std::move(about));
   return builder;
+}
+
+arg::Arg vcs_arg() {
+  return arg::ArgBuilder("vcs")
+      .help(
+          "Version control to prepare the package for: git (default) "
+          "writes .gitignore, none writes no ignore file. No repository "
+          "is created either way.")
+      .choices({"git", "none"})
+      .default_value("git")
+      .build();
 }
 
 }  // namespace
@@ -191,10 +206,12 @@ arg::Parser build_parser() {
                        .default_value("")
                        .build())
           .build());
-  builder.add_subcommand(
-      build_subcommand("new", "Create a new package").build());
+  builder.add_subcommand(build_subcommand("new", "Create a new package")
+                             .add_arg(vcs_arg())
+                             .build());
   builder.add_subcommand(
       build_subcommand("init", "Create a package in an existing directory")
+          .add_arg(vcs_arg())
           .build());
   builder.add_subcommand(
       build_subcommand("check", "Check a package without emitting code")

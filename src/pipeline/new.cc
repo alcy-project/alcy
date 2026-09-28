@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "config/build_config.h"
 #include "diag/diagnostic.h"
@@ -16,6 +17,7 @@
 #include "fpag/io/file_handle.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/vcs.h"
 #include "pkg/manifest.h"
 
 #if BUILD_FLAG(IS_OS_WIN)
@@ -62,11 +64,17 @@ bool valid_package_name(std::string_view name) {
 // Refuses to overwrite existing package files.
 NewResult write_package_files(PipelineContext& ctx,
                               const path::Path& package_dir,
-                              std::string_view name) {
+                              std::string_view name,
+                              Vcs vcs) {
   const path::Path manifest_path = package_dir.join(pkg::MANIFEST_FILE_NAME);
   const path::Path main_path = package_dir.join("main.al");
-  const path::Path git_ignore_path = package_dir.join(".gitignore");
-  for (const path::Path& path : {manifest_path, main_path, git_ignore_path}) {
+  // Only the chosen VCS contributes a file, so `none` neither writes nor
+  // refuses to overwrite an ignore file the user may have put there.
+  std::vector<path::Path> files{manifest_path, main_path};
+  if (vcs == Vcs::Git) {
+    files.push_back(package_dir.join(".gitignore"));
+  }
+  for (const path::Path& path : files) {
     io::FileHandle probe;
     if (probe.open(path.c_str(), io::FileAccess::Read)) {
       const u32 index = ctx.bag.emit(
@@ -100,7 +108,9 @@ path = "main.al")",
   }
   if (!write_text_file(manifest_path.as_view(), manifest_template) ||
       !write_text_file(main_path.as_view(), MAIN_TEXT) ||
-      !write_text_file(git_ignore_path.as_view(), GIT_IGNORE_TEXT)) {
+      (vcs == Vcs::Git &&
+       !write_text_file(package_dir.join(".gitignore").as_view(),
+                        GIT_IGNORE_TEXT))) {
     const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot create package files: '{}'",
                                    package_dir.as_view());
@@ -144,7 +154,8 @@ std::string current_dir_basename() {
 }
 
 NewResult create_new_package(PipelineContext& ctx,
-                             std::string_view target_dir) {
+                             std::string_view target_dir,
+                             Vcs vcs) {
   if (!valid_package_name(target_dir)) {
     const u32 index = ctx.bag.emit(
         diag::Severity::Error, PIPELINE_IO_ERROR,
@@ -162,10 +173,12 @@ NewResult create_new_package(PipelineContext& ctx,
     return base::make_err(0);
   }
   const path::Path package_dir = std::move(root).unwrap();
-  return write_package_files(ctx, package_dir, target_dir);
+  return write_package_files(ctx, package_dir, target_dir, vcs);
 }
 
-NewResult init_package(PipelineContext& ctx, std::string_view target_dir) {
+NewResult init_package(PipelineContext& ctx,
+                       std::string_view target_dir,
+                       Vcs vcs) {
   base::Result<path::Path, path::PathError> root =
       path::Path::from_native(target_dir);
   if (root.is_err()) {
@@ -189,7 +202,7 @@ NewResult init_package(PipelineContext& ctx, std::string_view target_dir) {
     (void)index;
     return base::make_err(0);
   }
-  return write_package_files(ctx, package_dir, name);
+  return write_package_files(ctx, package_dir, name, vcs);
 }
 
 }  // namespace pipeline

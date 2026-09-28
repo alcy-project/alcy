@@ -40,7 +40,7 @@ i32 dispatch(const CliConfig& config, const diag::RenderOptions& options) {
     case Subcommand::Compile: return result_code(run_compile(config, options));
     case Subcommand::Run: return run_run(config, options);
     case Subcommand::New:
-      return result_code(run_new(config.target_dir, options));
+      return result_code(run_new(config.target_dir, config.vcs, options));
     case Subcommand::Init: return result_code(run_init(config, options));
     case Subcommand::Check: return result_code(run_check(config, options));
     case Subcommand::None: break;

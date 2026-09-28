@@ -9,6 +9,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
 #include "pipeline/emit_mode.h"
+#include "pipeline/vcs.h"
 
 namespace cli {
 
@@ -58,6 +59,10 @@ struct CliConfig {
   // fragment form (`alcy/std/core`, or `name = { ... }`). Views borrow
   // argv storage like target_dir.
   std::vector<std::string_view> deps;
+  // Which ignore file `new` and `init` write. Defaults to git because
+  // that is the version control most packages are kept in, and the
+  // choice only selects a file: no repository is created either way.
+  pipeline::Vcs vcs = pipeline::Vcs::Git;
 
   constexpr bool operator==(const CliConfig&) const = default;
 };

@@ -92,6 +92,8 @@ source_set("pipeline") {
     "std_stage.h",
     "target.cc",
     "target.h",
+    "vcs.cc",
+    "vcs.h",
   ]
   deps = [
     ":embed_runtime",

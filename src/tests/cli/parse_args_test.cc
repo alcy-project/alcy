@@ -12,6 +12,7 @@
 #include "fpag/arg/parser.h"
 #include "fpag/term/color_mode.h"
 #include "pipeline/emit_mode.h"
+#include "pipeline/vcs.h"
 
 namespace cli {
 
@@ -126,6 +127,17 @@ TEST_CASE("Parse other subcommands") {
   CHECK(parse_ok(check).subcommand == Subcommand::Check);
   CHECK(parse_ok(compile).subcommand == Subcommand::Compile);
   CHECK(parse_ok(compile).target_dir == "main.al");
+}
+
+TEST_CASE("Parse scaffolding VCS option") {
+  const std::string_view dflt[] = {"alcy", "new", "mypkg"};
+  const std::string_view none[] = {"alcy", "init", "existing", "--vcs=none"};
+  const std::string_view git[] = {"alcy", "new", "mypkg", "--vcs=git"};
+  const std::string_view bad[] = {"alcy", "new", "mypkg", "--vcs=hg"};
+  CHECK(parse_ok(dflt).vcs == pipeline::Vcs::Git);
+  CHECK(parse_ok(none).vcs == pipeline::Vcs::None);
+  CHECK(parse_ok(git).vcs == pipeline::Vcs::Git);
+  CHECK(!parse(bad).is<CliConfig>());
 }
 
 TEST_CASE("Parse compile flags") {

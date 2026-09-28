@@ -19,7 +19,7 @@ ResultCode run_init(const CliConfig& config,
   pipeline::PipelineContext ctx;
   const std::string_view raw_dir =
       config.target_dir.empty() ? "." : config.target_dir;
-  pipeline::NewResult result = pipeline::init_package(ctx, raw_dir);
+  pipeline::NewResult result = pipeline::init_package(ctx, raw_dir, config.vcs);
   if (result.is_ok() && !ctx.bag.has_errors()) {
     base::logger.wo_prefix("created package in '{}'", raw_dir);
     return ResultCode::Success;
