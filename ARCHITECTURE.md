@@ -427,8 +427,10 @@ for testing the filesystem or writing an output artifact.
 
 - **Configuration layering**: each build dimension lives in exactly one
   place. The manifest (`alcy.toml`, versioned and shared) declares what
-  is built: targets, dependencies, and package identity. CLI flags carry
-  invocation-scoped, user-specific configuration: presentation
+  is built: targets, dependencies, and package identity. `.alcy/` beside
+  it holds how the goal package is built on this machine (today the link
+  driver in `toolchain.toml`); a dependency's `.alcy/` is never read.
+  CLI flags carry invocation-scoped, user-specific configuration: presentation
   (`--color`, `--lang`, verbosity), local paths, and parallelism.
   Dimensions affecting outputs through a finite selection (such as the
   debug/release mode) live on the CLI as part of the build identity;

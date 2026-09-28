@@ -20,6 +20,7 @@
 #include "pipeline/build.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/target.h"
+#include "pkg/toolchain.h"
 
 namespace cli {
 
@@ -40,6 +41,16 @@ ResultCode run_build(const CliConfig& config,
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
   if (found.found) {
+    base::Result<pkg::Toolchain, diag::Reported> toolchain =
+        pipeline::load_toolchain(ctx, found.root);
+    if (toolchain.is_err()) {
+      report_diagnostics(ctx.bag, ctx.sources, options);
+      return ResultCode::BuildFailed;
+    }
+    // An explicit driver wins; the file names the default.
+    const pkg::Toolchain tool = std::move(toolchain).unwrap();
+    const std::string_view linker =
+        config.linker.empty() ? tool.linker : config.linker;
     if (config.time_trace) {
       const path::Path out_dir = found.root.join(path::DEFAULT_OUT_DIR);
       if (pipeline::ensure_directories(ctx, out_dir.as_view()).is_ok()) {
@@ -48,7 +59,7 @@ ResultCode run_build(const CliConfig& config,
     }
     base::Result<void, diag::Reported> res = pipeline::build_package(
         ctx, found.root, found.manifest, found.manifest_name, config.output,
-        config.release, config.linker, config.emit);
+        config.release, linker, config.emit);
     if (!trace.finish()) {
       const u32 index =
           ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,

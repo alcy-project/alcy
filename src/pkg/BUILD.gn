@@ -13,6 +13,8 @@ source_set("pkg") {
     "modules.h",
     "resolve.cc",
     "resolve.h",
+    "toolchain.cc",
+    "toolchain.h",
   ]
   deps = [
     "//src:base_modules",

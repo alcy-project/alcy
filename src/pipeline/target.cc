@@ -24,6 +24,7 @@
 #include "pipeline/std_stage.h"
 #include "pkg/manifest.h"
 #include "pkg/modules.h"
+#include "pkg/toolchain.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -208,6 +209,29 @@ base::Result<BinTarget, diag::Reported> resolve_bin_target(
   target.file_count = files.size();
   target.bin_name = manifest.bins[0].name;
   return base::make_ok(target);
+}
+
+base::Result<pkg::Toolchain, diag::Reported> load_toolchain(
+    PipelineContext& ctx,
+    const path::Path& root) {
+  const path::Path path =
+      root.join(pkg::CONFIG_DIR_NAME).join(pkg::TOOLCHAIN_FILE_NAME);
+  base::Result<source::FileId, source::SourceError> file =
+      ctx.sources.load(path.as_view());
+  if (file.is_err()) {
+    return base::make_ok(pkg::Toolchain{});
+  }
+  const source::FileId loaded = std::move(file).unwrap();
+  const std::optional<std::string_view> bytes = ctx.sources.bytes(loaded);
+  if (!bytes.has_value()) {
+    const u32 index =
+        ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
+                     "toolchain '{}' is not a loaded file", path.as_view());
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  return pkg::parse_toolchain(*bytes, path.as_view(), loaded, ctx.bag,
+                              ctx.arena);
 }
 
 }  // namespace pipeline

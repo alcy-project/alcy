@@ -336,6 +336,63 @@ TEST_CASE("Build rejects a single file") {
   CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) != 0);
 }
 
+bool write_package(io::TempDir& dir,
+                   std::string_view rel,
+                   std::string_view program) {
+  return write_all(dir, std::string(rel) + "/alcy.toml",
+                   "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+                   "[[bin]]\nname = \"app\"\npath = \"main.al\"\n") &&
+         write_all(dir, std::string(rel) + "/main.al", program);
+}
+
+bool write_toolchain(io::TempDir& dir,
+                     std::string_view rel,
+                     std::string_view text) {
+  return write_all(dir, std::string(rel) + "/.alcy/toolchain.toml", text);
+}
+
+i32 run_build_on(io::TempDir& dir, std::string_view rel) {
+  const std::string target = dir.join(rel);
+  std::vector<std::string> storage{"alcy", "build", target};
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  return cli_main(static_cast<i32>(argv.size()), argv.data());
+}
+
+TEST_CASE("Build reads the linker from toolchain.toml") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_linker_");
+  const bool setup =
+      write_package(dir, "proj",
+                    "fn main() -> i32 {\n"
+                    "  ret 0\n"
+                    "}\n") &&
+      write_toolchain(dir, "proj", "linker = \"alcy-no-such-driver-xyz\"\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  // The frontend runs before the link, so a link failure proves the file
+  // was read rather than ignored.
+  CHECK(run_build_on(dir, "proj") != 0);
+}
+
+TEST_CASE("Build treats an empty linker as the default") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_linker_empty_");
+  const bool setup = write_package(dir, "proj",
+                                   "fn main() -> i32 {\n"
+                                   "  ret 0\n"
+                                   "}\n") &&
+                     write_toolchain(dir, "proj", "linker = \"\"\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CHECK(run_build_on(dir, "proj") == 0);
+}
+
 #if !BUILD_FLAG(IS_OS_ASMJS)
 TEST_CASE("Time trace writes a json file") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_trace_test_");
@@ -383,15 +440,6 @@ i32 run_run_on(io::TempDir& dir,
     argv.push_back(arg.data());
   }
   return cli_main(static_cast<i32>(argv.size()), argv.data());
-}
-
-bool write_package(io::TempDir& dir,
-                   std::string_view rel,
-                   std::string_view program) {
-  return write_all(dir, std::string(rel) + "/alcy.toml",
-                   "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
-                   "[[bin]]\nname = \"app\"\npath = \"main.al\"\n") &&
-         write_all(dir, std::string(rel) + "/main.al", program);
 }
 
 i32 run_init_on(io::TempDir& dir, std::string_view rel) {

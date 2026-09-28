@@ -125,7 +125,8 @@ arg::Parser build_parser() {
                        .default_value("executable")
                        .build())
           .add_arg(arg::ArgBuilder("linker")
-                       .help("System linker driver for executable builds.")
+                       .help("System linker driver for executable builds. "
+                             "Overrides .alcy/toolchain.toml.")
                        .default_value("")
                        .build())
           .build());
@@ -166,7 +167,8 @@ arg::Parser build_parser() {
                        .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("linker")
-                       .help("System linker driver for executable builds.")
+                       .help("System linker driver for executable builds. "
+                             "Overrides .alcy/toolchain.toml.")
                        .default_value("")
                        .build())
           .build());

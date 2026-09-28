@@ -14,6 +14,7 @@
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
 #include "pkg/manifest.h"
+#include "pkg/toolchain.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -63,5 +64,11 @@ base::Result<BinTarget, diag::Reported> resolve_bin_target(
     const path::Path& root,
     const pkg::PackageManifest& manifest,
     std::string_view manifest_name);
+
+// Loads `.alcy/toolchain.toml` beside the package root. An absent file
+// means defaults; a corrupt one lands in the bag.
+base::Result<pkg::Toolchain, diag::Reported> load_toolchain(
+    PipelineContext& ctx,
+    const path::Path& root);
 
 }  // namespace pipeline

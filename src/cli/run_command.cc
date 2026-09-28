@@ -20,6 +20,7 @@
 #include "pipeline/pipeline_context.h"
 #include "pipeline/run.h"
 #include "pipeline/target.h"
+#include "pkg/toolchain.h"
 
 namespace cli {
 
@@ -53,10 +54,19 @@ i32 run_run(const CliConfig& config, const diag::RenderOptions& options) {
       trace.set_path(std::string(out_dir.join("trace.json").as_view()));
     }
   }
+  base::Result<pkg::Toolchain, diag::Reported> toolchain =
+      pipeline::load_toolchain(ctx, found.root);
+  if (toolchain.is_err()) {
+    report_diagnostics(ctx.bag, ctx.sources, options);
+    return result_code(ResultCode::RunFailed);
+  }
+  // An explicit driver wins; the file names the default.
+  const pkg::Toolchain tool = std::move(toolchain).unwrap();
+  const std::string_view linker =
+      config.linker.empty() ? tool.linker : config.linker;
   base::Result<pipeline::RunOutcome, diag::Reported> result =
       pipeline::run_package(ctx, found.root, found.manifest,
-                            found.manifest_name, config.release, config.linker,
-                            args);
+                            found.manifest_name, config.release, linker, args);
   if (!trace.finish()) {
     const u32 index =
         ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
