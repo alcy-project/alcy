@@ -19,14 +19,15 @@
 #include "pipeline/build.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
+#include "tests/util/test_util.h"
 
 namespace pipeline {
 
 namespace {
 
 // The extension each mode's output gets, and the first bytes that say what
-// the file is. An object is an ELF relocatable; the IR is text starting
-// with LLVM's module id line.
+// the file is. An object is a relocatable in the platform's format; the IR
+// is text starting with LLVM's module id line.
 std::string read_file(const std::string& path) {
   const std::optional<std::string> text = io::read_file(path);
   return text.value_or(std::string{});
@@ -60,13 +61,8 @@ TEST_CASE("A build writes an object where it was asked for one") {
     CHECK(built.is_ok());
   }
   const std::string object = read_file(object_path);
-  CHECK(object.size() > 4);
-  if (object.size() > 4) {
-    // ELF magic: a relocatable, not a script we happened to write.
-    CHECK(object.compare(0, 4,
-                         "\x7f"
-                         "ELF") == 0);
-  }
+  // Object magic: a relocatable, not a script we happened to write.
+  CHECK(tests::is_object_bytes(object));
 }
 #endif  // !BUILD_FLAG(IS_OS_ASMJS
 

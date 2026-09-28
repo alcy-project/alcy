@@ -3,9 +3,6 @@
 
 #include "cli/cli_main.h"
 
-#include <fcntl.h>
-#include <unistd.h>
-
 #include <optional>
 #include <span>
 #include <string>
@@ -18,6 +15,12 @@
 #include "fpag/io/file_handle.h"
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
+#include "tests/util/test_util.h"
+
+#if !BUILD_FLAG(IS_OS_ASMJS) && !BUILD_FLAG(IS_OS_WIN)
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace cli {
 
@@ -39,6 +42,7 @@ i32 run_check_on(io::TempDir& dir, std::string_view rel) {
 }
 
 #if !BUILD_FLAG(IS_OS_ASMJS)
+#if !BUILD_FLAG(IS_OS_WIN)
 // Standard input is the test process's own, so a case that feeds the
 // compiler has to put the program there: the descriptor is replaced for the
 // duration and put back afterwards, because the rest of the suite reads it.
@@ -95,11 +99,12 @@ i32 run_compile_stdin(io::TempDir& dir,
   ::close(saved);
   return code;
 }
+#endif  // !BUILD_FLAG(IS_OS_WIN)
 #endif  // !BUILD_FLAG(IS_OS_ASMJS
 
 }  // namespace
 
-#if !BUILD_FLAG(IS_OS_ASMJS)
+#if !BUILD_FLAG(IS_OS_ASMJS) && !BUILD_FLAG(IS_OS_WIN)
 TEST_CASE("Compile reads a program from standard input") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_stdin_ok_");
   // No file on disk is named: the program exists only as the pipe's
@@ -168,7 +173,7 @@ TEST_CASE("Compile refuses standard input without a named output") {
   // replace; the caller must name one.
   CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) != 0);
 }
-#endif  // !BUILD_FLAG(IS_OS_ASMJS
+#endif  // !BUILD_FLAG(IS_OS_ASMJS) && !BUILD_FLAG(IS_OS_WIN)
 
 TEST_CASE("Check accepts a well-typed file") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_check_ok_test_");
@@ -247,10 +252,8 @@ TEST_CASE("Compile emits an object file") {
   CHECK(io::is_file(dir.join("main.o")));
   const std::optional<std::string> bytes = io::read_file(dir.join("main.o"));
   CHECK(bytes.has_value());
-  if (bytes.has_value() && bytes->size() > 4) {
-    CHECK(bytes->compare(0, 4,
-                         "\x7f"
-                         "ELF") == 0);
+  if (bytes.has_value()) {
+    CHECK(tests::is_object_bytes(*bytes));
   }
 }
 
