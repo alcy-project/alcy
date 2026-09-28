@@ -65,14 +65,12 @@ base::Result<void, diag::Reported> emit_package_object(
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-object",
                                            "backend");
   llvm::LLVMContext context;
-  // TODO: Add optimization level enum
-  (void)optimize;
   auto module = std::make_unique<llvm::Module>("alcy_module", context);
   codegen_llvm::LlvmIrEmitter emitter(module.get(), std::move(package.storage),
                                       &ctx.strings, TARGET_WIDTH);
   std::move(emitter).emit();
   base::Result<std::vector<u8>, codegen_llvm::ObjectEmitError> emitted =
-      codegen_llvm::emit_object(*module, "");
+      codegen_llvm::emit_object(*module, "", optimize);
   if (emitted.is_err()) {
     const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot emit object '{}'", output_path);
@@ -187,7 +185,8 @@ base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
                                                      std::string_view output,
                                                      bool optimize,
                                                      std::string_view linker,
-                                                     EmitMode mode) {
+                                                     EmitMode mode,
+                                                     const StdSelection& selection) {
   base::Result<source::FileId, source::SourceError> file = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "load", "frontend");
     return ctx.sources.load(target);
@@ -207,7 +206,8 @@ base::Result<void, diag::Reported> build_single_file(PipelineContext& ctx,
     DCHECK(dot != std::string::npos);
     output_path.replace(dot, std::string::npos, suffix_for(mode));
   }
-  return build_single_root(ctx, root, output_path, optimize, linker, mode);
+  return build_single_root(ctx, root, output_path, optimize, linker, mode,
+                             selection);
 }
 
 base::Result<void, diag::Reported> build_single_root(PipelineContext& ctx,
@@ -215,9 +215,10 @@ base::Result<void, diag::Reported> build_single_root(PipelineContext& ctx,
                                                      std::string_view output,
                                                      bool optimize,
                                                      std::string_view linker,
-                                                     EmitMode mode) {
+                                                     EmitMode mode,
+                                                     const StdSelection& selection) {
   base::Result<analyzer::ModuleTree, diag::Reported> tree =
-      front_end_root(ctx, root);
+      front_end_root(ctx, root, selection);
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }

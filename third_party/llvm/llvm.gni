@@ -135,4 +135,12 @@ llvm_components = llvm_backend_components + [
                     "LLVMDemangle",
                     "LLVMipo",
                     "LLVMVectorize",
+                    "LLVMPasses",
+                    "LLVMCoroutines",
+                    "LLVMFrontendOpenMP",
+                    "LLVMLinker",
+                    "LLVMFrontendAtomic",
+                    "LLVMFrontendOffloading",
+                    "LLVMSandboxIR",
+                    "LLVMHipStdPar",
                   ]

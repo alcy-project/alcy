@@ -372,6 +372,46 @@ TEST_CASE("Lower emits relocatable objects") {
     CHECK(buf.size() > 0);
   }
 }
+
+TEST_CASE("Optimization promotes stack allocas") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  x := 40\n"
+                                      "  ret x + 2\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("lower_optimize_test", context);
+  codegen_llvm::LlvmIrEmitter emitter(module.get(),
+                                      std::move(result.lowered->storage),
+                                      &f.strings, ir::PointerWidth::W64);
+  std::move(emitter).emit();
+  CHECK(!llvm::verifyModule(*module));
+
+  // The emitter spills every local; mem2reg in the O3 pipeline is what
+  // promotes this one, so its absence says the pipeline ran.
+  base::Result<void, codegen_llvm::ObjectEmitError> optimized =
+      codegen_llvm::optimize_module(*module, "");
+  CHECK(optimized.is_ok());
+  CHECK(!llvm::verifyModule(*module));
+  CHECK(codegen_llvm::emit_ir(*module).find("alloca") == std::string::npos);
+
+  // Unknown triples fail the same way emission does.
+  CHECK(codegen_llvm::optimize_module(*module, "no-such-triple").is_err());
+}
 #endif
 
 TEST_CASE("Lower wraps all main forms in a C entry") {

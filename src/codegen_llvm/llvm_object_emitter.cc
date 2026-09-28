@@ -14,6 +14,17 @@
 #include "config/build_config.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
+// New pass manager pieces name parameters -Wall flags under -Werror;
+// same treatment as other third-party headers in this codebase.
+#include "llvm/Analysis/CGSCCPassManager.h"
+#include "llvm/Analysis/LoopAnalysisManager.h"
+#include "llvm/IR/PassManager.h"
+#include "llvm/Passes/OptimizationLevel.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Passes/StandardInstrumentations.h"
+#pragma clang diagnostic pop
 #include "llvm/Support/raw_ostream.h"
 
 namespace codegen_llvm {
@@ -107,8 +118,11 @@ void init_linked_targets() {
 
 }  // namespace
 
-base::Result<std::vector<u8>, ObjectEmitError>
-emit_object(llvm::Module& module, std::string_view triple, bool optimize) {
+// Prepares the module for the triple (empty selects the host) and
+// returns its machine, tuned for the mode. Emission and optimization
+// share it so a bad triple fails identically on both paths.
+base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError>
+prepare_module(llvm::Module& module, std::string_view triple, bool optimize) {
   init_linked_targets();
   const std::string target_triple = triple.empty()
                                         ? llvm::sys::getDefaultTargetTriple()
@@ -132,11 +146,60 @@ emit_object(llvm::Module& module, std::string_view triple, bool optimize) {
     return base::make_err(ObjectEmitError::NoTargetMachine);
   }
   module.setDataLayout(machine->createDataLayout());
+  return base::make_ok(std::move(machine));
+}
+
+base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
+                                                    std::string_view triple) {
+  base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError> machine =
+      prepare_module(module, triple, true);
+  if (machine.is_err()) {
+    return base::make_err(std::move(machine).unwrap_err());
+  }
+  llvm::LoopAnalysisManager lam;
+  llvm::FunctionAnalysisManager fam;
+  llvm::CGSCCAnalysisManager cgam;
+  llvm::ModuleAnalysisManager mam;
+  llvm::PassInstrumentationCallbacks pic;
+  llvm::StandardInstrumentations si(module.getContext(), false);
+  si.registerCallbacks(pic, &mam);
+  // The machine outlives the builder: unwrap() moves into a temporary,
+  // so taking .get() off it would dangle past this statement.
+  std::unique_ptr<llvm::TargetMachine> owned = std::move(machine).unwrap();
+  llvm::PassBuilder pb(owned.get(), llvm::PipelineTuningOptions(), std::nullopt,
+                       &pic);
+  pb.registerModuleAnalyses(mam);
+  pb.registerCGSCCAnalyses(cgam);
+  pb.registerFunctionAnalyses(fam);
+  pb.registerLoopAnalyses(lam);
+  pb.crossRegisterProxies(lam, fam, cgam, mam);
+  llvm::ModulePassManager mpm =
+      pb.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
+  mpm.run(module, mam);
+  return base::make_ok();
+}
+
+base::Result<std::vector<u8>, ObjectEmitError>
+emit_object(llvm::Module& module, std::string_view triple, bool optimize) {
+  if (optimize) {
+    base::Result<void, ObjectEmitError> optimized =
+        optimize_module(module, triple);
+    if (optimized.is_err()) {
+      return base::make_err(std::move(optimized).unwrap_err());
+    }
+  }
+  base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError> machine =
+      prepare_module(module, triple, optimize);
+  if (machine.is_err()) {
+    return base::make_err(std::move(machine).unwrap_err());
+  }
+  // The passes below borrow the machine; it must outlive passes.run.
+  std::unique_ptr<llvm::TargetMachine> owned = std::move(machine).unwrap();
   llvm::SmallVector<char, 0> buffer_vec;
   llvm::raw_svector_ostream output(buffer_vec);
   llvm::legacy::PassManager passes;
-  if (machine->addPassesToEmitFile(passes, output, nullptr,
-                                   llvm::CodeGenFileType::ObjectFile)) {
+  if (owned->addPassesToEmitFile(passes, output, nullptr,
+                                 llvm::CodeGenFileType::ObjectFile)) {
     return base::make_err(ObjectEmitError::CannotEmit);
   }
   passes.run(module);

@@ -15,6 +15,7 @@
 #include "pipeline/build.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/spawn.h"
 #include "pipeline/std_stage.h"
 #include "source/source.h"
 
@@ -82,6 +83,33 @@ TEST_CASE("Pipeline build produces executable") {
       pipeline::build_single_file(ctx, dir.join("main.al"), exe_path, false, "",
                                   pipeline::EmitMode::Executable);
   CHECK(res.is_ok());
+}
+
+TEST_CASE("Pipeline release build produces a working executable") {
+  io::TempDir dir = io::TempDir::create_unique("pipeline_build_release_test_");
+  const bool setup =
+      dir.write_file("main.al", "fn main() -> i32 {\n  ret 3\n}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  PipelineContext ctx;
+  const std::string exe_path =
+      std::string(dir.path()) + "/main_exe" + std::string(exe_suffix());
+  auto res =
+      pipeline::build_single_file(ctx, dir.join("main.al"), exe_path, true, "",
+                                  pipeline::EmitMode::Executable);
+  CHECK(res.is_ok());
+  if (res.is_err()) {
+    return;
+  }
+  // Release runs the O3 pipeline; the binary must still exit 3.
+  base::Result<i32, SpawnError> ran = run_command({exe_path});
+  CHECK(ran.is_ok());
+  if (ran.is_ok()) {
+    CHECK(std::move(ran).unwrap() == 3);
+  }
 }
 
 TEST_CASE("Pipeline build reports an unwritable object path") {
