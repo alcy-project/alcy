@@ -307,6 +307,10 @@ class Resolver {
   // the imports never re-export (is_pub false).
   void inject_prelude() {
     for (u32 prelude : prelude_modules) {
+      // A facade's re-exports resolve first: a `pub use` names the
+      // surface the facade stands in for, and resolution is idempotent,
+      // so the later sweep over every module is unaffected.
+      resolve_exports(prelude);
       for (ast::ItemIdx item : modules[prelude]->items) {
         const ast::ItemNode& node = ast.items[item];
         if (!node.is_pub) {
@@ -327,30 +331,50 @@ class Resolver {
           if (!declared) {
             continue;
           }
-          for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
-            if (m == prelude) {
-              continue;
-            }
-            const std::vector<NameEntry>& locals =
-                ns == Namespace::Type    ? local_types[m]
-                : ns == Namespace::Value ? local_values[m]
-                                         : local_modules[m];
-            if (has_name(locals, name)) {
-              continue;
-            }
-            bool imported = false;
-            for (const Import& prior : module_imports[m]) {
-              if (prior.ns == ns && prior.name == name) {
-                imported = true;
-                break;
-              }
-            }
-            if (!imported) {
-              module_imports[m].push_back(
-                  Import{name, ns, prelude, name, false});
-            }
-          }
+          inject_name(name, ns, prelude, name, prelude);
         }
+      }
+      // A facade re-exports what its siblings declare, so the resolved
+      // import rides along: the name stays visible without a `use`, and
+      // the target is the declaration itself rather than the facade.
+      for (const Import& reexport : module_imports[prelude]) {
+        if (!reexport.is_pub) {
+          continue;
+        }
+        inject_name(reexport.name, reexport.ns, reexport.target_module,
+                    reexport.member, prelude);
+      }
+    }
+  }
+
+  // Makes `name` visible in every module but `skip`, unless a local or
+  // an earlier import already claims it. Locals win over the prelude,
+  // and the first prelude to claim a name keeps it.
+  void inject_name(std::string_view name,
+                   Namespace ns,
+                   u32 target,
+                   std::string_view member,
+                   u32 skip) {
+    for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+      if (m == skip) {
+        continue;
+      }
+      const std::vector<NameEntry>& locals =
+          ns == Namespace::Type    ? local_types[m]
+          : ns == Namespace::Value ? local_values[m]
+                                   : local_modules[m];
+      if (has_name(locals, name)) {
+        continue;
+      }
+      bool imported = false;
+      for (const Import& prior : module_imports[m]) {
+        if (prior.ns == ns && prior.name == name) {
+          imported = true;
+          break;
+        }
+      }
+      if (!imported) {
+        module_imports[m].push_back(Import{name, ns, target, member, false});
       }
     }
   }

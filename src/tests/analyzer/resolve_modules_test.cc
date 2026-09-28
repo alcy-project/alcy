@@ -7,6 +7,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -499,6 +500,73 @@ ResolveCase resolve_case_with_prelude(
   }
   ModuleTree tree = std::move(result).unwrap();
   return {tree, !f.bag.has_errors()};
+}
+
+TEST_CASE("Resolve nests a facade beside its sibling modules") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {
+                         {"main.al", "fn main() {}\n"},
+                         {"core/prelude.al", "pub use super::mem::help;\n"},
+                         {"core/mem.al", "pub fn help() {}\n"},
+                     });
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  std::deque<std::string> name_storage;
+  std::vector<ModuleInput> inputs;
+  std::optional<ModuleInput> root_input =
+      tests::register_source(f.sources, dir, "main.al", true, name_storage);
+  CHECK(root_input.has_value());
+  if (!root_input.has_value()) {
+    return;
+  }
+  inputs.push_back(*root_input);
+  std::deque<std::string> prelude_storage;
+  std::vector<ModuleInput> prelude_inputs;
+  for (const auto& entry :
+       {std::tuple<std::string_view, std::string_view, bool>{
+            "core/prelude.al", "core/prelude.al", true},
+        std::tuple<std::string_view, std::string_view, bool>{
+            "core/mem.al", "core/mem.al", false}}) {
+    const std::string_view name = std::get<0>(entry);
+    const std::string_view rel = std::get<1>(entry);
+    const bool facade = std::get<2>(entry);
+    const tests::VirtualSource* const file = dir.find(rel);
+    CHECK(file != nullptr);
+    if (file == nullptr) {
+      return;
+    }
+    prelude_storage.emplace_back(name);
+    prelude_inputs.push_back({prelude_storage.back(),
+                              f.sources.add_virtual(file->name, file->bytes),
+                              facade});
+  }
+  base::Result<ModuleTree, diag::Reported> resolved =
+      resolve_modules(root_input->id, inputs, "testpkg", f.sources, f.ast,
+                      f.bag, prelude_inputs);
+  CHECK(resolved.is_ok());
+  if (resolved.is_err()) {
+    return;
+  }
+  ModuleTree tree = std::move(resolved).unwrap();
+  CHECK(!f.bag.has_errors());
+  const ModuleNode* root = find_module(tree, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  bool found = false;
+  for (const Import& import : root->imports) {
+    if (import.ns == Namespace::Value && import.name == "help" &&
+        import.member == "help") {
+      found = true;
+    }
+  }
+  CHECK(found);
 }
 
 TEST_CASE("Resolve injects prelude imports") {
