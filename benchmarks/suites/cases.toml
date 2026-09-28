@@ -1,0 +1,75 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Process integration benchmarks: the real binary, run as a process.
+#
+# Every case is a command over a fixture directory under benchmarks/
+# fixtures/, measured by wall time over repeated runs. A shell command
+# or a linker argument is not accepted: the command is spelled as an
+# argument vector so a case cannot do anything the runner did not intend.
+
+schema_version = 1
+
+[[case]]
+id = "check/small-file"
+fixture = "check-small"
+argv = ["check", "--file", "main.al"]
+expected_exit = 0
+repetitions = 20
+warmup = 3
+
+[[case]]
+id = "check/package"
+fixture = "check-package"
+argv = ["check", "."]
+expected_exit = 0
+repetitions = 15
+warmup = 3
+
+[[case]]
+id = "check/many-modules"
+fixture = "check-many-modules"
+argv = ["check", "."]
+expected_exit = 0
+repetitions = 10
+warmup = 2
+
+[[case]]
+id = "compile/object"
+fixture = "check-small"
+argv = ["compile", "main.al", "-o", "out/main.o", "--emit", "object"]
+expected_exit = 0
+repetitions = 15
+warmup = 3
+# The output is written into the run's own scratch copy of the fixture,
+# so repeated runs do not race on one path.
+output_kind = "scratch"
+
+[[case]]
+id = "compile/executable"
+fixture = "check-small"
+argv = ["compile", "main.al", "-o", "out/main", "--release"]
+expected_exit = 0
+repetitions = 10
+warmup = 2
+output_kind = "scratch"
+
+# The same work at the default optimization level, so the harness itself
+# is what measures what --release bought.
+[[case]]
+id = "compile/executable-unoptimized"
+fixture = "check-small"
+argv = ["compile", "main.al", "-o", "out/main"]
+expected_exit = 0
+repetitions = 10
+warmup = 2
+output_kind = "scratch"
+
+[[case]]
+id = "build/executable"
+fixture = "build-package"
+argv = ["build", ".", "-o", "out/app", "--release"]
+expected_exit = 0
+repetitions = 10
+warmup = 2
+output_kind = "scratch"

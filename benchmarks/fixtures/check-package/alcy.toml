@@ -1,0 +1,10 @@
+[package]
+name = "bench"
+version = "0.1.0"
+
+[modules]
+include = ["main", "util"]
+
+[[bin]]
+name = "bench"
+path = "main.al"
