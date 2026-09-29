@@ -262,7 +262,7 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
         break;
       }
     }
-    double value = digits.empty() ? 0.0 : std::strtod(digits.c_str(), nullptr);
+    f64 value = digits.empty() ? 0.0 : std::strtod(digits.c_str(), nullptr);
     if (lit.is_negative) {
       value = -value;
     }
