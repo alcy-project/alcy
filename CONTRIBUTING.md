@@ -117,10 +117,38 @@ Notes:
 
 Keep changes focused; avoid mixing refactors with behavior changes unless they are inseparable.
 
-Commit messages say what changed and why, and stay short — a handful of lines rather than a
-page, as a rough guide rather than a quota. A message that has to be read carefully to find the
-point is a message that is too long. Put the reasoning in a comment, a test, or the ADR rather
-than in the log.
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/): a type,
+optionally a scope, then a subject, then a body.
+
+```
+<type>(<scope>): <subject>
+
+<body>
+```
+
+The type says what kind of change this is, so a reader can filter the log before reading any of
+it. The standard types are `feat` for a new capability, `fix` for a correction, `refactor` for a
+change that neither adds nor repairs behaviour, `perf`, `test`, `docs`, `build`, `ci`, `chore`,
+and `style`. Two the convention does not name are in use here: `check` for a change to one of
+the acceptance scripts under `tools/`, and `borrow` for a change to the borrow checker, which is
+large enough that its commits are worth reading as a series.
+
+The scope is the module or area the change belongs to, and it is encouraged: `fix(borrow)`,
+`feat(cli)`, `refactor(diag)`, `build(deps)`, `ci(wasm)`. It names where a reader would look
+first, which a subject line cannot do in ten words. Use the directory or namespace name, and
+prefer a scope that is already a `BUILD.gn` module over one invented for a single change. Omit
+it only when a change genuinely spans the tree and any one scope would mislead.
+
+The subject is imperative and lowercase, with no trailing period: what the change does, not
+what was done. `fix: two at_mut results is a receiver conflict`, not `Fixed the at_mut issue`.
+
+A `feat` or `fix` may carry a `BREAKING CHANGE:` footer, one per blank line after the body, for
+a change that invalidates previous behaviour. The tree is young enough that none has been needed
+yet, which is a reason to be sure before spending the one.
+
+The body is optional and says why. A commit that needs more than a handful of lines has a message
+that is too long: put the reasoning in a comment, a test, or the ADR rather than in the log. A
+message that has to be read carefully to find the point is a message that is too long.
 
 Record no abandoned attempts. Work that left nothing in the tree has nothing to point at later, so
 the log becomes its only trace; if a mistake is worth remembering, it is worth a comment where the
