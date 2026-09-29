@@ -21,10 +21,6 @@ namespace bench {
 
 namespace {
 
-// Emitting is milliseconds, and the object case is tens of them, so its
-// floor is longer: at one second it would gather twenty samples, which
-// is not enough for a median to mean anything and the engine would say
-// so on every run.
 constexpr MeasurementPolicy EMIT = {
     .warmup = 3,
     .samples = 0,
@@ -32,12 +28,18 @@ constexpr MeasurementPolicy EMIT = {
     .min_batch_ns = 0,
 };
 
+#if !BUILD_FLAG(IS_OS_ASMJS)
+// Emitting is milliseconds, and the object case is tens of them, so its
+// floor is longer: at one second it would gather twenty samples, which
+// is not enough for a median to mean anything and the engine would say
+// so on every run.
 constexpr MeasurementPolicy EMIT_OBJECT = {
     .warmup = 2,
     .samples = 0,
     .min_duration_ns = 4000ull * 1000 * 1000,
     .min_batch_ns = 0,
 };
+#endif  // !BUILD_FLAG(IS_OS_ASMJS)
 
 }  // namespace
 
