@@ -19,19 +19,22 @@ script_dir=$(dirname "$0")
 cd "$script_dir/.." && root_dir=$(pwd)
 tools_dir="$root_dir/tools"
 
-# Switches rather than a mode, so any order and any subset work.
+# script flags
 #
+#   --nix          run all checks in nix develop environment
 #   --wasm         also build and run the tests as WebAssembly (needs
 #                  Emscripten and node)
 #   --no-sanitize  skip the sanitized build of the exe cases (needs clang,
 #                  and roughly doubles their runtime)
 #   --no-coverage  skip the coverage ratchet (needs llvm-cov, and rebuilds
 #                  the tests and the compiler with instrumentation)
+nix=false
 run_wasm=false
 run_sanitize=true
 run_coverage=true
 for flag in "$@"; do
   case "$flag" in
+    --nix) nix=true ;;
     --wasm) run_wasm=true ;;
     --no-wasm) run_wasm=false ;;
     --no-sanitize) run_sanitize=false ;;
@@ -44,14 +47,20 @@ if command -v typos >/dev/null 2>&1; then
   typos
 fi
 
-# Enter nix develop shell if nix is available and not already inside
-if [ -z "${IN_NIX_SHELL:-}" ] && command -v nix >/dev/null 2>&1; then
+# Enter nix develop shell if nix = true and nix is available and not already inside
+if [[ $nix == true ]] && [ -z "${IN_NIX_SHELL:-}" ] && command -v nix >/dev/null 2>&1; then
   exec nix develop -c "$0" "$@"
 fi
 
-release_subdir="build_release"
-debug_subdir="build"
-wasm_subdir="build_wasm"
+if [[ $nix == true ]]; then
+  release_subdir="build_release_nix"
+  debug_subdir="build_nix"
+  wasm_subdir="build_wasm_nix"
+else
+  release_subdir="build_release"
+  debug_subdir="build"
+  wasm_subdir="build_wasm"
+fi
 
 "${py_runner[@]}" "$tools_dir/build.py" \
   --target=all \
