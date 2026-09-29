@@ -262,10 +262,15 @@ class Checker {
         const ir::TypeTag loaded = tag_of(loaded_ty);
         const bool is_reborrow =
             loaded == ir::TypeTag::Ref || loaded == ir::TypeTag::MutRef;
+        // A `str` is a view into someone's buffer, so a copy of one
+        // keeps the buffer's loan alive exactly like a copy of a
+        // reference does. Without this a view outlives the push that
+        // reallocates under it: the loan dies at the copy and the
+        // conflict is never reported.
         const bool carries_reference =
             is_reborrow || loaded == ir::TypeTag::Struct ||
             loaded == ir::TypeTag::Tuple || loaded == ir::TypeTag::Array ||
-            loaded == ir::TypeTag::Enum;
+            loaded == ir::TypeTag::Enum || loaded == ir::TypeTag::Str;
         if (carries_reference) {
           flow[instr.dst.idx] = flow[addr];
         } else {

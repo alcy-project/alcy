@@ -6,17 +6,13 @@ peripheral work lives in `backlog.md`.
 
 ## Next
 
-- [ ] Growable `String`.
+- [x] Growable `String`.
 
-  `String` is a fixed 256-byte array, so a longer result panics
-  instead of growing. `fmt`'s compile-time expansion writes the
-  pieces into the `buf` field as an inline array, so a heap buffer
-  means the expander allocates at run time; `docs/spec/fmt.md`
-  records the two ways to agree the size, and the first — the format
-  string is handed its scratch as an argument — is the honest one.
-  A heap buffer puts `String` in the position `Vec<T>` was in, so this
-  is the first exercise of the realloc-conflict rule on a type the
-  standard library owns.
+  Landed as a heap buffer mirroring `Vec<u8>`, with `format` measuring
+  before it reserves so nothing truncates. A `str` view keeps its
+  buffer's loan alive, so holding one across a `push` conflicts — the
+  first exercise of the realloc-conflict rule on a type the standard
+  library owns, pinned by `err-string-realloc`.
 - [ ] Slices, `&[T]`.
 
   The generalization of `str`, and the ground the borrowed APIs and

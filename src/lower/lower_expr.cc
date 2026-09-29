@@ -1005,6 +1005,38 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
 // Calls through an intrinsic declaration: known names map to
 // runtime hooks or IR operations. Undeclared legacy names
 // (print/println/panic) still arrive through lower_intrinsic.
+ir::RegisterIdx Lowerer::emit_heap_alloc(ir::TypeIdx elem,
+                                         ir::TypeIdx ref_ty,
+                                         ir::OperandIdx count) {
+  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+  const ir::TypeIdx usize_ty = usize_type();
+  // The runtime counts bytes; the compiler supplies the element size
+  // and alignment it reserved them at.
+  const ir::RegisterIdx bytes = emit_type_query(ir::Opcode::TypeSizeOf, elem);
+  const ir::RegisterIdx align = emit_type_query(ir::Opcode::TypeAlignOf, elem);
+  if (failed) {
+    return ir::RegisterIdx(base::INVALID_IDX);
+  }
+  const ir::RegisterIdx total =
+      emit(ir::Opcode::IntMul, usize_ty, {to_operand(bytes, usize_ty), count});
+  if (failed) {
+    return ir::RegisterIdx(base::INVALID_IDX);
+  }
+  const ir::ExternalFunctionIdx ext =
+      declare_external("alcy_alloc", ptr_ty, {usize_ty, usize_ty});
+  const ir::RegisterIdx result =
+      emit(ir::Opcode::Call, ptr_ty,
+           {builder.operand(ir::Operand::from_external_function(
+                ext, builder.primitive(ir::TypeTag::Function))),
+            to_operand(total, usize_ty), to_operand(align, usize_ty)});
+  if (failed) {
+    return ir::RegisterIdx(base::INVALID_IDX);
+  }
+  // The caller's `&mut` return is a reference; the runtime pointer
+  // needs its pointee label for later element offsets.
+  return emit(ir::Opcode::TypeCast, ref_ty, {to_operand(result, ptr_ty)});
+}
+
 Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
                                   const analyzer::CheckedModule::FnSig& sig,
                                   const std::vector<ir::TypeIdx>& type_args) {
@@ -1150,47 +1182,33 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       }
       args.push_back(arg_for(arg, sig.params[i]));
     }
-    // The runtime counts bytes; the compiler supplies the element size
-    // and alignment it reserved them at.
-    const ir::RegisterIdx bytes =
-        emit_type_query(ir::Opcode::TypeSizeOf, type_args[0]);
-    const ir::RegisterIdx align =
-        emit_type_query(ir::Opcode::TypeAlignOf, type_args[0]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    const ir::RegisterIdx total =
-        emit(ir::Opcode::IntMul, usize_ty,
-             {to_operand(bytes, usize_ty), args[name == "alloc" ? 0 : 1]});
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    const ir::OperandIdx size_op = to_operand(total, usize_ty);
-    const ir::OperandIdx align_op = to_operand(align, usize_ty);
     if (name == "dealloc") {
+      // The runtime counts bytes; the compiler supplies the element
+      // size and alignment it reserved them at.
+      const ir::RegisterIdx bytes =
+          emit_type_query(ir::Opcode::TypeSizeOf, type_args[0]);
+      const ir::RegisterIdx align =
+          emit_type_query(ir::Opcode::TypeAlignOf, type_args[0]);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      const ir::RegisterIdx total = emit(
+          ir::Opcode::IntMul, usize_ty, {to_operand(bytes, usize_ty), args[1]});
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
       const ir::ExternalFunctionIdx ext =
           declare_external("alcy_dealloc", builder.primitive(ir::TypeTag::Void),
                            {ptr_ty, usize_ty, usize_ty});
-      emit_void(ir::Opcode::Call,
-                {builder.operand(ir::Operand::from_external_function(
-                     ext, builder.primitive(ir::TypeTag::Function))),
-                 args[0], size_op, align_op});
+      emit_void(
+          ir::Opcode::Call,
+          {builder.operand(ir::Operand::from_external_function(
+               ext, builder.primitive(ir::TypeTag::Function))),
+           args[0], to_operand(total, usize_ty), to_operand(align, usize_ty)});
       return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
     }
-    const ir::ExternalFunctionIdx ext =
-        declare_external("alcy_alloc", ptr_ty, {usize_ty, usize_ty});
-    const ir::RegisterIdx result =
-        emit(ir::Opcode::Call, ptr_ty,
-             {builder.operand(ir::Operand::from_external_function(
-                  ext, builder.primitive(ir::TypeTag::Function))),
-              size_op, align_op});
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    // The intrinsic's `&mut T` return is a reference; the runtime
-    // pointer needs its pointee label for later element offsets.
     const ir::RegisterIdx labelled =
-        emit(ir::Opcode::TypeCast, sig.ret, {to_operand(result, ptr_ty)});
+        emit_heap_alloc(type_args[0], sig.ret, args[0]);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }

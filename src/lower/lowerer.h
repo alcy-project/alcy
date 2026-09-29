@@ -304,6 +304,13 @@ class Lowerer {
   ir::OperandIdx advance_ptr(ir::OperandIdx ptr,
                              ir::OperandIdx offset,
                              diag::Span span);
+  // Allocates `count` elements of `elem` on the heap and labels the raw
+  // pointer with `ref_ty`, the `&mut` the caller owns. This is what
+  // `alloc<T>` lowers to, factored out for callers that need a heap
+  // buffer without going through the intrinsic.
+  ir::RegisterIdx emit_heap_alloc(ir::TypeIdx elem,
+                                  ir::TypeIdx ref_ty,
+                                  ir::OperandIdx count);
   Val lower_str_intrinsic(ast::ExprIdx expr, std::string_view name);
   Val lower_intrinsic(ast::ExprIdx expr, std::string_view name);
   ir::OperandIdx arg_for(Val arg, ir::TypeIdx param);
@@ -458,8 +465,9 @@ class Lowerer {
                        ir::OperandIdx tup_op,
                        const std::vector<ir::TypeIdx>& elem_types,
                        ir::OperandIdx dst_base,
-                       u64 capacity_value,
-                       FmtState& state);
+                       ir::OperandIdx capacity,
+                       FmtState& state,
+                       bool measure_only);
   Val lower_fmt_write(ast::ExprIdx expr,
                       const analyzer::CheckedModule::FnSig& sig);
   Val lower_fmt_format(ast::ExprIdx expr,

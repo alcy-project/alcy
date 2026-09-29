@@ -52,3 +52,6 @@ because the language cannot name varying sizes and arities yet.
 
 - Numbered/indexed placeholders and format specifiers.
 - Float formatting, user-defined formattability, width/precision.
+- A single-pass growable expansion for `format`: today it measures the
+  output before reserving the heap buffer, so every value formats
+  twice.

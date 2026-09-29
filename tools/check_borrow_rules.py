@@ -493,6 +493,50 @@ case(
   ret *r + q.b
 }""", PAIR + "fn get_a(p: &P) -> &i32 {\n  ret &p.a\n}\n")
 
+# --- a str view into a string is a loan of the string -----------------
+case(
+    "view", "as_str-then-push", "reject",
+    """fn main() -> i32 {
+  mut s := String::new()
+  s.push(104u8)
+  r := s.as_str()
+  s.push(105u8)
+  print(r)
+  ret 0
+}""")
+
+case(
+    "view", "as_str-copy-then-push", "reject",
+    """fn main() -> i32 {
+  mut s := String::new()
+  s.push(104u8)
+  r := s.as_str()
+  t := r
+  s.push(105u8)
+  print(t)
+  ret 0
+}""")
+
+case(
+    "view", "as_str-dead-then-push", "accept",
+    """fn main() -> i32 {
+  mut s := String::new()
+  s.push(104u8)
+  r := s.as_str()
+  s.push(105u8)
+  ret s.len() as i32
+}""")
+
+case(
+    "view", "push-then-view", "accept",
+    """fn main() -> i32 {
+  mut s := String::new()
+  s.push(104u8)
+  s.push(105u8)
+  print(s.as_str())
+  ret 0
+}""")
+
 # --- a struct holding a reference composes by intersection ------------
 case(
     "struct", "reference-field-kept-live", "accept",

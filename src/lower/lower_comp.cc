@@ -1486,8 +1486,9 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
                               ir::OperandIdx tup_op,
                               const std::vector<ir::TypeIdx>& elem_types,
                               ir::OperandIdx dst_base,
-                              u64 capacity_value,
-                              FmtState& state) {
+                              ir::OperandIdx capacity,
+                              FmtState& state,
+                              bool measure_only) {
   const ir::TypeIdx usize_ty = usize_type();
   const ir::TypeIdx u8_ty = builder.primitive(ir::TypeTag::U8);
   const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
@@ -1496,7 +1497,7 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
         builder.immutable({.type = usize_ty, .data = {.u64_value = value}}),
         usize_ty);
   };
-  state.capacity = usize_imm(capacity_value);
+  state.capacity = capacity;
   state.off_addr = emit(ir::Opcode::Alloca, usize_ty, {size_one});
   emit_void(ir::Opcode::Store,
             {usize_imm(0), to_operand(state.off_addr, usize_ty)});
@@ -1520,9 +1521,15 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
                                   to_operand(state.tot_addr, usize_ty)});
   };
   // Copies [src, len), bounded by the buffer: only chunk reaches
-  // the buffer, while full always accrues to the total.
+  // the buffer, while full always accrues to the total. Measuring
+  // skips the copy and keeps the total, so a first pass learns the
+  // exact size a growable buffer has to reserve.
   auto bounded_copy = [&](ir::OperandIdx src, ir::OperandIdx len,
                           ir::OperandIdx full) {
+    if (measure_only) {
+      accumulate(full);
+      return !failed;
+    }
     const ir::RegisterIdx off = emit(ir::Opcode::Load, usize_ty,
                                      {to_operand(state.off_addr, usize_ty)});
     const ir::RegisterIdx remaining =
@@ -1863,9 +1870,12 @@ Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
     }
   }
   const ir::TypeIdx usize_ty = usize_type();
+  const ir::OperandIdx capacity_op = to_operand(
+      builder.immutable({.type = usize_ty, .data = {.u64_value = capacity}}),
+      usize_ty);
   FmtState state;
   if (!emit_fmt_pieces(node.span, parsed.pieces, tup.op, elem_types, buf.op,
-                       capacity, state)) {
+                       capacity_op, state, false)) {
     return Val{size_one, error_type(), false, false};
   }
   if (failed) {
@@ -1952,11 +1962,13 @@ Val Lowerer::lower_fmt_format(ast::ExprIdx expr,
     }
   }
   const ir::TypeIdx usize_ty = usize_type();
-  const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+  const ir::TypeIdx u8_ty = builder.primitive(ir::TypeTag::U8);
   u32 buf_field = 0;
   u32 len_field = 1;
+  u32 cap_field = 2;
   if (!struct_field_index(sig.ret, "buf", buf_field) ||
-      !struct_field_index(sig.ret, "len", len_field)) {
+      !struct_field_index(sig.ret, "len", len_field) ||
+      !struct_field_index(sig.ret, "cap", cap_field)) {
     internal(node.span, "string without fields");
     return Val{size_one, error_type(), false, false};
   }
@@ -1964,17 +1976,54 @@ Val Lowerer::lower_fmt_format(ast::ExprIdx expr,
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
-  const ir::ArrayType& buf_shape =
-      builder.state()
-          .array_types[builder.state().types[buf_field_ty].as_array()];
+  // Phase one measures: the pieces run with no destination, and the
+  // total they accrue is the exact size the heap buffer reserves. The
+  // tuple is lowered once up front, so its side effects happen once
+  // and both passes read the same values.
+  FmtState measured;
+  const ir::OperandIdx no_capacity = to_operand(
+      builder.immutable({.type = usize_ty, .data = {.u64_value = 0}}),
+      usize_ty);
+  if (!emit_fmt_pieces(node.span, parsed.pieces, tup_op, elem_types, size_one,
+                       no_capacity, measured, true)) {
+    return Val{size_one, error_type(), false, false};
+  }
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::RegisterIdx total = emit(ir::Opcode::Load, usize_ty,
+                                     {to_operand(measured.tot_addr, usize_ty)});
+  const ir::RegisterIdx heap =
+      emit_heap_alloc(u8_ty, buf_field_ty, to_operand(total, usize_ty));
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
   const ir::RegisterIdx slot = emit(ir::Opcode::Alloca, sig.ret, {size_one});
   const ir::RegisterIdx buf_addr =
       emit(ir::Opcode::GetElementPtr, buf_field_ty,
            {to_operand(slot, sig.ret), zero_i32, index_operand(buf_field)});
+  emit_void(ir::Opcode::Store, {to_operand(heap, buf_field_ty),
+                                to_operand(buf_addr, buf_field_ty)});
+  const ir::TypeIdx len_ty = field_type_of(sig.ret, len_field, node.span);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx cap_ty = field_type_of(sig.ret, cap_field, node.span);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::RegisterIdx cap_addr =
+      emit(ir::Opcode::GetElementPtr, cap_ty,
+           {to_operand(slot, sig.ret), zero_i32, index_operand(cap_field)});
+  emit_void(ir::Opcode::Store,
+            {to_operand(total, usize_ty), to_operand(cap_addr, cap_ty)});
+  // Phase two expands into the reserved buffer. The reservation is the
+  // measured total, so nothing truncates; the length stored below is
+  // the bytes the second pass wrote.
   FmtState state;
-  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
   if (!emit_fmt_pieces(node.span, parsed.pieces, tup_op, elem_types,
-                       to_operand(buf_addr, ptr_ty), buf_shape.count, state)) {
+                       to_operand(heap, buf_field_ty),
+                       to_operand(total, usize_ty), state, false)) {
     return Val{size_one, error_type(), false, false};
   }
   if (failed) {
@@ -1982,24 +2031,6 @@ Val Lowerer::lower_fmt_format(ast::ExprIdx expr,
   }
   const ir::RegisterIdx written =
       emit(ir::Opcode::Load, usize_ty, {to_operand(state.off_addr, usize_ty)});
-  const ir::RegisterIdx total =
-      emit(ir::Opcode::Load, usize_ty, {to_operand(state.tot_addr, usize_ty)});
-  const ir::RegisterIdx truncated =
-      emit(ir::Opcode::Ne, boolean,
-           {to_operand(written, usize_ty), to_operand(total, usize_ty)});
-  const ir::BlockIdx ok_block = reserve_block();
-  const ir::BlockIdx bad_block = reserve_block();
-  emit_cond_br(to_operand(truncated, boolean), bad_block, ok_block);
-  switch_to(bad_block);
-  emit_panic(str_operand("format output truncated"));
-  switch_to(ok_block);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
-  }
-  const ir::TypeIdx len_ty = field_type_of(sig.ret, len_field, node.span);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
-  }
   const ir::RegisterIdx len_addr =
       emit(ir::Opcode::GetElementPtr, len_ty,
            {to_operand(slot, sig.ret), zero_i32, index_operand(len_field)});

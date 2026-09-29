@@ -33,5 +33,25 @@ fn main() -> i32 {
   if e.len() != 2 {
     bad = 9
   }
+  // Past the old fixed limit: pushes and formatting both reallocate.
+  mut big := String::new()
+  mut i := 0
+  while i < 300 {
+    big.push(97u8)
+    i = i + 1
+  }
+  if big.len() != 300 {
+    bad = 10
+  }
+  if str_byte(big.as_str(), 299) != 97u8 {
+    bad = 11
+  }
+  grown := format("{}{}", (big.as_str(), big.as_str()))
+  if str_len(grown.as_str()) != 600 {
+    bad = 12
+  }
+  if str_byte(grown.as_str(), 599) != 97u8 {
+    bad = 13
+  }
   ret bad
 }

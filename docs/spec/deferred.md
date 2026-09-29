@@ -21,17 +21,6 @@ relied upon by MVP programs or by the MVP compiler implementation.
   inference binds only a parameter a declared parameter type pins on
   its own, so a call whose parameters cannot be recovered that way
   needs the turbofish.
-- `String` is still a fixed 256-byte array, so a formatted string longer
-  than that panics rather than growing. A growable `String` needs its
-  buffer to be uninitialized storage, but `format` is expanded at
-  compile time by a hand-written path in the lowerer that builds the
-  string value directly, writes the pieces into the `buf` field as an
-  inline array, and stores `written` into `len`. Giving `String` a heap
-  buffer means that path has to allocate at runtime instead, which
-  needs a capacity agreed between core and the expander: either the
-  format string is handed its scratch as an argument, so the expander
-  reads the size from the call site, or the size becomes a constant both
-  sides repeat. The first is the honest one. See `docs/spec/fmt.md`.
 - A loan's extent is a region computed by backward liveness over the
   CFG: a loan is live where a value carrying it is read and wherever a
   successor is live, so sibling branches differ. The place a reborrow
