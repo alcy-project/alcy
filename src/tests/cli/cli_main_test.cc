@@ -19,23 +19,38 @@
 #include "tests/util/test_util.h"
 
 // Replacing a descriptor and reading it back is the same operation on
-// every host; only the four names below differ, and Emscripten provides
+// every host; only the spellings below differ, and Emscripten provides
 // the POSIX ones. Isolating them here is what lets the cases that do it
 // run on Windows rather than being excluded for a spelling.
 #if BUILD_FLAG(IS_OS_WIN)
 #include <fcntl.h>
 #include <io.h>
 
+#include <cstdio>
+
 namespace {
 constexpr const char* NULL_DEVICE = "NUL";
+// Windows prefixes every open flag with an underscore and wants a
+// permission mask where POSIX wants a mode.
+constexpr int READ_FLAGS = _O_RDONLY;
+constexpr int WRITE_FLAGS = _O_WRONLY | _O_CREAT | _O_TRUNC;
+constexpr int TRUNCATE_FLAGS = _O_RDWR | _O_CREAT | _O_TRUNC;
+constexpr int FILE_MODE = _S_IREAD | _S_IWRITE;
+
+int open_file(const char* path, int flags) {
+  return ::_open(path, flags, FILE_MODE);
+}
+int open_null_device() {
+  return ::_open(NULL_DEVICE, _O_RDWR);
+}
+int close_descriptor(int fd) {
+  return ::_close(fd);
+}
 int dup_descriptor(int fd) {
   return ::_dup(fd);
 }
 int replace_descriptor(int from, int to) {
   return ::_dup2(from, to);
-}
-int open_null_device() {
-  return ::_open(NULL_DEVICE, _O_RDWR);
 }
 }  // namespace
 #else
@@ -46,14 +61,25 @@ int open_null_device() {
 
 namespace {
 constexpr const char* NULL_DEVICE = "/dev/null";
+constexpr int READ_FLAGS = O_RDONLY;
+constexpr int WRITE_FLAGS = O_WRONLY | O_CREAT | O_TRUNC;
+constexpr int TRUNCATE_FLAGS = O_RDWR | O_CREAT | O_TRUNC;
+constexpr int FILE_MODE = 0644;
+
+int open_file(const char* path, int flags) {
+  return ::open(path, flags, FILE_MODE);
+}
+int open_null_device() {
+  return ::open(NULL_DEVICE, O_RDWR);
+}
+int close_descriptor(int fd) {
+  return ::close(fd);
+}
 int dup_descriptor(int fd) {
   return ::dup(fd);
 }
 int replace_descriptor(int from, int to) {
   return ::dup2(from, to);
-}
-int open_null_device() {
-  return ::open(NULL_DEVICE, O_RDWR);
 }
 }  // namespace
 #endif
@@ -99,14 +125,13 @@ class CapturedStdout {
     // pending lines out of the capture, and there they would read as part
     // of what the compiler wrote.
     std::cout.flush();
-    file_ = static_cast<i32>(
-        ::open(path.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644));
+    file_ = static_cast<i32>(open_file(path.c_str(), TRUNCATE_FLAGS));
     if (file_ < 0) {
       return;
     }
     saved_ = static_cast<i32>(dup_descriptor(STDOUT_FILENO));
     if (saved_ < 0) {
-      ::close(file_);
+      close_descriptor(file_);
       file_ = -1;
       return;
     }
@@ -129,14 +154,14 @@ class CapturedStdout {
     // doctest queued goes back to the terminal rather than into the next
     // capture.
     std::cout.flush();
-    ::fflush(stdout);
-    ::close(STDOUT_FILENO);
+    std::fflush(stdout);
+    close_descriptor(STDOUT_FILENO);
     replace_descriptor(saved_, STDOUT_FILENO);
-    ::close(saved_);
-    ::close(file_);
+    close_descriptor(saved_);
+    close_descriptor(file_);
     file_ = -1;
     text_ = io::read_file(path_);
-    ::remove(path_.c_str());
+    std::remove(path_.c_str());
   }
 
   bool ok() const { return file_ >= 0; }
@@ -161,14 +186,13 @@ class CapturedStdout {
 class CapturedStderr {
  public:
   explicit CapturedStderr(const std::string& path) : path_(path) {
-    file_ = static_cast<i32>(
-        ::open(path.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644));
+    file_ = static_cast<i32>(open_file(path.c_str(), TRUNCATE_FLAGS));
     if (file_ < 0) {
       return;
     }
     saved_ = static_cast<i32>(dup_descriptor(STDERR_FILENO));
     if (saved_ < 0) {
-      ::close(file_);
+      close_descriptor(file_);
       file_ = -1;
       return;
     }
@@ -184,14 +208,14 @@ class CapturedStderr {
     if (file_ < 0) {
       return;
     }
-    ::fflush(stderr);
-    ::close(STDERR_FILENO);
+    std::fflush(stderr);
+    close_descriptor(STDERR_FILENO);
     replace_descriptor(saved_, STDERR_FILENO);
-    ::close(saved_);
-    ::close(file_);
+    close_descriptor(saved_);
+    close_descriptor(file_);
     file_ = -1;
     text_ = io::read_file(path_);
-    ::remove(path_.c_str());
+    std::remove(path_.c_str());
   }
 
   bool ok() const { return file_ >= 0; }
@@ -240,17 +264,17 @@ class SilencedOutput {
 
   ~SilencedOutput() {
     if (null_ >= 0) {
-      ::close(null_);
+      close_descriptor(null_);
     }
     if (saved_out_ < 0 || saved_err_ < 0) {
       return;
     }
-    ::close(STDOUT_FILENO);
-    ::close(STDERR_FILENO);
+    close_descriptor(STDOUT_FILENO);
+    close_descriptor(STDERR_FILENO);
     replace_descriptor(saved_out_, STDOUT_FILENO);
     replace_descriptor(saved_err_, STDERR_FILENO);
-    ::close(saved_out_);
-    ::close(saved_err_);
+    close_descriptor(saved_out_);
+    close_descriptor(saved_err_);
     // The same reason as in the constructor: doctest's next line belongs
     // on the real descriptor, not the one just put back.
     std::cout.flush();
@@ -277,9 +301,8 @@ i32 run_compile_stdin(io::TempDir& dir,
   if (text.empty()) {
     // io::write_file declines an empty span, and the empty program is
     // exactly one case here, so the file is created directly.
-    const i32 empty = static_cast<i32>(
-        ::open(source.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644));
-    if (empty < 0 || ::close(empty) != 0) {
+    const i32 empty = static_cast<i32>(open_file(source.c_str(), WRITE_FLAGS));
+    if (empty < 0 || close_descriptor(empty) != 0) {
       return -1;
     }
   } else {
@@ -295,15 +318,15 @@ i32 run_compile_stdin(io::TempDir& dir,
   if (saved < 0) {
     return -1;
   }
-  const i32 piped = static_cast<i32>(::open(source.c_str(), O_RDONLY));
+  const i32 piped = static_cast<i32>(open_file(source.c_str(), READ_FLAGS));
   if (piped < 0 || replace_descriptor(piped, STDIN_FILENO) < 0) {
     if (piped >= 0) {
-      ::close(piped);
+      close_descriptor(piped);
     }
-    ::close(saved);
+    close_descriptor(saved);
     return -1;
   }
-  ::close(piped);
+  close_descriptor(piped);
 
   const std::string out = dir.join(output);
   const std::string mode(emit);
@@ -316,9 +339,9 @@ i32 run_compile_stdin(io::TempDir& dir,
   }
   const i32 code = cli_main(static_cast<i32>(argv.size()), argv.data());
 
-  ::close(STDIN_FILENO);
+  close_descriptor(STDIN_FILENO);
   replace_descriptor(saved, STDIN_FILENO);
-  ::close(saved);
+  close_descriptor(saved);
   return code;
 }
 
@@ -413,6 +436,7 @@ TEST_CASE("Check accepts a well-typed file") {
   if (!setup) {
     return;
   }
+  SilencedOutput silenced;
   CHECK(run_check_on(dir, "ok.al") == 0);
 }
 
@@ -426,6 +450,7 @@ TEST_CASE("Check rejects a mistyped file") {
   if (!setup) {
     return;
   }
+  SilencedOutput silenced;
   CHECK(run_check_on(dir, "bad.al") != 0);
 }
 
@@ -442,6 +467,7 @@ TEST_CASE("Check rejects a non-exhaustive match") {
   if (!setup) {
     return;
   }
+  SilencedOutput silenced;
   CHECK(run_check_on(dir, "bad.al") != 0);
 }
 
