@@ -68,7 +68,7 @@ jobs:
       - name: Package & Generate Checksum
         shell: bash
         run: |
-          uv run python ./tools/package.py \
+          uv run ./tools/package.py \
             --plat=wasm \
             --arch=wasm32 \
             --mode="${{ inputs.build_type }}" \

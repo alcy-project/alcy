@@ -84,7 +84,7 @@ jobs:
       - name: Package & Generate Checksum
         shell: bash
         run: |
-          ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run python ./tools/package.py \
+          ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/package.py \
             --plat="${{ matrix.plat }}" \
             --arch="${{ matrix.arch }}" \
             --mode="${{ inputs.build_type }}" \
@@ -123,7 +123,7 @@ jobs:
 
       - name: Verify Static Linkage
         shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run python ./tools/verify_static_linkage.py --build-dir=out/build
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/verify_static_linkage.py --build-dir=out/build
 
       # The engine is built and run, and what comes out is checked for
       # shape: every case present, every sample counted, a clock named, a
