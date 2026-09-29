@@ -421,20 +421,34 @@ case(
   ret *a + *b
 }""")
 
-# A literal index names its element, so distinct literals are distinct
-# elements and the checker can say so. A runtime index cannot, so the
-# last case below is recorded as conforming by refusing.
+# `at_mut` takes `&mut Self`, so the receiver is what governs two calls,
+# not the index. Holding one result across a second call is two
+# exclusive loans of the vector at once, which the rules forbid whatever
+# the indices are; the index is invisible across the call anyway, since
+# the accessor reads it as a parameter.
 case(
     "element",
-    "two-at_mut-distinct-index",
-    "accept",
+    "two-at_mut-both-live",
+    "reject",
     VEC
     + """  mut a := v.at_mut(0).unwrap()
   mut b := v.at_mut(1).unwrap()
   *a = 10
   *b = 20
   ret *a + *b
-}""", known=True)
+}""")
+
+case(
+    "element",
+    "two-at_mut-first-dead",
+    "accept",
+    VEC
+    + """  mut a := v.at_mut(0).unwrap()
+  *a = 10
+  mut b := v.at_mut(1).unwrap()
+  *b = 20
+  ret 0
+}""")
 
 case(
     "element",

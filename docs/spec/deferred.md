@@ -41,11 +41,10 @@ relied upon by MVP programs or by the MVP compiler implementation.
   region model is the relational part: the outlives constraints between
   regions and the intersection a struct composes by, which today hold
   because a reborrow carries its parent's loans rather than because the
-  relation is solved. Separately, a loan into a buffer element is named
-  by a step standing for any index, so two `&mut` into distinct
-  *literal* indices are refused where they are disjoint; that is
-  recorded as a case in `tools/check_borrow_rules.py`, which states the
-  ownership rules as a gate. See `docs/adr/0012`.
+  relation is solved. A reference returned from a call is anchored to
+  the first loan the call reified, which a summary that named the place
+  it came from would remove the need to choose. The rules are stated as
+  a gate in `tools/check_borrow_rules.py`. See `docs/adr/0012`.
 - `spec` (trait) definitions and dispatch, coherence rules, and
   monomorphization beyond per-instantiation enum, struct, and method
   specialization.

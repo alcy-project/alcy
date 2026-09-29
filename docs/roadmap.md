@@ -6,16 +6,18 @@ peripheral work lives in `backlog.md`.
 
 ## Next
 
-- [ ] A loan into a buffer element names its element.
+- [ ] The relational part of the region model.
 
-  The step a loan through a buffer index carries stands for any index,
-  which is what makes a reallocating write conflict with a loan into
-  one element, and also what makes two `&mut` into distinct *literal*
-  indices conflict when they are disjoint. Naming the element where the
-  index is a literal, and keeping the wildcard for a runtime index,
-  satisfies both: the literals are distinct, and a runtime index still
-  cannot be shown distinct from anything. Tracked as a case in
-  `tools/check_borrow_rules.py`.
+  A reborrow carries its parent's loans, so the outlives constraint
+  between them holds by construction rather than by being solved, and a
+  struct holding a reference composes by whichever rule the flow happens
+  to take rather than by the intersection `docs/spec/ownership.md`
+  states. A summary that named the place a returned reference came from
+  would also let an accessor's index reach the call site, where today a
+  literal index is invisible because the accessor reads it as a
+  parameter. No case in the rule matrix observes any of this, so it is a
+  change with no failing case to point at — which is why it needs its
+  own scope rather than riding along with a fix.
 
 ## Queue
 
