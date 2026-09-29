@@ -13,3 +13,5 @@ restat = "restat"
 OLT = "OLT"
 # LLVM API name (llvm::IRBuilderBase::CreateMemCpy)
 Cpy = "Cpy"
+# Windows API: _O_WRONLY
+WRONLY = "WRONLY"
