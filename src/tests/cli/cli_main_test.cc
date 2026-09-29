@@ -853,13 +853,17 @@ TEST_CASE("Run announces the target before the program, not after") {
   if (!setup) {
     return;
   }
+  // --color=never because the label below is matched as plain text on
+  // standard error, and whether that stream is a terminal is the host's
+  // to decide: in a developer's terminal it is, and the verb arrives
+  // wrapped in escape codes.
   CapturedStderr captured(dir.join("stderr.txt"));
   CapturedStdout out(dir.join("stdout.txt"));
   CHECK(captured.ok());
   if (!captured.ok()) {
     return;
   }
-  CHECK(run_run_on(dir, "proj") == 0);
+  CHECK(run_run_on(dir, "proj", {"--color=never"}) == 0);
   const std::string announced = captured.text();
   const std::string program = out.text();
   // Standard error carries the announcement and whatever the link driver
@@ -892,7 +896,10 @@ TEST_CASE("Run does not announce a program that failed to build") {
   if (!announced.ok() || !reported.ok()) {
     return;
   }
-  CHECK(run_run_on(dir, "proj") != 0);
+  // The colour is pinned for the same reason as the case above: the
+  // absence of a plain label is only evidence if a labelled one would
+  // have been plain.
+  CHECK(run_run_on(dir, "proj", {"--color=never"}) != 0);
   CHECK(announced.text().find("Running   app\n") == std::string::npos);
   // The failure was reported, so the run did something rather than
   // nothing. Without this the assertion above would also hold for a
