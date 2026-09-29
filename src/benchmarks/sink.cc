@@ -8,6 +8,7 @@
 
 #include "benchmarks/runner.h"
 #include "benchmarks/statistics.h"
+#include "fpag/base/numeric.h"
 #include "text/json.h"
 
 namespace bench {

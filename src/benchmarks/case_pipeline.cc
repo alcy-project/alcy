@@ -4,7 +4,6 @@
 #include "benchmarks/case_pipeline.h"
 
 #include <memory>
-#include <span>
 
 #include "benchmarks/clock.h"
 #include "benchmarks/fixture.h"

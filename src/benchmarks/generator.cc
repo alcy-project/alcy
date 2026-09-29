@@ -7,7 +7,7 @@
 #include <string>
 #include <string_view>
 
-#include "fmt/format.h"
+#include "fmt/core.h"
 #include "fpag/base/numeric.h"
 
 namespace bench {

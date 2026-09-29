@@ -14,7 +14,6 @@
 #include "benchmarks/generator.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
-#include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
 #include "fpag/str/string_interner.h"
 #include "ir/storage.h"
