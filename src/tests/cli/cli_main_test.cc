@@ -18,11 +18,9 @@
 #include "fpag/io/temp_dir.h"
 #include "tests/util/test_util.h"
 
-// Replacing a descriptor and reading it back is the same operation on
-// every host. The descriptor numbers come from io::, which every other
-// caller in the tree uses and which needs no platform include; what is
-// left to spell differently is the calls themselves, the open flags and
-// the null device. Emscripten provides the POSIX ones.
+// The descriptor numbers come from io::, as they do everywhere else in
+// the tree, so only the calls, the open flags and the null device are
+// left to spell differently. Emscripten has the POSIX ones.
 #if BUILD_FLAG(IS_OS_WIN)
 #include <fcntl.h>
 #include <io.h>
@@ -125,17 +123,14 @@ i32 run_check_on(io::TempDir& dir, std::string_view rel) {
   return cli_main(static_cast<i32>(argv.size()), argv.data());
 }
 
-// Standard output is the test process's own, so a case that reads what
-// the compiler reported has to capture it: the descriptor is replaced
-// for the duration and put back afterwards, because doctest writes its
-// own results there.
+// Standard output is the test process's own, so reading what the
+// compiler reported means taking it for a while and giving it back.
 class CapturedStdout {
  public:
   explicit CapturedStdout(const std::string& path) : path_(path) {
     // doctest reports through std::cout, whose buffer belongs to the
-    // descriptor that is about to be replaced. Flushing it here keeps its
-    // pending lines out of the capture, and there they would read as part
-    // of what the compiler wrote.
+    // descriptor being replaced. Flushing keeps its pending lines out of
+    // the capture, where they would read as the compiler's.
     std::cout.flush();
     file_ = static_cast<i32>(open_file(path.c_str(), TRUNCATE_FLAGS));
     if (file_ < 0) {
@@ -155,16 +150,14 @@ class CapturedStdout {
   CapturedStdout(const CapturedStdout&) = delete;
   CapturedStdout& operator=(const CapturedStdout&) = delete;
 
-  // Restores the descriptor and reads back what was written. Idempotent,
-  // so the destructor can call it for the cases that never got this far.
+  // Idempotent, so the destructor can call it for the cases that never
+  // got this far.
   void finish() {
     if (file_ < 0) {
       return;
     }
-    // The compiler writes through the descriptor, so the C stream has
-    // nothing pending; std::cout is flushed anyway so that whatever
-    // doctest queued goes back to the terminal rather than into the next
-    // capture.
+    // The same reason again, on the way back: whatever doctest queued
+    // belongs to the terminal, not to the next capture.
     std::cout.flush();
     std::fflush(stdout);
     close_descriptor(io::STDOUT_FD);
@@ -177,8 +170,7 @@ class CapturedStdout {
   }
 
   bool ok() const { return file_ >= 0; }
-  // What the compiler wrote. Empty until finish(), since the bytes are
-  // only readable once the descriptor is back.
+  // Empty until the descriptor is back.
   std::string text() {
     finish();
     return text_;
@@ -191,10 +183,7 @@ class CapturedStdout {
   std::string text_;
 };
 
-// Standard error is the test process's own too, and `run` announces
-// itself there rather than on standard output. The descriptor is
-// replaced the same way, so a case can read the announcement back
-// without it landing on the terminal.
+// The same, for the stream `run` announces itself on.
 class CapturedStderr {
  public:
   explicit CapturedStderr(const std::string& path) : path_(path) {
@@ -244,22 +233,16 @@ class CapturedStderr {
   std::string text_;
 };
 
-// Discards whatever the compiler writes for the life of the guard. A case
-// that asserts on output captures it instead; this is for the ones that
-// only care about the exit code and the file the command left behind.
-//
-// Without it a case writes its result to the terminal, where it lands
-// between doctest's own lines and the results of every other case. A
-// passing run then prints provoked diagnostics — an `error[E4020]` from
-// a case that wanted one — beside a green `SUCCESS!`, and a reader
-// cannot tell the two apart.
+// Discards whatever the compiler writes, for the cases that assert on
+// the exit code and the file rather than on the output. Without it a
+// passing run prints the diagnostics a case provoked — an `error[E4020]`
+// from a case that wanted one — beside a green `SUCCESS!`.
 class SilencedOutput {
  public:
   SilencedOutput() {
     // doctest reports through std::cout, whose buffer belongs to the
-    // descriptor about to be replaced. Anything still queued there would
-    // be discarded along with the compiler's output, and the run would
-    // finish having printed no results at all.
+    // descriptor being replaced. Anything queued there would be discarded
+    // too, and the run would print no results at all.
     std::cout.flush();
     null_ = static_cast<i32>(open_null_device());
     if (null_ < 0) {
@@ -287,8 +270,7 @@ class SilencedOutput {
     replace_descriptor(saved_err_, io::STDERR_FD);
     close_descriptor(saved_out_);
     close_descriptor(saved_err_);
-    // The same reason as in the constructor: doctest's next line belongs
-    // on the real descriptor, not the one just put back.
+    // As in the constructor, on the way back.
     std::cout.flush();
   }
 
@@ -301,9 +283,8 @@ class SilencedOutput {
   i32 saved_err_ = -1;
 };
 
-// Standard input is the test process's own, so a case that feeds the
-// compiler has to put the program there: the descriptor is replaced for the
-// duration and put back afterwards, because the rest of the suite reads it.
+// Puts the program on standard input, which is the test process's own,
+// and gives the suite its own back afterwards.
 i32 run_compile_stdin(io::TempDir& dir,
                       std::string_view program,
                       std::string_view output,
@@ -325,7 +306,7 @@ i32 run_compile_stdin(io::TempDir& dir,
     }
   }
 
-  // Saved and restored, so one case's program is not the next case's input.
+  // Restored below, so one case's program is not the next case's.
   const i32 saved = static_cast<i32>(dup_descriptor(io::STDIN_FD));
   if (saved < 0) {
     return -1;
@@ -362,8 +343,6 @@ i32 run_compile_stdin(io::TempDir& dir,
 #if ALCY_TEST_LINKS
 TEST_CASE("Compile reads a program from standard input") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_stdin_ok_");
-  // No file on disk is named: the program exists only as the pipe's
-  // content, which is the whole point of the flag.
   SilencedOutput silenced;
   CHECK(run_compile_stdin(dir,
                           "fn main() -> i32 {\n"
@@ -378,9 +357,7 @@ TEST_CASE("Compile reads a program from standard input") {
 #if ALCY_TEST_LINKS
 TEST_CASE("Compile reports a program piped in under the name <stdin>") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_stdin_bad_");
-  // A type error, so the diagnostic has a line and a caret to place, and
-  // the name it places them against is the only observable that the
-  // virtual source was used rather than a file.
+  // A type error, so the diagnostic names the source it came from.
   SilencedOutput silenced;
   CHECK(run_compile_stdin(dir,
                           "fn main() -> i32 {\n"
@@ -393,9 +370,7 @@ TEST_CASE("Compile reports a program piped in under the name <stdin>") {
 
 TEST_CASE("Compile reads an empty pipe as an empty program") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_stdin_empty_");
-  // Not a crash and not a hang: the read ends at zero bytes and the
-  // program is then whatever an empty file would be. IR emission needs
-  // no entry point, so no link is attempted.
+  // Zero bytes, then whatever an empty file would be.
   SilencedOutput silenced;
   CHECK(run_compile_stdin(dir, "", "piped.ll", "llvm-ir") == 0);
 }
@@ -416,8 +391,6 @@ TEST_CASE("Compile refuses a target alongside standard input") {
   for (std::string& arg : storage) {
     argv.push_back(arg.data());
   }
-  // Both would be a contradiction, and silently preferring one would leave
-  // the user guessing which.
   SilencedOutput silenced;
   CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) != 0);
 }
@@ -431,8 +404,6 @@ TEST_CASE("Compile refuses standard input without a named output") {
   for (std::string& arg : storage) {
     argv.push_back(arg.data());
   }
-  // The pipe names no file, so an unnamed output has no extension to
-  // replace; the caller must name one.
   SilencedOutput silenced;
   CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) != 0);
 }
@@ -512,8 +483,6 @@ TEST_CASE("Compile emits an object file") {
   }
   SilencedOutput silenced;
   CHECK(run_compile_on(dir, "main.al", "main.o", "object") == 0);
-  // The extension alone would have been an executable called main.o, so
-  // the file is checked rather than just the exit code.
   CHECK(io::is_file(dir.join("main.o")));
   const std::optional<std::string> bytes = io::read_file(dir.join("main.o"));
   CHECK(bytes.has_value());
@@ -595,8 +564,6 @@ TEST_CASE("Build rejects a single file") {
   if (!setup) {
     return;
   }
-  // The split is the feature: a file belongs to `compile`, so `build`
-  // fails rather than guessing.
   const std::string target = dir.join("main.al");
   std::vector<std::string> storage{"alcy", "build", target};
   std::vector<char*> argv;
@@ -646,8 +613,7 @@ TEST_CASE("Build reads the linker from toolchain.toml") {
   if (!setup) {
     return;
   }
-  // The frontend runs before the link, so a link failure proves the file
-  // was read rather than ignored.
+  // A link failure proves the file was read rather than ignored.
   SilencedOutput silenced;
   CHECK(run_build_on(dir, "proj") != 0);
 }
@@ -680,8 +646,6 @@ TEST_CASE("Time trace embeds its phases in the json result") {
   if (!setup) {
     return;
   }
-  // Textual IR needs no backend, so the trace covers every phase on
-  // every host.
   const std::string target = dir.join("main.al");
   const std::string out = dir.join("main.ll");
   std::vector<std::string> storage{"alcy", "-t",     "compile", target,  "-o",
@@ -702,8 +666,7 @@ TEST_CASE("Time trace embeds its phases in the json result") {
   CHECK(document.find("\"analyze\"") != std::string::npos);
   CHECK(document.find("\"lower\"") != std::string::npos);
   CHECK(document.find("\"borrow\"") != std::string::npos);
-  // One document, ending in a newline, with nothing beside it: the
-  // trace is no longer a second file to correlate with this one.
+  // One document and no second file to correlate with it.
   CHECK(!document.empty());
   CHECK(document.back() == '\n');
   CHECK(document.find('\n') == document.size() - 1);
@@ -759,8 +722,7 @@ TEST_CASE("Json result carries diagnostics as data") {
   }
   CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) != 0);
   const std::string document = captured.text();
-  // The resolved span is what an editor needs to place the squiggle, so
-  // the document carries it rather than leaving it to be located again.
+  // An editor places the squiggle from the span, not by re-finding it.
   CHECK(document.find("\"status\":\"error\"") != std::string::npos);
   CHECK(document.find("\"severity\":\"error\"") != std::string::npos);
   CHECK(document.find("\"code\":") != std::string::npos);
@@ -768,7 +730,6 @@ TEST_CASE("Json result carries diagnostics as data") {
   CHECK(document.find("bad.al") != std::string::npos);
   CHECK(document.find("\"offset\":") != std::string::npos);
   CHECK(document.find("\"length\":") != std::string::npos);
-  // The rendered form is an alternative to this, not an addition to it.
   CHECK(document.find("error[E") == std::string::npos);
 }
 
@@ -845,12 +806,11 @@ TEST_CASE("Run executes a package and forwards its exit code") {
 // The two cases below read the streams rather than discarding them.
 #if ALCY_TEST_LINKS
 TEST_CASE("Run announces the target before the program, not after") {
-  // The label is what tells the reader which program's output they are
-  // looking at, so it has to come first. Printed afterwards it would sit
-  // below that output and read as more of it.
+  // The label says whose output follows, so it has to come first: below
+  // that output it would read as more of it.
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_announce_");
-  // Written out rather than through write_package, because that manifest
-  // names no std dependency and this program prints.
+  // Written out because this program prints and write_package's manifest
+  // names no std dependency.
   const bool setup =
       write_all(dir, "proj/alcy.toml",
                 "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
@@ -865,10 +825,8 @@ TEST_CASE("Run announces the target before the program, not after") {
   if (!setup) {
     return;
   }
-  // --color=never because the label below is matched as plain text on
-  // standard error, and whether that stream is a terminal is the host's
-  // to decide: in a developer's terminal it is, and the verb arrives
-  // wrapped in escape codes.
+  // --color=never because the label is matched as plain text, and
+  // whether standard error is a terminal is the host's to decide.
   CapturedStderr captured(dir.join("stderr.txt"));
   CapturedStdout out(dir.join("stdout.txt"));
   CHECK(captured.ok());
@@ -878,20 +836,16 @@ TEST_CASE("Run announces the target before the program, not after") {
   CHECK(run_run_on(dir, "proj", {"--color=never"}) == 0);
   const std::string announced = captured.text();
   const std::string program = out.text();
-  // Standard error carries the announcement and whatever the link driver
-  // says for itself, which is a warning on some platforms. Asserting the
-  // whole stream would be asserting the linker is quiet, which is not
-  // this case's subject; what matters is that the label is one whole
-  // line of its own and is the one naming this program.
+  // Matched rather than compared whole, because the link driver adds a
+  // warning of its own to this stream on some platforms.
   CHECK(announced.find("Running   app\n") != std::string::npos);
-  // The program keeps standard output to itself, so a pipe into `run`
-  // carries program output and nothing else.
+  // A pipe into `run` carries the program's output and nothing else.
   CHECK(program == "marker\n");
 }
 
 TEST_CASE("Run does not announce a program that failed to build") {
-  // The announcement is a claim that a process is about to start. One
-  // made before the compile would be a claim about work not yet done.
+  // The announcement claims a process is about to start, so one made
+  // before the compile would be a claim about work not yet done.
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_noannounce_");
   const bool setup = write_package(dir, "proj",
                                    "fn main() {\n"
@@ -908,14 +862,12 @@ TEST_CASE("Run does not announce a program that failed to build") {
   if (!announced.ok() || !reported.ok()) {
     return;
   }
-  // The colour is pinned for the same reason as the case above: the
-  // absence of a plain label is only evidence if a labelled one would
-  // have been plain.
+  // Pinned for the same reason as above: a plain label would have been
+  // plain, so its absence means something.
   CHECK(run_run_on(dir, "proj", {"--color=never"}) != 0);
   CHECK(announced.text().find("Running   app\n") == std::string::npos);
-  // The failure was reported, so the run did something rather than
-  // nothing. Without this the assertion above would also hold for a
-  // command that printed no announcement because it printed nothing.
+  // The failure was reported, so the absence above is the absence of an
+  // announcement rather than of any output.
   CHECK(reported.text().find("type mismatch") != std::string::npos);
 }
 
