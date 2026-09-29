@@ -18,11 +18,54 @@
 #include "fpag/io/temp_dir.h"
 #include "tests/util/test_util.h"
 
-#if !BUILD_FLAG(IS_OS_ASMJS) && !BUILD_FLAG(IS_OS_WIN)
+// Replacing a descriptor and reading it back is the same operation on
+// every host; only the four names below differ, and Emscripten provides
+// the POSIX ones. Isolating them here is what lets the cases that do it
+// run on Windows rather than being excluded for a spelling.
+#if BUILD_FLAG(IS_OS_WIN)
+#include <fcntl.h>
+#include <io.h>
+
+namespace {
+constexpr const char* NULL_DEVICE = "NUL";
+int dup_descriptor(int fd) {
+  return ::_dup(fd);
+}
+int replace_descriptor(int from, int to) {
+  return ::_dup2(from, to);
+}
+int open_null_device() {
+  return ::_open(NULL_DEVICE, _O_RDWR);
+}
+}  // namespace
+#else
 #include <fcntl.h>
 #include <unistd.h>
 
 #include <cstdio>
+
+namespace {
+constexpr const char* NULL_DEVICE = "/dev/null";
+int dup_descriptor(int fd) {
+  return ::dup(fd);
+}
+int replace_descriptor(int from, int to) {
+  return ::dup2(from, to);
+}
+int open_null_device() {
+  return ::open(NULL_DEVICE, O_RDWR);
+}
+}  // namespace
+#endif
+
+// Emscripten has no system linker and cannot spawn a process, so a case
+// that needs either cannot run there. Nothing else about a case depends
+// on the host: the file system, the terminal and the compiler are all
+// present, which is why the exclusion is per case rather than per file.
+#if BUILD_FLAG(IS_OS_ASMJS)
+#define ALCY_TEST_LINKS 0
+#else
+#define ALCY_TEST_LINKS 1
 #endif
 
 namespace cli {
@@ -33,8 +76,17 @@ bool write_all(io::TempDir& dir, std::string_view rel, std::string_view text) {
   return dir.write_file(rel, text);
 }
 
-#if !BUILD_FLAG(IS_OS_ASMJS)
-#if !BUILD_FLAG(IS_OS_WIN)
+i32 run_check_on(io::TempDir& dir, std::string_view rel) {
+  const std::string target = dir.join(rel);
+  std::vector<std::string> storage{"alcy", "check", "--file", target};
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  return cli_main(static_cast<i32>(argv.size()), argv.data());
+}
+
 // Standard output is the test process's own, so a case that reads what
 // the compiler reported has to capture it: the descriptor is replaced
 // for the duration and put back afterwards, because doctest writes its
@@ -52,13 +104,13 @@ class CapturedStdout {
     if (file_ < 0) {
       return;
     }
-    saved_ = static_cast<i32>(::dup(STDOUT_FILENO));
+    saved_ = static_cast<i32>(dup_descriptor(STDOUT_FILENO));
     if (saved_ < 0) {
       ::close(file_);
       file_ = -1;
       return;
     }
-    ::dup2(file_, STDOUT_FILENO);
+    replace_descriptor(file_, STDOUT_FILENO);
   }
 
   ~CapturedStdout() { finish(); }
@@ -79,7 +131,7 @@ class CapturedStdout {
     std::cout.flush();
     ::fflush(stdout);
     ::close(STDOUT_FILENO);
-    ::dup2(saved_, STDOUT_FILENO);
+    replace_descriptor(saved_, STDOUT_FILENO);
     ::close(saved_);
     ::close(file_);
     file_ = -1;
@@ -114,13 +166,13 @@ class CapturedStderr {
     if (file_ < 0) {
       return;
     }
-    saved_ = static_cast<i32>(::dup(STDERR_FILENO));
+    saved_ = static_cast<i32>(dup_descriptor(STDERR_FILENO));
     if (saved_ < 0) {
       ::close(file_);
       file_ = -1;
       return;
     }
-    ::dup2(file_, STDERR_FILENO);
+    replace_descriptor(file_, STDERR_FILENO);
   }
 
   ~CapturedStderr() { finish(); }
@@ -134,7 +186,7 @@ class CapturedStderr {
     }
     ::fflush(stderr);
     ::close(STDERR_FILENO);
-    ::dup2(saved_, STDERR_FILENO);
+    replace_descriptor(saved_, STDERR_FILENO);
     ::close(saved_);
     ::close(file_);
     file_ = -1;
@@ -173,17 +225,17 @@ class SilencedOutput {
     // be discarded along with the compiler's output, and the run would
     // finish having printed no results at all.
     std::cout.flush();
-    null_ = static_cast<i32>(::open("/dev/null", O_RDWR));
+    null_ = static_cast<i32>(open_null_device());
     if (null_ < 0) {
       return;
     }
-    saved_out_ = static_cast<i32>(::dup(STDOUT_FILENO));
-    saved_err_ = static_cast<i32>(::dup(STDERR_FILENO));
+    saved_out_ = static_cast<i32>(dup_descriptor(STDOUT_FILENO));
+    saved_err_ = static_cast<i32>(dup_descriptor(STDERR_FILENO));
     if (saved_out_ < 0 || saved_err_ < 0) {
       return;
     }
-    ::dup2(null_, STDOUT_FILENO);
-    ::dup2(null_, STDERR_FILENO);
+    replace_descriptor(null_, STDOUT_FILENO);
+    replace_descriptor(null_, STDERR_FILENO);
   }
 
   ~SilencedOutput() {
@@ -195,8 +247,8 @@ class SilencedOutput {
     }
     ::close(STDOUT_FILENO);
     ::close(STDERR_FILENO);
-    ::dup2(saved_out_, STDOUT_FILENO);
-    ::dup2(saved_err_, STDERR_FILENO);
+    replace_descriptor(saved_out_, STDOUT_FILENO);
+    replace_descriptor(saved_err_, STDERR_FILENO);
     ::close(saved_out_);
     ::close(saved_err_);
     // The same reason as in the constructor: doctest's next line belongs
@@ -239,12 +291,12 @@ i32 run_compile_stdin(io::TempDir& dir,
   }
 
   // Saved and restored, so one case's program is not the next case's input.
-  const i32 saved = static_cast<i32>(::dup(STDIN_FILENO));
+  const i32 saved = static_cast<i32>(dup_descriptor(STDIN_FILENO));
   if (saved < 0) {
     return -1;
   }
   const i32 piped = static_cast<i32>(::open(source.c_str(), O_RDONLY));
-  if (piped < 0 || ::dup2(piped, STDIN_FILENO) < 0) {
+  if (piped < 0 || replace_descriptor(piped, STDIN_FILENO) < 0) {
     if (piped >= 0) {
       ::close(piped);
     }
@@ -265,16 +317,14 @@ i32 run_compile_stdin(io::TempDir& dir,
   const i32 code = cli_main(static_cast<i32>(argv.size()), argv.data());
 
   ::close(STDIN_FILENO);
-  ::dup2(saved, STDIN_FILENO);
+  replace_descriptor(saved, STDIN_FILENO);
   ::close(saved);
   return code;
 }
-#endif  // !BUILD_FLAG(IS_OS_WIN)
-#endif  // !BUILD_FLAG(IS_OS_ASMJS
 
 }  // namespace
 
-#if !BUILD_FLAG(IS_OS_ASMJS) && !BUILD_FLAG(IS_OS_WIN)
+#if ALCY_TEST_LINKS
 TEST_CASE("Compile reads a program from standard input") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_stdin_ok_");
   // No file on disk is named: the program exists only as the pipe's
@@ -288,7 +338,9 @@ TEST_CASE("Compile reads a program from standard input") {
                           "piped.ll") == 0);
   CHECK(io::is_file(dir.join("piped.ll")));
 }
+#endif
 
+#if ALCY_TEST_LINKS
 TEST_CASE("Compile reports a program piped in under the name <stdin>") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_stdin_bad_");
   // A type error, so the diagnostic has a line and a caret to place, and
@@ -302,6 +354,7 @@ TEST_CASE("Compile reports a program piped in under the name <stdin>") {
                           "}\n",
                           "piped.ll") != 0);
 }
+#endif
 
 TEST_CASE("Compile reads an empty pipe as an empty program") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_stdin_empty_");
@@ -348,7 +401,49 @@ TEST_CASE("Compile refuses standard input without a named output") {
   SilencedOutput silenced;
   CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) != 0);
 }
-#endif  // !BUILD_FLAG(IS_OS_ASMJS) && !BUILD_FLAG(IS_OS_WIN)
+TEST_CASE("Check accepts a well-typed file") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_check_ok_test_");
+  const bool setup = write_all(dir, "ok.al",
+                               "struct Point { x: i32, y: i32 }\n"
+                               "fn main() {\n"
+                               "  p := Point { x: 1, y: 2 }\n"
+                               "  _ := p.x + p.y\n"
+                               "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CHECK(run_check_on(dir, "ok.al") == 0);
+}
+
+TEST_CASE("Check rejects a mistyped file") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_check_bad_test_");
+  const bool setup = write_all(dir, "bad.al",
+                               "fn main() {\n"
+                               "  x: u8 := 42i32\n"
+                               "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CHECK(run_check_on(dir, "bad.al") != 0);
+}
+
+TEST_CASE("Check rejects a non-exhaustive match") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_check_match_test_");
+  const bool setup = write_all(dir, "bad.al",
+                               "enum Choice { Yes, No(i32) }\n"
+                               "fn f(c: Choice) -> i32 {\n"
+                               "  ret match c {\n"
+                               "    Yes => 1,\n"
+                               "  }\n"
+                               "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CHECK(run_check_on(dir, "bad.al") != 0);
+}
 
 i32 run_compile_on(io::TempDir& dir,
                    std::string_view rel,
@@ -366,7 +461,6 @@ i32 run_compile_on(io::TempDir& dir,
   return cli_main(static_cast<i32>(argv.size()), argv.data());
 }
 
-#if !BUILD_FLAG(IS_OS_ASMJS)
 TEST_CASE("Compile emits an object file") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_object_");
   const bool setup = write_all(dir, "main.al",
@@ -422,6 +516,7 @@ TEST_CASE("Compile rejects an unknown emit mode") {
   CHECK(run_compile_on(dir, "main.al", "main.o", "bitcode") != 0);
 }
 
+#if ALCY_TEST_LINKS
 TEST_CASE("Compile links an executable") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_exe_");
   const bool setup = write_all(dir, "main.al",
@@ -435,6 +530,7 @@ TEST_CASE("Compile links an executable") {
   SilencedOutput silenced;
   CHECK(run_compile_on(dir, "main.al", "main_exe") == 0);
 }
+#endif
 
 TEST_CASE("Compile creates nonexistent directory") {
   io::TempDir dir =
@@ -517,6 +613,7 @@ TEST_CASE("Build reads the linker from toolchain.toml") {
   CHECK(run_build_on(dir, "proj") != 0);
 }
 
+#if ALCY_TEST_LINKS
 TEST_CASE("Build treats an empty linker as the default") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_linker_empty_");
   const bool setup = write_package(dir, "proj",
@@ -531,9 +628,8 @@ TEST_CASE("Build treats an empty linker as the default") {
   SilencedOutput silenced;
   CHECK(run_build_on(dir, "proj") == 0);
 }
+#endif
 
-#if !BUILD_FLAG(IS_OS_ASMJS)
-#if !BUILD_FLAG(IS_OS_WIN)
 TEST_CASE("Time trace embeds its phases in the json result") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_trace_test_");
   const bool setup = write_all(dir, "main.al",
@@ -637,6 +733,7 @@ TEST_CASE("Json result carries diagnostics as data") {
   CHECK(document.find("error[E") == std::string::npos);
 }
 
+#if ALCY_TEST_LINKS
 TEST_CASE("Text result reports the statistics it measured") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_stats_test_");
   const bool setup =
@@ -661,8 +758,7 @@ TEST_CASE("Text result reports the statistics it measured") {
   CHECK(captured.text().find("Checked   1 file, 1 module, 1 function  (") !=
         std::string::npos);
 }
-#endif  // !BUILD_FLAG(IS_OS_WIN)
-#endif  // !BUILD_FLAG(IS_OS_ASMJS)
+#endif
 
 i32 run_run_on(io::TempDir& dir,
                std::string_view rel,
@@ -689,6 +785,7 @@ i32 run_init_on(io::TempDir& dir, std::string_view rel) {
   return cli_main(static_cast<i32>(argv.size()), argv.data());
 }
 
+#if ALCY_TEST_LINKS
 TEST_CASE("Run executes a package and forwards its exit code") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_exit_test_");
   const bool setup = write_package(dir, "proj",
@@ -702,7 +799,11 @@ TEST_CASE("Run executes a package and forwards its exit code") {
   SilencedOutput silenced;
   CHECK(run_run_on(dir, "proj") == 3);
 }
+#endif
 
+// The two cases below read the streams rather than discarding them, so
+// they need the capture classes, which are POSIX-only.
+#if ALCY_TEST_LINKS
 TEST_CASE("Run announces the target before the program, not after") {
   // The label is what tells the reader which program's output they are
   // looking at, so it has to come first. Printed afterwards it would sit
@@ -743,7 +844,9 @@ TEST_CASE("Run announces the target before the program, not after") {
   // carries program output and nothing else.
   CHECK(program == "marker\n");
 }
+#endif
 
+#if ALCY_TEST_LINKS
 TEST_CASE("Run does not announce a program that failed to build") {
   // The announcement is a claim that a process is about to start. One
   // made before the compile would be a claim about work not yet done.
@@ -770,7 +873,9 @@ TEST_CASE("Run does not announce a program that failed to build") {
   // command that printed no announcement because it printed nothing.
   CHECK(reported.text().find("type mismatch") != std::string::npos);
 }
+#endif
 
+#if ALCY_TEST_LINKS
 TEST_CASE("Run tolerates program arguments") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_args_test_");
   const bool setup = write_package(dir, "proj",
@@ -784,7 +889,9 @@ TEST_CASE("Run tolerates program arguments") {
   SilencedOutput silenced;
   CHECK(run_run_on(dir, "proj", {"hello", "world"}) == 0);
 }
+#endif
 
+#if ALCY_TEST_LINKS
 TEST_CASE("Run fails on a mistyped package") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_bad_test_");
   const bool setup = write_package(dir, "proj",
@@ -798,7 +905,9 @@ TEST_CASE("Run fails on a mistyped package") {
   SilencedOutput silenced;
   CHECK(run_run_on(dir, "proj") != 0);
 }
+#endif
 
+#if ALCY_TEST_LINKS
 TEST_CASE("Run rejects a single file") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_file_test_");
   const bool setup = write_all(dir, "main.al",
@@ -814,6 +923,7 @@ TEST_CASE("Run rejects a single file") {
   SilencedOutput silenced;
   CHECK(run_run_on(dir, "main.al") != 0);
 }
+#endif
 
 TEST_CASE("Init creates a package in an existing directory") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_init_test_");
@@ -825,6 +935,5 @@ TEST_CASE("Init creates a package in an existing directory") {
   CHECK(main.open(dir.join("proj/main.al"), io::FileAccess::Read));
   CHECK(run_init_on(dir, "proj") != 0);
 }
-#endif
 
 }  // namespace cli

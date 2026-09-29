@@ -26,6 +26,19 @@ bool is_object_bytes(std::string_view bytes) {
          machine == "\x64\xAA";
 #elif BUILD_FLAG(IS_OS_APPLE)
   return bytes.size() >= 4 && bytes.compare(0, 4, "\xCF\xFA\xED\xFE") == 0;
+#elif BUILD_FLAG(IS_OS_ASMJS)
+  // The WebAssembly backend emits a wasm object, which is a module: the
+  // same four magic bytes every .wasm file starts with. Falling through
+  // to the ELF test below would fail on a correctly emitted object.
+  //
+  // The length is given explicitly because the magic begins with a NUL,
+  // and the `const char*` overload of compare measures its argument with
+  // strlen, which would stop at the first byte and compare nothing.
+  static constexpr std::string_view WASM_MAGIC(
+      "\x00"
+      "asm",
+      4);
+  return bytes.size() >= 4 && bytes.compare(0, 4, WASM_MAGIC) == 0;
 #else
   return bytes.size() >= 4 && bytes.compare(0, 4,
                                             "\x7F"
