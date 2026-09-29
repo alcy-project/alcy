@@ -4,6 +4,7 @@
 #include "pipeline/build.h"
 
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -58,6 +59,58 @@ std::string suffix_for(EmitMode mode) {
   return std::string(exe_suffix());
 }
 
+// The module a lowered package becomes, and the context it lives in.
+//
+// The two travel together because a module is invalid once its context
+// goes, and the context is neither copyable nor movable, so the caller
+// constructs this and has it filled rather than receiving one back.
+struct EmittedModule {
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module;
+
+  // Builds the module and, when asked for it, optimizes it. This is the
+  // only place that decides: the optimization belongs to the module, not
+  // to whichever backend goes on to consume it, and a backend that ran
+  // the pipeline on its own left every other consumer reading
+  // unoptimized IR.
+  base::Result<void, diag::Reported> build(PipelineContext& ctx,
+                                           lower::LoweredPackage& package,
+                                           bool optimize) {
+    module = std::make_unique<llvm::Module>("alcy_module", context);
+    codegen_llvm::LlvmIrEmitter emitter(
+        module.get(), std::move(package.storage), &ctx.strings, TARGET_WIDTH);
+    std::move(emitter).emit();
+    if (!optimize) {
+      return base::make_ok();
+    }
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "optimize",
+                                             "backend");
+    if (codegen_llvm::optimize_module(*module, "").is_err()) {
+      const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
+                                     "cannot optimize the module");
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
+    return base::make_ok();
+  }
+};
+
+// Writes bytes to `output_path`, whose parent directory is the caller's
+// to have made: every mode writes to one path, and the path is chosen
+// before the mode is acted on.
+base::Result<void, diag::Reported> write_output(PipelineContext& ctx,
+                                                std::string_view what,
+                                                const std::string& output_path,
+                                                std::span<const u8> bytes) {
+  if (!io::write_file(bytes, output_path)) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
+                                   "cannot write {} '{}'", what, output_path);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  return base::make_ok();
+}
+
 base::Result<void, diag::Reported> emit_package_object(
     PipelineContext& ctx,
     lower::LoweredPackage& package,
@@ -65,69 +118,35 @@ base::Result<void, diag::Reported> emit_package_object(
     const std::string& output_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-object",
                                            "backend");
-  llvm::LLVMContext context;
-  auto module = std::make_unique<llvm::Module>("alcy_module", context);
-  codegen_llvm::LlvmIrEmitter emitter(module.get(), std::move(package.storage),
-                                      &ctx.strings, TARGET_WIDTH);
-  std::move(emitter).emit();
-  base::Result<std::vector<u8>, codegen_llvm::ObjectEmitError> emitted =
-      codegen_llvm::emit_object(*module, "", optimize);
-  if (emitted.is_err()) {
+  EmittedModule emitted;
+  if (emitted.build(ctx, package, optimize).is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  base::Result<std::vector<u8>, codegen_llvm::ObjectEmitError> object =
+      codegen_llvm::emit_object(*emitted.module, "");
+  if (object.is_err()) {
     const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
                                    "cannot emit object '{}'", output_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  const std::vector<u8>& buffer = std::move(emitted).unwrap();
-  base::Result<path::Path, path::PathError> parsed =
-      path::Path::from_native(output_path);
-  if (parsed.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "invalid output path '{}'", output_path);
-    (void)index;
-    return base::make_err(diag::Reported{});
-  }
-  const path::Path parent = std::move(parsed).unwrap().parent();
-  if (ensure_directories(ctx, parent.as_view()).is_err() ||
-      !io::write_file(buffer, output_path)) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot write object '{}'", output_path);
-    (void)index;
-    return base::make_err(diag::Reported{});
-  }
-  return base::make_ok();
+  return write_output(ctx, "object", output_path, std::move(object).unwrap());
 }
 
 base::Result<void, diag::Reported> emit_package_ir(
     PipelineContext& ctx,
     lower::LoweredPackage& package,
+    bool optimize,
     const std::string& output_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-ir", "backend");
-  llvm::LLVMContext context;
-  auto module = std::make_unique<llvm::Module>("alcy_module", context);
-  codegen_llvm::LlvmIrEmitter emitter(module.get(), std::move(package.storage),
-                                      &ctx.strings, TARGET_WIDTH);
-  std::move(emitter).emit();
-  const std::string ir = codegen_llvm::emit_ir(*module);
-
-  base::Result<path::Path, path::PathError> parsed =
-      path::Path::from_native(output_path);
-  if (parsed.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "invalid output path '{}'", output_path);
-    (void)index;
+  EmittedModule emitted;
+  if (emitted.build(ctx, package, optimize).is_err()) {
     return base::make_err(diag::Reported{});
   }
-  const path::Path parent = std::move(parsed).unwrap().parent();
-  const std::vector<u8> buffer(ir.begin(), ir.end());
-  if (ensure_directories(ctx, parent.as_view()).is_err() ||
-      !io::write_file(buffer, output_path)) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot write ir '{}'", output_path);
-    (void)index;
-    return base::make_err(diag::Reported{});
-  }
-  return base::make_ok();
+  const std::string ir = codegen_llvm::emit_ir(*emitted.module);
+  return write_output(
+      ctx, "ir", output_path,
+      std::span<const u8>(reinterpret_cast<const u8*>(ir.data()), ir.size()));
 }
 
 base::Result<void, diag::Reported> link_executable(
@@ -164,13 +183,30 @@ base::Result<std::string, diag::Reported> emit_output(
     std::string_view linker,
     EmitMode mode,
     const std::string& output_path) {
+  // One path, so its parent is made once and every mode agrees about it.
+  // The linker creates no directories of its own, which left
+  // `alcy build -o out/app` failing where the same `-o` for an object
+  // worked.
+  base::Result<path::Path, path::PathError> parsed =
+      path::Path::from_native(output_path);
+  if (parsed.is_err()) {
+    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
+                                   "invalid output path '{}'", output_path);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  if (ensure_directories(ctx, std::move(parsed).unwrap().parent().as_view())
+          .is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+
   base::Result<void, diag::Reported> written =
       [&]() -> base::Result<void, diag::Reported> {
     if (mode == EmitMode::Object) {
       return emit_package_object(ctx, lowered, optimize, output_path);
     }
     if (mode == EmitMode::LlvmIr) {
-      return emit_package_ir(ctx, lowered, output_path);
+      return emit_package_ir(ctx, lowered, optimize, output_path);
     }
     io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
     const std::string object_path = scratch.join("main.o");
@@ -269,18 +305,14 @@ base::Result<std::string, diag::Reported> build_package(
   const path::Path out_dir = root.join(path::DEFAULT_OUT_DIR);
   std::string output_path;
   if (output.empty()) {
-    if (mode == EmitMode::Executable) {
-      if (ensure_directories(ctx, out_dir.as_view()).is_err()) {
-        return base::make_err(diag::Reported{});
-      }
-      output_path =
-          out_dir
-              .join(std::string(resolved.bin_name) + std::string(exe_suffix()))
-              .as_view();
-    } else {
-      output_path = root.join(std::string(resolved.bin_name) + suffix_for(mode))
-                        .as_view();
-    }
+    // Everything a package build writes goes to the directory the
+    // scaffold's own `.gitignore` names, whatever the mode. An object or
+    // a module beside the manifest landed outside the one region the
+    // compiler told git to ignore, so `git status` reported the build's
+    // own output as untracked.
+    output_path =
+        out_dir.join(std::string(resolved.bin_name) + suffix_for(mode))
+            .as_view();
   } else {
     output_path = std::string(output);
   }

@@ -25,18 +25,23 @@ base::Result<lower::LoweredPackage, diag::Reported> compile_tree(
     PipelineContext& ctx,
     analyzer::ModuleTree tree);
 
-// Emits one relocatable object for lowered IR. Write or emission
-// failures land in the bag.
+// Emits one relocatable object for a lowered package. The module is
+// built and, when `optimize` is set, put through the O3 pipeline here
+// rather than inside the emission, so that every backend sees the same
+// module. Write failures land in the bag; the output's parent directory
+// is the caller's to have made.
 base::Result<void, diag::Reported> emit_package_object(
     PipelineContext& ctx,
     lower::LoweredPackage& package,
     bool optimize,
     const std::string& output_path);
 
-// Writes the module as LLVM's textual IR.
+// Writes the module as LLVM's textual IR, optimized or not on the same
+// terms as emit_package_object.
 base::Result<void, diag::Reported> emit_package_ir(
     PipelineContext& ctx,
     lower::LoweredPackage& package,
+    bool optimize,
     const std::string& output_path);
 
 // Links one object plus the staged runtime into an executable.

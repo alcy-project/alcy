@@ -119,10 +119,10 @@ void init_linked_targets() {
 }  // namespace
 
 // Prepares the module for the triple (empty selects the host) and
-// returns its machine, tuned for the mode. Emission and optimization
-// share it so a bad triple fails identically on both paths.
+// returns its machine. Emission and optimization share it so a bad
+// triple fails identically on both paths.
 base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError>
-prepare_module(llvm::Module& module, std::string_view triple, bool optimize) {
+prepare_module(llvm::Module& module, std::string_view triple) {
   init_linked_targets();
   const std::string target_triple = triple.empty()
                                         ? llvm::sys::getDefaultTargetTriple()
@@ -136,12 +136,8 @@ prepare_module(llvm::Module& module, std::string_view triple, bool optimize) {
   }
   module.setTargetTriple(triple_obj);
   llvm::TargetOptions options;
-  const llvm::CodeGenOptLevel opt_level =
-      optimize ? llvm::CodeGenOptLevel::Aggressive
-               : llvm::CodeGenOptLevel::Default;
-  std::unique_ptr<llvm::TargetMachine> machine(
-      target->createTargetMachine(triple_obj, "generic", "", options,
-                                  llvm::Reloc::PIC_, std::nullopt, opt_level));
+  std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
+      triple_obj, "generic", "", options, llvm::Reloc::PIC_, std::nullopt));
   if (machine == nullptr) {
     return base::make_err(ObjectEmitError::NoTargetMachine);
   }
@@ -152,7 +148,7 @@ prepare_module(llvm::Module& module, std::string_view triple, bool optimize) {
 base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
                                                     std::string_view triple) {
   base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError> machine =
-      prepare_module(module, triple, true);
+      prepare_module(module, triple);
   if (machine.is_err()) {
     return base::make_err(std::move(machine).unwrap_err());
   }
@@ -179,17 +175,11 @@ base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
   return base::make_ok();
 }
 
-base::Result<std::vector<u8>, ObjectEmitError>
-emit_object(llvm::Module& module, std::string_view triple, bool optimize) {
-  if (optimize) {
-    base::Result<void, ObjectEmitError> optimized =
-        optimize_module(module, triple);
-    if (optimized.is_err()) {
-      return base::make_err(std::move(optimized).unwrap_err());
-    }
-  }
+base::Result<std::vector<u8>, ObjectEmitError> emit_object(
+    llvm::Module& module,
+    std::string_view triple) {
   base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError> machine =
-      prepare_module(module, triple, optimize);
+      prepare_module(module, triple);
   if (machine.is_err()) {
     return base::make_err(std::move(machine).unwrap_err());
   }

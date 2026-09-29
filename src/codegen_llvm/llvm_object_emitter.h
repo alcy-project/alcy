@@ -26,12 +26,14 @@ enum class ObjectEmitError : u8 {
 // Emits a relocatable object file for the module. An empty triple
 // selects the host. Only targets linked into the binary are
 // available (host backends on native builds); anything else reports
-// UnknownTriple without touching the module. With optimize the module
-// first runs optimize_module and codegen tunes aggressively.
+// UnknownTriple without touching the module.
+//
+// The module arrives as it will be emitted: optimization is
+// optimize_module's job, run by the caller beforehand, so that every
+// consumer of a module sees the same one.
 base::Result<std::vector<u8>, ObjectEmitError> emit_object(
     llvm::Module& module,
-    std::string_view triple,
-    bool optimize = false);
+    std::string_view triple);
 
 // Runs the O3 middle-end pipeline over the module in place, for the
 // given triple (empty selects the host). The module must verify clean;

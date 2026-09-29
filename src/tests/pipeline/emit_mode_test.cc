@@ -137,9 +137,9 @@ TEST_CASE("A package build honours the mode too") {
     const char* relative;
   };
   const Case cases[] = {
-      {EmitMode::LlvmIr, "proj/app.ll"},
+      {EmitMode::LlvmIr, "proj/out/app.ll"},
 #if !BUILD_FLAG(IS_OS_ASMJS)
-      {EmitMode::Object, "proj/app.o"},
+      {EmitMode::Object, "proj/out/app.o"},
 #endif  // !BUILD_FLAG(IS_OS_ASMJS
   };
   for (const Case& one : cases) {
@@ -163,9 +163,11 @@ TEST_CASE("A package build honours the mode too") {
                       "", false, "", one.mode);
     CHECK(built.is_ok());
     CHECK(io::is_file(dir.join(one.relative)));
+    // Every mode lands in the directory the scaffold's own `.gitignore`
+    // names, so a build never drops an artifact where git can see it.
+    CHECK(!io::is_file(dir.join("proj/app.ll")));
 #if !BUILD_FLAG(IS_OS_ASMJS)
-    // An object never ends up in the executable's directory.
-    CHECK(!io::is_file(dir.join("proj/out/app.o")));
+    CHECK(!io::is_file(dir.join("proj/app.o")));
 #endif  // !BUILD_FLAG(IS_OS_ASMJS
   }
 }

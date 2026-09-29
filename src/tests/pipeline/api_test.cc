@@ -10,6 +10,7 @@
 #include "diag/bag.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
+#include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "path/path.h"
 #include "pipeline/build.h"
@@ -112,6 +113,65 @@ TEST_CASE("Pipeline release build produces a working executable") {
   if (ran.is_ok()) {
     CHECK(std::move(ran).unwrap() == 3);
   }
+}
+
+// The emitter spills every local, so an unoptimized module has an
+// alloca per one and the O3 pipeline's mem2reg promotes them. That makes
+// the presence of an alloca the difference between the flag reaching the
+// IR and the flag reaching only the object file, which is how a release
+// build once produced byte-identical IR either way.
+TEST_CASE("Release optimizes the textual IR, not only the object") {
+  io::TempDir dir = io::TempDir::create_unique("pipeline_ir_optimize_");
+  const std::string source =
+      "fn add(a: i32, b: i32) -> i32 {\n  ret a + b\n}\n"
+      "fn main() -> i32 {\n  _ := add(1i32, 2i32)\n  ret 0\n}\n";
+  const bool setup = dir.write_file("main.al", source);
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  io::TempDir outputs = io::TempDir::create_unique("pipeline_ir_out_");
+  const std::string plain = outputs.join("plain.ll");
+  const std::string released = outputs.join("released.ll");
+
+  for (const auto& [optimize, target] :
+       {std::pair{false, plain}, std::pair{true, released}}) {
+    PipelineContext ctx;
+    base::Result<std::string, diag::Reported> built = build_single_file(
+        ctx, dir.join("main.al"), target, optimize, "",
+        pipeline::EmitMode::LlvmIr, pipeline::full_std_selection());
+    CHECK(built.is_ok());
+  }
+
+  const std::string plain_ir = io::read_file(plain);
+  const std::string released_ir = io::read_file(released);
+  CHECK(!plain_ir.empty());
+  CHECK(!released_ir.empty());
+  CHECK(plain_ir.find("alloca") != std::string::npos);
+  CHECK(released_ir.find("alloca") == std::string::npos);
+  CHECK(plain_ir != released_ir);
+}
+
+TEST_CASE("A build creates the directory its output names") {
+  // The linker creates no directories of its own, so `build -o out/app`
+  // used to fail where the same -o for an object worked. The output's
+  // parent is made once, before the mode is acted on.
+  io::TempDir dir = io::TempDir::create_unique("pipeline_nested_output_");
+  const std::string target = dir.join("a/b/c/app");
+  const std::string out = target.substr(0, target.find_last_of('/')) + "/app";
+  const bool setup =
+      dir.write_file("main.al", "fn main() -> i32 {\n  ret 0\n}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  PipelineContext ctx;
+  base::Result<std::string, diag::Reported> built = build_single_file(
+      ctx, dir.join("main.al"), out, false, "", pipeline::EmitMode::Executable,
+      pipeline::full_std_selection());
+  CHECK(built.is_ok());
+  CHECK(io::is_file(out));
 }
 
 TEST_CASE("Pipeline build reports an unwritable object path") {
