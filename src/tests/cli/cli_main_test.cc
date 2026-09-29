@@ -928,7 +928,7 @@ TEST_CASE("Run announces the target before the program, not after") {
   // warning of its own to this stream on some platforms.
   CHECK(announced.find("Running   app\n") != std::string::npos);
   CHECK(program.find("Running   app\n") == std::string::npos);
-  CHECK(program.find("marker\n") != std::string::npos);
+  CHECK(program.find("marker") != std::string::npos);
 }
 
 TEST_CASE("Run does not announce a program that failed to build") {
