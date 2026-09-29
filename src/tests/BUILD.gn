@@ -10,6 +10,7 @@ executable("tests") {
     "benchmarks/engine_test.cc",
     "benchmarks/generator_test.cc",
     "borrow/borrow_test.cc",
+    "cli/cli_config_test.cc",
     "cli/cli_main_test.cc",
     "cli/output_test.cc",
     "cli/parse_args_test.cc",

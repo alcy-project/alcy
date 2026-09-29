@@ -18,9 +18,11 @@
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
 #include "pipeline/build.h"
+#include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
 #include "pkg/manifest.h"
+#include "pkg/toolchain.h"
 #include "source/source.h"
 
 namespace cli {
@@ -106,6 +108,10 @@ ResultCode run_compile(const CliConfig& config,
     return failed;
   }
   const pipeline::StdSelection selection = std::move(selected).unwrap();
+  // `compile` never reads a toolchain file, so one file stays
+  // reproducible from the command alone; see docs/adr/0019.
+  const pipeline::LinkOptions link =
+      resolve_link_options(config, pkg::Toolchain{});
   // Validation guarantees one of these: a target, or the pipe with a
   // named output.
   if (config.stdin_source) {
@@ -120,9 +126,8 @@ ResultCode run_compile(const CliConfig& config,
     // The manager copies the text, so the buffer can go straight after.
     const source::FileId root =
         ctx.sources.add_virtual(STDIN_NAME, std::move(text).unwrap());
-    base::Result<std::string, diag::Reported> res =
-        pipeline::build_single_root(ctx, root, config.output, config.release,
-                                    config.linker, config.emit, selection);
+    base::Result<std::string, diag::Reported> res = pipeline::build_single_root(
+        ctx, root, config.output, config.release, link, config.emit, selection);
     envelope.trace = trace.take_events();
     if (res.is_err() || ctx.bag.has_errors()) {
       return failed;
@@ -133,9 +138,9 @@ ResultCode run_compile(const CliConfig& config,
     return ResultCode::Success;
   }
 
-  base::Result<std::string, diag::Reported> res = pipeline::build_single_file(
-      ctx, config.target_dir, config.output, config.release, config.linker,
-      config.emit, selection);
+  base::Result<std::string, diag::Reported> res =
+      pipeline::build_single_file(ctx, config.target_dir, config.output,
+                                  config.release, link, config.emit, selection);
   envelope.trace = trace.take_events();
   if (res.is_err() || ctx.bag.has_errors()) {
     return failed;

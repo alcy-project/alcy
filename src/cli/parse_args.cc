@@ -55,6 +55,14 @@ CliConfig extract_from_matches(arg::Matches&& matches) {
       pipeline::EmitMode::Executable);
   c.output = matches.get<std::string_view>("output").unwrap_or(c.output);
   c.linker = matches.get<std::string_view>("linker").unwrap_or(c.linker);
+  if (auto link_args = matches.get_all<std::string_view>("link-args");
+      link_args.is_ok()) {
+    for (std::string_view argument : std::move(link_args).unwrap()) {
+      if (!argument.empty()) {
+        c.link_args.push_back(argument);
+      }
+    }
+  }
   c.no_std = matches.get<bool>("no-std").unwrap_or(false);
   // `vcs` is declared on the two scaffolding verbs only, so the default
   // stands wherever it is absent.
@@ -153,14 +161,20 @@ arg::Parser build_parser() {
                        .build())
           .add_arg(arg::ArgBuilder("emit")
                        .help("What to write: executable (default), object, "
-                             "or llvm-ir. The output's extension no longer "
-                             "decides.")
-                       .choices({"executable", "object", "llvm-ir"})
+                             "llvm-ir, or llvm-bc. The output's extension "
+                             "no longer decides.")
+                       .choices({"executable", "object", "llvm-ir", "llvm-bc"})
                        .default_value("executable")
                        .build())
           .add_arg(arg::ArgBuilder("linker")
                        .help("System linker driver for executable builds. "
                              "Overrides .alcy/toolchain.toml.")
+                       .default_value("")
+                       .build())
+          .add_arg(arg::ArgBuilder("link-args")
+                       .help("Argument for the link driver, after the "
+                             "objects. Repeatable, one argument each; "
+                             "overrides .alcy/toolchain.toml.")
                        .default_value("")
                        .build())
           .build());
@@ -178,13 +192,18 @@ arg::Parser build_parser() {
                        .build())
           .add_arg(arg::ArgBuilder("emit")
                        .help("What to write: executable (default), object, "
-                             "or llvm-ir. The output's extension no longer "
-                             "decides.")
-                       .choices({"executable", "object", "llvm-ir"})
+                             "llvm-ir, or llvm-bc. The output's extension "
+                             "no longer decides.")
+                       .choices({"executable", "object", "llvm-ir", "llvm-bc"})
                        .default_value("executable")
                        .build())
           .add_arg(arg::ArgBuilder("linker")
                        .help("System linker driver for executable builds.")
+                       .default_value("")
+                       .build())
+          .add_arg(arg::ArgBuilder("link-args")
+                       .help("Argument for the link driver, after the "
+                             "objects. Repeatable, one argument each.")
                        .default_value("")
                        .build())
           .add_arg(arg::ArgBuilder("stdin")
@@ -214,6 +233,12 @@ arg::Parser build_parser() {
           .add_arg(arg::ArgBuilder("linker")
                        .help("System linker driver for executable builds. "
                              "Overrides .alcy/toolchain.toml.")
+                       .default_value("")
+                       .build())
+          .add_arg(arg::ArgBuilder("link-args")
+                       .help("Argument for the link driver, after the "
+                             "objects. Repeatable, one argument each; "
+                             "overrides .alcy/toolchain.toml.")
                        .default_value("")
                        .build())
           .build());

@@ -25,6 +25,7 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/StandardInstrumentations.h"
 #pragma clang diagnostic pop
+#include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace codegen_llvm {
@@ -206,6 +207,14 @@ std::string emit_ir(llvm::Module& module) {
   module.print(out, nullptr);
   out.flush();
   return text;
+}
+
+std::vector<u8> emit_bitcode(llvm::Module& module) {
+  llvm::SmallVector<char, 0> buffer;
+  llvm::raw_svector_ostream out(buffer);
+  llvm::WriteBitcodeToFile(module, out);
+  std::vector<u8> result(buffer.begin(), buffer.end());
+  return result;
 }
 
 }  // namespace codegen_llvm

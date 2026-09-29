@@ -18,6 +18,7 @@
 #include "fpag/io/io_util.h"
 #include "path/path.h"
 #include "pipeline/build.h"
+#include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/target.h"
 #include "pkg/toolchain.h"
@@ -80,13 +81,11 @@ ResultCode run_build(const CliConfig& config,
   if (toolchain.is_err()) {
     return failed;
   }
-  // An explicit driver wins; the file names the default.
   const pkg::Toolchain tool = std::move(toolchain).unwrap();
-  const std::string_view linker =
-      config.linker.empty() ? tool.linker : config.linker;
+  const pipeline::LinkOptions link = resolve_link_options(config, tool);
   base::Result<std::string, diag::Reported> res = pipeline::build_package(
       ctx, found.root, found.manifest, found.manifest_name, config.output,
-      config.release, linker, config.emit);
+      config.release, link, config.emit);
   envelope.trace = trace.take_events();
   if (res.is_err() || ctx.bag.has_errors()) {
     return failed;

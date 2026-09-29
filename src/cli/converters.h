@@ -39,6 +39,8 @@ struct arg::Converter<pipeline::EmitMode> {
       return make_ok(EmitMode::Object);
     } else if (v == "llvm-ir") {
       return make_ok(EmitMode::LlvmIr);
+    } else if (v == "llvm-bc") {
+      return make_ok(EmitMode::LlvmBitcode);
     } else {
       return make_err(GetError::InvalidArgument);
     }

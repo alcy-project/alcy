@@ -17,6 +17,7 @@
 #include "fpag/io/temp_dir.h"
 #include "path/path.h"
 #include "pipeline/build.h"
+#include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
 #include "source/source.h"
@@ -58,8 +59,8 @@ TEST_CASE("A build writes an object where it was asked for one") {
   {
     PipelineContext ctx;
     base::Result<std::string, diag::Reported> built =
-        build_single_file(ctx, source, object_path, false, "", EmitMode::Object,
-                          pipeline::full_std_selection());
+        build_single_file(ctx, source, object_path, false, LinkOptions{},
+                          EmitMode::Object, pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
   const std::string object = read_file(object_path);
@@ -77,8 +78,8 @@ TEST_CASE("A build writes the module as textual IR") {
   {
     PipelineContext ctx;
     base::Result<std::string, diag::Reported> built =
-        build_single_file(ctx, source, ir_path, false, "", EmitMode::LlvmIr,
-                          pipeline::full_std_selection());
+        build_single_file(ctx, source, ir_path, false, LinkOptions{},
+                          EmitMode::LlvmIr, pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
   const std::string ir = read_file(ir_path);
@@ -90,6 +91,24 @@ TEST_CASE("A build writes the module as textual IR") {
   CHECK(ir.find("alcy_module") != std::string::npos);
 }
 
+TEST_CASE("A build writes the module as bitcode") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_emit_bc_test_");
+  const std::string source = dir.join("main.al");
+  CHECK(dir.write_file("main.al", PROGRAM));
+
+  // A named output keeps its own extension, so the bytes are the only
+  // thing left that says what was written.
+  const std::string bitcode_path = dir.join("out.bin");
+  {
+    PipelineContext ctx;
+    base::Result<std::string, diag::Reported> built = build_single_file(
+        ctx, source, bitcode_path, false, LinkOptions{}, EmitMode::LlvmBitcode,
+        pipeline::full_std_selection());
+    CHECK(built.is_ok());
+  }
+  CHECK(tests::is_bitcode_bytes(read_file(bitcode_path)));
+}
+
 TEST_CASE("The default extension follows the mode") {
   // No output named: the source's extension is replaced by the mode's.
   io::TempDir dir = io::TempDir::create_unique("alcy_emit_suffix_test_");
@@ -98,18 +117,26 @@ TEST_CASE("The default extension follows the mode") {
   {
     PipelineContext ctx;
     base::Result<std::string, diag::Reported> built =
-        build_single_file(ctx, dir.join("main.al"), "", false, "",
+        build_single_file(ctx, dir.join("main.al"), "", false, LinkOptions{},
                           EmitMode::LlvmIr, pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
   CHECK(io::is_file(dir.join("main.ll")));
+  {
+    PipelineContext ctx;
+    base::Result<std::string, diag::Reported> built = build_single_file(
+        ctx, dir.join("main.al"), "", false, LinkOptions{},
+        EmitMode::LlvmBitcode, pipeline::full_std_selection());
+    CHECK(built.is_ok());
+  }
+  CHECK(io::is_file(dir.join("main.bc")));
 #if !BUILD_FLAG(IS_OS_ASMJS)
   CHECK(!io::is_file(dir.join("main.o")));
 
   {
     PipelineContext ctx;
     base::Result<std::string, diag::Reported> built =
-        build_single_file(ctx, dir.join("main.al"), "", false, "",
+        build_single_file(ctx, dir.join("main.al"), "", false, LinkOptions{},
                           EmitMode::Object, pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
@@ -138,6 +165,7 @@ TEST_CASE("A package build honours the mode too") {
   };
   const Case cases[] = {
       {EmitMode::LlvmIr, "proj/out/app.ll"},
+      {EmitMode::LlvmBitcode, "proj/out/app.bc"},
 #if !BUILD_FLAG(IS_OS_ASMJS)
       {EmitMode::Object, "proj/out/app.o"},
 #endif  // !BUILD_FLAG(IS_OS_ASMJS
@@ -160,12 +188,13 @@ TEST_CASE("A package build honours the mode too") {
     }
     base::Result<std::string, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
-                      "", false, "", one.mode);
+                      "", false, LinkOptions{}, one.mode);
     CHECK(built.is_ok());
     CHECK(io::is_file(dir.join(one.relative)));
     // Every mode lands in the directory the scaffold's own `.gitignore`
     // names, so a build never drops an artifact where git can see it.
     CHECK(!io::is_file(dir.join("proj/app.ll")));
+    CHECK(!io::is_file(dir.join("proj/app.bc")));
 #if !BUILD_FLAG(IS_OS_ASMJS)
     CHECK(!io::is_file(dir.join("proj/app.o")));
 #endif  // !BUILD_FLAG(IS_OS_ASMJS

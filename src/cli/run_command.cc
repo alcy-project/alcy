@@ -20,6 +20,7 @@
 #include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
 #include "path/path.h"
+#include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/run.h"
 #include "pipeline/target.h"
@@ -71,10 +72,8 @@ i32 run_run(const CliConfig& config,
   if (toolchain.is_err()) {
     return failed;
   }
-  // An explicit driver wins; the file names the default.
   const pkg::Toolchain tool = std::move(toolchain).unwrap();
-  const std::string_view linker =
-      config.linker.empty() ? tool.linker : config.linker;
+  const pipeline::LinkOptions link = resolve_link_options(config, tool);
   const term::ColorStyle style =
       term::console_color_style(term::Stream::Stderr, config.color_mode);
   const diag::RenderOptions announce_options{
@@ -82,7 +81,7 @@ i32 run_run(const CliConfig& config,
   };
   base::Result<pipeline::RunOutcome, diag::Reported> result =
       pipeline::run_package(ctx, found.root, found.manifest,
-                            found.manifest_name, config.release, linker, args,
+                            found.manifest_name, config.release, link, args,
                             announce_exec, &announce_options);
   envelope.trace = trace.take_events();
   if (result.is_err()) {

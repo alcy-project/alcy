@@ -10,6 +10,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "path/path.h"
+#include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
 
@@ -40,7 +41,7 @@ base::Result<RunOutcome, diag::Reported> run_package(
     source::FileId manifest_file,
     std::string_view manifest_name,
     bool optimize,
-    std::string_view linker,
+    LinkOptions link,
     std::span<const std::string_view> args,
     AnnounceExec announce = nullptr,
     const void* announce_ctx = nullptr);

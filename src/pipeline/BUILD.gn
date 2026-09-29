@@ -75,6 +75,7 @@ source_set("pipeline") {
     "emit_mode.h",
     "frontend.cc",
     "frontend.h",
+    "link_options.h",
     "new.cc",
     "new.h",
     "pipeline.cc",

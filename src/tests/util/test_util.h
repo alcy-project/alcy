@@ -18,4 +18,9 @@ void init_logger();
 // so this is what tells an object from an executable wearing its name.
 bool is_object_bytes(std::string_view bytes);
 
+// True when `bytes` starts with LLVM's bitcode magic: `BC` followed by
+// the two bytes that keep it from being any file that opens with those
+// letters.
+bool is_bitcode_bytes(std::string_view bytes);
+
 }  // namespace tests

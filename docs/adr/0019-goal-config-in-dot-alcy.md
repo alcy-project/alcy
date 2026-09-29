@@ -20,10 +20,16 @@ choices apply?
   `format.toml`, and `lsp.toml` later.
 - Only the goal package's `.alcy/` is ever read. A dependency's
   `.alcy/` is invisible to the packages that build it.
-- `toolchain.toml` v1 holds one optional key, `linker`. Absent file
-  or absent key means the default driver. A non-empty `--linker`
-  overrides the file; `compile` keeps the flag and never reads files,
-  so a single file stays reproducible from command and file alone.
+- `toolchain.toml` holds two optional keys, `linker` and `link-args`.
+  Absent file or absent key means the default driver and an empty
+  argument list. A non-empty `--linker` overrides the file's driver; a
+  `--link-args` given at least once replaces the file's list rather than
+  joining it, so an invocation resolves to settings its own command and
+  the file together can predict. `compile` keeps both flags and never
+  reads files, so a single file stays reproducible from command and file
+  alone. `link-args` are arguments for the driver — a library, a search
+  path, a switch such as `-fuse-ld=lld` — and a flag meant for the
+  linker behind it goes through `-Wl,`.
 - Unknown keys are ignored, like `alcy.toml`. `new` and `init` do not
   scaffold `.alcy/`.
 

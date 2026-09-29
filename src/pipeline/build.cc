@@ -26,6 +26,7 @@
 #include "path/path.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/frontend.h"
+#include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/runtime_stage.h"
 #include "pipeline/spawn.h"
@@ -54,6 +55,7 @@ std::string suffix_for(EmitMode mode) {
   switch (mode) {
     case EmitMode::Object: return ".o";
     case EmitMode::LlvmIr: return ".ll";
+    case EmitMode::LlvmBitcode: return ".bc";
     case EmitMode::Executable: break;
   }
   return std::string(exe_suffix());
@@ -149,17 +151,45 @@ base::Result<void, diag::Reported> emit_package_ir(
       std::span<const u8>(reinterpret_cast<const u8*>(ir.data()), ir.size()));
 }
 
+base::Result<void, diag::Reported> emit_package_bitcode(
+    PipelineContext& ctx,
+    lower::LoweredPackage& package,
+    bool optimize,
+    const std::string& output_path) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-bitcode",
+                                           "backend");
+  EmittedModule emitted;
+  if (emitted.build(ctx, package, optimize).is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  const std::vector<u8> bytes = codegen_llvm::emit_bitcode(*emitted.module);
+  return write_output(ctx, "bitcode", output_path, bytes);
+}
+
 base::Result<void, diag::Reported> link_executable(
     PipelineContext& ctx,
-    std::string_view linker,
+    LinkOptions link,
     const std::string& object_path,
     const std::string& runtime_path,
     const std::string& exe_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "link", "backend");
-  const std::string driver = linker.empty() ? "clang" : std::string(linker);
+  const std::string driver =
+      link.driver.empty() ? "clang" : std::string(link.driver);
+  // The driver's own arguments follow both objects, where a library is
+  // resolved against them, and stop short of the output, which stays the
+  // last word.
+  std::vector<std::string> argv;
+  argv.reserve(3 + link.args.size() + 2);
+  argv.emplace_back(driver);
+  argv.emplace_back(object_path);
+  argv.emplace_back(runtime_path);
+  for (std::string_view argument : link.args) {
+    argv.emplace_back(argument);
+  }
+  argv.emplace_back("-o");
+  argv.emplace_back(exe_path);
 
-  base::Result<i32, SpawnError> linked =
-      run_command({driver, object_path, runtime_path, "-o", exe_path});
+  base::Result<i32, SpawnError> linked = run_command(argv);
   if (linked.is_err()) {
     const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_LINK_ERROR,
                                    "cannot run the system compiler");
@@ -180,7 +210,7 @@ base::Result<std::string, diag::Reported> emit_output(
     PipelineContext& ctx,
     lower::LoweredPackage& lowered,
     bool optimize,
-    std::string_view linker,
+    LinkOptions link,
     EmitMode mode,
     const std::string& output_path) {
   // One path, so its parent is made once and every mode agrees about it.
@@ -208,6 +238,9 @@ base::Result<std::string, diag::Reported> emit_output(
     if (mode == EmitMode::LlvmIr) {
       return emit_package_ir(ctx, lowered, optimize, output_path);
     }
+    if (mode == EmitMode::LlvmBitcode) {
+      return emit_package_bitcode(ctx, lowered, optimize, output_path);
+    }
     io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
     const std::string object_path = scratch.join("main.o");
     if (emit_package_object(ctx, lowered, optimize, object_path).is_err() ||
@@ -215,7 +248,7 @@ base::Result<std::string, diag::Reported> emit_output(
       return base::make_err(diag::Reported{});
     }
     const std::string runtime_path = scratch.join(runtime_source_name());
-    return link_executable(ctx, linker, object_path, runtime_path, output_path);
+    return link_executable(ctx, link, object_path, runtime_path, output_path);
   }();
   if (written.is_err()) {
     return base::make_err(std::move(written).unwrap_err());
@@ -230,7 +263,7 @@ base::Result<std::string, diag::Reported> build_single_file(
     std::string_view target,
     std::string_view output,
     bool optimize,
-    std::string_view linker,
+    LinkOptions link,
     EmitMode mode,
     const StdSelection& selection) {
   base::Result<source::FileId, source::SourceError> file = [&] {
@@ -252,7 +285,7 @@ base::Result<std::string, diag::Reported> build_single_file(
     DCHECK(dot != std::string::npos);
     output_path.replace(dot, std::string::npos, suffix_for(mode));
   }
-  return build_single_root(ctx, root, output_path, optimize, linker, mode,
+  return build_single_root(ctx, root, output_path, optimize, link, mode,
                            selection);
 }
 
@@ -261,7 +294,7 @@ base::Result<std::string, diag::Reported> build_single_root(
     source::FileId root,
     std::string_view output,
     bool optimize,
-    std::string_view linker,
+    LinkOptions link,
     EmitMode mode,
     const StdSelection& selection) {
   base::Result<analyzer::ModuleTree, diag::Reported> tree =
@@ -275,7 +308,7 @@ base::Result<std::string, diag::Reported> build_single_root(
     return base::make_err(diag::Reported{});
   }
   lower::LoweredPackage lowered = std::move(package).unwrap();
-  return emit_output(ctx, lowered, optimize, linker, mode, std::string(output));
+  return emit_output(ctx, lowered, optimize, link, mode, std::string(output));
 }
 
 base::Result<std::string, diag::Reported> build_package(
@@ -285,7 +318,7 @@ base::Result<std::string, diag::Reported> build_package(
     std::string_view manifest_name,
     std::string_view output,
     bool optimize,
-    std::string_view linker,
+    LinkOptions link,
     EmitMode mode) {
   base::Result<BinTarget, diag::Reported> target =
       resolve_package_target(ctx, root, manifest_file, manifest_name);
@@ -316,7 +349,7 @@ base::Result<std::string, diag::Reported> build_package(
   } else {
     output_path = std::string(output);
   }
-  return emit_output(ctx, lowered, optimize, linker, mode, output_path);
+  return emit_output(ctx, lowered, optimize, link, mode, output_path);
 }
 
 }  // namespace pipeline

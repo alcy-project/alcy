@@ -45,6 +45,7 @@ TEST_CASE("Parse build subcommand") {
                             .file = "",
                             .output = "",
                             .linker = "",
+                            .link_args = {},
                             .program_args = {},
                             .no_std = false,
                             .deps = {}});
@@ -85,6 +86,18 @@ TEST_CASE("Parse build linker flag") {
   CHECK(config.linker == "clang++");
 }
 
+TEST_CASE("Parse repeated link arguments") {
+  const std::string_view args[] = {"alcy", "build", "--link-args=-lm",
+                                   "--link-args=-pthread", "mydir"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.link_args.size() == 2);
+  if (config.link_args.size() != 2) {
+    return;
+  }
+  CHECK(config.link_args[0] == "-lm");
+  CHECK(config.link_args[1] == "-pthread");
+}
+
 TEST_CASE("Parse emit modes") {
   const std::string_view exe[] = {"alcy", "build", "--emit=executable"};
   CHECK(parse_ok(exe).emit == pipeline::EmitMode::Executable);
@@ -92,6 +105,8 @@ TEST_CASE("Parse emit modes") {
   CHECK(parse_ok(obj).emit == pipeline::EmitMode::Object);
   const std::string_view llvm[] = {"alcy", "build", "--emit=llvm-ir"};
   CHECK(parse_ok(llvm).emit == pipeline::EmitMode::LlvmIr);
+  const std::string_view bc[] = {"alcy", "build", "--emit=llvm-bc"};
+  CHECK(parse_ok(bc).emit == pipeline::EmitMode::LlvmBitcode);
 }
 
 TEST_CASE("Parse rejects the reserved ir spelling") {

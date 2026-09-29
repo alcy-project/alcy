@@ -633,6 +633,94 @@ TEST_CASE("Build treats an empty linker as the default") {
   SilencedOutput silenced;
   CHECK(run_build_on(dir, "proj") == 0);
 }
+
+TEST_CASE("Build links the arguments toolchain.toml names") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_link_args_");
+  const bool setup =
+      write_package(dir, "proj",
+                    "fn main() -> i32 {\n"
+                    "  ret 0\n"
+                    "}\n") &&
+      write_toolchain(dir, "proj",
+                      "link-args = [\"--alcy-no-such-link-flag-xyz\"]\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  // The driver is handed the file's own list, and names an argument it
+  // does not have.
+  SilencedOutput silenced;
+  CHECK(run_build_on(dir, "proj") != 0);
+}
+
+TEST_CASE("A link argument flag replaces the file's list rather than join it") {
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_cli_build_link_args_flag_");
+  const bool setup =
+      write_package(dir, "proj",
+                    "fn main() -> i32 {\n"
+                    "  ret 0\n"
+                    "}\n") &&
+      write_toolchain(dir, "proj",
+                      "link-args = [\"--alcy-no-such-link-flag-xyz\"]\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  const std::string target = dir.join("proj");
+  // One the driver takes without complaint, so reaching it at all is the
+  // success: the file's own argument would still have failed the link.
+  std::vector<std::string> storage{"alcy", "build", target, "--link-args=-v"};
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  SilencedOutput silenced;
+  CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) == 0);
+}
+
+TEST_CASE("compile links the arguments it was given") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_link_args_");
+  const bool setup =
+      write_all(dir, "main.al", "fn main() -> i32 {\n  ret 0\n}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  const std::string target = dir.join("main.al");
+  std::vector<std::string> storage{"alcy", "compile", target,
+                                   "--link-args=--alcy-no-such-link-flag-xyz"};
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  SilencedOutput silenced;
+  CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) != 0);
+}
+
+TEST_CASE("run links the arguments it was given") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_link_args_");
+  const bool setup = write_package(dir, "proj",
+                                   "fn main() -> i32 {\n"
+                                   "  ret 0\n"
+                                   "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  const std::string target = dir.join("proj");
+  std::vector<std::string> storage{"alcy", "run", target,
+                                   "--link-args=--alcy-no-such-link-flag-xyz"};
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  SilencedOutput silenced;
+  CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) != 0);
+}
 #endif
 
 TEST_CASE("Time trace embeds its phases in the json result") {
@@ -840,9 +928,7 @@ TEST_CASE("Run announces the target before the program, not after") {
   // warning of its own to this stream on some platforms.
   CHECK(announced.find("Running   app\n") != std::string::npos);
   CHECK(program.find("Running   app\n") == std::string::npos);
-  // Windows automatically replaces \n with \r\n so not including \n
-  // intentionally.
-  CHECK(program.find("marker") != std::string::npos);
+  CHECK(program.find("marker\n") != std::string::npos);
 }
 
 TEST_CASE("Run does not announce a program that failed to build") {

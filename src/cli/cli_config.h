@@ -9,7 +9,9 @@
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
 #include "pipeline/emit_mode.h"
+#include "pipeline/link_options.h"
 #include "pipeline/vcs.h"
+#include "pkg/toolchain.h"
 
 namespace cli {
 
@@ -49,6 +51,10 @@ struct CliConfig {
   // System linker driver for executable builds (empty selects the default
   // toolchain driver). Borrows argv storage like target_dir.
   std::string_view linker;
+  // Arguments handed to that driver, in `--link-args` order: one flag per
+  // argument, so nothing has to be split or quoted. Replaces the file's
+  // own list when given. Views borrow argv storage like target_dir.
+  std::vector<std::string_view> link_args;
   // Trailing positionals after the target, passed to the program by
   // `run`. Views borrow argv storage like target_dir.
   std::vector<std::string_view> program_args;
@@ -69,5 +75,12 @@ struct CliConfig {
 
   constexpr bool operator==(const CliConfig&) const = default;
 };
+
+// What the link step gets for this invocation: the goal package's
+// toolchain file, overridden wherever the command named something. An
+// absent file is an empty Toolchain, which is what a command that reads
+// no file passes.
+pipeline::LinkOptions resolve_link_options(const CliConfig& config,
+                                           const pkg::Toolchain& tool);
 
 }  // namespace cli

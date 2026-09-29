@@ -51,4 +51,12 @@ base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
 // Infallible: printing a module to a string cannot fail.
 std::string emit_ir(llvm::Module& module);
 
+// The module as LLVM's bitcode: the same content emit_ir prints, written
+// in the binary form that `llvm-dis` and a linker read directly instead of
+// parsing text first. Like emit_ir it stops before code generation, so it
+// needs no target.
+//
+// Infallible: it is written to memory, and nothing there can fail.
+std::vector<u8> emit_bitcode(llvm::Module& module);
+
 }  // namespace codegen_llvm

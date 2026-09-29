@@ -46,4 +46,8 @@ bool is_object_bytes(std::string_view bytes) {
 #endif
 }
 
+bool is_bitcode_bytes(std::string_view bytes) {
+  return bytes.size() >= 4 && bytes.compare(0, 4, "BC\xC0\xDE") == 0;
+}
+
 }  // namespace tests

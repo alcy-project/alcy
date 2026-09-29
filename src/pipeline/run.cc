@@ -17,6 +17,7 @@
 #include "lower/lower.h"
 #include "path/path.h"
 #include "pipeline/build.h"
+#include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/runtime_stage.h"
 #include "pipeline/spawn.h"
@@ -34,7 +35,7 @@ base::Result<RunOutcome, diag::Reported> link_and_run(
     lower::LoweredPackage& lowered,
     std::string_view target,
     bool optimize,
-    std::string_view linker,
+    LinkOptions link,
     std::span<const std::string_view> args,
     AnnounceExec announce,
     const void* announce_ctx) {
@@ -47,7 +48,7 @@ base::Result<RunOutcome, diag::Reported> link_and_run(
   const std::string exe_path =
       scratch.join(std::string("main") + std::string(exe_suffix()));
   const std::string runtime_path = scratch.join(runtime_source_name());
-  if (link_executable(ctx, linker, object_path, runtime_path, exe_path)
+  if (link_executable(ctx, link, object_path, runtime_path, exe_path)
           .is_err()) {
     return base::make_err(diag::Reported{});
   }
@@ -82,7 +83,7 @@ base::Result<RunOutcome, diag::Reported> run_package(
     source::FileId manifest_file,
     std::string_view manifest_name,
     bool optimize,
-    std::string_view linker,
+    LinkOptions link,
     std::span<const std::string_view> args,
     AnnounceExec announce,
     const void* announce_ctx) {
@@ -98,7 +99,7 @@ base::Result<RunOutcome, diag::Reported> run_package(
     return base::make_err(diag::Reported{});
   }
   lower::LoweredPackage lowered = std::move(package).unwrap();
-  return link_and_run(ctx, lowered, resolved.bin_name, optimize, linker, args,
+  return link_and_run(ctx, lowered, resolved.bin_name, optimize, link, args,
                       announce, announce_ctx);
 }
 

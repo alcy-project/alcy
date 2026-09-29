@@ -72,6 +72,48 @@ TEST_CASE("Toolchain rejects a mistyped linker") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Toolchain parses link arguments in order") {
+  Fixture f;
+  base::Result<Toolchain, diag::Reported> result =
+      parse(f, "link-args = [\"-lm\", \"-pthread\"]\n");
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  const Toolchain tool = std::move(result).unwrap();
+  CHECK(tool.link_args.size() == 2);
+  if (tool.link_args.size() != 2) {
+    return;
+  }
+  CHECK(tool.link_args[0] == "-lm");
+  CHECK(tool.link_args[1] == "-pthread");
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Toolchain without link arguments means an empty list") {
+  Fixture f;
+  base::Result<Toolchain, diag::Reported> result =
+      parse(f, "linker = \"lld\"\n");
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  CHECK(std::move(result).unwrap().link_args.empty());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Toolchain rejects link arguments that are not a list") {
+  Fixture f;
+  CHECK(parse(f, "link-args = \"-lm\"\n").is_err());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Toolchain rejects a link argument that is not text") {
+  Fixture f;
+  CHECK(parse(f, "link-args = [\"-lm\", 3]\n").is_err());
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Toolchain rejects broken TOML") {
   Fixture f;
   CHECK(parse(f, "[[unclosed\n").is_err());

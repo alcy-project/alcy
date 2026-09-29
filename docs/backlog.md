@@ -13,6 +13,16 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] alcy IR text format: define, serialize, deserialize; ahead of
   `--emit=ir` and any cache.
 - [ ] Lib packages: the suite's other half next to `[[bin]]`.
+- [ ] Link-time measurement: a benchmark reporting where a link goes —
+  driver startup, the runtime's own compilation, the linker — and
+  asserting nothing about wall time.
+- [ ] Runtime staged as bitcode and merged into the program's module in
+  process, through `llvm::lto::LTO`. Removes the clang spawned once per
+  build to compile `alcy_runtime.c`, changes no link line, and works
+  with GNU ld.
+- [ ] Embedded lld, and the system driver with it. The driver picks
+  crt files, system libraries, and search paths per platform, so this
+  follows the two items above and stands as its own project.
 
 ## Shipped
 
@@ -48,3 +58,11 @@ replaced. The foundations are in `roadmap.md`.
 - [x] Samples: `fizzbuzz`, `fibonacci`, and `primes`, run through the
   `exe` harness by `--cases-root` so an example that stops compiling
   fails the build.
+- [x] `--emit=llvm-bc`: the module as LLVM's bitcode — the same content
+  `--emit=llvm-ir` prints, in the form another LLVM tool reads without
+  parsing text, and the second mode that needs no target.
+- [x] Link arguments: `--link-args` on `build`, `run`, and `compile`,
+  plus `link-args` in `.alcy/toolchain.toml`. They are the driver's own
+  arguments, so a library or `-fuse-ld=lld` reaches it unquoted, and a
+  flag replaces the file's list the way `--linker` replaces the file's
+  driver. Before it, no external library could be linked at all.

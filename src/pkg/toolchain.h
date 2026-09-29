@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <span>
 #include <string_view>
 
 #include "diag/bag.h"
@@ -23,10 +24,12 @@ constexpr std::string_view CONFIG_DIR_NAME = ".alcy";
 constexpr std::string_view TOOLCHAIN_FILE_NAME = "toolchain.toml";
 
 // How the goal package links: the system driver handed to the link
-// step. Empty selects the default toolchain driver. Views borrow
-// arena storage owned by the caller of parse_toolchain().
+// step, and the arguments that driver is given. An empty driver
+// selects the default toolchain driver. Views borrow arena storage
+// owned by the caller of parse_toolchain().
 struct Toolchain {
   std::string_view linker;
+  std::span<const std::string_view> link_args;
 };
 
 // Parses `.alcy/toolchain.toml` bytes. Unknown keys are ignored, like
