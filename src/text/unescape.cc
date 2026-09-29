@@ -83,7 +83,7 @@ std::string unescape_string(std::string_view spelling) {
         u32 code = 0;
         bool any = false;
         while (i < body.size() && body[i] != '}') {
-          const int digit = hex_value(body[i]);
+          const i32 digit = hex_value(body[i]);
           if (digit < 0) {
             break;
           }

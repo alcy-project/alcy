@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "doctest/doctest.h"
+#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
 #include "source/source.h"
@@ -94,7 +95,7 @@ TEST_CASE("A view survives a later load") {
     return;
   }
 
-  for (int i = 0; i < 64; ++i) {
+  for (i32 i = 0; i < 64; ++i) {
     const std::string file = "generated" + std::to_string(i) + ".al";
     CHECK(write(dir, file, "fn g() {}\n"));
     base::Result<FileId, SourceError> loaded =

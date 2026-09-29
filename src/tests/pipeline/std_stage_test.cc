@@ -95,7 +95,7 @@ TEST_CASE("Staging the standard library gives every context its own path") {
   // Same property as above over several contexts, so a name derived from
   // anything but a per-context random suffix fails here too.
   std::set<std::string> paths;
-  for (int i = 0; i < 4; ++i) {
+  for (i32 i = 0; i < 4; ++i) {
     PipelineContext ctx;
     base::Result<std::span<const analyzer::ModuleInput>, diag::Reported>
         staged = stage(ctx);

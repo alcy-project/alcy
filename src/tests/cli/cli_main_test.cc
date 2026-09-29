@@ -19,37 +19,46 @@
 #include "tests/util/test_util.h"
 
 // Replacing a descriptor and reading it back is the same operation on
-// every host; only the spellings below differ, and Emscripten provides
-// the POSIX ones. Isolating them here is what lets the cases that do it
-// run on Windows rather than being excluded for a spelling.
+// every host. The descriptor numbers come from io::, which every other
+// caller in the tree uses and which needs no platform include; what is
+// left to spell differently is the calls themselves, the open flags and
+// the null device. Emscripten provides the POSIX ones.
 #if BUILD_FLAG(IS_OS_WIN)
 #include <fcntl.h>
 #include <io.h>
+#include <sys/stat.h>
 
 #include <cstdio>
 
 namespace {
 constexpr const char* NULL_DEVICE = "NUL";
-// Windows prefixes every open flag with an underscore and wants a
-// permission mask where POSIX wants a mode.
-constexpr int READ_FLAGS = _O_RDONLY;
-constexpr int WRITE_FLAGS = _O_WRONLY | _O_CREAT | _O_TRUNC;
-constexpr int TRUNCATE_FLAGS = _O_RDWR | _O_CREAT | _O_TRUNC;
-constexpr int FILE_MODE = _S_IREAD | _S_IWRITE;
+// A capture holds bytes the compiler wrote, so it is opened in binary:
+// the CRT would otherwise turn each newline into a pair on the way out
+// and a case comparing them would see the difference.
+constexpr i32 BINARY_FLAG = _O_BINARY;
 
-int open_file(const char* path, int flags) {
+// Windows prefixes every open flag with an underscore. The permission
+// mask is spelled with the symbolic names from <sys/stat.h> because the
+// two systems do not agree on the number: 0644 is not
+// _S_IREAD | _S_IWRITE.
+constexpr i32 READ_FLAGS = _O_RDONLY | BINARY_FLAG;
+constexpr i32 WRITE_FLAGS = _O_WRONLY | _O_CREAT | _O_TRUNC | BINARY_FLAG;
+constexpr i32 TRUNCATE_FLAGS = _O_RDWR | _O_CREAT | _O_TRUNC | BINARY_FLAG;
+constexpr i32 FILE_MODE = _S_IREAD | _S_IWRITE;
+
+i32 open_file(const char* path, i32 flags) {
   return ::_open(path, flags, FILE_MODE);
 }
-int open_null_device() {
+i32 open_null_device() {
   return ::_open(NULL_DEVICE, _O_RDWR);
 }
-int close_descriptor(int fd) {
+i32 close_descriptor(i32 fd) {
   return ::_close(fd);
 }
-int dup_descriptor(int fd) {
+i32 dup_descriptor(i32 fd) {
   return ::_dup(fd);
 }
-int replace_descriptor(int from, int to) {
+i32 replace_descriptor(i32 from, i32 to) {
   return ::_dup2(from, to);
 }
 }  // namespace
@@ -61,24 +70,27 @@ int replace_descriptor(int from, int to) {
 
 namespace {
 constexpr const char* NULL_DEVICE = "/dev/null";
-constexpr int READ_FLAGS = O_RDONLY;
-constexpr int WRITE_FLAGS = O_WRONLY | O_CREAT | O_TRUNC;
-constexpr int TRUNCATE_FLAGS = O_RDWR | O_CREAT | O_TRUNC;
-constexpr int FILE_MODE = 0644;
+// The CRT here has no text mode to opt out of, so there is no binary
+// flag to pass; the constant keeps the two branches spelled alike.
+constexpr i32 BINARY_FLAG = 0;
+constexpr i32 READ_FLAGS = O_RDONLY | BINARY_FLAG;
+constexpr i32 WRITE_FLAGS = O_WRONLY | O_CREAT | O_TRUNC | BINARY_FLAG;
+constexpr i32 TRUNCATE_FLAGS = O_RDWR | O_CREAT | O_TRUNC | BINARY_FLAG;
+constexpr i32 FILE_MODE = 0644;
 
-int open_file(const char* path, int flags) {
+i32 open_file(const char* path, i32 flags) {
   return ::open(path, flags, FILE_MODE);
 }
-int open_null_device() {
+i32 open_null_device() {
   return ::open(NULL_DEVICE, O_RDWR);
 }
-int close_descriptor(int fd) {
+i32 close_descriptor(i32 fd) {
   return ::close(fd);
 }
-int dup_descriptor(int fd) {
+i32 dup_descriptor(i32 fd) {
   return ::dup(fd);
 }
-int replace_descriptor(int from, int to) {
+i32 replace_descriptor(i32 from, i32 to) {
   return ::dup2(from, to);
 }
 }  // namespace
@@ -129,13 +141,13 @@ class CapturedStdout {
     if (file_ < 0) {
       return;
     }
-    saved_ = static_cast<i32>(dup_descriptor(STDOUT_FILENO));
+    saved_ = static_cast<i32>(dup_descriptor(io::STDOUT_FD));
     if (saved_ < 0) {
       close_descriptor(file_);
       file_ = -1;
       return;
     }
-    replace_descriptor(file_, STDOUT_FILENO);
+    replace_descriptor(file_, io::STDOUT_FD);
   }
 
   ~CapturedStdout() { finish(); }
@@ -155,8 +167,8 @@ class CapturedStdout {
     // capture.
     std::cout.flush();
     std::fflush(stdout);
-    close_descriptor(STDOUT_FILENO);
-    replace_descriptor(saved_, STDOUT_FILENO);
+    close_descriptor(io::STDOUT_FD);
+    replace_descriptor(saved_, io::STDOUT_FD);
     close_descriptor(saved_);
     close_descriptor(file_);
     file_ = -1;
@@ -190,13 +202,13 @@ class CapturedStderr {
     if (file_ < 0) {
       return;
     }
-    saved_ = static_cast<i32>(dup_descriptor(STDERR_FILENO));
+    saved_ = static_cast<i32>(dup_descriptor(io::STDERR_FD));
     if (saved_ < 0) {
       close_descriptor(file_);
       file_ = -1;
       return;
     }
-    replace_descriptor(file_, STDERR_FILENO);
+    replace_descriptor(file_, io::STDERR_FD);
   }
 
   ~CapturedStderr() { finish(); }
@@ -209,8 +221,8 @@ class CapturedStderr {
       return;
     }
     std::fflush(stderr);
-    close_descriptor(STDERR_FILENO);
-    replace_descriptor(saved_, STDERR_FILENO);
+    close_descriptor(io::STDERR_FD);
+    replace_descriptor(saved_, io::STDERR_FD);
     close_descriptor(saved_);
     close_descriptor(file_);
     file_ = -1;
@@ -253,13 +265,13 @@ class SilencedOutput {
     if (null_ < 0) {
       return;
     }
-    saved_out_ = static_cast<i32>(dup_descriptor(STDOUT_FILENO));
-    saved_err_ = static_cast<i32>(dup_descriptor(STDERR_FILENO));
+    saved_out_ = static_cast<i32>(dup_descriptor(io::STDOUT_FD));
+    saved_err_ = static_cast<i32>(dup_descriptor(io::STDERR_FD));
     if (saved_out_ < 0 || saved_err_ < 0) {
       return;
     }
-    replace_descriptor(null_, STDOUT_FILENO);
-    replace_descriptor(null_, STDERR_FILENO);
+    replace_descriptor(null_, io::STDOUT_FD);
+    replace_descriptor(null_, io::STDERR_FD);
   }
 
   ~SilencedOutput() {
@@ -269,10 +281,10 @@ class SilencedOutput {
     if (saved_out_ < 0 || saved_err_ < 0) {
       return;
     }
-    close_descriptor(STDOUT_FILENO);
-    close_descriptor(STDERR_FILENO);
-    replace_descriptor(saved_out_, STDOUT_FILENO);
-    replace_descriptor(saved_err_, STDERR_FILENO);
+    close_descriptor(io::STDOUT_FD);
+    close_descriptor(io::STDERR_FD);
+    replace_descriptor(saved_out_, io::STDOUT_FD);
+    replace_descriptor(saved_err_, io::STDERR_FD);
     close_descriptor(saved_out_);
     close_descriptor(saved_err_);
     // The same reason as in the constructor: doctest's next line belongs
@@ -314,12 +326,12 @@ i32 run_compile_stdin(io::TempDir& dir,
   }
 
   // Saved and restored, so one case's program is not the next case's input.
-  const i32 saved = static_cast<i32>(dup_descriptor(STDIN_FILENO));
+  const i32 saved = static_cast<i32>(dup_descriptor(io::STDIN_FD));
   if (saved < 0) {
     return -1;
   }
   const i32 piped = static_cast<i32>(open_file(source.c_str(), READ_FLAGS));
-  if (piped < 0 || replace_descriptor(piped, STDIN_FILENO) < 0) {
+  if (piped < 0 || replace_descriptor(piped, io::STDIN_FD) < 0) {
     if (piped >= 0) {
       close_descriptor(piped);
     }
@@ -339,8 +351,8 @@ i32 run_compile_stdin(io::TempDir& dir,
   }
   const i32 code = cli_main(static_cast<i32>(argv.size()), argv.data());
 
-  close_descriptor(STDIN_FILENO);
-  replace_descriptor(saved, STDIN_FILENO);
+  close_descriptor(io::STDIN_FD);
+  replace_descriptor(saved, io::STDIN_FD);
   close_descriptor(saved);
   return code;
 }
