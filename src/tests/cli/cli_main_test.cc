@@ -424,6 +424,7 @@ TEST_CASE("Compile refuses standard input without a named output") {
   SilencedOutput silenced;
   CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) != 0);
 }
+
 TEST_CASE("Check accepts a well-typed file") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_check_ok_test_");
   const bool setup = write_all(dir, "ok.al",
@@ -759,7 +760,6 @@ TEST_CASE("Json result carries diagnostics as data") {
   CHECK(document.find("error[E") == std::string::npos);
 }
 
-#if ALCY_TEST_LINKS
 TEST_CASE("Text result reports the statistics it measured") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_stats_test_");
   const bool setup =
@@ -768,8 +768,11 @@ TEST_CASE("Text result reports the statistics it measured") {
   if (!setup) {
     return;
   }
-  std::vector<std::string> storage{"alcy", "check", "--file",
-                                   dir.join("main.al")};
+  // --color=never because the sentence below is matched as plain text,
+  // and whether a terminal is present is the host's to decide: under
+  // Emscripten it is, and the verb arrives wrapped in escape codes.
+  std::vector<std::string> storage{"alcy",     "check",  "--file",
+                                   dir.join("main.al"), "--color=never"};
   std::vector<char*> argv;
   argv.reserve(storage.size());
   for (std::string& arg : storage) {
@@ -781,10 +784,10 @@ TEST_CASE("Text result reports the statistics it measured") {
     return;
   }
   CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) == 0);
-  CHECK(captured.text().find("Checked   1 file, 1 module, 1 function  (") !=
+  const std::string text = captured.text();
+  CHECK(text.find("Checked   1 file, 1 module, 1 function  (") !=
         std::string::npos);
 }
-#endif
 
 i32 run_run_on(io::TempDir& dir,
                std::string_view rel,
@@ -827,8 +830,7 @@ TEST_CASE("Run executes a package and forwards its exit code") {
 }
 #endif
 
-// The two cases below read the streams rather than discarding them, so
-// they need the capture classes, which are POSIX-only.
+// The two cases below read the streams rather than discarding them.
 #if ALCY_TEST_LINKS
 TEST_CASE("Run announces the target before the program, not after") {
   // The label is what tells the reader which program's output they are
@@ -870,9 +872,7 @@ TEST_CASE("Run announces the target before the program, not after") {
   // carries program output and nothing else.
   CHECK(program == "marker\n");
 }
-#endif
 
-#if ALCY_TEST_LINKS
 TEST_CASE("Run does not announce a program that failed to build") {
   // The announcement is a claim that a process is about to start. One
   // made before the compile would be a claim about work not yet done.
@@ -899,9 +899,7 @@ TEST_CASE("Run does not announce a program that failed to build") {
   // command that printed no announcement because it printed nothing.
   CHECK(reported.text().find("type mismatch") != std::string::npos);
 }
-#endif
 
-#if ALCY_TEST_LINKS
 TEST_CASE("Run tolerates program arguments") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_args_test_");
   const bool setup = write_package(dir, "proj",
@@ -915,9 +913,7 @@ TEST_CASE("Run tolerates program arguments") {
   SilencedOutput silenced;
   CHECK(run_run_on(dir, "proj", {"hello", "world"}) == 0);
 }
-#endif
 
-#if ALCY_TEST_LINKS
 TEST_CASE("Run fails on a mistyped package") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_bad_test_");
   const bool setup = write_package(dir, "proj",
@@ -931,9 +927,7 @@ TEST_CASE("Run fails on a mistyped package") {
   SilencedOutput silenced;
   CHECK(run_run_on(dir, "proj") != 0);
 }
-#endif
 
-#if ALCY_TEST_LINKS
 TEST_CASE("Run rejects a single file") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_file_test_");
   const bool setup = write_all(dir, "main.al",
