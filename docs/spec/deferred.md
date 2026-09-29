@@ -32,21 +32,20 @@ relied upon by MVP programs or by the MVP compiler implementation.
   format string is handed its scratch as an argument, so the expander
   reads the size from the call site, or the size becomes a constant both
   sides repeat. The first is the honest one. See `docs/spec/fmt.md`.
-- A loan's extent is still the span from its birth to the last use of
-  anything derived from it, computed per function rather than per path,
-  rather than a region solved for. Reborrowing lands: a place reached
-  through a reference is named by a dereference step, a reborrow carries
-  the loans it stands behind, `&mut T` coerces to `&T` at an argument and
-  at a receiver, an implicit reborrow at an argument or a receiver is a
-  loan whether or not the source writes a `&`, and `elem_ref` and
-  `uninit_ref` let a buffer be read through a shared owner, so `Vec<T>`
-  has a read-only `at` that the checker records. The consequence is that
-  a loan live on one branch is taken as live on all of them, so an early
-  return on a branch where the loan is already dead still reports the
-  move or drop that would end the borrowed value. What is left is the
-  non-lexical extent, which is the region solver's input, then the
-  return-position elision for a reborrow that escapes through a call.
-  See `docs/adr/0012`.
+- A loan's extent is a region computed by backward liveness over the
+  CFG, not a solved region: a loan is live where a value carrying it is
+  read and wherever a successor is live, so sibling branches differ. What
+  that is not yet is a *solved* region: liveness is the input the solver
+  takes, and the reborrow rule that shortens a derived loan for the
+  extent of the reborrow is still missing, as is the return-position
+  elision for a reborrow that escapes through a call. Reborrowing itself
+  lands: a place reached through a reference is named by a dereference
+  step, a reborrow carries the loans it stands behind, `&mut T` coerces
+  to `&T` at an argument and at a receiver, an implicit reborrow at an
+  argument or a receiver is a loan whether or not the source writes a
+  `&`, and `elem_ref` and `uninit_ref` let a buffer be read through a
+  shared owner, so `Vec<T>` has a read-only `at` that the checker
+  records. See `docs/adr/0012`.
 - `spec` (trait) definitions and dispatch, coherence rules, and
   monomorphization beyond per-instantiation enum, struct, and method
   specialization.

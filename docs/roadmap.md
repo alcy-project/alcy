@@ -6,15 +6,15 @@ peripheral work lives in `backlog.md`.
 
 ## Next
 
-- [ ] A loan's extent is a region, not a span.
+- [ ] A reborrow shortens the loan it derives from.
 
-  A loan's extent is computed per function, so one live on a single
-  branch is taken as live on all of them and an early return on a branch
-  where the loan is already dead reports a conflict that is not one.
-  This is the region solver's input, and the widest remaining piece of
-  ADR-0012. The loans themselves now exist wherever a reborrow happens,
-  so this is the only thing standing between the checker and programs
-  that read through a loan across a branch.
+  A reborrow stands behind the loan it came from, and while it is live
+  the two are the same loan as far as a write is concerned: the checker
+  has to keep them apart, or a reborrow appears to conflict with the
+  borrow it was taken from. This is rule 1 of ADR-0012, and it is what
+  turns the liveness the checker now computes into a solved region: a
+  derived loan's extent ends where the original's does rather than
+  where its own last use falls.
 
 ## Queue
 

@@ -7,6 +7,8 @@ executable("tests") {
     "analyzer/types_test.cc",
     "ast/ast_test.cc",
     "ast/verify_test.cc",
+    "benchmarks/engine_test.cc",
+    "benchmarks/generator_test.cc",
     "borrow/borrow_test.cc",
     "cli/cli_main_test.cc",
     "cli/parse_args_test.cc",
@@ -66,6 +68,7 @@ executable("tests") {
 
   deps = [
     "//src:alcy_lib",
+    "//src/benchmarks:bench",
     "//src/cli",
     "//third_party/doctest",
 

@@ -237,43 +237,128 @@ def compare(before_path: Path, after_path: Path) -> int:
     return 0
 
 
-def main() -> int:
-    sys.stdout.reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(
-        description="Run process integration benchmarks over the alcy binary."
-    )
-    parser.add_argument(
-        "--build-subdir",
-        default="build",
-        help="Subdirectory inside out/ holding the alcy binary (default: build)",
-    )
-    parser.add_argument(
-        "--suite",
-        default="benchmarks/suites/cases.toml",
-        help="Suite file, relative to the project root",
-    )
-    parser.add_argument(
-        "--fixtures",
-        default="benchmarks/fixtures",
-        help="Fixture root, relative to the project root",
-    )
-    parser.add_argument(
-        "--cases",
-        default="",
-        help="Comma-separated case ids to run (default: all)",
-    )
-    parser.add_argument("--output", default="", help="JSONL file to append to")
-    parser.add_argument(
-        "--compare",
-        nargs=2,
-        metavar=("BEFORE", "AFTER"),
-        help="Compare two result files instead of running cases",
-    )
-    args = parser.parse_args()
+# The microbenchmark driver, a separate binary: it links the compiler as
+# a library and never the cli, so what it times has no process boundary
+# and no argument parsing in it.
+def resolve_driver(build_subdir: str) -> Path:
+    driver = project_root_dir / "out" / build_subdir / "benchmarks"
+    if not driver.is_file():
+        driver = driver.with_suffix(".exe")
+    if not driver.is_file():
+        raise SuiteError(f"benchmark driver not found in out/{build_subdir}/")
+    return driver
 
-    if args.compare:
-        return compare(Path(args.compare[0]), Path(args.compare[1]))
 
+def print_micro(record: dict) -> None:
+    stats = record["stats"]
+    print(
+        f"{record['benchmark_id']}: p50 {stats['p50'] / 1e6:.3f}ms "
+        f"p95 {stats['p95'] / 1e6:.3f}ms over {stats['count']} samples"
+        f"{'' if record['confidence'] == 'ok' else ' (low confidence)'}"
+    )
+
+
+def run_micro(build_subdir: str, output: str, cases: str) -> int:
+    """Runs the engine over the cases it was compiled with.
+
+    There is no suite file to read: a case is added to the driver, not to
+    a manifest, because a micro case is a call into a module rather than
+    a command line. The filter narrows a run without a rebuild.
+    """
+    try:
+        driver = resolve_driver(build_subdir)
+    except SuiteError as e:
+        print(f"error: {e}")
+        return -1
+
+    target = Path(output) if output else None
+    if target is not None:
+        target.parent.mkdir(parents=True, exist_ok=True)
+    argv = [str(driver), "--build-subdir", build_subdir]
+    if cases:
+        argv += ["--cases", cases]
+    proc = subprocess.run(
+        argv, capture_output=True, text=True, encoding="utf-8"
+    )
+    if proc.returncode != 0:
+        print(proc.stdout)
+        print(proc.stderr, file=sys.stderr)
+        return -1
+
+    records = [json.loads(line) for line in proc.stdout.splitlines() if line]
+    if not records:
+        print("error: the driver reported no cases")
+        return -1
+    if target is not None:
+        with open(target, "a", encoding="utf-8") as f:
+            for record in records:
+                f.write(json.dumps(record) + "\n")
+    for record in records:
+        print_micro(record)
+    if target is not None:
+        print(f"wrote {len(records)} record(s) to {target}")
+    return 0
+
+
+# How far apart two measurements of the same work may be before one of
+# them is measuring something else. A phase reached through the pipeline
+# carries what the pipeline does around it and the micro case does not,
+# so the ratio is not expected to be one; it is not expected to be ten.
+RECONCILE_LIMIT = 10.0
+
+
+def reconcile(micro_path: Path, trace_path: Path) -> int:
+    """Checks the engine against the phases a real run recorded.
+
+    A percentile is self-consistent whatever it measures, so the engine
+    is only worth something if an independent measurement agrees. The two
+    describe the same phase from different angles: once through the
+    pipeline with everything around it, and many times in isolation. A
+    disagreement by an order of magnitude means one of the two is not
+    measuring the phase.
+    """
+    micro = {r["name"]: r for r in load_jsonl(micro_path) if r["kind"] == "micro"}
+    try:
+        document = json.loads(trace_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"error: cannot read the trace document: {e}")
+        return -1
+
+    totals: dict[str, float] = {}
+    for event in document.get("traceEvents", []):
+        totals[event["name"]] = totals.get(event["name"], 0.0) + event["dur"]
+
+    for name in sorted(set(micro) - set(totals)):
+        print(f"NOTE    {name}: no phase of that name in the trace")
+
+    rows = 0
+    failures = 0
+    for name in sorted(set(micro) & set(totals)):
+        engine = micro[name]["stats"]["p50"]
+        traced = totals[name]
+        if engine <= 0 or traced <= 0:
+            print(f"SKIP    {name}: nothing to compare")
+            continue
+        ratio = traced / engine
+        bad = ratio > RECONCILE_LIMIT or ratio < 1 / RECONCILE_LIMIT
+        if bad:
+            failures += 1
+        rows += 1
+        print(
+            f"{'BAD' if bad else 'ok':6} {name}: trace {traced:.1f}us "
+            f"/ engine {engine:.1f}us = {ratio:.2f}x"
+        )
+
+    if not rows:
+        print("reconcile: no case names a phase the trace recorded")
+        return 1
+    if failures:
+        print(f"reconcile: {failures} case(s) disagree with the trace")
+        return 1
+    return 0
+
+
+def run_process(args) -> int:
     try:
         suite = load_suite(project_root_dir / args.suite)
         binary = resolve_binary(args.build_subdir)
@@ -314,6 +399,61 @@ def main() -> int:
                 f.write(json.dumps(record) + "\n")
         print(f"wrote {len(records)} record(s) to {path}")
     return 0
+
+
+def main() -> int:
+    sys.stdout.reconfigure(encoding="utf-8")
+    parser = argparse.ArgumentParser(
+        description="Run the compiler's benchmarks, or read what they recorded."
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    process = sub.add_parser(
+        "process", help="time the alcy binary as a process"
+    )
+    micro = sub.add_parser(
+        "micro", help="time compiler phases in process, with no file in the way"
+    )
+    cmp_ = sub.add_parser("compare", help="compare two result files")
+    rec = sub.add_parser(
+        "reconcile", help="check engine figures against a --time-trace run"
+    )
+
+    for target in (process, micro):
+        target.add_argument(
+            "--build-subdir",
+            default="build",
+            help="Subdirectory inside out/ holding the binary (default: build)",
+        )
+        target.add_argument(
+            "--cases", default="", help="Comma-separated case ids to run"
+        )
+        target.add_argument(
+            "--output", default="", help="JSONL file to append to"
+        )
+    process.add_argument(
+        "--suite",
+        default="benchmarks/suites/cases.toml",
+        help="Suite file, relative to the project root",
+    )
+    process.add_argument(
+        "--fixtures",
+        default="benchmarks/fixtures",
+        help="Fixture root, relative to the project root",
+    )
+    cmp_.add_argument("before", help="Result file recorded earlier")
+    cmp_.add_argument("after", help="Result file recorded now")
+    rec.add_argument("micro", help="JSONL the engine wrote")
+    rec.add_argument("trace", help="A --time-trace --json document")
+
+    args = parser.parse_args()
+    if args.command == "compare":
+        return compare(Path(args.before), Path(args.after))
+    if args.command == "reconcile":
+        return reconcile(Path(args.micro), Path(args.trace))
+    if args.command == "micro":
+        return run_micro(args.build_subdir, args.output, args.cases)
+    return run_process(args)
 
 
 if __name__ == "__main__":

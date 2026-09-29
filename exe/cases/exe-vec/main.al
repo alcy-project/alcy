@@ -41,20 +41,15 @@ fn main() -> i32 {
   if v.len() != 1000 {
     ret 4
   }
-  // A retained accessor result, consumed after another call has run.
+  // A retained accessor result, consumed after other calls have run.
   // `Option<&mut T>` carries an exclusive reference, so it is move-only
-  // and this is its one use. The result is consumed before the early
-  // return below because a loan's extent is the span from its birth to
-  // its last use across the whole function, not per branch, so a return
-  // taken while the loan is still live on another branch ends `v` under
-  // it. See docs/spec/deferred.md.
+  // and this is its one use.
   kept := v.at_mut(10 as usize)
-  taken := takes_by_value(Vec::<i32>::new())
+  if takes_by_value(Vec::<i32>::new()) != 0 {
+    ret 5
+  }
   if *kept.unwrap() != 10i32 {
     ret 6
-  }
-  if taken != 0 {
-    ret 5
   }
   // Bounds: the last index is present, one past it is not. `at` is the
   // shared accessor, so this needs no unique borrow.
@@ -67,17 +62,13 @@ fn main() -> i32 {
   if *v.at(500 as usize).unwrap() != 500i32 {
     ret 18
   }
-  // A shared borrow held while the vector is otherwise used. The
-  // length is read into a local first, for the same reason as above: an
-  // early return on a branch where the loan is dead still ends `v` under
-  // it, because the extent is not per branch yet.
+  // A shared borrow held while the vector is otherwise used.
   held := v.at(3 as usize)
-  held_len := v.len()
+  if v.len() != 1000 {
+    ret 19
+  }
   if *held.unwrap() != 3i32 {
     ret 20
-  }
-  if held_len != 1000 {
-    ret 19
   }
   last := v.pop()
   if last.is_none() {

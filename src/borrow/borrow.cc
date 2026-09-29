@@ -88,8 +88,9 @@ struct Loan {
   u32 reg = NO_ROOT;
   Place place;
   bool exclusive = false;
+  // The instruction that created the loan. A check never sees a loan
+  // that is not born yet.
   u32 birth = 0;
-  u32 expiry = 0;
   // Summary token for a parameter alloca: carries the parameter
   // index so return-reachability becomes a summary. Never conflicts;
   // reification propagates the caller's own loans instead.
@@ -111,7 +112,6 @@ class Checker {
   std::vector<u32> home;
   std::vector<std::vector<u32>> path;
   std::vector<std::vector<u32>> flow;
-  std::vector<u32> last_use;
   std::vector<Loan> loans;
   // Entry-block allocas holding a block parameter, paired with that
   // parameter's position. Filled by param_allocas per function and read
@@ -127,6 +127,13 @@ class Checker {
   // loans may reach a return, indexed by function. Call sites
   // reify them by propagating only those arguments' loans.
   std::vector<std::vector<u32>> summaries;
+  // Liveness, per block and per loan: the loans still live where a
+  // block is entered and where it is left, and the last instruction of
+  // a block that reads a loan. A loan's extent is a region rather than
+  // a range, so a loan live on one branch is not live on its siblings.
+  std::vector<std::vector<u32>> live_in;
+  std::vector<std::vector<u32>> live_out;
+  std::vector<std::vector<u32>> loan_last_use;
 
   const ir::Instruction& instr_at(ir::InstructionIdx idx) const {
     return storage.instrs()[idx];
@@ -189,7 +196,7 @@ class Checker {
       }
       Place place;
       place.root = alloca;
-      loans.push_back({alloca, place, false, 0, 0, index});
+      loans.push_back({alloca, place, false, 0, index});
       flow[alloca].push_back(static_cast<u32>(loans.size() - 1));
     }
   }
@@ -333,7 +340,7 @@ class Checker {
           // loan on the caller's argument rather than a bare pointer.
           flow[instr.dst.idx] = flow[place_reg];
           flow[instr.dst.idx].push_back(static_cast<u32>(loans.size()));
-          loans.push_back({instr.dst.idx, place, exclusive, pos, pos});
+          loans.push_back({instr.dst.idx, place, exclusive, pos});
         }
         break;
       }
@@ -409,41 +416,142 @@ class Checker {
       }
       default: break;
     }
-    for (u32 offset = 0; offset < instr.operands.size(); ++offset) {
-      const ir::Operand& operand =
-          storage.operands()[instr.operands.head() + offset];
-      if (operand.is<ir::RegisterIdx>() &&
-          operand.as_register().idx < last_use.size()) {
-        // Max, not assign: blocks are visited in reservation order
-        // while instructions are emitted in visit order, so a later
-        // visit can carry a smaller index.
-        u32& last = last_use[operand.as_register().idx];
-        if (pos > last) {
-          last = pos;
+  }
+
+  // A loan stays live through every use of every value derived from it
+  // (moves, loads, and aggregate holders propagate the identity
+  // forward), so sequential borrows of one place stop being live while
+  // interleaved ones stay so. Liveness is a backward dataflow over the
+  // CFG: a loan is live where a value carrying it is read, and live
+  // wherever a successor is live. Sibling branches therefore differ,
+  // which is what lets a return taken where the loan is already dead
+  // end the borrowed value without reporting a conflict.
+  void compute_liveness(const ir::Function& fn,
+                        const std::vector<ir::BlockIdx>& order) {
+    loan_last_use.assign(storage.blocks().size(), {});
+    live_in.assign(storage.blocks().size(), {});
+    live_out.assign(storage.blocks().size(), {});
+    for (std::vector<u32>& row : loan_last_use) {
+      row.assign(loans.size(), 0);
+    }
+    // A loan is last read at the last instruction that reads any
+    // register carrying it, in the block that instruction is in.
+    for (ir::BlockIdx bidx : fn.blocks) {
+      const ir::Block& block = storage.blocks()[bidx];
+      for (ir::InstructionIdx iidx : block.instrs) {
+        const ir::Instruction& instr = instr_at(iidx);
+        for (u32 offset = 0; offset < instr.operands.size(); ++offset) {
+          const ir::Operand& operand =
+              storage.operands()[instr.operands.head() + offset];
+          if (!operand.is<ir::RegisterIdx>()) {
+            continue;
+          }
+          const u32 reg = operand.as_register().idx;
+          if (reg >= flow.size()) {
+            continue;
+          }
+          for (u32 loan : flow[reg]) {
+            if (loan < loan_last_use[bidx.idx].size() &&
+                iidx.idx > loan_last_use[bidx.idx][loan]) {
+              loan_last_use[bidx.idx][loan] = iidx.idx;
+            }
+          }
         }
       }
     }
-  }
-
-  void compute_expiry() {
-    // A loan stays live through every use of every value derived
-    // from it (moves, loads, and aggregate holders propagate the
-    // identity forward), so sequential borrows of one place expire
-    // while interleaved ones stay live.
-    for (Loan& loan : loans) {
-      loan.expiry = loan.birth;
-    }
-    for (u32 reg = 0; reg < static_cast<u32>(flow.size()); ++reg) {
-      for (u32 loan : flow[reg]) {
-        if (loan < loans.size() && last_use[reg] > loans[loan].expiry) {
-          loans[loan].expiry = last_use[reg];
+    std::vector<std::vector<ir::BlockIdx>> preds(storage.blocks().size());
+    std::vector<ir::BlockIdx> succs;
+    for (ir::BlockIdx bidx : fn.blocks) {
+      successors(bidx, succs);
+      for (ir::BlockIdx succ : succs) {
+        if (succ.idx < preds.size()) {
+          preds[succ.idx].push_back(bidx);
         }
       }
     }
+    auto add_loan = [](std::vector<u32>& set, u32 loan) {
+      for (u32 prior : set) {
+        if (prior == loan) {
+          return;
+        }
+      }
+      set.push_back(loan);
+    };
+    // Backward to a fixed point: a block is live out wherever any
+    // successor is live in, and live in wherever it is read on a path
+    // that reaches one of them.
+    std::vector<u32> block_first(storage.blocks().size(), 0);
+    std::vector<u32> block_last(storage.blocks().size(), 0);
+    for (ir::BlockIdx bidx : fn.blocks) {
+      const ir::Block& block = storage.blocks()[bidx];
+      if (block.instrs.empty()) {
+        continue;
+      }
+      block_first[bidx.idx] = block.instrs.head().idx;
+      block_last[bidx.idx] = block.instrs.head().idx + block.instrs.size() - 1;
+    }
+    const usize cap = order.size() * 10 + 10;
+    for (usize iter = 0; iter < cap; ++iter) {
+      bool changed = false;
+      for (ir::BlockIdx bidx : order) {
+        std::vector<u32> out;
+        succs.clear();
+        successors(bidx, succs);
+        for (ir::BlockIdx succ : succs) {
+          for (u32 loan : live_in[succ.idx]) {
+            add_loan(out, loan);
+          }
+        }
+        if (out != live_out[bidx.idx]) {
+          live_out[bidx.idx] = std::move(out);
+          changed = true;
+        }
+        // A loan is live on entry when it is read in this block or live
+        // on exit, and it was not born here: a loan born in the block
+        // starts at its own birth, so it is never live before it. That
+        // exclusion is what stops a loan made in a loop body from
+        // wrapping around the back edge and being live on the next
+        // entry, where it would outlive the iteration that made it.
+        std::vector<u32> in;
+        for (u32 loan = 0; loan < loans.size(); ++loan) {
+          const u32 birth = loans[loan].birth;
+          if (birth >= block_first[bidx.idx] && birth <= block_last[bidx.idx]) {
+            continue;
+          }
+          bool live_here = loan_last_use[bidx.idx][loan] != 0;
+          for (u32 prior : live_out[bidx.idx]) {
+            if (prior == loan) {
+              live_here = true;
+              break;
+            }
+          }
+          if (live_here) {
+            add_loan(in, loan);
+          }
+        }
+        if (in != live_in[bidx.idx]) {
+          live_in[bidx.idx] = std::move(in);
+          changed = true;
+        }
+      }
+      if (!changed) {
+        return;
+      }
+    }
+    DCHECK(false);
   }
 
-  bool live_at(const Loan& loan, u32 pos) const {
-    return loan.birth <= pos && pos <= loan.expiry;
+  bool live_at(u32 loan, ir::BlockIdx bidx, u32 pos) const {
+    if (loan >= loans.size() || loans[loan].birth > pos) {
+      return false;
+    }
+    for (u32 prior : live_out[bidx.idx]) {
+      if (prior == loan) {
+        return true;
+      }
+    }
+    return loan < loan_last_use[bidx.idx].size() &&
+           loan_last_use[bidx.idx][loan] >= pos;
   }
 
   void check_place_use(const std::vector<Place>& moved,
@@ -646,21 +754,22 @@ class Checker {
 
   void check_function(const ir::Function& fn) {
     forward(fn);
-    compute_expiry();
     std::vector<ir::BlockIdx> order;
     reverse_post_order(fn, order);
     compute_moved(fn, order);
+    compute_liveness(fn, order);
     std::vector<Place> state;
     for (ir::BlockIdx bidx : order) {
       state = moved_in[bidx.idx];
       const ir::Block& block = storage.blocks()[bidx];
       for (ir::InstructionIdx iidx : block.instrs) {
-        check_instr(fn, iidx, state);
+        check_instr(fn, bidx, iidx, state);
       }
     }
   }
 
   void check_instr(const ir::Function& fn,
+                   ir::BlockIdx bidx,
                    ir::InstructionIdx iidx,
                    std::vector<Place>& moved) {
     const ir::Instruction& instr = instr_at(iidx);
@@ -691,11 +800,12 @@ class Checker {
           break;
         }
         check_place_use(moved, place, span, "move");
-        for (const Loan& loan : loans) {
+        for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
+          const Loan& loan = loans[id];
           if (loan.param != NO_ROOT) {
             continue;
           }
-          if (!live_at(loan, pos) || !overlaps(loan.place, place)) {
+          if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
             continue;
           }
           const u32 index =
@@ -717,11 +827,12 @@ class Checker {
         const bool exclusive =
             instr.dst.is_valid() &&
             tag_of(storage.registers()[instr.dst].type) == ir::TypeTag::MutRef;
-        for (const Loan& loan : loans) {
+        for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
+          const Loan& loan = loans[id];
           if (loan.reg == instr.dst.idx || loan.param != NO_ROOT) {
             continue;
           }
-          if (!live_at(loan, pos) || !overlaps(loan.place, place)) {
+          if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
             continue;
           }
           if (exclusive || loan.exclusive) {
@@ -738,11 +849,12 @@ class Checker {
         Place place;
         if (operand_place(1, place)) {
           kill_moved(moved, place);
-          for (const Loan& loan : loans) {
+          for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
+            const Loan& loan = loans[id];
             if (loan.param != NO_ROOT) {
               continue;
             }
-            if (!live_at(loan, pos) || !overlaps(loan.place, place)) {
+            if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
               continue;
             }
             const u32 index = bag.emit(
@@ -878,7 +990,6 @@ class Checker {
     home.assign(storage.registers().size(), NO_ROOT);
     path.assign(storage.registers().size(), {});
     flow.assign(storage.registers().size(), {});
-    last_use.assign(storage.registers().size(), 0);
     loans.clear();
     moved_in.clear();
     moved_out.clear();

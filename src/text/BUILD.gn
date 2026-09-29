@@ -3,6 +3,8 @@
 
 source_set("text") {
   sources = [
+    "json.cc",
+    "json.h",
     "unescape.cc",
     "unescape.h",
   ]

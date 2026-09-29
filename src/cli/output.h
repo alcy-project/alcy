@@ -75,9 +75,6 @@ std::string render_text(const Envelope& envelope, const diag::RenderOptions& r);
 // document can be pasted into a trace viewer unchanged.
 std::string render_json(const Envelope& envelope);
 
-// Appends a JSON string literal for text, quotes and escaping included.
-void append_json_string(std::string& out, std::string_view text);
-
 // Writes a finished envelope to standard output: the text report, or
 // the JSON document when the invocation asked for it. This is the only
 // exit for command results, which is what keeps "standard output is
