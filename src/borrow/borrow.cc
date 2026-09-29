@@ -97,6 +97,17 @@ struct Loan {
   u32 param = NO_ROOT;
 };
 
+// One way a returned reference reaches a parameter: which parameter,
+// and the path from that parameter to the reference. An empty path is
+// the parameter itself; a field index names a projection through it.
+// Callers keep every entry alive, which is the conjunction the region
+// model requires of conditional joins and struct composition alike.
+struct SummaryEntry {
+  u32 param = NO_ROOT;
+  std::vector<u32> path;
+  bool exclusive = false;
+};
+
 class Checker {
  public:
   Checker(const lower::LoweredPackage& lowered,
@@ -123,10 +134,10 @@ class Checker {
   // Checks seed from moved_in (before the block's own moves).
   std::vector<std::vector<Place>> moved_in;
   std::vector<std::vector<Place>> moved_out;
-  // Function summaries (return-regions): parameter indexes whose
-  // loans may reach a return, indexed by function. Call sites
-  // reify them by propagating only those arguments' loans.
-  std::vector<std::vector<u32>> summaries;
+  // Function summaries (return-regions): the ways a returned
+  // reference reaches the parameters, indexed by function. Call sites
+  // reify each entry against the matching argument.
+  std::vector<std::vector<SummaryEntry>> summaries;
   // Liveness, per block and per loan: the loans still live where a
   // block is entered and where it is left, and the last instruction of
   // a block that reads a loan. A loan's extent is a region rather than
@@ -419,28 +430,117 @@ class Checker {
         if (target.idx >= summaries.size()) {
           break;
         }
-        for (u32 param : summaries[target.idx]) {
-          if (param + 1 >= instr.operands.size()) {
+        const bool result_exclusive =
+            tag_of(storage.registers()[instr.dst.idx].type) ==
+            ir::TypeTag::MutRef;
+        auto union_flow = [&](u32 dst, u32 loan) {
+          for (u32 prior : flow[dst]) {
+            if (prior == loan) {
+              return;
+            }
+          }
+          flow[dst].push_back(loan);
+        };
+        // Project each entry onto its argument: the result carries a
+        // loan on the argument's referent extended by the recorded
+        // path, so a loan into one field does not cover the whole
+        // argument. An entry with an empty path keeps the argument's
+        // own loans below. A projected place is exclusive when the
+        // entry is or when the result itself is an exclusive
+        // reference: returning an exclusive reference derived from a
+        // shared one is already rejected where it is taken, so a
+        // well-formed callee never records it.
+        struct Projected {
+          u32 param = NO_ROOT;
+          Place place;
+        };
+        std::vector<Projected> projected;
+        for (const SummaryEntry& entry : summaries[target.idx]) {
+          if (entry.path.empty()) {
+            continue;
+          }
+          if (entry.param + 1 >= instr.operands.size()) {
             break;
           }
           const ir::Operand& arg =
-              storage.operands()[instr.operands.head() + param + 1];
+              storage.operands()[instr.operands.head() + entry.param + 1];
+          if (!arg.is<ir::RegisterIdx>() ||
+              arg.as_register().idx >= flow.size()) {
+            continue;
+          }
+          u32 referent = NO_ROOT;
+          std::vector<u32> referent_path;
+          for (u32 loan : flow[arg.as_register().idx]) {
+            if (loan < loans.size() && loans[loan].place.root != NO_ROOT) {
+              referent = loans[loan].place.root;
+              referent_path = loans[loan].place.path;
+              break;
+            }
+          }
+          if (referent == NO_ROOT) {
+            continue;
+          }
+          Place place{referent, referent_path};
+          for (u32 step : entry.path) {
+            place.path.push_back(step);
+          }
+          loans.push_back(
+              {instr.dst.idx, place, entry.exclusive || result_exclusive, pos});
+          union_flow(instr.dst.idx, static_cast<u32>(loans.size() - 1));
+          projected.push_back({entry.param, place});
+        }
+        for (const SummaryEntry& entry : summaries[target.idx]) {
+          if (entry.param + 1 >= instr.operands.size()) {
+            break;
+          }
+          const ir::Operand& arg =
+              storage.operands()[instr.operands.head() + entry.param + 1];
           if (!arg.is<ir::RegisterIdx>() ||
               arg.as_register().idx >= flow.size()) {
             continue;
           }
           for (u32 loan : flow[arg.as_register().idx]) {
-            bool known = false;
-            for (u32 prior : flow[instr.dst.idx]) {
-              if (prior == loan) {
-                known = true;
-                break;
+            if (loan >= loans.size()) {
+              continue;
+            }
+            // Summary tokens always propagate: a return through this
+            // call reaches the caller's caller through them. A real
+            // loan strictly inside a projected place is superseded by
+            // it and does not propagate; anything else keeps today's
+            // behavior.
+            if (loans[loan].param == NO_ROOT && !entry.path.empty()) {
+              bool covered = false;
+              for (const Projected& proj : projected) {
+                if (proj.param != entry.param ||
+                    proj.place.root != loans[loan].place.root) {
+                  continue;
+                }
+                const std::vector<u32>& wide = loans[loan].place.path;
+                const std::vector<u32>& narrow = proj.place.path;
+                if (wide.size() < narrow.size()) {
+                  bool prefix = true;
+                  for (usize i = 0; i < wide.size(); ++i) {
+                    if (!steps_match(wide[i], narrow[i])) {
+                      prefix = false;
+                      break;
+                    }
+                  }
+                  if (prefix) {
+                    covered = true;
+                    break;
+                  }
+                }
+              }
+              if (covered) {
+                continue;
               }
             }
-            if (!known) {
-              flow[instr.dst.idx].push_back(loan);
-            }
+            union_flow(instr.dst.idx, loan);
           }
+        }
+        if (!projected.empty() && instr.dst.idx < home.size()) {
+          home[instr.dst.idx] = projected.front().place.root;
+          path[instr.dst.idx] = projected.front().place.path;
         }
         break;
       }
@@ -1030,11 +1130,25 @@ class Checker {
     }
   }
 
-  // Recomputes one summary from current flow: parameter indexes
-  // whose loans reach a return. Summaries only grow across sweeps.
+  // Recomputes one summary from current flow: the ways a returned
+  // reference reaches the parameters. A loan whose place is rooted at
+  // a parameter alloca names that parameter and the path from it; a
+  // leading dereference steps out of the parameter slot itself, which
+  // the caller's argument already embodies, so it is dropped for a
+  // by-reference parameter. Summaries only grow across sweeps.
   bool update_summary(ir::FunctionIdx fidx) {
     const ir::Function& fn = storage.functions()[fidx];
-    std::vector<u32> next;
+    std::vector<u32> param_of_alloca(storage.registers().size(), NO_ROOT);
+    for (const auto& [alloca, index] : param_homes) {
+      if (alloca < param_of_alloca.size()) {
+        param_of_alloca[alloca] = index;
+      }
+    }
+    std::vector<ir::TypeIdx> param_types;
+    for (ir::TypeIdx tidx : fn.meta.param_types) {
+      param_types.push_back(tidx);
+    }
+    std::vector<std::pair<SummaryEntry, bool>> staged;
     for (ir::BlockIdx bidx : fn.blocks) {
       const ir::Block& block = storage.blocks()[bidx];
       if (block.instrs.empty()) {
@@ -1051,27 +1165,80 @@ class Checker {
         continue;
       }
       for (u32 loan : flow[value.as_register().idx]) {
-        if (loan >= loans.size() || loans[loan].param == NO_ROOT) {
+        if (loan >= loans.size()) {
           continue;
         }
+        const Loan& entry = loans[loan];
+        u32 param = entry.param;
+        std::vector<u32> relpath;
+        if (param == NO_ROOT) {
+          if (entry.place.root >= param_of_alloca.size() ||
+              param_of_alloca[entry.place.root] == NO_ROOT) {
+            continue;
+          }
+          param = param_of_alloca[entry.place.root];
+          relpath = entry.place.path;
+          if (param < param_types.size()) {
+            const ir::TypeTag ptag = tag_of(param_types[param]);
+            if ((ptag == ir::TypeTag::Ref || ptag == ir::TypeTag::MutRef) &&
+                !relpath.empty() && relpath.front() == DEREF_STEP) {
+              relpath.erase(relpath.begin());
+            }
+          }
+        }
+        SummaryEntry candidate{param, std::move(relpath), entry.exclusive};
+        const bool candidate_from_token = entry.param != NO_ROOT;
         bool known = false;
-        for (u32 prior : next) {
-          if (prior == loans[loan].param) {
+        for (const auto& [prior, _] : staged) {
+          if (prior.param == candidate.param && prior.path == candidate.path &&
+              prior.exclusive == candidate.exclusive) {
             known = true;
             break;
           }
         }
         if (!known) {
-          next.push_back(loans[loan].param);
+          staged.emplace_back(std::move(candidate), candidate_from_token);
         }
+      }
+    }
+    // A token entry names the whole parameter, so it is redundant where
+    // a narrower entry names a part of the same parameter: the returned
+    // place is the narrower one, and keeping the whole one would make
+    // every call site cover the argument it no longer needs to.
+    std::vector<SummaryEntry> next;
+    for (const auto& [candidate, from_token] : staged) {
+      if (from_token) {
+        bool narrowed = false;
+        for (const auto& [other, other_token] : staged) {
+          if (!other_token && other.param == candidate.param &&
+              !other.path.empty()) {
+            narrowed = true;
+            break;
+          }
+        }
+        if (narrowed) {
+          continue;
+        }
+      }
+      bool known = false;
+      for (const SummaryEntry& prior : next) {
+        if (prior.param == candidate.param && prior.path == candidate.path &&
+            prior.exclusive == candidate.exclusive) {
+          known = true;
+          break;
+        }
+      }
+      if (!known) {
+        next.push_back(candidate);
       }
     }
     if (next.size() == summaries[fidx.idx].size()) {
       bool same = true;
-      for (u32 index : next) {
+      for (const SummaryEntry& index : next) {
         bool found = false;
-        for (u32 prior : summaries[fidx.idx]) {
-          if (prior == index) {
+        for (const SummaryEntry& prior : summaries[fidx.idx]) {
+          if (prior.param == index.param && prior.path == index.path &&
+              prior.exclusive == index.exclusive) {
             found = true;
             break;
           }

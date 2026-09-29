@@ -33,18 +33,18 @@ relied upon by MVP programs or by the MVP compiler implementation.
   reads the size from the call site, or the size becomes a constant both
   sides repeat. The first is the honest one. See `docs/spec/fmt.md`.
 - A loan's extent is a region computed by backward liveness over the
-  CFG, not a solved region: a loan is live where a value carrying it is
-  read and wherever a successor is live, so sibling branches differ. The
-  place a reborrow names is the place the reference points into, not the
-  slot holding it, so a reborrow is anchored to the loan it derives from
-  and cannot be more exclusive than that loan is. What is left of the
-  region model is the relational part: the outlives constraints between
-  regions and the intersection a struct composes by, which today hold
-  because a reborrow carries its parent's loans rather than because the
-  relation is solved. A reference returned from a call is anchored to
-  the first loan the call reified, which a summary that named the place
-  it came from would remove the need to choose. The rules are stated as
-  a gate in `tools/check_borrow_rules.py`. See `docs/adr/0012`.
+  CFG: a loan is live where a value carrying it is read and wherever a
+  successor is live, so sibling branches differ. The place a reborrow
+  names is the place the reference points into, not the slot holding
+  it, so a reborrow is anchored to the loan it derives from and cannot
+  be more exclusive than that loan is. A summary names the place a
+  returned reference came from, so a loan into one field does not cover
+  the whole argument it was projected from. What is left of the region
+  model is the relational part: the outlives constraints between regions
+  and the intersection a struct composes by, which today hold because a
+  reborrow carries its parent's loans rather than because the relation
+  is solved. The rules are stated as a gate in
+  `tools/check_borrow_rules.py`. See `docs/adr/0012`.
 - `spec` (trait) definitions and dispatch, coherence rules, and
   monomorphization beyond per-instantiation enum, struct, and method
   specialization.

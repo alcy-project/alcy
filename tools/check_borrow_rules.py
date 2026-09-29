@@ -462,6 +462,37 @@ case(
   ret *a + *b
 }""")
 
+# --- projection through a call: the summary names the field, so a loan
+# --- into one field does not cover the whole argument ------------------
+case(
+    "projection", "mut-field-then-other-field", "accept",
+    """fn main() -> i32 {
+  mut q := P { a: 1, b: 2 }
+  mut r := mget_a(&mut q)
+  *r = 5
+  q.b = 9
+  ret *r + q.b
+}""", PAIR + "fn mget_a(p: &mut P) -> &mut i32 {\n  ret &mut p.a\n}\n")
+
+case(
+    "projection", "mut-field-then-same-field", "reject",
+    """fn main() -> i32 {
+  mut q := P { a: 1, b: 2 }
+  mut r := mget_a(&mut q)
+  *r = 5
+  q.a = 9
+  ret *r
+}""", PAIR + "fn mget_a(p: &mut P) -> &mut i32 {\n  ret &mut p.a\n}\n")
+
+case(
+    "projection", "shared-field-then-other-field", "accept",
+    """fn main() -> i32 {
+  mut q := P { a: 1, b: 2 }
+  r := get_a(&q)
+  q.b = 9
+  ret *r + q.b
+}""", PAIR + "fn get_a(p: &P) -> &i32 {\n  ret &p.a\n}\n")
+
 # --- a struct holding a reference composes by intersection ------------
 case(
     "struct", "reference-field-kept-live", "accept",

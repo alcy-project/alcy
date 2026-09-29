@@ -6,30 +6,6 @@ peripheral work lives in `backlog.md`.
 
 ## Next
 
-- [ ] The relational part of the region model.
-
-  A reborrow carries its parent's loans, so the outlives constraint
-  between them holds by construction rather than by being solved, and a
-  struct holding a reference composes by whichever rule the flow happens
-  to take rather than by the intersection `docs/spec/ownership.md`
-  states. A summary that named the place a returned reference came from
-  would also let an accessor's index reach the call site, where today a
-  literal index is invisible because the accessor reads it as a
-  parameter. No case in the rule matrix observes any of this, so it is a
-  change with no failing case to point at — which is why it needs its
-  own scope rather than riding along with a fix.
-
-## Queue
-
-- [ ] The relational part of the region model.
-
-  A reborrow carries its parent's loans, so the outlives constraint
-  between them holds by construction rather than by being solved, and a
-  struct holding a reference composes by whichever rule the flow happens
-  to take rather than by the intersection `docs/spec/ownership.md`
-  states. Neither is observable yet through the rule matrix, so this is
-  a change with no failing case to point at, which is why it waits
-  behind work that does have one.
 - [ ] Growable `String`.
 
   `String` is a fixed 256-byte array, so a longer result panics
