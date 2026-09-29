@@ -6,18 +6,28 @@ peripheral work lives in `backlog.md`.
 
 ## Next
 
-- [ ] A reborrow shortens the loan it derives from.
+- [ ] A loan into a buffer element names its element.
 
-  A reborrow stands behind the loan it came from, and while it is live
-  the two are the same loan as far as a write is concerned: the checker
-  has to keep them apart, or a reborrow appears to conflict with the
-  borrow it was taken from. This is rule 1 of ADR-0012, and it is what
-  turns the liveness the checker now computes into a solved region: a
-  derived loan's extent ends where the original's does rather than
-  where its own last use falls.
+  The step a loan through a buffer index carries stands for any index,
+  which is what makes a reallocating write conflict with a loan into
+  one element, and also what makes two `&mut` into distinct *literal*
+  indices conflict when they are disjoint. Naming the element where the
+  index is a literal, and keeping the wildcard for a runtime index,
+  satisfies both: the literals are distinct, and a runtime index still
+  cannot be shown distinct from anything. Tracked as a case in
+  `tools/check_borrow_rules.py`.
 
 ## Queue
 
+- [ ] The relational part of the region model.
+
+  A reborrow carries its parent's loans, so the outlives constraint
+  between them holds by construction rather than by being solved, and a
+  struct holding a reference composes by whichever rule the flow happens
+  to take rather than by the intersection `docs/spec/ownership.md`
+  states. Neither is observable yet through the rule matrix, so this is
+  a change with no failing case to point at, which is why it waits
+  behind work that does have one.
 - [ ] Growable `String`.
 
   `String` is a fixed 256-byte array, so a longer result panics

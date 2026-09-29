@@ -260,9 +260,39 @@ class Checker {
         } else {
           flow[instr.dst.idx].clear();
         }
-        if (is_reborrow && home[addr] != NO_ROOT) {
-          home[instr.dst.idx] = home[addr];
-          path[instr.dst.idx] = path[addr];
+        if (is_reborrow) {
+          // Reading a reference is not a copy of a pointer: it is a
+          // loan on the place the reference points into, so the
+          // referent is the place of the loan the reference stands
+          // for. Naming the slot that holds the reference instead
+          // gives two references to one place two loans that do not
+          // overlap, so nothing reports them aliasing and an exclusive
+          // loan can be taken from a shared one. A reference with no
+          // loan behind it — a parameter of unknown origin — keeps the
+          // slot, which names the referent only by convention. When a
+          // call hands back a reference derived from more than one
+          // parameter the summary does not say which place it names,
+          // so the first loan it carried is the referent; the rule
+          // matrix cannot observe the difference, and a summary that
+          // could say would remove the choice.
+          u32 referent = NO_ROOT;
+          std::vector<u32> referent_path;
+          for (u32 loan : flow[instr.dst.idx]) {
+            if (loan < loans.size() && loans[loan].place.root != NO_ROOT) {
+              referent = loans[loan].place.root;
+              referent_path = loans[loan].place.path;
+              break;
+            }
+          }
+          if (referent != NO_ROOT) {
+            home[instr.dst.idx] = referent;
+            path[instr.dst.idx] = std::move(referent_path);
+          } else if (home[addr] != NO_ROOT) {
+            home[instr.dst.idx] = home[addr];
+            path[instr.dst.idx] = path[addr];
+          } else {
+            break;
+          }
           path[instr.dst.idx].push_back(DEREF_STEP);
         }
         break;
@@ -777,6 +807,18 @@ class Checker {
     const diag::Span span = iidx.idx < lowered.instr_spans.size()
                                 ? lowered.instr_spans[iidx.idx]
                                 : diag::Span{};
+    auto operand_reg = [&](u32 offset, u32& reg) {
+      if (offset >= instr.operands.size()) {
+        return false;
+      }
+      const ir::Operand& operand =
+          storage.operands()[instr.operands.head() + offset];
+      if (!operand.is<ir::RegisterIdx>()) {
+        return false;
+      }
+      reg = operand.as_register().idx;
+      return true;
+    };
     auto operand_place = [&](u32 offset, Place& place) {
       if (offset >= instr.operands.size()) {
         return false;
@@ -784,13 +826,49 @@ class Checker {
       return place_of(storage.operands()[instr.operands.head() + offset],
                       place);
     };
+    // Whether a loan is one the value at this operand already carries,
+    // so an access through it is access the loan authorized.
+    auto carries_loan = [&](u32 reg, u32 id) {
+      if (reg >= flow.size()) {
+        return false;
+      }
+      for (u32 held : flow[reg]) {
+        if (held == id) {
+          return true;
+        }
+      }
+      return false;
+    };
     switch (instr.op) {
       case ir::Opcode::Load: {
         // Reading a place is a use, so a read of a moved place is a
         // use-after-move.
         Place place;
+        u32 addr_reg = NO_ROOT;
         if (operand_place(0, place)) {
           check_place_use(moved, place, span, "read");
+          // An exclusive loan freezes the place it covers, reading
+          // included. Reading through a loan is exempt, since the
+          // address carries the loan it was taken by; reading the same
+          // place by another route is the conflict.
+          for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
+            const Loan& loan = loans[id];
+            if (loan.param != NO_ROOT || !loan.exclusive) {
+              continue;
+            }
+            operand_reg(0, addr_reg);
+            if (carries_loan(addr_reg, id)) {
+              continue;
+            }
+            if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
+              continue;
+            }
+            const u32 index =
+                bag.emit(diag::Severity::Error, BORROW_CONFLICT, span,
+                         "conflicting borrows of '{}'", addr_name(place.root));
+            (void)index;
+            break;
+          }
         }
         break;
       }
@@ -827,9 +905,26 @@ class Checker {
         const bool exclusive =
             instr.dst.is_valid() &&
             tag_of(storage.registers()[instr.dst].type) == ir::TypeTag::MutRef;
+        // A reborrow is not in conflict with the loan it was taken
+        // from: it stands behind that loan and ends with it, which is
+        // what rule 1 means by being valid exactly as long as the
+        // enclosing borrow. It may not be *more* exclusive than what it
+        // derives from, so an exclusive reborrow of a shared loan is
+        // still a conflict.
+        auto derived_from = [&](u32 id) {
+          for (u32 held : flow[instr.dst.idx]) {
+            if (held == id) {
+              return true;
+            }
+          }
+          return false;
+        };
         for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
           const Loan& loan = loans[id];
           if (loan.reg == instr.dst.idx || loan.param != NO_ROOT) {
+            continue;
+          }
+          if (derived_from(id) && !(exclusive && !loan.exclusive)) {
             continue;
           }
           if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
@@ -847,11 +942,20 @@ class Checker {
       }
       case ir::Opcode::Store: {
         Place place;
-        if (operand_place(1, place)) {
+        u32 target = NO_ROOT;
+        if (operand_reg(1, target) && operand_place(1, place)) {
           kill_moved(moved, place);
+          // Writing through a loan is what the loan is for, so a store
+          // is exempt from the loans its own address carries. Every
+          // other loan reaching the place still forbids it, which is
+          // what makes a write through one reference a conflict with a
+          // loan taken through another.
           for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
             const Loan& loan = loans[id];
             if (loan.param != NO_ROOT) {
+              continue;
+            }
+            if (carries_loan(target, id)) {
               continue;
             }
             if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {

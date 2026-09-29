@@ -101,7 +101,7 @@ case(
   mut m := &mut *s
   *m = 5
   ret *s
-}""", BOX, known=True)
+}""", BOX)
 
 case(
     "aliasing", "mut-through-two-shared-refs", "reject",
@@ -114,17 +114,28 @@ case(
   *a = 1
   *b = 2
   ret x
-}""", BOX, known=True)
+}""", BOX)
 
 case(
-    "aliasing", "read-shared-while-derived-mut-live", "reject",
+    "aliasing", "exclusive-from-shared-then-read", "reject",
     """fn main() -> i32 {
   mut x := 1i32
   s := &x
   mut m := &mut *s
   *m = 5
   ret *s
-}""", BOX, known=True)
+}""", BOX)
+
+# Reading the parent while an exclusive reborrow of it is live is the
+# same rule seen from the other side: the child freezes the parent.
+case(
+    "aliasing", "parent-read-while-child-live", "reject",
+    """fn main() -> i32 {
+  mut x := 1i32
+  mut m := &mut x
+  mut n := &mut *m
+  ret *m + *n
+}""", BOX)
 
 case(
     "aliasing", "mut-through-two-mut-refs", "reject",

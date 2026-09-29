@@ -34,25 +34,18 @@ relied upon by MVP programs or by the MVP compiler implementation.
   sides repeat. The first is the honest one. See `docs/spec/fmt.md`.
 - A loan's extent is a region computed by backward liveness over the
   CFG, not a solved region: a loan is live where a value carrying it is
-  read and wherever a successor is live, so sibling branches differ. What
-  that is not yet is a *solved* region, and the gap that matters is in
-  the place rather than the extent: a reborrow's place is the slot
-  holding the reference, not the place the reference points into, so two
-  references to one place produce two loans that do not overlap. The
-  consequences are recorded as cases in `tools/check_borrow_rules.py`:
-  an exclusive loan can be derived from a shared one, two exclusive
-  loans can alias through two shared references to one place, and a
-  shared reference can be read while a loan derived from it is live.
-  Separately, a loan into a buffer element is named by a step that
-  stands for any index, so two `&mut` into distinct *literal* indices
-  are refused where they are disjoint. Reborrowing otherwise lands: a
-  place reached through a reference is named by a dereference step, a
-  reborrow carries the loans it stands behind, `&mut T` coerces to `&T`
-  at an argument and at a receiver, an implicit reborrow at an argument
-  or a receiver is a loan whether or not the source writes a `&`, and
-  `elem_ref` and `uninit_ref` let a buffer be read through a shared
-  owner, so `Vec<T>` has a read-only `at` that the checker records. See
-  `docs/adr/0012`.
+  read and wherever a successor is live, so sibling branches differ. The
+  place a reborrow names is the place the reference points into, not the
+  slot holding it, so a reborrow is anchored to the loan it derives from
+  and cannot be more exclusive than that loan is. What is left of the
+  region model is the relational part: the outlives constraints between
+  regions and the intersection a struct composes by, which today hold
+  because a reborrow carries its parent's loans rather than because the
+  relation is solved. Separately, a loan into a buffer element is named
+  by a step standing for any index, so two `&mut` into distinct
+  *literal* indices are refused where they are disjoint; that is
+  recorded as a case in `tools/check_borrow_rules.py`, which states the
+  ownership rules as a gate. See `docs/adr/0012`.
 - `spec` (trait) definitions and dispatch, coherence rules, and
   monomorphization beyond per-instantiation enum, struct, and method
   specialization.
