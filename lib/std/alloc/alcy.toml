@@ -7,21 +7,11 @@ name = "alloc"
 version = "0.1.0"
 
 [modules]
-include = [
-  "prelude",
-  "heap",
-  "text",
-  "vec",
-]
+include = ["prelude", "heap", "string", "vec"]
 # The public surface, in the form ADR-0007 specifies. Nothing
 # enforces it yet. Its `pub` items are also the implicit surface:
 # a program depending on this package sees them with no `use`.
-export = [
-  "prelude",
-  "heap",
-  "text",
-  "vec",
-]
+export = ["prelude", "heap", "string", "vec"]
 
 [dependencies]
 "alcy/std/core" = {}

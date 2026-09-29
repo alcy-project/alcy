@@ -17,5 +17,5 @@ pub use super::heap::elem_ref;
 pub use super::heap::uninit_write;
 pub use super::heap::uninit_assume;
 pub use super::heap::uninit_ref;
+pub use super::string::String;
 pub use super::vec::Vec;
-pub use super::text::String;
