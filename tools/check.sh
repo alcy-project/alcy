@@ -77,8 +77,14 @@ wasm_subdir="build_wasm"
 
 "${py_runner[@]}" "$tools_dir/check_runtime.py"
 
+# The samples run through the harness the cases above use, so a program
+# kept as an example is also one that still compiles and still prints
+# what it says it prints. Here rather than with the cases because these
+# are read as much as run, and a sample that is wrong is a
+# documentation fault.
 "${py_runner[@]}" "$tools_dir/check_exe.py" \
-  --build-subdir=$debug_subdir
+  --build-subdir=$debug_subdir \
+  --cases-root=samples
 
 # The same cases again through --emit=llvm-ir, so the code alcy generates
 # is compiled by an external toolchain that can instrument it. Skipped

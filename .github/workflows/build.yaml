@@ -121,6 +121,13 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_exe.py --build-subdir=build
 
+      # The samples run through the same harness as the test cases, so a
+      # program kept as an example is also a program that still compiles
+      # and still prints what it says it prints.
+      - name: Run Samples
+        shell: bash
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_exe.py --build-subdir=build --cases-root=samples
+
       - name: Verify Static Linkage
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/verify_static_linkage.py --build-dir=out/build

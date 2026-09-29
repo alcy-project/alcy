@@ -229,6 +229,15 @@ def main():
         help="Comma-separated case names to run (default: all)",
     )
     parser.add_argument(
+        "--cases-root",
+        default="exe/cases",
+        help=(
+            "Directory of case directories, relative to the project root. "
+            "The samples use the same harness as the test cases, so that a "
+            "program kept as an example stays compiled and run."
+        ),
+    )
+    parser.add_argument(
         "--sanitize",
         action="store_true",
         help=(
@@ -250,7 +259,10 @@ def main():
         print(f"alcy binary not found in out/{args.build_subdir}/")
         return -1
 
-    cases_root = project_root_dir / "exe" / "cases"
+    cases_root = project_root_dir / args.cases_root
+    if not cases_root.is_dir():
+        print(f"cases root not found: {args.cases_root}")
+        return -1
     selected = (
         {name.strip() for name in args.cases.split(",") if name.strip()}
         if args.cases
