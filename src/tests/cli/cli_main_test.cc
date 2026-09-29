@@ -771,7 +771,7 @@ TEST_CASE("Text result reports the statistics it measured") {
   // --color=never because the sentence below is matched as plain text,
   // and whether a terminal is present is the host's to decide: under
   // Emscripten it is, and the verb arrives wrapped in escape codes.
-  std::vector<std::string> storage{"alcy",     "check",  "--file",
+  std::vector<std::string> storage{"alcy", "check", "--file",
                                    dir.join("main.al"), "--color=never"};
   std::vector<char*> argv;
   argv.reserve(storage.size());
