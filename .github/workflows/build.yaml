@@ -121,6 +121,21 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run python ./tools/verify_static_linkage.py --build-dir=out/build
 
+      # A microbenchmark whose own figures wander measures nothing, so the
+      # engine is asked to reproduce itself and the check is a gate. It
+      # runs on a release build only: a debug build carries assertions
+      # and sanitizers, and its timings describe that build rather than
+      # the compiler.
+      - name: Check Benchmark Reproducibility
+        if: ${{ inputs.build_type == 'release' }}
+        shell: bash
+        run: |
+          set -e
+          nix=""
+          if [[ "${{ matrix.nix }}" == "true" ]]; then nix="nix develop .#default --command "; fi
+          $nix uv run ./tools/build.py --target=benchmarks --mode=release --build-subdir=build
+          $nix uv run ./tools/run_benchmarks.py reconcile --build-subdir=build
+
       - name: Run Smoke Test
         shell: bash
         run: |

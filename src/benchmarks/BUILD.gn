@@ -1,7 +1,7 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-# The engine, without the driver, so the unit tests can drive it with a
+# The engine without the driver, so the unit tests can drive it with a
 # fake clock: a duration that depends on the host is not a test.
 source_set("bench") {
   sources = [

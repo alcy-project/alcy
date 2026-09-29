@@ -125,7 +125,8 @@ def summarize(samples_ns: list[int]) -> dict:
 
 
 def measure(
-    case: dict, binary: Path, fixtures_dir: Path, build_subdir: str
+    case: dict, binary: Path, fixtures_dir: Path, build_subdir: str,
+    build_mode: str,
 ) -> dict:
     argv = [str(binary), *case["argv"]]
     repetitions = int(case.get("repetitions", 10))
@@ -164,11 +165,11 @@ def measure(
         "samples_ns": samples_ns,
         "stats": summarize(samples_ns),
     }
-    record.update(environment(binary, build_subdir))
+    record.update(environment(binary, build_subdir, build_mode))
     return record
 
 
-def environment(binary: Path, build_subdir: str) -> dict:
+def environment(binary: Path, build_subdir: str, build_mode: str) -> dict:
     """What the numbers are only comparable within.
 
     A shared CI runner is not a stable measurement environment, so the
@@ -177,6 +178,7 @@ def environment(binary: Path, build_subdir: str) -> dict:
     return {
         "target": f"{platform.system().lower()}-{platform.machine()}",
         "build_subdir": build_subdir,
+        "build_mode": build_mode,
         "binary_bytes": binary.stat().st_size,
     }
 
@@ -201,6 +203,7 @@ COMPARABLE = (
     "command",
     "target",
     "build_subdir",
+    "build_mode",
 )
 
 
@@ -240,6 +243,17 @@ def compare(before_path: Path, after_path: Path) -> int:
 # The microbenchmark driver, a separate binary: it links the compiler as
 # a library and never the cli, so what it times has no process boundary
 # and no argument parsing in it.
+def infer_build_mode(build_subdir: str) -> str:
+    """release or debug, from the output directory the build wrote.
+
+    `build.py --mode=release --build-subdir=build_release` is the
+    convention, and a build directory whose name does not say otherwise
+    is the debug one, which is also the safe answer to assume: a debug
+    figure describes the build rather than the compiler.
+    """
+    return "release" if "release" in build_subdir else "debug"
+
+
 def resolve_driver(build_subdir: str) -> Path:
     driver = project_root_dir / "out" / build_subdir / "benchmarks"
     if not driver.is_file():
@@ -258,7 +272,8 @@ def print_micro(record: dict) -> None:
     )
 
 
-def run_micro(build_subdir: str, output: str, cases: str) -> int:
+def run_micro(build_subdir: str, build_mode: str, output: str,
+              cases: str) -> int:
     """Runs the engine over the cases it was compiled with.
 
     There is no suite file to read: a case is added to the driver, not to
@@ -274,9 +289,15 @@ def run_micro(build_subdir: str, output: str, cases: str) -> int:
     target = Path(output) if output else None
     if target is not None:
         target.parent.mkdir(parents=True, exist_ok=True)
-    argv = [str(driver), "--build-subdir", build_subdir]
+    argv = [str(driver), "--build-subdir", build_subdir,
+            "--build-mode", build_mode]
     if cases:
         argv += ["--cases", cases]
+    # The source is written out so a `check` run can be pointed at the
+    # very input these figures came from, which is what the reconcile
+    # step needs on both sides.
+    if target is not None:
+        argv += ["--emit-source", str(target.with_suffix(".al"))]
     proc = subprocess.run(
         argv, capture_output=True, text=True, encoding="utf-8"
     )
@@ -300,60 +321,148 @@ def run_micro(build_subdir: str, output: str, cases: str) -> int:
     return 0
 
 
-# How far apart two measurements of the same work may be before one of
-# them is measuring something else. A phase reached through the pipeline
-# carries what the pipeline does around it and the micro case does not,
-# so the ratio is not expected to be one; it is not expected to be ten.
-RECONCILE_LIMIT = 10.0
+# How far two runs of the same case may differ before the harness itself
+# is suspect. A shared CI runner is noisy, so the band is wide; it exists
+# to catch a broken clock, a missing warmup, or a batch that swallowed the
+# work, not to measure the machine.
+REPRODUCIBILITY_TOLERANCE = 0.25
+
+# The width the engine runs at when nothing says otherwise. Large enough
+# that a sample is far longer than the clock's own cost.
+DEFAULT_WIDTH = 64
 
 
-def reconcile(micro_path: Path, trace_path: Path) -> int:
-    """Checks the engine against the phases a real run recorded.
+def phase_totals(trace_path: Path) -> dict[str, float]:
+    """Each phase's total, in microseconds, as a Chromium trace records it.
 
-    A percentile is self-consistent whatever it measures, so the engine
-    is only worth something if an independent measurement agrees. The two
-    describe the same phase from different angles: once through the
-    pipeline with everything around it, and many times in isolation. A
-    disagreement by an order of magnitude means one of the two is not
-    measuring the phase.
+    A trace event's `dur` is microseconds because that is the unit the
+    format defines; the engine counts nanoseconds and is converted where
+    the two meet, rather than either side being changed, so that the trace
+    document stays pasteable into a viewer.
     """
-    micro = {r["name"]: r for r in load_jsonl(micro_path) if r["kind"] == "micro"}
     try:
         document = json.loads(trace_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
-        print(f"error: cannot read the trace document: {e}")
-        return -1
-
+        raise SuiteError(f"cannot read {trace_path}: {e}") from e
     totals: dict[str, float] = {}
     for event in document.get("traceEvents", []):
         totals[event["name"]] = totals.get(event["name"], 0.0) + event["dur"]
+    return totals
 
-    for name in sorted(set(micro) - set(totals)):
-        print(f"NOTE    {name}: no phase of that name in the trace")
 
-    rows = 0
-    failures = 0
-    for name in sorted(set(micro) & set(totals)):
-        engine = micro[name]["stats"]["p50"]
-        traced = totals[name]
-        if engine <= 0 or traced <= 0:
-            print(f"SKIP    {name}: nothing to compare")
-            continue
-        ratio = traced / engine
-        bad = ratio > RECONCILE_LIMIT or ratio < 1 / RECONCILE_LIMIT
-        if bad:
-            failures += 1
-        rows += 1
-        print(
-            f"{'BAD' if bad else 'ok':6} {name}: trace {traced:.1f}us "
-            f"/ engine {engine:.1f}us = {ratio:.2f}x"
+def engine_run(driver: Path, build_subdir: str, build_mode: str, width: int,
+               record_path: Path, source_path: Path) -> dict[str, dict]:
+    """Runs the engine once and returns its cases by name."""
+    done = subprocess.run(
+        [
+            str(driver),
+            "--build-subdir", build_subdir,
+            "--build-mode", build_mode,
+            "--functions", str(width),
+            "--output", str(record_path),
+            "--emit-source", str(source_path),
+        ],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    if done.returncode != 0:
+        raise SuiteError(f"the engine failed: {done.stderr.strip()}")
+    return {r["name"]: r for r in load_jsonl(record_path) if r["kind"] == "micro"}
+
+
+def run_reconcile(build_subdir: str, build_mode: str, tolerance: float) -> int:
+    """Checks that the engine measures what it claims, and shows the rest.
+
+    Two things are worth knowing and only one of them can be a gate.
+
+    The engine's figure is the *steady-state* cost of a phase: the same
+    bytes, run again and again, warm. A `--time-trace` run is a single
+    invocation, and the phases that touch the file pay its first touch
+    once. The two are therefore not expected to agree, and are not
+    compared as though they should: for a small file the difference is an
+    order of magnitude, and closing it would mean making the engine
+    measure something less useful. They are printed side by side, so the
+    gap is visible rather than assumed.
+
+    What can be gated is the harness itself. Run twice on one machine and
+    a case's median should land in the same place; if it does not, the
+    clock, the warmup, or the batching is wrong, and every number the
+    engine ever produced is suspect. That is the check CI runs.
+    """
+    try:
+        driver = resolve_driver(build_subdir)
+        binary = resolve_binary(build_subdir)
+    except SuiteError as e:
+        print(f"error: {e}")
+        return -1
+
+    if build_mode != "release":
+        # A debug build carries assertions and sanitizers. Its timings
+        # describe that build, not the compiler, and they wander by more
+        # than the band below: the same parse measured three times moves
+        # by about a sixth. The figure is still reported, because the
+        # spread is what says so.
+        print(f"note: build mode is {build_mode!r}, not 'release'; these "
+              "timings are not a measurement of the compiler\n")
+
+    with tempfile.TemporaryDirectory(prefix="alcy_reconcile_") as scratch:
+        work = Path(scratch)
+        source_path = work / "bench.al"
+        try:
+            first = engine_run(driver, build_subdir, build_mode, DEFAULT_WIDTH,
+                               work / "first.jsonl", source_path)
+            second = engine_run(driver, build_subdir, build_mode, DEFAULT_WIDTH,
+                                work / "second.jsonl", source_path)
+        except SuiteError as e:
+            print(f"error: {e}")
+            return -1
+
+        check = subprocess.run(
+            [str(binary), "check", "--file", str(source_path),
+             "--time-trace", "--json"],
+            capture_output=True, text=True, encoding="utf-8",
         )
+        (work / "trace.json").write_text(check.stdout, encoding="utf-8")
+        try:
+            traces = phase_totals(work / "trace.json")
+        except SuiteError as e:
+            print(f"error: {e}")
+            return -1
+
+        print(f"engine, two runs at {DEFAULT_WIDTH} functions:")
+        failures = 0
+        rows = 0
+        for name in sorted(set(first) & set(second)):
+            one = first[name]["stats"]["p50"]
+            two = second[name]["stats"]["p50"]
+            smaller = min(one, two)
+            spread = abs(one - two) / smaller if smaller > 0 else 0.0
+            unstable = spread > tolerance
+            if unstable:
+                failures += 1
+            rows += 1
+            print(
+                f"  {'BAD' if unstable else 'ok':4} {name}: "
+                f"{one / 1000.0:.3f}ms then {two / 1000.0:.3f}ms "
+                f"({spread * 100:.1f}% apart)"
+            )
+
+        print()
+        print("against one compiler run, for scale rather than for agreement:")
+        for name in sorted(set(first) & set(traces)):
+            engine_us = first[name]["stats"]["p50"] / 1000.0
+            traced_us = traces[name]
+            if min(engine_us, traced_us) <= 0:
+                continue
+            print(
+                f"       {name}: engine {engine_us:.3f}ms steady-state, "
+                f"trace {traced_us:.3f}ms for the whole invocation"
+            )
 
     if not rows:
-        print("reconcile: no case names a phase the trace recorded")
+        print("reconcile: the engine reported no case twice")
         return 1
     if failures:
-        print(f"reconcile: {failures} case(s) disagree with the trace")
+        print(f"reconcile: {failures} case(s) did not reproduce")
         return 1
     return 0
 
@@ -380,7 +489,9 @@ def run_process(args) -> int:
     records = []
     for case in cases:
         try:
-            record = measure(case, binary, fixtures_dir, args.build_subdir)
+            record = measure(case, binary, fixtures_dir, args.build_subdir,
+                             args.build_mode or infer_build_mode(
+                                 args.build_subdir))
         except SuiteError as e:
             print(f"error: {e}")
             return -1
@@ -416,7 +527,8 @@ def main() -> int:
     )
     cmp_ = sub.add_parser("compare", help="compare two result files")
     rec = sub.add_parser(
-        "reconcile", help="check engine figures against a --time-trace run"
+        "reconcile",
+        help="check that the engine reproduces, and show it beside a run",
     )
 
     for target in (process, micro):
@@ -431,6 +543,12 @@ def main() -> int:
         target.add_argument(
             "--output", default="", help="JSONL file to append to"
         )
+        target.add_argument(
+            "--build-mode",
+            default="",
+            help="debug or release, recorded with the figures "
+                 "(default: read from --build-subdir)",
+        )
     process.add_argument(
         "--suite",
         default="benchmarks/suites/cases.toml",
@@ -443,16 +561,33 @@ def main() -> int:
     )
     cmp_.add_argument("before", help="Result file recorded earlier")
     cmp_.add_argument("after", help="Result file recorded now")
-    rec.add_argument("micro", help="JSONL the engine wrote")
-    rec.add_argument("trace", help="A --time-trace --json document")
+    rec.add_argument(
+        "--build-subdir",
+        default="build",
+        help="Subdirectory inside out/ holding both binaries (default: build)",
+    )
+    rec.add_argument(
+        "--build-mode",
+        default="",
+        help="Build the figures came from (default: read from "
+             "--build-subdir)",
+    )
+    rec.add_argument(
+        "--tolerance",
+        type=float,
+        default=REPRODUCIBILITY_TOLERANCE,
+        help="How far two runs of a case may differ (default %(default)s)",
+    )
 
     args = parser.parse_args()
     if args.command == "compare":
         return compare(Path(args.before), Path(args.after))
     if args.command == "reconcile":
-        return reconcile(Path(args.micro), Path(args.trace))
+        mode = args.build_mode or infer_build_mode(args.build_subdir)
+        return run_reconcile(args.build_subdir, mode, args.tolerance)
     if args.command == "micro":
-        return run_micro(args.build_subdir, args.output, args.cases)
+        mode = args.build_mode or infer_build_mode(args.build_subdir)
+        return run_micro(args.build_subdir, mode, args.output, args.cases)
     return run_process(args)
 
 

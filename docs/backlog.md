@@ -5,9 +5,11 @@ replaced. The foundations are in `roadmap.md`.
 
 - [x] Optimized builds: wire the optimization level through to LLVM
   behind the existing `--release`.
-- [ ] Benchmark harness: the microbenchmark engine, on top of the
-  process runner in `tools/run_benchmarks.py` and the phase timings
-  the result envelope now reports.
+- [ ] Benchmark harness: cases for the phases beyond the frontend.
+  The engine and the process runner are in place, and the frontend
+  cases are the only ones written; `analyze`, `borrow`, `lower`,
+  `emit-ir`, `emit-object`, and `link` follow. Designed in
+  `docs/adr/0021`.
 - [x] `grammar.ebnf` maintenance: every grammar change diffs the file
   in the same commit.
 - [x] `build/scripts` → `tools/` rename, in one shot.
