@@ -6,7 +6,9 @@
 #include <string>
 #include <string_view>
 
+#include "benchmarks/case_codegen.h"
 #include "benchmarks/case_frontend.h"
+#include "benchmarks/case_pipeline.h"
 #include "benchmarks/clock.h"
 #include "benchmarks/generator.h"
 #include "benchmarks/runner.h"
@@ -46,13 +48,6 @@ void print_usage() {
       "  --statements <n>    statements per function (default 8)\n"
       "  --depth <n>         if-nesting depth (default 3)\n",
       stderr);
-}
-
-// Whether a case is wanted. The filter names the case alone: a group
-// has no part in selecting one, because two groups may both have a
-// `parse` and the runner picks a case by its full id.
-bool wants(std::string_view filter, bench::CaseId id) {
-  return filter.empty() || filter.find(id.name) != std::string_view::npos;
 }
 
 }  // namespace
@@ -128,17 +123,18 @@ i32 main(i32 argc, char** argv) {
   };
 
   bench::ResultWriter writer(metadata);
-  const bench::Emitter emit{&writer};
+  bench::Emitter emit{&writer};
   const bench::SteadyClock clock;
   bench::Runner<bench::SteadyClock> runner(clock);
-  const bool any = wants(case_filter, bench::CaseId{"frontend", "tokenize"}) ||
-                   wants(case_filter, bench::CaseId{"frontend", "parse"});
-  if (!any) {
+  const bench::CaseFilter filter{case_filter};
+  bench::run_frontend_cases(runner, spec, filter, emit);
+  bench::run_pipeline_cases(runner, spec, filter, emit);
+  bench::run_codegen_cases(runner, spec, filter, emit);
+  if (emit.count == 0) {
     std::fprintf(stderr, "benchmarks: no case matched '%s'\n",
                  case_filter.c_str());
     return 1;
   }
-  bench::run_frontend_cases(runner, spec, emit);
 
   if (output.empty()) {
     io::write(io::STDOUT_FD, writer.text().data(), writer.text().size());

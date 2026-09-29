@@ -69,6 +69,7 @@ executable("tests") {
   deps = [
     "//src:alcy_lib",
     "//src/benchmarks:bench",
+    "//src/benchmarks:bench_cases",
     "//src/cli",
     "//third_party/doctest",
 

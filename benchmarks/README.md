@@ -60,7 +60,20 @@ along with staging the standard library. The two are not expected to
 agree — for a small file the difference is several times over — and
 closing that gap would mean measuring something less useful. `reconcile`
 prints them side by side so the difference is visible rather than
-assumed, and gates on the thing that *can* be checked: that the engine
-reproduces its own figures across two runs, which is what catches a
-broken clock, a missing warmup, or a batch that swallowed the work. It
-runs on a release build, because a debug build does not reproduce.
+assumed, and judges the one thing it can: that the engine reproduces its
+own figures across two runs, which is what catches a broken clock, a
+missing warmup, or a batch that swallowed the work.
+
+Neither judgement is CI's to make. A shared runner is not a quiet
+machine — the same case measured twice on one moved by thirty percent,
+against one or two on a quiet machine — so a gate on it would be a coin
+flip that blocks merges and teaches everyone to re-run. CI runs `smoke`
+instead, which judges the shape of the result and not its speed:
+
+    uv run ./tools/run_benchmarks.py smoke
+
+Every case present, every sample counted, a clock named, a figure above
+zero, and a generated source the compiler still accepts. A noisy machine
+cannot make any of those false. `reconcile` needs a release build and
+refuses a debug one, whose figures describe that build rather than the
+compiler.

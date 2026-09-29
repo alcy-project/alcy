@@ -1,8 +1,8 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-# The engine without the driver, so the unit tests can drive it with a
-# fake clock: a duration that depends on the host is not a test.
+# The engine without the compiler. Its own test drives it with a fake
+# clock, so a duration that depends on the host is not a test.
 source_set("bench") {
   sources = [
     "clock.cc",
@@ -26,23 +26,50 @@ source_set("bench") {
   configs += [ "//src:alcy_config" ]
 }
 
+# The cases, and the fixture they share. Split from the engine so that
+# the engine carries no compiler dependency of its own.
+source_set("bench_cases") {
+  sources = [
+    "case_codegen.cc",
+    "case_codegen.h",
+    "case_frontend.cc",
+    "case_frontend.h",
+    "case_pipeline.cc",
+    "case_pipeline.h",
+    "fixture.cc",
+    "fixture.h",
+  ]
+
+  deps = [
+    ":bench",
+    "//src:alcy_lib",
+  ]
+
+  # The cases include the engine's headers, and the driver includes the
+  # cases', so both hops have to forward.
+  public_deps = [ ":bench" ]
+
+  configs += [
+    "//src:alcy_config",
+    "//src:win_sys_libs",
+  ]
+}
+
 # The microbenchmark driver. Separate from alcy so that nothing here is
 # linked into the compiler: what a benchmark harness may do to the
 # compiler is not something the compiler should carry.
 executable("benchmarks") {
-  sources = [
-    "benchmark_main.cc",
-    "case_frontend.cc",
-    "case_frontend.h",
-  ]
+  sources = [ "benchmark_main.cc" ]
 
   configs += [
     "//src:alcy_config",
     "//src:win_sys_libs",
   ]
 
+  # The driver names the host it ran on, which is what the build flags
+  # say, and drives the engine through fpag.
   deps = [
-    ":bench",
-    "//src:alcy_lib",
+    ":bench_cases",
+    "//src:base_modules",
   ]
 }

@@ -121,20 +121,21 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run python ./tools/verify_static_linkage.py --build-dir=out/build
 
-      # A microbenchmark whose own figures wander measures nothing, so the
-      # engine is asked to reproduce itself and the check is a gate. It
-      # runs on a release build only: a debug build carries assertions
-      # and sanitizers, and its timings describe that build rather than
-      # the compiler.
-      - name: Check Benchmark Reproducibility
-        if: ${{ inputs.build_type == 'release' }}
+      # The engine is built and run, and what comes out is checked for
+      # shape: every case present, every sample counted, a clock named, a
+      # figure above zero, and a generated source the compiler accepts.
+      #
+      # Nothing here judges a timing. A shared runner is not a quiet
+      # machine, and a gate on a figure it cannot measure is a coin flip
+      # that teaches everyone to re-run. `reconcile` makes that
+      # judgement, on a machine someone controls, and it is run by hand.
+      - name: Check Benchmark Harness
         shell: bash
         run: |
           set -e
           nix=""
           if [[ "${{ matrix.nix }}" == "true" ]]; then nix="nix develop .#default --command "; fi
-          $nix uv run ./tools/build.py --target=benchmarks --mode=release --build-subdir=build
-          $nix uv run ./tools/run_benchmarks.py reconcile --build-subdir=build
+          $nix uv run ./tools/run_benchmarks.py smoke --build-subdir=build
 
       - name: Run Smoke Test
         shell: bash

@@ -72,7 +72,8 @@ void parse_once(FrontendFixture& fixture) {
 
 void run_frontend_cases(Runner<SteadyClock>& runner,
                         const SourceSpec& spec,
-                        Emitter emit) {
+                        const CaseFilter& filter,
+                        Emitter& emit) {
   FrontendFixture fixture(generate_source(spec));
 
   // A whole file is never short enough to need a batch, so both cases
@@ -88,11 +89,15 @@ void run_frontend_cases(Runner<SteadyClock>& runner,
       .min_batch_ns = 0,
   };
 
-  emit(CaseId{"frontend", "tokenize"}, policy,
-       runner.measure(policy, [] {}, [&] { fixture.tokenize(); }));
+  if (filter.wants(CaseId{"frontend", "tokenize"})) {
+    emit(CaseId{"frontend", "tokenize"}, policy,
+         runner.measure(policy, [] {}, [&] { fixture.tokenize(); }));
+  }
 
-  emit(CaseId{"frontend", "parse"}, policy,
-       runner.measure(policy, [] {}, [&] { parse_once(fixture); }));
+  if (filter.wants(CaseId{"frontend", "parse"})) {
+    emit(CaseId{"frontend", "parse"}, policy,
+         runner.measure(policy, [] {}, [&] { parse_once(fixture); }));
+  }
 }
 
 }  // namespace bench

@@ -5,11 +5,12 @@ replaced. The foundations are in `roadmap.md`.
 
 - [x] Optimized builds: wire the optimization level through to LLVM
   behind the existing `--release`.
-- [ ] Benchmark harness: cases for the phases beyond the frontend.
-  The engine and the process runner are in place, and the frontend
-  cases are the only ones written; `analyze`, `borrow`, `lower`,
-  `emit-ir`, `emit-object`, and `link` follow. Designed in
-  `docs/adr/0021`.
+- [x] Benchmark harness: an engine for the compiler's phases beside the
+  process runner, with a local reproducibility check and a CI smoke
+  check. Designed in `docs/adr/0021`. Nine of the seventeen phases have
+  cases; `load`, `prelude`, and `link` have none on purpose, since each
+  is a read, a staging of the embedded suite, or a subprocess, and a
+  number for those belongs to the process runner.
 - [x] `grammar.ebnf` maintenance: every grammar change diffs the file
   in the same commit.
 - [x] `build/scripts` → `tools/` rename, in one shot.

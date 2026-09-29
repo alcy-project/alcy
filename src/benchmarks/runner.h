@@ -23,6 +23,17 @@ struct CaseId {
   constexpr bool operator==(const CaseId&) const = default;
 };
 
+// Selects cases by name. A group takes no part in it: two groups may
+// both have a `parse`, and a record is identified by its full id, so a
+// name that appears in any group selects it there.
+struct CaseFilter {
+  std::string_view names;
+
+  bool wants(CaseId id) const {
+    return names.empty() || names.find(id.name) != std::string_view::npos;
+  }
+};
+
 // How long to run a case, and how much of each sample to trust.
 //
 // Sample count is not fixed across cases: a lexer's token and a linker's

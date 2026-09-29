@@ -21,6 +21,7 @@ struct Emitter;
 // against a scripted clock by the unit tests instead.
 void run_frontend_cases(Runner<SteadyClock>& runner,
                         const SourceSpec& spec,
-                        Emitter emit);
+                        const CaseFilter& filter,
+                        Emitter& emit);
 
 }  // namespace bench

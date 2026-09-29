@@ -91,7 +91,17 @@ measures, so the engine is checked against something. What it is checked
 against is itself, run twice: a case's median has to land in the same
 place twice on one machine, and if it does not, the clock, the warmup,
 or the batching is wrong and every figure the engine ever produced is
-suspect. This is the gate, and it runs in CI.
+suspect.
+
+This is a local check, not a CI gate. A shared runner is not a quiet
+machine: the same parse measured twice on one moved by thirty percent,
+where on a quiet machine it moves by one or two. A gate on a figure
+nobody can measure is a coin flip, and a coin flip that blocks merges
+teaches everyone to re-run rather than to read the output. CI instead
+runs a smoke check that judges nothing about timing — every case
+present, every sample counted, a clock named, a figure above zero, and
+a generated source the compiler still accepts — none of which a noisy
+machine can make true.
 
 The engine is *not* checked against `--time-trace`, because the two do
 not measure the same thing and cannot. The engine reports a phase's
@@ -110,9 +120,11 @@ about a sixth, which is not a figure to gate on.
 
 ## Consequences
 
-- The engine's numbers are known to be stable, and known *not* to mean
-  what a trace run means. A reader comparing the two has to know that,
-  and the tool says it every time.
+- The engine's numbers are known to be stable on a machine that can be
+  trusted to be quiet, and CI checks only that the harness is whole.
+  Neither CI nor a pull request says whether a change made anything
+  faster; that is a local measurement, and a number from a shared
+  runner is not one.
 - A rebuild of the harness in another language reuses the contract, the
   case list, the fixtures, and the statistics rules; only the
   implementation is new, and the clock boundary is the part that is one

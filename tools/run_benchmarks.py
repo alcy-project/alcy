@@ -244,14 +244,25 @@ def compare(before_path: Path, after_path: Path) -> int:
 # a library and never the cli, so what it times has no process boundary
 # and no argument parsing in it.
 def infer_build_mode(build_subdir: str) -> str:
-    """release or debug, from the output directory the build wrote.
+    """release or debug, as the build directory recorded it.
 
-    `build.py --mode=release --build-subdir=build_release` is the
-    convention, and a build directory whose name does not say otherwise
-    is the debug one, which is also the safe answer to assume: a debug
-    figure describes the build rather than the compiler.
+    The directory's name says nothing: the CI matrix builds both a debug
+    and a release compiler into `out/build` and distinguishes them with
+    `--mode`. `gn gen` wrote the flags that were actually used into
+    `args.gn`, so that is what is asked. Guessing from the name got this
+    wrong in the first CI run, and the run it got wrong measured a debug
+    build's timings and called them a compiler's.
     """
-    return "release" if "release" in build_subdir else "debug"
+    args = project_root_dir / "out" / build_subdir / "args.gn"
+    try:
+        text = args.read_text(encoding="utf-8")
+    except OSError:
+        return "unknown"
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("is_debug"):
+            return "debug" if stripped.endswith("true") else "release"
+    return "unknown"
 
 
 def resolve_driver(build_subdir: str) -> Path:
@@ -369,6 +380,106 @@ def engine_run(driver: Path, build_subdir: str, build_mode: str, width: int,
     return {r["name"]: r for r in load_jsonl(record_path) if r["kind"] == "micro"}
 
 
+def run_smoke(build_subdir: str) -> int:
+    """Checks that the engine produced a full, well-formed result.
+
+    This is the part of checking the harness that survives a machine
+    nobody controls. It says nothing about how fast anything was: it
+    looks at the shape of what came out, so a case that stopped being
+    measured, a clock that read zero, a policy that collected nothing, or
+    a generator that stopped producing a program the compiler accepts,
+    all fail. A runner being noisy cannot make any of those true, and
+    they cannot be told apart by a figure that is allowed to be wrong.
+
+    The one judgement it makes is about the generated source, which is
+    exact: the compiler has to accept it. A case measuring error
+    recovery would otherwise look like a case measuring a parser.
+    """
+    try:
+        driver = resolve_driver(build_subdir)
+        binary = resolve_binary(build_subdir)
+    except SuiteError as e:
+        print(f"error: {e}")
+        return -1
+
+    with tempfile.TemporaryDirectory(prefix="alcy_smoke_") as scratch:
+        work = Path(scratch)
+        record_path = work / "smoke.jsonl"
+        source_path = work / "bench.al"
+        done = subprocess.run(
+            [
+                str(driver),
+                "--build-subdir", build_subdir,
+                "--functions", str(DEFAULT_WIDTH),
+                "--output", str(record_path),
+                "--emit-source", str(source_path),
+            ],
+            capture_output=True, text=True, encoding="utf-8",
+        )
+        if done.returncode != 0:
+            print(done.stderr, file=sys.stderr)
+            return -1
+
+        records = load_jsonl(record_path)
+        if not records:
+            print("error: the engine wrote no record")
+            return -1
+
+        problems = []
+        seen = set()
+        for record in records:
+            name = record["benchmark_id"]
+            seen.add(name)
+            stats = record.get("stats", {})
+            samples = record.get("samples_ns", [])
+            if record.get("kind") != "micro":
+                problems.append(f"{name}: not a micro record")
+            if len(samples) != stats.get("count"):
+                problems.append(
+                    f"{name}: {len(samples)} samples but count "
+                    f"{stats.get('count')}"
+                )
+            if not samples:
+                problems.append(f"{name}: collected no sample")
+            elif not stats.get("p50", 0) > 0:
+                problems.append(f"{name}: p50 is {stats.get('p50')}")
+            if not record.get("fixture_digest"):
+                problems.append(f"{name}: no fixture digest")
+            metadata = record.get("metadata", {})
+            if not metadata.get("clock"):
+                problems.append(f"{name}: no clock named")
+            # Reported rather than required: how many samples a policy
+            # gathers depends on how fast the host is, and a slow runner
+            # is not a broken case.
+            print(
+                f"       {name}: p50 {stats.get('p50', 0) / 1e6:.3f}ms over "
+                f"{len(samples)} samples, {record.get('confidence')} "
+                f"confidence"
+            )
+
+        accepted = subprocess.run(
+            [str(binary), "check", "--file", str(source_path), "--json"],
+            capture_output=True, text=True, encoding="utf-8",
+        )
+        try:
+            verdict = json.loads(accepted.stdout)
+        except json.JSONDecodeError:
+            problems.append("the compiler's verdict was not JSON")
+        else:
+            if verdict.get("status") != "ok" or verdict.get("diagnostics"):
+                problems.append(
+                    "the generated source does not compile: "
+                    f"{verdict.get('diagnostics')}"
+                )
+
+    if problems:
+        for problem in problems:
+            print(f"BAD    {problem}")
+        return 1
+    print(f"ok     {len(seen)} case(s) reported and the fixture compiles")
+    return 0
+
+
 def run_reconcile(build_subdir: str, build_mode: str, tolerance: float) -> int:
     """Checks that the engine measures what it claims, and shows the rest.
 
@@ -396,13 +507,15 @@ def run_reconcile(build_subdir: str, build_mode: str, tolerance: float) -> int:
         return -1
 
     if build_mode != "release":
-        # A debug build carries assertions and sanitizers. Its timings
-        # describe that build, not the compiler, and they wander by more
-        # than the band below: the same parse measured three times moves
-        # by about a sixth. The figure is still reported, because the
-        # spread is what says so.
-        print(f"note: build mode is {build_mode!r}, not 'release'; these "
-              "timings are not a measurement of the compiler\n")
+        # A debug build carries assertions and sanitizers, so its timings
+        # describe that build rather than the compiler. Refused rather
+        # than warned about: the spread below would be read as a verdict
+        # on the harness when it is really a verdict on the build.
+        print(f"error: reconcile needs a release build; out/{build_subdir} is "
+              f"{build_mode!r}")
+        print("       a debug build's figures are not a measurement of the "
+              "compiler")
+        return -1
 
     with tempfile.TemporaryDirectory(prefix="alcy_reconcile_") as scratch:
         work = Path(scratch)
@@ -526,6 +639,10 @@ def main() -> int:
         "micro", help="time compiler phases in process, with no file in the way"
     )
     cmp_ = sub.add_parser("compare", help="compare two result files")
+    smoke = sub.add_parser(
+        "smoke",
+        help="check the engine produced a full, well-formed result",
+    )
     rec = sub.add_parser(
         "reconcile",
         help="check that the engine reproduces, and show it beside a run",
@@ -561,8 +678,15 @@ def main() -> int:
     )
     cmp_.add_argument("before", help="Result file recorded earlier")
     cmp_.add_argument("after", help="Result file recorded now")
+    for target in (smoke, rec):
+        target.add_argument(
+            "--build-subdir",
+            default="build",
+            help="Subdirectory inside out/ holding both binaries "
+                 "(default: build)",
+        )
     rec.add_argument(
-        "--build-subdir",
+        "--build-subdir-unused",
         default="build",
         help="Subdirectory inside out/ holding both binaries (default: build)",
     )
@@ -582,6 +706,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.command == "compare":
         return compare(Path(args.before), Path(args.after))
+    if args.command == "smoke":
+        return run_smoke(args.build_subdir)
     if args.command == "reconcile":
         mode = args.build_mode or infer_build_mode(args.build_subdir)
         return run_reconcile(args.build_subdir, mode, args.tolerance)

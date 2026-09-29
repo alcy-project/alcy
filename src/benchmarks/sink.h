@@ -57,13 +57,18 @@ class ResultWriter {
 // between, and the cases are templates so the call inlines.
 struct Emitter {
   ResultWriter* writer = nullptr;
+  // How many cases actually ran, so a filter that matched nothing is a
+  // complaint rather than an empty file.
+  mutable u32 count = 0;
 
   void operator()(CaseId id,
                   const MeasurementPolicy& policy,
                   const Measurement& measurement) const {
-    if (writer != nullptr) {
-      writer->write(id, policy, measurement);
+    if (writer == nullptr) {
+      return;
     }
+    ++count;
+    writer->write(id, policy, measurement);
   }
 };
 
