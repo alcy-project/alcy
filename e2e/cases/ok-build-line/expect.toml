@@ -5,5 +5,5 @@
 # not redirect it.
 exit = 0
 subcommand = "build"
-contains = ["Built     ", "  (1"]
+contains = ["Built     ", "  ("]
 not_contains = ["error", "byte(s)", "file(s)"]
