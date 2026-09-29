@@ -72,6 +72,9 @@ wasm_subdir="build_wasm"
 "${py_runner[@]}" "$tools_dir/check_e2e.py" \
   --build-subdir=$debug_subdir
 
+"${py_runner[@]}" "$tools_dir/check_borrow_rules.py" \
+  --build-subdir=$debug_subdir
+
 "${py_runner[@]}" "$tools_dir/check_runtime.py"
 
 "${py_runner[@]}" "$tools_dir/check_exe.py" \

@@ -35,17 +35,24 @@ relied upon by MVP programs or by the MVP compiler implementation.
 - A loan's extent is a region computed by backward liveness over the
   CFG, not a solved region: a loan is live where a value carrying it is
   read and wherever a successor is live, so sibling branches differ. What
-  that is not yet is a *solved* region: liveness is the input the solver
-  takes, and the reborrow rule that shortens a derived loan for the
-  extent of the reborrow is still missing, as is the return-position
-  elision for a reborrow that escapes through a call. Reborrowing itself
-  lands: a place reached through a reference is named by a dereference
-  step, a reborrow carries the loans it stands behind, `&mut T` coerces
-  to `&T` at an argument and at a receiver, an implicit reborrow at an
-  argument or a receiver is a loan whether or not the source writes a
-  `&`, and `elem_ref` and `uninit_ref` let a buffer be read through a
-  shared owner, so `Vec<T>` has a read-only `at` that the checker
-  records. See `docs/adr/0012`.
+  that is not yet is a *solved* region, and the gap that matters is in
+  the place rather than the extent: a reborrow's place is the slot
+  holding the reference, not the place the reference points into, so two
+  references to one place produce two loans that do not overlap. The
+  consequences are recorded as cases in `tools/check_borrow_rules.py`:
+  an exclusive loan can be derived from a shared one, two exclusive
+  loans can alias through two shared references to one place, and a
+  shared reference can be read while a loan derived from it is live.
+  Separately, a loan into a buffer element is named by a step that
+  stands for any index, so two `&mut` into distinct *literal* indices
+  are refused where they are disjoint. Reborrowing otherwise lands: a
+  place reached through a reference is named by a dereference step, a
+  reborrow carries the loans it stands behind, `&mut T` coerces to `&T`
+  at an argument and at a receiver, an implicit reborrow at an argument
+  or a receiver is a loan whether or not the source writes a `&`, and
+  `elem_ref` and `uninit_ref` let a buffer be read through a shared
+  owner, so `Vec<T>` has a read-only `at` that the checker records. See
+  `docs/adr/0012`.
 - `spec` (trait) definitions and dispatch, coherence rules, and
   monomorphization beyond per-instantiation enum, struct, and method
   specialization.
