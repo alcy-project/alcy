@@ -117,6 +117,10 @@ Notes:
 
 Keep changes focused; avoid mixing refactors with behavior changes unless they are inseparable.
 
+Commit messages are one to five lines: what changed, and why. A message that has to be read
+carefully to find the point is a message that is too long. Put the reasoning in a comment, a test,
+or the ADR rather than in the log.
+
 When changing architecture, module boundaries, invariants, ownership/lifetime rules, or other
 design-level contracts, update `docs/architecture.md` and add or update an ADR when appropriate.
 
