@@ -1,4 +1,4 @@
 exit = 0
 subcommand = "build"
-contains = ["W4026", "unused non-() value", "compiled:"]
+contains = ["W4026", "unused non-() value", "Compiled"]
 not_contains = ["error[E"]

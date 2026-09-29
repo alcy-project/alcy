@@ -25,7 +25,7 @@ namespace {
 
 ResultCode finish(const pipeline::CheckResult& result, Envelope& envelope) {
   envelope.status = Status::Ok;
-  envelope.summary = "checked";
+  envelope.outcome = Outcome::Checked;
   envelope.file_count = result.file_count;
   envelope.module_count = result.module_count;
   envelope.function_count = result.function_count;

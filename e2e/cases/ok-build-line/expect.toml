@@ -1,0 +1,9 @@
+# The verb column is padded to a fixed width, so the subject of a
+# result line starts at the same place whatever the verb was. The output
+# itself goes to the scratch path this runner asks for; the default
+# placement into out/ is covered by the emit-mode unit tests, which do
+# not redirect it.
+exit = 0
+subcommand = "build"
+contains = ["Built     ", "  (1"]
+not_contains = ["error", "byte(s)", "file(s)"]

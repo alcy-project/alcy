@@ -5,6 +5,7 @@
 
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "cli/cli_config.h"
 #include "cli/output.h"
@@ -24,7 +25,9 @@ ResultCode run_init(const CliConfig& config,
   envelope.sources = &ctx.sources;
   if (result.is_ok() && !ctx.bag.has_errors()) {
     envelope.status = Status::Ok;
-    envelope.summary = "created package";
+    envelope.outcome = Outcome::CreatedPackage;
+    envelope.package_name = std::move(result).unwrap();
+    envelope.package_dir = std::string(target);
     return ResultCode::Success;
   }
   envelope.status = Status::Error;

@@ -113,6 +113,60 @@ class CapturedStdout {
   std::string text_;
 };
 
+// Standard error is the test process's own too, and `run` announces
+// itself there rather than on standard output. The descriptor is
+// replaced the same way, so a case can read the announcement back
+// without it landing on the terminal.
+class CapturedStderr {
+ public:
+  explicit CapturedStderr(const std::string& path) : path_(path) {
+    file_ = static_cast<i32>(
+        ::open(path.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644));
+    if (file_ < 0) {
+      return;
+    }
+    saved_ = static_cast<i32>(::dup(STDERR_FILENO));
+    if (saved_ < 0) {
+      ::close(file_);
+      file_ = -1;
+      return;
+    }
+    ::dup2(file_, STDERR_FILENO);
+  }
+
+  ~CapturedStderr() { finish(); }
+
+  CapturedStderr(const CapturedStderr&) = delete;
+  CapturedStderr& operator=(const CapturedStderr&) = delete;
+
+  void finish() {
+    if (file_ < 0) {
+      return;
+    }
+    ::fflush(stderr);
+    ::close(STDERR_FILENO);
+    ::dup2(saved_, STDERR_FILENO);
+    ::close(saved_);
+    ::close(file_);
+    file_ = -1;
+    text_ = io::read_file(path_);
+    ::remove(path_.c_str());
+  }
+
+  bool ok() const { return file_ >= 0; }
+
+  std::string text() {
+    finish();
+    return text_;
+  }
+
+ private:
+  std::string path_;
+  i32 file_ = -1;
+  i32 saved_ = -1;
+  std::string text_;
+};
+
 // Standard input is the test process's own, so a case that feeds the
 // compiler has to put the program there: the descriptor is replaced for the
 // duration and put back afterwards, because the rest of the suite reads it.
@@ -589,9 +643,8 @@ TEST_CASE("Text result reports the statistics it measured") {
     return;
   }
   CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) == 0);
-  CHECK(
-      captured.text().find("checked: 1 file(s), 1 module(s), 1 function(s)") !=
-      std::string::npos);
+  CHECK(captured.text().find("Checked   1 file, 1 module, 1 function  (") !=
+        std::string::npos);
 }
 #endif  // !BUILD_FLAG(IS_OS_WIN)
 #endif  // !BUILD_FLAG(IS_OS_ASMJS)
@@ -632,6 +685,64 @@ TEST_CASE("Run executes a package and forwards its exit code") {
     return;
   }
   CHECK(run_run_on(dir, "proj") == 3);
+}
+
+TEST_CASE("Run announces the target before the program, not after") {
+  // The label is what tells the reader which program's output they are
+  // looking at, so it has to come first. Printed afterwards it would sit
+  // below that output and read as more of it.
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_announce_");
+  // Written out rather than through write_package, because that manifest
+  // names no std dependency and this program prints.
+  const bool setup =
+      write_all(dir, "proj/alcy.toml",
+                "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+                "[dependencies]\n\"alcy/std/*\" = {}\n\n"
+                "[[bin]]\nname = \"app\"\npath = \"main.al\"\n") &&
+      write_all(dir, "proj/main.al",
+                "fn main() -> i32 {\n"
+                "  println(\"marker\")\n"
+                "  ret 0\n"
+                "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CapturedStderr captured(dir.join("stderr.txt"));
+  CapturedStdout out(dir.join("stdout.txt"));
+  CHECK(captured.ok());
+  if (!captured.ok()) {
+    return;
+  }
+  CHECK(run_run_on(dir, "proj") == 0);
+  const std::string announced = captured.text();
+  const std::string program = out.text();
+  // The name is the bin target's, which is what the manifest calls it.
+  CHECK(announced == "Running   app\n");
+  // The program keeps standard output to itself, so a pipe into `run`
+  // carries program output and nothing else.
+  CHECK(program == "marker\n");
+}
+
+TEST_CASE("Run does not announce a program that failed to build") {
+  // The announcement is a claim that a process is about to start. One
+  // made before the compile would be a claim about work not yet done.
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_noannounce_");
+  const bool setup = write_package(dir, "proj",
+                                   "fn main() {\n"
+                                   "  x: u8 := 42i32\n"
+                                   "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CapturedStderr captured(dir.join("stderr.txt"));
+  CHECK(captured.ok());
+  if (!captured.ok()) {
+    return;
+  }
+  CHECK(run_run_on(dir, "proj") != 0);
+  CHECK(captured.text().find("Running") == std::string::npos);
 }
 
 TEST_CASE("Run tolerates program arguments") {

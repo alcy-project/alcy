@@ -14,8 +14,11 @@
 #include "cli/trace.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/render.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/term/color_style.h"
+#include "fpag/term/console.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/run.h"
@@ -23,6 +26,19 @@
 #include "pkg/toolchain.h"
 
 namespace cli {
+
+namespace {
+
+// The announcement is written to standard error, so it is styled by
+// what standard error can do rather than by what standard output can:
+// redirecting the program's output to a pipe must not strip the label
+// of the program that produced it, or vice versa.
+void announce_exec(std::string_view target, const void* ctx) {
+  const auto& options = *static_cast<const diag::RenderOptions*>(ctx);
+  announce("Running", target, options);
+}
+
+}  // namespace
 
 i32 run_run(const CliConfig& config,
             pipeline::PipelineContext& ctx,
@@ -59,9 +75,15 @@ i32 run_run(const CliConfig& config,
   const pkg::Toolchain tool = std::move(toolchain).unwrap();
   const std::string_view linker =
       config.linker.empty() ? tool.linker : config.linker;
+  const term::ColorStyle style =
+      term::console_color_style(term::Stream::Stderr, config.color_mode);
+  const diag::RenderOptions announce_options{
+      .color = style != term::ColorStyle::Off,
+  };
   base::Result<pipeline::RunOutcome, diag::Reported> result =
       pipeline::run_package(ctx, found.root, found.manifest,
-                            found.manifest_name, config.release, linker, args);
+                            found.manifest_name, config.release, linker, args,
+                            announce_exec, &announce_options);
   envelope.trace = trace.take_events();
   if (result.is_err()) {
     return failed;
@@ -69,7 +91,7 @@ i32 run_run(const CliConfig& config,
   // A run that reaches the program still carries the warnings the bag
   // collected along the way, so the report is not a success-only line.
   envelope.status = Status::Ok;
-  envelope.summary = "ran";
+  envelope.outcome = Outcome::Ran;
   return std::move(result).unwrap().exit_code;
 }
 

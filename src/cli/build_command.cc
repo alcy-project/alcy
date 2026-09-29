@@ -26,11 +26,13 @@ namespace cli {
 
 namespace {
 
-// What was written is what the reader wants to know after a build, and
-// the pipeline resolved the path, so it hands the path back rather than
-// leaving the caller to guess which file to measure.
-void record_output_size(std::string_view output, Envelope& envelope) {
-  const isize size = io::file_size(std::string(output));
+// What was written is what the reader wants to know after a build. The
+// pipeline resolved the path, so the report names the file that exists
+// and measures that, rather than leaving the reader to guess which of
+// the requested and the written differ.
+void record_output(const std::string& output, Envelope& envelope) {
+  envelope.output_path = output;
+  const isize size = io::file_size(output);
   if (size > 0) {
     envelope.output_bytes = static_cast<u64>(size);
   }
@@ -89,9 +91,9 @@ ResultCode run_build(const CliConfig& config,
   if (res.is_err() || ctx.bag.has_errors()) {
     return failed;
   }
-  record_output_size(std::move(res).unwrap(), envelope);
+  record_output(std::move(res).unwrap(), envelope);
   envelope.status = Status::Ok;
-  envelope.summary = "built";
+  envelope.outcome = Outcome::Built;
   return ResultCode::Success;
 }
 

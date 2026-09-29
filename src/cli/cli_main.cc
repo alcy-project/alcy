@@ -127,7 +127,7 @@ i32 cli_main(i32 argc, char** argv) {
       Envelope envelope;
       envelope.command = command_name(config.subcommand);
       envelope.status = Status::Error;
-      envelope.summary =
+      envelope.failure =
           describe_config_error(std::move(validated).unwrap_err());
       envelope.wall_ns = elapsed_ns_since(started);
       report(envelope, options, json);

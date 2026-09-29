@@ -26,6 +26,18 @@ class SourceManager;
 
 namespace cli {
 
+// What a command did, as a word rather than a sentence. The renderer owns
+// the wording so that it lives in one place, and a tool reading the JSON
+// gets a stable name instead of an English string it has to parse.
+enum class Outcome : u8 {
+  Failed,
+  Built,
+  Compiled,
+  Checked,
+  Ran,
+  CreatedPackage,
+};
+
 // Whether the command did what it was asked to do. A command sets it
 // once, at its success exit; the default is failure, so a path that
 // returns early reports an error it already put in the bag.
@@ -40,9 +52,21 @@ struct Envelope {
   // The verb, as spelled on the command line.
   std::string_view command;
   Status status = Status::Error;
-  // What the command is called in a sentence: "built", "checked",
-  // "created package". Empty when there is nothing to say.
-  std::string_view summary;
+  // What the command did, or `Failed` if it did not. The default is
+  // failure, so a path that returns early without saying what it reached
+  // says it reached nothing.
+  Outcome outcome = Outcome::Failed;
+  // Why a command failed, for a failure with no diagnostic behind it: a
+  // rejected flag combination has nothing to point at, so its message
+  // is the whole report. Empty for a failure a diagnostic already
+  // explains, and for every success.
+  std::string failure;
+  // What the command wrote, as the caller would name it. Empty when it
+  // wrote nothing, which is what a check does.
+  std::string output_path;
+  // What a scaffold created, and where. Only set by `new` and `init`.
+  std::string package_name;
+  std::string package_dir;
   // Counts worth reporting. Zero means the command has no such
   // measurement, which is why they are not optional: a package with no
   // files and a package that was not counted read the same, and only one
@@ -69,6 +93,18 @@ struct Envelope {
 
 // Diagnostics, the result line, and the time-trace summary, as text.
 std::string render_text(const Envelope& envelope, const diag::RenderOptions& r);
+
+// Writes the line that labels what a command is about to do, to
+// standard error, immediately before the command does it.
+//
+// Standard error because standard output belongs to whatever the
+// command is about to run: `alcy run | grep` sees the program's output
+// and nothing else. The options carry the capability of the stream
+// actually written to, so a label on a redirected standard error is
+// plain while one on a terminal is not.
+void announce(std::string_view verb,
+              std::string_view subject,
+              const diag::RenderOptions& options);
 
 // One JSON document: the result, its diagnostics, and the trace when
 // there is one. The trace's `traceEvents` sits at the top level so the

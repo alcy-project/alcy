@@ -9,15 +9,18 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/render.h"
 #include "diag/span.h"
+#include "fmt/core.h"
 #include "fmt/format.h"
+#include "fpag/base/numeric.h"
+#include "fpag/debug/profiler/profile_event.h"
 #include "fpag/io/io_util.h"
+#include "fpag/term/style.h"
 #include "source/source.h"
 #include "text/json.h"
 
@@ -207,7 +210,249 @@ void append_trace_text(std::string& out, const Envelope& envelope) {
   }
 }
 
+// The verb each outcome reports itself as. Owned here so the wording
+// lives in one place and a new outcome cannot add a second phrasing of
+// the same result.
+const char* verb_for(Outcome outcome) {
+  switch (outcome) {
+    case Outcome::Failed: return "Failed";
+    case Outcome::Built: return "Built";
+    case Outcome::Compiled: return "Compiled";
+    case Outcome::Checked: return "Checked";
+    case Outcome::Ran: return "Ran";
+    case Outcome::CreatedPackage: return "Created package";
+  }
+  return "Failed";
+}
+
+// The JSON spells the same outcome as a name a tool can match on, so a
+// consumer never has to read an English sentence to know what ran.
+const char* outcome_name(Outcome outcome) {
+  switch (outcome) {
+    case Outcome::Failed: return "failed";
+    case Outcome::Built: return "built";
+    case Outcome::Compiled: return "compiled";
+    case Outcome::Checked: return "checked";
+    case Outcome::Ran: return "ran";
+    case Outcome::CreatedPackage: return "created-package";
+  }
+  return "failed";
+}
+
+// Where the subject of a result line starts, so the lines of a session
+// read as a column. The longest verb is `Compiled`; a scaffold's
+// `Created package` is longer still, and is the one result that is not
+// a build of something, so it takes the column with it and lines up on
+// the words after it.
+constexpr usize VERB_COLUMN = 10;
+
+// Bold bright green for the verb, underline for what it acted on, dim for the
+// note. The same palette the diagnostic renderer uses, so a result line and a
+// diagnostic agree about what a colour means.
+void append_bold_bright_green(std::string& out, std::string_view text) {
+  out.append(term::BOLD);
+  out.append(term::FG_BRIGHT_GREEN);
+  out.append(text);
+  out.append(term::RESET);
+}
+
+void append_underline(std::string& out, std::string_view text) {
+  out.append(term::UNDERLINE);
+  out.append(text);
+  out.append(term::RESET);
+}
+
+void append_dim(std::string& out, std::string_view text) {
+  out.append(term::DIM);
+  out.append(text);
+  out.append(term::RESET);
+}
+
+void append_red(std::string& out, std::string_view text) {
+  out += term::FG_RED;
+  out.append(text);
+  out += term::RESET;
+}
+
+// A count with its noun, pluralized. `1 file(s)` was neither: it reads
+// as a placeholder in a sentence and as a mistake in a list.
+void append_count(std::string& out,
+                  usize count,
+                  std::string_view one,
+                  std::string_view many) {
+  fmt::format_to(std::back_inserter(out), "{} {}", count,
+                 count == 1 ? one : many);
+}
+
+// A size in the largest unit that leaves something in front of the
+// point, so `742 bytes` and `16.4 KiB` and never `0.0 MiB`. Exact bytes
+// below a kibibyte, which is the only figure worth counting there.
+void append_size(std::string& out, u64 bytes) {
+  constexpr f64 KIB = 1024.0;
+  constexpr f64 MIB = KIB * KIB;
+  constexpr f64 GIB = MIB * KIB;
+  const f64 size = static_cast<f64>(bytes);
+  if (size < KIB) {
+    fmt::format_to(std::back_inserter(out), "{} byte{}", bytes,
+                   bytes == 1 ? "" : "s");
+  } else if (size < MIB) {
+    fmt::format_to(std::back_inserter(out), "{:.1f} KiB", size / KIB);
+  } else if (size < GIB) {
+    fmt::format_to(std::back_inserter(out), "{:.1f} MiB", size / MIB);
+  } else {
+    fmt::format_to(std::back_inserter(out), "{:.1f} GiB", size / GIB);
+  }
+}
+
+void append_duration(std::string& out, u64 ns) {
+  constexpr f64 MICRO = 1000.0;
+  const f64 us = static_cast<f64>(ns) / MICRO;
+  if (us < 1000.0) {
+    fmt::format_to(std::back_inserter(out), "{:.0f} us", us);
+  } else if (us < 1000000.0) {
+    fmt::format_to(std::back_inserter(out), "{:.1f} ms", us / 1000.0);
+  } else {
+    fmt::format_to(std::back_inserter(out), "{:.2f} s", us / 1000000.0);
+  }
+}
+
+// A run's wall time covers the program's own execution, so a duration
+// beside it would be reporting the program as the build. Every other
+// outcome measures the compiler alone, and says so.
+bool note_has_duration(const Envelope& envelope) {
+  return envelope.outcome != Outcome::Ran;
+}
+
+bool note_has_size(const Envelope& envelope) {
+  return envelope.outcome == Outcome::Built ||
+         envelope.outcome == Outcome::Compiled;
+}
+
+// The subject of a result line: what was written, what was created, or
+// what was counted.
+std::string result_subject(const Envelope& envelope) {
+  switch (envelope.outcome) {
+    case Outcome::Failed: return {};
+    case Outcome::CreatedPackage:
+      return "'" + envelope.package_name + "' in " + envelope.package_dir;
+    case Outcome::Checked: {
+      std::string subject;
+      if (envelope.file_count > 0) {
+        append_count(subject, envelope.file_count, "file", "files");
+        subject += ", ";
+      }
+      if (envelope.module_count > 0) {
+        append_count(subject, envelope.module_count, "module", "modules");
+        subject += ", ";
+      }
+      if (envelope.function_count > 0) {
+        append_count(subject, envelope.function_count, "function", "functions");
+      }
+      return subject;
+    }
+    case Outcome::Built:
+    case Outcome::Compiled:
+    case Outcome::Ran: return envelope.output_path;
+  }
+  return {};
+}
+
+// The note after the subject: what was written, and how long it took.
+std::string result_note(const Envelope& envelope) {
+  std::string note = "(";
+  if (note_has_size(envelope) && envelope.output_bytes > 0) {
+    append_size(note, envelope.output_bytes);
+    note += ", ";
+  }
+  append_duration(note, envelope.wall_ns);
+  note += ')';
+  return note;
+}
+
+// A verb and its subject, in the column every result line uses.
+void render_labelled(std::string& out,
+                     std::string_view verb,
+                     std::string_view subject,
+                     bool pad_verb,
+                     bool color,
+                     bool newline) {
+  if (color) {
+    append_bold_bright_green(out, verb);
+  } else {
+    out.append(verb);
+  }
+  if (!pad_verb) {
+    // `Created package` is longer than the column and says something
+    // else entirely, so it takes the column with it.
+    if (!subject.empty()) {
+      out.push_back(' ');
+    }
+  } else {
+    // The subject starts at the same column on every line, so a session
+    // reads as a table. A subject is never padded: a path's width is
+    // unbounded and padding it would push the note off the screen.
+    const usize width = verb.size();
+    out.append(width < VERB_COLUMN ? VERB_COLUMN - width : 1, ' ');
+  }
+  if (subject.empty()) {
+    if (newline) {
+      out.push_back('\n');
+    }
+    return;
+  }
+  if (color) {
+    append_underline(out, subject);
+  } else {
+    out.append(subject);
+  }
+  if (newline) {
+    out.push_back('\n');
+  }
+}
+
+// The verb, the subject, and the note, laid out in columns. The one
+// place a result line is built, so the text report and the JSON
+// `summary` cannot drift apart.
+void render_result_line(std::string& out,
+                        const Envelope& envelope,
+                        bool color,
+                        bool newline) {
+  const std::string_view verb = verb_for(envelope.outcome);
+  const std::string subject = result_subject(envelope);
+  render_labelled(out, verb, subject,
+                  envelope.outcome != Outcome::CreatedPackage, color, false);
+
+  if (note_has_size(envelope) || note_has_duration(envelope)) {
+    out.append("  ");
+    const std::string note = result_note(envelope);
+    if (color) {
+      append_dim(out, note);
+    } else {
+      out.append(note);
+    }
+  }
+  if (newline) {
+    out.push_back('\n');
+  }
+}
+
+// The same line without colour and without its newline, which is what a
+// JSON document carries: a reader wants the sentence, not the layout.
+std::string result_line(const Envelope& envelope) {
+  std::string line;
+  render_result_line(line, envelope, false, false);
+  return line;
+}
+
 }  // namespace
+
+void announce(std::string_view verb,
+              std::string_view subject,
+              const diag::RenderOptions& options) {
+  std::string line;
+  render_labelled(line, verb, subject, true, options.color, true);
+  io::write(io::STDERR_FD, line.data(), line.size());
+}
 
 u64 elapsed_ns_since(std::chrono::steady_clock::time_point start) {
   const std::chrono::steady_clock::duration elapsed =
@@ -223,19 +468,21 @@ std::string render_text(const Envelope& envelope,
       append_diagnostic_text(out, diagnostic, *envelope.sources, options);
     });
   }
-  if (!envelope.summary.empty()) {
-    out.append(envelope.summary);
-    // The statistics are the answer to "what did it cost", so they sit
-    // on the line that reports the result rather than on their own.
-    if (envelope.file_count > 0 || envelope.module_count > 0 ||
-        envelope.function_count > 0) {
-      fmt::format_to(
-          std::back_inserter(out), ": {} file(s), {} module(s), {} function(s)",
-          envelope.file_count, envelope.module_count, envelope.function_count);
+  if (envelope.status == Status::Ok) {
+    // A run already announced itself before the program started, and a
+    // second line after the program's own output would sit below that
+    // output and read as more of it. The exit code is the result, and
+    // the caller has it.
+    if (envelope.outcome != Outcome::Ran) {
+      render_result_line(out, envelope, options.color, true);
     }
-    if (envelope.output_bytes > 0) {
-      fmt::format_to(std::back_inserter(out), ": {} byte(s)",
-                     envelope.output_bytes);
+  } else if (!envelope.failure.empty()) {
+    // A failure with no diagnostic behind it. The message is the result,
+    // and it gets the same colour an error would have.
+    if (options.color) {
+      append_red(out, envelope.failure);
+    } else {
+      out.append(envelope.failure);
     }
     out.push_back('\n');
   }
@@ -260,11 +507,25 @@ std::string render_json(const Envelope& envelope) {
   append_json_string(out, envelope.command);
   out += R"(,"status":)";
   append_json_string(out, envelope.status == Status::Ok ? "ok" : "error");
+  // The outcome is the machine-readable half: a stable name a tool
+  // matches on, rather than the sentence a human reads.
+  out += R"(,"outcome":)";
+  append_json_string(out, outcome_name(envelope.outcome));
   out += R"(,"summary":)";
-  if (envelope.summary.empty()) {
+  if (envelope.status != Status::Ok) {
+    if (envelope.failure.empty()) {
+      out += "null";
+    } else {
+      append_json_string(out, envelope.failure);
+    }
+  } else {
+    append_json_string(out, result_line(envelope));
+  }
+  out += R"(,"output_path":)";
+  if (envelope.output_path.empty()) {
     out += "null";
   } else {
-    append_json_string(out, envelope.summary);
+    append_json_string(out, envelope.output_path);
   }
   // The statistics are flat and always present, so a reader indexes them
   // without first finding out which command ran.

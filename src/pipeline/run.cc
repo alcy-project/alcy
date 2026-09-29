@@ -32,9 +32,12 @@ namespace {
 base::Result<RunOutcome, diag::Reported> link_and_run(
     PipelineContext& ctx,
     lower::LoweredPackage& lowered,
+    std::string_view target,
     bool optimize,
     std::string_view linker,
-    std::span<const std::string_view> args) {
+    std::span<const std::string_view> args,
+    AnnounceExec announce,
+    const void* announce_ctx) {
   io::TempDir scratch = io::TempDir::create_unique("alcy_run_");
   const std::string object_path = scratch.join("main.o");
   if (emit_package_object(ctx, lowered, optimize, object_path).is_err() ||
@@ -53,6 +56,13 @@ base::Result<RunOutcome, diag::Reported> link_and_run(
   argv.emplace_back(exe_path);
   for (std::string_view arg : args) {
     argv.emplace_back(arg);
+  }
+  // Announced here rather than at the entry point because everything
+  // above it is the compiler's own work: until the program starts, the
+  // reader is waiting on a build, and saying otherwise would be a
+  // claim about work that has not been done.
+  if (announce != nullptr) {
+    announce(target, announce_ctx);
   }
   base::Result<i32, SpawnError> executed = run_command(argv);
   if (executed.is_err()) {
@@ -73,7 +83,9 @@ base::Result<RunOutcome, diag::Reported> run_package(
     std::string_view manifest_name,
     bool optimize,
     std::string_view linker,
-    std::span<const std::string_view> args) {
+    std::span<const std::string_view> args,
+    AnnounceExec announce,
+    const void* announce_ctx) {
   base::Result<BinTarget, diag::Reported> target =
       resolve_package_target(ctx, root, manifest_file, manifest_name);
   if (target.is_err() || ctx.bag.has_errors()) {
@@ -86,7 +98,8 @@ base::Result<RunOutcome, diag::Reported> run_package(
     return base::make_err(diag::Reported{});
   }
   lower::LoweredPackage lowered = std::move(package).unwrap();
-  return link_and_run(ctx, lowered, optimize, linker, args);
+  return link_and_run(ctx, lowered, resolved.bin_name, optimize, linker, args,
+                      announce, announce_ctx);
 }
 
 }  // namespace pipeline

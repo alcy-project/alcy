@@ -117,7 +117,7 @@ path = "main.al")",
     (void)index;
     return base::make_err(0);
   }
-  return base::make_ok();
+  return base::make_ok(std::string(name));
 }
 
 // Last canonical segment, for package naming. Empty for roots and ".".
