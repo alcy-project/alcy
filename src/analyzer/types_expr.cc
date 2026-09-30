@@ -1051,7 +1051,7 @@ ir::TypeIdx Checker::check_method_call(u32 module,
                                        ast::ExprIdx expr,
                                        const ir::TypeIdx* expected) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ir::TypeIdx receiver = check_expr(
+  ir::TypeIdx receiver = check_expr(
       module, node.payload.get<ast::ExprMethodCall>().receiver, nullptr);
   if (is_error(receiver)) {
     for (ast::ExprIdx arg : node.payload.get<ast::ExprMethodCall>().args) {
@@ -1059,6 +1059,10 @@ ir::TypeIdx Checker::check_method_call(u32 module,
     }
     return error_type();
   }
+  // A field's type is a storage copy of its declaration while the
+  // method entry is keyed on the declared type, so look through the
+  // copy. Values without one pass through unchanged.
+  receiver = type_origin(receiver);
   const std::string_view name =
       node.payload.get<ast::ExprMethodCall>().name.name;
   const diag::Span span = node.span;

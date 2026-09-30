@@ -259,6 +259,122 @@ TEST_CASE("Check instantiates generic structs") {
   CHECK(pair_i_s.idx != root->functions[1].params[0].idx);
 }
 
+TEST_CASE("Check keeps generic struct field copies contiguous") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct Leaf<T> { slot: T }\n"
+                       "struct Pair<S, T> { first: Leaf<S>, second: Leaf<T> }\n"
+                       "fn f(x: Pair<i32, u8>) -> i32 {\n"
+                       "  ret 0\n"
+                       "}\n"
+                       "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr || root->functions.empty()) {
+    return;
+  }
+  // The first field's `Leaf<i32>` instantiation creates types of its
+  // own while the fields resolve; the copies that follow must still
+  // form one contiguous range.
+  const ir::Storage& types = *result.package->types;
+  const ir::TypeIdx pair_ty = root->functions[0].params[0];
+  CHECK(types.types()[pair_ty].tag == ir::TypeTag::Struct);
+  if (types.types()[pair_ty].tag != ir::TypeTag::Struct) {
+    return;
+  }
+  const ir::StructType& pair_shape =
+      types.struct_types()[types.types()[pair_ty].as_struct()];
+  CHECK(pair_shape.fields.size() == 2);
+  if (pair_shape.fields.size() != 2) {
+    return;
+  }
+  CHECK(pair_shape.fields[0].idx + 1 == pair_shape.fields[1].idx);
+  CHECK(types.types()[pair_shape.fields[0]].tag == ir::TypeTag::Struct);
+  CHECK(types.types()[pair_shape.fields[1]].tag == ir::TypeTag::Struct);
+}
+
+TEST_CASE("Check publishes a generic instance nested in a field") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Leaf<T> { slot: T }\n"
+                                      "struct Wrap<T> { only: Leaf<T> }\n"
+                                      "fn f(x: Wrap<i32>) -> i32 {\n"
+                                      "  ret 0\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr || root->functions.empty()) {
+    return;
+  }
+  // Instantiating `Wrap<i32>` instantiates `Leaf<i32>` while the field
+  // resolves; the outer instance is the one completed, so its fields
+  // publish for lowering lookups.
+  const ir::TypeIdx wrap_ty = root->functions[0].params[0];
+  bool wrap_published = false;
+  bool leaf_published = false;
+  for (const CheckedModule::StructInfo& info : root->structs) {
+    if (info.type.idx == wrap_ty.idx) {
+      wrap_published = info.fields.size() == 1 && info.fields[0] == "only";
+    }
+    if (info.fields.size() == 1 && info.fields[0] == "slot") {
+      leaf_published = true;
+    }
+  }
+  CHECK(wrap_published);
+  CHECK(leaf_published);
+}
+
+TEST_CASE("Check keeps outer type parameters across nested instantiation") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn id<A>(x: A) -> A {\n"
+                                      "  ret x\n"
+                                      "}\n"
+                                      "fn keep<T>(x: T) -> T {\n"
+                                      "  _ := id::<u8>(7 as u8)\n"
+                                      "  z: T := x\n"
+                                      "  ret z\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  ret keep(42i32) - 42\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  // Binding `id`'s parameter must not replace `keep`'s scope: `T` still
+  // names the outer argument in the annotation that follows.
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
 TEST_CASE("Check instantiates generic struct methods") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",

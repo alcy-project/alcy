@@ -432,6 +432,7 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   const ir::TypeIdx reserved =
       is_struct ? builder.reserve_struct(name) : builder.reserve_enum(name);
   generic_instances.push_back(GenericInstance{nominal, args, reserved});
+  const usize instance_index = generic_instances.size() - 1;
   inst_numbering.push_back(reserved);
   // A sequence must be contiguous in the type table, and the arguments
   // are arbitrary existing nodes, so each is copied in.
@@ -446,10 +447,17 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
     for (usize i = 0; i < params.size(); ++i) {
       type_params.emplace_back(params[i].name, args[i]);
     }
-    ir::TypeSeq seq;
+    std::vector<ir::TypeIdx> fields;
+    fields.reserve(node.payload.get<ast::ItemStruct>().fields.size());
     for (const ast::ItemStructField& field :
          node.payload.get<ast::ItemStruct>().fields) {
-      seq.push(storage_copy(resolve_type(entry.module, field.type, nullptr)));
+      fields.push_back(resolve_type(entry.module, field.type, nullptr));
+    }
+    // The copies must be adjacent, so every field resolves before any
+    // copy is appended: resolution can create types of its own.
+    ir::TypeSeq seq;
+    for (ir::TypeIdx field : fields) {
+      seq.push(storage_copy(field));
     }
     builder.fill_struct(reserved, seq.finish(), args_seq.finish());
   } else {
@@ -484,7 +492,9 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   while (type_params.size() > pushed) {
     type_params.pop_back();
   }
-  GenericInstance& instance = generic_instances.back();
+  // A field type can instantiate another generic nominal, which pushes
+  // entries of its own; this instance's entry is the one recorded above.
+  GenericInstance& instance = generic_instances[instance_index];
   instance.started = true;
   instance.complete = true;
   (void)span;
@@ -995,7 +1005,8 @@ void Checker::process_module(u32 module) {
         // parameter to a placeholder resolves the declaration to a
         // concrete signature the structural check can read.
         if (!intrinsic.generic.empty()) {
-          const auto& kept = type_params;
+          const std::vector<std::pair<std::string_view, ir::TypeIdx>> kept =
+              type_params;
           type_params.clear();
           for (const ast::Ident& param : intrinsic.generic) {
             type_params.emplace_back(param.name,
@@ -2163,7 +2174,8 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
   }
   const bool is_intrinsic = ast.items[item].kind == ast::ItemKind::Intrinsic;
   const std::span<const ast::Ident> params = fn_generic_params(item);
-  const auto& kept_outer = type_params;
+  const std::vector<std::pair<std::string_view, ir::TypeIdx>> kept_outer =
+      type_params;
   type_params.clear();
   for (usize i = 0; i < params.size() && i < args.size(); ++i) {
     type_params.emplace_back(params[i].name, args[i]);
@@ -2246,7 +2258,9 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
       return nullptr;
     }
     if (!declared.through_ref) {
-      bound[declared.slot] = actual;
+      // A field's type is a storage copy; the parameter binds the
+      // declared type behind it rather than the copy.
+      bound[declared.slot] = type_origin(actual);
       continue;
     }
     const ir::TypeTag tag = builder.types()[actual.idx].tag;
@@ -2293,7 +2307,9 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
         return nullptr;
       }
     }
-    bound[declared.slot] = bound_type;
+    // A wrapper's payload and a slice's element are storage copies;
+    // the parameter binds the declared type behind them.
+    bound[declared.slot] = type_origin(bound_type);
   }
   for (const ir::TypeIdx arg : bound) {
     if (!arg.is_valid()) {
