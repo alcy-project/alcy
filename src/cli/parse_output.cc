@@ -19,6 +19,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
 #include "fpag/term/color_style.h"
+#include "i18n/language.h"
 
 namespace cli {
 
@@ -48,6 +49,36 @@ term::ColorMode scan_color_mode(i32 argc, const char* const* argv) {
     }
   }
   return mode;
+}
+
+i18n::Language scan_language(i32 argc, const char* const* argv) {
+  i18n::Language language = i18n::Language::EnUs;
+  if (argv == nullptr) {
+    return language;
+  }
+  for (i32 i = 1; i < argc; ++i) {
+    if (argv[i] == nullptr) {
+      continue;
+    }
+    const std::string_view arg(argv[i]);
+    std::string_view value;
+    if (arg == "--lang") {
+      if (i + 1 >= argc || argv[i + 1] == nullptr) {
+        continue;
+      }
+      value = std::string_view(argv[++i]);
+    } else if (arg.starts_with("--lang=")) {
+      value = arg.substr(sizeof("--lang=") - 1);
+    } else {
+      continue;
+    }
+    if (const std::optional<i18n::Language> found =
+            i18n::language_from_tag(value);
+        found.has_value()) {
+      language = *found;
+    }
+  }
+  return language;
 }
 
 std::string render_outcome(const arg::Parser& parser,

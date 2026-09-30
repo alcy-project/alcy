@@ -19,6 +19,7 @@ source_set("pkg") {
   deps = [
     "//src:base_modules",
     "//src/diag",
+    "//src/i18n",
     "//src/path",
     "//src/source",
     "//third_party/toml",

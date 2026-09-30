@@ -17,6 +17,7 @@ source_set("analyzer") {
     "//src:base_modules",
     "//src/ast",
     "//src/diag",
+    "//src/i18n",
     "//src/ir",
     "//src/lexer",
     "//src/parser",

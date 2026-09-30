@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "cli/cli_config.h"
 #include "cli/converters.h"  // IWYU pragma: keep
@@ -19,6 +20,7 @@
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
+#include "i18n/language.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/vcs.h"
 
@@ -31,6 +33,7 @@ CliConfig extract_from_matches(arg::Matches&& matches) {
   c.time_trace = matches.get<bool>("time-trace").unwrap_or(c.time_trace);
   c.json = matches.get<bool>("json").unwrap_or(c.json);
   c.color_mode = matches.get<term::ColorMode>("color").unwrap_or(c.color_mode);
+  c.language = matches.get<i18n::Language>("lang").unwrap_or(c.language);
 
   const std::string_view selected = matches.selected_command();
   if (selected == "build") {
@@ -121,6 +124,18 @@ arg::Arg vcs_arg() {
       .build();
 }
 
+// The tags `--lang` accepts, taken from the catalog rather than written
+// out here: a language the cli does not offer is a language the catalogs
+// do not cover.
+std::vector<std::string> language_choices() {
+  std::vector<std::string> choices;
+  choices.reserve(i18n::LANGUAGE_TAGS.size());
+  for (const i18n::LanguageTag& entry : i18n::LANGUAGE_TAGS) {
+    choices.emplace_back(entry.tag);
+  }
+  return choices;
+}
+
 }  // namespace
 
 arg::Parser build_parser() {
@@ -132,6 +147,15 @@ arg::Parser build_parser() {
                       .default_value("auto")
                       .choices({"auto", "always", "never"})
                       .build());
+  builder.add_arg(
+      arg::ArgBuilder("lang")
+          .help("Language for every message this run prints. Taken from "
+                "this flag alone: the locale the shell exports is not "
+                "consulted, so the same command line reports the same "
+                "text on every machine.")
+          .default_value(i18n::canonical_tag(i18n::Language::EnUs))
+          .choices(language_choices())
+          .build());
   builder.add_arg(arg::ArgBuilder("time-trace")
                       .short_name('t')
                       .help("Time the compilation phases and report where "

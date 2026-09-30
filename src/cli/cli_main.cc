@@ -31,7 +31,6 @@
 #include "fpag/io/io_util.h"
 #include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
-#include "i18n/language.h"
 #include "pipeline/pipeline_context.h"
 
 namespace cli {
@@ -114,6 +113,7 @@ i32 cli_main(i32 argc, char** argv) {
         term::console_color_style(term::Stream::Stdout, config.color_mode);
     const diag::RenderOptions options{
         .color = style != term::ColorStyle::Off,
+        .language = config.language,
     };
     // Validation has already rejected `--json` on a verb that has no
     // result document to report, so the flag and the renderer agree.
@@ -137,7 +137,7 @@ i32 cli_main(i32 argc, char** argv) {
       // One context for the invocation: the command fills it and the
       // envelope borrows it, so the bag and the sources it points at are
       // still alive when the report is rendered.
-      pipeline::PipelineContext ctx{i18n::Language::EnUs};
+      pipeline::PipelineContext ctx{config.language};
       Envelope envelope;
       envelope.command = command_name(config.subcommand);
       exit_code = dispatch(config, ctx, envelope);

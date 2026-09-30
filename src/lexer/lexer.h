@@ -8,9 +8,11 @@
 #include <vector>
 
 #include "diag/bag.h"
+#include "diag/diagnostic.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "i18n/messages.h"
 #include "lexer/token.h"
 #include "source/source.h"
 

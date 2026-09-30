@@ -7,6 +7,7 @@
 #include <iterator>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "debug/fatal.h"
 #include "fmt/core.h"
@@ -20,7 +21,10 @@ namespace i18n {
 // One identity per message in the catalog, named by the message and not
 // by the code it is reported under. The ordinal is an index into every
 // catalog, so nothing outside this module depends on which one a
-// message got.
+// message got. Sixteen bits because the catalog outgrows a byte: every
+// message the compiler prints and every message the cli renders is one
+// ordinal, and a catalog of a few hundred entries is the design.
+// NOLINTNEXTLINE(performance-enum-size)
 enum class Key : u16 {
 #define ALCY_I18N_ENUMERATOR(Name, Text) Name,
   ALCY_I18N_FOREACH_KEY_EN_US(ALCY_I18N_ENUMERATOR)
@@ -43,8 +47,8 @@ struct Entry {
 #define ALCY_I18N_ENTRY(Name, Text) Entry{Key::Name, Text},
 
 // One catalog per language, generated from that language's list: the
-// text of one message as a compile-time constant, and the table a
-// runtime lookup reads.
+// text of one message as a compile-time constant, and the whole
+// language as a table the build can check.
 #define ALCY_I18N_CATALOG(LanguageValue, Catalog, LIST)       \
   struct Catalog {                                            \
     template <Key K>                                          \
@@ -54,8 +58,9 @@ struct Entry {
         default: UNREACHABLE();                               \
       }                                                       \
     }                                                         \
-    static constexpr std::array<Entry, KEY_COUNT> entries = { \
-        LIST(ALCY_I18N_ENTRY)};                               \
+    static consteval std::array<Entry, KEY_COUNT> entries() { \
+      return {LIST(ALCY_I18N_ENTRY)};                         \
+    }                                                         \
   };
 
 // The languages the catalogs cover, in enum order. The runtime switch,
@@ -78,7 +83,7 @@ consteval bool is_canonical(const std::array<Entry, N>& entries) {
   return true;
 }
 
-static_assert(is_canonical(EnUs::entries));
+static_assert(is_canonical(EnUs::entries()));
 
 // A message rendered without arguments has nothing to fill in: the
 // empty-argument format string parses the text and rejects a

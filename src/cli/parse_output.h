@@ -12,6 +12,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
 #include "fpag/term/color_style.h"
+#include "i18n/language.h"
 
 namespace cli {
 
@@ -19,6 +20,13 @@ namespace cli {
 // program name). Used to style messages for outcomes that carry no config,
 // such as parse errors. Unknown or absent values yield ColorMode::Auto.
 term::ColorMode scan_color_mode(i32 argc, const char* const* argv);
+
+// Best-effort `--lang` scan, for the same reason: the help text is built
+// before the arguments are parsed, and it has to be written in the
+// language the invocation asked for. A value that names no catalog leaves
+// the default, and the parser reports the value as an invalid choice
+// rather than this scan falling back to it silently.
+i18n::Language scan_language(i32 argc, const char* const* argv);
 
 // Renders an interruption outcome (help, version, error, ...) for display.
 // Returns an empty string for CliConfig, which has nothing to display.

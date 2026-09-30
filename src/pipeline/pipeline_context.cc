@@ -13,6 +13,7 @@
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
 #include "fpag/mem/page_allocator.h"
+#include "i18n/language.h"
 #include "path/path.h"
 
 namespace pipeline {

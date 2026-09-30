@@ -8,6 +8,7 @@
 
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
+#include "i18n/language.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/link_options.h"
 #include "pipeline/vcs.h"
@@ -29,6 +30,11 @@ struct CliConfig {
   bool time_trace = false;
   // Presentation preference; cli resolves terminal capability before dispatch.
   term::ColorMode color_mode = term::ColorMode::Auto;
+  // Language every message of this invocation is written in. Asked for
+  // explicitly and defaulted here: a build must not read a language out
+  // of the environment, or the same command line reports different text
+  // on different machines.
+  i18n::Language language = i18n::Language::EnUs;
   Subcommand subcommand = Subcommand::None;
   bool release = false;
   // First positional, read as each subcommand's target (empty when

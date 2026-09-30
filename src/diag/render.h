@@ -8,6 +8,7 @@
 
 #include "diag/diagnostic.h"
 #include "fmt/format.h"
+#include "i18n/language.h"
 #include "source/source.h"
 
 namespace diag {
@@ -29,6 +30,12 @@ using SourceFetch = std::optional<SourceText> (*)(source::FileId file_id,
 // inspect the terminal or environment.
 struct RenderOptions {
   bool color = false;
+  // Language the chrome is written in: the severity word, the note that
+  // labels a secondary span, and the stand-in for a file the manager
+  // cannot name. The message itself was composed in this language when it
+  // was emitted, so a bag and these options disagree only if a caller
+  // renders one bag under two languages.
+  i18n::Language language = i18n::Language::EnUs;
 };
 
 // Renders one diagnostic into out. Snippets are single-line

@@ -15,6 +15,7 @@
 #include "fpag/arg/parser.h"
 #include "fpag/term/color_mode.h"
 #include "fpag/term/color_style.h"
+#include "i18n/language.h"
 
 namespace cli {
 
@@ -100,6 +101,32 @@ TEST_CASE("Scan color mode") {
   CHECK(scan_color_mode(4, separate) == term::ColorMode::Always);
   CHECK(scan_color_mode(3, bogus) == term::ColorMode::Auto);
   CHECK(scan_color_mode(0, nullptr) == term::ColorMode::Auto);
+}
+
+TEST_CASE("Scan language") {
+  const char* none[] = {"alcy", "build"};
+  const char* equals[] = {"alcy", "--lang=en-us", "build"};
+  const char* separate[] = {"alcy", "build", "--lang", "en-us"};
+  // A tag the catalogs do not cover is the parser's error to report, not
+  // a reason for this scan to report another language.
+  const char* unsupported[] = {"alcy", "--lang=ja-jp", "build"};
+  const char* miscased[] = {"alcy", "--lang=EN-US", "build"};
+  CHECK(scan_language(2, none) == i18n::Language::EnUs);
+  CHECK(scan_language(3, equals) == i18n::Language::EnUs);
+  CHECK(scan_language(4, separate) == i18n::Language::EnUs);
+  CHECK(scan_language(3, unsupported) == i18n::Language::EnUs);
+  CHECK(scan_language(3, miscased) == i18n::Language::EnUs);
+  CHECK(scan_language(0, nullptr) == i18n::Language::EnUs);
+}
+
+TEST_CASE("The language reaches the config") {
+  const std::string_view args[] = {"alcy", "--lang=en-us", "build"};
+  CHECK(parse(args).get<CliConfig>().language == i18n::Language::EnUs);
+}
+
+TEST_CASE("A tag with no catalog is rejected") {
+  const std::string_view args[] = {"alcy", "--lang=ja-jp", "build"};
+  CHECK(parse(args).is<ParseFailure>());
 }
 
 }  // namespace cli

@@ -21,6 +21,7 @@ source_set("codegen_llvm") {
   deps = [
     "//src:base_modules",
     "//src/diag",
+    "//src/i18n",
   ]
   public_deps = [
     "//src/ir",

@@ -3,13 +3,28 @@
 
 #pragma once
 
+#include <optional>
 #include <string_view>
 
 #include "fpag/arg/converter.h"
 #include "fpag/base/result.h"
 #include "fpag/term/color_mode.h"
+#include "i18n/language.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/vcs.h"
+
+template <>
+struct arg::Converter<i18n::Language> {
+  static base::Result<i18n::Language, arg::GetError> from_string(
+      std::string_view v) {
+    using arg::GetError, base::make_err, base::make_ok, i18n::Language;
+    if (const std::optional<Language> found = i18n::language_from_tag(v);
+        found.has_value()) {
+      return make_ok(*found);
+    }
+    return make_err(GetError::InvalidArgument);
+  }
+};
 
 template <>
 struct arg::Converter<term::ColorMode> {

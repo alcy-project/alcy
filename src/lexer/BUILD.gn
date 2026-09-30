@@ -11,6 +11,7 @@ source_set("lexer") {
   deps = [
     "//src:base_modules",
     "//src/diag",
+    "//src/i18n",
     "//src/source",
   ]
   configs += [ "//src:alcy_config" ]

@@ -1,6 +1,9 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <array>
+#include <optional>
+
 #include "doctest/doctest.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"
@@ -13,7 +16,9 @@ TEST_CASE("a tag names exactly one language") {
   CHECK(canonical_tag(Language::EnUs) == "en-us");
   const std::optional<Language> found = language_from_tag("en-us");
   CHECK(found.has_value());
-  CHECK(found.value() == Language::EnUs);
+  if (found.has_value()) {
+    CHECK(*found == Language::EnUs);
+  }
 }
 
 TEST_CASE("a tag is matched as written") {
@@ -31,10 +36,11 @@ TEST_CASE("the tag list names every language") {
 }
 
 TEST_CASE("every catalog has one entry per key, in key order") {
-  static_assert(detail::is_canonical(detail::EnUs::entries));
-  CHECK(detail::EnUs::entries.size() == KEY_COUNT);
+  static_assert(detail::is_canonical(detail::EnUs::entries()));
+  const std::array<detail::Entry, KEY_COUNT> entries = detail::EnUs::entries();
+  CHECK(entries.size() == KEY_COUNT);
   for (u16 i = 0; i < KEY_COUNT; ++i) {
-    CHECK(detail::EnUs::entries[i].key == static_cast<Key>(i));
+    CHECK(entries[i].key == static_cast<Key>(i));
   }
 }
 

@@ -5,6 +5,7 @@
 
 #include <array>
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "debug/fatal.h"
@@ -30,18 +31,18 @@ struct LanguageTag {
   std::string_view tag;
 };
 
-inline constexpr std::array kLanguageTags = {
+inline constexpr std::array LANGUAGE_TAGS = {
     LanguageTag{Language::EnUs, "en-us"},
 };
 
 inline constexpr usize LANGUAGE_COUNT = static_cast<usize>(Language::Count);
 
-static_assert(kLanguageTags.size() == LANGUAGE_COUNT,
+static_assert(LANGUAGE_TAGS.size() == LANGUAGE_COUNT,
               "every Language needs exactly one tag");
 
 // The tag a language is named by, spelled the way `--lang` spells it.
 constexpr std::string_view canonical_tag(Language language) {
-  for (const LanguageTag& entry : kLanguageTags) {
+  for (const LanguageTag& entry : LANGUAGE_TAGS) {
     if (entry.language == language) {
       return entry.tag;
     }
@@ -57,7 +58,7 @@ constexpr std::string_view canonical_tag(Language language) {
 // program, and a build whose output language depends on it is a
 // different compiler on every machine.
 constexpr std::optional<Language> language_from_tag(std::string_view tag) {
-  for (const LanguageTag& entry : kLanguageTags) {
+  for (const LanguageTag& entry : LANGUAGE_TAGS) {
     if (entry.tag == tag) {
       return entry.language;
     }

@@ -13,16 +13,21 @@
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/term/style.h"
+#include "i18n/language.h"
+#include "i18n/messages.h"
 
 namespace diag {
 
 namespace {
 
-constexpr std::string_view severity_text(Severity severity) {
+std::string_view severity_text(Severity severity, i18n::Language language) {
   switch (severity) {
-    case Severity::Error: return "error";
-    case Severity::Warning: return "warning";
-    case Severity::Note: return "note";
+    case Severity::Error:
+      return i18n::text<i18n::Key::RenderSeverityError>(language);
+    case Severity::Warning:
+      return i18n::text<i18n::Key::RenderSeverityWarning>(language);
+    case Severity::Note:
+      return i18n::text<i18n::Key::RenderSeverityNote>(language);
   }
 }
 
@@ -183,7 +188,7 @@ void render(const Diagnostic& diag,
             const RenderOptions& options,
             SourceFetch fetch,
             const void* ctx) {
-  const std::string_view sev = severity_text(diag.severity);
+  const std::string_view sev = severity_text(diag.severity, options.language);
   if (options.color) {
     begin_style(out, true, severity_color(diag.severity), true);
     fmt::format_to(std::back_inserter(out), "{}[{}{}]", sev,
@@ -205,7 +210,9 @@ void render(const Diagnostic& diag,
   }
   const SourceText source = fetched.value_or(SourceText{});
   const std::string_view name =
-      source.name.empty() ? "[unknown file]" : source.name;
+      source.name.empty()
+          ? i18n::text<i18n::Key::RenderUnknownFile>(options.language)
+          : source.name;
 
   fmt::format_to(std::back_inserter(out), " --> ");
   append_colored(out, options.color, term::FG_CYAN, name);
@@ -274,10 +281,13 @@ void render(const Diagnostic& diag,
     }
     const SourceText label_source = fetched_label.value_or(SourceText{});
     const std::string_view label_name =
-        label_source.name.empty() ? "[unknown file]" : label_source.name;
+        label_source.name.empty()
+            ? i18n::text<i18n::Key::RenderUnknownFile>(options.language)
+            : label_source.name;
     fmt::format_to(std::back_inserter(out), " = ");
     begin_style(out, options.color, term::FG_CYAN, true);
-    fmt::format_to(std::back_inserter(out), "note");
+    fmt::format_to(std::back_inserter(out), "{}",
+                   i18n::text<i18n::Key::RenderSeverityNote>(options.language));
     end_style(out, options.color);
     fmt::format_to(std::back_inserter(out), ": {} --> ", label.message);
     append_colored(out, options.color, term::FG_CYAN, label_name);

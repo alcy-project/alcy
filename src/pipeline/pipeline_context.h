@@ -14,6 +14,7 @@
 #include "fpag/debug/profiler/profiler.h"
 #include "fpag/mem/arena.h"
 #include "fpag/str/string_interner.h"
+#include "i18n/language.h"
 #include "source/source.h"
 
 namespace pipeline {

@@ -9,6 +9,7 @@ source_set("borrow") {
   deps = [
     "//src:base_modules",
     "//src/diag",
+    "//src/i18n",
     "//src/ir",
     "//src/lower",
   ]

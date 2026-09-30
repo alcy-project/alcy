@@ -31,6 +31,11 @@
   F(LexerInvalidEscapeInString, "invalid escape in string literal")         \
   F(LexerUnterminatedBlockComment, "unterminated block comment")           \
   F(LexerUnterminatedCharacter, "unterminated character literal")           \
-  F(LexerUnterminatedString, "unterminated string literal")
+  F(LexerUnterminatedString, "unterminated string literal") \
+  /* diagnostic renderer */ \
+  F(RenderSeverityError, "error") \
+  F(RenderSeverityNote, "note") \
+  F(RenderSeverityWarning, "warning") \
+  F(RenderUnknownFile, "[unknown file]")
 
 #endif  // ALCY_I18N_MESSAGES_DEF_

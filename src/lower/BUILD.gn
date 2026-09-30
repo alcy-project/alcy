@@ -15,6 +15,7 @@ source_set("lower") {
     "//src/analyzer",
     "//src/ast",
     "//src/diag",
+    "//src/i18n",
     "//src/ir",
     "//src/source",
     "//src/text",

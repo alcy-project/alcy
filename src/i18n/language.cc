@@ -9,7 +9,7 @@ namespace i18n {
 
 std::string tag_list() {
   std::string tags;
-  for (const LanguageTag& entry : kLanguageTags) {
+  for (const LanguageTag& entry : LANGUAGE_TAGS) {
     if (!tags.empty()) {
       tags.push_back(' ');
     }
