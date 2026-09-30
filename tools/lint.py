@@ -44,6 +44,27 @@ def target_files(target_dirs: list[Path]):
     return files, comp_files, header_files
 
 
+def check_ascii_only(files: list[str]) -> bool:
+    """Ensure all target source files contain strictly ASCII characters."""
+    passed = True
+    for rel_path in files:
+        filepath = project_root_dir / rel_path
+        try:
+            with open(filepath, "r", encoding="ascii") as f:
+                f.read()
+        except UnicodeDecodeError:
+            passed = False
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                for line_num, line in enumerate(f, start=1):
+                    for col_num, char in enumerate(line, start=1):
+                        if ord(char) > 127:
+                            print(
+                                f"Non-ASCII character error: {rel_path}:{line_num}:{col_num}: "
+                                f"found '{char}' (U+{ord(char):04X}) in: {line.strip()}"
+                            )
+    return passed
+
+
 # Headers whose translation unit is generated: the generator already
 # occupies the sibling name, so no source .cc can exist. They stay
 # outside the header gate until the generator is renamed. A stale
@@ -170,6 +191,12 @@ def lint_files(
             failed = True
 
     files, comp_files, header_files = target_files(target_dirs)
+
+    # Check that all source and header files under project_source_dirs remain pure ASCII
+    all_source_files = sorted(set(files + comp_files + header_files))
+    if not check_ascii_only(all_source_files):
+        failed = True
+
     for error in exclusion_errors(build_dir):
         print(error)
         failed = True
