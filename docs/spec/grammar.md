@@ -8,7 +8,11 @@ are rejected with guidance diagnostics.
 
 ## Lexical notes
 
-- `..=`, `..<` are single tokens. After an integer literal, `..`
+- `..`, `..=`, `..<` are single tokens and open a range; either
+  endpoint may be absent, and an absent one is unbounded (`1..`,
+  `..3`, `..`). `..=` includes the end endpoint, `..` and `..<`
+  exclude it. A newline after the operator terminates the statement,
+  so `n := 0..` is a complete value. After an integer literal, `..`
   starts a range operator, never a float fraction (`1..2` is
   `1 .. 2`); `1. < 2` keeps float-then-compare.
 - Nesting is bounded at 256 levels, counted on expressions, types,

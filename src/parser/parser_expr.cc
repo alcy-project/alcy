@@ -18,6 +18,33 @@
 
 namespace parser {
 
+namespace {
+
+// `..`, `..=`, and `..<` all open a range; the token picks how the end
+// endpoint is bound (`..=` includes it, the others exclude it).
+bool is_range_op(lexer::TokenKind kind) {
+  return kind == lexer::TokenKind::DotDot ||
+         kind == lexer::TokenKind::DotDotEq ||
+         kind == lexer::TokenKind::DotDotLess;
+}
+
+// Whether the token after a range operator starts the end endpoint. A
+// closer, separator, or end of input leaves the endpoint absent, so
+// `a[1..]`, `s[..]`, and `f(..)` parse with an unbounded side.
+bool starts_range_end(lexer::TokenKind kind) {
+  switch (kind) {
+    case lexer::TokenKind::RBrace:
+    case lexer::TokenKind::RBracket:
+    case lexer::TokenKind::RParen:
+    case lexer::TokenKind::Comma:
+    case lexer::TokenKind::Semicolon:
+    case lexer::TokenKind::Eof: return false;
+    default: return true;
+  }
+}
+
+}  // namespace
+
 ast::ExprIdx Parser::parse_expr() {
   if (nesting_exhausted(peek().span)) {
     return ast::ExprIdx::invalid();
@@ -28,46 +55,20 @@ ast::ExprIdx Parser::parse_expr() {
 
 ast::ExprIdx Parser::parse_range() {
   const usize mark = pos_;
-  if (check(lexer::TokenKind::DotDot) || check(lexer::TokenKind::DotDotEq) ||
-      check(lexer::TokenKind::DotDotLess)) {
-    const lexer::TokenKind kind = peek_kind();
-    advance();
-    ast::ExprIdx end = ast::ExprIdx::invalid();
-    if (kind != lexer::TokenKind::DotDot && !at_end() &&
-        !check(lexer::TokenKind::RBrace) &&
-        !check(lexer::TokenKind::RBracket) &&
-        !check(lexer::TokenKind::RParen) && !check(lexer::TokenKind::Comma) &&
-        !check(lexer::TokenKind::Semicolon)) {
-      end = parse_or();
-      if (!end.is_valid()) {
-        return ast::ExprIdx::invalid();
-      }
+  ast::ExprIdx start = ast::ExprIdx::invalid();
+  if (!is_range_op(peek_kind())) {
+    start = parse_or();
+    if (!start.is_valid()) {
+      return ast::ExprIdx::invalid();
     }
-    ast::ExprNode node;
-    node.kind = ast::ExprKind::Range;
-    node.span = span_from(mark);
-    node.payload.set(ast::ExprRange{
-        .start = ast::ExprIdx::invalid(),
-        .end = end,
-        .inclusive = (kind == lexer::TokenKind::DotDotEq),
-    });
-    return ast_.exprs.push_back(node);
-  }
-  ast::ExprIdx lhs = parse_or();
-  if (!lhs.is_valid()) {
-    return ast::ExprIdx::invalid();
-  }
-  if (!check(lexer::TokenKind::DotDot) && !check(lexer::TokenKind::DotDotEq) &&
-      !check(lexer::TokenKind::DotDotLess)) {
-    return lhs;
+    if (!is_range_op(peek_kind())) {
+      return start;
+    }
   }
   const lexer::TokenKind kind = peek_kind();
   advance();
   ast::ExprIdx end = ast::ExprIdx::invalid();
-  if (kind != lexer::TokenKind::DotDot && !at_end() &&
-      !check(lexer::TokenKind::RBrace) && !check(lexer::TokenKind::RBracket) &&
-      !check(lexer::TokenKind::RParen) && !check(lexer::TokenKind::Comma) &&
-      !check(lexer::TokenKind::Semicolon)) {
+  if (starts_range_end(peek_kind())) {
     end = parse_or();
     if (!end.is_valid()) {
       return ast::ExprIdx::invalid();
@@ -77,7 +78,7 @@ ast::ExprIdx Parser::parse_range() {
   node.kind = ast::ExprKind::Range;
   node.span = span_from(mark);
   node.payload.set(ast::ExprRange{
-      .start = lhs,
+      .start = start,
       .end = end,
       .inclusive = (kind == lexer::TokenKind::DotDotEq),
   });

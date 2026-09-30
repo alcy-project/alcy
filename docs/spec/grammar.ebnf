@@ -65,8 +65,8 @@ field_pat   = IDENT | IDENT , ":" , pattern ;
 (* Expressions, lowest to highest precedence *)
 
 expr          = range_expr ;
-range_expr    = or_expr , [ ( "..=" | "..<" ) , [ or_expr ] ]
-              | ".." , or_expr ;
+range_expr    = [ or_expr ] , range_op , [ or_expr ] ;
+range_op      = ".." | "..=" | "..<" ;
 or_expr       = and_expr , { "||" , and_expr } ;
 and_expr      = cmp_expr , { "&&" , cmp_expr } ;
 cmp_expr      = bit_or_expr , [ ( "==" | "!=" | ">" | "<" | ">=" | "<=" ) ,

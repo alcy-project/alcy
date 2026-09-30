@@ -61,6 +61,12 @@ const ast::ExprBinary as_binary(const ast::ExprIdx expr_idx, Fixture& f) {
   return expr.payload.get<ast::ExprBinary>();
 }
 
+const ast::ExprRange as_range(const ast::ExprIdx expr_idx, Fixture& f) {
+  const ast::ExprNode& expr = f.ast.exprs[expr_idx];
+  CHECK(expr.kind == ast::ExprKind::Range);
+  return expr.payload.get<ast::ExprRange>();
+}
+
 const ast::ExprReturn as_return(const ast::ExprIdx expr_idx, Fixture& f) {
   const ast::ExprNode& expr = f.ast.exprs[expr_idx];
   CHECK(expr.kind == ast::ExprKind::Return);
@@ -384,6 +390,104 @@ TEST_CASE("Parser respects operator precedence") {
   const ast::ExprIdx mul_idx = add.rhs;
   const ast::ExprBinary& mul = as_binary(mul_idx, f);
   CHECK(mul.op == ast::BinaryOp::Mul);
+}
+
+TEST_CASE("Parser reads range expressions") {
+  Fixture f;
+  {
+    const ParseResult result = parse("fn f() { 1..3 }", f);
+    CHECK(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    const ast::Block& block = f.ast.blocks[as_fn(result.items[0], f).body];
+    const ast::ExprRange range = as_range(block.value, f);
+    CHECK(range.start.is_valid());
+    CHECK(range.end.is_valid());
+    CHECK(!range.inclusive);
+  }
+  {
+    const ParseResult result = parse("fn f() { 1..=3 }", f);
+    CHECK(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    const ast::Block& block = f.ast.blocks[as_fn(result.items[0], f).body];
+    const ast::ExprRange range = as_range(block.value, f);
+    CHECK(range.start.is_valid());
+    CHECK(range.end.is_valid());
+    CHECK(range.inclusive);
+  }
+  {
+    const ParseResult result = parse("fn f() { 1..<3 }", f);
+    CHECK(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    const ast::Block& block = f.ast.blocks[as_fn(result.items[0], f).body];
+    const ast::ExprRange range = as_range(block.value, f);
+    CHECK(range.start.is_valid());
+    CHECK(range.end.is_valid());
+    CHECK(!range.inclusive);
+  }
+  {
+    const ParseResult result = parse("fn f() { 1.. }", f);
+    CHECK(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    const ast::Block& block = f.ast.blocks[as_fn(result.items[0], f).body];
+    const ast::ExprRange range = as_range(block.value, f);
+    CHECK(range.start.is_valid());
+    CHECK(!range.end.is_valid());
+  }
+  {
+    const ParseResult result = parse("fn f() { ..3 }", f);
+    CHECK(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    const ast::Block& block = f.ast.blocks[as_fn(result.items[0], f).body];
+    const ast::ExprRange range = as_range(block.value, f);
+    CHECK(!range.start.is_valid());
+    CHECK(range.end.is_valid());
+  }
+  {
+    const ParseResult result = parse("fn f() { .. }", f);
+    CHECK(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    const ast::Block& block = f.ast.blocks[as_fn(result.items[0], f).body];
+    const ast::ExprRange range = as_range(block.value, f);
+    CHECK(!range.start.is_valid());
+    CHECK(!range.end.is_valid());
+  }
+  // Endpoints are `or` expressions: the range binds loosest.
+  {
+    const ParseResult result = parse("fn f() { 1 + 2..3 * 4 }", f);
+    CHECK(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    const ast::Block& block = f.ast.blocks[as_fn(result.items[0], f).body];
+    const ast::ExprRange range = as_range(block.value, f);
+    CHECK(as_binary(range.start, f).op == ast::BinaryOp::Add);
+    CHECK(as_binary(range.end, f).op == ast::BinaryOp::Mul);
+  }
+  // A newline closes an open-ended range like any complete value.
+  {
+    const ParseResult result = parse("fn f() {\n  x := 1..\n  ret x\n}", f);
+    CHECK(result.ok);
+    if (!result.ok) {
+      return;
+    }
+    const ast::Block& block = f.ast.blocks[as_fn(result.items[0], f).body];
+    CHECK(block.statements.size() == 1);
+    CHECK(block.value.is_valid());
+    CHECK(f.ast.exprs[block.value].kind == ast::ExprKind::Return);
+  }
+  CHECK(!f.bag.has_errors());
 }
 
 TEST_CASE("Parser treats power as right associative") {

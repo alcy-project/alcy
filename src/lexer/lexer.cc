@@ -63,7 +63,12 @@ bool inserts_semi(TokenKind kind) {
     // A cast target (`1 as u64`, `x as Self`) ends the expression, so
     // type keywords terminate the statement too. `!` is excluded: a
     // trailing `!` negates and always continues the expression.
+    // A range operator can also end one: `n := 0..` is a complete
+    // value, so the following newline terminates it.
     case TokenKind::Question:
+    case TokenKind::DotDot:
+    case TokenKind::DotDotEq:
+    case TokenKind::DotDotLess:
     case TokenKind::Self:
     case TokenKind::SelfType:
     case TokenKind::I8:
