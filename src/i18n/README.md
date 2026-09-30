@@ -3,14 +3,16 @@
 The message catalog: the languages the compiler reports in, and the
 text of every message it can print.
 
-- `Language` is the set of languages, and `kLanguageTags` names each one
+- `Language` is the set of languages, and `LANGUAGE_TAGS` names each one
   by the tag `--lang` takes. Tags are lowercase kebab-case and match
   exactly. Nothing reads the environment: `LANG` and `LC_ALL` belong to
   the shell, and a compiler whose output language depends on them is a
   different compiler on every machine.
 - `Key` is one identity per message, named by the message rather than by
   the diagnostic code it is reported under, because 24 of the 45
-  registered codes carry more than one wording.
+  registered codes carry more than one wording. The ordinal is an index
+  into every catalog and means nothing outside this module, so the enum
+  is as wide as the catalog needs it to be.
 - `messages.def` holds the texts. It is a list, not a table: the key
   enum, every language's table, and the completeness check are all
   generated from it, so they cannot disagree.
@@ -34,7 +36,7 @@ translation of it, so a name is not changed to tidy up.
 
 ## Adding a language
 
-1. Add `LangXx` to `Language` and its tag to `kLanguageTags`.
+1. Add `Xx` to `Language` and its tag to `LANGUAGE_TAGS`.
 2. Add `lang/xx_yy.def` with `ALCY_I18N_FOREACH_KEY_XX_YY`, listing
    every key of the canonical list in the same order.
 3. Add the language to `ALCY_I18N_FOREACH_LANGUAGE`.

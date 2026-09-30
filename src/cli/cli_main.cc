@@ -31,6 +31,7 @@
 #include "fpag/io/io_util.h"
 #include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
+#include "i18n/language.h"
 #include "pipeline/pipeline_context.h"
 
 namespace cli {

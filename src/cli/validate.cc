@@ -3,6 +3,7 @@
 
 #include "cli/validate.h"
 
+#include <string>
 #include <string_view>
 
 #include "cli/cli_config.h"

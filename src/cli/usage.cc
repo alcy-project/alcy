@@ -10,14 +10,13 @@
 #include <string_view>
 #include <vector>
 
-#include "cli/usage.h"
-#include "debug/fatal.h"
 #include "fmt/base.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
 #include "fpag/arg/error_code.h"
 #include "fpag/arg/help_formatter.h"
 #include "fpag/term/style.h"
+#include "i18n/language.h"
 #include "i18n/messages.h"
 
 namespace cli {
@@ -138,10 +137,10 @@ UsageText::UsageText(Language language)
 }
 
 const UsageText& usage_text(Language language) {
-  static const std::array<UsageText, i18n::LANGUAGE_COUNT> tables = {
+  static const std::array<UsageText, i18n::LANGUAGE_COUNT> TABLES = {
       UsageText{Language::EnUs},
   };
-  return tables[static_cast<usize>(language)];
+  return TABLES[static_cast<usize>(language)];
 }
 
 std::string HelpFormatter::operator()(const arg::Command& command,

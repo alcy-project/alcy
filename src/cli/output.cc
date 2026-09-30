@@ -21,6 +21,7 @@
 #include "fpag/debug/profiler/profile_event.h"
 #include "fpag/io/io_util.h"
 #include "fpag/term/style.h"
+#include "i18n/language.h"
 #include "i18n/messages.h"
 #include "source/source.h"
 #include "text/json.h"
