@@ -105,7 +105,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
   mem::Arena arena;
   arena.reserve(1u << 20);
   diag::DiagBag bag{arena, i18n::Language::EnUs};
-  const u32 index = bag.emit(
+  const u32 index = bag.emit_untranslated(
       diag::Severity::Error, 1,
       diag::Span{.file = 1, .offset = offset, .length = length}, "fuzz");
   const diag::Diagnostic* const diag = bag.at(index);

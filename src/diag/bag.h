@@ -77,8 +77,9 @@ class DiagBag {
   }
 
   // Appends a diagnostic whose message is composed here rather than from
-  // the catalog. Nothing new emits through this: a message the user reads
-  // is a catalog entry, and a test's own wording is the one case left.
+  // the catalog. Nothing the compiler reports arrives this way: a message
+  // a user reads is a catalog entry, and a test that needs a wording of
+  // its own inventing one is what is left.
   template <typename... Args>
   u32 emit_untranslated(Severity severity,
                         u32 code,
@@ -100,29 +101,6 @@ class DiagBag {
     fmt::format_to(std::back_inserter(out), format,
                    std::forward<Args>(args)...);
     return push(severity, code, primary, true, {out.data(), out.size()});
-  }
-
-  // The untranslated form, still reached under its old name while the
-  // remaining call sites move to the catalog. It is not overloaded with
-  // the keyed form above: a key cannot be deduced from an argument, so
-  // the two never both answer a call.
-  template <typename... Args>
-  u32 emit(Severity severity,
-           u32 code,
-           fmt::format_string<Args...> format,
-           Args&&... args) {
-    return emit_untranslated(severity, code, format,
-                             std::forward<Args>(args)...);
-  }
-
-  template <typename... Args>
-  u32 emit(Severity severity,
-           u32 code,
-           Span primary,
-           fmt::format_string<Args...> format,
-           Args&&... args) {
-    return emit_untranslated(severity, code, primary, format,
-                             std::forward<Args>(args)...);
   }
 
   // Attaches secondary labels to a previously emitted diagnostic. The labels

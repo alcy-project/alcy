@@ -12,7 +12,13 @@ Diagnostics: spans, the diagnostic bag, and rendering.
 
 ## Entry points
 
-- `DiagBag::emit(severity, code, ...)` -> bag index. Never fails.
+- `DiagBag::emit<i18n::Key::Name>(severity, code, [span,] args...)` ->
+  bag index. Never fails. The message comes from the catalog, and the
+  bag's `Language` decides which text of it. Every catalog's format
+  string is checked against the arguments at compile time.
+- `DiagBag::emit_untranslated(severity, code, [span,] format, args...)` ->
+  the same, for a test that needs a wording of its own. Nothing the
+  compiler reports goes through it.
 - `DiagBag::at(index)` -> `const Diagnostic*`, `nullptr` when the
   index names no diagnostic. Callers must null-check.
 - `DiagBag::label(index, labels)` ->

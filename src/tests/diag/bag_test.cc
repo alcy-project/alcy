@@ -29,9 +29,10 @@ TEST_CASE("DiagBag counts and iteration") {
   CHECK(!f.bag.has_errors());
   CHECK(f.bag.size() == 0);
 
-  const u32 e = f.bag.emit(Severity::Error, 7, "broken {}", "thing");
-  const u32 w = f.bag.emit(Severity::Warning, 8, "shaky");
-  f.bag.emit(Severity::Note, 9, "fyi");
+  const u32 e =
+      f.bag.emit_untranslated(Severity::Error, 7, "broken {}", "thing");
+  const u32 w = f.bag.emit_untranslated(Severity::Warning, 8, "shaky");
+  f.bag.emit_untranslated(Severity::Note, 9, "fyi");
 
   CHECK(f.bag.size() == 3);
   CHECK(f.bag.has_errors());
@@ -49,8 +50,8 @@ TEST_CASE("DiagBag counts and iteration") {
 TEST_CASE("DiagBag spans and labels") {
   BagFixture f;
   const Span span{.file = 3, .offset = 8, .length = 3};
-  const u32 i =
-      f.bag.emit(Severity::Error, 1, span, "bad call from {}", "here");
+  const u32 i = f.bag.emit_untranslated(Severity::Error, 1, span,
+                                        "bad call from {}", "here");
   CHECK(f.bag.at(i)->has_primary_span);
   CHECK(f.bag.at(i)->primary_span.offset == 8);
   CHECK(f.bag.at(i)->label_count == 0);
