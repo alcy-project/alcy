@@ -23,9 +23,14 @@ peripheral work lives in `backlog.md`.
   `as_mut_slice`, and `String::as_bytes` are the first borrowed APIs,
   pinned by `ok-slice`, `err-slice-realloc`, and `exe-slice`.
   Sub-slicing arrives with range data, the task below.
-- [ ] `Map` and `Set`, str-keyed with an internal hash.
+- [x] `Map` and `Set`, str-keyed with an internal hash.
 
-  No traits. Self-hosting needs them.
+  Landed as a `str`-keyed `Map<V>` with a companion `Set` over
+  `Map<u8>` (`docs/adr/0024`). Keys are copied and owned, removal
+  leaves a hole the next insertion reuses, and growth rehashes at
+  three quarters occupancy. The key type stays `str` until `spec` can
+  declare `Hash` and `Eq`; pinned by `exe-map`, `exe-set`, and the
+  `map` cases in `tools/check_borrow_rules.py`.
 - [ ] `Range` data and sub-slicing.
 
   Range expressions and the interval types behind them, so an index

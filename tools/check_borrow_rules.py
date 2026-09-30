@@ -462,6 +462,62 @@ case(
   ret *a + *b
 }""")
 
+# --- map entries: a view from `get` is a loan of the map, and a call
+# --- that mutates the map conflicts with it ---------------------------
+case(
+    "map", "view-then-insert", "reject",
+    """fn main() -> i32 {
+  mut m := Map::<i32>::new()
+  _ := m.insert("a", 1i32)
+  view := m.get("a")
+  _ := m.insert("b", 2i32)
+  ret *view.unwrap()
+}""")
+
+case(
+    "map", "view-then-len", "accept",
+    """fn main() -> i32 {
+  mut m := Map::<i32>::new()
+  _ := m.insert("a", 1i32)
+  view := m.get("a")
+  n := m.len()
+  ret *view.unwrap() + n as i32 - 1
+}""")
+
+case(
+    "map", "view-then-remove", "reject",
+    """fn main() -> i32 {
+  mut m := Map::<i32>::new()
+  _ := m.insert("a", 1i32)
+  view := m.get("a")
+  _ := m.remove("a")
+  ret *view.unwrap()
+}""")
+
+# A method receiver names a field, and the loan covers that field; a
+# view into one field leaves another field free to mutate.
+case(
+    "map", "view-then-other-field", "accept",
+    """struct Both { a: Map<i32>, b: Map<i32> }
+fn main() -> i32 {
+  mut x := Both { a: Map::<i32>::new(), b: Map::<i32>::new() }
+  _ := x.a.insert("k", 5i32)
+  view := x.a.get("k")
+  _ := x.b.insert("j", 7i32)
+  ret *view.unwrap() - 5
+}""")
+
+case(
+    "map", "field-view-then-mutate", "reject",
+    """struct Both { a: Map<i32>, b: Map<i32> }
+fn main() -> i32 {
+  mut x := Both { a: Map::<i32>::new(), b: Map::<i32>::new() }
+  _ := x.a.insert("k", 5i32)
+  view := x.a.get("k")
+  _ := x.a.insert("j", 7i32)
+  ret *view.unwrap() - 5
+}""")
+
 # --- projection through a call: the summary names the field, so a loan
 # --- into one field does not cover the whole argument ------------------
 case(

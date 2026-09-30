@@ -26,6 +26,8 @@ action("embed_std") {
     "//lib/std/alloc/heap.al",
     "//lib/std/alloc/vec.al",
     "//lib/std/alloc/string.al",
+    "//lib/std/alloc/map.al",
+    "//lib/std/alloc/set.al",
     "//lib/std/fmt/prelude.al",
     "//lib/std/fmt/write.al",
     "//lib/std/fmt/format.al",

@@ -19,3 +19,5 @@ pub use super::heap::uninit_assume;
 pub use super::heap::uninit_ref;
 pub use super::string::String;
 pub use super::vec::Vec;
+pub use super::map::Map;
+pub use super::set::Set;
