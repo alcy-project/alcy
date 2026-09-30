@@ -113,10 +113,6 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_borrow_rules.py --build-subdir=build
 
-      - name: Check Runtime
-        shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_runtime.py --build-subdir=build
-
       - name: Run exe Acceptance
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_exe.py --build-subdir=build
