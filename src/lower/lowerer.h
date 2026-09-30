@@ -266,6 +266,35 @@ class Lowerer {
   Val place_addr(ast::ExprIdx expr);
   bool is_rooted_place(ast::ExprIdx expr) const;
   Val checked_index_addr(Val base, Val position, diag::Span span);
+  // Whether a checked type is a `Range<T>` value. The interval types
+  // are reserved to core, so the shape is the declaration's.
+  bool is_range_type(ir::TypeIdx type);
+  // The half-open `[start, width)` a range value names over a run of
+  // `len` elements. Both endpoints and their order are checked at
+  // runtime; `start` and `width` are `usize` operands.
+  struct RunBounds {
+    ir::OperandIdx start = ir::OperandIdx::invalid();
+    ir::OperandIdx width = ir::OperandIdx::invalid();
+  };
+  bool run_bounds(Val range,
+                  ir::OperandIdx len,
+                  RunBounds& out,
+                  diag::Span span);
+  // Writes one endpoint of a range expression into `range_slot`:
+  // `Included` for a start and for an end after `..=`, `Excluded` for
+  // the other ends, and `Unbounded` for an absent side.
+  bool store_bound(ast::ExprIdx expr,
+                   Val range_slot,
+                   std::string_view field,
+                   ast::ExprIdx endpoint,
+                   bool included);
+  Val lower_range(ast::ExprIdx expr);
+  // A run of `base` as a view: a fixed array is borrowed for it, a
+  // slice re-slices to its own kind, and a `str` to `str`. `exclusive`
+  // selects `&mut [T]` when the receiver is an array.
+  Val lower_subslice(Val base, Val range, bool exclusive, diag::Span span);
+  // A `usize` immediate, sized for the target.
+  ir::OperandIdx const_usize(u64 value);
   ir::OperandIdx index_operand(u32 index);
   bool struct_field_index(ir::TypeIdx type,
                           std::string_view name,

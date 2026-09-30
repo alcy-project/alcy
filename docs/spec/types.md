@@ -41,8 +41,11 @@
   move-only, and the view keeps the loan of the buffer it reads (see
   `ownership.md`). `str` stays its own type rather than spelling as
   `&[u8]`, with the same representation and the same loan rule.
-- Sub-slicing (`&a[1..3]`, `s[1..]`) needs range endpoints and arrives
-  with range types; see `deferred.md`.
+- Sub-slicing names a run with a range: `&a[1..3]` is the run of a
+  fixed array as a `&[T]` (or `&mut [T]`), `s[1..]` re-slices a view
+  to its own kind, and a `str` narrows to a `str`. Both endpoints are
+  bounds-checked and the run must be ordered, else the program panics
+  with "slice out of bounds".
 
 ## Text (staged)
 
@@ -51,13 +54,25 @@
   core text library live post-MVP. Baremetal targets without core
   use `u8`/`u32` directly.
 
-## Ranges (representation decided, types next)
+## Ranges (staged)
 
 - A range is interval data, not an iterator: a single
   `Range<T> { start: Bound<T>, end: Bound<T> }` with
-  `Bound = Included(T) | Excluded(T) | Unbounded`. The `..=`/`..<`
-  markers map directly onto bound constructors; an absent endpoint
-  needs no marker.
+  `Bound = Included(T) | Excluded(T) | Unbounded`, both declared by
+  `core` with reserved names so a range expression always constructs
+  the one declaration. `..=` includes its end, `..` and `..<` exclude
+  it, and an absent endpoint is `Unbounded`.
+- Both endpoints share one element type: an expected `Range<E>` pins
+  it, otherwise the present endpoints agree, with a bare integer
+  literal adapting to the other side as in a binary operation. With
+  neither endpoint present (`..`) the unsuffixed default applies.
+  Only integer ranges are indexable; float ranges are legal data with
+  no index meaning.
+- A range expression builds the value; an index with a range reads the
+  half-open run `[start, end)` it names. A bare run of a fixed array
+  is unsized, so only a borrow names it (`&a[1..3]`); borrowing a view
+  is rejected, since no place stands behind one. A run is not a place
+  and cannot be assigned to.
 - Iteration is explicit and separate: only integer ranges expose an
   iterator, and it arrives with the `spec` system as an `Iterator`
   implementation; float ranges have no iteration method. Stepping
@@ -65,10 +80,4 @@
 - `for` over a range desugars through a single documented rule to
   the explicit iterator form. Index and slice APIs accept bound
   data, never iterators.
-- Range data and the index expressions that read a run through one
-  (`&a[1..3]`, `s[1..]`, both endpoints bounds-checked) land next.
-  Iteration, stepping, and `for` arrive with `spec`, which gives
-  them an `Iterator` to hang on; a compiler-blessed iterator would
-  be thrown away there. The operator tokens and the endpoint-marking
-  rule above are frozen now.
 

@@ -1458,6 +1458,323 @@ Val Lowerer::build_slice_value(ir::OperandIdx base,
   return Val{to_operand(fat, ref_ty), ref_ty, false, false};
 }
 
+ir::OperandIdx Lowerer::const_usize(u64 value) {
+  const ir::TypeIdx usize_ty = usize_type();
+  ir::Immutable imm{.type = usize_ty, .data = {}};
+  if (tag_of(usize_ty) == ir::TypeTag::U64) {
+    imm.data.u64_value = value;
+  } else {
+    imm.data.u32_value = static_cast<u32>(value);
+  }
+  return to_operand(builder.immutable(imm), usize_ty);
+}
+
+bool Lowerer::is_range_type(ir::TypeIdx type) {
+  const ir::TypeIdx origin = type_origin(type);
+  if (tag_of(origin) != ir::TypeTag::Struct) {
+    return false;
+  }
+  u32 index = 0;
+  return struct_field_index(origin, "start", index) &&
+         struct_field_index(origin, "end", index);
+}
+
+// The half-open `[start, width)` a range value names. Each endpoint is
+// decoded from its `Bound` tag: the tag and payload loads happen
+// unconditionally, and `Unbounded` discards the payload with a `select`
+// rather than a branch, since its slot is never written. Exactly one of
+// the endpoint's value and its limit carries the `+1` that inclusion
+// needs, so the check always precedes the add and neither can wrap.
+bool Lowerer::run_bounds(Val range,
+                         ir::OperandIdx len,
+                         RunBounds& out,
+                         diag::Span span) {
+  u32 start_index = 0;
+  u32 end_index = 0;
+  if (!struct_field_index(range.type, "start", start_index) ||
+      !struct_field_index(range.type, "end", end_index)) {
+    internal(span, "range without endpoints");
+    return false;
+  }
+  Val start_slot = field_addr(range, "start", span);
+  Val end_slot = field_addr(range, "end", span);
+  if (failed) {
+    return false;
+  }
+  const ir::TypeIdx bound_ty = type_origin(start_slot.type);
+  u32 included_v = 0;
+  u32 excluded_v = 0;
+  u32 unbounded_v = 0;
+  if (!variant_index(bound_ty, "Included", included_v) ||
+      !variant_index(bound_ty, "Excluded", excluded_v) ||
+      !variant_index(bound_ty, "Unbounded", unbounded_v)) {
+    internal(span, "bound without variants");
+    return false;
+  }
+  const std::vector<ir::TypeIdx> payloads =
+      variant_payload(bound_ty, included_v);
+  if (payloads.size() != 1) {
+    internal(span, "bound arity");
+    return false;
+  }
+  const ir::TypeIdx element = payloads[0];
+  const ir::TypeIdx usize_ty = usize_type();
+  const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+  const ir::OperandIdx one = const_usize(1);
+
+  auto require = [&](ir::RegisterIdx good) {
+    const ir::BlockIdx ok_block = reserve_block();
+    const ir::BlockIdx bad_block = reserve_block();
+    emit_cond_br(to_operand(good, boolean), ok_block, bad_block);
+    switch_to(bad_block);
+    emit_panic(str_operand("slice out of bounds"));
+    switch_to(ok_block);
+  };
+
+  auto decode = [&](Val slot, bool is_start) -> Val {
+    const Val tag = load_disc(slot);
+    const ir::RegisterIdx is_unbounded = emit(
+        ir::Opcode::Eq, boolean, {use_value(tag), disc_operand(unbounded_v)});
+    const ir::RegisterIdx is_included = emit(
+        ir::Opcode::Eq, boolean, {use_value(tag), disc_operand(included_v)});
+    const ir::RegisterIdx is_excluded = emit(
+        ir::Opcode::Eq, boolean, {use_value(tag), disc_operand(excluded_v)});
+    const ir::RegisterIdx payload_addr =
+        payload_field_addr(slot, variant_fields(bound_ty, included_v), 0);
+    const ir::RegisterIdx payload =
+        emit(ir::Opcode::Load, element, {to_operand(payload_addr, element)});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    Val wide{to_operand(payload, element), element, false, false};
+    if (tag_of(element) != tag_of(usize_ty)) {
+      const ir::RegisterIdx casted =
+          emit(ir::Opcode::TypeCast, usize_ty, {use_value(wide)});
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      wide = Val{to_operand(casted, usize_ty), usize_ty, false, false};
+    }
+    // An included end and an excluded start exclude the element one
+    // past the bound, so their value is the bound plus one and the
+    // limit is the length; the other spellings put the one on the
+    // limit instead.
+    const ir::RegisterIdx use_bump = is_start ? is_excluded : is_included;
+    const ir::RegisterIdx bumped =
+        emit(ir::Opcode::IntAdd, usize_ty, {use_value(wide), one});
+    const ir::RegisterIdx bounded =
+        emit(ir::Opcode::Select, usize_ty,
+             {to_operand(use_bump, boolean), to_operand(bumped, usize_ty),
+              use_value(wide)});
+    const ir::RegisterIdx crossed =
+        emit(ir::Opcode::IntAdd, usize_ty, {len, one});
+    const ir::RegisterIdx limit = emit(
+        ir::Opcode::Select, usize_ty,
+        {to_operand(use_bump, boolean), len, to_operand(crossed, usize_ty)});
+    const ir::RegisterIdx under =
+        emit(ir::Opcode::Lt, boolean,
+             {to_operand(bounded, usize_ty), to_operand(limit, usize_ty)});
+    const ir::RegisterIdx ok =
+        emit(ir::Opcode::Or, boolean,
+             {to_operand(is_unbounded, boolean), to_operand(under, boolean)});
+    require(ok);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::OperandIdx empty_side = is_start ? const_usize(0) : len;
+    const ir::RegisterIdx value =
+        emit(ir::Opcode::Select, usize_ty,
+             {to_operand(is_unbounded, boolean), empty_side,
+              to_operand(bounded, usize_ty)});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(value, usize_ty), usize_ty, false, false};
+  };
+
+  const Val start = decode(start_slot, true);
+  const Val end = decode(end_slot, false);
+  if (failed) {
+    return false;
+  }
+  // `start <= end`, and both are bounded by `len` above, so the width
+  // below cannot wrap.
+  const ir::RegisterIdx inverted =
+      emit(ir::Opcode::Gt, boolean, {use_value(start), use_value(end)});
+  const ir::RegisterIdx ordered = emit(
+      ir::Opcode::Select, boolean,
+      {to_operand(inverted, boolean), bool_operand(false), bool_operand(true)});
+  require(ordered);
+  if (failed) {
+    return false;
+  }
+  const ir::RegisterIdx width =
+      emit(ir::Opcode::IntSub, usize_ty, {use_value(end), use_value(start)});
+  if (failed) {
+    return false;
+  }
+  out.start = use_value(start);
+  out.width = to_operand(width, usize_ty);
+  return true;
+}
+
+bool Lowerer::store_bound(ast::ExprIdx expr,
+                          Val range_slot,
+                          std::string_view field,
+                          ast::ExprIdx endpoint,
+                          bool included) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  Val slot = field_addr(range_slot, field, node.span);
+  if (failed) {
+    return false;
+  }
+  const ir::TypeIdx bound_ty = type_origin(slot.type);
+  const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
+  const ir::RegisterIdx tag_addr = emit(ir::Opcode::GetElementPtr, i32_ty,
+                                        {slot.op, zero_i32, index_operand(0)});
+  const std::string_view variant_name =
+      endpoint.is_valid() ? (included ? "Included" : "Excluded") : "Unbounded";
+  u32 variant = 0;
+  if (!variant_index(bound_ty, variant_name, variant)) {
+    internal(node.span, "bound without declaration");
+    return false;
+  }
+  emit_void(ir::Opcode::Store,
+            {disc_operand(variant), to_operand(tag_addr, bound_ty)});
+  if (!endpoint.is_valid()) {
+    return !failed;
+  }
+  const std::vector<ir::TypeIdx> payloads = variant_payload(bound_ty, variant);
+  if (payloads.size() != 1) {
+    internal(node.span, "bound arity");
+    return false;
+  }
+  Val value = lower_expr(endpoint, &payloads[0]);
+  if (failed) {
+    return false;
+  }
+  const ir::RegisterIdx payload_addr =
+      payload_field_addr(slot, variant_fields(bound_ty, variant), 0);
+  emit_void(ir::Opcode::Store,
+            {use_value(value), to_operand(payload_addr, payloads[0])});
+  return !failed;
+}
+
+Val Lowerer::lower_range(ast::ExprIdx expr) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprRange& range = node.payload.get<ast::ExprRange>();
+  const ir::TypeIdx range_ty = expr_type(expr);
+  if (!is_range_type(range_ty)) {
+    internal(node.span, "range without type");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, range_ty, {size_one});
+  Val slot{to_operand(addr, range_ty), range_ty, true, false};
+  if (!store_bound(expr, slot, "start", range.start, true)) {
+    return Val{size_one, error_type(), false, false};
+  }
+  if (!store_bound(expr, slot, "end", range.end, range.inclusive)) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return slot;
+}
+
+Val Lowerer::lower_subslice(Val base,
+                            Val range,
+                            bool exclusive,
+                            diag::Span span) {
+  const ir::TypeTag tag = tag_of(base.type);
+  if (tag == ir::TypeTag::Array) {
+    if (!base.address) {
+      base = address_of(base);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+    }
+    const ir::ArrayType& shape =
+        builder.state()
+            .array_types[builder.state().types[base.type].as_array()];
+    RunBounds bounds;
+    if (!run_bounds(range, const_usize(shape.count), bounds, span)) {
+      return Val{size_one, error_type(), false, false};
+    }
+    // The address comes first and the loan second, exactly as for an
+    // element borrow: the offset names a place inside the array, so
+    // the borrow covers the whole array while the run is live.
+    const ir::RegisterIdx element =
+        emit(ir::Opcode::GetElementPtr, shape.element,
+             {base.op, zero_i32, bounds.start});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::TypeIdx elem_ref =
+        builder.reference_type(shape.element, exclusive);
+    const ir::RegisterIdx loan = emit(ir::Opcode::Borrow, elem_ref,
+                                      {to_operand(element, shape.element)});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::TypeIdx view =
+        builder.reference_type(builder.slice_type(shape.element), exclusive);
+    return build_slice_value(to_operand(loan, elem_ref), bounds.width, view,
+                             span);
+  }
+  if (is_slice_ref(base.type)) {
+    const bool element_exclusive = tag_of(base.type) == ir::TypeTag::MutRef;
+    const Val material = materialize(base);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    ir::OperandIdx bytes = ir::OperandIdx::invalid();
+    ir::OperandIdx len = ir::OperandIdx::invalid();
+    if (!slice_parts(material, bytes, len)) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::SliceType& shape =
+        builder.state().slice_types
+            [builder.state().types[slice_pointee(base.type)].as_slice()];
+    RunBounds bounds;
+    if (!run_bounds(range, len, bounds, span)) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::TypeIdx elem_ref =
+        builder.reference_type(shape.element, element_exclusive);
+    const ir::RegisterIdx element =
+        emit(ir::Opcode::ElemOffset, elem_ref, {bytes, bounds.start});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return build_slice_value(to_operand(element, elem_ref), bounds.width,
+                             base.type, span);
+  }
+  if (tag == ir::TypeTag::Str) {
+    const Val material = materialize(base);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    ir::OperandIdx bytes = ir::OperandIdx::invalid();
+    ir::OperandIdx len = ir::OperandIdx::invalid();
+    if (!str_parts(material, bytes, len)) {
+      return Val{size_one, error_type(), false, false};
+    }
+    RunBounds bounds;
+    if (!run_bounds(range, len, bounds, span)) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::TypeIdx byte_ref =
+        builder.reference_type(builder.primitive(ir::TypeTag::U8), false);
+    const ir::RegisterIdx byte =
+        emit(ir::Opcode::ElemOffset, byte_ref, {bytes, bounds.start});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return build_slice_value(to_operand(byte, byte_ref), bounds.width,
+                             builder.primitive(ir::TypeTag::Str), span);
+  }
+  internal(span, "run of a non-container");
+  return Val{size_one, error_type(), false, false};
+}
+
 Val Lowerer::lower_str_intrinsic(ast::ExprIdx expr, std::string_view name) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
@@ -2807,6 +3124,21 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     case ast::ExprKind::Borrow: {
       const ast::ExprBorrow& borrow = node.payload.get<ast::ExprBorrow>();
+      if (ast.exprs[borrow.inner].kind == ast::ExprKind::Index) {
+        const ast::ExprIndex& index =
+            ast.exprs[borrow.inner].payload.get<ast::ExprIndex>();
+        if (is_range_type(expr_type(index.index))) {
+          Val base = lower_expr(index.receiver, nullptr);
+          if (failed) {
+            return Val{size_one, error_type(), false, false};
+          }
+          Val position = lower_expr(index.index, nullptr);
+          if (failed) {
+            return Val{size_one, error_type(), false, false};
+          }
+          return lower_subslice(base, position, borrow.is_mut, node.span);
+        }
+      }
       Val place = place_addr(borrow.inner);
       if (failed) {
         return Val{size_one, error_type(), false, false};
@@ -2895,6 +3227,17 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     case ast::ExprKind::Index: {
       const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
+      if (is_range_type(expr_type(index.index))) {
+        Val base = lower_expr(index.receiver, nullptr);
+        if (failed) {
+          return Val{size_one, error_type(), false, false};
+        }
+        Val position = lower_expr(index.index, nullptr);
+        if (failed) {
+          return Val{size_one, error_type(), false, false};
+        }
+        return lower_subslice(base, position, false, node.span);
+      }
       Val base = lower_expr(index.receiver, nullptr);
       if (failed) {
         return Val{size_one, error_type(), false, false};
@@ -2912,9 +3255,7 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       }
       return materialize(addr);
     }
-    case ast::ExprKind::Range:
-      unsupported(node.span, "control flow in lowering");
-      return Val{size_one, error_type(), false, false};
+    case ast::ExprKind::Range: return lower_range(expr);
     case ast::ExprKind::Block: {
       const ast::ExprBlock& block = node.payload.get<ast::ExprBlock>();
       if (!block.is_comp) {

@@ -31,12 +31,14 @@ peripheral work lives in `backlog.md`.
   three quarters occupancy. The key type stays `str` until `spec` can
   declare `Hash` and `Eq`; pinned by `exe-map`, `exe-set`, and the
   `map` cases in `tools/check_borrow_rules.py`.
-- [ ] `Range` data and sub-slicing.
+- [x] `Range` data and sub-slicing.
 
-  Range expressions and the interval types behind them, so an index
-  accepts a run (`&a[1..3]`, `s[1..]`), both endpoints
+  Range expressions build the interval types (`docs/adr/0025`), and an
+  index accepts a run (`&a[1..3]`, `s[1..]`), both endpoints
   bounds-checked. Iteration and `for` wait for `spec`: a blessed
-  iterator would be thrown away there.
+  iterator would be thrown away there. Pinned by `exe-range`,
+  `exe-subslice`, `exe-subslice-panic`, the `ok-range`/`err-range-*`
+  cases, and the `subslice` cases in `tools/check_borrow_rules.py`.
 - [ ] `ArrayVec<T, N>`, a fixed-capacity inline container.
 
   The baremetal case proper: no heap, so no realloc hazard, and the

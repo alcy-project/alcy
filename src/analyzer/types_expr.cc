@@ -1452,18 +1452,44 @@ ir::TypeIdx Checker::check_index(u32 module,
                                  ast::ExprIdx expr,
                                  const ir::TypeIdx* expected) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ir::TypeIdx receiver =
-      check_expr(module, node.payload.get<ast::ExprIndex>().receiver, nullptr);
-  const ir::TypeIdx position =
-      check_expr(module, node.payload.get<ast::ExprIndex>().index, nullptr);
+  const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
+  const ir::TypeIdx receiver = check_expr(module, index.receiver, nullptr);
+  const ir::TypeIdx position = check_expr(module, index.index, nullptr);
   if (is_error(receiver) || is_error(position)) {
     return error_type();
   }
+  ir::TypeIdx element = error_type();
+  if (range_element(position, element)) {
+    bool unsized = false;
+    const ir::TypeIdx run =
+        check_run_index(receiver, element, expected, node.span, unsized);
+    if (is_error(run)) {
+      return error_type();
+    }
+    if (unsized) {
+      // `[E]` is unsized, so a bare run of a fixed array cannot be a
+      // value: the borrow is the spelling that names it.
+      const u32 diag =
+          bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, node.span,
+                   "a run of a fixed array must be borrowed (`&a[..]`)");
+      (void)diag;
+      return error_type();
+    }
+    return run;
+  }
+  return check_element_index(receiver, position, index.index, expected,
+                             node.span);
+}
+
+ir::TypeIdx Checker::check_element_index(ir::TypeIdx receiver,
+                                         ir::TypeIdx position,
+                                         ast::ExprIdx index_expr,
+                                         const ir::TypeIdx* expected,
+                                         diag::Span span) {
   if (!is_integer_tag(tag_of(position))) {
     const u32 diag =
         bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH,
-                 ast.exprs[node.payload.get<ast::ExprIndex>().index].span,
-                 "array index must be an integer");
+                 ast.exprs[index_expr].span, "array index must be an integer");
     (void)diag;
     return error_type();
   }
@@ -1471,7 +1497,7 @@ ir::TypeIdx Checker::check_index(u32 module,
     const ir::ArrayType& array =
         builder.array_types()[builder.types()[receiver].as_array()];
     if (expected != nullptr) {
-      return unify(*expected, array.element, node.span, "index");
+      return unify(*expected, array.element, span, "index");
     }
     return array.element;
   }
@@ -1483,16 +1509,201 @@ ir::TypeIdx Checker::check_index(u32 module,
       const ir::SliceType& slice =
           builder.slice_types()[builder.types()[pointee].as_slice()];
       if (expected != nullptr) {
-        return unify(*expected, slice.element, node.span, "index");
+        return unify(*expected, slice.element, span, "index");
       }
       return slice.element;
     }
   }
   const u32 diag =
-      bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, node.span,
+      bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, span,
                "cannot index '{}'", pretty_tag(tag_of(receiver)));
   (void)diag;
   return error_type();
+}
+
+ir::TypeIdx Checker::check_run_index(ir::TypeIdx receiver,
+                                     ir::TypeIdx element,
+                                     const ir::TypeIdx* expected,
+                                     diag::Span span,
+                                     bool& unsized) {
+  unsized = false;
+  if (!is_integer_tag(tag_of(element))) {
+    const u32 diag =
+        bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH, span,
+                 "a range index must have an integer endpoint type");
+    (void)diag;
+    return error_type();
+  }
+  const ir::TypeTag tag = tag_of(receiver);
+  if (tag == ir::TypeTag::Array) {
+    const ir::ArrayType& array =
+        builder.array_types()[builder.types()[receiver].as_array()];
+    unsized = true;
+    const ir::TypeIdx run = builder.slice_type(array.element);
+    if (expected != nullptr) {
+      return unify(*expected, run, span, "index");
+    }
+    return run;
+  }
+  if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
+    const ir::TypeIdx pointee =
+        builder.ref_types()[builder.types()[receiver].as_ref()].pointee;
+    if (tag_of(pointee) == ir::TypeTag::Slice) {
+      // Re-slicing keeps the view's kind: `sl[1..]` on `&mut [T]`
+      // still writes.
+      if (expected != nullptr) {
+        return unify(*expected, receiver, span, "index");
+      }
+      return receiver;
+    }
+  }
+  if (tag == ir::TypeTag::Str) {
+    const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
+    if (expected != nullptr) {
+      return unify(*expected, str, span, "index");
+    }
+    return str;
+  }
+  const u32 diag =
+      bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, span,
+               "cannot index '{}' with a range", pretty_tag(tag));
+  (void)diag;
+  return error_type();
+}
+
+// A range expression is `Range<T>` data. The element type comes from
+// the endpoints: an expected `Range<E>` pins it, otherwise the present
+// endpoints agree, with a bare integer literal adapting to the other
+// side exactly as it does in a binary operation. With neither endpoint
+// present (`..`) the language's unsuffixed default applies.
+ir::TypeIdx Checker::check_range(u32 module,
+                                 ast::ExprIdx expr,
+                                 const ir::TypeIdx* expected) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprRange& range = node.payload.get<ast::ExprRange>();
+  ir::TypeIdx hint = error_type();
+  const ir::TypeIdx* endpoint_expected = nullptr;
+  if (expected != nullptr) {
+    ir::TypeIdx element = error_type();
+    if (range_element(*expected, element) && !is_error(element)) {
+      hint = element;
+      endpoint_expected = &hint;
+    }
+  }
+  ir::TypeIdx start = error_type();
+  if (range.start.is_valid()) {
+    start = check_expr(module, range.start, endpoint_expected);
+  }
+  ir::TypeIdx end = error_type();
+  if (range.end.is_valid()) {
+    end = check_expr(module, range.end, endpoint_expected);
+  }
+  if (range.start.is_valid() && range.end.is_valid() && !is_error(start) &&
+      !is_error(end) && !types_equal(start, end)) {
+    if (is_integer_tag(tag_of(end)) && is_bare_int_literal(range.start)) {
+      start = check_expr(module, range.start, &end);
+    } else if (is_integer_tag(tag_of(start)) &&
+               is_bare_int_literal(range.end)) {
+      end = check_expr(module, range.end, &start);
+    }
+  }
+  if (range.start.is_valid() && is_error(start)) {
+    return error_type();
+  }
+  if (range.end.is_valid() && is_error(end)) {
+    return error_type();
+  }
+  ir::TypeIdx element = error_type();
+  if (range.start.is_valid()) {
+    element = start;
+  } else if (range.end.is_valid()) {
+    element = end;
+  } else {
+    element = builder.primitive(ir::TypeTag::I32);
+  }
+  if (range.start.is_valid() && range.end.is_valid() &&
+      !types_equal(start, end)) {
+    const u32 diag =
+        bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH, node.span,
+                 "type mismatch in range endpoints: '{}' vs '{}'",
+                 pretty_tag(tag_of(start)), pretty_tag(tag_of(end)));
+    (void)diag;
+    return error_type();
+  }
+  NominalEntry* entry = builtin_nominal("Range");
+  if (entry == nullptr) {
+    const u32 diag =
+        bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_TYPE, node.span,
+                 "range expressions need the `core` standard "
+                 "library package");
+    (void)diag;
+    return error_type();
+  }
+  return instantiate_generic(nominal_index(entry), {element}, node.span);
+}
+
+bool Checker::range_element(ir::TypeIdx type, ir::TypeIdx& element) const {
+  const GenericInstance* instance = generic_find(type_origin(type));
+  if (instance == nullptr || instance->args.size() != 1) {
+    return false;
+  }
+  const NominalEntry& entry = nominals[instance->nominal];
+  if (entry.name != "Range") {
+    return false;
+  }
+  element = instance->args[0];
+  return true;
+}
+
+// `&a[run]`: a fixed array's run has no place of its own, so it never
+// reaches `check_index`, which would reject the bare form. Checking
+// the operands here lets the borrow name the run instead. A view is
+// already a reference, so borrowing one has no place behind it and is
+// rejected.
+ir::TypeIdx Checker::check_borrow_of_index(u32 module,
+                                           ast::ExprIdx expr,
+                                           const ast::ExprBorrow& borrow,
+                                           const ir::TypeIdx* expected) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprIndex& index =
+      ast.exprs[borrow.inner].payload.get<ast::ExprIndex>();
+  const diag::Span span = ast.exprs[borrow.inner].span;
+  const ir::TypeIdx receiver = check_expr(module, index.receiver, nullptr);
+  const ir::TypeIdx position = check_expr(module, index.index, nullptr);
+  if (is_error(receiver) || is_error(position)) {
+    return error_type();
+  }
+  ir::TypeIdx element = error_type();
+  ir::TypeIdx pointee = error_type();
+  if (range_element(position, element)) {
+    bool unsized = false;
+    pointee = check_run_index(receiver, element, nullptr, span, unsized);
+    if (is_error(pointee)) {
+      return error_type();
+    }
+    if (!unsized) {
+      const u32 diag =
+          bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, span,
+                   "a view is already a reference; re-slice it "
+                   "without `&`");
+      (void)diag;
+      return error_type();
+    }
+  } else {
+    pointee =
+        check_element_index(receiver, position, index.index, nullptr, span);
+    if (is_error(pointee)) {
+      return error_type();
+    }
+  }
+  // The operands were checked here rather than through `check_expr` on
+  // the index, so record its own type for lowering.
+  modules[module].expr_types.push_back({borrow.inner, pointee, cur_inst});
+  const ir::TypeIdx type = builder.reference_type(pointee, borrow.is_mut);
+  if (expected != nullptr) {
+    return unify(*expected, type, node.span, "borrow");
+  }
+  return type;
 }
 
 void Checker::check_cond(u32 module, ast::CondIdx cond, bool& binds) {
@@ -1996,13 +2207,15 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
     case ast::ExprKind::Borrow: {
       // Place-ness is a borrow-checking concern; here the
       // inner type only determines the reference shape.
-      const ir::TypeIdx pointee = check_expr(
-          module, node.payload.get<ast::ExprBorrow>().inner, nullptr);
+      const ast::ExprBorrow& borrow = node.payload.get<ast::ExprBorrow>();
+      if (ast.exprs[borrow.inner].kind == ast::ExprKind::Index) {
+        return check_borrow_of_index(module, expr, borrow, expected);
+      }
+      const ir::TypeIdx pointee = check_expr(module, borrow.inner, nullptr);
       if (is_error(pointee)) {
         return error_type();
       }
-      const ir::TypeIdx type = builder.reference_type(
-          pointee, node.payload.get<ast::ExprBorrow>().is_mut);
+      const ir::TypeIdx type = builder.reference_type(pointee, borrow.is_mut);
       if (expected != nullptr) {
         return unify(*expected, type, node.span, "borrow");
       }
@@ -2215,11 +2428,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
       return builder.never_type();
     }
     case ast::ExprKind::Range: {
-      const u32 index =
-          bag.emit(diag::Severity::Error, ANALYZER_UNSUPPORTED_EXPR, node.span,
-                   "range expressions arrive post-MVP");
-      (void)index;
-      return error_type();
+      return check_range(module, expr, expected);
     }
   }
 }
@@ -2306,21 +2515,34 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
       return check_field(module, place, nullptr);
     }
     case ast::ExprKind::Index: {
-      const ir::TypeIdx receiver =
-          check_place(module, node.payload.get<ast::ExprIndex>().receiver);
+      const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
+      const ir::TypeIdx receiver = check_place(module, index.receiver);
       if (is_error(receiver)) {
         return error_type();
       }
       // A slice behind a shared reference reads only, exactly like
       // `*r` on a `&T` place: the element is reachable, not writable.
       if (tag_of(receiver) == ir::TypeTag::Ref) {
-        const u32 index =
+        const u32 diag =
             bag.emit(diag::Severity::Error, ANALYZER_BAD_ASSIGNMENT, node.span,
                      "cannot assign through a shared reference");
-        (void)index;
+        (void)diag;
         return error_type();
       }
-      return check_index(module, place, nullptr);
+      const ir::TypeIdx position = check_expr(module, index.index, nullptr);
+      if (is_error(position)) {
+        return error_type();
+      }
+      ir::TypeIdx element = error_type();
+      if (range_element(position, element)) {
+        const u32 diag =
+            bag.emit(diag::Severity::Error, ANALYZER_BAD_ASSIGNMENT, node.span,
+                     "cannot assign to a run; a run is a view, not a place");
+        (void)diag;
+        return error_type();
+      }
+      return check_element_index(receiver, position, index.index, nullptr,
+                                 node.span);
     }
     case ast::ExprKind::Deref: {
       const ir::TypeIdx inner =

@@ -7,8 +7,8 @@ name = "core"
 version = "0.1.0"
 
 [modules]
-include = ["prelude", "mem", "option", "result", "slice", "string"]
+include = ["prelude", "mem", "option", "range", "result", "slice", "string"]
 # The public surface, in the form ADR-0007 specifies. Nothing
 # enforces it yet. Its `pub` items are also the implicit surface:
 # a program depending on this package sees them with no `use`.
-export = ["prelude", "mem", "option", "result", "slice", "string"]
+export = ["prelude", "mem", "option", "range", "result", "slice", "string"]

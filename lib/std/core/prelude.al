@@ -17,6 +17,8 @@ pub use super::mem::println;
 pub use super::mem::size_of;
 pub use super::mem::align_of;
 pub use super::option::Option;
+pub use super::range::Bound;
+pub use super::range::Range;
 pub use super::result::Result;
 pub use super::slice::slice_len;
 pub use super::slice::slice_from_parts;

@@ -144,6 +144,8 @@ class Checker {
   ir::TypeIdx fn_ret = ir::TypeIdx(0);
   void register_nominals();
   NominalEntry* find_nominal(u32 module, std::string_view name);
+  // A declaration recognized by its reserved name (`Range`, `Bound`).
+  NominalEntry* builtin_nominal(std::string_view name);
   u32 find_child_module(u32 module, std::string_view name) const;
   ir::TypeIdx primitive_type(ast::PrimitiveKind kind, diag::Span span);
   ir::TypeIdx error_type();
@@ -410,6 +412,9 @@ class Checker {
   ir::TypeIdx check_struct_expr(u32 module,
                                 ast::ExprIdx expr,
                                 const ir::TypeIdx* expected);
+  ir::TypeIdx check_range(u32 module,
+                          ast::ExprIdx expr,
+                          const ir::TypeIdx* expected);
   ir::TypeIdx check_question(u32 module,
                              ast::ExprIdx expr,
                              const ir::TypeIdx* expected);
@@ -419,6 +424,32 @@ class Checker {
   ir::TypeIdx check_index(u32 module,
                           ast::ExprIdx expr,
                           const ir::TypeIdx* expected);
+  // Element access: `receiver[integer]`, already checked. The expected
+  // type, when given, is the element type.
+  ir::TypeIdx check_element_index(ir::TypeIdx receiver,
+                                  ir::TypeIdx position,
+                                  ast::ExprIdx index_expr,
+                                  const ir::TypeIdx* expected,
+                                  diag::Span span);
+  // Run access: `receiver[range]`, the range already checked. A fixed
+  // array yields the bare `[E]`, which `unsized` reports: only a
+  // borrow can name it. A slice reference re-slices to its own kind,
+  // and `str` to `str`.
+  ir::TypeIdx check_run_index(ir::TypeIdx receiver,
+                              ir::TypeIdx element,
+                              const ir::TypeIdx* expected,
+                              diag::Span span,
+                              bool& unsized);
+  // `&a[range]` and its `mut` form. The borrow names the run of a
+  // fixed array; borrowing a view has no place behind it, so it is
+  // rejected here rather than in lowering.
+  ir::TypeIdx check_borrow_of_index(u32 module,
+                                    ast::ExprIdx expr,
+                                    const ast::ExprBorrow& borrow,
+                                    const ir::TypeIdx* expected);
+  // The element type of a `Range<T>` instantiation; false for any
+  // other type.
+  bool range_element(ir::TypeIdx type, ir::TypeIdx& element) const;
   void check_cond(u32 module, ast::CondIdx cond, bool& binds);
   ir::TypeIdx check_if(u32 module,
                        ast::ExprIdx expr,

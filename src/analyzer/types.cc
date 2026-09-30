@@ -77,6 +77,18 @@ void Checker::register_nominals() {
         (void)index;
         continue;
       }
+      if (!duplicate && (name == "Range" || name == "Bound") &&
+          !(tree.modules[m]->is_staged &&
+            is_core_package(tree.modules[m]->path))) {
+        // The interval types back range expressions, so their names are
+        // reserved to the package that declares them: a range always
+        // constructs that one declaration.
+        const u32 index =
+            bag.emit(diag::Severity::Error, ANALYZER_RESERVED_NAME, span,
+                     "'{}' is a built-in type", name);
+        (void)index;
+        continue;
+      }
       if (duplicate) {
         const u32 index =
             bag.emit(diag::Severity::Error, ANALYZER_DUPLICATE_DEFINITION, span,
@@ -92,6 +104,17 @@ void Checker::register_nominals() {
 NominalEntry* Checker::find_nominal(u32 module, std::string_view name) {
   for (NominalEntry& entry : nominals) {
     if (entry.module == module && entry.name == name) {
+      return &entry;
+    }
+  }
+  return nullptr;
+}
+
+// A declaration recognized by its reserved name rather than by path.
+// Range and Bound are reserved, so a tree holds at most one of each.
+NominalEntry* Checker::builtin_nominal(std::string_view name) {
+  for (NominalEntry& entry : nominals) {
+    if (entry.name == name) {
       return &entry;
     }
   }

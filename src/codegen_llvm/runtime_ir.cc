@@ -72,9 +72,8 @@ class RuntimeBuilder {
       declared->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
       return declared;
     }
-    return llvm::Function::Create(type,
-                                  llvm::GlobalValue::LinkOnceODRLinkage, name,
-                                  module_);
+    return llvm::Function::Create(type, llvm::GlobalValue::LinkOnceODRLinkage,
+                                  name, module_);
   }
 
   llvm::Function* libc(std::string_view name, llvm::FunctionType* type) {

@@ -19,6 +19,7 @@ action("embed_std") {
     "//lib/std/core/prelude.al",
     "//lib/std/core/mem.al",
     "//lib/std/core/option.al",
+    "//lib/std/core/range.al",
     "//lib/std/core/result.al",
     "//lib/std/core/slice.al",
     "//lib/std/core/string.al",

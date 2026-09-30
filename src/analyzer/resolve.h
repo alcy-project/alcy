@@ -112,6 +112,14 @@ inline bool is_fmt_item(const ModuleTree& tree, ast::ItemIdx item) {
   return false;
 }
 
+// The `core` package of the staged standard library: the `core` root
+// and everything under it. The interval types are declared there and
+// their names are reserved, so a range expression always constructs
+// the one declaration. See docs/adr/0025.
+inline bool is_core_package(std::string_view path) {
+  return path == "core" || (path.size() > 6 && path.substr(0, 6) == "core::");
+}
+
 // Short human-readable detail for a module tree failure.
 std::string_view describe_module_tree_error(ModuleTreeError error);
 
