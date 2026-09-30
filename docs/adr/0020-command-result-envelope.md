@@ -1,5 +1,6 @@
 # ADR-0020: One command result envelope for every output path
 
+- Subject: the compiler
 - Status: Accepted
 - Date: 2026-09-29
 

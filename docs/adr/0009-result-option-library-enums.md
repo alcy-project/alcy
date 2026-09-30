@@ -1,5 +1,6 @@
 # ADR-0009: Result and Option as Library Enums
 
+- Subject: the language
 - Status: Accepted
 - Date: 2026-09-25
 - Supersedes: `docs/adr/0003-blessed-result-option.md`

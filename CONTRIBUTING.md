@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- A C++20 toolchain: Clang, LLD, and libc++ (see [docs/build.md](docs/build.md)).
+- A C++20 toolchain: Clang, LLD, and libc++ (see [compiler/docs/build.md](compiler/docs/build.md)).
 - GN and Ninja.
 - Python via `uv` (`uv sync` sets up the environment; `uv run` prefixes commands).
 - Alternatively, Nix provides the whole toolchain: `nix develop`.
@@ -66,10 +66,10 @@ Notes:
 
 ## Conventions
 
-- **Architecture:** Follow [docs/architecture.md](docs/architecture.md) for module responsibilities,
+- **Architecture:** Follow [compiler/docs/architecture.md](compiler/docs/architecture.md) for module responsibilities,
   dependency direction, ownership/lifetime boundaries, allocation contracts, and core design
   principles. IR construction rules (type currency, operand factories, `SeqBuilder`, opcode
-  conventions) live in [docs/ir.md](docs/ir.md).
+  conventions) live in [compiler/docs/ir.md](compiler/docs/ir.md).
 - **Standard:** C++20. Follow the Google C++ Style Guide where it does not conflict with
   repository-specific conventions.
 - **Explicitness:** Keep significant behavior visible at the call site. Do not use operator
@@ -78,7 +78,7 @@ Notes:
   (unnamed numbers or strings) in domain logic; bind them to meaningful constants.
 - **Ownership:** Make ownership and lifetime explicit in APIs. Prefer non-owning views for
   non-owning relationships and owning types only where ownership is part of the contract.
-- **Dependencies:** Respect the dependency direction defined by `docs/architecture.md`. Do not
+- **Dependencies:** Respect the dependency direction defined by `compiler/docs/architecture.md`. Do not
   introduce dependencies on higher-level modules for convenience, and do not create cyclic
   module dependencies.
 - **Naming & Types:** `PascalCase` for classes/structs/enums, `UPPER_SNAKE_CASE` for constants,
@@ -106,7 +106,7 @@ Notes:
   enforce repository style. Use `format.py` and `lint.py --fix` to fix most issues automatically.
   New source files must carry the license header.
 - **Module naming:** Module names stay abbreviated (`pkg`, `diag`). Directory, GN module,
-  and namespace names must always match; full forms live in `docs/architecture.md`.
+  and namespace names must always match; full forms live in `compiler/docs/architecture.md`.
 - **Wording:** The private LLVM fork is `llvm-alcy-fork` on first mention per document,
   and `the fork` thereafter.
 - **Architecture decisions:** One decision, one record. Significant technical decisions get an ADR

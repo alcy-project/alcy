@@ -1,5 +1,6 @@
 # ADR-0015: Validation happens at public API boundaries
 
+- Subject: the compiler
 - Status: Accepted
 - Date: 2026-09-26
 

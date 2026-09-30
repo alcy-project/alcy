@@ -15,7 +15,7 @@
 
 - `mod` keyword removed; module declarations only in `alcy.toml`.
 - `[modules]` table has `include` (list of paths or `["*"]`) and `export` (public API).
-- Source paths use `/`; no `src/` hardcoding.
+- Source paths use `/`; a module path never names a build directory.
 - Module-to-file mapping is 1-to-1 explicit.
 
 ## Paths and imports

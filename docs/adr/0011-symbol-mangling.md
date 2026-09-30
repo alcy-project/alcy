@@ -1,5 +1,6 @@
 # ADR-0011: Every Symbol Is Derived from Its Signature
 
+- Subject: the language
 - Status: Accepted
 - Date: 2026-09-26
 

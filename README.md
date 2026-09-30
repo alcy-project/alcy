@@ -10,11 +10,11 @@ compiler pipeline are still being designed and implemented.
 
 - [principles.md](docs/principles.md) - where the language is going, and the
   properties that decide design questions.
-- [architecture.md](docs/architecture.md) - the planned compiler design.
+- [architecture.md](compiler/docs/architecture.md) - the planned compiler design.
 
 ## Build & Install
 
-Requires GN, Ninja, Clang, LLD, and libc++ (see [docs/build.md](docs/build.md)
+Requires GN, Ninja, Clang, LLD, and libc++ (see [compiler/docs/build.md](compiler/docs/build.md)
 for details).
 
 ```bash

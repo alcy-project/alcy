@@ -1,5 +1,6 @@
 # ADR-0012: Reborrow on Reference Read, and How the Extent Is Computed
 
+- Subject: the language
 - Status: Accepted
 - Date: 2026-09-26
 

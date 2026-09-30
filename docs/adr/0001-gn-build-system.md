@@ -1,5 +1,6 @@
 # ADR 0001: GN as the build system
 
+- Subject: the compiler
 - Status: Superseded by `docs/adr/0006-llvm-dependency-config-root.md`
 - Date: 2026-09-16
 
@@ -22,4 +23,4 @@ only for building LLVM inside the fork.
 - Fast, hermetic-feeling builds with a single `gn gen` + `ninja` flow;
   `compile_commands.json` is generated for clangd.
 - Build logic is split accordingly: GN owns the compiler, CMake owns LLVM.
-  Contributors need both tools, documented in `docs/build.md`.
+  Contributors need both tools, documented in `compiler/docs/build.md`.

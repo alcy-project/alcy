@@ -1,5 +1,6 @@
 # ADR-0017: Each bug class gets the oracle that can see it
 
+- Subject: the compiler
 - Status: Accepted
 - Date: 2026-09-27
 

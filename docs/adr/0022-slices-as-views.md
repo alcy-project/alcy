@@ -1,5 +1,6 @@
 # ADR-0022: Slices, and the Shape of a Reference to One
 
+- Subject: the language
 - Status: Accepted
 - Date: 2026-09-30
 

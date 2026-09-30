@@ -1,5 +1,6 @@
 # ADR-0005: LLVM-Only MVP Backend
 
+- Subject: the compiler
 - Status: Accepted
 - Date: 2026-09-18
 

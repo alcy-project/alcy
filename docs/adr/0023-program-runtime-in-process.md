@@ -1,5 +1,6 @@
 # ADR-0023: The Program Runtime Is Built as IR in the Program's Module
 
+- Subject: the compiler
 - Status: Accepted
 - Date: 2026-09-30
 

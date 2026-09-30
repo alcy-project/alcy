@@ -8,14 +8,14 @@ change.
 
 This document covers *what* the compiler is and *why* it is structured this
 way. For day-to-day build, test, lint, formatting, and contribution rules,
-see [CONTRIBUTING.md](CONTRIBUTING.md). Detailed subsystem documentation
-belongs in `docs/`.
+see [CONTRIBUTING.md](../../CONTRIBUTING.md). Detailed subsystem documentation
+belongs in `compiler/docs/`.
 
 ## Core design principles
 
 These govern the compiler's implementation. For the principles the
 *language* is built to hold - which decide language design questions
-rather than code layout - see [principles.md](principles.md).
+rather than code layout - see [principles.md](../../docs/principles.md).
 
 When implementing or modifying any component in alcy, preserve the following
 principles:
@@ -252,7 +252,7 @@ Key design points:
   references use explicit backpatch setters.
 
 The detailed IR construction contract, opcode conventions, and storage layout
-are documented in [docs/ir.md](docs/ir.md).
+are documented in [ir.md](ir.md).
 
 ## Memory & lifetime model
 
@@ -294,7 +294,7 @@ consideration of their effect on these contracts.
 
 Validation happens at trust boundaries - the public API of each module -
 and nowhere else by default. The contract (decided in
-[`docs/adr/0015-boundary-validation.md`](docs/adr/0015-boundary-validation.md)) is:
+[`docs/adr/0015-boundary-validation.md`](../../docs/adr/0015-boundary-validation.md)) is:
 
 - **Public API is checked-only.** Every public entry point that accepts
   externally supplied or independently constructible data returns
@@ -369,7 +369,7 @@ Source bytes
    `alcy_dealloc`, `alcy_print`, `alcy_println`, `alcy_panic`, and
    `alcy_sys_write`, over libc — is defined in that same module, so a build
    spawns no compiler for it and it is optimized with the program
-   ([`docs/adr/0023-program-runtime-in-process.md`](docs/adr/0023-program-runtime-in-process.md)).
+   ([`docs/adr/0023-program-runtime-in-process.md`](../../docs/adr/0023-program-runtime-in-process.md)).
 
 Each stage should expose the minimum data needed by the next stage. A stage
 must not reach backward into another stage's private state as a shortcut.
@@ -377,7 +377,7 @@ must not reach backward into another stage's private state as a shortcut.
 ## LLVM integration
 
 The compiler links against a private LLVM fork
-(`third_party/llvm`, see [`docs/adr/0002-llvm-fork-prebuilt.md`](docs/adr/0002-llvm-fork-prebuilt.md)).
+(`third_party/llvm`, see [`docs/adr/0002-llvm-fork-prebuilt.md`](../../docs/adr/0002-llvm-fork-prebuilt.md)).
 The LLVM dependency is an implementation detail of the active code-generation
 backend; compiler IR must remain independent of LLVM-specific types and
 policies.
@@ -385,16 +385,16 @@ policies.
 Only the libraries required for IR construction and emission are used. The
 fork is consumed as prebuilt static libraries keyed by the submodule tag,
 with a from-source fallback. Build and platform details are documented in
-[docs/build.md](docs/build.md).
+[build.md](build.md).
 
 ## Verification
 
 Verification is layered by bug class, and no layer substitutes for another. A
 compiler can be memory-safe, crash-free, and still lower a program to the wrong
 value, so each layer names what it can see. The rationale and the rejected
-alternatives are in [`docs/adr/0017-verification-strategy.md`](docs/adr/0017-verification-strategy.md); the
+alternatives are in [`docs/adr/0017-verification-strategy.md`](../../docs/adr/0017-verification-strategy.md); the
 contributor-facing rules are in
-[CONTRIBUTING.md](CONTRIBUTING.md#testing-rules).
+[CONTRIBUTING.md](../../CONTRIBUTING.md#testing-rules).
 
 | Layer | Oracle | Runs in | Claims |
 | --- | --- | --- | --- |

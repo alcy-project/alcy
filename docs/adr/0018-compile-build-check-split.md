@@ -1,5 +1,6 @@
 # ADR-0018: Compile Builds a File, Build Builds a Package
 
+- Subject: the compiler
 - Status: Accepted
 - Date: 2026-09-28
 

@@ -1,5 +1,6 @@
 # ADR-0025: Ranges as Data, Runs as Views
 
+- Subject: the language
 - Status: Accepted
 - Date: 2026-10-01
 

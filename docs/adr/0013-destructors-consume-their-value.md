@@ -1,5 +1,6 @@
 # ADR-0013: Destructors consume their value
 
+- Subject: the language
 - Status: Accepted
 - Date: 2026-09-26
 

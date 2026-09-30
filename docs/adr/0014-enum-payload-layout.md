@@ -1,5 +1,6 @@
 # ADR-0014: An enum payload lives in the enum's own slot
 
+- Subject: the language
 - Status: Accepted
 - Date: 2026-09-26
 

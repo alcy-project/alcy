@@ -1,5 +1,6 @@
 # ADR-0027: Uninitialized Storage is a Type, Not a Runtime Fact
 
+- Subject: the language
 - Status: Accepted
 - Date: 2026-09-26
 

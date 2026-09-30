@@ -1,5 +1,6 @@
 # ADR-0024: Str-Keyed Collections Before the Spec System
 
+- Subject: the language
 - Status: Accepted
 - Date: 2026-10-01
 

@@ -1,5 +1,6 @@
 # ADR-0008: CLI-owned diagnostic color presentation
 
+- Subject: the compiler
 - Status: Accepted
 - Date: 2026-09-25
 

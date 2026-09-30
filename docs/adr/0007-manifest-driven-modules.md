@@ -1,5 +1,6 @@
 # ADR-0007: Manifest-Driven Module Resolution (Removal of `mod` Keyword)
 
+- Subject: the language
 - Status: Accepted
 - Date: 2026-09-21
 

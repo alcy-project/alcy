@@ -1,5 +1,6 @@
 # ADR 0002: Private LLVM fork consumed as prebuilt libraries
 
+- Subject: the compiler
 - Status: Superseded by `docs/adr/0006-llvm-dependency-config-root.md`
 - Date: 2026-09-16
 
@@ -27,5 +28,5 @@ builds in that order.
 - The fork must publish release archives for every supported triple and build
   type, with a build configuration (notably CRT and libc++ selection)
   matching the compiler's flags - otherwise the link fails (see
-  `docs/build.md`, platform notes).
+  `compiler/docs/build.md`, platform notes).
 - Updating LLVM means cutting a fork release and bumping the submodule.

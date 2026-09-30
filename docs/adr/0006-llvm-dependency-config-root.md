@@ -1,5 +1,6 @@
 # ADR 0006: LLVM dependency managed via config.toml
 
+- Subject: the compiler
 - Status: Accepted
 - Date: 2026-09-20
 - Supersedes: `docs/adr/0001-gn-build-system.md`,

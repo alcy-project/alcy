@@ -1,5 +1,6 @@
 # ADR-0010: Typed Heap Primitives over Byte Pointers
 
+- Subject: the language
 - Status: Accepted
 - Date: 2026-09-26
 

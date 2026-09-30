@@ -1,5 +1,6 @@
 # ADR-0026: Localized User-Facing Messages
 
+- Subject: the compiler
 - Status: Accepted
 - Date: 2026-10-01
 

@@ -1,5 +1,6 @@
 # ADR-0019: Per-Goal Configuration Lives in `.alcy/`
 
+- Subject: the compiler
 - Status: Accepted
 - Date: 2026-09-28
 

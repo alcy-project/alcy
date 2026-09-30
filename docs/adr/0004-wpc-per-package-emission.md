@@ -1,5 +1,6 @@
 # ADR-0004: Whole-Program Analysis with Per-Package Emission
 
+- Subject: the compiler
 - Status: Accepted
 - Date: 2026-09-18
 

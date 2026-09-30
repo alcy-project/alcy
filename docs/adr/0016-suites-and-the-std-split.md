@@ -1,5 +1,6 @@
 # ADR-0016: Suites, and the split of the standard library
 
+- Subject: the language
 - Status: accepted
 - Date: 2026-09-27
 
