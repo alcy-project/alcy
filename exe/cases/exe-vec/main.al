@@ -2,8 +2,8 @@
 // own buffer, and the first to return an `Option<T>` a caller keeps
 // across another call. Both used to be wrong: the accessor returned a
 // borrowed pointer the borrow checker could not track, and the returned
-// enum read a dead stack frame. See docs/adr/0012 and
-// docs/adr/0014.
+// enum read a dead stack frame. See docs/adr/0012-reborrow-on-reference-read.md and
+// docs/adr/0014-enum-payload-layout.md.
 // A read-only walk: `at` takes `&Self`, so no unique borrow is needed
 // and the vector stays readable.
 fn sum_all(v: &Vec<i32>) -> i32 {

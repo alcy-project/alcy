@@ -81,7 +81,8 @@ old shape.
   requires, confined to the intrinsic set rather than reachable
   through the indexing syntax.
 - `alloc<T>` hands back `&mut T` over uninitialized elements, so a
-  read before a write is accepted. ADR-0011 closes that hole with
+  read before a write is accepted. `docs/adr/0027-maybe-uninit-storage.md`
+  closes that hole with
   `MaybeUninit<T>`.
 - The `measure` field on `ir::Instruction` and the `ElemOffset`,
   `TypeSizeOf`, and `TypeAlignOf` opcodes exist for this. Layout

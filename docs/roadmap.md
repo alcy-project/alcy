@@ -17,7 +17,7 @@ peripheral work lives in `backlog.md`.
 
   Landed as the generalization of `str`: an unsized `[T]` that only
   exists behind a reference, whose value is the `{ptr, len}` pair
-  carried whole across calls (`docs/adr/0022`). A fixed array decays
+  carried whole across calls (`docs/adr/0022-slices-as-views.md`). A fixed array decays
   at an argument, indexing bounds-checks the runtime length through an
   element place, and a view keeps the buffer's loan — `Vec::as_slice`,
   `as_mut_slice`, and `String::as_bytes` are the first borrowed APIs,
@@ -26,14 +26,14 @@ peripheral work lives in `backlog.md`.
 - [x] `Map` and `Set`, str-keyed with an internal hash.
 
   Landed as a `str`-keyed `Map<V>` with a companion `Set` over
-  `Map<u8>` (`docs/adr/0024`). Keys are copied and owned, removal
+  `Map<u8>` (`docs/adr/0024-str-keyed-collections-before-specs.md`). Keys are copied and owned, removal
   leaves a hole the next insertion reuses, and growth rehashes at
   three quarters occupancy. The key type stays `str` until `spec` can
   declare `Hash` and `Eq`; pinned by `exe-map`, `exe-set`, and the
   `map` cases in `tools/check_borrow_rules.py`.
 - [x] `Range` data and sub-slicing.
 
-  Range expressions build the interval types (`docs/adr/0025`), and an
+  Range expressions build the interval types (`docs/adr/0025-ranges-as-data.md`), and an
   index accepts a run (`&a[1..3]`, `s[1..]`), both endpoints
   bounds-checked. Iteration and `for` wait for `spec`: a blessed
   iterator would be thrown away there. Pinned by `exe-range`,

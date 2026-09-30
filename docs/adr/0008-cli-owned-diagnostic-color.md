@@ -23,7 +23,7 @@ Diagnostics are written by the CLI-owned output path. The
 renderer uses the ANSI 16-color palette for error, warning, note, path, line
 number, and caret elements, with resets around each styled span.
 
-Superseded in part by ADR-0020, which replaced the stdout logger with a
+Superseded in part by `docs/adr/0020-command-result-envelope.md`, which replaced the stdout logger with a
 result envelope and a pair of renderers.
 
 ## Consequences

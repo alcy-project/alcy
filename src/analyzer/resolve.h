@@ -90,7 +90,7 @@ base::Result<void, ModuleTreeError> verify_module_tree(const ModuleTree& tree);
 // The `fmt` package of the staged standard library: the `fmt` root
 // and everything under it. Compiler-known `write`/`format` expansions
 // key on this rather than on a name, so a user function called `write`
-// stays ordinary. See docs/adr/0016.
+// stays ordinary. See docs/adr/0016-suites-and-the-std-split.md.
 inline bool is_fmt_package(std::string_view path) {
   return path == "fmt" || (path.size() > 5 && path.substr(0, 5) == "fmt::");
 }
@@ -116,7 +116,7 @@ inline bool is_fmt_item(const ModuleTree& tree, ast::ItemIdx item) {
 // The `core` package of the staged standard library: the `core` root
 // and everything under it. The interval types are declared there and
 // their names are reserved, so a range expression always constructs
-// the one declaration. See docs/adr/0025.
+// the one declaration. See docs/adr/0025-ranges-as-data.md.
 inline bool is_core_package(std::string_view path) {
   return path == "core" || (path.size() > 6 && path.substr(0, 6) == "core::");
 }

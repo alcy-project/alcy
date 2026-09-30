@@ -1,6 +1,6 @@
 # ADR 0001: GN as the build system
 
-- Status: Superseded by ADR-0006
+- Status: Superseded by `docs/adr/0006-llvm-dependency-config-root.md`
 - Date: 2026-09-16
 
 ## Context

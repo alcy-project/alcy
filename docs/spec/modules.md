@@ -58,15 +58,15 @@ grammar to name members or other packages.
 A package has two surfaces:
 
 - `[modules] export` is the **public** surface: what `use` can reach.
-  It is manifest-declared, per ADR-0007.
+  It is manifest-declared, per `docs/adr/0007-manifest-driven-modules.md`.
 - The package's root module (`prelude.al`) is the **implicit** surface:
   its `pub` items need no `use`. This is a scope concern, not a way to
-  hide an API, which is why it does not conflict with ADR-0007.
+  hide an API, which is why it does not conflict with `docs/adr/0007-manifest-driven-modules.md`.
 
 A suite guarantees that no name appears in two members' implicit
 surfaces, so selecting a whole suite cannot produce an ambiguity.
 
-The standard library is the `alcy/std` suite; see ADR-0016 for the
+The standard library is the `alcy/std` suite; see `docs/adr/0016-suites-and-the-std-split.md` for the
 member list and the dependency graph.
 
 ## Packages

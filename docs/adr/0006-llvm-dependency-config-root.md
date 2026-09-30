@@ -2,13 +2,14 @@
 
 - Status: Accepted
 - Date: 2026-09-20
-- Supersedes: ADR 0001, 0002
+- Supersedes: `docs/adr/0001-gn-build-system.md`,
+  `docs/adr/0002-llvm-fork-prebuilt.md`
 
 ## Context
 
 Previously, the LLVM dependency was managed via a Git submodule (`third_party/llvm/src`),
 and the setup script resolved prebuilt release tags using `git describe --tags`
-within the submodule (ADR 0002). A fallback to build LLVM from source via
+within the submodule (`docs/adr/0002-llvm-fork-prebuilt.md`). A fallback to build LLVM from source via
 CMake was also maintained.
 
 This approach introduced several issues:

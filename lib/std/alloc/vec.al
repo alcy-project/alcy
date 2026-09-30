@@ -14,7 +14,7 @@
 // `at` takes `&Self` and hands out `&T`; the mutating accessors take
 // `&mut Self`. A shared reborrow of `*self` reaches the buffer field,
 // so a read-only view is a shared loan of the referent, not a copy of
-// the pointer. See docs/adr/0012.
+// the pointer. See docs/adr/0012-reborrow-on-reference-read.md.
 pub struct Vec<T> {
   buf: &mut MaybeUninit<T>,
   len: usize,

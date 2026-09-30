@@ -110,7 +110,9 @@ Notes:
 - **Wording:** The private LLVM fork is `llvm-alcy-fork` on first mention per document,
   and `the fork` thereafter.
 - **Architecture decisions:** One decision, one record. Significant technical decisions get an ADR
-  in `docs/adr/` (copy `docs/adr/0000-template.md`). Small, obvious changes do not need one.
+  in `docs/adr/` (copy `docs/adr/0000-template.md`). Small, obvious changes do not need one. A
+  reference names the file (`docs/adr/0011-symbol-mangling.md`), never the number alone: a number
+  breaks when the log is renumbered, and a filename is what a reader can open.
 - **ASCII Character Set**: All C++ source files (`src/`) must remain pure ASCII. Do not use
   non-ASCII Unicode characters in code or comments (e.g., em-dashes `—`, smart quotes `“”`, or arrows `→`).
   Use standard ASCII equivalents (`-`, `"..."`, `->`). Non-ASCII characters are permitted only in

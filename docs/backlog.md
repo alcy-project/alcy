@@ -25,15 +25,15 @@ replaced. The foundations are in `roadmap.md`.
 - [x] Verb split: `compile` takes a file, `build` a package, `check`
   neither emits. The three verbs each sniffed the target's extension, so
   the sniff lived in three places and `build` carried options for two
-  jobs. Designed in `docs/adr/0018`.
+  jobs. Designed in `docs/adr/0018-compile-build-check-split.md`.
 - [x] Per-goal configuration under `.alcy/`: `alcy.toml` declares what
   a package is, so build choices moved out of it rather than growing
-  beside it. Designed in `docs/adr/0019`.
+  beside it. Designed in `docs/adr/0019-goal-config-in-dot-alcy.md`.
 - [x] Version control option for `new`/`init`: scaffold the ignore
   file for the chosen VCS, never initialize a repository.
 - [x] Command result envelope: one output path rendering as text or
   `--json`, with statistics in the text line and the time trace
-  embedded alongside it. Designed in `docs/adr/0020`.
+  embedded alongside it. Designed in `docs/adr/0020-command-result-envelope.md`.
 - [x] Result lines as a column: counts carry their nouns, sizes scale
   past a kibibyte, and the verb sits at a fixed width so a session's
   results read as a table. A run announces itself before the program
@@ -44,7 +44,7 @@ replaced. The foundations are in `roadmap.md`.
   rather than on the module; every backend now sees one module.
 - [x] Benchmark harness: an engine for the compiler's phases beside the
   process runner, with a local reproducibility check and a CI smoke
-  check. Designed in `docs/adr/0021`. Nine of the seventeen phases have
+  check. Designed in `docs/adr/0021-benchmark-measurement.md`. Nine of the seventeen phases have
   cases; `load`, `prelude`, and `link` have none on purpose, since each
   is a read, a staging of the embedded suite, or a subprocess, and a
   number for those belongs to the process runner.
@@ -69,4 +69,4 @@ replaced. The foundations are in `roadmap.md`.
   went 60.1 ms → 29.2 ms and its total 114 ms → 85.2 ms. The pinned
   LLVM ships no clang and a host-made `.bc` would couple every build to
   its version, so the functions are built as IR rather than linked in.
-  Designed in `docs/adr/0023`.
+  Designed in `docs/adr/0023-program-runtime-in-process.md`.

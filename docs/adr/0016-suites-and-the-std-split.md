@@ -43,11 +43,11 @@ place to look.
 ### Two surfaces per package
 
 - `[modules] export` is the **public** surface: what `use` can reach.
-  It stays manifest-declared, per ADR-0007.
+  It stays manifest-declared, per `docs/adr/0007-manifest-driven-modules.md`.
 - `prelude.al` is the **implicit** surface: the package's root module
   re-exports the subset of its public names that need no `use`. It is a
   scope concern, not a way to hide an API, which is why it does not
-  conflict with ADR-0007.
+  conflict with `docs/adr/0007-manifest-driven-modules.md`.
 
 A package's implicit surface is a subset of its public surface. A suite
 guarantees that no name appears in two members' implicit surfaces, so

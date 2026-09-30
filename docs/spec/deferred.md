@@ -11,7 +11,7 @@ relied upon by MVP programs or by the MVP compiler implementation.
   destructor that way must declare its own `drop`, and the compiler warns
   when it cannot place one. Moving one field out of a struct also does
   not retire the struct's own destructor; field-level move tracking is
-  still to come. See `docs/adr/0013`. For the same reason `Vec::grow`
+  still to come. See `docs/adr/0013-destructors-consume-their-value.md`. For the same reason `Vec::grow`
   moves elements rather than ending them and `Vec::clear` forgets them,
   so a `T` with a destructor leaks until the buffer is released.
 - Generic structs, generic enums, generic free functions, and generic
@@ -33,7 +33,7 @@ relied upon by MVP programs or by the MVP compiler implementation.
   and the intersection a struct composes by, which today hold because a
   reborrow carries its parent's loans rather than because the relation
   is solved. The rules are stated as a gate in
-  `tools/check_borrow_rules.py`. See `docs/adr/0012`.
+  `tools/check_borrow_rules.py`. See `docs/adr/0012-reborrow-on-reference-read.md`.
 - `spec` (trait) definitions and dispatch, coherence rules, and
   monomorphization beyond per-instantiation enum, struct, and method
   specialization.
@@ -57,14 +57,14 @@ relied upon by MVP programs or by the MVP compiler implementation.
   sub-slicing are frozen in `types.md`. Slice patterns wait for the
   pattern work.
 - Two-phase borrows, so `v.push(v.len())` resolves the receiver before
-  the arguments; see `docs/adr/0012`.
+  the arguments; see `docs/adr/0012-reborrow-on-reference-read.md`.
 - Interior mutability; mutable statics; `const`-position extensions.
 - Attribute system in full (`#[repr(C)]` and beyond).
 
 ## Toolchain
 
 - The `alcy/std` suite is selected per manifest and staged in pieces
-  (ADR-0016): `[dependencies]` names members or the whole suite, the
+  (`docs/adr/0016-suites-and-the-std-split.md`): `[dependencies]` names members or the whole suite, the
   closure is required rather than pulled in, and only the selected
   members become prelude facades. What remains is `[modules] export`
   enforcement, cross-package `use` between members, and the registry or

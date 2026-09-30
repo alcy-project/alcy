@@ -8,7 +8,7 @@
 `str` was the only view in the language. A `Vec` or a `String` can hand
 out a reference to one element, but nothing can name a run of elements,
 so a whole-buffer accessor is inexpressible and every walk is an index
-loop with a bounds check per step. ADR-0010 rejected `&[T]` as
+loop with a bounds check per step. `docs/adr/0010-typed-heap-primitives.md` rejected `&[T]` as
 premature when typed heap primitives landed; the containers are in
 place now, and the borrowed APIs they need are the reason to revisit
 it.
@@ -18,7 +18,7 @@ reference is a thin pointer to a place, and borrow checking reasons
 about places and paths through them. `str` is already a `{bytes, len}`
 pair carried by value, and the standard library's realloc-conflict
 rule depends on a view keeping the loan of the buffer it reads
-(ADR-0012, `ownership.md`).
+(`docs/adr/0012-reborrow-on-reference-read.md`, `ownership.md`).
 
 ## Decision
 
@@ -84,7 +84,7 @@ matches the kind of the source the view was built from.
   capability the separate type lacks.
 - **A pointer to the `{ptr, len}` pair.** Rejected: a returned view
   would point at a dead frame, exactly the payload-lifetime fault
-  ADR-0014 records, and allocating the pair would put an allocation in
+  `docs/adr/0014-enum-payload-layout.md` records, and allocating the pair would put an allocation in
   every accessor.
 - **An unchecked element address in the public surface.** Rejected:
   `elem_ptr` exists for the containers that check first; user-facing

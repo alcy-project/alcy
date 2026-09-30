@@ -121,7 +121,7 @@ Nothing would be left to own it, so its destructor could never run.
   again. Field-level move tracking is follow-up work.
 - There is no `Drop` bound to name "this type ends with code", so a
   generic function cannot yet be written that requires it. The `spec`
-  system covers that (see ADR-0011 and `deferred.md`).
+  system covers that (see `docs/spec/deferred.md`).
 
 ## Alternatives considered
 

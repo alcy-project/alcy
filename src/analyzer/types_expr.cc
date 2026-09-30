@@ -1342,7 +1342,7 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
 // `?` propagates within one enum type: the scrutinee and the enclosing
 // return type must be the same type. The first variant yields its
 // first payload; any other variant returns the scrutinee unchanged.
-// See docs/adr/0009.
+// See docs/adr/0009-result-option-library-enums.md.
 ir::TypeIdx Checker::check_question(u32 module,
                                     ast::ExprIdx expr,
                                     const ir::TypeIdx* expected) {

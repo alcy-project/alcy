@@ -8,4 +8,4 @@
 // Target-specific operations: caches, barriers, port I/O.
 //
 // Declared but empty: the package is part of the suite's shape and
-// carries no names yet. See docs/adr/0016.
+// carries no names yet. See docs/adr/0016-suites-and-the-std-split.md.

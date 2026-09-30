@@ -1,4 +1,4 @@
-# Part of the `alcy/std` suite; see docs/adr/0016.
+# Part of the `alcy/std` suite; see docs/adr/0016-suites-and-the-std-split.md.
 #
 # Compile-time expanded formatting into a caller's buffer.
 
@@ -12,7 +12,7 @@ include = [
   "format",
   "write",
 ]
-# The public surface, in the form ADR-0007 specifies. Nothing
+# The public surface, in the form `docs/adr/0007-manifest-driven-modules.md` specifies. Nothing
 # enforces it yet. Its `pub` items are also the implicit surface:
 # a program depending on this package sees them with no `use`.
 export = [

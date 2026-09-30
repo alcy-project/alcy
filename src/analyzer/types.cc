@@ -2847,7 +2847,7 @@ void Checker::check_main(u32 module, ast::ItemIdx fn) {
   }
   // An enum return is accepted structurally: the first variant must
   // carry exactly one `()` payload, so the entry thunk can map the
-  // first discriminant to exit code 0. See docs/adr/0009.
+  // first discriminant to exit code 0. See docs/adr/0009-result-option-library-enums.md.
   if (tag == ir::TypeTag::Enum) {
     const ir::EnumType& shape =
         builder.enum_types()[builder.types()[ret].as_enum()];

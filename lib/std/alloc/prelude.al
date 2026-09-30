@@ -8,7 +8,7 @@
 // definitions and are reachable by path.
 //
 // The heap and the values that live on it. `Vec` and `String` are here
-// rather than in core because they are heap-backed; see docs/adr/0016.
+// rather than in core because they are heap-backed; see docs/adr/0016-suites-and-the-std-split.md.
 
 pub use super::heap::alloc;
 pub use super::heap::dealloc;

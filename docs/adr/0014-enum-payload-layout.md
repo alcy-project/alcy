@@ -43,7 +43,7 @@ This surfaced as a `Vec<T>` fault. A container's accessors return
 `Option<T>`, so the moment a container hands a value back to a caller
 and the caller keeps it across another call, the value is read out of a
 dead frame. That looked like a borrow-checking problem and is not; see
-`docs/adr/0012` for the correction.
+`docs/adr/0012-reborrow-on-reference-read.md` for the correction.
 
 ## Decision
 

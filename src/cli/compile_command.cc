@@ -110,7 +110,7 @@ ResultCode run_compile(const CliConfig& config,
   }
   const pipeline::StdSelection selection = std::move(selected).unwrap();
   // `compile` never reads a toolchain file, so one file stays
-  // reproducible from the command alone; see docs/adr/0019.
+  // reproducible from the command alone; see docs/adr/0019-goal-config-in-dot-alcy.md.
   const pipeline::LinkOptions link =
       resolve_link_options(config, pkg::Toolchain{});
   // Validation guarantees one of these: a target, or the pipe with a

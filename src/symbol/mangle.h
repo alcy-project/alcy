@@ -16,7 +16,7 @@
 // Deterministic encoding of a linkable symbol from the signature it
 // names. Every symbol the compiler defines is encoded this way, so a
 // source name can never collide with a C library entry point or with
-// another alcy item. See docs/adr/0011.
+// another alcy item. See docs/adr/0011-symbol-mangling.md.
 namespace symbol {
 
 // What a symbol names. Two signatures encode to the same string only if

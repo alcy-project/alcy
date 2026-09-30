@@ -111,7 +111,8 @@ sets several priorities.
   container is the common case, not the only case; fixed-capacity
   inline storage is a first-class answer, not a fallback.
 - **Symbols are derived from signatures, not names.** A kernel's
-  vocabulary is `write`, `read`, `open`, and `close` (ADR-0011).
+  vocabulary is `write`, `read`, `open`, and `close`
+  (`docs/adr/0011-symbol-mangling.md`).
 - **Layout is queryable.** `size_of` and `align_of` are calls.
 - **Control over codegen is a language concern, not a build flag**, so
   that the same source means the same thing in a kernel and a test.

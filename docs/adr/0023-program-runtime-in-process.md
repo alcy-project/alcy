@@ -76,7 +76,7 @@ lookup in the module, not a link of two modules.
   relocatably reported all six entry points as duplicate symbols before
   and none after. What still collides is alcy's own code: a program and
   the standard library it compiled in are emitted with external linkage
-  ([ADR 0011](0011-symbol-mangling.md)), so two objects sharing a std
+  ([`docs/adr/0011-symbol-mangling.md`](0011-symbol-mangling.md)), so two objects sharing a std
   function collide on that one instead. Making a multi-object image work
   is lib packages' question, and this change takes the runtime off the
   list rather than the whole of it.

@@ -21,7 +21,7 @@ one message. A logger expresses that by testing a flag at every call
 site, which puts the contract where the next contributor will forget
 it.
 
-ADR-0008 recorded the same observation in reverse: it assigned color
+`docs/adr/0008-cli-owned-diagnostic-color.md` recorded the same observation in reverse: it assigned color
 policy to the cli while leaving emission to "the existing stdout
 logger", and deferred moving diagnostics to standard error as a separate
 decision.
@@ -65,7 +65,7 @@ The profiler's own clock is wall-clock derived and is not used for it.
 `base::logger` and `src/base/logger.{h,cc}` are removed, along with the
 `fpag/logging` dependency. Two `fpag` facilities stay, because neither
 is about output: `term::console_color_style` for terminal capability
-detection, which ADR-0008 assigned to `fpag::term` and which includes
+detection, which `docs/adr/0008-cli-owned-diagnostic-color.md` assigned to `fpag::term` and which includes
 Windows virtual-terminal initialization, and `debug::init_debug_logger`,
 which is what makes a failed `FPAG_CHECK` inside fpag report itself.
 

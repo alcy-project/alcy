@@ -75,7 +75,7 @@
   - `uninit_assume<T>(slot: &mut MaybeUninit<T>) -> &mut T` releases a
     slot as a mutable reference to its value. Reading through the
     result before anything was written yields whatever the allocator
-    returned. See `docs/adr/0011`.
+    returned. See `docs/adr/0027-maybe-uninit-storage.md`.
   - The allocation intrinsics are generic. `elem_ptr`, `dealloc`,
     `uninit_write`, and `uninit_assume` recover `T` from the pointee of
     their reference argument, so a call admits one instantiation;
@@ -85,7 +85,7 @@
     parameter bound to a placeholder.
   - `&u8` and `&mut u8` are not indexable. Element access through a
     heap pointer arrives with the growable containers, which own the
-    bounds check. See `docs/adr/0010`.
+    bounds check. See `docs/adr/0010-typed-heap-primitives.md`.
 - `print(msg: str)` and `println(msg: str)` are ordinary core
   functions over `sys_write`. They remain callable with or without
   a declaration: without the prelude, the legacy name-based path
@@ -103,7 +103,7 @@
   function, associated function, or method), and the type arguments of
   the instantiation. A source name never reaches the linker, so no
   program can collide with a C library entry point or with another
-  alcy item. See `docs/adr/0011`.
+  alcy item. See `docs/adr/0011-symbol-mangling.md`.
 - The encoding is deterministic: the same signature yields the same
   symbol in any lowering order, so a profiler, a debugger, and a
   backtrace all read the same name.

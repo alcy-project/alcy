@@ -100,7 +100,7 @@ CheckCase check_case(
     const source::FileId id = f.sources.add_virtual(file->name, file->bytes);
     prelude_storage.emplace_back(name);
     // A staged prelude source is a package facade, so its public
-    // surface is in scope without a `use`; see docs/adr/0016.
+    // surface is in scope without a `use`; see docs/adr/0016-suites-and-the-std-split.md.
     prelude_inputs.push_back({prelude_storage.back(), id, true});
   }
   base::Result<ModuleTree, diag::Reported> tree_result = resolve_modules(
@@ -136,7 +136,7 @@ const CheckedModule::NamedType* find_type(const CheckedModule& module,
   return nullptr;
 }
 
-// `Option` and `Result` live in the core prelude since ADR-0009, so
+// `Option` and `Result` live in the core prelude since `docs/adr/0009-result-option-library-enums.md`, so
 // tests that mention them inject a matching declaration set.
 constexpr std::string_view CORE_PRELUDE =
     R"(pub intrinsic fn panic(msg: str) -> !;
@@ -1744,7 +1744,7 @@ TEST_CASE("Check borrow expressions") {
   }
   {
     // `&mut T` where `&T` is expected is a shared reborrow, so this
-    // binds rather than mismatching. See docs/adr/0012 rule 3.
+    // binds rather than mismatching. See docs/adr/0012-reborrow-on-reference-read.md rule 3.
     VirtualDir dir;
     const bool setup = write_all(dir, {{"main.al",
                                         "fn main() {\n"

@@ -36,7 +36,7 @@ TEST_CASE("Pipeline stages the standard library prelude") {
     return;
   }
   // One entry module per package of the `alcy/std` suite, named by its
-  // path within the suite; see docs/adr/0016.
+  // path within the suite; see docs/adr/0016-suites-and-the-std-split.md.
   CHECK(inputs[0].name == "core/prelude.al");
   CHECK(inputs[0].id != source::UNKNOWN_FILE);
   for (const analyzer::ModuleInput& input : inputs) {

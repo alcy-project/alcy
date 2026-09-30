@@ -1,11 +1,11 @@
-# ADR-0011: Uninitialized Storage is a Type, Not a Runtime Fact
+# ADR-0027: Uninitialized Storage is a Type, Not a Runtime Fact
 
 - Status: Accepted
 - Date: 2026-09-26
 
 ## Context
 
-ADR-0010 made `alloc<T>` return `&mut T` over uninitialized elements.
+`docs/adr/0010-typed-heap-primitives.md` made `alloc<T>` return `&mut T` over uninitialized elements.
 That signature has no way to express "written" versus "not written", so
 `*p` on a fresh element was an ordinary read of type `T` and type
 checked. For a `T` that contains a pointer, that read returned

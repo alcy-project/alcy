@@ -18,7 +18,7 @@ using Builder =
 
 // The program runtime: the `alcy_*` functions a program's module
 // declares, libc calls and platform split included, built as IR rather
-// than compiled per build (see `docs/adr/0023`).
+// than compiled per build (see `docs/adr/0023-program-runtime-in-process.md`).
 class RuntimeBuilder {
  public:
   RuntimeBuilder(llvm::Module& module, ir::PointerWidth width)

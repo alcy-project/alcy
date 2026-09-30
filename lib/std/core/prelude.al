@@ -8,7 +8,7 @@
 // definitions and are reachable by path.
 //
 // Core is the one package of the suite with no dependencies; see
-// docs/adr/0016.
+// docs/adr/0016-suites-and-the-std-split.md.
 
 pub use super::mem::memcopy;
 pub use super::mem::panic;

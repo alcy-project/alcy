@@ -2,11 +2,11 @@
 
 - Status: Accepted
 - Date: 2026-09-25
-- Supersedes: ADR-0003
+- Supersedes: `docs/adr/0003-blessed-result-option.md`
 
 ## Context
 
-ADR-0003 introduced `Result<T, E>` and `Option<T>` as compiler-synthesized
+`docs/adr/0003-blessed-result-option.md` introduced `Result<T, E>` and `Option<T>` as compiler-synthesized
 "blessed" types because MVP had no user-defined generics. That decision
 is now obsolete: generic enums, generic inherent methods with per-value
 monomorphization, and the `Enum::Variant` path all exist. The blessed
@@ -39,7 +39,7 @@ structural rule over any enum:
   the enclosing return type must be the same enum instantiation. On the
   first variant the operator yields that variant's first payload; on
   any other variant it returns the scrutinee unchanged. This preserves
-  ADR-0003's "identical error types only" rule without naming a type.
+  `docs/adr/0003-blessed-result-option.md`'s "identical error types only" rule without naming a type.
 - `main` may return `()`, `i32`, or a two-variant enum whose first
   variant carries a single `()` payload. The entry thunk maps the first
   variant to exit code 0 and aborts on any other discriminant.

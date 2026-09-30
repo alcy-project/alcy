@@ -5,7 +5,7 @@
 - `Result<T, E>` and `Option<T>` are ordinary generic enums defined in
   the `alcy/std/core` prelude. The compiler holds no knowledge of
   their names, shapes, or methods; a user module may shadow either
-  name. See `docs/adr/0009`.
+  name. See `docs/adr/0009-result-option-library-enums.md`.
 - `Result` has variants `Ok(T)` and `Err(E)`; `Option` has `Some(T)`
   and `None`. Both compose as ordinary algebraic types for region
   purposes (field intersection and projection apply unchanged).

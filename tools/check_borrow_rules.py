@@ -5,7 +5,7 @@
 
 """Check the borrow checker against the rules it is supposed to enforce.
 
-docs/spec/ownership.md and ADR-0012 state the rules as propositions
+docs/spec/ownership.md and `docs/adr/0012-reborrow-on-reference-read.md` state the rules as propositions
 about a loan, so a program's verdict is derivable rather than a matter
 of taste. Every case below declares the verdict its loan demands, and
 the checker either agrees or does not. A disagreement is a defect in

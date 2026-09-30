@@ -67,7 +67,7 @@ class LlvmIrEmitter {
 
   // True for a zero-parameter `main` whose return form maps to an
   // exit code: `()`, `i32`, or a two-variant enum whose first variant
-  // holds `()` (see docs/adr/0009).
+  // holds `()` (see docs/adr/0009-result-option-library-enums.md).
   bool is_entry_candidate(const ir::Function& function) const;
   // Emits the C-ABI `main` wrapper around a renamed user entry.
   void emit_entry(llvm::Function* entry_function, ir::TypeTag ret);

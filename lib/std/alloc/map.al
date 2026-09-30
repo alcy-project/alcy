@@ -19,7 +19,7 @@
 // Nothing bounds `V`: the hash is this module's own and equality is a
 // byte walk, so no capability has to be declared to use the map. The
 // key type stays `str` until `spec` can demand a hash and equality;
-// see `docs/adr/0024`.
+// see `docs/adr/0024-str-keyed-collections-before-specs.md`.
 pub struct Map<V> {
   keys: &mut MaybeUninit<String>,
   values: &mut MaybeUninit<V>,
