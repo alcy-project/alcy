@@ -144,7 +144,7 @@ struct StdHint {
   std::string_view name;
 };
 
-// Names the embedded member carrying `name` — a public item of it,
+// Names the embedded member carrying `name` - a public item of it,
 // or the member itself. Empty when the name is not standard library.
 inline std::string_view std_hint_package(std::span<const StdHint> hints,
                                          std::string_view name) {

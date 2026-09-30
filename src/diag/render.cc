@@ -248,8 +248,8 @@ void render(const Diagnostic& diag,
   if (carets == 0) {
     carets = 1;
   }
-  // A span can cover a whole line — a rejected deeply nested expression
-  // spans thousands of columns — and a caret per column buries the
+  // A span can cover a whole line - a rejected deeply nested expression
+  // spans thousands of columns - and a caret per column buries the
   // message in noise, so the run is capped at a readable width.
   if (carets > MAX_CARET_RUN) {
     carets = MAX_CARET_RUN;

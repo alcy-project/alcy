@@ -9,8 +9,8 @@
 namespace pipeline {
 
 // What the link step is handed: the driver to run, and the arguments that
-// driver gets. Views borrow the caller's storage — argv for a flag, the
-// goal package's toolchain.toml for a file — so one must not outlive
+// driver gets. Views borrow the caller's storage - argv for a flag, the
+// goal package's toolchain.toml for a file - so one must not outlive
 // them.
 struct LinkOptions {
   // Empty selects the default toolchain driver.

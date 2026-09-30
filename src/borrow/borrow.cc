@@ -47,7 +47,7 @@ constexpr u32 DEREF_STEP = 0xFFFFFFFFu;
 // whole buffer, which is what makes a reallocating write conflict with a
 // loan into the old block. Two such steps never compare equal to each
 // other, so two loans into distinct elements of one buffer do not
-// conflict — the granularity a `&T` accessor can express, since nothing
+// conflict - the granularity a `&T` accessor can express, since nothing
 // in the source names the index at the borrow.
 constexpr u32 ELEMENT_STEP = 0xFFFFFFFEu;
 
@@ -286,7 +286,7 @@ class Checker {
           // gives two references to one place two loans that do not
           // overlap, so nothing reports them aliasing and an exclusive
           // loan can be taken from a shared one. A reference with no
-          // loan behind it — a parameter of unknown origin — keeps the
+          // loan behind it - a parameter of unknown origin - keeps the
           // slot, which names the referent only by convention. When a
           // call hands back a reference derived from more than one
           // parameter the summary does not say which place it names,

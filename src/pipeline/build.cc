@@ -70,7 +70,7 @@ struct EmittedModule {
   llvm::LLVMContext context;
   std::unique_ptr<llvm::Module> module;
 
-  // Builds the module — the program and, defined in it, the runtime —
+  // Builds the module - the program and, defined in it, the runtime -
   // and, when asked for it, optimizes it. This is the only place that
   // decides: the optimization belongs to the module, not to whichever
   // backend goes on to consume it, and a backend that ran the pipeline

@@ -40,7 +40,7 @@ class CompilerFixture {
   explicit CompilerFixture(SourceSpec spec);
 
   // Takes the source directly, so a caller that is not a generated case
-  // — a test, and nothing else — can hand over something the compiler
+  // - a test, and nothing else - can hand over something the compiler
   // will not accept and see the fixture say so.
   explicit CompilerFixture(std::string source);
 

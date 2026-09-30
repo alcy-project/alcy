@@ -121,8 +121,8 @@ TEST_CASE("Pipeline release build produces a working executable") {
 // program's spills the difference between the flag reaching the IR and
 // the flag reaching only the object file, which is how a release build
 // once produced byte-identical IR either way. The runtime is defined in
-// the module too, and its `alcy_alloc` keeps one alloca of its own —
-// `posix_memalign` writes its result through a pointer — so the two are
+// the module too, and its `alcy_alloc` keeps one alloca of its own -
+// `posix_memalign` writes its result through a pointer - so the two are
 // told apart by element type.
 TEST_CASE("Release optimizes the textual IR, not only the object") {
   io::TempDir dir = io::TempDir::create_unique("pipeline_ir_optimize_");

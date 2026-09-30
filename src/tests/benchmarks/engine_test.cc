@@ -21,7 +21,7 @@ namespace {
 // to advance it from inside the timed region: the runner owns its own
 // copy of the clock, and a case that reached a different one would have
 // its work charged to a clock nobody reads. A real case never needs this
-// — it runs compiler code and lets the runner do the reading — which is
+// - it runs compiler code and lets the runner do the reading - which is
 // why the state is a separate thing rather than a counter on the clock.
 struct Script {
   u64 now = 0;

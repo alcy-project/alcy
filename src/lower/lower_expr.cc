@@ -2544,7 +2544,7 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     // The arm test reads the discriminant and payload out of the
     // scrutinee place, and the body can still reborrow through the
-    // binding, so the move lands after the body — but before the arm's
+    // binding, so the move lands after the body - but before the arm's
     // branch, since a terminated block takes no more instructions.
     auto finish_pattern_arm = [&](Val produced) {
       if (!terminated_cur()) {

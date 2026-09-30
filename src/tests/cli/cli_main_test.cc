@@ -235,8 +235,8 @@ class CapturedStderr {
 
 // Discards whatever the compiler writes, for the cases that assert on
 // the exit code and the file rather than on the output. Without it a
-// passing run prints the diagnostics a case provoked — an `error[E4020]`
-// from a case that wanted one — beside a green `SUCCESS!`.
+// passing run prints the diagnostics a case provoked - an `error[E4020]`
+// from a case that wanted one - beside a green `SUCCESS!`.
 class SilencedOutput {
  public:
   SilencedOutput() {
