@@ -23,6 +23,16 @@ Each stage owns a stride of 1000 with sub-ranges of 100 per area, so
 new checks fit without renumbering. Adding a code means claiming the
 next free value in the owning area here first, then defining it.
 
+A code is not a message. It identifies a check for whatever reads the
+output, and most checks say more than one thing: `2000` is an invalid
+character and an empty character literal, `4024` covers a missing
+wildcard arm, an uncovered variant, and a missing variant by name. The
+text of each of those is a separate entry in `src/i18n/messages.def`,
+keyed by an `i18n::Key` that names what is wrong rather than where it
+happened, because a translation is keyed by the message and half the
+codes here have no single wording to key it with. A code stays at the
+call site, where the check that found it lives.
+
 ## pkg (1000–1999)
 
 Manifests (`src/pkg/manifest.cc`, 1000–1099):

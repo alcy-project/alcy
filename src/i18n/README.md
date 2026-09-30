@@ -20,7 +20,8 @@ text of every message it can print.
 - `text<K>` is for a message with no arguments. A message that grows a
   placeholder stops compiling there.
 - `format<K>` returns the composed message as a `std::string`, for the
-  cli, which renders text rather than appending it.
+  cli, which renders text rather than appending it. `format_to<K>` takes
+  any output iterator fmt can write into.
 
 ## Adding a message
 
@@ -41,6 +42,10 @@ translation of it, so a name is not changed to tidy up.
 The build rejects a catalog that misses a key, reorders one, or names a
 key that does not exist. There is no fallback: a language reaches
 `--lang` only when its catalog is complete.
+
+Not messages: the JSON document's field names and machine values, the
+units a measurement is written in (`KiB`, `ms`), flag spellings, and the
+diagnostics of the developer (`DLOG`, `DCHECK`, `UNREACHABLE`).
 
 The data source is an in-tree X-macro while there is one language and no
 external translators. The seam is `Key` and `format_to<K>`: moving the

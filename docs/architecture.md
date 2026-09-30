@@ -135,15 +135,20 @@ state between stages beyond the data explicitly passed along.
 | `codegen_llvm`            | Emits LLVM IR from analyzed IR. The active MVP code-generation path.                                                                   | Local API buffers only.                                                           |
 | `codegen`                 | Reserved native code generation backend; no committed design yet.                                                                      | N/A - not yet implemented.                                                        |
 | `diag`                    | Stands for `diagnostic`. Source spans, diagnostics, arena-backed bags, and the fmtlib renderer.                                        | Zero heap allocation on hot paths; message bytes use an injected arena.           |
+| `i18n`                    | Stands for `internationalization`. The languages the compiler reports in, and the catalog that holds every message it can print.      | Catalog strings are static; the cli owns the composed copies.                      |
 | `base`, `debug`, `config` | Low-level shared facilities for numeric types, nesting limits, diagnostics/assertion helpers, and build-time flags.                  | Zero heap allocations.                                                            |
 
 Supporting targets include `tests` and `benchmarks`.
 
 Diagnostic presentation is resolved by the `cli` module from the invocation's
-`--color` setting. The `diag` renderer receives explicit rendering options and
-never probes the terminal; the shared `term` facility owns terminal capability
-detection and the base ANSI sequences. The `pipeline` module owns diagnostic
-production and storage, while the `cli` module owns diagnostic emission.
+`--color` and `--lang` settings. The `diag` renderer receives explicit rendering
+options and never probes the terminal or the environment; the shared `term`
+facility owns terminal capability detection and the base ANSI sequences. A
+`DiagBag` is constructed with the invocation's language and composes each
+message from the `i18n` catalog as it is emitted, so a diagnostic carries the
+text the user was told rather than a recipe for telling them. The `pipeline`
+module owns diagnostic production and storage, while the `cli` module owns
+diagnostic emission.
 
 ```mermaid
 flowchart TD
@@ -430,7 +435,9 @@ for testing the filesystem or writing an output artifact.
   that identical inputs reproduce identical results on any machine.
   Diagnostic messages render in English by default; other languages are
   selected only through an explicit `--lang` flag (never ambient
-  locale), keyed by stable diagnostic codes. Known tension: rendered
+  locale), and each message is identified by its own catalog key rather
+  than by the diagnostic code it happens to be reported under, since
+  most codes carry more than one wording. Known tension: rendered
   source paths are currently absolute; workspace-relative rendering is
   future work, not a silent exception to this rule.
 
