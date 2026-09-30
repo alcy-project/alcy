@@ -1441,9 +1441,8 @@ ir::TypeIdx Checker::check_index(u32 module,
     if (unsized) {
       // `[E]` is unsized, so a bare run of a fixed array cannot be a
       // value: the borrow is the spelling that names it.
-      const u32 diag =
-          bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, node.span,
-                   "a run of a fixed array must be borrowed (`&a[..]`)");
+      const u32 diag = bag.emit<i18n::Key::AnalyzerArrayRunNeedsBorrow>(
+          diag::Severity::Error, ANALYZER_INVALID_OPERATION, node.span);
       (void)diag;
       return error_type();
     }
@@ -1500,9 +1499,8 @@ ir::TypeIdx Checker::check_run_index(ir::TypeIdx receiver,
                                      bool& unsized) {
   unsized = false;
   if (!is_integer_tag(tag_of(element))) {
-    const u32 diag =
-        bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH, span,
-                 "a range index must have an integer endpoint type");
+    const u32 diag = bag.emit<i18n::Key::AnalyzerRangeEndpointNotInteger>(
+        diag::Severity::Error, ANALYZER_TYPE_MISMATCH, span);
     (void)diag;
     return error_type();
   }
@@ -1536,9 +1534,8 @@ ir::TypeIdx Checker::check_run_index(ir::TypeIdx receiver,
     }
     return str;
   }
-  const u32 diag =
-      bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, span,
-               "cannot index '{}' with a range", pretty_tag(tag));
+  const u32 diag = bag.emit<i18n::Key::AnalyzerCannotIndexWithRange>(
+      diag::Severity::Error, ANALYZER_INVALID_OPERATION, span, pretty_tag(tag));
   (void)diag;
   return error_type();
 }
@@ -1595,19 +1592,16 @@ ir::TypeIdx Checker::check_range(u32 module,
   }
   if (range.start.is_valid() && range.end.is_valid() &&
       !types_equal(start, end)) {
-    const u32 diag =
-        bag.emit(diag::Severity::Error, ANALYZER_TYPE_MISMATCH, node.span,
-                 "type mismatch in range endpoints: '{}' vs '{}'",
-                 pretty_tag(tag_of(start)), pretty_tag(tag_of(end)));
+    const u32 diag = bag.emit<i18n::Key::AnalyzerRangeEndpointTypeMismatch>(
+        diag::Severity::Error, ANALYZER_TYPE_MISMATCH, node.span,
+        pretty_tag(tag_of(start)), pretty_tag(tag_of(end)));
     (void)diag;
     return error_type();
   }
   NominalEntry* entry = builtin_nominal("Range");
   if (entry == nullptr) {
-    const u32 diag =
-        bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_TYPE, node.span,
-                 "range expressions need the `core` standard "
-                 "library package");
+    const u32 diag = bag.emit<i18n::Key::AnalyzerRangeNeedsStdCore>(
+        diag::Severity::Error, ANALYZER_UNKNOWN_TYPE, node.span);
     (void)diag;
     return error_type();
   }
@@ -1654,10 +1648,8 @@ ir::TypeIdx Checker::check_borrow_of_index(u32 module,
       return error_type();
     }
     if (!unsized) {
-      const u32 diag =
-          bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, span,
-                   "a view is already a reference; re-slice it "
-                   "without `&`");
+      const u32 diag = bag.emit<i18n::Key::AnalyzerViewIsAlreadyReference>(
+          diag::Severity::Error, ANALYZER_INVALID_OPERATION, span);
       (void)diag;
       return error_type();
     }
@@ -2490,9 +2482,8 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
       }
       ir::TypeIdx element = error_type();
       if (range_element(position, element)) {
-        const u32 diag =
-            bag.emit(diag::Severity::Error, ANALYZER_BAD_ASSIGNMENT, node.span,
-                     "cannot assign to a run; a run is a view, not a place");
+        const u32 diag = bag.emit<i18n::Key::AnalyzerCannotAssignToRun>(
+            diag::Severity::Error, ANALYZER_BAD_ASSIGNMENT, node.span);
         (void)diag;
         return error_type();
       }

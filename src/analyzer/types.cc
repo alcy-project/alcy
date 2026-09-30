@@ -83,9 +83,8 @@ void Checker::register_nominals() {
         // The interval types back range expressions, so their names are
         // reserved to the package that declares them: a range always
         // constructs that one declaration.
-        const u32 index =
-            bag.emit(diag::Severity::Error, ANALYZER_RESERVED_NAME, span,
-                     "'{}' is a built-in type", name);
+        const u32 index = bag.emit<i18n::Key::AnalyzerBuiltinType>(
+            diag::Severity::Error, ANALYZER_RESERVED_NAME, span, name);
         (void)index;
         continue;
       }

@@ -78,6 +78,7 @@
   F(AnalyzerArrayLiteralWithoutCount, "array literal needs elements or a repeat count") \
   F(AnalyzerArrayRepeatArity, "array expects {} elements, found repeat of {}") \
   F(AnalyzerArrayRepeatTooLarge, "array repeat count {} exceeds the limit of {}") \
+  F(AnalyzerArrayRunNeedsBorrow, "a run of a fixed array must be borrowed (`&a[..]`)") \
   F(AnalyzerAssignThroughShared, "cannot assign through a shared reference") \
   F(AnalyzerAssignToImmutable, "cannot assign to an immutable binding") \
   F(AnalyzerAssociatedFunctionAsMethod, "associated function '{}' called as a method") \
@@ -89,8 +90,10 @@
   F(AnalyzerCallArityMismatch, "'{}' expects {} arguments, found {}") \
   F(AnalyzerCallNonPath, "cannot call a non-path expression") \
   F(AnalyzerCalleeNeedsArguments, "callee needs arguments") \
+  F(AnalyzerCannotAssignToRun, "cannot assign to a run; a run is a view, not a place") \
   F(AnalyzerCannotDereference, "cannot dereference '{}'") \
   F(AnalyzerCannotIndex, "cannot index '{}'") \
+  F(AnalyzerCannotIndexWithRange, "cannot index '{}' with a range") \
   F(AnalyzerCannotInferType, "cannot infer the generic type; add an annotation") \
   F(AnalyzerCannotInferTypeArguments, "cannot infer the type arguments of '{}'; add them with '{}::<T>(...)'") \
   F(AnalyzerCharacterLiteralDeferred, "character literals need the core Char type (deferred)") \
@@ -146,6 +149,10 @@
   F(AnalyzerNotCallable, "not callable") \
   F(AnalyzerNotTupleVariant, "not a tuple variant") \
   F(AnalyzerOrPatternBindsDifferentNames, "or-pattern alternatives must bind the same names") \
+  F(AnalyzerRangeEndpointNotInteger, "a range index must have an integer endpoint type") \
+  F(AnalyzerRangeEndpointTypeMismatch, "type mismatch in range endpoints: '{}' vs '{}'") \
+  F(AnalyzerRangeExpressionsDeferred, "range expressions arrive post-MVP") \
+  F(AnalyzerRangeNeedsStdCore, "range expressions need the `core` standard library package") \
   F(AnalyzerReceiverTypeMismatch, "type mismatch in receiver") \
   F(AnalyzerRecursiveType, "recursive type '{}' without indirection") \
   F(AnalyzerReferencePatternType, "reference pattern on a non-reference type") \
@@ -194,6 +201,7 @@
   F(AnalyzerVariantCallArity, "variant expects {} arguments, found {}") \
   F(AnalyzerVariantFieldArity, "variant expects {} fields, pattern has {}") \
   F(AnalyzerVariantNotInMatchedType, "variant is not a member of the matched type") \
+  F(AnalyzerViewIsAlreadyReference, "a view is already a reference; re-slice it without `&`") \
   F(AnalyzerWriteArity, "'write' expects 3 arguments, found {}") \
   F(AnalyzerWriteInCompEvaluation, "'write' is not allowed in comp evaluation") \
   F(AnalyzerWriteOutcomeNotInScope, "'WriteOutcome' is not in scope") \
