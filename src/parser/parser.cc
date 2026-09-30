@@ -16,6 +16,7 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "i18n/messages.h"
 #include "lexer/lexer.h"
 #include "lexer/token.h"
 #include "source/source.h"
@@ -127,9 +128,8 @@ void Parser::skip_insignificant() {
     if (is_reserved(kind)) {
       const diag::Span span = tokens_[pos_].span;
       const std::string_view spelling = bytes_.substr(span.offset, span.length);
-      const u32 index =
-          bag_.emit(diag::Severity::Error, PARSER_RESERVED_WORD, span,
-                    "`{}` is reserved for future use", spelling);
+      const u32 index = bag_.emit<i18n::Key::ParserReservedName>(
+          diag::Severity::Error, PARSER_RESERVED_WORD, span, spelling);
       (void)index;
       ++pos_;
       continue;
@@ -161,16 +161,15 @@ bool Parser::expect(lexer::TokenKind kind, std::string_view what) {
     return true;
   }
   if (at_end()) {
-    const u32 index =
-        bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN,
-                  span_from(pos_), "expected {}, found end of file", what);
+    const u32 index = bag_.emit<i18n::Key::ParserExpectedFoundEndOfFile>(
+        diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span_from(pos_), what);
     (void)index;
     return false;
   }
   const diag::Span span = peek().span;
-  const u32 index = bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN,
-                              span, "expected {}, found `{}`", what,
-                              bytes_.substr(span.offset, span.length));
+  const u32 index = bag_.emit<i18n::Key::ParserExpectedFound>(
+      diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span, what,
+      bytes_.substr(span.offset, span.length));
   (void)index;
   return false;
 }
@@ -260,9 +259,8 @@ base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
   if (base::Result<void, lexer::TokenStreamError> verified =
           lexer::verify_token_stream(tokens_, file_, bytes_);
       verified.is_err()) {
-    const u32 index = bag_.emit(
+    const u32 index = bag_.emit<i18n::Key::ParserInvalidTokenStream>(
         diag::Severity::Error, PARSER_INVALID_TOKEN_STREAM,
-        "internal error: invalid token stream: {}",
         lexer::describe_token_stream_error(std::move(verified).unwrap_err()));
     (void)index;
     return base::make_err(diag::Reported{});
@@ -281,10 +279,9 @@ base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
   }
   if (base::Result<void, ast::VerifyError> verified = ast::verify_file(ast_);
       verified.is_err()) {
-    const u32 index =
-        bag_.emit(diag::Severity::Error, PARSER_INVALID_AST,
-                  "internal error: invalid syntax tree: {}",
-                  ast::describe_verify_error(std::move(verified).unwrap_err()));
+    const u32 index = bag_.emit<i18n::Key::ParserInvalidSyntaxTree>(
+        diag::Severity::Error, PARSER_INVALID_AST,
+        ast::describe_verify_error(std::move(verified).unwrap_err()));
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -306,16 +303,15 @@ ast::ItemIdx Parser::parse_item() {
     default: break;
   }
   if (at_end()) {
-    const u32 index =
-        bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN,
-                  span_from(pos_), "expected item, found end of file");
+    const u32 index = bag_.emit<i18n::Key::ParserExpectedItemFoundEndOfFile>(
+        diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span_from(pos_));
     (void)index;
     return ast::ItemIdx::invalid();
   }
   const diag::Span span = peek().span;
-  const u32 index = bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN,
-                              span, "expected item, found `{}`",
-                              bytes_.substr(span.offset, span.length));
+  const u32 index = bag_.emit<i18n::Key::ParserExpectedItemFound>(
+      diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span,
+      bytes_.substr(span.offset, span.length));
   (void)index;
   return ast::ItemIdx::invalid();
 }
@@ -668,9 +664,9 @@ bool Parser::parse_generic_params(std::vector<ast::Ident>& params) {
     ast::Ident name = std::move(param).unwrap();
     for (const ast::Ident& existing : params) {
       if (existing.name == name.name) {
-        const u32 index =
-            bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, name.span,
-                      "duplicate type parameter '{}'", name.name);
+        const u32 index = bag_.emit<i18n::Key::ParserDuplicateTypeParameter>(
+            diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, name.span,
+            name.name);
         (void)index;
         return false;
       }
@@ -860,9 +856,8 @@ bool Parser::parse_decimal_u64(u64* out) {
       continue;
     }
     if (c < '0' || c > '9') {
-      const u32 index =
-          bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span,
-                    "array length must be decimal");
+      const u32 index = bag_.emit<i18n::Key::ParserArrayLengthNotDecimal>(
+          diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span);
       (void)index;
       return false;
     }
@@ -870,9 +865,8 @@ bool Parser::parse_decimal_u64(u64* out) {
     // smaller array, or zero.
     const u64 digit = static_cast<u64>(c - '0');
     if (value > (~0ull - digit) / 10) {
-      const u32 index =
-          bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span,
-                    "array length is too large");
+      const u32 index = bag_.emit<i18n::Key::ParserArrayLengthTooLarge>(
+          diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span);
       (void)index;
       return false;
     }
@@ -888,9 +882,8 @@ bool Parser::nesting_exhausted(diag::Span span) {
   }
   if (!reported_too_deep_) {
     reported_too_deep_ = true;
-    const u32 index =
-        bag_.emit(diag::Severity::Error, PARSER_TOO_DEEP, span,
-                  "nesting is deeper than the limit of {}", nesting_.limit());
+    const u32 index = bag_.emit<i18n::Key::ParserNestingTooDeep>(
+        diag::Severity::Error, PARSER_TOO_DEEP, span, nesting_.limit());
     (void)index;
   }
   return true;
@@ -924,9 +917,8 @@ ast::BlockIdx Parser::parse_block() {
     statements.push_back(stmt);
     if (!match(lexer::TokenKind::Semicolon) &&
         !check(lexer::TokenKind::RBrace) && !at_end()) {
-      const u32 index =
-          bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, peek().span,
-                    "expected `;`");
+      const u32 index = bag_.emit<i18n::Key::ParserExpectedSemicolon>(
+          diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, peek().span);
       (void)index;
       synchronize();
     }

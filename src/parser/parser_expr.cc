@@ -13,6 +13,7 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "i18n/messages.h"
 #include "lexer/token.h"
 #include "parser/parser.h"
 
@@ -985,9 +986,8 @@ ast::ExprIdx Parser::parse_array_literal() {
     return ast::ExprIdx::invalid();
   }
   if (check(lexer::TokenKind::RBracket)) {
-    const u32 index =
-        bag_.emit(diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, peek().span,
-                  "array literal needs elements or a repeat count");
+    const u32 index = bag_.emit<i18n::Key::AnalyzerArrayLiteralWithoutCount>(
+        diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, peek().span);
     (void)index;
     return ast::ExprIdx::invalid();
   }
@@ -1051,9 +1051,8 @@ ast::ExprIdx Parser::parse_comp_block() {
     return ast::ExprIdx::invalid();
   }
   if (!check(lexer::TokenKind::LBrace)) {
-    const u32 index = bag_.emit(
-        diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, peek().span,
-        "`comp` is only allowed on parameters, declarations, and blocks");
+    const u32 index = bag_.emit<i18n::Key::ParserCompOnlyOnBindings>(
+        diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, peek().span);
     (void)index;
     return ast::ExprIdx::invalid();
   }

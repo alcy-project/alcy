@@ -13,6 +13,7 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "i18n/messages.h"
 #include "source/source.h"
 
 namespace analyzer {
@@ -175,17 +176,13 @@ inline void emit_unresolved(diag::DiagBag& bag,
                             std::string_view name) {
   const std::string_view package = std_hint_package(hints, name);
   if (!package.empty()) {
-    const u32 index = bag.emit(diag::Severity::Error, code, span,
-                               "unresolved {} '{}'; `{}` is in "
-                               "the standard library "
-                               "(alcy/std/{}); add it to "
-                               "[dependencies]",
-                               kind, name, name, package);
+    const u32 index = bag.emit<i18n::Key::AnalyzerUnresolvedInStandardLibrary>(
+        diag::Severity::Error, code, span, kind, name, name, package);
     (void)index;
     return;
   }
-  const u32 index = bag.emit(diag::Severity::Error, code, span,
-                             "unresolved {} '{}'", kind, name);
+  const u32 index = bag.emit<i18n::Key::AnalyzerUnresolved>(
+      diag::Severity::Error, code, span, kind, name);
   (void)index;
 }
 

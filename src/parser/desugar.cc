@@ -18,6 +18,7 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "i18n/messages.h"
 #include "parser/parser.h"
 
 namespace parser {
@@ -63,9 +64,8 @@ class Desugar {
     }
     if (!reported_too_deep_) {
       reported_too_deep_ = true;
-      const u32 index =
-          bag.emit(diag::Severity::Error, PARSER_TOO_DEEP, span,
-                   "nesting is deeper than the limit of {}", nesting_.limit());
+      const u32 index = bag.emit<i18n::Key::ParserNestingTooDeep>(
+          diag::Severity::Error, PARSER_TOO_DEEP, span, nesting_.limit());
       (void)index;
     }
     return true;
@@ -120,9 +120,8 @@ class Desugar {
         const_cast<Binding*>(existing)->seen = true;
         return existing->fresh;
       }
-      const u32 index =
-          bag.emit(diag::Severity::Error, PARSER_ALREADY_BOUND, ident.span,
-                   "`{}` is already bound in this scope", ident.name);
+      const u32 index = bag.emit<i18n::Key::ParserNameAlreadyBound>(
+          diag::Severity::Error, PARSER_ALREADY_BOUND, ident.span, ident.name);
       (void)index;
       return ident.name;
     }
@@ -328,9 +327,9 @@ class Desugar {
         }
       }
       if (mismatch) {
-        const u32 index = bag.emit(
-            diag::Severity::Error, PARSER_OR_PATTERN_MISMATCH, node.span,
-            "or-pattern alternatives must bind the same names");
+        const u32 index =
+            bag.emit<i18n::Key::AnalyzerOrPatternBindsDifferentNames>(
+                diag::Severity::Error, PARSER_OR_PATTERN_MISMATCH, node.span);
         (void)index;
       }
       pop_scope();
@@ -344,9 +343,9 @@ class Desugar {
         }
       }
       if (clash) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, PARSER_ALREADY_BOUND, node.span,
-                     "`{}` is already bound in this scope", binding.orig);
+        const u32 index = bag.emit<i18n::Key::ParserNameAlreadyBound>(
+            diag::Severity::Error, PARSER_ALREADY_BOUND, node.span,
+            binding.orig);
         (void)index;
         continue;
       }
@@ -542,10 +541,9 @@ base::Result<void, diag::Reported> desugar_shadowing(
   desugar.run(items);
   if (base::Result<void, ast::VerifyError> verified = ast::verify_file(ast);
       verified.is_err()) {
-    const u32 index =
-        bag.emit(diag::Severity::Error, PARSER_INVALID_AST,
-                 "internal error: invalid syntax tree: {}",
-                 ast::describe_verify_error(std::move(verified).unwrap_err()));
+    const u32 index = bag.emit<i18n::Key::ParserInvalidSyntaxTree>(
+        diag::Severity::Error, PARSER_INVALID_AST,
+        ast::describe_verify_error(std::move(verified).unwrap_err()));
     (void)index;
     return base::make_err(diag::Reported{});
   }

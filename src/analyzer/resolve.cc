@@ -19,6 +19,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
+#include "i18n/messages.h"
 #include "lexer/lexer.h"
 #include "lexer/token.h"
 #include "parser/desugar.h"
@@ -176,9 +177,8 @@ class Resolver {
     if (root_file == NO_MODULE) {
       // The root file was not among the inputs, so there is nothing to
       // attach a tree to. A checked index would read out of bounds.
-      const u32 index =
-          bag.emit(diag::Severity::Error, ANALYZER_INVALID_PATH, diag::Span{},
-                   "root file is not among the module inputs");
+      const u32 index = bag.emit<i18n::Key::AnalyzerRootFileNotAModuleInput>(
+          diag::Severity::Error, ANALYZER_INVALID_PATH, diag::Span{});
       (void)index;
       return;
     }
@@ -204,9 +204,9 @@ class Resolver {
 
     for (const FileData& file : file_data) {
       if (file.module == NO_MODULE) {
-        const u32 index =
-            bag.emit(diag::Severity::Warning, ANALYZER_UNREACHABLE_FILE,
-                     "source file '{}' has no module", file.path.as_view());
+        const u32 index = bag.emit<i18n::Key::AnalyzerSourceFileHasNoModule>(
+            diag::Severity::Warning, ANALYZER_UNREACHABLE_FILE,
+            file.path.as_view());
         (void)index;
       }
     }
@@ -260,9 +260,9 @@ class Resolver {
             parent);
         module_children[parent].push_back(child);
       } else if (leaf) {
-        const u32 index = bag.emit(
+        const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateModule>(
             diag::Severity::Error, ANALYZER_DUPLICATE_MODULE, diag::Span{},
-            "module '{}' is declared more than once", slash_name);
+            slash_name);
         (void)index;
         return;
       }
@@ -388,12 +388,11 @@ class Resolver {
       return;
     }
     if (exports_state[module] == 1) {
-      const u32 index =
-          bag.emit(diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT,
-                   modules[module]->items.empty()
-                       ? diag::Span{}
-                       : ast.items[modules[module]->items[0]].span,
-                   "dependency cycle in re-exports");
+      const u32 index = bag.emit<i18n::Key::PkgDependencyCycleInReExports>(
+          diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT,
+          modules[module]->items.empty()
+              ? diag::Span{}
+              : ast.items[modules[module]->items[0]].span);
       (void)index;
       exports_state[module] = 2;
       return;
@@ -433,17 +432,17 @@ class Resolver {
                  : ns == Namespace::Value ? local_values[module]
                                           : local_modules[module],
                  name)) {
-      const u32 index =
-          bag.emit(diag::Severity::Error, ANALYZER_AMBIGUOUS_IMPORT,
-                   use_node.span, "`{}` conflicts with a local item", name);
+      const u32 index = bag.emit<i18n::Key::AnalyzerConflictsWithLocalItem>(
+          diag::Severity::Error, ANALYZER_AMBIGUOUS_IMPORT, use_node.span,
+          name);
       (void)index;
       return;
     }
     for (const Import& prior : module_imports[module]) {
       if (prior.ns == ns && prior.name == name) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, ANALYZER_AMBIGUOUS_IMPORT,
-                     use_node.span, "`{}` is imported more than once", name);
+        const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateImport>(
+            diag::Severity::Error, ANALYZER_AMBIGUOUS_IMPORT, use_node.span,
+            name);
         (void)index;
         return;
       }
@@ -483,9 +482,8 @@ class Resolver {
       segments.push_back(segment.name);
     }
     if (segments.size() < 2) {
-      const u32 index =
-          bag.emit(diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT, node.span,
-                   "imports must be module-qualified (`self::foo`)");
+      const u32 index = bag.emit<i18n::Key::AnalyzerImportNotQualified>(
+          diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT, node.span);
       (void)index;
       return;
     }
@@ -503,9 +501,8 @@ class Resolver {
       current = module;
     } else if (head == "super") {
       if (parents[module] == NO_MODULE) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT,
-                     node.span, "the root module has no parent");
+        const u32 index = bag.emit<i18n::Key::AnalyzerRootModuleHasNoParent>(
+            diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT, node.span);
         (void)index;
         return;
       }
@@ -577,16 +574,16 @@ class Resolver {
       const std::optional<std::string_view> source_name =
           sources.name(input.id);
       if (!source_name.has_value()) {
-        const u32 index = bag.emit(diag::Severity::Error, ANALYZER_INVALID_PATH,
-                                   "unknown file id for a module input");
+        const u32 index = bag.emit<i18n::Key::AnalyzerUnknownModuleFileId>(
+            diag::Severity::Error, ANALYZER_INVALID_PATH);
         (void)index;
         continue;
       }
       base::Result<path::Path, path::PathError> canonical =
           path::Path::from_native(*source_name);
       if (canonical.is_err()) {
-        const u32 index = bag.emit(diag::Severity::Error, ANALYZER_INVALID_PATH,
-                                   "invalid source path for file");
+        const u32 index = bag.emit<i18n::Key::PipelineInvalidSourcePath>(
+            diag::Severity::Error, ANALYZER_INVALID_PATH);
         (void)index;
         continue;
       }
@@ -598,16 +595,16 @@ class Resolver {
       const std::optional<std::string_view> source_name =
           sources.name(input.id);
       if (!source_name.has_value()) {
-        const u32 index = bag.emit(diag::Severity::Error, ANALYZER_INVALID_PATH,
-                                   "unknown file id for a prelude input");
+        const u32 index = bag.emit<i18n::Key::AnalyzerUnknownPreludeFileId>(
+            diag::Severity::Error, ANALYZER_INVALID_PATH);
         (void)index;
         continue;
       }
       base::Result<path::Path, path::PathError> canonical =
           path::Path::from_native(*source_name);
       if (canonical.is_err()) {
-        const u32 index = bag.emit(diag::Severity::Error, ANALYZER_INVALID_PATH,
-                                   "invalid source path for file");
+        const u32 index = bag.emit<i18n::Key::PipelineInvalidSourcePath>(
+            diag::Severity::Error, ANALYZER_INVALID_PATH);
         (void)index;
         continue;
       }
@@ -656,12 +653,12 @@ class Resolver {
         } else if (leaf) {
           // Two staged sources resolved to the same leaf: the later one
           // would silently overwrite the earlier module's items.
-          const u32 index = bag.emit(
+          const u32 index = bag.emit<i18n::Key::AnalyzerDuplicatePreludeModule>(
               diag::Severity::Error, ANALYZER_DUPLICATE_MODULE,
               prelude_data[i].id == source::UNKNOWN_FILE
                   ? diag::Span{}
                   : diag::Span{prelude_data[i].id, 0, 0},
-              "prelude module '{}' is declared more than once", child_path);
+              child_path);
           (void)index;
           continue;
         }
