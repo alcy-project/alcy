@@ -367,6 +367,30 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
   }
 }
 
+// Whether `expr` names storage rather than a temporary: a local or a
+// projection through one. Reference receivers that name storage are
+// borrowed in place, so a method on a field updates the field instead
+// of a copy.
+bool Lowerer::is_rooted_place(ast::ExprIdx expr) const {
+  const ast::ExprNode& node = ast.exprs[expr];
+  switch (node.kind) {
+    case ast::ExprKind::Path: {
+      const ast::ExprPath& path = node.payload.get<ast::ExprPath>();
+      const std::span<const ast::Ident> segments = ast.paths[path.idx].segments;
+      return segments.size() == 1 && lookup_local(segments[0].name) != nullptr;
+    }
+    case ast::ExprKind::Field:
+      return is_rooted_place(node.payload.get<ast::ExprField>().receiver);
+    case ast::ExprKind::Index:
+      return is_rooted_place(node.payload.get<ast::ExprIndex>().receiver);
+    case ast::ExprKind::Deref:
+      // The pointer may come from any expression; the storage it names
+      // outlives the call.
+      return true;
+    default: return false;
+  }
+}
+
 // Bounds-checked address of base[position]: panics out of bounds.
 // The base must be a direct array address; indexing through a
 // reference cannot project through codegen's alloca tracking.
@@ -1798,11 +1822,6 @@ ir::OperandIdx Lowerer::str_operand(std::string_view message) {
 
 Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   const ast::ExprNode& method = ast.exprs[expr];
-  Val receiver =
-      lower_expr(method.payload.get<ast::ExprMethodCall>().receiver, nullptr);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
-  }
   const analyzer::CheckedModule::CallTarget* target = call_target(expr);
   if (target == nullptr || !target->is_method) {
     internal(method.span, "method call without target");
@@ -1810,6 +1829,17 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   }
   const analyzer::CheckedModule& def = pkg.modules[target->module];
   const analyzer::CheckedModule::MethodInfo& info = def.methods[target->index];
+  // A reference receiver borrows the place it names; anything else
+  // evaluates to a value first.
+  const ast::ExprIdx receiver_expr =
+      method.payload.get<ast::ExprMethodCall>().receiver;
+  Val receiver =
+      is_ref_tag(tag_of(info.params[0])) && is_rooted_place(receiver_expr)
+          ? place_addr(receiver_expr)
+          : lower_expr(receiver_expr, nullptr);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
   const std::vector<u32> comp = comp_positions(info.item);
   if (!comp.empty() && comp[0] == 0) {
     unsupported(method.span, "comp method receiver");

@@ -264,6 +264,7 @@ class Lowerer {
   Val lower_literal(ast::LiteralIdx lit_idx, const ir::TypeIdx* expected);
   ir::OperandIdx imm_from_u64(ir::TypeTag tag, ir::TypeIdx type, u64 value);
   Val place_addr(ast::ExprIdx expr);
+  bool is_rooted_place(ast::ExprIdx expr) const;
   Val checked_index_addr(Val base, Val position, diag::Span span);
   ir::OperandIdx index_operand(u32 index);
   bool struct_field_index(ir::TypeIdx type,
