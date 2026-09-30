@@ -25,6 +25,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"
+#include "i18n/messages.h"
 #include "ir/common.h"
 #include "ir/function.h"
 #include "ir/immutable.h"
@@ -293,11 +294,8 @@ void Lowerer::emit_drops(u32 mark, diag::Span span) {
       local.moved = true;
       continue;
     }
-    const u32 index = bag.emit(
-        diag::Severity::Warning, LOWER_DROP_UNPLACED, span,
-        "destructor for '{}' is not run: it is reached through a variant or "
-        "an array, so declare 'fn drop(self: Self)' to end it",
-        local.name);
+    const u32 index = bag.emit<i18n::Key::LowerDestructorNotRun>(
+        diag::Severity::Warning, LOWER_DROP_UNPLACED, span, local.name);
     (void)index;
   }
 }
@@ -841,8 +839,8 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
       std::move(lowerer).finish();
   if (built.is_err()) {
     const ir::VerifyError error = std::move(built).unwrap_err();
-    const u32 index = bag.emit(diag::Severity::Error, LOWER_INTERNAL,
-                               diag::Span{}, "lowered IR failed verification");
+    const u32 index = bag.emit<i18n::Key::LowerIrVerificationFailed>(
+        diag::Severity::Error, LOWER_INTERNAL, diag::Span{});
     (void)index;
     const diag::Diagnostic diag = ir::to_diagnostic(error);
     fmt::memory_buffer rendered;

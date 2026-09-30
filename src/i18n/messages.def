@@ -176,6 +176,20 @@
   F(AnalyzerWriteArity, "'write' expects 3 arguments, found {}") \
   F(AnalyzerWriteInCompEvaluation, "'write' is not allowed in comp evaluation") \
   F(AnalyzerWriteOutcomeNotInScope, "'WriteOutcome' is not in scope") \
+  /* lower */ \
+  F(LowerDestructorNotRun, "destructor for '{}' is not run: it is reached through a variant or an array, so declare 'fn drop(self: Self)' to end it") \
+  F(LowerDiscardedDestructor, "discarded value holds something with a destructor, so ending it here is needed") \
+  F(LowerInternalError, "internal lowering error: {}") \
+  F(LowerIrVerificationFailed, "lowered IR failed verification") \
+  F(LowerUnreachableExpression, "unreachable expression") \
+  F(LowerUnreachableStatement, "unreachable statement") \
+  F(LowerUnsupportedConstruct, "'{}' is not supported in this lowering slice") \
+  /* borrow */ \
+  F(BorrowAssignWhileBorrowed, "cannot assign to '{}' while borrowed") \
+  F(BorrowConflict, "conflicting borrows of '{}'") \
+  F(BorrowMoveInvalidatesBorrow, "move of '{}' invalidates an outstanding borrow") \
+  F(BorrowReturnsLocalReference, "returns reference to local '{}'") \
+  F(BorrowUseAfterMove, "use of moved '{}' in {}") \
   /* codegen */ \
   F(CodegenArgumentNotFormattable, "argument is not formattable") \
   F(CodegenInvalidModuleTree, "internal error: invalid module tree: {}") \

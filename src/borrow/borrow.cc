@@ -13,6 +13,7 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "i18n/messages.h"
 #include "ir/common.h"
 #include "ir/function.h"
 #include "ir/instruction.h"
@@ -757,9 +758,9 @@ class Checker {
                        std::string_view action) {
     for (const Place& gone : moved) {
       if (overlaps(gone, place)) {
-        const u32 index =
-            bag.emit(diag::Severity::Error, BORROW_USE_AFTER_MOVE, span,
-                     "use of moved '{}' in {}", addr_name(place.root), action);
+        const u32 index = bag.emit<i18n::Key::BorrowUseAfterMove>(
+            diag::Severity::Error, BORROW_USE_AFTER_MOVE, span,
+            addr_name(place.root), action);
         (void)index;
         return;
       }
@@ -1030,9 +1031,9 @@ class Checker {
             if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
               continue;
             }
-            const u32 index =
-                bag.emit(diag::Severity::Error, BORROW_CONFLICT, span,
-                         "conflicting borrows of '{}'", addr_name(place.root));
+            const u32 index = bag.emit<i18n::Key::BorrowConflict>(
+                diag::Severity::Error, BORROW_CONFLICT, span,
+                addr_name(place.root));
             (void)index;
             break;
           }
@@ -1053,10 +1054,9 @@ class Checker {
           if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
             continue;
           }
-          const u32 index =
-              bag.emit(diag::Severity::Error, BORROW_USE_AFTER_MOVE, span,
-                       "move of '{}' invalidates an outstanding borrow",
-                       addr_name(place.root));
+          const u32 index = bag.emit<i18n::Key::BorrowMoveInvalidatesBorrow>(
+              diag::Severity::Error, BORROW_USE_AFTER_MOVE, span,
+              addr_name(place.root));
           (void)index;
           break;
         }
@@ -1098,9 +1098,9 @@ class Checker {
             continue;
           }
           if (exclusive || loan.exclusive) {
-            const u32 index =
-                bag.emit(diag::Severity::Error, BORROW_CONFLICT, span,
-                         "conflicting borrows of '{}'", addr_name(place.root));
+            const u32 index = bag.emit<i18n::Key::BorrowConflict>(
+                diag::Severity::Error, BORROW_CONFLICT, span,
+                addr_name(place.root));
             (void)index;
             break;
           }
@@ -1128,9 +1128,9 @@ class Checker {
             if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
               continue;
             }
-            const u32 index = bag.emit(
+            const u32 index = bag.emit<i18n::Key::BorrowAssignWhileBorrowed>(
                 diag::Severity::Error, BORROW_ASSIGN_BORROWED, span,
-                "cannot assign to '{}' while borrowed", addr_name(place.root));
+                addr_name(place.root));
             (void)index;
             break;
           }
@@ -1152,9 +1152,8 @@ class Checker {
           }
           const u32 root = loans[loan].place.root;
           if (!is_param_root(root, fn)) {
-            const u32 index =
-                bag.emit(diag::Severity::Error, BORROW_ESCAPE, span,
-                         "returns reference to local '{}'", addr_name(root));
+            const u32 index = bag.emit<i18n::Key::BorrowReturnsLocalReference>(
+                diag::Severity::Error, BORROW_ESCAPE, span, addr_name(root));
             (void)index;
             break;
           }

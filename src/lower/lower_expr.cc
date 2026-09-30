@@ -19,6 +19,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/str/string_interner.h"
 #include "fpag/str/string_pool_id.h"
+#include "i18n/messages.h"
 #include "ir/common.h"
 #include "ir/external_function.h"
 #include "ir/function.h"
@@ -35,16 +36,15 @@
 namespace lower {
 
 void Lowerer::unsupported(diag::Span span, std::string_view what) {
-  const u32 index =
-      bag.emit(diag::Severity::Error, LOWER_UNSUPPORTED, span,
-               "'{}' is not supported in this lowering slice", what);
+  const u32 index = bag.emit<i18n::Key::LowerUnsupportedConstruct>(
+      diag::Severity::Error, LOWER_UNSUPPORTED, span, what);
   (void)index;
   failed = true;
 }
 
 void Lowerer::internal(diag::Span span, std::string_view what) {
-  const u32 index = bag.emit(diag::Severity::Error, LOWER_INTERNAL, span,
-                             "internal lowering error: {}", what);
+  const u32 index = bag.emit<i18n::Key::LowerInternalError>(
+      diag::Severity::Error, LOWER_INTERNAL, span, what);
   (void)index;
   failed = true;
 }
@@ -3050,9 +3050,8 @@ bool Lowerer::report_nesting(diag::Span span) {
     return true;
   }
   reported_too_deep_ = true;
-  const u32 index =
-      bag.emit(diag::Severity::Error, LOWER_TOO_DEEP, span,
-               "nesting is deeper than the limit of {}", nesting_.limit());
+  const u32 index = bag.emit<i18n::Key::ParserNestingTooDeep>(
+      diag::Severity::Error, LOWER_TOO_DEEP, span, nesting_.limit());
   (void)index;
   return true;
 }
@@ -3357,10 +3356,8 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
         // Nothing is left to own the value once the binding discards it,
         // so its destructor would never run and whatever it holds would
         // be lost.
-        const u32 index = bag.emit(
-            diag::Severity::Error, LOWER_DISCARDED_DESTRUCTOR, node.span,
-            "discarded value holds something with a destructor, so ending "
-            "it here is needed");
+        const u32 index = bag.emit<i18n::Key::LowerDiscardedDestructor>(
+            diag::Severity::Error, LOWER_DISCARDED_DESTRUCTOR, node.span);
         (void)index;
       }
       bind_pattern(decl.pattern, Val{moved, init.type, false, false});
@@ -3450,8 +3447,8 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
       break;
     }
     if (!reachable) {
-      const u32 index = bag.emit(diag::Severity::Warning, LOWER_UNREACHABLE,
-                                 ast.stmts[stmt].span, "unreachable statement");
+      const u32 index = bag.emit<i18n::Key::LowerUnreachableStatement>(
+          diag::Severity::Warning, LOWER_UNREACHABLE, ast.stmts[stmt].span);
       (void)index;
       continue;
     }
@@ -3472,9 +3469,8 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
       emit_drops(mark, node.span);
     }
   } else if (!reachable && node.value.is_valid()) {
-    const u32 index =
-        bag.emit(diag::Severity::Warning, LOWER_UNREACHABLE,
-                 ast.exprs[node.value].span, "unreachable expression");
+    const u32 index = bag.emit<i18n::Key::LowerUnreachableExpression>(
+        diag::Severity::Warning, LOWER_UNREACHABLE, ast.exprs[node.value].span);
     (void)index;
   }
   const bool bad = failed || terminated_cur();
