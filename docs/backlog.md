@@ -16,10 +16,11 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] Link-time measurement: a benchmark reporting where a link goes —
   driver startup, the runtime's own compilation, the linker — and
   asserting nothing about wall time.
-- [ ] Runtime staged as bitcode and merged into the program's module in
-  process, through `llvm::lto::LTO`. Removes the clang spawned once per
-  build to compile `alcy_runtime.c`, changes no link line, and works
-  with GNU ld.
+- [ ] Program runtime emitted in process: the `alcy_*` functions are
+  defined in the module our own codegen already builds, so no clang
+  compiles `alcy_runtime.c` on every build. The pinned LLVM ships no
+  clang, and a host-made `.bc` would couple every build to its version,
+  so the functions are built as IR instead.
 - [ ] Embedded lld, and the system driver with it. The driver picks
   crt files, system libraries, and search paths per platform, so this
   follows the two items above and stands as its own project.
