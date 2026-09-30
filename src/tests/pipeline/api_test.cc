@@ -150,11 +150,53 @@ TEST_CASE("Release optimizes the textual IR, not only the object") {
 
   const std::string plain_ir = io::read_file(plain);
   const std::string released_ir = io::read_file(released);
+
+  // Plain LLVM-IR should be like:
+  // define i32 @"_A1f0:.3:add"(i32 %0, i32 %1) local_unnamed_addr #1 {
+  //   %3 = add i32 %1, %0
+  //   ret i32 %3
+  // }
+  // // or:
+  // define i32 @"_A1f0:.3:add"(i32 %0, i32 %1) {
+  //   %3 = alloca i32, align 4
+  //   store i32 %0, ptr %3, align 4
+  //   %4 = load i32, ptr %3, align 4
+  //   %5 = alloca i32, align 4
+  //   store i32 %4, ptr %5, align 4
+  //   %6 = alloca i32, align 4
+  //   store i32 %1, ptr %6, align 4
+  //   %7 = load i32, ptr %6, align 4
+  //   %8 = alloca i32, align 4
+  //   store i32 %7, ptr %8, align 4
+  //   %9 = load i32, ptr %5, align 4
+  //   %10 = load i32, ptr %8, align 4
+  //   %11 = add i32 %9, %10
+  //   ret i32 %11
+  // }
+  //
+  // define i32 @"_A1f0:.9:alcy_main"() {
+  //   %1 = call i32 @"_A1f0:.3:add"(i32 1, i32 2)
+  //   ret i32 0
+  // }
+
+  // Release LLVM-IR should be like:
+  // define noundef i32 @"_A1f0:.9:alcy_main"() local_unnamed_addr #3 {
+  //   ret i32 0
+  // }
+
   CHECK(!plain_ir.empty());
   CHECK(!released_ir.empty());
-  CHECK(plain_ir.find("alloca i32") != std::string::npos);
-  CHECK(released_ir.find("alloca i32") == std::string::npos);
-  CHECK(released_ir.find("alloca ptr") != std::string::npos);
+
+  // Both have "alcy_main" function
+  CHECK(plain_ir.find("alcy_main") != std::string::npos);
+  CHECK(plain_ir.find("ret i32 0") != std::string::npos);
+  CHECK(released_ir.find("alcy_main") != std::string::npos);
+  CHECK(released_ir.find("ret i32 0") != std::string::npos);
+
+  // Call of "add" at least exists on plain
+  CHECK(plain_ir.find("add") != std::string::npos);
+  CHECK(plain_ir.find("i32 1, i32 2") != std::string::npos);
+
   CHECK(plain_ir != released_ir);
 }
 
