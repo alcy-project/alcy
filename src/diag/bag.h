@@ -65,14 +65,16 @@ class DiagBag {
   template <i18n::Key K, typename... Args>
   u32 emit(Severity severity, u32 code, Args&&... args) {
     fmt::memory_buffer out;
-    i18n::format_to<K>(out, language_, std::forward<Args>(args)...);
+    i18n::format_to<K>(std::back_inserter(out), language_,
+                       std::forward<Args>(args)...);
     return push(severity, code, {}, false, {out.data(), out.size()});
   }
 
   template <i18n::Key K, typename... Args>
   u32 emit(Severity severity, u32 code, Span primary, Args&&... args) {
     fmt::memory_buffer out;
-    i18n::format_to<K>(out, language_, std::forward<Args>(args)...);
+    i18n::format_to<K>(std::back_inserter(out), language_,
+                       std::forward<Args>(args)...);
     return push(severity, code, primary, true, {out.data(), out.size()});
   }
 

@@ -11,6 +11,7 @@
 
 #include "cli/cli_config.h"
 #include "cli/converters.h"  // IWYU pragma: keep
+#include "cli/usage.h"
 #include "debug/fatal.h"
 #include "fpag/arg/arg.h"
 #include "fpag/arg/command.h"
@@ -21,6 +22,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
 #include "i18n/language.h"
+#include "i18n/messages.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/vcs.h"
 
@@ -113,12 +115,9 @@ arg::CommandBuilder build_subcommand(std::string name, std::string about) {
   return builder;
 }
 
-arg::Arg vcs_arg() {
+arg::Arg vcs_arg(const UsageText& usage) {
   return arg::ArgBuilder("vcs")
-      .help(
-          "Version control to prepare the package for: git (default) "
-          "writes .gitignore, none writes no ignore file. No repository "
-          "is created either way.")
+      .help(usage.text(i18n::Key::CliVcsHelp))
       .choices({"git", "none"})
       .default_value("git")
       .build();
@@ -138,146 +137,122 @@ std::vector<std::string> language_choices() {
 
 }  // namespace
 
-arg::Parser build_parser() {
+arg::Parser build_parser(i18n::Language language) {
+  const UsageText& usage = usage_text(language);
   arg::CommandBuilder builder(ALCY_PROJECT_NAME, ALCY_PROJECT_VERSION);
-  builder.about(ALCY_COMMAND_ABOUT);
+  builder.about(std::string(usage.text(i18n::Key::CliAbout)));
   builder.builtin_enabled(true);
   builder.add_arg(arg::ArgBuilder("color")
-                      .help("Color mode for logging and diagnostics")
+                      .help(usage.text(i18n::Key::CliColorHelp))
                       .default_value("auto")
                       .choices({"auto", "always", "never"})
                       .build());
-  builder.add_arg(
-      arg::ArgBuilder("lang")
-          .help("Language for every message this run prints. Taken from "
-                "this flag alone: the locale the shell exports is not "
-                "consulted, so the same command line reports the same "
-                "text on every machine.")
-          .default_value(i18n::canonical_tag(i18n::Language::EnUs))
-          .choices(language_choices())
-          .build());
+  builder.add_arg(arg::ArgBuilder("lang")
+                      .help(usage.text(i18n::Key::CliLangHelp))
+                      .default_value(i18n::canonical_tag(i18n::Language::EnUs))
+                      .choices(language_choices())
+                      .build());
   builder.add_arg(arg::ArgBuilder("time-trace")
                       .short_name('t')
-                      .help("Time the compilation phases and report where "
-                            "the run went. With --json the phases are "
-                            "embedded in the document; on their own they "
-                            "are a summary table.")
+                      .help(usage.text(i18n::Key::CliTimeTraceHelp))
                       .is_flag(true)
                       .build());
-  builder.add_arg(
-      arg::ArgBuilder("json")
-          .help("Report the result as one JSON document on standard output, "
-                "for a tool reading it. Applies to build, compile, and "
-                "check.")
-          .is_flag(true)
-          .build());
+  builder.add_arg(arg::ArgBuilder("json")
+                      .help(usage.text(i18n::Key::CliJsonHelp))
+                      .is_flag(true)
+                      .build());
   builder.add_subcommand(
-      build_subcommand("build", "Build a package directory")
+      build_subcommand("build",
+                       std::string(usage.text(i18n::Key::CliBuildAbout)))
           .add_arg(arg::ArgBuilder("release")
-                       .help("Build with optimizations.")
+                       .help(usage.text(i18n::Key::CliReleaseHelp))
                        .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("output")
                        .short_name('o')
-                       .help("Where the output goes. Empty picks the "
-                             "package's out/ directory.")
+                       .help(usage.text(i18n::Key::CliBuildOutputHelp))
                        .default_value("")
                        .build())
           .add_arg(arg::ArgBuilder("emit")
-                       .help("What to write: executable (default), object, "
-                             "llvm-ir, or llvm-bc. The output's extension "
-                             "no longer decides.")
+                       .help(usage.text(i18n::Key::CliEmitHelp))
                        .choices({"executable", "object", "llvm-ir", "llvm-bc"})
                        .default_value("executable")
                        .build())
           .add_arg(arg::ArgBuilder("linker")
-                       .help("System linker driver for executable builds. "
-                             "Overrides .alcy/toolchain.toml.")
+                       .help(usage.text(i18n::Key::CliLinkerOverrideHelp))
                        .default_value("")
                        .build())
           .add_arg(arg::ArgBuilder("link-args")
-                       .help("Argument for the link driver, after the "
-                             "objects. Repeatable, one argument each; "
-                             "overrides .alcy/toolchain.toml.")
+                       .help(usage.text(i18n::Key::CliLinkArgsOverrideHelp))
                        .default_value("")
                        .build())
           .build());
   builder.add_subcommand(
-      build_subcommand("compile", "Compile a single source file")
+      build_subcommand("compile",
+                       std::string(usage.text(i18n::Key::CliCompileAbout)))
           .add_arg(arg::ArgBuilder("release")
-                       .help("Build with optimizations.")
+                       .help(usage.text(i18n::Key::CliReleaseHelp))
                        .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("output")
                        .short_name('o')
-                       .help("Where the output goes. Empty picks a path "
-                             "beside the input; required with --stdin.")
+                       .help(usage.text(i18n::Key::CliCompileOutputHelp))
                        .default_value("")
                        .build())
           .add_arg(arg::ArgBuilder("emit")
-                       .help("What to write: executable (default), object, "
-                             "llvm-ir, or llvm-bc. The output's extension "
-                             "no longer decides.")
+                       .help(usage.text(i18n::Key::CliEmitHelp))
                        .choices({"executable", "object", "llvm-ir", "llvm-bc"})
                        .default_value("executable")
                        .build())
           .add_arg(arg::ArgBuilder("linker")
-                       .help("System linker driver for executable builds.")
+                       .help(usage.text(i18n::Key::CliCompileLinkerHelp))
                        .default_value("")
                        .build())
           .add_arg(arg::ArgBuilder("link-args")
-                       .help("Argument for the link driver, after the "
-                             "objects. Repeatable, one argument each.")
+                       .help(usage.text(i18n::Key::CliCompileLinkArgsHelp))
                        .default_value("")
                        .build())
           .add_arg(arg::ArgBuilder("stdin")
-                       .help("Read the program from standard input instead of "
-                             "a file, and report against the name <stdin>. "
-                             "For an editor buffer that has never been saved.")
+                       .help(usage.text(i18n::Key::CliStdinHelp))
                        .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("no-std")
-                       .help("Start with no standard library instead of the "
-                             "default suite. Add back with --deps.")
+                       .help(usage.text(i18n::Key::CliNoStdHelp))
                        .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("deps")
-                       .help("A dependency on top of the default suite, as a "
-                             "specifier (`alcy/std/core`) or `specifier = "
-                             "{ ... }`. Repeatable.")
+                       .help(usage.text(i18n::Key::CliDepsHelp))
                        .default_value("")
                        .build())
           .build());
   builder.add_subcommand(
-      build_subcommand("run", "Build and run a package directory")
+      build_subcommand("run", std::string(usage.text(i18n::Key::CliRunAbout)))
           .add_arg(arg::ArgBuilder("release")
-                       .help("Build with optimizations.")
+                       .help(usage.text(i18n::Key::CliReleaseHelp))
                        .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("linker")
-                       .help("System linker driver for executable builds. "
-                             "Overrides .alcy/toolchain.toml.")
+                       .help(usage.text(i18n::Key::CliLinkerOverrideHelp))
                        .default_value("")
                        .build())
           .add_arg(arg::ArgBuilder("link-args")
-                       .help("Argument for the link driver, after the "
-                             "objects. Repeatable, one argument each; "
-                             "overrides .alcy/toolchain.toml.")
+                       .help(usage.text(i18n::Key::CliLinkArgsOverrideHelp))
                        .default_value("")
                        .build())
           .build());
-  builder.add_subcommand(build_subcommand("new", "Create a new package")
-                             .add_arg(vcs_arg())
-                             .build());
   builder.add_subcommand(
-      build_subcommand("init", "Create a package in an existing directory")
-          .add_arg(vcs_arg())
+      build_subcommand("new", std::string(usage.text(i18n::Key::CliNewAbout)))
+          .add_arg(vcs_arg(usage))
           .build());
   builder.add_subcommand(
-      build_subcommand("check", "Check a package without emitting code")
+      build_subcommand("init", std::string(usage.text(i18n::Key::CliInitAbout)))
+          .add_arg(vcs_arg(usage))
+          .build());
+  builder.add_subcommand(
+      build_subcommand("check",
+                       std::string(usage.text(i18n::Key::CliCheckAbout)))
           .add_arg(arg::ArgBuilder("file")
-                       .help("Check one source file instead of a package "
-                             "directory.")
+                       .help(usage.text(i18n::Key::CliCheckFileHelp))
                        .default_value("")
                        .build())
           .build());

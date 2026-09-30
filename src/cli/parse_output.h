@@ -32,7 +32,8 @@ i18n::Language scan_language(i32 argc, const char* const* argv);
 // Returns an empty string for CliConfig, which has nothing to display.
 std::string render_outcome(const arg::Parser& parser,
                            const ParseOutcome& outcome,
-                           term::ColorStyle style);
+                           term::ColorStyle style,
+                           i18n::Language language = i18n::Language::EnUs);
 
 // Exit code for interruption outcomes. Returns nullopt for CliConfig,
 // which the cli dispatches instead of exiting.

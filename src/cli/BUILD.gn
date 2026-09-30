@@ -33,6 +33,8 @@ source_set("cli") {
     "run_command.h",
     "trace.cc",
     "trace.h",
+    "usage.cc",
+    "usage.h",
     "validate.cc",
     "validate.h",
   ]
@@ -43,7 +45,6 @@ source_set("cli") {
   defines = [
     "ALCY_PROJECT_NAME=\"$project_name\"",
     "ALCY_PROJECT_VERSION=\"$project_version\"",
-    "ALCY_COMMAND_ABOUT=\"$command_about\"",
   ]
 
   configs += [

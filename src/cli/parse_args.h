@@ -13,6 +13,7 @@
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/tagged_union.h"
+#include "i18n/language.h"
 
 namespace cli {
 
@@ -36,7 +37,9 @@ using ParseOutcome = base::AutoTaggedUnion<CliConfig,
                                            UnknownSubcommand,
                                            ParseFailure>;
 
-arg::Parser build_parser();
+// The parser, with its help text written in one language. The default is
+// the language the cli reports in when nothing asks for another.
+arg::Parser build_parser(i18n::Language language = i18n::Language::EnUs);
 
 // Parses args, where element 0 is the program name (same convention as
 // argv). Views in the returned config borrow the input storage.

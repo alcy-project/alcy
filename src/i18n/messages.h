@@ -111,16 +111,17 @@ std::string_view text(Language language) {
   }
 }
 
-// Composes a message in one language into out. Every catalog's format
-// string for K is parsed against Args... at compile time, so a
-// translation that lost a placeholder or retyped one is a build error
-// rather than a diagnostic printed with a hole in it.
-template <Key K, typename... Args>
-void format_to(fmt::memory_buffer& out, Language language, Args&&... args) {
+// Composes a message in one language into out, which is anything fmt can
+// format into. Every catalog's format string for K is parsed against
+// Args... at compile time, so a translation that lost a placeholder or
+// retyped one is a build error rather than a diagnostic printed with a
+// hole in it.
+template <Key K, typename OutputIt, typename... Args>
+void format_to(OutputIt&& out, Language language, Args&&... args) {
   switch (language) {
 #define ALCY_I18N_FORMAT_IN(LanguageValue, Catalog, LIST)                   \
   case LanguageValue:                                                       \
-    fmt::format_to(std::back_inserter(out),                                 \
+    fmt::format_to(out,                                                     \
                    fmt::format_string<Args...>(detail::Catalog::text<K>()), \
                    std::forward<Args>(args)...);                            \
     return;
@@ -135,7 +136,7 @@ void format_to(fmt::memory_buffer& out, Language language, Args&&... args) {
 template <Key K, typename... Args>
 std::string format(Language language, Args&&... args) {
   fmt::memory_buffer out;
-  format_to<K>(out, language, std::forward<Args>(args)...);
+  format_to<K>(std::back_inserter(out), language, std::forward<Args>(args)...);
   return std::string(out.data(), out.size());
 }
 

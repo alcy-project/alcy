@@ -83,10 +83,11 @@ ResultCode run_interruption(const arg::Parser& parser,
                             const ParseOutcome& outcome,
                             ResultCode code,
                             i32 argc,
-                            const char* const* argv) {
+                            const char* const* argv,
+                            i18n::Language language) {
   const term::ColorStyle style = term::console_color_style(
       term::Stream::Stdout, scan_color_mode(argc, argv));
-  write_stdout(render_outcome(parser, outcome, style));
+  write_stdout(render_outcome(parser, outcome, style, language));
   return code;
 }
 
@@ -100,13 +101,17 @@ i32 cli_main(i32 argc, char** argv) {
   const std::chrono::steady_clock::time_point started =
       std::chrono::steady_clock::now();
 
-  arg::Parser parser = build_parser();
+  // The help is written before the arguments are parsed, so the language
+  // is read off the raw arguments first. A value that names no catalog is
+  // the parser's error to report, in the default language.
+  const i18n::Language language = scan_language(argc, argv);
+  arg::Parser parser = build_parser(language);
   ParseOutcome outcome = parse_args(parser, argc, argv);
 
   i32 exit_code = result_code(ResultCode::Success);
   if (const std::optional<ResultCode> code = interruption_exit_code(outcome)) {
-    exit_code =
-        result_code(run_interruption(parser, outcome, *code, argc, argv));
+    exit_code = result_code(
+        run_interruption(parser, outcome, *code, argc, argv, language));
   } else {
     const CliConfig& config = outcome.get<CliConfig>();
     const term::ColorStyle style =

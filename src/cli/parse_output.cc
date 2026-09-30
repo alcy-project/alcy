@@ -10,6 +10,7 @@
 #include "cli/cli_config.h"
 #include "cli/parse_args.h"
 #include "cli/result_code.h"
+#include "cli/usage.h"
 #include "debug/fatal.h"
 #include "fmt/format.h"
 #include "fpag/arg/error_formatter.h"
@@ -20,6 +21,7 @@
 #include "fpag/term/color_mode.h"
 #include "fpag/term/color_style.h"
 #include "i18n/language.h"
+#include "i18n/messages.h"
 
 namespace cli {
 
@@ -83,24 +85,26 @@ i18n::Language scan_language(i32 argc, const char* const* argv) {
 
 std::string render_outcome(const arg::Parser& parser,
                            const ParseOutcome& outcome,
-                           term::ColorStyle style) {
+                           term::ColorStyle style,
+                           i18n::Language language) {
   if (outcome.is<CliConfig>()) {
     return "";
   }
+  const HelpFormatter help{language};
   if (outcome.is<HelpRequested>() || outcome.is<NoSubcommand>()) {
-    return parser.help_message(arg::DefaultHelpFormatter{}, style);
+    return parser.help_message(help, style);
   }
   if (outcome.is<VersionRequested>()) {
     return parser.version_message(arg::DefaultVersionFormatter{}, style);
   }
   if (outcome.is<UnknownSubcommand>()) {
     const UnknownSubcommand& unknown = outcome.get<UnknownSubcommand>();
-    return fmt::format("unknown subcommand '{}'; see '{} --help'", unknown.name,
-                       parser.root_command().name());
+    return i18n::format<i18n::Key::CliUnknownSubcommand>(
+        language, unknown.name, parser.root_command().name());
   }
   if (outcome.is<ParseFailure>()) {
     const ParseFailure& failure = outcome.get<ParseFailure>();
-    const arg::DefaultErrorFormatter format;
+    const ErrorFormatter format{language};
     return format(parser.root_command().name(), failure.errors, style);
   }
   UNREACHABLE();

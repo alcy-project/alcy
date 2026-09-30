@@ -262,10 +262,84 @@
   F(PipelineSourceDirectoryInaccessible, "source directory '{}' is not accessible") \
   F(PipelineStdIsASuite, "'alcy/std' is a suite, not a package; write \"alcy/std/*\" for every member or \"alcy/std/<package>\" for one") \
   F(PipelineStdPackageRequiresSuite, "alcy/std/{} requires alcy/std/{}; add it to [dependencies]") \
+  /* cli */ \
+  F(CliAbout, "alcy language compiler") \
+  F(CliBuildAbout, "Build a package directory") \
+  F(CliBuildOutputHelp, "Where the output goes. Empty picks the package's out/ directory.") \
+  F(CliBuildTakesDirectory, "`build` takes a package directory; use `compile` for a file") \
+  F(CliBytePlural, "bytes") \
+  F(CliByteSingular, "byte") \
+  F(CliCheckAbout, "Check a package without emitting code") \
+  F(CliCheckFileHelp, "Check one source file instead of a package directory.") \
+  F(CliCheckFileOrTarget, "`check` takes a directory or `--file`, not both") \
+  F(CliColorHelp, "Color mode for logging and diagnostics") \
+  F(CliCompileAbout, "Compile a single source file") \
+  F(CliCompileLinkArgsHelp, "Argument for the link driver, after the objects. Repeatable, one argument each.") \
+  F(CliCompileLinkerHelp, "System linker driver for executable builds.") \
+  F(CliCompileNeedsTarget, "`compile` needs a file target or `--stdin`") \
+  F(CliCompileOutputHelp, "Where the output goes. Empty picks a path beside the input; required with --stdin.") \
+  F(CliDepsHelp, "A dependency on top of the default suite, as a specifier (`alcy/std/core`) or `specifier = {{ ... }}`. Repeatable.") \
+  F(CliDepsOnlyForCompile, "`--no-std` and `--deps` only mean anything for `compile`") \
+  F(CliEmitHelp, "What to write: executable (default), object, llvm-ir, or llvm-bc. The output's extension no longer decides.") \
+  F(CliFilePlural, "files") \
+  F(CliFileSingular, "file") \
+  F(CliFunctionPlural, "functions") \
+  F(CliFunctionSingular, "function") \
+  F(CliInitAbout, "Create a package in an existing directory") \
+  F(CliInvalidConfiguration, "invalid configuration") \
+  F(CliJsonHelp, "Report the result as one JSON document on standard output, for a tool reading it. Applies to build, compile, and check.") \
+  F(CliJsonOnlyForResultVerbs, "`--json` only means anything for `build`, `compile`, and `check`") \
+  F(CliLangHelp, "Language for every message this run prints. Taken from this flag alone: the locale the shell exports is not consulted, so the same command line reports the same text on every machine.") \
+  F(CliLinkArgsOverrideHelp, "Argument for the link driver, after the objects. Repeatable, one argument each; overrides .alcy/toolchain.toml.") \
+  F(CliLinkerOverrideHelp, "System linker driver for executable builds. Overrides .alcy/toolchain.toml.") \
+  F(CliModulePlural, "modules") \
+  F(CliModuleSingular, "module") \
+  F(CliNewAbout, "Create a new package") \
+  F(CliNoStdHelp, "Start with no standard library instead of the default suite. Add back with --deps.") \
+  F(CliNoSubcommand, "no subcommand given") \
+  F(CliPhaseTimings, "phase timings (total, inclusive):") \
+  F(CliProgramArgsOnlyForRun, "program arguments are only accepted by `run`") \
+  F(CliReleaseHelp, "Build with optimizations.") \
+  F(CliRunAbout, "Build and run a package directory") \
+  F(CliRunTakesDirectory, "`run` takes a package directory; use `compile` for a file") \
+  F(CliStdinHelp, "Read the program from standard input instead of a file, and report against the name <stdin>. For an editor buffer that has never been saved.") \
+  F(CliStdinNeedsOutput, "`compile --stdin` needs `-o` to name the output") \
+  F(CliStdinTakesNoTarget, "`--stdin` takes no target") \
+  F(CliTimeTraceHelp, "Time the compilation phases and report where the run went. With --json the phases are embedded in the document; on their own they are a summary table.") \
+  F(CliUnknownSubcommand, "unknown subcommand '{}'; see '{} --help'") \
+  F(CliVcsHelp, "Version control to prepare the package for: git (default) writes .gitignore, none writes no ignore file. No repository is created either way.") \
+  F(CliVerbBuilt, "Built") \
+  F(CliVerbChecked, "Checked") \
+  F(CliVerbCompiled, "Compiled") \
+  F(CliVerbCreatedPackage, "Created package") \
+  F(CliVerbFailed, "Failed") \
+  F(CliVerbRan, "Ran") \
   /* diagnostic renderer */ \
   F(RenderSeverityError, "error") \
   F(RenderSeverityNote, "note") \
   F(RenderSeverityWarning, "warning") \
-  F(RenderUnknownFile, "[unknown file]")
+  F(RenderUnknownFile, "[unknown file]") \
+  /* argument parser */ \
+  F(ArgCommand, "Command") \
+  F(ArgCommands, "Commands") \
+  F(ArgDefault, "(default: {})") \
+  F(ArgDuplicateOption, "the argument '{}' was provided more than once") \
+  F(ArgError, "error") \
+  F(ArgFlagTakesNoValue, "flag '{}' takes no value") \
+  F(ArgHelpOption, "Print help message") \
+  F(ArgInvalidArgCount, "invalid arg count provided: {}") \
+  F(ArgInvalidChoice, "invalid choice for argument '{}': '{}'") \
+  F(ArgInvalidValue, "invalid value for argument '{}': '{}'") \
+  F(ArgMissingRequiredArgument, "the required argument '{}' was not provided") \
+  F(ArgMissingValueForOption, "a value is required for '{}' but none was supplied") \
+  F(ArgNullMatchesPointer, "output matches pointer is null") \
+  F(ArgOptions, "Options") \
+  F(ArgRequired, "[required]") \
+  F(ArgTryHelp, "\nFor more information, try '{0}{1} --help{2}'.\n") \
+  F(ArgUnknownLongOption, "unexpected argument '--{}' found") \
+  F(ArgUnknownShortOption, "unexpected argument '-{}' found") \
+  F(ArgUsage, "Usage") \
+  F(ArgValueName, "value") \
+  F(ArgVersionOption, "Print version information")
 
 #endif  // ALCY_I18N_MESSAGES_DEF_
