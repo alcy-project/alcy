@@ -54,7 +54,6 @@ jobs:
 
     env:
       COLORTERM: 256color
-      CC: clang
 
     steps:
       - name: Checkout Repository

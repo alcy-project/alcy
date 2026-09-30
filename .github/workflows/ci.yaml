@@ -7,7 +7,6 @@ on:
       - src/**
       - e2e/**
       - exe/**
-      - runtime/**
       - third_party/**
       - build/**
       - .github/workflows/**
