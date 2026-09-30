@@ -10,6 +10,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
+#include "i18n/messages.h"
 #include "pkg/arena_copy.h"
 #include "source/source.h"
 
@@ -49,9 +50,7 @@ base::Result<Toolchain, diag::Reported> parse_toolchain(
     // The toolchain file is read without a source location, so the
     // message names the file rather than pointing into it.
     const toml::parse_error& error = result.error();
-    const u32 index = bag.emit(diag::Severity::Error, TOOLCHAIN_SYNTAX_ERROR,
-                               "toolchain '{}': TOML syntax error: {}",
-                               filename, error.description());
+    const u32 index = bag.emit<i18n::Key::PkgToolchainTomlSyntaxError>(diag::Severity::Error, TOOLCHAIN_SYNTAX_ERROR, filename, error.description());
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -63,10 +62,7 @@ base::Result<Toolchain, diag::Reported> parse_toolchain(
     if (name == "linker") {
       const auto text = node.value<std::string_view>();
       if (!text.has_value()) {
-        const u32 index = bag.emit(diag::Severity::Error,
-                                   TOOLCHAIN_SEMANTIC_ERROR,
-                                   "toolchain '{}': linker must be a string",
-                                   filename);
+        const u32 index = bag.emit<i18n::Key::PkgToolchainLinkerNotAString>(diag::Severity::Error, TOOLCHAIN_SEMANTIC_ERROR, filename);
         (void)index;
         return base::make_err(diag::Reported{});
       }
@@ -76,9 +72,7 @@ base::Result<Toolchain, diag::Reported> parse_toolchain(
     if (name == "link-args") {
       if (!node.is_array()) {
         const u32 index =
-            bag.emit(diag::Severity::Error, TOOLCHAIN_SEMANTIC_ERROR,
-                     "toolchain '{}': link-args must be a list of strings",
-                     filename);
+            bag.emit<i18n::Key::PkgToolchainLinkArgsNotStrings>(diag::Severity::Error, TOOLCHAIN_SEMANTIC_ERROR, filename);
         (void)index;
         return base::make_err(diag::Reported{});
       }
@@ -100,9 +94,7 @@ base::Result<Toolchain, diag::Reported> parse_toolchain(
       const auto text = entry.value<std::string_view>();
       if (!text.has_value()) {
         const u32 index =
-            bag.emit(diag::Severity::Error, TOOLCHAIN_SEMANTIC_ERROR,
-                     "toolchain '{}': link-args must be a list of strings",
-                     filename);
+            bag.emit<i18n::Key::PkgToolchainLinkArgsNotStrings>(diag::Severity::Error, TOOLCHAIN_SEMANTIC_ERROR, filename);
         (void)index;
         return base::make_err(diag::Reported{});
       }

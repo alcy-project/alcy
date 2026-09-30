@@ -12,6 +12,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
+#include "i18n/messages.h"
 #include "path/path.h"
 #include "pipeline/frontend.h"
 #include "pipeline/pipeline_context.h"
@@ -53,8 +54,8 @@ base::Result<CheckResult, diag::Reported> check_single_file(
     return ctx.sources.load(target);
   }();
   if (file.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot read '{}'", target);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotRead>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, target);
     (void)index;
     return fail();
   }

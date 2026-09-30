@@ -11,6 +11,7 @@
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "fpag/base/result.h"
+#include "i18n/messages.h"
 #include "pipeline/embedded_std.h"
 #include "pipeline/pipeline_context.h"
 #include "pkg/manifest.h"
@@ -65,29 +66,21 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
         continue;
       }
       if (dep.source == pkg::DependencySource::Unspecified) {
-        const u32 index = bag.emit(
-            diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED,
-            "dependency '{}' names no source; give one of path, version, "
-            "git",
-            dep.spec);
+        const u32 index = bag.emit<i18n::Key::PipelineDependencyNamesNoSource>(
+            diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, dep.spec);
         (void)index;
         return base::make_err(diag::Reported{});
       }
-      const u32 index = bag.emit(
-          diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED,
-          "dependency '{}' needs a fetcher the resolver does not have yet",
-          dep.spec);
+      const u32 index = bag.emit<i18n::Key::PipelineDependencyNeedsFetcher>(
+          diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, dep.spec);
       (void)index;
       return base::make_err(diag::Reported{});
     }
     // The standard library is embedded, so a source beside the name is
     // always a mistake rather than a pin.
     if (dep.source != pkg::DependencySource::Unspecified) {
-      const u32 index =
-          bag.emit(diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED,
-                   "dependency '{}' is part of the embedded standard library, "
-                   "which takes no source",
-                   dep.spec);
+      const u32 index = bag.emit<i18n::Key::PipelineDependencyIsEmbeddedStd>(
+          diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, dep.spec);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -97,19 +90,15 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
       // `alcy/core` are misspellings with an obvious fix each.
       if (dep.owner == STD_OWNER) {
         if (dep.member == STD_SUITE) {
-          const u32 index = bag.emit(
-              diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED,
-              "'alcy/std' is a suite, not a package; write \"alcy/std/*\" "
-              "for every member or \"alcy/std/<package>\" for one");
+          const u32 index = bag.emit<i18n::Key::PipelineStdIsASuite>(
+              diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED);
           (void)index;
           return base::make_err(diag::Reported{});
         }
         if (find_member(dep.member) != nullptr) {
-          const u32 index =
-              bag.emit(diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED,
-                       "dependency '{}' is a member of alcy/std; write "
-                       "\"alcy/std/{}\"",
-                       dep.spec, dep.member);
+          const u32 index = bag.emit<i18n::Key::PipelineDependencyIsAStdMember>(
+              diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, dep.spec,
+              dep.member);
           (void)index;
           return base::make_err(diag::Reported{});
         }
@@ -118,18 +107,13 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
         continue;
       }
       if (dep.source == pkg::DependencySource::Unspecified) {
-        const u32 index = bag.emit(
-            diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED,
-            "dependency '{}' names no source; give one of path, version, "
-            "git",
-            dep.spec);
+        const u32 index = bag.emit<i18n::Key::PipelineDependencyNamesNoSource>(
+            diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, dep.spec);
         (void)index;
         return base::make_err(diag::Reported{});
       }
-      const u32 index = bag.emit(
-          diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED,
-          "dependency '{}' needs a fetcher the resolver does not have yet",
-          dep.spec);
+      const u32 index = bag.emit<i18n::Key::PipelineDependencyNeedsFetcher>(
+          diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, dep.spec);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -139,9 +123,8 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
       continue;
     }
     if (find_member(dep.member) == nullptr) {
-      const u32 index =
-          bag.emit(diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED,
-                   "dependency '{}' is not a member of alcy/std", dep.spec);
+      const u32 index = bag.emit<i18n::Key::PipelineDependencyNotAStdMember>(
+          diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, dep.spec);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -155,11 +138,8 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
       if (selected(selection.members, member)) {
         // A glob overlapping a named member would stage it twice over:
         // one spelling has to go.
-        const u32 index = bag.emit(
-            diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED,
-            "dependency '{}' overlaps '{}'; name every member or glob the "
-            "suite, not both",
-            glob_spec, member);
+        const u32 index = bag.emit<i18n::Key::PipelineDependencyOverlaps>(
+            diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, glob_spec, member);
         (void)index;
         return base::make_err(diag::Reported{});
       }
@@ -173,10 +153,8 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
     for (u64 i = 0; i < info->dep_count; ++i) {
       std::string_view need(info->deps[i]);
       if (!selected(selection.members, need)) {
-        const u32 index = bag.emit(
-            diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED,
-            "alcy/std/{} requires alcy/std/{}; add it to [dependencies]",
-            member, need);
+        const u32 index = bag.emit<i18n::Key::PipelineStdPackageRequiresSuite>(
+            diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, member, need);
         (void)index;
         return base::make_err(diag::Reported{});
       }

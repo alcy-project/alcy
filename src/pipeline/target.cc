@@ -18,6 +18,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
+#include "i18n/messages.h"
 #include "path/path.h"
 #include "pipeline/embedded_std.h"
 #include "pipeline/pipeline.h"
@@ -36,8 +37,8 @@ base::Result<ManifestProbe, path::PathError> find_package_manifest(
     std::string_view raw) {
   base::Result<path::Path, path::PathError> dir = path::Path::from_native(raw);
   if (dir.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "invalid target '{}'", raw);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineInvalidTarget>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, raw);
     (void)index;
     return base::make_err(std::move(dir).unwrap_err());
   }
@@ -64,9 +65,8 @@ base::Result<BinTarget, diag::Reported> resolve_package_target(
   const std::optional<std::string_view> manifest_bytes =
       ctx.sources.bytes(manifest_file);
   if (!manifest_bytes.has_value()) {
-    const u32 index =
-        ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                     "manifest '{}' is not a loaded file", manifest_name);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNotLoaded>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -95,17 +95,16 @@ base::Result<BinTarget, diag::Reported> resolve_bin_target(
     return base::make_err(diag::Reported{});
   }
   if (manifest.bin_count == 0) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_NO_TARGETS,
-                                   "manifest '{}' declares no [[bin]] targets",
-                                   manifest_name);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNoBinTarget>(
+        diag::Severity::Error, PIPELINE_NO_TARGETS, manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }
   if (manifest.bin_count > 1) {
-    const u32 index = ctx.bag.emit(
-        diag::Severity::Error, PIPELINE_NO_TARGETS,
-        "manifest '{}' declares {} [[bin]] targets; only one is supported",
-        manifest_name, manifest.bin_count);
+    const u32 index =
+        ctx.bag.emit<i18n::Key::PipelineManifestTooManyBinTargets>(
+            diag::Severity::Error, PIPELINE_NO_TARGETS, manifest_name,
+            manifest.bin_count);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -127,9 +126,8 @@ base::Result<BinTarget, diag::Reported> resolve_bin_target(
     }
   }
   if (bin_file == source::UNKNOWN_FILE) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_NO_TARGETS,
-                                   "bin target '{}' was not discovered",
-                                   manifest.bins[0].path);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineBinTargetNotDiscovered>(
+        diag::Severity::Error, PIPELINE_NO_TARGETS, manifest.bins[0].path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -168,11 +166,10 @@ base::Result<BinTarget, diag::Reported> resolve_bin_target(
     // is true but hides which file collided. Name the pair here.
     for (const analyzer::ModuleInput& prior : inputs) {
       if (prior.id != entry.id && prior.name == name) {
-        const u32 index = ctx.bag.emit(
-            diag::Severity::Error, PIPELINE_NO_TARGETS, diag::Span{},
-            "module '{}' is shared by two files relative to the bin's "
-            "directory '{}'",
-            name, bin_dir);
+        const u32 index =
+            ctx.bag.emit<i18n::Key::PipelineModuleSharedByTwoFiles>(
+                diag::Severity::Error, PIPELINE_NO_TARGETS, diag::Span{}, name,
+                bin_dir);
         (void)index;
         return base::make_err(diag::Reported{});
       }
@@ -180,9 +177,8 @@ base::Result<BinTarget, diag::Reported> resolve_bin_target(
     inputs.push_back({name, entry.id});
   }
   if (!bin_selected) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_NO_TARGETS,
-                                   "bin target '{}' is not in [modules]",
-                                   manifest.bins[0].path);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineBinTargetNotSelected>(
+        diag::Severity::Error, PIPELINE_NO_TARGETS, manifest.bins[0].path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -230,9 +226,8 @@ base::Result<pkg::Toolchain, diag::Reported> load_toolchain(
   const source::FileId loaded = std::move(file).unwrap();
   const std::optional<std::string_view> bytes = ctx.sources.bytes(loaded);
   if (!bytes.has_value()) {
-    const u32 index =
-        ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                     "toolchain '{}' is not a loaded file", path.as_view());
+    const u32 index = ctx.bag.emit<i18n::Key::PkgToolchainNotLoaded>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, path.as_view());
     (void)index;
     return base::make_err(diag::Reported{});
   }

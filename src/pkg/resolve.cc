@@ -14,6 +14,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
+#include "i18n/messages.h"
 #include "path/path.h"
 #include "pkg/manifest.h"
 #include "source/source.h"
@@ -34,9 +35,8 @@ base::Result<std::vector<ResolvedPackage>, diag::Reported> resolve_into(
     std::vector<path::Path>& visited) {
   for (const path::Path& seen : visited) {
     if (seen == canonical_dir) {
-      const u32 index = bag.emit(diag::Severity::Error, RESOLVE_CYCLE_ERROR,
-                                 "dependency cycle detected at '{}'",
-                                 canonical_dir.as_view());
+      const u32 index = bag.emit<i18n::Key::PkgDependencyCycle>(
+          diag::Severity::Error, RESOLVE_CYCLE_ERROR, canonical_dir.as_view());
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -47,9 +47,8 @@ base::Result<std::vector<ResolvedPackage>, diag::Reported> resolve_into(
   base::Result<source::FileId, source::SourceError> loaded =
       sources.load(manifest_path.as_view());
   if (loaded.is_err()) {
-    const u32 index =
-        bag.emit(diag::Severity::Error, RESOLVE_IO_ERROR,
-                 "cannot read manifest '{}'", manifest_path.as_view());
+    const u32 index = bag.emit<i18n::Key::PkgCannotReadManifest>(
+        diag::Severity::Error, RESOLVE_IO_ERROR, manifest_path.as_view());
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -82,10 +81,8 @@ base::Result<std::vector<ResolvedPackage>, diag::Reported> resolve_into(
       // Only local directories resolve by inclusion; registry and git
       // sources have no fetcher yet, and embedded entries never reach
       // a path walk.
-      const u32 index = bag.emit(
-          diag::Severity::Error, RESOLVE_IO_ERROR,
-          "dependency '{}' needs a fetcher the resolver does not have yet",
-          dep.spec);
+      const u32 index = bag.emit<i18n::Key::PipelineDependencyNeedsFetcher>(
+          diag::Severity::Error, RESOLVE_IO_ERROR, dep.spec);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -114,8 +111,8 @@ base::Result<std::vector<ResolvedPackage>, diag::Reported> resolve_package(
   base::Result<path::Path, path::PathError> canonical =
       path::Path::from_native(dir);
   if (canonical.is_err()) {
-    const u32 index = bag.emit(diag::Severity::Error, RESOLVE_IO_ERROR,
-                               "invalid package directory '{}'", dir);
+    const u32 index = bag.emit<i18n::Key::PkgInvalidPackageDirectory>(
+        diag::Severity::Error, RESOLVE_IO_ERROR, dir);
     (void)index;
     return base::make_err(diag::Reported{});
   }

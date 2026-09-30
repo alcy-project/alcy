@@ -15,6 +15,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
+#include "i18n/messages.h"
 #include "path/path.h"
 #include "pkg/arena_copy.h"
 #include "pkg/manifest.h"
@@ -102,9 +103,8 @@ base::Result<std::vector<ModuleFile>, diag::Reported> resolve_module_files(
     }
     for (const ModuleFile& prior : selected) {
       if (prior.name == name) {
-        const u32 index = bag.emit(
-            diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{},
-            "module '{}' is selected by more than one file", name);
+        const u32 index = bag.emit<i18n::Key::PkgModuleSelectedTwice>(
+            diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{}, name);
         (void)index;
         return false;
       }
@@ -131,9 +131,8 @@ base::Result<std::vector<ModuleFile>, diag::Reported> resolve_module_files(
       }
     }
     if (found == source::UNKNOWN_FILE) {
-      const u32 index =
-          bag.emit(diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{},
-                   "manifest [modules] include '{}' has no file", entry);
+      const u32 index = bag.emit<i18n::Key::PkgModulesIncludeHasNoFile>(
+          diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{}, entry);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -144,18 +143,15 @@ base::Result<std::vector<ModuleFile>, diag::Reported> resolve_module_files(
     // different names and it compiles twice.
     std::string_view relative;
     if (!relative_to(candidate.as_view(), root, relative)) {
-      const u32 index = bag.emit(
-          diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{},
-          "manifest [modules] include '{}' resolves outside the package",
-          entry);
+      const u32 index = bag.emit<i18n::Key::PkgModulesIncludeEscapesPackage>(
+          diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{}, entry);
       (void)index;
       return base::make_err(diag::Reported{});
     }
     const std::string name = module_name_of(relative);
     if (name.empty()) {
-      const u32 index = bag.emit(
-          diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{},
-          "manifest [modules] include '{}' is not a module path", entry);
+      const u32 index = bag.emit<i18n::Key::PkgModulesIncludeNotAModulePath>(
+          diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{}, entry);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -192,9 +188,8 @@ base::Result<std::vector<ModuleFile>, diag::Reported> resolve_module_files(
       }
     }
     if (!taken) {
-      const u32 index = bag.emit(
+      const u32 index = bag.emit<i18n::Key::PkgSourceFileNotSelected>(
           diag::Severity::Warning, MODULES_UNSELECTED_FILE,
-          "source file '{}' is not in [modules]",
           sources.name(id).value_or(std::string_view{"[unknown file]"}));
       (void)index;
     }

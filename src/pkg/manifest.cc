@@ -14,6 +14,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
+#include "i18n/messages.h"
 #include "pkg/arena_copy.h"
 #include "source/source.h"
 
@@ -99,8 +100,8 @@ base::Result<PackageManifest, diag::Reported> semantic_error(
     std::string_view message) {
   // Semantic errors name the manifest in the message and carry no span;
   // only syntax errors have a position to report.
-  const u32 index = bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-                             "manifest '{}': {}", filename, message);
+  const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
+      diag::Severity::Error, MANIFEST_SEMANTIC_ERROR, filename, message);
   (void)index;
   return base::make_err(diag::Reported{});
 }
@@ -122,10 +123,8 @@ base::Result<std::string_view, diag::Reported> dep_string(
   *present = true;
   const auto value = it->second.value<std::string_view>();
   if (!value.has_value() || value->empty()) {
-    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-             "manifest '{}': dependency '{}' needs '{}' to be a non-empty "
-             "string",
-             filename, dep, field);
+    bag.emit<i18n::Key::PkgDependencyEmptyString>(
+        diag::Severity::Error, MANIFEST_SEMANTIC_ERROR, filename, dep, field);
     return base::make_err(diag::Reported{});
   }
   return base::make_ok(*value);
@@ -163,8 +162,8 @@ base::Result<Dependency, diag::Reported> parse_dependency(
     std::string_view spec,
     const toml::node& node) {
   if (!node.is_table()) {
-    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-             "manifest '{}': dependency '{}' must be a table", filename, spec);
+    bag.emit<i18n::Key::PkgDependencyNotATable>(
+        diag::Severity::Error, MANIFEST_SEMANTIC_ERROR, filename, spec);
     return base::make_err(diag::Reported{});
   }
   const toml::table& table = *node.as_table();
@@ -187,19 +186,15 @@ base::Result<Dependency, diag::Reported> parse_dependency(
     start = slash + 1;
   }
   if (parts < 1 || parts > 3) {
-    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-             "manifest '{}': dependency '{}' is not of the form name, "
-             "owner/name, or owner/suite/package",
-             filename, spec);
+    bag.emit<i18n::Key::PkgDependencyBadSpecifier>(
+        diag::Severity::Error, MANIFEST_SEMANTIC_ERROR, filename, spec);
     return base::make_err(diag::Reported{});
   }
   for (u32 i = 0; i < parts; ++i) {
     const bool glob_here = segments[i] == "*";
     if (segments[i].empty() || (glob_here && !(i == 2 && parts == 3))) {
-      bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-               "manifest '{}': dependency '{}' is not of the form name, "
-               "owner/name, or owner/suite/package",
-               filename, spec);
+      bag.emit<i18n::Key::PkgDependencyBadSpecifier>(
+          diag::Severity::Error, MANIFEST_SEMANTIC_ERROR, filename, spec);
       return base::make_err(diag::Reported{});
     }
   }
@@ -212,9 +207,8 @@ base::Result<Dependency, diag::Reported> parse_dependency(
       return base::make_err(diag::Reported{});
     }
     if (!has_path) {
-      bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-               "manifest '{}': dependency '{}' needs {{ path = ... }}",
-               filename, spec);
+      bag.emit<i18n::Key::PkgDependencyNeedsPath>(
+          diag::Severity::Error, MANIFEST_SEMANTIC_ERROR, filename, spec);
       return base::make_err(diag::Reported{});
     }
     return base::make_ok(Dependency{
@@ -270,9 +264,9 @@ base::Result<Dependency, diag::Reported> parse_dependency(
     if (field != "path" && field != "version" && field != "git" &&
         field != "branch" && field != "tag" && field != "rev" &&
         field != "registry") {
-      bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-               "manifest '{}': dependency '{}' has an unknown field '{}'",
-               filename, spec, field);
+      bag.emit<i18n::Key::PkgDependencyUnknownField>(diag::Severity::Error,
+                                                     MANIFEST_SEMANTIC_ERROR,
+                                                     filename, spec, field);
       return base::make_err(diag::Reported{});
     }
     (void)node;
@@ -280,32 +274,25 @@ base::Result<Dependency, diag::Reported> parse_dependency(
   const u32 refs =
       (has_branch ? 1u : 0u) + (has_tag ? 1u : 0u) + (has_rev ? 1u : 0u);
   if (refs > 1) {
-    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-             "manifest '{}': dependency '{}' names more than one of branch, "
-             "tag, rev",
-             filename, spec);
+    bag.emit<i18n::Key::PkgDependencyTooManyRefs>(
+        diag::Severity::Error, MANIFEST_SEMANTIC_ERROR, filename, spec);
     return base::make_err(diag::Reported{});
   }
   if (refs > 0 && !has_git) {
-    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-             "manifest '{}': dependency '{}' names a ref without a git "
-             "remote",
-             filename, spec);
+    bag.emit<i18n::Key::PkgDependencyRefWithoutRemote>(
+        diag::Severity::Error, MANIFEST_SEMANTIC_ERROR, filename, spec);
     return base::make_err(diag::Reported{});
   }
   // A `path` beside `git` is the subpath inside the repository; beside
   // `version` it would be two sources at once.
   if (has_version && (has_git || has_path)) {
-    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-             "manifest '{}': dependency '{}' names more than one source",
-             filename, spec);
+    bag.emit<i18n::Key::PkgDependencyTooManySources>(
+        diag::Severity::Error, MANIFEST_SEMANTIC_ERROR, filename, spec);
     return base::make_err(diag::Reported{});
   }
   if (has_version && !valid_version_req(version_text)) {
-    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-             "manifest '{}': dependency '{}' needs a version of the form "
-             "=1.2.3, 1.2, or 1",
-             filename, spec);
+    bag.emit<i18n::Key::PkgDependencyBadVersion>(
+        diag::Severity::Error, MANIFEST_SEMANTIC_ERROR, filename, spec);
     return base::make_err(diag::Reported{});
   }
   Dependency dep{
@@ -453,8 +440,8 @@ void report_manifest_error(ManifestError error,
       detail = "module list with an empty entry";
       break;
   }
-  const u32 index = bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-                             "manifest '{}': {}", name, detail);
+  const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
+      diag::Severity::Error, MANIFEST_SEMANTIC_ERROR, name, detail);
   (void)index;
 }
 
@@ -467,9 +454,9 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
   toml::parse_result result = toml::parse(bytes, filename);
   if (!result) {
     const toml::parse_error& error = result.error();
-    const u32 index = bag.emit(diag::Severity::Error, MANIFEST_SYNTAX_ERROR,
-                               toml_span(bytes, file, error.source()),
-                               "TOML syntax error: {}", error.description());
+    const u32 index = bag.emit<i18n::Key::PkgTomlSyntaxError>(
+        diag::Severity::Error, MANIFEST_SYNTAX_ERROR,
+        toml_span(bytes, file, error.source()), error.description());
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -712,10 +699,8 @@ base::Result<Dependency, diag::Reported> parse_dependency_flag(
     std::string_view key = trim_flag(body.substr(0, eq));
     std::string_view value = trim_flag(body.substr(eq + 1));
     if (value.empty()) {
-      bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-               "manifest '{}': dependency '{}' must be a specifier or "
-               "`specifier = {{ ... }}`",
-               filename, fragment);
+      bag.emit<i18n::Key::PkgDependencyNotASpecifier>(
+          diag::Severity::Error, MANIFEST_SEMANTIC_ERROR, filename, fragment);
       return base::make_err(diag::Reported{});
     }
     // Slashes need quoting for TOML, so a bare key is quoted here
@@ -733,26 +718,22 @@ base::Result<Dependency, diag::Reported> parse_dependency_flag(
   toml::parse_result parsed =
       toml::parse("[dependencies]\n" + table + "\n", filename);
   if (!parsed) {
-    bag.emit(diag::Severity::Error, MANIFEST_SYNTAX_ERROR,
-             "manifest '{}': dependency '{}' does not parse", filename,
-             fragment);
+    bag.emit<i18n::Key::PkgDependencyDoesNotParse>(
+        diag::Severity::Error, MANIFEST_SYNTAX_ERROR, filename, fragment);
     return base::make_err(diag::Reported{});
   }
   const toml::table& root = parsed.table();
   const auto deps_it = root.find("dependencies");
   if (deps_it == root.end() || !deps_it->second.is_table() ||
       deps_it->second.as_table()->empty()) {
-    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-             "manifest '{}': dependency '{}' must be a specifier or "
-             "`specifier = {{ ... }}`",
-             filename, fragment);
+    bag.emit<i18n::Key::PkgDependencyNotASpecifier>(
+        diag::Severity::Error, MANIFEST_SEMANTIC_ERROR, filename, fragment);
     return base::make_err(diag::Reported{});
   }
   const toml::table* const deps = deps_it->second.as_table();
   if (deps->size() != 1) {
-    bag.emit(diag::Severity::Error, MANIFEST_SEMANTIC_ERROR,
-             "manifest '{}': dependency '{}' names more than one entry",
-             filename, fragment);
+    bag.emit<i18n::Key::PkgDependencyTooManyEntries>(
+        diag::Severity::Error, MANIFEST_SEMANTIC_ERROR, filename, fragment);
     return base::make_err(diag::Reported{});
   }
   const auto entry = deps->begin();

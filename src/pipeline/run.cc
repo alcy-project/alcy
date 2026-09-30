@@ -14,6 +14,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
+#include "i18n/messages.h"
 #include "lower/lower.h"
 #include "path/path.h"
 #include "pipeline/build.h"
@@ -63,8 +64,8 @@ base::Result<RunOutcome, diag::Reported> link_and_run(
   }
   base::Result<i32, SpawnError> executed = run_command(argv);
   if (executed.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_LINK_ERROR,
-                                   "cannot execute '{}'", exe_path);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotExecute>(
+        diag::Severity::Error, PIPELINE_LINK_ERROR, exe_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }

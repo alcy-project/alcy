@@ -23,6 +23,7 @@
 #include "fpag/debug/profiler/profile_scope.h"
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
+#include "i18n/messages.h"
 #include "lower/lower.h"
 #include "path/path.h"
 #include "pipeline/emit_mode.h"
@@ -92,8 +93,8 @@ struct EmittedModule {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "optimize",
                                              "backend");
     if (codegen_llvm::optimize_module(*module, "").is_err()) {
-      const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                     "cannot optimize the module");
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotOptimize>(
+          diag::Severity::Error, PIPELINE_IO_ERROR);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -109,8 +110,8 @@ base::Result<void, diag::Reported> write_output(PipelineContext& ctx,
                                                 const std::string& output_path,
                                                 std::span<const u8> bytes) {
   if (!io::write_file(bytes, output_path)) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot write {} '{}'", what, output_path);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotWrite>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, what, output_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -131,8 +132,8 @@ base::Result<void, diag::Reported> emit_package_object(
   base::Result<std::vector<u8>, codegen_llvm::ObjectEmitError> object =
       codegen_llvm::emit_object(*emitted.module, "");
   if (object.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot emit object '{}'", output_path);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotEmitObject>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, output_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -193,15 +194,15 @@ base::Result<void, diag::Reported> link_executable(
 
   base::Result<i32, SpawnError> linked = run_command(argv);
   if (linked.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_LINK_ERROR,
-                                   "cannot run the system compiler");
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotRunSystemCompiler>(
+        diag::Severity::Error, PIPELINE_LINK_ERROR);
     (void)index;
     return base::make_err(diag::Reported{});
   }
   const i32 code = std::move(linked).unwrap();
   if (code != 0) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_LINK_ERROR,
-                                   "linking '{}' failed", exe_path);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineLinkFailed>(
+        diag::Severity::Error, PIPELINE_LINK_ERROR, exe_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -222,8 +223,8 @@ base::Result<std::string, diag::Reported> emit_output(
   base::Result<path::Path, path::PathError> parsed =
       path::Path::from_native(output_path);
   if (parsed.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "invalid output path '{}'", output_path);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineInvalidOutputPath>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, output_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -271,8 +272,8 @@ base::Result<std::string, diag::Reported> build_single_file(
     return ctx.sources.load(target);
   }();
   if (file.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot read '{}'", target);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotRead>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, target);
     (void)index;
     return base::make_err(diag::Reported{});
   }

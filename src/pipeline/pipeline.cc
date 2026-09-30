@@ -16,6 +16,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/file_handle.h"
+#include "i18n/messages.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
 #include "pkg/manifest.h"
@@ -135,22 +136,22 @@ base::Result<DiscoveredSources, diag::Reported> discover_sources(
     diag::DiagBag& bag) {
   base::Result<path::Path, path::PathError> root = path::Path::from_native(dir);
   if (root.is_err()) {
-    const u32 index = bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                               "invalid source directory '{}'", dir);
+    const u32 index = bag.emit<i18n::Key::PipelineInvalidSourceDirectory>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, dir);
     (void)index;
     return base::make_err(diag::Reported{});
   }
   const path::Path root_path = std::move(root).unwrap();
   std::vector<path::Path> paths;
   if (!walk_sources(root_path, paths)) {
-    const u32 index = bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                               "source directory '{}' is not accessible", dir);
+    const u32 index = bag.emit<i18n::Key::PipelineSourceDirectoryInaccessible>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, dir);
     (void)index;
     return base::make_err(diag::Reported{});
   }
   if (paths.empty()) {
-    const u32 index = bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                               "no source files found under '{}'", dir);
+    const u32 index = bag.emit<i18n::Key::PipelineNoSourceFiles>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, dir);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -162,9 +163,8 @@ base::Result<DiscoveredSources, diag::Reported> discover_sources(
     base::Result<source::FileId, source::SourceError> loaded =
         sources.load(path.as_view());
     if (loaded.is_err()) {
-      const u32 index =
-          bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                   "cannot read source file '{}'", path.as_view());
+      const u32 index = bag.emit<i18n::Key::PipelineCannotReadSource>(
+          diag::Severity::Error, PIPELINE_IO_ERROR, path.as_view());
       (void)index;
       return base::make_err(diag::Reported{});
     }

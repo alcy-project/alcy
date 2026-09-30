@@ -194,9 +194,69 @@
   F(CodegenArgumentNotFormattable, "argument is not formattable") \
   F(CodegenInvalidModuleTree, "internal error: invalid module tree: {}") \
   /* pkg */ \
+  F(PkgCannotReadManifest, "cannot read manifest '{}'") \
+  F(PkgDependencyBadSpecifier, "manifest '{}': dependency '{}' is not of the form name, owner/name, or owner/suite/package") \
+  F(PkgDependencyBadVersion, "manifest '{}': dependency '{}' needs a version of the form =1.2.3, 1.2, or 1") \
+  F(PkgDependencyCycle, "dependency cycle detected at '{}'") \
   F(PkgDependencyCycleInReExports, "dependency cycle in re-exports") \
+  F(PkgDependencyDoesNotParse, "manifest '{}': dependency '{}' does not parse") \
+  F(PkgDependencyEmptyString, "manifest '{}': dependency '{}' needs '{}' to be a non-empty string") \
+  F(PkgDependencyNeedsPath, "manifest '{}': dependency '{}' needs {{ path = ... }}") \
+  F(PkgDependencyNotASpecifier, "manifest '{}': dependency '{}' must be a specifier or `specifier = {{ ... }}`") \
+  F(PkgDependencyNotATable, "manifest '{}': dependency '{}' must be a table") \
+  F(PkgDependencyRefWithoutRemote, "manifest '{}': dependency '{}' names a ref without a git remote") \
+  F(PkgDependencyTooManyEntries, "manifest '{}': dependency '{}' names more than one entry") \
+  F(PkgDependencyTooManyRefs, "manifest '{}': dependency '{}' names more than one of branch, tag, rev") \
+  F(PkgDependencyTooManySources, "manifest '{}': dependency '{}' names more than one source") \
+  F(PkgDependencyUnknownField, "manifest '{}': dependency '{}' has an unknown field '{}'") \
+  F(PkgInvalidPackageDirectory, "invalid package directory '{}'") \
+  F(PkgManifestInvalid, "manifest '{}': {}") \
+  F(PkgModuleSelectedTwice, "module '{}' is selected by more than one file") \
+  F(PkgModulesIncludeEscapesPackage, "manifest [modules] include '{}' resolves outside the package") \
+  F(PkgModulesIncludeHasNoFile, "manifest [modules] include '{}' has no file") \
+  F(PkgModulesIncludeNotAModulePath, "manifest [modules] include '{}' is not a module path") \
+  F(PkgSourceFileNotSelected, "source file '{}' is not in [modules]") \
+  F(PkgTomlSyntaxError, "TOML syntax error: {}") \
+  F(PkgToolchainLinkArgsNotStrings, "toolchain '{}': link-args must be a list of strings") \
+  F(PkgToolchainLinkerNotAString, "toolchain '{}': linker must be a string") \
+  F(PkgToolchainNotLoaded, "toolchain '{}' is not a loaded file") \
+  F(PkgToolchainTomlSyntaxError, "toolchain '{}': TOML syntax error: {}") \
   /* pipeline */ \
+  F(PipelineBinTargetNotDiscovered, "bin target '{}' was not discovered") \
+  F(PipelineBinTargetNotSelected, "bin target '{}' is not in [modules]") \
+  F(PipelineCannotCreateDirectory, "cannot create directory '{}'") \
+  F(PipelineCannotCreatePackage, "cannot create package '{}'") \
+  F(PipelineCannotCreatePackageFiles, "cannot create package files: '{}'") \
+  F(PipelineCannotDerivePackageName, "cannot derive a package name from '{}'; use [A-Za-z0-9_-] only") \
+  F(PipelineCannotEmitObject, "cannot emit object '{}'") \
+  F(PipelineCannotExecute, "cannot execute '{}'") \
+  F(PipelineCannotInitPackage, "cannot init package '{}'") \
+  F(PipelineCannotOptimize, "cannot optimize the module") \
+  F(PipelineCannotRead, "cannot read '{}'") \
+  F(PipelineCannotReadSource, "cannot read source file '{}'") \
+  F(PipelineCannotRunSystemCompiler, "cannot run the system compiler") \
+  F(PipelineCannotWrite, "cannot write {} '{}'") \
+  F(PipelineDependencyIsAStdMember, "dependency '{}' is a member of alcy/std; write \"alcy/std/{}\"") \
+  F(PipelineDependencyIsEmbeddedStd, "dependency '{}' is part of the embedded standard library, which takes no source") \
+  F(PipelineDependencyNamesNoSource, "dependency '{}' names no source; give one of path, version, git") \
+  F(PipelineDependencyNeedsFetcher, "dependency '{}' needs a fetcher the resolver does not have yet") \
+  F(PipelineDependencyNotAStdMember, "dependency '{}' is not a member of alcy/std") \
+  F(PipelineDependencyOverlaps, "dependency '{}' overlaps '{}'; name every member or glob the suite, not both") \
+  F(PipelineInvalidOutputPath, "invalid output path '{}'") \
+  F(PipelineInvalidPackageName, "invalid package name '{}'; use [A-Za-z0-9_-] only") \
+  F(PipelineInvalidSourceDirectory, "invalid source directory '{}'") \
   F(PipelineInvalidSourcePath, "invalid source path for file") \
+  F(PipelineInvalidTarget, "invalid target '{}'") \
+  F(PipelineLinkFailed, "linking '{}' failed") \
+  F(PipelineManifestNoBinTarget, "manifest '{}' declares no [[bin]] targets") \
+  F(PipelineManifestNotLoaded, "manifest '{}' is not a loaded file") \
+  F(PipelineManifestTooManyBinTargets, "manifest '{}' declares {} [[bin]] targets; only one is supported") \
+  F(PipelineModuleSharedByTwoFiles, "module '{}' is shared by two files relative to the bin's directory '{}'") \
+  F(PipelineNoSourceFiles, "no source files found under '{}'") \
+  F(PipelinePathExists, "'{}' already exists; refusing to overwrite") \
+  F(PipelineSourceDirectoryInaccessible, "source directory '{}' is not accessible") \
+  F(PipelineStdIsASuite, "'alcy/std' is a suite, not a package; write \"alcy/std/*\" for every member or \"alcy/std/<package>\" for one") \
+  F(PipelineStdPackageRequiresSuite, "alcy/std/{} requires alcy/std/{}; add it to [dependencies]") \
   /* diagnostic renderer */ \
   F(RenderSeverityError, "error") \
   F(RenderSeverityNote, "note") \

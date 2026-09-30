@@ -15,6 +15,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/file_handle.h"
+#include "i18n/messages.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/vcs.h"
@@ -77,9 +78,8 @@ NewResult write_package_files(PipelineContext& ctx,
   for (const path::Path& path : files) {
     io::FileHandle probe;
     if (probe.open(path.c_str(), io::FileAccess::Read)) {
-      const u32 index = ctx.bag.emit(
-          diag::Severity::Error, PIPELINE_IO_ERROR,
-          "'{}' already exists; refusing to overwrite", path.as_view());
+      const u32 index = ctx.bag.emit<i18n::Key::PipelinePathExists>(
+          diag::Severity::Error, PIPELINE_IO_ERROR, path.as_view());
       (void)index;
       return base::make_err(0);
     }
@@ -111,9 +111,8 @@ path = "main.al")",
       (vcs == Vcs::Git &&
        !write_text_file(package_dir.join(".gitignore").as_view(),
                         GIT_IGNORE_TEXT))) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot create package files: '{}'",
-                                   package_dir.as_view());
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotCreatePackageFiles>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, package_dir.as_view());
     (void)index;
     return base::make_err(0);
   }
@@ -157,9 +156,8 @@ NewResult create_new_package(PipelineContext& ctx,
                              std::string_view target_dir,
                              Vcs vcs) {
   if (!valid_package_name(target_dir)) {
-    const u32 index = ctx.bag.emit(
-        diag::Severity::Error, PIPELINE_IO_ERROR,
-        "invalid package name '{}'; use [A-Za-z0-9_-] only", target_dir);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineInvalidPackageName>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, target_dir);
     (void)index;
     return base::make_err(0);
   }
@@ -167,8 +165,8 @@ NewResult create_new_package(PipelineContext& ctx,
   base::Result<path::Path, path::PathError> root =
       path::Path::from_native(target_dir);
   if (root.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot create package '{}'", target_dir);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotCreatePackage>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, target_dir);
     (void)index;
     return base::make_err(0);
   }
@@ -182,8 +180,8 @@ NewResult init_package(PipelineContext& ctx,
   base::Result<path::Path, path::PathError> root =
       path::Path::from_native(target_dir);
   if (root.is_err()) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot init package '{}'", target_dir);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotInitPackage>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, target_dir);
     (void)index;
     return base::make_err(0);
   }
@@ -195,10 +193,8 @@ NewResult init_package(PipelineContext& ctx,
     name = fallback;
   }
   if (!valid_package_name(name)) {
-    const u32 index = ctx.bag.emit(
-        diag::Severity::Error, PIPELINE_IO_ERROR,
-        "cannot derive a package name from '{}'; use [A-Za-z0-9_-] only",
-        target_dir);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotDerivePackageName>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, target_dir);
     (void)index;
     return base::make_err(0);
   }

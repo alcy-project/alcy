@@ -14,6 +14,7 @@
 #include "fpag/io/io_util.h"
 #include "fpag/mem/page_allocator.h"
 #include "i18n/language.h"
+#include "i18n/messages.h"
 #include "path/path.h"
 
 namespace pipeline {
@@ -41,15 +42,15 @@ base::Result<void, diag::Reported> ensure_directories(PipelineContext& ctx,
       continue;
     }
     if (!io::create_directory(std::string(prefix))) {
-      const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                     "cannot create directory '{}'", prefix);
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotCreateDirectory>(
+          diag::Severity::Error, PIPELINE_IO_ERROR, prefix);
       (void)index;
       return base::make_err(diag::Reported{});
     }
   }
   if (!io::create_directory(std::string(path))) {
-    const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                   "cannot create directory '{}'", path);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotCreateDirectory>(
+        diag::Severity::Error, PIPELINE_IO_ERROR, path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
