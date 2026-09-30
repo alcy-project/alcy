@@ -11,9 +11,9 @@
 namespace pipeline {
 
 // One embedded standard library source, named by its suite-relative
-// path (`core/prelude.al`). Staged to a scratch directory and injected
-// as a prelude module, so compilations need no install-layout
-// assumptions. The table is generated; see tools/embed_std.py.
+// path (`core/prelude.al`). Attached as a prelude module under that name,
+// so compilations need no install-layout assumptions and no filesystem
+// is touched. The table is generated; see tools/embed_std.py.
 struct StagedSource {
   const char* path;
   const unsigned char* data;

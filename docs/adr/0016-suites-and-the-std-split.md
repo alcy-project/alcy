@@ -115,7 +115,11 @@ tables, so a manifest edit needs no script edit beside it. An unresolved
 name that a member carries names that member, which is what makes an
 opt-in `core` diagnosable rather than mysterious. `alcy compile` selects
 the same way, with `--no-std` and `--deps`, since a single file has no
-manifest to select from.
+manifest to select from. The staged bytes are copied into the source
+manager under their suite-relative names rather than written to a scratch
+directory and mapped: nothing reaches the filesystem, two compilations
+cannot read each other's prelude, and a diagnostic about a standard
+library source names `core/prelude.al` instead of a temporary path.
 
 **Follow-up:** enforcement of `export`, cross-package `use` between
 members, and the fetchers every other owner and suite needs. Until those

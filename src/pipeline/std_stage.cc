@@ -3,18 +3,12 @@
 
 #include "pipeline/std_stage.h"
 
-#include <optional>
 #include <span>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include "analyzer/resolve.h"
-#include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
-#include "fpag/base/result.h"
-#include "fpag/io/temp_dir.h"
 #include "pipeline/embedded_std.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
@@ -48,57 +42,36 @@ std::string_view as_view(const unsigned char* data, u64 len) {
 
 }  // namespace
 
-base::Result<std::span<const analyzer::ModuleInput>, diag::Reported>
-std_prelude(PipelineContext& ctx, const StdSelection& selection) {
+std::span<const analyzer::ModuleInput> std_prelude(
+    PipelineContext& ctx,
+    const StdSelection& selection) {
   if (ctx.std_staged && ctx.std_selected == selection.members) {
-    return base::make_ok(
-        std::span<const analyzer::ModuleInput>(ctx.std_inputs));
+    return std::span<const analyzer::ModuleInput>(ctx.std_inputs);
   }
   ctx.std_inputs.clear();
   ctx.std_selected = selection.members;
-  // The scratch directory must be unique per process. A fixed name is
-  // wiped and recreated on construction, and each staged file is then
-  // written with "wb", which truncates the existing inode rather than
-  // replacing it. Two alcy processes sharing one directory therefore
-  // truncate a prelude the other has already mapped, and the reader then
-  // faults past the end of a truncated mapping. Parallel builds and
-  // concurrent editor integrations hit this routinely.
-  ctx.std_scratch.emplace(io::TempDir::create_unique("alcy_std_"));
-  io::TempDir& scratch = *ctx.std_scratch;
-  // One facade per selected member plus the modules beside it,
-  // named by the path within the suite. Anything unselected is absent,
-  // not merely out of scope.
+  // One facade per selected member plus the modules beside it, named by
+  // the path within the suite. Anything unselected is absent, not merely
+  // out of scope. The bytes come from the embedded table and are copied
+  // into the source manager under that name, so nothing touches the
+  // filesystem and two compilations never read each other's prelude.
   for (usize i = 0; i < STAGED_SOURCE_COUNT; ++i) {
     const StagedSource& source = STAGED_SOURCES[i];
     if (!selected(selection.members, std::string_view(source.path))) {
       continue;
     }
-    if (!scratch.write_file(
-            std::string_view(source.path),
-            as_view(source.data,
-                    static_cast<decltype(source.len)>(source.len)))) {
-      const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                     "cannot stage the standard library");
-      (void)index;
-      return base::make_err(diag::Reported{});
-    }
-    base::Result<source::FileId, source::SourceError> loaded =
-        ctx.sources.load(scratch.join(std::string_view(source.path)));
-    if (loaded.is_err()) {
-      const u32 index = ctx.bag.emit(diag::Severity::Error, PIPELINE_IO_ERROR,
-                                     "cannot load the standard library");
-      (void)index;
-      return base::make_err(diag::Reported{});
-    }
+    const source::FileId id = ctx.sources.add_virtual(
+        source.path,
+        as_view(source.data, static_cast<decltype(source.len)>(source.len)));
     // A source named `prelude.al` is its package's facade: its public
-    // surface is in scope without a `use`. The name is read from what was
-    // staged, so a `prelude` module in a user package stays ordinary.
+    // surface is in scope without a `use`. The name is read from the
+    // embedded path, so a `prelude` module in a user package stays
+    // ordinary.
     const bool facade = ends_with(source.path, "/prelude.al");
-    ctx.std_inputs.push_back(
-        {std::string_view(source.path), std::move(loaded).unwrap(), facade});
+    ctx.std_inputs.push_back({std::string_view(source.path), id, facade});
   }
   ctx.std_staged = true;
-  return base::make_ok(std::span<const analyzer::ModuleInput>(ctx.std_inputs));
+  return std::span<const analyzer::ModuleInput>(ctx.std_inputs);
 }
 
 }  // namespace pipeline

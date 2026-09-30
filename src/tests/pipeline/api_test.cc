@@ -27,15 +27,9 @@ namespace pipeline {
 #if !BUILD_FLAG(IS_OS_ASMJS)
 TEST_CASE("Pipeline stages the standard library prelude") {
   PipelineContext ctx;
-  base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> prelude =
-      std_prelude(ctx, pipeline::full_std_selection());
-  CHECK(prelude.is_ok());
-  CHECK(!ctx.bag.has_errors());
-  if (prelude.is_err()) {
-    return;
-  }
   const std::span<const analyzer::ModuleInput> inputs =
-      std::move(prelude).unwrap();
+      std_prelude(ctx, pipeline::full_std_selection());
+  CHECK(!ctx.bag.has_errors());
   CHECK(!inputs.empty());
   if (inputs.empty()) {
     return;

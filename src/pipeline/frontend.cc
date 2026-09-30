@@ -74,22 +74,17 @@ base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
     source::FileId root,
     const StdSelection& selection) {
   const analyzer::ModuleInput single_input{"", root};
-  base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> prelude =
-      [&] {
-        PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "prelude",
-                                                 "frontend");
-        return std_prelude(ctx, selection);
-      }();
-  if (prelude.is_err()) {
-    return base::make_err(diag::Reported{});
-  }
+  const std::span<const analyzer::ModuleInput> prelude = [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "prelude",
+                                             "frontend");
+    return std_prelude(ctx, selection);
+  }();
   return [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve",
                                              "frontend");
     const std::span<const analyzer::StdHint> hints(STD_HINTS, STD_HINT_COUNT);
     return analyzer::resolve_modules(root, {&single_input, 1}, "", ctx.sources,
-                                     ctx.ast, ctx.bag,
-                                     std::move(prelude).unwrap(), hints);
+                                     ctx.ast, ctx.bag, prelude, hints);
   }();
 }
 

@@ -3,111 +3,96 @@
 
 #include "pipeline/std_stage.h"
 
+#include <optional>
 #include <set>
 #include <span>
-#include <string>
 #include <string_view>
-#include <utility>
 
 #include "analyzer/resolve.h"
-#include "diag/bag.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
-#include "fpag/base/result.h"
-#include "fpag/io/temp_dir.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
+#include "source/source.h"
 
 namespace pipeline {
 
 namespace {
 
-// The staged standard library lives in a scratch directory whose files
-// are then memory-mapped, so two contexts sharing one directory corrupt
-// each other: the second wipes the directory on construction and rewrites
-// each file with "wb", which truncates the inode the first still has
-// mapped. Reading past the end of a truncated mapping is a fault, not a
-// wrong answer, so the property is stated on the directory rather than on
-// the symptom, which needs a race to reproduce.
-base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> stage(
-    PipelineContext& ctx) {
+std::span<const analyzer::ModuleInput> stage(PipelineContext& ctx) {
   return std_prelude(ctx, full_std_selection());
-}
-
-// Staging only records the directory on success, so this hands back null
-// rather than a reference the caller has no way to check.
-const io::TempDir* scratch_of(const PipelineContext& ctx) {
-  return ctx.std_scratch.has_value() ? &*ctx.std_scratch : nullptr;
 }
 
 }  // namespace
 
-TEST_CASE("Staging the standard library uses a private directory") {
-  PipelineContext a;
-  PipelineContext b;
-  base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> first =
-      stage(a);
-  base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> second =
-      stage(b);
-  CHECK(first.is_ok());
-  CHECK(second.is_ok());
-  const io::TempDir* const a_dir = scratch_of(a);
-  const io::TempDir* const b_dir = scratch_of(b);
-  CHECK(a_dir != nullptr);
-  CHECK(b_dir != nullptr);
-  if (first.is_err() || second.is_err() || a_dir == nullptr ||
-      b_dir == nullptr) {
-    return;
-  }
-  // A shared name would make a parallel build or two editor
-  // integrations read each other's prelude.
-  CHECK(a_dir->path() != b_dir->path());
-}
-
-TEST_CASE("Staging the standard library twice reuses one directory") {
-  // Within a context the staged inputs are kept, so the paths handed to
-  // the resolver must survive a second call. Staging again under a fresh
-  // name would invalidate every view already taken.
+// The suite's bytes are copied into the source manager rather than
+// written out and mapped, so nothing reaches the filesystem and two
+// compilations cannot read each other's prelude. The name a source
+// carries is what diagnostics see, and it stays the path within the
+// suite: a name carrying a scratch directory would put a temporary path
+// in every diagnostic about a standard library source.
+TEST_CASE("Staged sources are virtual and named by their suite path") {
   PipelineContext ctx;
-  base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> first =
-      stage(ctx);
-  CHECK(first.is_ok());
-  const io::TempDir* const dir = scratch_of(ctx);
-  CHECK(dir != nullptr);
-  if (first.is_err() || dir == nullptr) {
-    return;
-  }
-  const std::string_view first_path = dir->path();
-  const usize first_count = std::move(first).unwrap().size();
-  base::Result<std::span<const analyzer::ModuleInput>, diag::Reported> second =
-      stage(ctx);
-  CHECK(second.is_ok());
-  const io::TempDir* const again = scratch_of(ctx);
-  CHECK(again != nullptr);
-  if (second.is_err() || again == nullptr) {
-    return;
-  }
-  CHECK(again->path() == first_path);
-  CHECK(std::move(second).unwrap().size() == first_count);
-}
-
-TEST_CASE("Staging the standard library gives every context its own path") {
-  // Same property as above over several contexts, so a name derived from
-  // anything but a per-context random suffix fails here too.
-  std::set<std::string> paths;
-  for (i32 i = 0; i < 4; ++i) {
-    PipelineContext ctx;
-    base::Result<std::span<const analyzer::ModuleInput>, diag::Reported>
-        staged = stage(ctx);
-    const io::TempDir* const dir = scratch_of(ctx);
-    CHECK(staged.is_ok());
-    CHECK(dir != nullptr);
-    if (staged.is_err() || dir == nullptr) {
+  const std::span<const analyzer::ModuleInput> inputs = stage(ctx);
+  CHECK(!inputs.empty());
+  for (const analyzer::ModuleInput& input : inputs) {
+    CHECK(input.id != source::UNKNOWN_FILE);
+    CHECK(!ctx.sources.is_mapped(input.id));
+    const std::optional<std::string_view> name = ctx.sources.name(input.id);
+    CHECK(name.has_value());
+    if (!name.has_value()) {
       continue;
     }
-    CHECK(paths.insert(std::string(dir->path())).second);
+    CHECK(*name == input.name);
+    CHECK(!name->starts_with("/"));
+    const std::optional<std::string_view> bytes = ctx.sources.bytes(input.id);
+    CHECK(bytes.has_value());
+    if (bytes.has_value()) {
+      CHECK(!bytes->empty());
+    }
   }
-  CHECK(paths.size() == 4);
+}
+
+TEST_CASE("Staging the standard library twice reuses one source per name") {
+  // Within a context the sources are kept, so the ids handed to the
+  // resolver must survive a second call. Re-adding a name would mint a
+  // second id for one name and leave every view taken from the first
+  // reading bytes nothing else refers to.
+  PipelineContext ctx;
+  const std::span<const analyzer::ModuleInput> first = stage(ctx);
+  CHECK(!first.empty());
+  if (first.empty()) {
+    return;
+  }
+  const std::optional<std::string_view> text = ctx.sources.bytes(first[0].id);
+
+  const std::span<const analyzer::ModuleInput> second = stage(ctx);
+  CHECK(second.size() == first.size());
+  for (usize i = 0; i < second.size() && i < first.size(); ++i) {
+    CHECK(second[i].id == first[i].id);
+    CHECK(ctx.sources.bytes(second[i].id).has_value());
+  }
+  CHECK(ctx.sources.bytes(first[0].id) == text);
+}
+
+TEST_CASE("Staging names one facade per member") {
+  // A member's entry module is what puts its public surface in scope
+  // without a `use`, so the flag has to follow the name and only the
+  // name: a `prelude` module in a user package is ordinary.
+  PipelineContext ctx;
+  const std::span<const analyzer::ModuleInput> inputs = stage(ctx);
+  CHECK(!inputs.empty());
+  std::set<std::string_view> names;
+  std::set<std::string_view> facades;
+  for (const analyzer::ModuleInput& input : inputs) {
+    CHECK(names.insert(input.name).second);
+    const bool entry_module = input.name.ends_with("/prelude.al");
+    CHECK(input.is_facade == entry_module);
+    if (input.is_facade) {
+      CHECK(facades.insert(input.name).second);
+    }
+  }
+  CHECK(!facades.empty());
 }
 
 }  // namespace pipeline
