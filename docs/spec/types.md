@@ -51,7 +51,7 @@
   core text library live post-MVP. Baremetal targets without core
   use `u8`/`u32` directly.
 
-## Ranges (representation decided, types deferred)
+## Ranges (representation decided, types next)
 
 - A range is interval data, not an iterator: a single
   `Range<T> { start: Bound<T>, end: Bound<T> }` with
@@ -59,13 +59,16 @@
   markers map directly onto bound constructors; an absent endpoint
   needs no marker.
 - Iteration is explicit and separate: only integer ranges expose an
-  iterator (via a compiler-blessed implementation); float ranges
-  have no iteration method. Stepping lives on the iterator, never
-  on the interval.
+  iterator, and it arrives with the `spec` system as an `Iterator`
+  implementation; float ranges have no iteration method. Stepping
+  lives on the iterator, never on the interval.
 - `for` over a range desugars through a single documented rule to
   the explicit iterator form. Index and slice APIs accept bound
   data, never iterators.
-- Range types, their methods, and `for` loops arrive together,
-  post-MVP. The operator tokens and the endpoint-marking rule above
-  are frozen now.
+- Range data and the index expressions that read a run through one
+  (`&a[1..3]`, `s[1..]`, both endpoints bounds-checked) land next.
+  Iteration, stepping, and `for` arrive with `spec`, which gives
+  them an `Iterator` to hang on; a compiler-blessed iterator would
+  be thrown away there. The operator tokens and the endpoint-marking
+  rule above are frozen now.
 

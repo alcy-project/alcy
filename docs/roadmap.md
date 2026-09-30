@@ -22,10 +22,16 @@ peripheral work lives in `backlog.md`.
   element place, and a view keeps the buffer's loan — `Vec::as_slice`,
   `as_mut_slice`, and `String::as_bytes` are the first borrowed APIs,
   pinned by `ok-slice`, `err-slice-realloc`, and `exe-slice`.
-  Sub-slicing waits for range endpoints.
+  Sub-slicing arrives with range data, the task below.
 - [ ] `Map` and `Set`, str-keyed with an internal hash.
 
   No traits. Self-hosting needs them.
+- [ ] `Range` data and sub-slicing.
+
+  Range expressions and the interval types behind them, so an index
+  accepts a run (`&a[1..3]`, `s[1..]`), both endpoints
+  bounds-checked. Iteration and `for` wait for `spec`: a blessed
+  iterator would be thrown away there.
 - [ ] `ArrayVec<T, N>`, a fixed-capacity inline container.
 
   The baremetal case proper: no heap, so no realloc hazard, and the
