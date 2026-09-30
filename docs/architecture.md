@@ -345,7 +345,11 @@ Source bytes
    optimization passes, or region precision demand it.
 
 4. **LLVM code generation** - `codegen_llvm` walks verified basic blocks and
-   lowers alcy IR operations to LLVM IR.
+   lowers alcy IR operations to LLVM IR. The program runtime — `alcy_alloc`,
+   `alcy_dealloc`, `alcy_print`, `alcy_println`, `alcy_panic`, and
+   `alcy_sys_write`, over libc — is defined in that same module, so a build
+   spawns no compiler for it and it is optimized with the program
+   ([ADR 0023](docs/adr/0023-program-runtime-in-process.md)).
 
 Each stage should expose the minimum data needed by the next stage. A stage
 must not reach backward into another stage's private state as a shortcut.

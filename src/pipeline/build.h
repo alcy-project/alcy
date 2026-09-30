@@ -27,10 +27,10 @@ base::Result<lower::LoweredPackage, diag::Reported> compile_tree(
     analyzer::ModuleTree tree);
 
 // Emits one relocatable object for a lowered package. The module is
-// built and, when `optimize` is set, put through the O3 pipeline here
-// rather than inside the emission, so that every backend sees the same
-// module. Write failures land in the bag; the output's parent directory
-// is the caller's to have made.
+// built, runtime included, and, when `optimize` is set, put through the
+// O3 pipeline here rather than inside the emission, so that every
+// backend sees the same module. Write failures land in the bag; the
+// output's parent directory is the caller's to have made.
 base::Result<void, diag::Reported> emit_package_object(
     PipelineContext& ctx,
     lower::LoweredPackage& package,
@@ -53,21 +53,20 @@ base::Result<void, diag::Reported> emit_package_bitcode(
     bool optimize,
     const std::string& output_path);
 
-// Links one object plus the staged runtime into an executable. An empty
-// driver in `link` selects the default toolchain driver, and its
-// arguments follow the two objects on the command line.
+// Links one object into an executable. An empty driver in `link`
+// selects the default toolchain driver, and its arguments follow the
+// object on the command line.
 base::Result<void, diag::Reported> link_executable(
     PipelineContext& ctx,
     LinkOptions link,
     const std::string& object_path,
-    const std::string& runtime_path,
     const std::string& exe_path);
 
 // Emits lowered IR according to the mode: one object, textual IR,
-// bitcode, or an object staged with the runtime and linked into an
-// executable. Both single-file and package builds end here. Success carries the
-// path written, which the caller cannot work out on its own when the
-// caller left the path empty.
+// bitcode, or an object linked into an executable. Both single-file and
+// package builds end here. Success carries the path written, which the
+// caller cannot work out on its own when the caller left the path
+// empty.
 base::Result<std::string, diag::Reported> emit_output(
     PipelineContext& ctx,
     lower::LoweredPackage& lowered,

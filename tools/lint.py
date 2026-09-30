@@ -49,7 +49,6 @@ def target_files(target_dirs: list[Path]):
 # outside the header gate until the generator is renamed. A stale
 # entry fails the run instead of silently passing.
 GENERATED_HEADER_EXCLUSIONS = [
-    "src/pipeline/embedded_runtime.h",
     "src/pipeline/embedded_std.h",
 ]
 

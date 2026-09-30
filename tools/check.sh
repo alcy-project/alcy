@@ -84,8 +84,6 @@ fi
 "${py_runner[@]}" "$tools_dir/check_borrow_rules.py" \
   --build-subdir=$debug_subdir
 
-"${py_runner[@]}" "$tools_dir/check_runtime.py"
-
 # The samples run through the harness the cases above use, so a program
 # kept as an example is also one that still compiles and still prints
 # what it says it prints. Here rather than with the cases because these

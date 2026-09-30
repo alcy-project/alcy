@@ -18,9 +18,8 @@ exactly when present; `*_contains` lists must all appear in the
 respective stream.
 
 Cases are copied to a scratch directory, built to executables with
-`alcy compile` for a single file or `alcy build` for a package (which
-links the embedded runtime), executed, and asserted. Directories
-holding alcy.toml build as packages.
+`alcy compile` for a single file or `alcy build` for a package, executed,
+and asserted. Directories holding alcy.toml build as packages.
 """
 
 import argparse
@@ -54,10 +53,6 @@ def parse_expect(path: Path):
     return expected_exit, expected_stdout, stdout_contains, stderr_contains
 
 
-# The runtime alcy links against, as source. Only the sanitizing path
-# needs it: alcy stages its own embedded copy for a normal build.
-RUNTIME_SOURCE = project_root_dir / "runtime" / "alcy_runtime.c"
-
 # Sanitizers for a generated program. Address is the one that finds
 # memory bugs in compiler output; undefined is here because a lowering
 # mistake often shows up as an integer or shift operation that is merely
@@ -74,9 +69,9 @@ def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path):
 
     alcy writes an object straight from an LLVM TargetMachine, with no
     external compiler in the path, so the code it generates cannot be
-    instrumented after the fact. Textual IR can: the program is handed to
-    clang, which both compiles and instruments it. That is the reason
-    --emit=llvm-ir exists, and this is what it is for.
+    instrumented after the fact. Textual IR can: the module is handed to
+    clang, which both compiles and instruments it, runtime included.
+    That is the reason --emit=llvm-ir exists, and this is what it is for.
     """
     ir = work / "main.ll"
     command = "build" if is_package else "compile"
@@ -88,10 +83,7 @@ def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path):
     if proc.returncode != 0 or not ir.is_file():
         return proc, "alcy --emit=llvm-ir did not produce a module"
 
-    # -x ir applies to every input after it, so the runtime's language is
-    # named again rather than left inheriting it.
-    link = [SYSTEM_CLANG, "-x", "ir", str(ir), "-x", "c", str(RUNTIME_SOURCE),
-            *SANITIZERS, "-o", str(exe)]
+    link = [SYSTEM_CLANG, "-x", "ir", str(ir), *SANITIZERS, "-o", str(exe)]
     proc = subprocess.run(
         link, capture_output=True, text=True, encoding="utf-8", cwd=work
     )

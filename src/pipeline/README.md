@@ -3,7 +3,7 @@
 Compilation pipeline: the linear stage flow that wires every module
 together (see `docs/architecture.md`).
 
-Stages run frontend (discovery, std/runtime staging) -> analyzer
+Stages run frontend (discovery, std staging) -> analyzer
 (resolve, check) -> lower -> borrow -> codegen_llvm (emit, link) ->
 run. Each stage takes validated artifacts from the previous one and
 returns `base::Result<T, diag::Reported>`, reporting through the
@@ -15,7 +15,7 @@ shared `DiagBag` in `PipelineContext`.
 - `check_single_file` / `check_package_tree` -> `CheckResult` counts.
 - `run_single_file` / `run_package` -> `RunOutcome{exit_code}`.
 - `std_prelude` -> `base::Result<std::span<...>, diag::Reported>`;
-  `stage_runtime` -> `base::Result<void, diag::Reported>`.
+  `link_executable` -> `base::Result<void, diag::Reported>`.
 
 ## Input requirements
 

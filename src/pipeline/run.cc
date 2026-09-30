@@ -19,7 +19,6 @@
 #include "pipeline/build.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
-#include "pipeline/runtime_stage.h"
 #include "pipeline/spawn.h"
 #include "pipeline/target.h"
 #include "source/source.h"
@@ -41,15 +40,12 @@ base::Result<RunOutcome, diag::Reported> link_and_run(
     const void* announce_ctx) {
   io::TempDir scratch = io::TempDir::create_unique("alcy_run_");
   const std::string object_path = scratch.join("main.o");
-  if (emit_package_object(ctx, lowered, optimize, object_path).is_err() ||
-      stage_runtime(scratch, ctx.bag).is_err()) {
+  if (emit_package_object(ctx, lowered, optimize, object_path).is_err()) {
     return base::make_err(diag::Reported{});
   }
   const std::string exe_path =
       scratch.join(std::string("main") + std::string(exe_suffix()));
-  const std::string runtime_path = scratch.join(runtime_source_name());
-  if (link_executable(ctx, link, object_path, runtime_path, exe_path)
-          .is_err()) {
+  if (link_executable(ctx, link, object_path, exe_path).is_err()) {
     return base::make_err(diag::Reported{});
   }
   std::vector<std::string> argv;

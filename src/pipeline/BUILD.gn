@@ -1,21 +1,6 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-action("embed_runtime") {
-  script = "//tools/embed_runtime.py"
-  inputs = [
-    "//runtime/alcy_runtime.c",
-    "//runtime/alcy_runtime.h",
-  ]
-  outputs = [ "$target_gen_dir/embedded_runtime.cc" ]
-  args = [
-    "--runtime-dir",
-    rebase_path("//runtime", root_build_dir),
-    "--output",
-    rebase_path("$target_gen_dir/embedded_runtime.cc", root_build_dir),
-  ]
-}
-
 action("embed_std") {
   script = "//tools/embed_std.py"
   inputs = [
@@ -64,13 +49,11 @@ action("embed_std") {
 
 source_set("pipeline") {
   sources = [
-    "$target_gen_dir/embedded_runtime.cc",
     "$target_gen_dir/embedded_std.cc",
     "build.cc",
     "build.h",
     "check.cc",
     "check.h",
-    "embedded_runtime.h",
     "embedded_std.h",
     "emit_mode.cc",
     "emit_mode.h",
@@ -85,8 +68,6 @@ source_set("pipeline") {
     "pipeline_context.h",
     "run.cc",
     "run.h",
-    "runtime_stage.cc",
-    "runtime_stage.h",
     "spawn.cc",
     "spawn.h",
     "std_select.cc",
@@ -99,7 +80,6 @@ source_set("pipeline") {
     "vcs.h",
   ]
   deps = [
-    ":embed_runtime",
     ":embed_std",
     "//src:base_modules",
     "//src:modules",

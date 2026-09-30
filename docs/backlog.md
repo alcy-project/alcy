@@ -14,16 +14,11 @@ replaced. The foundations are in `roadmap.md`.
   `--emit=ir` and any cache.
 - [ ] Lib packages: the suite's other half next to `[[bin]]`.
 - [ ] Link-time measurement: a benchmark reporting where a link goes —
-  driver startup, the runtime's own compilation, the linker — and
-  asserting nothing about wall time.
-- [ ] Program runtime emitted in process: the `alcy_*` functions are
-  defined in the module our own codegen already builds, so no clang
-  compiles `alcy_runtime.c` on every build. The pinned LLVM ships no
-  clang, and a host-made `.bc` would couple every build to its version,
-  so the functions are built as IR instead.
+  driver startup, the object write, the linker — and asserting nothing
+  about wall time.
 - [ ] Embedded lld, and the system driver with it. The driver picks
   crt files, system libraries, and search paths per platform, so this
-  follows the two items above and stands as its own project.
+  follows the item above and stands as its own project.
 
 ## Shipped
 
@@ -67,3 +62,11 @@ replaced. The foundations are in `roadmap.md`.
   arguments, so a library or `-fuse-ld=lld` reaches it unquoted, and a
   flag replaces the file's list the way `--linker` replaces the file's
   driver. Before it, no external library could be linked at all.
+- [x] Runtime emitted in process: the `alcy_*` functions are defined in
+  the module our own codegen already builds, so no compiler is spawned
+  for them on every build, the link line loses an input, and the
+  runtime is optimized with the program. A hello-world's link phase
+  went 60.1 ms → 29.2 ms and its total 114 ms → 85.2 ms. The pinned
+  LLVM ships no clang and a host-made `.bc` would couple every build to
+  its version, so the functions are built as IR rather than linked in.
+  Designed in `docs/adr/0023`.

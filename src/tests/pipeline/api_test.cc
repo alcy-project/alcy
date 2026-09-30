@@ -116,11 +116,14 @@ TEST_CASE("Pipeline release build produces a working executable") {
   }
 }
 
-// The emitter spills every local, so an unoptimized module has an
-// alloca per one and the O3 pipeline's mem2reg promotes them. That makes
-// the presence of an alloca the difference between the flag reaching the
-// IR and the flag reaching only the object file, which is how a release
-// build once produced byte-identical IR either way.
+// The emitter spills every local, so an unoptimized module has an alloca
+// per one and the O3 pipeline's mem2reg promotes them. That makes the
+// program's spills the difference between the flag reaching the IR and
+// the flag reaching only the object file, which is how a release build
+// once produced byte-identical IR either way. The runtime is defined in
+// the module too, and its `alcy_alloc` keeps one alloca of its own —
+// `posix_memalign` writes its result through a pointer — so the two are
+// told apart by element type.
 TEST_CASE("Release optimizes the textual IR, not only the object") {
   io::TempDir dir = io::TempDir::create_unique("pipeline_ir_optimize_");
   const std::string source =
@@ -149,8 +152,9 @@ TEST_CASE("Release optimizes the textual IR, not only the object") {
   const std::string released_ir = io::read_file(released);
   CHECK(!plain_ir.empty());
   CHECK(!released_ir.empty());
-  CHECK(plain_ir.find("alloca") != std::string::npos);
-  CHECK(released_ir.find("alloca") == std::string::npos);
+  CHECK(plain_ir.find("alloca i32") != std::string::npos);
+  CHECK(released_ir.find("alloca i32") == std::string::npos);
+  CHECK(released_ir.find("alloca ptr") != std::string::npos);
   CHECK(plain_ir != released_ir);
 }
 

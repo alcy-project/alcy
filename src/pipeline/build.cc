@@ -14,6 +14,7 @@
 #include "codegen_llvm/common.h"
 #include "codegen_llvm/llvm_ir_emitter.h"
 #include "codegen_llvm/llvm_object_emitter.h"
+#include "codegen_llvm/runtime_ir.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -28,7 +29,6 @@
 #include "pipeline/frontend.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
-#include "pipeline/runtime_stage.h"
 #include "pipeline/spawn.h"
 #include "pipeline/std_select.h"
 #include "pipeline/target.h"
@@ -70,11 +70,11 @@ struct EmittedModule {
   llvm::LLVMContext context;
   std::unique_ptr<llvm::Module> module;
 
-  // Builds the module and, when asked for it, optimizes it. This is the
-  // only place that decides: the optimization belongs to the module, not
-  // to whichever backend goes on to consume it, and a backend that ran
-  // the pipeline on its own left every other consumer reading
-  // unoptimized IR.
+  // Builds the module — the program and, defined in it, the runtime —
+  // and, when asked for it, optimizes it. This is the only place that
+  // decides: the optimization belongs to the module, not to whichever
+  // backend goes on to consume it, and a backend that ran the pipeline
+  // on its own left every other consumer reading unoptimized IR.
   base::Result<void, diag::Reported> build(PipelineContext& ctx,
                                            lower::LoweredPackage& package,
                                            bool optimize) {
@@ -82,6 +82,10 @@ struct EmittedModule {
     codegen_llvm::LlvmIrEmitter emitter(
         module.get(), std::move(package.storage), &ctx.strings, TARGET_WIDTH);
     std::move(emitter).emit();
+    // Before the optimizer, so the runtime is inlined and folded like
+    // any other code, and after the program, so its definitions land in
+    // the declarations the program's call sites already hold.
+    codegen_llvm::add_runtime_definitions(*module, TARGET_WIDTH);
     if (!optimize) {
       return base::make_ok();
     }
@@ -170,19 +174,17 @@ base::Result<void, diag::Reported> link_executable(
     PipelineContext& ctx,
     LinkOptions link,
     const std::string& object_path,
-    const std::string& runtime_path,
     const std::string& exe_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "link", "backend");
   const std::string driver =
       link.driver.empty() ? "clang" : std::string(link.driver);
-  // The driver's own arguments follow both objects, where a library is
-  // resolved against them, and stop short of the output, which stays the
+  // The driver's own arguments follow the object, where a library is
+  // resolved against it, and stop short of the output, which stays the
   // last word.
   std::vector<std::string> argv;
-  argv.reserve(3 + link.args.size() + 2);
+  argv.reserve(2 + link.args.size() + 2);
   argv.emplace_back(driver);
   argv.emplace_back(object_path);
-  argv.emplace_back(runtime_path);
   for (std::string_view argument : link.args) {
     argv.emplace_back(argument);
   }
@@ -243,12 +245,10 @@ base::Result<std::string, diag::Reported> emit_output(
     }
     io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
     const std::string object_path = scratch.join("main.o");
-    if (emit_package_object(ctx, lowered, optimize, object_path).is_err() ||
-        stage_runtime(scratch, ctx.bag).is_err()) {
+    if (emit_package_object(ctx, lowered, optimize, object_path).is_err()) {
       return base::make_err(diag::Reported{});
     }
-    const std::string runtime_path = scratch.join(runtime_source_name());
-    return link_executable(ctx, link, object_path, runtime_path, output_path);
+    return link_executable(ctx, link, object_path, output_path);
   }();
   if (written.is_err()) {
     return base::make_err(std::move(written).unwrap_err());
@@ -257,7 +257,7 @@ base::Result<std::string, diag::Reported> emit_output(
 }
 
 // Single-file build: runs the full frontend over one source file, then
-// emits an object and links it with the staged runtime.
+// emits an object and links it into an executable.
 base::Result<std::string, diag::Reported> build_single_file(
     PipelineContext& ctx,
     std::string_view target,

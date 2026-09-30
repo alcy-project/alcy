@@ -15,6 +15,8 @@ source_set("codegen_llvm") {
     "llvm_ir_storage.h",
     "llvm_object_emitter.cc",
     "llvm_object_emitter.h",
+    "runtime_ir.cc",
+    "runtime_ir.h",
   ]
   deps = [
     "//src:base_modules",

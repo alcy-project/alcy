@@ -6,9 +6,8 @@
 """Embeds the toolchain standard library sources as byte arrays.
 
 Reads lib/std/<member>/main.al source files, emitting a translation
-unit that exposes their exact bytes. Mirrors embed_runtime.py: byte
-arrays stay portable across hosts without external tools or
-per-architecture handling.
+unit that exposes their exact bytes. Byte arrays stay portable across
+hosts without external tools or per-architecture handling.
 """
 
 import argparse
