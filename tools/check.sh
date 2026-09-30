@@ -84,6 +84,12 @@ fi
 "${py_runner[@]}" "$tools_dir/check_borrow_rules.py" \
   --build-subdir=$debug_subdir
 
+# The specification is what a program is written against, and the compiler
+# is how this one happens to implement it. That boundary is prose in
+# `docs/spec/overview.md` and a check here, since a reference that creeps
+# in is the kind of thing nobody notices until the thing it names moves.
+"${py_runner[@]}" "$tools_dir/check_spec.py"
+
 # The samples run through the harness the cases above use, so a program
 # kept as an example is also one that still compiles and still prints
 # what it says it prints. Here rather than with the cases because these

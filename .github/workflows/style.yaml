@@ -90,3 +90,11 @@ jobs:
         shell: bash
         run: |
           uv run ./tools/lint.py
+
+      # The specification states what a program is written against, so it
+      # names no file, module, or symbol of the compiler that implements
+      # it. It runs here rather than in the build jobs because it reads
+      # documents and needs no build at all.
+      - name: Check the Specification
+        shell: bash
+        run: uv run ./tools/check_spec.py

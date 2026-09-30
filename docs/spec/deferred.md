@@ -32,8 +32,8 @@ relied upon by MVP programs or by the MVP compiler implementation.
   model is the relational part: the outlives constraints between regions
   and the intersection a struct composes by, which today hold because a
   reborrow carries its parent's loans rather than because the relation
-  is solved. The rules are stated as a gate in
-  `tools/check_borrow_rules.py`. See `docs/adr/0012-reborrow-on-reference-read.md`.
+  is solved. Each rule is stated as a case the
+  conformance suite runs. See `docs/adr/0012-reborrow-on-reference-read.md`.
 - `spec` (trait) definitions and dispatch, coherence rules, and
   monomorphization beyond per-instantiation enum, struct, and method
   specialization.
