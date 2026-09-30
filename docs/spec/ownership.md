@@ -10,6 +10,11 @@
   and still exists.
 - `&mut T` fields are permitted and make the aggregate move-only
   through the structural `Copy` rule (see region composition below).
+- A buffer view (`str`, `&[T]`) carries the loan of the buffer it
+  reads, so a write that may reallocate or overwrite the buffer
+  conflicts while the view is live. Copying the view keeps the loan;
+  copying out its length does not, because the length half owns
+  nothing.
 
 ## Region model
 

@@ -301,6 +301,15 @@ class Lowerer {
                            const std::vector<ir::TypeIdx>& type_args);
   ir::TypeIdx usize_type();
   bool str_parts(Val str, ir::OperandIdx& bytes_out, ir::OperandIdx& len_out);
+  bool slice_parts(Val slice,
+                   ir::OperandIdx& bytes_out,
+                   ir::OperandIdx& len_out);
+  Val build_slice_value(ir::OperandIdx base,
+                        ir::OperandIdx len,
+                        ir::TypeIdx ref_ty,
+                        diag::Span span);
+  bool is_slice_ref(ir::TypeIdx param) const;
+  ir::TypeIdx slice_pointee(ir::TypeIdx type) const;
   ir::OperandIdx advance_ptr(ir::OperandIdx ptr,
                              ir::OperandIdx offset,
                              diag::Span span);

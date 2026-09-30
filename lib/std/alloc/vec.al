@@ -82,6 +82,18 @@ impl<T> Vec<T> {
     ret Option::Some(uninit_ref(elem_ref(self.buf, index)))
   }
 
+  // The whole buffer as a shared view. The slice borrows the
+  // vector, so it stays readable while the vector is not grown.
+  pub fn as_slice(self: &Self) -> &[T] {
+    ret slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len)
+  }
+
+  // The whole buffer as an exclusive view. Growing while it is live
+  // reallocates under it, so the checker reports the conflict.
+  pub fn as_mut_slice(mut self: &mut Self) -> &mut [T] {
+    ret slice_from_parts_mut(uninit_assume(elem_ptr(self.buf, 0)), self.len)
+  }
+
   pub fn at_mut(mut self: &mut Self, index: usize) -> Option<&mut T> {
     if index >= self.len {
       ret Option::None

@@ -537,6 +537,109 @@ case(
   ret 0
 }""")
 
+# --- a slice is a str in the shape of any element: a view that
+# --- carries the buffer's loan, with the length half owning nothing.
+case(
+    "view", "as_slice-then-push", "reject",
+    """fn main() -> i32 {
+  mut v := Vec::<i32>::new()
+  v.push(1i32)
+  s := v.as_slice()
+  v.push(2i32)
+  ret slice_len(s) as i32
+}""")
+
+case(
+    "view", "as_slice-copy-then-push", "reject",
+    """fn main() -> i32 {
+  mut v := Vec::<i32>::new()
+  v.push(1i32)
+  s := v.as_slice()
+  t := s
+  v.push(2i32)
+  ret slice_len(t) as i32
+}""")
+
+case(
+    "view", "as_slice-last-use-then-push", "accept",
+    """fn main() -> i32 {
+  mut v := Vec::<i32>::new()
+  v.push(1i32)
+  s := v.as_slice()
+  n := slice_len(s)
+  v.push(2i32)
+  ret n as i32
+}""")
+
+case(
+    "view", "as_mut_slice-write-then-push", "reject",
+    """fn main() -> i32 {
+  mut v := Vec::<i32>::new()
+  v.push(1i32)
+  mut s := v.as_mut_slice()
+  s[0] = 9
+  v.push(2i32)
+  ret slice_len(s) as i32
+}""")
+
+case(
+    "view", "as_mut_slice-last-use-then-push", "accept",
+    """fn main() -> i32 {
+  mut v := Vec::<i32>::new()
+  v.push(1i32)
+  mut s := v.as_mut_slice()
+  s[0] = 9
+  n := slice_len(s)
+  v.push(2i32)
+  ret *v.at(0).unwrap() + n as i32 - 10
+}""")
+
+case(
+    "view", "shared-slice-then-mut-slice", "reject",
+    """fn main() -> i32 {
+  mut v := Vec::<i32>::new()
+  v.push(1i32)
+  s := v.as_slice()
+  m := v.as_mut_slice()
+  ret slice_len(s) + slice_len(m)
+}""")
+
+case(
+    "view", "mut-slice-element-write", "accept",
+    """fn touch(mut v: &mut [i32]) {
+  v[1] = 9
+}
+fn main() -> i32 {
+  mut a := [1i32, 2i32]
+  touch(&mut a)
+  ret a[1] - 9
+}""")
+
+case(
+    "view", "slice-element-then-push", "reject",
+    """fn main() -> i32 {
+  mut v := Vec::<i32>::new()
+  v.push(1i32)
+  v.push(2i32)
+  s := v.as_slice()
+  r := &s[1]
+  v.push(3i32)
+  ret *r
+}""")
+
+case(
+    "view", "slice-element-copy-then-push", "accept",
+    """fn main() -> i32 {
+  mut v := Vec::<i32>::new()
+  v.push(1i32)
+  v.push(2i32)
+  s := v.as_slice()
+  r := &s[1]
+  n := *r
+  v.push(3i32)
+  ret n - 2
+}""")
+
 # --- a struct holding a reference composes by intersection ------------
 case(
     "struct", "reference-field-kept-live", "accept",

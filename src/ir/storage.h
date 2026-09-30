@@ -42,6 +42,7 @@ struct StorageState {
   using Types = base::Vec<TypeNode, TypeIdx, Alloc<TypeNode>>;
   using StructTypes = base::Vec<StructType, StructTypeIdx, Alloc<StructType>>;
   using ArrayTypes = base::Vec<ArrayType, ArrayTypeIdx, Alloc<ArrayType>>;
+  using SliceTypes = base::Vec<SliceType, SliceTypeIdx, Alloc<SliceType>>;
   using EnumTypes = base::Vec<EnumType, EnumTypeIdx, Alloc<EnumType>>;
   using EnumVariantTypes =
       base::Vec<EnumVariantType, EnumVariantTypeIdx, Alloc<EnumVariantType>>;
@@ -59,6 +60,7 @@ struct StorageState {
   Types types;
   StructTypes struct_types;
   ArrayTypes array_types;
+  SliceTypes slice_types;
   EnumTypes enum_types;
   EnumVariantTypes enum_variant_types;
   RefTypes ref_types;
@@ -178,10 +180,21 @@ inline TypeLayout type_layout(const StorageState& state,
     case TypeTag::F64: return {8, 8};
     // Fat pointer: {bytes, len}, with the length riding the target.
     case TypeTag::Str: return {2 * word, word};
+    case TypeTag::Slice: return {2 * word, word};
     case TypeTag::Ptr:
-    case TypeTag::Ref:
-    case TypeTag::MutRef:
     case TypeTag::Function: return {word, word};
+    case TypeTag::Ref:
+    case TypeTag::MutRef: {
+      // A reference to a slice is the fat pointer itself, passed by
+      // value like `str`: borrowck owns the distinction, codegen sees
+      // two words either way.
+      const TypeNode& pointee =
+          state.types[state.ref_types[node.as_ref()].pointee];
+      if (pointee.tag == TypeTag::Slice) {
+        return {2 * word, word};
+      }
+      return {word, word};
+    }
     case TypeTag::Struct:
       return fields_layout(state, state.struct_types[node.as_struct()].fields,
                            width);
@@ -244,6 +257,8 @@ inline bool is_copy_type(const StorageState& state, TypeIdx idx) {
     }
     case TypeTag::Array:
       return is_copy_type(state, state.array_types[node.as_array()].element);
+    case TypeTag::Slice:
+      return is_copy_type(state, state.slice_types[node.as_slice()].element);
     case TypeTag::Enum: {
       const EnumType& enum_type = state.enum_types[node.as_enum()];
       for (EnumVariantTypeIdx vidx = enum_type.variants.head();
@@ -308,6 +323,9 @@ class Storage {
   }
   const StorageState::ArrayTypes& array_types() const {
     return state_.array_types;
+  }
+  const StorageState::SliceTypes& slice_types() const {
+    return state_.slice_types;
   }
   const StorageState::EnumTypes& enum_types() const {
     return state_.enum_types;

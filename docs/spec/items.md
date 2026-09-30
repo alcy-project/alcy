@@ -46,6 +46,14 @@
   - `str_from_parts(ptr: &u8, len: usize) -> str` builds a view over
     caller-provided bytes. Only core uses it, to expose `String` as
     `str`; arbitrary pointers are the caller's responsibility.
+  - `slice_len<T>(s: &[T]) -> usize` reports a slice view's element
+    count.
+  - `slice_from_parts<T>(ptr: &T, len: usize) -> &[T]` builds a shared
+    view over caller-provided elements, and `slice_from_parts_mut<T>`
+    is its exclusive counterpart, taking and returning `&mut`. As
+    with `str_from_parts`, arbitrary pointers are the caller's
+    responsibility; the view keeps the loan of the referent it was
+    built from.
   - `alloc<T>(count: usize) -> &mut MaybeUninit<T>` reserves room for
     `count` elements of `T` at `T`'s own size and alignment, and
     returns the unique owning reference. A zero `count` still yields a

@@ -13,12 +13,16 @@ peripheral work lives in `backlog.md`.
   buffer's loan alive, so holding one across a `push` conflicts — the
   first exercise of the realloc-conflict rule on a type the standard
   library owns, pinned by `err-string-realloc`.
-- [ ] Slices, `&[T]`.
+- [x] Slices, `&[T]`.
 
-  The generalization of `str`, and the ground the borrowed APIs and
-  the containers stand on. Confirm what of it already works before
-  building: the indexing and slicing of a fixed array may carry most
-  of the syntax, with the borrowed type and its lifetime the rest.
+  Landed as the generalization of `str`: an unsized `[T]` that only
+  exists behind a reference, whose value is the `{ptr, len}` pair
+  carried whole across calls (`docs/adr/0022`). A fixed array decays
+  at an argument, indexing bounds-checks the runtime length through an
+  element place, and a view keeps the buffer's loan — `Vec::as_slice`,
+  `as_mut_slice`, and `String::as_bytes` are the first borrowed APIs,
+  pinned by `ok-slice`, `err-slice-realloc`, and `exe-slice`.
+  Sub-slicing waits for range endpoints.
 - [ ] `Map` and `Set`, str-keyed with an internal hash.
 
   No traits. Self-hosting needs them.

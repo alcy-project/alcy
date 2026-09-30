@@ -76,6 +76,10 @@ impl String {
     ret str_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len)
   }
 
+  pub fn as_bytes(self: &Self) -> &[u8] {
+    ret slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len)
+  }
+
   // Forgets every byte, keeping the room already reserved.
   pub fn clear(mut self: &mut Self) {
     self.len = 0

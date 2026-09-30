@@ -25,6 +25,25 @@
 - Indexing reads and writes through places with panic-on-out-of-bounds
   semantics. Arrays are `Copy` if and only if their element is.
 
+## Slices
+
+- A slice `[T]` is a run of `T` of runtime length. It is unsized, so
+  it appears only behind a reference: `&[T]` or `&mut [T]`. A bare
+  `[T]` in a type position is rejected.
+- A slice reference is a pointer and a length travelling together, so
+  a view crosses a call boundary whole. A fixed array `[T; N]` decays
+  to `&[T]` (or `&mut [T]`) at an argument position, keeping the
+  borrow's kind and moving the length into the view.
+- Indexing a slice bounds-checks against the runtime length, like a
+  fixed array against its count. `&mut [T]` indexes writable, `&[T]`
+  read-only.
+- A slice is a view, not an owner: `&[T]` copies, `&mut [T]` is
+  move-only, and the view keeps the loan of the buffer it reads (see
+  `ownership.md`). `str` stays its own type rather than spelling as
+  `&[u8]`, with the same representation and the same loan rule.
+- Sub-slicing (`&a[1..3]`, `s[1..]`) needs range endpoints and arrives
+  with range types; see `deferred.md`.
+
 ## Text (staged)
 
 - The compiler-known text type is `str`: byte sequences backing

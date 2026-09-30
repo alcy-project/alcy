@@ -559,7 +559,8 @@ bool Checker::resolve_type_path(u32 module,
 
 ir::TypeIdx Checker::resolve_type(u32 module,
                                   ast::TypeIdx type,
-                                  const ir::TypeIdx* self) {
+                                  const ir::TypeIdx* self,
+                                  bool behind_ref) {
   if (nesting_.exhausted()) {
     report_too_deep(ast.types[type].span);
     return error_type();
@@ -592,10 +593,22 @@ ir::TypeIdx Checker::resolve_type(u32 module,
       return builder.array_type(element, array.count);
     }
     case ast::TypeKind::Ref: {
-      ir::TypeIdx pointee =
-          resolve_type(module, node.payload.get<ast::TypeRef>().inner, self);
+      ir::TypeIdx pointee = resolve_type(
+          module, node.payload.get<ast::TypeRef>().inner, self, true);
       return builder.reference_type(pointee,
                                     node.payload.get<ast::TypeRef>().is_mut);
+    }
+    case ast::TypeKind::Slice: {
+      const ast::TypeSlice& slice = node.payload.get<ast::TypeSlice>();
+      const ir::TypeIdx element = resolve_type(module, slice.element, self);
+      if (!behind_ref) {
+        const u32 index =
+            bag.emit(diag::Severity::Error, ANALYZER_UNKNOWN_TYPE, node.span,
+                     "unsized type `[T]` must be behind a reference (`&[T]`)");
+        (void)index;
+        return error_type();
+      }
+      return builder.slice_type(element);
     }
     case ast::TypeKind::Path: {
       const ast::Path& path = ast.paths[node.payload.get<ast::TypePath>().path];
@@ -720,10 +733,12 @@ bool Checker::is_known_intrinsic(std::string_view name) {
   return name == "memcopy" || name == "print" || name == "println" ||
          name == "panic" || name == "str_len" || name == "str_byte" ||
          name == "str_slice" || name == "sys_write" ||
-         name == "str_from_parts" || name == "alloc" || name == "dealloc" ||
-         name == "elem_ptr" || name == "elem_ref" || name == "size_of" ||
-         name == "align_of" || name == "uninit_write" ||
-         name == "uninit_assume" || name == "uninit_ref";
+         name == "str_from_parts" || name == "slice_len" ||
+         name == "slice_from_parts" || name == "slice_from_parts_mut" ||
+         name == "alloc" || name == "dealloc" || name == "elem_ptr" ||
+         name == "elem_ref" || name == "size_of" || name == "align_of" ||
+         name == "uninit_write" || name == "uninit_assume" ||
+         name == "uninit_ref";
 }
 
 // Verifies a declared intrinsic signature against its canonical
@@ -822,6 +837,43 @@ bool Checker::check_intrinsic_signature(u32 module,
     return or_wrong(params.size() == 1 && uninit_slot(params[0]) &&
                     builder.types()[ret.idx].tag == ir::TypeTag::MutRef &&
                     same(uninit_payload(pointee(params[0])), pointee(ret)));
+  }
+  // A slice reference of either kind: what `slice_len` reads and
+  // what the slice constructors return through.
+  const auto slice_ref = [&](ir::TypeIdx type) {
+    const ir::TypeTag tag = builder.types()[type.idx].tag;
+    return tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef;
+  };
+  if (name == "slice_len") {
+    // `slice_len<T>(s: &[T]) -> usize`.
+    return or_wrong(params.size() == 1 && slice_ref(params[0]) &&
+                    tag_of(pointee(params[0])) == ir::TypeTag::Slice &&
+                    is_usize(ret));
+  }
+  if (name == "slice_from_parts" || name == "slice_from_parts_mut") {
+    // `slice_from_parts<T>(ptr: &T, len: usize) -> &[T]`, and the
+    // exclusive counterpart returning `&mut [T]`.
+    const ir::TypeTag ret_tag = builder.types()[ret.idx].tag;
+    const ir::TypeTag ptr_tag = params.size() == 2
+                                    ? builder.types()[params[0].idx].tag
+                                    : ir::TypeTag::Error;
+    if (!slice_ref(ret) ||
+        (ptr_tag != ir::TypeTag::Ref && ptr_tag != ir::TypeTag::MutRef)) {
+      return wrong();
+    }
+    if (tag_of(pointee(ret)) != ir::TypeTag::Slice) {
+      return wrong();
+    }
+    if (tag_of(pointee(params[0])) == ir::TypeTag::Slice) {
+      return wrong();
+    }
+    const ir::SliceType& slice =
+        builder.slice_types()[builder.types()[pointee(ret)].as_slice()];
+    const bool kinds_match =
+        (ret_tag == ir::TypeTag::MutRef && ptr_tag == ir::TypeTag::MutRef) ||
+        (ret_tag == ir::TypeTag::Ref && ptr_tag == ir::TypeTag::Ref);
+    return or_wrong(params.size() == 2 && is_usize(params[1]) &&
+                    same(slice.element, pointee(params[0])) && kinds_match);
   }
   if (name == "memcopy") {
     expected.push_back(builder.reference_type(u8, true));
@@ -1290,6 +1342,11 @@ bool Checker::has_value_cycle(ir::TypeIdx root,
       cycle = has_value_cycle(array.element, stack, storage);
       break;
     }
+    case ir::TypeTag::Slice: {
+      const ir::SliceType& slice = storage.slice_types()[node.as_slice()];
+      cycle = has_value_cycle(slice.element, stack, storage);
+      break;
+    }
     default: break;
   }
   stack.pop_back();
@@ -1403,6 +1460,13 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
       return aa.count == ab.count &&
              types_equal_inner(aa.element, ab.element, seen);
     }
+    case ir::TypeTag::Slice: {
+      const ir::SliceType& sa =
+          builder.slice_types()[builder.types()[a].as_slice()];
+      const ir::SliceType& sb =
+          builder.slice_types()[builder.types()[b].as_slice()];
+      return types_equal_inner(sa.element, sb.element, seen);
+    }
     case ir::TypeTag::Tuple: {
       const ir::TupleType& ta_t =
           builder.tuple_types()[builder.types()[a].as_tuple()];
@@ -1435,6 +1499,35 @@ bool Checker::coerces_to_shared(ir::TypeIdx expected, ir::TypeIdx actual) {
          builder.ref_types()[builder.types()[actual].as_ref()].pointee.idx;
 }
 
+bool Checker::coerces_array_to_slice(ir::TypeIdx expected, ir::TypeIdx actual) {
+  const ir::TypeTag etag = tag_of(expected);
+  const ir::TypeTag atag = tag_of(actual);
+  if (etag != ir::TypeTag::Ref && etag != ir::TypeTag::MutRef) {
+    return false;
+  }
+  if (atag != ir::TypeTag::Ref && atag != ir::TypeTag::MutRef) {
+    return false;
+  }
+  if (etag == ir::TypeTag::MutRef && atag != ir::TypeTag::MutRef) {
+    return false;
+  }
+  const ir::TypeIdx epointee =
+      builder.ref_types()[builder.types()[expected].as_ref()].pointee;
+  const ir::TypeIdx apointee =
+      builder.ref_types()[builder.types()[actual].as_ref()].pointee;
+  if (tag_of(epointee) != ir::TypeTag::Slice) {
+    return false;
+  }
+  if (tag_of(apointee) != ir::TypeTag::Array) {
+    return false;
+  }
+  const ir::SliceType& slice =
+      builder.slice_types()[builder.types()[epointee].as_slice()];
+  const ir::ArrayType& array =
+      builder.array_types()[builder.types()[apointee].as_array()];
+  return types_equal(slice.element, array.element);
+}
+
 // Unifies actual against expected, emitting a mismatch diagnostic.
 // Never coerces to anything; Error suppresses follow-on diagnostics.
 ir::TypeIdx Checker::unify(ir::TypeIdx expected,
@@ -1460,6 +1553,9 @@ ir::TypeIdx Checker::unify(ir::TypeIdx expected,
   // mismatch. The exclusive reference is consumed at the call, so
   // nothing can write through it while the shared one is live.
   if (coerces_to_shared(expected, actual)) {
+    return actual;
+  }
+  if (coerces_array_to_slice(expected, actual)) {
     return actual;
   }
   // An unwritten slot is the one mismatch with an obvious fix, so it
@@ -2017,11 +2113,20 @@ static u32 param_slot(std::span<const ast::Ident> params,
 Checker::DeclaredBinding Checker::declared_binding(
     std::span<const ast::Ident> params,
     const ast::TypeNode& declared) const {
-  const DeclaredBinding none{static_cast<u32>(params.size()), false, false};
+  const DeclaredBinding none{static_cast<u32>(params.size()), false, false,
+                             false};
   if (declared.kind == ast::TypeKind::Ref) {
     const DeclaredBinding inner = declared_binding(
         params, ast.types[declared.payload.get<ast::TypeRef>().inner]);
-    return DeclaredBinding{inner.slot, true, inner.through_uninit};
+    return DeclaredBinding{inner.slot, true, inner.through_uninit,
+                           inner.through_slice};
+  }
+  if (declared.kind == ast::TypeKind::Slice) {
+    // `&[T]` pins `T` from the array or slice behind the reference.
+    const DeclaredBinding inner = declared_binding(
+        params, ast.types[declared.payload.get<ast::TypeSlice>().element]);
+    return DeclaredBinding{inner.slot, inner.through_ref, inner.through_uninit,
+                           true};
   }
   if (declared.kind != ast::TypeKind::Path) {
     return none;
@@ -2033,13 +2138,14 @@ Checker::DeclaredBinding Checker::declared_binding(
     // `MaybeUninit<T>` pins `T` from the wrapper's payload.
     const DeclaredBinding inner =
         declared_binding(params, ast.types[type_path.args[0]]);
-    return DeclaredBinding{inner.slot, inner.through_ref, true};
+    return DeclaredBinding{inner.slot, inner.through_ref, true,
+                           inner.through_slice};
   }
   if (!type_path.args.empty() || path.segments.size() != 1) {
     return none;
   }
   return DeclaredBinding{param_slot(params, path.segments[0].name), false,
-                         false};
+                         false, false};
 }
 
 // Instantiates a generic function or intrinsic against `args` and
@@ -2161,6 +2267,26 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
         const u32 index =
             bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, span,
                      "'{}' needs uninitialized storage to bind its type "
+                     "argument",
+                     fn_name(item));
+        (void)index;
+        return nullptr;
+      }
+    }
+    if (declared.through_slice) {
+      const ir::TypeTag bound_tag = builder.types()[bound_type.idx].tag;
+      if (bound_tag == ir::TypeTag::Array) {
+        bound_type =
+            builder.array_types()[builder.types()[bound_type.idx].as_array()]
+                .element;
+      } else if (bound_tag == ir::TypeTag::Slice) {
+        bound_type =
+            builder.slice_types()[builder.types()[bound_type.idx].as_slice()]
+                .element;
+      } else {
+        const u32 index =
+            bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, span,
+                     "'{}' needs an array or a slice to bind its type "
                      "argument",
                      fn_name(item));
         (void)index;
@@ -2626,6 +2752,9 @@ bool Checker::contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited) {
     }
     case ir::TypeTag::Array:
       return contains_mut_ref(builder.array_types()[node.as_array()].element,
+                              visited);
+    case ir::TypeTag::Slice:
+      return contains_mut_ref(builder.slice_types()[node.as_slice()].element,
                               visited);
     case ir::TypeTag::Enum: {
       const ir::EnumType& enum_type = builder.enum_types()[node.as_enum()];

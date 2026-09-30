@@ -882,6 +882,69 @@ TEST_CASE("Check accepts mutable reference fields as move-only") {
   CHECK(!result.package->types->is_copy_type(holder->type));
 }
 
+TEST_CASE("Check resolves a slice behind a reference") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn first(v: &[i32]) -> i32 {\n"
+                                      "  ret v[0]\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  mut a := [1i32, 2i32]\n"
+                                      "  ret first(&a) - 1\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const CheckedModule::FnSig* first = nullptr;
+  for (const CheckedModule::FnSig& fn : root->functions) {
+    if (fn.name == "first") {
+      first = &fn;
+      break;
+    }
+  }
+  CHECK(first != nullptr);
+  if (first == nullptr) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  CHECK(types.types()[first->params[0]].tag == ir::TypeTag::Ref);
+  const ir::TypeIdx pointee =
+      types.ref_types()[types.types()[first->params[0]].as_ref()].pointee;
+  CHECK(types.types()[pointee].tag == ir::TypeTag::Slice);
+  const ir::SliceType& slice =
+      types.slice_types()[types.types()[pointee].as_slice()];
+  CHECK(types.types()[slice.element].tag == ir::TypeTag::I32);
+}
+
+TEST_CASE("Check rejects a bare slice type") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn f(v: [i32]) {}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Check exposes core generic shapes through the IR") {
   VirtualDir dir;
   const bool setup =

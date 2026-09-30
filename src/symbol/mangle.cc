@@ -71,6 +71,7 @@ constexpr char TAG_PTR = 'p';
 constexpr char TAG_REF = 'r';
 constexpr char TAG_MUT_REF = 'w';
 constexpr char TAG_ARRAY = 'y';
+constexpr char TAG_SLICE = 'v';
 constexpr char TAG_TUPLE = 'u';
 constexpr char TAG_NOMINAL = 'n';
 
@@ -187,6 +188,12 @@ class Encoder {
         encode_type(pointee(node));
         return;
       case ir::TypeTag::Ptr: out_.push_back(TAG_PTR); return;
+      case ir::TypeTag::Slice: {
+        const ir::SliceType& slice = types_.slice_types()[node.as_slice()];
+        out_.push_back(TAG_SLICE);
+        encode_type(slice.element);
+        return;
+      }
       case ir::TypeTag::Array: {
         const ir::ArrayType& array = types_.array_types()[node.as_array()];
         out_.push_back(TAG_ARRAY);

@@ -56,6 +56,15 @@ VerifyResult verify_storage(const Storage& storage) {
                            storage.types().size())) {
         return err(VerifyErrorKind::StructFieldsOutOfRange, sidx.idx);
       }
+    } else if (node.tag == TypeTag::Slice) {
+      const SliceTypeIdx sidx = node.as_slice();
+      if (sidx.idx >= storage.slice_types().size()) {
+        return err(VerifyErrorKind::TypeMetadataOutOfRange, tidx.idx);
+      }
+      if (storage.slice_types()[sidx].element.idx >= storage.types().size()) {
+        return err(VerifyErrorKind::TypeIdxOutOfRange,
+                   storage.slice_types()[sidx].element.idx);
+      }
     } else if (node.tag == TypeTag::Array) {
       const ArrayTypeIdx aidx = node.as_array();
       if (aidx.idx >= storage.array_types().size()) {

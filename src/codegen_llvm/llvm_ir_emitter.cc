@@ -82,9 +82,30 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
       return llvm::StructType::get(module_->getContext(),
                                    {builder_->getPtrTy(), len_ty});
     }
+    case T::Slice: {
+      // Fat pointer: {bytes, len}. Same shape as `str`; only the
+      // element type differs, and the length still rides the target.
+      llvm::Type* len_ty = width_ == ir::PointerWidth::W64
+                               ? builder_->getInt64Ty()
+                               : builder_->getInt32Ty();
+      return llvm::StructType::get(module_->getContext(),
+                                   {builder_->getPtrTy(), len_ty});
+    }
     case T::Ptr: return builder_->getPtrTy();
-    case T::Ref: return builder_->getPtrTy();
-    case T::MutRef: return builder_->getPtrTy();
+    case T::Ref:
+    case T::MutRef: {
+      // A reference to a slice is the fat pointer itself, matching the
+      // layout above; every other reference rides as a thin pointer.
+      const ir::TypeIdx pointee = storage_->ref_types()[node.as_ref()].pointee;
+      if (storage_->types()[pointee].tag == ir::TypeTag::Slice) {
+        llvm::Type* len_ty = width_ == ir::PointerWidth::W64
+                                 ? builder_->getInt64Ty()
+                                 : builder_->getInt32Ty();
+        return llvm::StructType::get(module_->getContext(),
+                                     {builder_->getPtrTy(), len_ty});
+      }
+      return builder_->getPtrTy();
+    }
     case T::Struct: {
       const ir::StructType& struct_type =
           storage_->struct_types()[node.as_struct()];

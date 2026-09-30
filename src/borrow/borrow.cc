@@ -19,6 +19,7 @@
 #include "ir/opcode.h"
 #include "ir/storage.h"
 #include "ir/type.h"
+#include "ir/type_util.h"
 #include "lower/lower.h"
 
 namespace borrow {
@@ -270,7 +271,8 @@ class Checker {
         const bool carries_reference =
             is_reborrow || loaded == ir::TypeTag::Struct ||
             loaded == ir::TypeTag::Tuple || loaded == ir::TypeTag::Array ||
-            loaded == ir::TypeTag::Enum || loaded == ir::TypeTag::Str;
+            loaded == ir::TypeTag::Enum || loaded == ir::TypeTag::Str ||
+            loaded == ir::TypeTag::Slice;
         if (carries_reference) {
           flow[instr.dst.idx] = flow[addr];
         } else {
@@ -311,6 +313,66 @@ class Checker {
           }
           path[instr.dst.idx].push_back(DEREF_STEP);
         }
+        break;
+      }
+      case ir::Opcode::ExtractValue: {
+        // A field projected out of a slice value names the same place:
+        // the extracted buffer pointer is usable as the buffer it
+        // points at. Anything else keeps today's behavior, where a
+        // copied-out field owns nothing: extending liveness there
+        // would keep an aggregate's loan alive past a plain field
+        // copy, which rejects correct programs.
+        u32 src = NO_ROOT;
+        if (!operand_reg(0, src) || !instr.dst.is_valid()) {
+          break;
+        }
+        const ir::TypeIdx src_type = storage.registers()[src].type;
+        const ir::TypeTag src_tag = tag_of(src_type);
+        bool is_slice_value = src_tag == ir::TypeTag::Slice;
+        if (src_tag == ir::TypeTag::Ref || src_tag == ir::TypeTag::MutRef) {
+          const ir::TypeIdx pointee =
+              storage.ref_types()[storage.types()[src_type].as_ref()].pointee;
+          is_slice_value = tag_of(pointee) == ir::TypeTag::Slice;
+        }
+        if (!is_slice_value) {
+          break;
+        }
+        // Only the buffer half stands for the place the view reads
+        // through. Copying the length out is a plain integer copy that
+        // owns nothing, and letting it keep the loan alive would make
+        // `n := slice_len(s)` count as a use of `s`.
+        u32 field = 0;
+        bool have_field = false;
+        if (instr.operands.size() >= 2) {
+          const ir::Operand& index_op =
+              storage.operands()[instr.operands.head() + 1];
+          if (index_op.is<ir::ImmutableIdx>()) {
+            const ir::Immutable& imm =
+                storage.immutables()[index_op.as_immutable()];
+            const ir::TypeTag tag = storage.types()[imm.type.idx].tag;
+            if (ir::is_integer_type(tag)) {
+              field = static_cast<u32>(imm.as_u64_integer(tag));
+              have_field = true;
+            }
+          }
+        }
+        if (!have_field || field != 0) {
+          flow[instr.dst.idx].clear();
+          break;
+        }
+        if (home[src] != NO_ROOT) {
+          home[instr.dst.idx] = home[src];
+          path[instr.dst.idx] = path[src];
+        } else {
+          for (u32 loan : flow[src]) {
+            if (loan < loans.size() && loans[loan].place.root != NO_ROOT) {
+              home[instr.dst.idx] = loans[loan].place.root;
+              path[instr.dst.idx] = loans[loan].place.path;
+              break;
+            }
+          }
+        }
+        flow[instr.dst.idx] = flow[src];
         break;
       }
       case ir::Opcode::GetElementPtr: {

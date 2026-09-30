@@ -39,6 +39,7 @@ enum class TypeTag : u8 {
   Array,
   Function,
   Enum,
+  Slice,
   Never,
   Tuple,
   // Error recovery marker (never written by user code): failed resolutions
@@ -85,6 +86,13 @@ struct ArrayType {
   u64 count;
 };
 
+// Element of an unsized slice. A value of this type never exists on
+// its own: slices only occur behind a reference, as `{bytes, len}`,
+// so the tag carries no layout of its own.
+struct SliceType {
+  TypeIdx element;
+};
+
 struct EnumVariantType {
   str::StringPoolId name;
   // Payload field types in declaration order; empty for unit variants.
@@ -113,10 +121,14 @@ struct TupleType {
 
 struct TypeNode {
   TypeTag tag;
-  // Meaningful only for Struct/Array/Enum/Ref/MutRef/Tuple tags.
-  base::
-      Union<StructTypeIdx, ArrayTypeIdx, EnumTypeIdx, RefTypeIdx, TupleTypeIdx>
-          data;
+  // Meaningful only for Struct/Array/Slice/Enum/Ref/MutRef/Tuple tags.
+  base::Union<StructTypeIdx,
+              ArrayTypeIdx,
+              SliceTypeIdx,
+              EnumTypeIdx,
+              RefTypeIdx,
+              TupleTypeIdx>
+      data;
 
   inline StructTypeIdx as_struct() const {
     DCHECK_MSG(tag == TypeTag::Struct, "type node is not a struct");
@@ -126,6 +138,11 @@ struct TypeNode {
   inline ArrayTypeIdx as_array() const {
     DCHECK_MSG(tag == TypeTag::Array, "type node is not an array");
     return data.get<ArrayTypeIdx>();
+  }
+
+  inline SliceTypeIdx as_slice() const {
+    DCHECK_MSG(tag == TypeTag::Slice, "type node is not a slice");
+    return data.get<SliceTypeIdx>();
   }
 
   inline EnumTypeIdx as_enum() const {
@@ -171,6 +188,7 @@ constexpr const char* type_to_str(TypeTag tag) {
 
     case T::Struct: return "struct";
     case T::Array: return "array";
+    case T::Slice: return "slice";
     case T::Function: return "function";
     case T::Enum: return "enum";
     case T::Never: return "never";

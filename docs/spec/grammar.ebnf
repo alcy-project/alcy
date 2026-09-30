@@ -44,10 +44,11 @@ use_item    = [ "pub" ] , "use" , path , [ "as" , IDENT ] , ";" ;
 (* Types *)
 
 type        = primitive | "()" | "!" | "str"
-            | tuple_type | array_type | ref_type | path_type ;
+            | tuple_type | array_type | slice_type | ref_type | path_type ;
 primitive   = integer_type | float_type | "bool" ;
 tuple_type  = "(" , type , "," , type , { "," , type } , [ "," ] , ")" ;
 array_type  = "[" , type , ";" , INTEGER , "]" ;
+slice_type  = "[" , type , "]" ;
 ref_type    = "&" , [ "mut" ] , type ;
 path_type   = path , [ "<" , type , { "," , type } , ">" ] ;
 

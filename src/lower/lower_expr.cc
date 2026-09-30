@@ -371,6 +371,58 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
 // The base must be a direct array address; indexing through a
 // reference cannot project through codegen's alloca tracking.
 Val Lowerer::checked_index_addr(Val base, Val position, diag::Span span) {
+  if (base.address && is_slice_ref(base.type)) {
+    // Indexing a slice: materialize the fat struct, project its
+    // fields, check the runtime length, and offset the buffer. The
+    // borrow checker anchors the projection to the loans the value
+    // carries and extends the element, so the place stays tied to
+    // whatever the view was taken from.
+    const Val material = materialize(base);
+    ir::OperandIdx bytes = ir::OperandIdx::invalid();
+    ir::OperandIdx len = ir::OperandIdx::invalid();
+    if (!slice_parts(material, bytes, len)) {
+      return Val{size_one, error_type(), true, false};
+    }
+    const ir::TypeIdx usize_ty = usize_type();
+    Val wide = position;
+    if (tag_of(position.type) != tag_of(usize_ty)) {
+      const ir::RegisterIdx casted =
+          emit(ir::Opcode::TypeCast, usize_ty, {use_value(position)});
+      if (failed) {
+        return Val{size_one, error_type(), true, false};
+      }
+      wide = Val{to_operand(casted, usize_ty), usize_ty, false, false};
+    }
+    const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+    const ir::RegisterIdx in_bounds =
+        emit(ir::Opcode::Lt, boolean, {use_value(wide), len});
+    const ir::BlockIdx ok_block = reserve_block();
+    const ir::BlockIdx bad_block = reserve_block();
+    emit_cond_br(to_operand(in_bounds, boolean), ok_block, bad_block);
+    switch_to(bad_block);
+    emit_panic(str_operand("index out of bounds"));
+    switch_to(ok_block);
+    if (failed) {
+      return Val{size_one, error_type(), true, false};
+    }
+    const ir::SliceType& shape =
+        builder.state().slice_types
+            [builder.state().types[slice_pointee(base.type)].as_slice()];
+    // ElemOffset names an element loan: its destination carries the
+    // element reference, so the borrow checker extends the buffer's
+    // place with an element step instead of covering the whole
+    // buffer. Exclusive exactly when the slice itself is.
+    const bool exclusive = tag_of(base.type) == ir::TypeTag::MutRef;
+    const ir::TypeIdx elem_ref =
+        builder.reference_type(shape.element, exclusive);
+    const ir::RegisterIdx elem =
+        emit(ir::Opcode::ElemOffset, elem_ref, {bytes, use_value(wide)});
+    if (failed) {
+      return Val{size_one, error_type(), true, false};
+    }
+    return Val{to_operand(elem, shape.element), shape.element, true,
+               base.place};
+  }
   if (!base.address || tag_of(base.type) != ir::TypeTag::Array) {
     unsupported(span, "index through reference");
     return Val{size_one, error_type(), true, false};
@@ -1214,6 +1266,41 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     }
     return Val{to_operand(labelled, sig.ret), sig.ret, false, false};
   }
+  if (name == "slice_len") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    if (call.args.size() != 1 || type_args.size() != 1) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    Val receiver = lower_expr(call.args[0], &sig.params[0]);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const Val material = materialize(receiver);
+    ir::OperandIdx bytes = ir::OperandIdx::invalid();
+    ir::OperandIdx len = ir::OperandIdx::invalid();
+    if (!slice_parts(material, bytes, len)) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{len, usize_type(), false, false};
+  }
+  if (name == "slice_from_parts" || name == "slice_from_parts_mut") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    if (call.args.size() != 2 || type_args.size() != 1) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    Val ptr = lower_expr(call.args[0], &sig.params[0]);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    Val len = lower_expr(call.args[1], &sig.params[1]);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return build_slice_value(use_value(ptr), use_value(len), sig.ret,
+                             node.span);
+  }
   if (name == "str_from_parts") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
     if (call.args.size() != 2) {
@@ -1296,6 +1383,55 @@ ir::OperandIdx Lowerer::advance_ptr(ir::OperandIdx ptr,
   }
   (void)span;
   return to_operand(bumped, ptr_ty);
+}
+
+// Extracts the (bytes, len) pair from a materialized slice value,
+// the fat struct a `&[T]` carries. Mirrors str_parts exactly; the
+// borrow checker anchors both fields to the loans the value carries.
+bool Lowerer::slice_parts(Val slice,
+                          ir::OperandIdx& bytes_out,
+                          ir::OperandIdx& len_out) {
+  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+  const ir::TypeIdx usize_ty = usize_type();
+  const ir::RegisterIdx bytes =
+      emit(ir::Opcode::ExtractValue, ptr_ty, {slice.op, index_operand(0)});
+  if (failed) {
+    return false;
+  }
+  const ir::RegisterIdx len =
+      emit(ir::Opcode::ExtractValue, usize_ty, {slice.op, index_operand(1)});
+  if (failed) {
+    return false;
+  }
+  bytes_out = to_operand(bytes, ptr_ty);
+  len_out = to_operand(len, usize_ty);
+  return true;
+}
+
+// Builds the fat struct for a slice view: an alloca holding the base
+// pointer and the length. Stores union the base's loans into the
+// value, so the view stays tied to whatever it was taken from.
+Val Lowerer::build_slice_value(ir::OperandIdx base,
+                               ir::OperandIdx len,
+                               ir::TypeIdx ref_ty,
+                               diag::Span span) {
+  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+  const ir::TypeIdx usize_ty = usize_type();
+  const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, ref_ty, {size_one});
+  const ir::RegisterIdx field0 =
+      emit(ir::Opcode::GetElementPtr, ptr_ty,
+           {to_operand(addr, ref_ty), zero_i32, index_operand(0)});
+  emit_void(ir::Opcode::Store, {base, to_operand(field0, ptr_ty)});
+  const ir::RegisterIdx field1 =
+      emit(ir::Opcode::GetElementPtr, usize_ty,
+           {to_operand(addr, ref_ty), zero_i32, index_operand(1)});
+  emit_void(ir::Opcode::Store, {len, to_operand(field1, usize_ty)});
+  // The fat struct rides by value, matching the parameter convention:
+  // a `&[T]` is the pair itself, not a pointer to one.
+  const ir::RegisterIdx fat =
+      emit(ir::Opcode::Load, ref_ty, {to_operand(addr, ref_ty)});
+  (void)span;
+  return Val{to_operand(fat, ref_ty), ref_ty, false, false};
 }
 
 Val Lowerer::lower_str_intrinsic(ast::ExprIdx expr, std::string_view name) {
@@ -1454,9 +1590,95 @@ Val Lowerer::lower_intrinsic(ast::ExprIdx expr, std::string_view name) {
   return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
 }
 
+// The slice behind a slice reference, or invalid when the type is
+// not one. The fat struct rides by value everywhere below the type
+// checker; the reference wrapper is borrowck-only.
+ir::TypeIdx Lowerer::slice_pointee(ir::TypeIdx type) const {
+  const ir::TypeTag tag = tag_of(type);
+  if (tag != ir::TypeTag::Ref && tag != ir::TypeTag::MutRef) {
+    return ir::TypeIdx(base::INVALID_IDX);
+  }
+  const ir::TypeIdx pointee =
+      builder.ref_types()[builder.types()[type].as_ref()].pointee;
+  if (tag_of(pointee) != ir::TypeTag::Slice) {
+    return ir::TypeIdx(base::INVALID_IDX);
+  }
+  return pointee;
+}
+
+// Whether a parameter wants a fat slice pointer: a reference whose
+// pointee is a slice. Array arguments decay into these at call
+// boundaries, and slice values already have the shape.
+bool Lowerer::is_slice_ref(ir::TypeIdx param) const {
+  return slice_pointee(param).is_valid();
+}
+
 ir::OperandIdx Lowerer::arg_for(Val arg, ir::TypeIdx param) {
   if (!is_ref_tag(tag_of(param))) {
     return use_value(arg);
+  }
+  // Array-to-slice decay: `&[T; N]` where `&[T]` is expected builds the
+  // fat pointer, keeping the array's length as the length. The borrow
+  // on the array keeps it alive; the stores below carry that loan into
+  // the view. A value already of reference-to-array shape builds from
+  // itself, carrying the loans its flow already has.
+  if (is_slice_ref(param)) {
+    if (arg.address && tag_of(arg.type) == ir::TypeTag::Array) {
+      const ir::ArrayType& shape =
+          builder.state()
+              .array_types[builder.state().types[arg.type].as_array()];
+      const bool exclusive = tag_of(param) == ir::TypeTag::MutRef;
+      const ir::TypeIdx ref = builder.reference_type(arg.type, exclusive);
+      const ir::RegisterIdx loan = emit(ir::Opcode::Borrow, ref, {arg.op});
+      if (failed) {
+        return ir::OperandIdx(base::INVALID_IDX);
+      }
+      const ir::TypeIdx usize_ty = usize_type();
+      ir::Immutable imm{.type = usize_ty, .data = {}};
+      if (tag_of(usize_ty) == ir::TypeTag::U64) {
+        imm.data.u64_value = shape.count;
+      } else {
+        imm.data.u32_value = static_cast<u32>(shape.count);
+      }
+      Val fat = build_slice_value(to_operand(loan, ref),
+                                  to_operand(builder.immutable(imm), usize_ty),
+                                  param, cur_span_);
+      if (failed) {
+        return ir::OperandIdx(base::INVALID_IDX);
+      }
+      return fat.op;
+    }
+    Val refv = arg;
+    if (refv.address) {
+      refv = materialize(refv);
+      if (failed) {
+        return ir::OperandIdx(base::INVALID_IDX);
+      }
+    }
+    if (tag_of(refv.type) == ir::TypeTag::Ref ||
+        tag_of(refv.type) == ir::TypeTag::MutRef) {
+      const ir::TypeIdx pointee =
+          builder.ref_types()[builder.types()[refv.type].as_ref()].pointee;
+      if (tag_of(pointee) == ir::TypeTag::Array) {
+        const ir::ArrayType& shape =
+            builder.state()
+                .array_types[builder.state().types[pointee].as_array()];
+        const ir::TypeIdx usize_ty = usize_type();
+        ir::Immutable imm{.type = usize_ty, .data = {}};
+        if (tag_of(usize_ty) == ir::TypeTag::U64) {
+          imm.data.u64_value = shape.count;
+        } else {
+          imm.data.u32_value = static_cast<u32>(shape.count);
+        }
+        Val fat = build_slice_value(
+            refv.op, to_operand(builder.immutable(imm), usize_ty), param,
+            cur_span_);
+        if (failed) {
+          return ir::OperandIdx(base::INVALID_IDX);
+        }
+        return fat.op;
+      }
+    }
   }
   // A reborrow is implicit at an argument and at a receiver, so the
   // place is loaned here whether or not the source wrote a `&`. Without

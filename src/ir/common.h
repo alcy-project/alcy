@@ -59,6 +59,9 @@ using StructTypeIdx = details::Idx<StructType>;
 struct ArrayType;
 using ArrayTypeIdx = details::Idx<ArrayType>;
 
+struct SliceType;
+using SliceTypeIdx = details::Idx<SliceType>;
+
 struct EnumType;
 using EnumTypeIdx = details::Idx<EnumType>;
 

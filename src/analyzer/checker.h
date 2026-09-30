@@ -170,6 +170,7 @@ class Checker {
     u32 slot = 0;
     bool through_ref = false;
     bool through_uninit = false;
+    bool through_slice = false;
   };
   DeclaredBinding declared_binding(std::span<const ast::Ident> params,
                                    const ast::TypeNode& declared) const;
@@ -222,7 +223,8 @@ class Checker {
                          std::string_view& name_out);
   ir::TypeIdx resolve_type(u32 module,
                            ast::TypeIdx type,
-                           const ir::TypeIdx* self);
+                           const ir::TypeIdx* self,
+                           bool behind_ref = false);
   static bool is_known_intrinsic(std::string_view name);
   bool check_intrinsic_signature(u32 module,
                                  const ast::ItemIntrinsic& intrinsic,
@@ -243,6 +245,7 @@ class Checker {
   bool types_equal(ir::TypeIdx a, ir::TypeIdx b);
   bool types_equal_inner(ir::TypeIdx a, ir::TypeIdx b, std::vector<u64>& seen);
   bool coerces_to_shared(ir::TypeIdx expected, ir::TypeIdx actual);
+  bool coerces_array_to_slice(ir::TypeIdx expected, ir::TypeIdx actual);
   ir::TypeIdx unify(ir::TypeIdx expected,
                     ir::TypeIdx actual,
                     diag::Span span,

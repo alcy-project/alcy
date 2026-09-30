@@ -53,7 +53,9 @@ relied upon by MVP programs or by the MVP compiler implementation.
 - `f16`, 128-bit integers, posit, and decimal types; `Char`/`Ascii`/
   grapheme semantics in core (see `types.md`).
 - `Range` iteration, stepping, and `for` loops (representation and
-  endpoint-marking frozen in `types.md`).
+  endpoint-marking frozen in `types.md`). An index expression does not
+  accept a range either, so sub-slicing (`&a[1..3]`, `s[1..]`) and
+  slice patterns arrive with them.
 - Two-phase borrows, so `v.push(v.len())` resolves the receiver before
   the arguments; see `docs/adr/0012`.
 - Interior mutability; mutable statics; `const`-position extensions.

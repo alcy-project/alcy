@@ -102,6 +102,16 @@ ast::TypeIdx Parser::parse_type() {
       if (!element.is_valid()) {
         return ast::TypeIdx::invalid();
       }
+      if (peek_kind() == T::RBracket) {
+        // No `; count`: an unsized slice, valid only behind a
+        // reference. The analyzer rejects a bare `[T]`.
+        advance();
+        ast::TypeNode node;
+        node.kind = ast::TypeKind::Slice;
+        node.span = span_from(mark);
+        node.payload.set(ast::TypeSlice{.element = element});
+        return ast_.types.push_back(node);
+      }
       if (!expect(T::Semicolon, "`;`")) {
         return ast::TypeIdx::invalid();
       }

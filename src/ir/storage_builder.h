@@ -113,6 +113,9 @@ class StorageBuilder {
   const StorageState::ArrayTypes& array_types() const {
     return state_.array_types;
   }
+  const StorageState::SliceTypes& slice_types() const {
+    return state_.slice_types;
+  }
   const StorageState::EnumTypes& enum_types() const {
     return state_.enum_types;
   }
@@ -168,6 +171,26 @@ class StorageBuilder {
     DCHECK(node.tag == TypeTag::Struct);
     state_.struct_types[node.as_struct()].fields = fields;
     state_.struct_types[node.as_struct()].params = params;
+  }
+
+  TypeIdx slice_type(TypeIdx element) {
+    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
+         ++idx) {
+      const TypeNode& node = state_.types[idx];
+      if (node.tag != TypeTag::Slice) {
+        continue;
+      }
+      const SliceTypeIdx sidx = node.data.get<SliceTypeIdx>();
+      if (sidx.idx < state_.slice_types.size() &&
+          state_.slice_types[sidx].element.idx == element.idx) {
+        return idx;
+      }
+    }
+    TypeNode node{};
+    node.tag = TypeTag::Slice;
+    node.data.set(
+        state_.slice_types.emplace_back(SliceType{.element = element}));
+    return state_.types.emplace_back(node);
   }
 
   TypeIdx array_type(TypeIdx element, u64 count) {

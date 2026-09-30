@@ -14,7 +14,10 @@ block parameters, immediates) holds a `TypeIdx`, never a bare tag.
   constexpr contexts use `primitive_idx(TypeTag::...)` instead.
 - Structs: `builder.struct_type(name, fields)` where `fields` is a
   `TypeIdxRange` of already-interned types. Arrays:
-  `builder.array_type(element, count)`.
+  `builder.array_type(element, count)`. Slices:
+  `builder.slice_type(element)`. A slice is never a value type on its
+  own; `&[T]` is a reference whose pointee is a slice, laid out and
+  passed as `{ptr, len}` by value.
 - Reuse: `builder.ref_type(idx)` appends a copy of an existing entry
   (needed for field/parameter lists that mention one type twice).
 
@@ -73,6 +76,7 @@ skips value binding for any producer with an invalid `dst`.
 | `Load` / `Store` | `[ptr]` / `[value, ptr]`; the loaded type comes from the destination register. |
 | `Memcopy` | `[dst_ptr, src_ptr, len(integer)]`, discarded value; bytewise copy. |
 | `GetElementPtr` | `[base_ptr(register), integer index...]`. The element type is recovered from the base pointer's `Alloca` site, tracked by the emitter; pointers from elsewhere are unsupported in MVP. |
+| `ElemOffset` | `[base_ptr(register), integer index]`. The destination register carries the element reference, so the borrow checker extends the buffer's place with one element step. |
 | `ExtractValue` / `InsertValue` | Aggregate first, then integer-immediate indexes (`InsertValue` takes the field value second). |
 | `TypeCast` | Determined by source/destination tags: integer resizing by width and signedness, int<->float, float resizing, int<->pointer. |
 | Comparisons | Signedness follows the operand type (`I*` signed, `U*` unsigned); floats use ordered predicates; pointers support `Eq`/`Ne` only. |

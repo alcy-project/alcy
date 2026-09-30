@@ -114,6 +114,7 @@ enum class TypeKind : u8 {
   Str,
   Tuple,
   Array,
+  Slice,
   Path,
   Ref,
 };
@@ -136,6 +137,10 @@ struct TypeArray {
   u64 count = 0;
 };
 
+struct TypeSlice {
+  TypeIdx element = TypeIdx::invalid();
+};
+
 struct TypePath {
   PathIdx path = PathIdx::invalid();
   std::span<const TypeIdx> args;
@@ -152,8 +157,8 @@ struct TypeNode {
 
   // Leaves members uninitialized; parsers set the active member
   // before pushing the node.
-  using TypePayload =
-      base::Union<TypePrimitive, TypeTuple, TypeArray, TypePath, TypeRef>;
+  using TypePayload = base::
+      Union<TypePrimitive, TypeTuple, TypeArray, TypeSlice, TypePath, TypeRef>;
   TypePayload payload;
 };
 

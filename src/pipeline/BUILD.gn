@@ -35,6 +35,7 @@ action("embed_std") {
     "//lib/std/core/mem.al",
     "//lib/std/core/option.al",
     "//lib/std/core/result.al",
+    "//lib/std/core/slice.al",
     "//lib/std/core/string.al",
     "//lib/std/alloc/prelude.al",
     "//lib/std/alloc/heap.al",

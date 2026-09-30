@@ -1463,19 +1463,32 @@ ir::TypeIdx Checker::check_index(u32 module,
     (void)diag;
     return error_type();
   }
-  if (tag_of(receiver) != ir::TypeTag::Array) {
-    const u32 diag =
-        bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, node.span,
-                 "cannot index '{}'", pretty_tag(tag_of(receiver)));
-    (void)diag;
-    return error_type();
+  if (tag_of(receiver) == ir::TypeTag::Array) {
+    const ir::ArrayType& array =
+        builder.array_types()[builder.types()[receiver].as_array()];
+    if (expected != nullptr) {
+      return unify(*expected, array.element, node.span, "index");
+    }
+    return array.element;
   }
-  const ir::ArrayType& array =
-      builder.array_types()[builder.types()[receiver].as_array()];
-  if (expected != nullptr) {
-    return unify(*expected, array.element, node.span, "index");
+  if (tag_of(receiver) == ir::TypeTag::Ref ||
+      tag_of(receiver) == ir::TypeTag::MutRef) {
+    const ir::TypeIdx pointee =
+        builder.ref_types()[builder.types()[receiver].as_ref()].pointee;
+    if (tag_of(pointee) == ir::TypeTag::Slice) {
+      const ir::SliceType& slice =
+          builder.slice_types()[builder.types()[pointee].as_slice()];
+      if (expected != nullptr) {
+        return unify(*expected, slice.element, node.span, "index");
+      }
+      return slice.element;
+    }
   }
-  return array.element;
+  const u32 diag =
+      bag.emit(diag::Severity::Error, ANALYZER_INVALID_OPERATION, node.span,
+               "cannot index '{}'", pretty_tag(tag_of(receiver)));
+  (void)diag;
+  return error_type();
 }
 
 void Checker::check_cond(u32 module, ast::CondIdx cond, bool& binds) {
@@ -2292,6 +2305,15 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
       const ir::TypeIdx receiver =
           check_place(module, node.payload.get<ast::ExprIndex>().receiver);
       if (is_error(receiver)) {
+        return error_type();
+      }
+      // A slice behind a shared reference reads only, exactly like
+      // `*r` on a `&T` place: the element is reachable, not writable.
+      if (tag_of(receiver) == ir::TypeTag::Ref) {
+        const u32 index =
+            bag.emit(diag::Severity::Error, ANALYZER_BAD_ASSIGNMENT, node.span,
+                     "cannot assign through a shared reference");
+        (void)index;
         return error_type();
       }
       return check_index(module, place, nullptr);

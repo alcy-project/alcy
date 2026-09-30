@@ -209,9 +209,10 @@ invariant-preserving construction.
 Key design points:
 
 - **Interned types**: Every type reference is a `TypeIdx` into a unified type
-  table (`TypeNode`: a `TypeTag` plus optional struct/array metadata).
-  Primitive tags are pre-interned in tag order; composite types (`Struct`,
-  `Array`) are created through builder factories.
+  table (`TypeNode`: a `TypeTag` plus optional metadata for the composite
+  kinds). Primitive tags are pre-interned in tag order; composite types
+  (`Struct`, `Enum`, `Array`, `Slice`, and the structural `Ref`/`Tuple`
+  shapes) are created through builder factories.
 
 - **Tagged operands**: An `Operand` carries its type reference together with
   its tagged payload so the tag and payload cannot drift apart. Dispatch uses
