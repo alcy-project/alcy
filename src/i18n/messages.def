@@ -33,6 +33,27 @@
   F(LexerUnterminatedCharacter, "unterminated character literal") \
   F(LexerUnterminatedString, "unterminated string literal") \
   /* parser */ \
+  F(ArgCommand, "Command") \
+  F(ArgCommands, "Commands") \
+  F(ArgDefault, "(default: {})") \
+  F(ArgDuplicateOption, "the argument '{}' was provided more than once") \
+  F(ArgError, "error") \
+  F(ArgFlagTakesNoValue, "flag '{}' takes no value") \
+  F(ArgHelpOption, "Print help message") \
+  F(ArgInvalidArgCount, "invalid arg count provided: {}") \
+  F(ArgInvalidChoice, "invalid choice for argument '{}': '{}'") \
+  F(ArgInvalidValue, "invalid value for argument '{}': '{}'") \
+  F(ArgMissingRequiredArgument, "the required argument '{}' was not provided") \
+  F(ArgMissingValueForOption, "a value is required for '{}' but none was supplied") \
+  F(ArgNullMatchesPointer, "output matches pointer is null") \
+  F(ArgOptions, "Options") \
+  F(ArgRequired, "[required]") \
+  F(ArgTryHelp, "\nFor more information, try '{0}{1} --help{2}'.\n") \
+  F(ArgUnknownLongOption, "unexpected argument '--{}' found") \
+  F(ArgUnknownShortOption, "unexpected argument '-{}' found") \
+  F(ArgUsage, "Usage") \
+  F(ArgValueName, "value") \
+  F(ArgVersionOption, "Print version information") \
   F(ParserArrayLengthNotDecimal, "array length must be decimal") \
   F(ParserArrayLengthTooLarge, "array length is too large") \
   F(ParserCompOnlyOnBindings, "`comp` is only allowed on parameters, declarations, and blocks") \
@@ -297,6 +318,7 @@
   F(CliNewAbout, "Create a new package") \
   F(CliNoStdHelp, "Start with no standard library instead of the default suite. Add back with --deps.") \
   F(CliNoSubcommand, "no subcommand given") \
+  F(CliPackageCreatedAt, "'{}' in {}") \
   F(CliPhaseTimings, "phase timings (total, inclusive):") \
   F(CliProgramArgsOnlyForRun, "program arguments are only accepted by `run`") \
   F(CliReleaseHelp, "Build with optimizations.") \
@@ -318,28 +340,6 @@
   F(RenderSeverityError, "error") \
   F(RenderSeverityNote, "note") \
   F(RenderSeverityWarning, "warning") \
-  F(RenderUnknownFile, "[unknown file]") \
-  /* argument parser */ \
-  F(ArgCommand, "Command") \
-  F(ArgCommands, "Commands") \
-  F(ArgDefault, "(default: {})") \
-  F(ArgDuplicateOption, "the argument '{}' was provided more than once") \
-  F(ArgError, "error") \
-  F(ArgFlagTakesNoValue, "flag '{}' takes no value") \
-  F(ArgHelpOption, "Print help message") \
-  F(ArgInvalidArgCount, "invalid arg count provided: {}") \
-  F(ArgInvalidChoice, "invalid choice for argument '{}': '{}'") \
-  F(ArgInvalidValue, "invalid value for argument '{}': '{}'") \
-  F(ArgMissingRequiredArgument, "the required argument '{}' was not provided") \
-  F(ArgMissingValueForOption, "a value is required for '{}' but none was supplied") \
-  F(ArgNullMatchesPointer, "output matches pointer is null") \
-  F(ArgOptions, "Options") \
-  F(ArgRequired, "[required]") \
-  F(ArgTryHelp, "\nFor more information, try '{0}{1} --help{2}'.\n") \
-  F(ArgUnknownLongOption, "unexpected argument '--{}' found") \
-  F(ArgUnknownShortOption, "unexpected argument '-{}' found") \
-  F(ArgUsage, "Usage") \
-  F(ArgValueName, "value") \
-  F(ArgVersionOption, "Print version information")
+  F(RenderUnknownFile, "[unknown file]")
 
 #endif  // ALCY_I18N_MESSAGES_DEF_

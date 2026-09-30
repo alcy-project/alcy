@@ -7,6 +7,8 @@
 
 #include "cli/cli_config.h"
 #include "fpag/base/result.h"
+#include "i18n/language.h"
+#include "i18n/messages.h"
 #include "path/path.h"
 
 namespace cli {
@@ -63,30 +65,31 @@ base::Result<void, ConfigError> validate_cli_config(const CliConfig& config) {
   return base::make_ok();
 }
 
-std::string_view describe_config_error(ConfigError error) {
+std::string describe_config_error(ConfigError error, i18n::Language language) {
+  using i18n::Key;
   switch (error) {
-    case ConfigError::MissingSubcommand: return "no subcommand given";
+    case ConfigError::MissingSubcommand:
+      return i18n::format<Key::CliNoSubcommand>(language);
     case ConfigError::UnexpectedProgramArgs:
-      return "program arguments are only accepted by `run`";
+      return i18n::format<Key::CliProgramArgsOnlyForRun>(language);
     case ConfigError::BuildSingleFile:
-      return "`build` takes a package directory; use `compile` for a file";
+      return i18n::format<Key::CliBuildTakesDirectory>(language);
     case ConfigError::RunSingleFile:
-      return "`run` takes a package directory; use `compile` for a file";
+      return i18n::format<Key::CliRunTakesDirectory>(language);
     case ConfigError::CompileNeedsTarget:
-      return "`compile` needs a file target or `--stdin`";
+      return i18n::format<Key::CliCompileNeedsTarget>(language);
     case ConfigError::CompileTargetWithStdin:
-      return "`--stdin` takes no target";
+      return i18n::format<Key::CliStdinTakesNoTarget>(language);
     case ConfigError::CompileStdinNeedsOutput:
-      return "`compile --stdin` needs `-o` to name the output";
+      return i18n::format<Key::CliStdinNeedsOutput>(language);
     case ConfigError::CheckFileWithTarget:
-      return "`check` takes a directory or `--file`, not both";
+      return i18n::format<Key::CliCheckFileOrTarget>(language);
     case ConfigError::DepsWithoutCompile:
-      return "`--no-std` and `--deps` only mean anything for `compile`";
+      return i18n::format<Key::CliDepsOnlyForCompile>(language);
     case ConfigError::JsonWithoutResult:
-      return "`--json` only means anything for `build`, `compile`, and "
-             "`check`";
+      return i18n::format<Key::CliJsonOnlyForResultVerbs>(language);
   }
-  return "invalid configuration";
+  return i18n::format<Key::CliInvalidConfiguration>(language);
 }
 
 }  // namespace cli

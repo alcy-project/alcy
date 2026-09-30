@@ -9,6 +9,7 @@
 #include "diag/render.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
+#include "i18n/language.h"
 
 namespace cli {
 
@@ -81,7 +82,8 @@ TEST_CASE("A run reports no result line, having announced itself already") {
   CHECK(text(ran).empty());
   // The outcome still says what happened, for a machine: only the
   // human-facing line is gone.
-  CHECK(render_json(ran).find("\"outcome\":\"ran\"") != std::string::npos);
+  CHECK(render_json(ran, i18n::Language::EnUs).find("\"outcome\":\"ran\"") !=
+        std::string::npos);
 }
 
 TEST_CASE("A scaffold reports its own shape, not a padded column") {
@@ -143,10 +145,10 @@ TEST_CASE("A failure with no diagnostic prints its own message") {
   envelope.failure = "--emit needs a value";
 
   CHECK(text(envelope) == "--emit needs a value\n");
-  CHECK(render_json(envelope).find("\"status\":\"error\"") !=
-        std::string::npos);
-  CHECK(render_json(envelope).find("\"summary\":\"--emit needs a value\"") !=
-        std::string::npos);
+  CHECK(render_json(envelope, i18n::Language::EnUs)
+            .find("\"status\":\"error\"") != std::string::npos);
+  CHECK(render_json(envelope, i18n::Language::EnUs)
+            .find("\"summary\":\"--emit needs a value\"") != std::string::npos);
 }
 
 TEST_CASE("A failure with a diagnostic prints no result line") {
@@ -158,8 +160,8 @@ TEST_CASE("A failure with a diagnostic prints no result line") {
   envelope.status = Status::Error;
 
   CHECK(text(envelope).empty());
-  CHECK(render_json(envelope).find("\"outcome\":\"failed\"") !=
-        std::string::npos);
+  CHECK(render_json(envelope, i18n::Language::EnUs)
+            .find("\"outcome\":\"failed\"") != std::string::npos);
 }
 
 TEST_CASE("Colour reaches the verb, the subject, and nothing else") {
@@ -173,7 +175,8 @@ TEST_CASE("Colour reaches the verb, the subject, and nothing else") {
         "\x1b[2m(2.0 KiB, 2.0 ms)\x1b[0m\n");
   // The JSON carries the sentence, not the layout: a consumer wants the
   // text, and a line of escape codes is not text.
-  const std::string json = render_json(built("out/demo", 2048, 2000000));
+  const std::string json =
+      render_json(built("out/demo", 2048, 2000000), i18n::Language::EnUs);
   CHECK(json.find("\"summary\":\"Built     out/demo  (2.0 KiB, 2.0 ms)\"") !=
         std::string::npos);
   CHECK(json.find("\"outcome\":\"built\"") != std::string::npos);

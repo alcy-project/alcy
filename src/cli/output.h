@@ -11,6 +11,7 @@
 #include "diag/render.h"
 #include "fpag/base/numeric.h"
 #include "fpag/debug/profiler/profile_event.h"
+#include "i18n/language.h"
 
 namespace diag {
 
@@ -109,7 +110,7 @@ void announce(std::string_view verb,
 // One JSON document: the result, its diagnostics, and the trace when
 // there is one. The trace's `traceEvents` sits at the top level so the
 // document can be pasted into a trace viewer unchanged.
-std::string render_json(const Envelope& envelope);
+std::string render_json(const Envelope& envelope, i18n::Language language);
 
 // Writes a finished envelope to standard output: the text report, or
 // the JSON document when the invocation asked for it. This is the only

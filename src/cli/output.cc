@@ -21,6 +21,7 @@
 #include "fpag/debug/profiler/profile_event.h"
 #include "fpag/io/io_util.h"
 #include "fpag/term/style.h"
+#include "i18n/messages.h"
 #include "source/source.h"
 #include "text/json.h"
 
@@ -198,11 +199,15 @@ void append_trace_json(std::string& out, const Envelope& envelope) {
   out += ']';
 }
 
-void append_trace_text(std::string& out, const Envelope& envelope) {
+void append_trace_text(std::string& out,
+                       const Envelope& envelope,
+                       i18n::Language language) {
   if (envelope.trace.empty()) {
     return;
   }
-  out += "\nphase timings (total, inclusive):\n";
+  out += '\n';
+  out += i18n::text<i18n::Key::CliPhaseTimings>(language);
+  out += ":\n";
   for (const PhaseTotal& total : phase_totals(envelope)) {
     fmt::format_to(std::back_inserter(out), "  {:<14} {:>8.3} ms  {}\n",
                    total.name, static_cast<double>(total.ns) / 1.0e6,
@@ -213,16 +218,18 @@ void append_trace_text(std::string& out, const Envelope& envelope) {
 // The verb each outcome reports itself as. Owned here so the wording
 // lives in one place and a new outcome cannot add a second phrasing of
 // the same result.
-const char* verb_for(Outcome outcome) {
+std::string_view verb_for(Outcome outcome, i18n::Language language) {
+  using i18n::Key;
   switch (outcome) {
-    case Outcome::Failed: return "Failed";
-    case Outcome::Built: return "Built";
-    case Outcome::Compiled: return "Compiled";
-    case Outcome::Checked: return "Checked";
-    case Outcome::Ran: return "Ran";
-    case Outcome::CreatedPackage: return "Created package";
+    case Outcome::Failed: return i18n::text<Key::CliVerbFailed>(language);
+    case Outcome::Built: return i18n::text<Key::CliVerbBuilt>(language);
+    case Outcome::Compiled: return i18n::text<Key::CliVerbCompiled>(language);
+    case Outcome::Checked: return i18n::text<Key::CliVerbChecked>(language);
+    case Outcome::Ran: return i18n::text<Key::CliVerbRan>(language);
+    case Outcome::CreatedPackage:
+      return i18n::text<Key::CliVerbCreatedPackage>(language);
   }
-  return "Failed";
+  return i18n::text<Key::CliVerbFailed>(language);
 }
 
 // The JSON spells the same outcome as a name a tool can match on, so a
@@ -275,7 +282,9 @@ void append_red(std::string& out, std::string_view text) {
 }
 
 // A count with its noun, pluralized. `1 file(s)` was neither: it reads
-// as a placeholder in a sentence and as a mistake in a list.
+// as a placeholder in a sentence and as a mistake in a list. A language
+// that carries the count inside its noun gets two messages and picks
+// between them, which is why both arrive already composed.
 void append_count(std::string& out,
                   usize count,
                   std::string_view one,
@@ -287,14 +296,15 @@ void append_count(std::string& out,
 // A size in the largest unit that leaves something in front of the
 // point, so `742 bytes` and `16.4 KiB` and never `0.0 MiB`. Exact bytes
 // below a kibibyte, which is the only figure worth counting there.
-void append_size(std::string& out, u64 bytes) {
+void append_size(std::string& out, u64 bytes, i18n::Language language) {
   constexpr f64 KIB = 1024.0;
   constexpr f64 MIB = KIB * KIB;
   constexpr f64 GIB = MIB * KIB;
   const f64 size = static_cast<f64>(bytes);
   if (size < KIB) {
-    fmt::format_to(std::back_inserter(out), "{} byte{}", bytes,
-                   bytes == 1 ? "" : "s");
+    fmt::format_to(std::back_inserter(out), "{} {}", bytes,
+                   bytes == 1 ? i18n::text<i18n::Key::CliByteSingular>(language)
+                              : i18n::text<i18n::Key::CliBytePlural>(language));
   } else if (size < MIB) {
     fmt::format_to(std::back_inserter(out), "{:.1f} KiB", size / KIB);
   } else if (size < GIB) {
@@ -330,23 +340,31 @@ bool note_has_size(const Envelope& envelope) {
 
 // The subject of a result line: what was written, what was created, or
 // what was counted.
-std::string result_subject(const Envelope& envelope) {
+std::string result_subject(const Envelope& envelope, i18n::Language language) {
+  using i18n::Key;
   switch (envelope.outcome) {
     case Outcome::Failed: return {};
     case Outcome::CreatedPackage:
-      return "'" + envelope.package_name + "' in " + envelope.package_dir;
+      return i18n::format<Key::CliPackageCreatedAt>(
+          language, envelope.package_name, envelope.package_dir);
     case Outcome::Checked: {
       std::string subject;
       if (envelope.file_count > 0) {
-        append_count(subject, envelope.file_count, "file", "files");
+        append_count(subject, envelope.file_count,
+                     i18n::text<Key::CliFileSingular>(language),
+                     i18n::text<Key::CliFilePlural>(language));
         subject += ", ";
       }
       if (envelope.module_count > 0) {
-        append_count(subject, envelope.module_count, "module", "modules");
+        append_count(subject, envelope.module_count,
+                     i18n::text<Key::CliModuleSingular>(language),
+                     i18n::text<Key::CliModulePlural>(language));
         subject += ", ";
       }
       if (envelope.function_count > 0) {
-        append_count(subject, envelope.function_count, "function", "functions");
+        append_count(subject, envelope.function_count,
+                     i18n::text<Key::CliFunctionSingular>(language),
+                     i18n::text<Key::CliFunctionPlural>(language));
       }
       return subject;
     }
@@ -358,10 +376,10 @@ std::string result_subject(const Envelope& envelope) {
 }
 
 // The note after the subject: what was written, and how long it took.
-std::string result_note(const Envelope& envelope) {
+std::string result_note(const Envelope& envelope, i18n::Language language) {
   std::string note = "(";
   if (note_has_size(envelope) && envelope.output_bytes > 0) {
-    append_size(note, envelope.output_bytes);
+    append_size(note, envelope.output_bytes, language);
     note += ", ";
   }
   append_duration(note, envelope.wall_ns);
@@ -416,15 +434,16 @@ void render_labelled(std::string& out,
 void render_result_line(std::string& out,
                         const Envelope& envelope,
                         bool color,
-                        bool newline) {
-  const std::string_view verb = verb_for(envelope.outcome);
-  const std::string subject = result_subject(envelope);
+                        bool newline,
+                        i18n::Language language) {
+  const std::string_view verb = verb_for(envelope.outcome, language);
+  const std::string subject = result_subject(envelope, language);
   render_labelled(out, verb, subject,
                   envelope.outcome != Outcome::CreatedPackage, color, false);
 
   if (note_has_size(envelope) || note_has_duration(envelope)) {
     out.append("  ");
-    const std::string note = result_note(envelope);
+    const std::string note = result_note(envelope, language);
     if (color) {
       append_dim(out, note);
     } else {
@@ -438,9 +457,9 @@ void render_result_line(std::string& out,
 
 // The same line without colour and without its newline, which is what a
 // JSON document carries: a reader wants the sentence, not the layout.
-std::string result_line(const Envelope& envelope) {
+std::string result_line(const Envelope& envelope, i18n::Language language) {
   std::string line;
-  render_result_line(line, envelope, false, false);
+  render_result_line(line, envelope, false, false, language);
   return line;
 }
 
@@ -474,7 +493,7 @@ std::string render_text(const Envelope& envelope,
     // output and read as more of it. The exit code is the result, and
     // the caller has it.
     if (envelope.outcome != Outcome::Ran) {
-      render_result_line(out, envelope, options.color, true);
+      render_result_line(out, envelope, options.color, true, options.language);
     }
   } else if (!envelope.failure.empty()) {
     // A failure with no diagnostic behind it. The message is the result,
@@ -486,22 +505,22 @@ std::string render_text(const Envelope& envelope,
     }
     out.push_back('\n');
   }
-  append_trace_text(out, envelope);
+  append_trace_text(out, envelope, options.language);
   return out;
 }
 
 void report(const Envelope& envelope,
             const diag::RenderOptions& options,
             bool json) {
-  const std::string text =
-      json ? render_json(envelope) : render_text(envelope, options);
+  const std::string text = json ? render_json(envelope, options.language)
+                                : render_text(envelope, options);
   if (text.empty()) {
     return;
   }
   io::write(io::STDOUT_FD, text.data(), text.size());
 }
 
-std::string render_json(const Envelope& envelope) {
+std::string render_json(const Envelope& envelope, i18n::Language language) {
   std::string out;
   out += R"({"version":1,"command":)";
   append_json_string(out, envelope.command);
@@ -519,7 +538,7 @@ std::string render_json(const Envelope& envelope) {
       append_json_string(out, envelope.failure);
     }
   } else {
-    append_json_string(out, result_line(envelope));
+    append_json_string(out, result_line(envelope, language));
   }
   out += R"(,"output_path":)";
   if (envelope.output_path.empty()) {

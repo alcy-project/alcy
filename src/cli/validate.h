@@ -3,11 +3,12 @@
 
 #pragma once
 
-#include <string_view>
+#include <string>
 
 #include "cli/cli_config.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "i18n/language.h"
 
 namespace cli {
 
@@ -44,7 +45,7 @@ enum class ConfigError : u8 {
 // Pure: no I/O, no output; the caller renders the failure.
 base::Result<void, ConfigError> validate_cli_config(const CliConfig& config);
 
-// Short human-readable detail for a config failure.
-std::string_view describe_config_error(ConfigError error);
+// The detail for a config failure, in the invocation's language.
+std::string describe_config_error(ConfigError error, i18n::Language language);
 
 }  // namespace cli

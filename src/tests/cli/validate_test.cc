@@ -6,14 +6,15 @@
 #include "cli/cli_config.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
+#include "i18n/language.h"
 
 namespace cli {
 
 TEST_CASE("Config validation requires a subcommand") {
   const CliConfig config{};
   CHECK(validate_cli_config(config).is_err());
-  CHECK(describe_config_error(ConfigError::MissingSubcommand) ==
-        "no subcommand given");
+  CHECK(describe_config_error(ConfigError::MissingSubcommand,
+                              i18n::Language::EnUs) == "no subcommand given");
 }
 
 TEST_CASE("Config validation rejects program arguments outside run") {
