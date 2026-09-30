@@ -3,11 +3,13 @@
 
 #pragma once
 
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "cli/suggest.h"
 #include "fpag/arg/arg.h"
 #include "fpag/arg/command.h"
 #include "fpag/arg/parse_error.h"
@@ -64,12 +66,14 @@ struct HelpFormatter {
 // One line per parse error, then where to read more. The error itself
 // is a message, so it is composed by the catalog against the flag and
 // the value the parser rejected; the label in front of it and the
-// punctuation after it are structure.
+// punctuation after it are structure. A suggestion follows the error it
+// explains, naming the flag without dashes; rendering adds them.
 struct ErrorFormatter {
   i18n::Language language = i18n::Language::EnUs;
 
   std::string operator()(std::string_view command_name,
                          const std::vector<arg::ParseError>& errors,
+                         std::span<const FlagSuggestion> suggestions,
                          term::ColorStyle color_style) const;
 };
 

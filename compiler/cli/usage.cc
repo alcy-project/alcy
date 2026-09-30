@@ -6,10 +6,12 @@
 #include <algorithm>
 #include <array>
 #include <iterator>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "cli/suggest.h"
 #include "fmt/base.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
@@ -238,6 +240,7 @@ std::string HelpFormatter::operator()(const arg::Command& command,
 std::string ErrorFormatter::operator()(
     std::string_view command_name,
     const std::vector<arg::ParseError>& errors,
+    std::span<const FlagSuggestion> suggestions,
     term::ColorStyle color_style) const {
   std::string result;
   constexpr usize ESTIMATED_STR_LEN_PER_ERROR = 256;
@@ -249,7 +252,8 @@ std::string ErrorFormatter::operator()(
   const char* reset = term::style_code(term::RESET, color_style);
   const char* cyan = term::style_code(term::FG_BRIGHT_CYAN, color_style);
 
-  for (const arg::ParseError& error : errors) {
+  for (usize i = 0; i < errors.size(); ++i) {
+    const arg::ParseError& error = errors[i];
     fmt::format_to(out, "{}{}{}{}{}{}", bright_red, bold,
                    i18n::text<Key::ArgError>(language), reset, ": ", bold);
     // Each code is one message, so the catalog decides which arguments
@@ -295,6 +299,17 @@ std::string ErrorFormatter::operator()(
       case arg::ErrorCode::None: break;
     }
     fmt::format_to(out, "\n");
+    // A suggestion belongs to the error it explains, so it follows that
+    // error's line. An index past the errors matches nothing, which keeps
+    // a stale suggestion from rendering against the wrong error.
+    for (const FlagSuggestion& suggestion : suggestions) {
+      if (suggestion.error_index == i) {
+        i18n::format_to<Key::CliDidYouMean>(
+            out, language, fmt::format("--{}", suggestion.flag));
+        fmt::format_to(out, "\n");
+        break;
+      }
+    }
   }
 
   fmt::format_to(

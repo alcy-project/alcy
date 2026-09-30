@@ -11,11 +11,14 @@
 
 #include "cli/cli_config.h"
 #include "cli/converters.h"  // IWYU pragma: keep
+#include "cli/suggest.h"
 #include "cli/usage.h"
 #include "debug/fatal.h"
 #include "fpag/arg/arg.h"
 #include "fpag/arg/command.h"
+#include "fpag/arg/error_code.h"
 #include "fpag/arg/matches.h"
+#include "fpag/arg/parse_error.h"
 #include "fpag/arg/parse_result.h"
 #include "fpag/arg/parse_status.h"
 #include "fpag/arg/parser.h"
@@ -89,20 +92,39 @@ CliConfig extract_from_matches(arg::Matches&& matches) {
   return c;
 }
 
-ParseOutcome to_outcome(arg::ParseResult<arg::Matches>&& result) {
+ParseOutcome to_outcome(arg::Parser& parser,
+                        std::span<const std::string_view> args,
+                        arg::ParseResult<arg::Matches>&& result) {
   switch (result.status()) {
     case arg::ParseStatus::Success: {
       CliConfig config = extract_from_matches(std::move(result).unwrap());
       if (config.subcommand == Subcommand::None) {
         if (!config.target_dir.empty()) {
-          return UnknownSubcommand{std::string(config.target_dir)};
+          UnknownSubcommand unknown{std::string(config.target_dir), ""};
+          if (auto suggestion =
+                  suggest_subcommand(parser.root_command(), unknown.name)) {
+            unknown.suggestion = std::move(*suggestion);
+          }
+          return unknown;
         }
         return NoSubcommand{};
       }
       return config;
     }
-    case arg::ParseStatus::Error:
-      return ParseFailure{std::move(result).unwrap_err()};
+    case arg::ParseStatus::Error: {
+      ParseFailure failure{std::move(result).unwrap_err(), {}};
+      for (usize i = 0; i < failure.errors.size(); ++i) {
+        const arg::ParseError& error = failure.errors[i];
+        if (error.code != arg::ErrorCode::UnknownLongOption) {
+          continue;
+        }
+        if (auto suggestion =
+                suggest_flag(parser.root_command(), args, error.context)) {
+          failure.suggestions.push_back({i, std::move(*suggestion)});
+        }
+      }
+      return failure;
+    }
     case arg::ParseStatus::HelpRequested: return HelpRequested{};
     case arg::ParseStatus::VersionRequested: return VersionRequested{};
     default: UNREACHABLE();
@@ -261,13 +283,25 @@ arg::Parser build_parser(i18n::Language language) {
 
 ParseOutcome parse_args(arg::Parser& parser,
                         std::span<const std::string_view> args) {
-  return to_outcome(parser.try_parse(args));
+  return to_outcome(parser, args, parser.try_parse(args));
 }
 
 ParseOutcome parse_args(arg::Parser& parser,
                         i32 argc,
                         const char* const* argv) {
-  return to_outcome(parser.try_parse(argc, argv));
+  arg::ParseResult<arg::Matches> result = parser.try_parse(argc, argv);
+  // Views over argv for flag suggestions, built only when an error may
+  // carry one. The parser maps a null entry to an empty view, and so
+  // does this.
+  std::vector<std::string_view> args;
+  if (result.status() == arg::ParseStatus::Error && argv != nullptr) {
+    args.reserve(static_cast<usize>(argc > 0 ? argc : 0));
+    for (i32 i = 0; i < argc; ++i) {
+      args.emplace_back(argv[i] != nullptr ? std::string_view(argv[i])
+                                           : std::string_view());
+    }
+  }
+  return to_outcome(parser, args, std::move(result));
 }
 
 }  // namespace cli

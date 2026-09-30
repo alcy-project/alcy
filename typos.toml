@@ -15,3 +15,14 @@ OLT = "OLT"
 Cpy = "Cpy"
 # Windows API: _O_WRONLY
 WRONLY = "WRONLY"
+# Misspellings under test: the suggestion tests feed the matcher typos
+# on purpose (compiler/tests/cli/*suggest*, parse_args_test,
+# parse_output_test), and per-file scopes do not apply in this typos
+# version, so these stand down globally.
+buid = "buid"
+buil = "buil"
+comiple = "comiple"
+chek = "chek"
+outpu = "outpu"
+abd = "abd"
+halp = "halp"

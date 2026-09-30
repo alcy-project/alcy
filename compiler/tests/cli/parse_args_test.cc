@@ -218,12 +218,49 @@ TEST_CASE("Parse unknown subcommand keeps its name") {
   }
 }
 
+TEST_CASE("Parse unknown subcommand suggests the closest one") {
+  const std::string_view close[] = {"alcy", "buid"};
+  ParseOutcome outcome = parse(close);
+  CHECK(outcome.is<UnknownSubcommand>());
+  if (outcome.is<UnknownSubcommand>()) {
+    CHECK(std::move(outcome).get<UnknownSubcommand>().suggestion == "build");
+  }
+
+  const std::string_view far[] = {"alcy", "frobnicate"};
+  ParseOutcome missed = parse(far);
+  CHECK(missed.is<UnknownSubcommand>());
+  if (missed.is<UnknownSubcommand>()) {
+    CHECK(std::move(missed).get<UnknownSubcommand>().suggestion.empty());
+  }
+}
+
 TEST_CASE("Parse unknown flags") {
   const std::string_view args[] = {"alcy", "build", "--frobnicator"};
   ParseOutcome outcome = parse(args);
   CHECK(outcome.is<ParseFailure>());
   if (outcome.is<ParseFailure>()) {
     CHECK(!std::move(outcome).get<ParseFailure>().errors.empty());
+  }
+}
+
+TEST_CASE("Parse unknown flag suggests the closest one") {
+  const std::string_view args[] = {"alcy", "build", "--outpu"};
+  ParseOutcome outcome = parse(args);
+  CHECK(outcome.is<ParseFailure>());
+  if (outcome.is<ParseFailure>()) {
+    const ParseFailure& failure = outcome.get<ParseFailure>();
+    CHECK(failure.suggestions.size() == 1);
+    if (!failure.suggestions.empty()) {
+      CHECK(failure.suggestions[0].error_index == 0);
+      CHECK(failure.suggestions[0].flag == "output");
+    }
+  }
+
+  const std::string_view far[] = {"alcy", "build", "--frobnicator"};
+  ParseOutcome missed = parse(far);
+  CHECK(missed.is<ParseFailure>());
+  if (missed.is<ParseFailure>()) {
+    CHECK(std::move(missed).get<ParseFailure>().suggestions.empty());
   }
 }
 

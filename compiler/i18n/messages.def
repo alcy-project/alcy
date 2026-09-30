@@ -317,6 +317,7 @@
   F(CliCompileOutputHelp, "Where the output goes. Empty picks a path beside the input; required with --stdin.") \
   F(CliDepsHelp, "A dependency on top of the default suite, as a specifier (`alcy/std/core`) or `specifier = {{ ... }}`. Repeatable.") \
   F(CliDepsOnlyForCompile, "`--no-std` and `--deps` only mean anything for `compile`") \
+  F(CliDidYouMean, "did you mean '{}'?") \
   F(CliEmitHelp, "What to write: executable (default), object, llvm-ir, or llvm-bc. The output's extension no longer decides.") \
   F(CliFilePlural, "files") \
   F(CliFileSingular, "file") \

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "cli/cli_config.h"
+#include "cli/suggest.h"
 #include "fpag/arg/parse_error.h"
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
@@ -25,9 +26,12 @@ struct VersionRequested {};
 struct NoSubcommand {};
 struct UnknownSubcommand {
   std::string name;
+  // The closest subcommand name, empty when nothing is close.
+  std::string suggestion;
 };
 struct ParseFailure {
   std::vector<arg::ParseError> errors;
+  std::vector<FlagSuggestion> suggestions;
 };
 
 using ParseOutcome = base::AutoTaggedUnion<CliConfig,

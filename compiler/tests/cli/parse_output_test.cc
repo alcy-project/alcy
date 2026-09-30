@@ -63,10 +63,28 @@ TEST_CASE("Render unknown subcommand") {
   CHECK(text.find("--help") != std::string::npos);
 }
 
+TEST_CASE("Render subcommand suggestion") {
+  const std::string_view close[] = {"alcy", "buid"};
+  CHECK(render(parse(close)).find("did you mean 'build'?") !=
+        std::string::npos);
+
+  const std::string_view far[] = {"alcy", "frobnicate"};
+  CHECK(render(parse(far)).find("did you mean") == std::string::npos);
+}
+
 TEST_CASE("Render parse failure") {
   const std::string_view args[] = {"alcy", "build", "--frobnicator"};
   const std::string text = render(parse(args));
   CHECK(!text.empty());
+}
+
+TEST_CASE("Render flag suggestion") {
+  const std::string_view close[] = {"alcy", "build", "--outpu"};
+  CHECK(render(parse(close)).find("did you mean '--output'?") !=
+        std::string::npos);
+
+  const std::string_view far[] = {"alcy", "build", "--frobnicator"};
+  CHECK(render(parse(far)).find("did you mean") == std::string::npos);
 }
 
 TEST_CASE("Render config is empty") {

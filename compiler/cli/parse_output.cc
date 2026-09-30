@@ -99,13 +99,20 @@ std::string render_outcome(const arg::Parser& parser,
   }
   if (outcome.is<UnknownSubcommand>()) {
     const UnknownSubcommand& unknown = outcome.get<UnknownSubcommand>();
-    return i18n::format<i18n::Key::CliUnknownSubcommand>(
+    std::string text = i18n::format<i18n::Key::CliUnknownSubcommand>(
         language, unknown.name, parser.root_command().name());
+    if (!unknown.suggestion.empty()) {
+      text += "\n";
+      text +=
+          i18n::format<i18n::Key::CliDidYouMean>(language, unknown.suggestion);
+    }
+    return text;
   }
   if (outcome.is<ParseFailure>()) {
     const ParseFailure& failure = outcome.get<ParseFailure>();
     const ErrorFormatter format{language};
-    return format(parser.root_command().name(), failure.errors, style);
+    return format(parser.root_command().name(), failure.errors,
+                  failure.suggestions, style);
   }
   UNREACHABLE();
 }
