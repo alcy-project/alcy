@@ -11,6 +11,7 @@
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "i18n/language.h"
 #include "pipeline/check.h"
 #include "pipeline/pipeline_context.h"
 
@@ -34,7 +35,7 @@ struct CheckOutcome {
 // filesystem.
 CheckOutcome run_check(const std::string& source) {
   CheckOutcome outcome;
-  PipelineContext ctx;
+  PipelineContext ctx{i18n::Language::EnUs};
   const base::Result<CheckResult, diag::Reported> result =
       check_source(ctx, "main.al", source);
   outcome.ran = true;

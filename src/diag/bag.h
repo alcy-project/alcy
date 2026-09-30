@@ -15,6 +15,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
+#include "i18n/messages.h"
 
 namespace diag {
 
@@ -41,22 +42,76 @@ enum class BagError : u8 {
 // mem::Arena (cold path only - message composition is the only allocation,
 // and it bumps the injected arena rather than the heap).
 //
+// The language is part of the bag because a diagnostic records the text
+// the user was told, not a recipe for telling them: the message is
+// composed from the catalog here, and rendering it again renders the
+// same text. One invocation reports in one language.
+//
 // Diagnostics are addressed by stable u32 indices: the entries array can
 // relocate as it grows, so the bag never hands out references.
 class DiagBag {
  public:
-  explicit DiagBag(mem::Arena& arena) : arena_(&arena) {}
+  DiagBag(mem::Arena& arena, i18n::Language language)
+      : arena_(&arena), language_(language) {}
 
   DiagBag(const DiagBag&) = delete;
   DiagBag& operator=(const DiagBag&) = delete;
 
+  // Composes a message from the catalog and appends the diagnostic.
+  // Every catalog's format string for K is checked against Args... at
+  // compile time, so a translation that does not fit the call site is a
+  // build error rather than a diagnostic printed wrong.
+  template <i18n::Key K, typename... Args>
+  u32 emit(Severity severity, u32 code, Args&&... args) {
+    fmt::memory_buffer out;
+    i18n::format_to<K>(out, language_, std::forward<Args>(args)...);
+    return push(severity, code, {}, false, {out.data(), out.size()});
+  }
+
+  template <i18n::Key K, typename... Args>
+  u32 emit(Severity severity, u32 code, Span primary, Args&&... args) {
+    fmt::memory_buffer out;
+    i18n::format_to<K>(out, language_, std::forward<Args>(args)...);
+    return push(severity, code, primary, true, {out.data(), out.size()});
+  }
+
+  // Appends a diagnostic whose message is composed here rather than from
+  // the catalog. Nothing new emits through this: a message the user reads
+  // is a catalog entry, and a test's own wording is the one case left.
+  template <typename... Args>
+  u32 emit_untranslated(Severity severity,
+                        u32 code,
+                        fmt::format_string<Args...> format,
+                        Args&&... args) {
+    fmt::memory_buffer out;
+    fmt::format_to(std::back_inserter(out), format,
+                   std::forward<Args>(args)...);
+    return push(severity, code, {}, false, {out.data(), out.size()});
+  }
+
+  template <typename... Args>
+  u32 emit_untranslated(Severity severity,
+                        u32 code,
+                        Span primary,
+                        fmt::format_string<Args...> format,
+                        Args&&... args) {
+    fmt::memory_buffer out;
+    fmt::format_to(std::back_inserter(out), format,
+                   std::forward<Args>(args)...);
+    return push(severity, code, primary, true, {out.data(), out.size()});
+  }
+
+  // The untranslated form, still reached under its old name while the
+  // remaining call sites move to the catalog. It is not overloaded with
+  // the keyed form above: a key cannot be deduced from an argument, so
+  // the two never both answer a call.
   template <typename... Args>
   u32 emit(Severity severity,
            u32 code,
            fmt::format_string<Args...> format,
            Args&&... args) {
-    return emit_impl(severity, code, Span{}, false, format,
-                     std::forward<Args>(args)...);
+    return emit_untranslated(severity, code, format,
+                             std::forward<Args>(args)...);
   }
 
   template <typename... Args>
@@ -65,8 +120,8 @@ class DiagBag {
            Span primary,
            fmt::format_string<Args...> format,
            Args&&... args) {
-    return emit_impl(severity, code, primary, true, format,
-                     std::forward<Args>(args)...);
+    return emit_untranslated(severity, code, primary, format,
+                             std::forward<Args>(args)...);
   }
 
   // Attaches secondary labels to a previously emitted diagnostic. The labels
@@ -98,19 +153,6 @@ class DiagBag {
   }
 
  private:
-  template <typename... Args>
-  u32 emit_impl(Severity severity,
-                u32 code,
-                Span primary,
-                bool has_primary,
-                fmt::format_string<Args...> format,
-                Args&&... args) {
-    fmt::memory_buffer out;
-    fmt::format_to(std::back_inserter(out), format,
-                   std::forward<Args>(args)...);
-    return push(severity, code, primary, has_primary, {out.data(), out.size()});
-  }
-
   // Appends a diagnostic with an already-composed message. Copies the
   // message into the arena; grows the entries array as needed. Returns the
   // stable index of the new entry.
@@ -124,6 +166,7 @@ class DiagBag {
   std::string_view intern(std::string_view bytes) const;
 
   mem::Arena* arena_;
+  i18n::Language language_;
   // Arena-owned array of all diagnostics, in emission order.
   Diagnostic* entries_ = nullptr;
   u32 capacity_ = 0;

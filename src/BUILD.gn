@@ -30,6 +30,7 @@ group("modules") {
     "codegen",
     "codegen_llvm",
     "diag",
+    "i18n",
     "ir",
     "lexer",
     "lower",

@@ -60,11 +60,11 @@ class Lexer {
   void lex_string(std::vector<Token>& out);
   void lex_char(std::vector<Token>& out);
   void lex_symbol(std::vector<Token>& out);
-  void emit_error(std::vector<Token>& out,
-                  usize start,
-                  usize length,
-                  u32 code,
-                  std::string_view message);
+  // Reports the error token the lexer produced in place of one it could
+  // read. The message is a catalog key, so the wording lives in one
+  // place and the code stays with the check that found it.
+  template <i18n::Key K>
+  void emit_error(std::vector<Token>& out, usize start, usize length, u32 code);
 
   std::string_view bytes_;
   source::FileId file_;
@@ -72,5 +72,15 @@ class Lexer {
   usize pos_ = 0;
   TokenKind last_significant_ = TokenKind::Eof;
 };
+
+template <i18n::Key K>
+void Lexer::emit_error(std::vector<Token>& out,
+                       usize start,
+                       usize length,
+                       u32 code) {
+  const diag::Span span = span_at(start, length);
+  (void)bag_.emit<K>(diag::Severity::Error, code, span);
+  out.push_back(Token{.kind = TokenKind::Error, .span = span});
+}
 
 }  // namespace lexer

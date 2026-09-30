@@ -10,6 +10,7 @@
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
+#include "i18n/language.h"
 #include "ir/verifier.h"
 #include "pipeline/check.h"
 #include "pipeline/pipeline_context.h"
@@ -47,7 +48,7 @@ TEST_CASE("A generated source is a program the compiler accepts") {
   // did not parse, the numbers would be error recovery, and every case
   // built on it would be quietly measuring the wrong thing. The width
   // crosses the point where a bare index stops being an identifier.
-  pipeline::PipelineContext ctx;
+  pipeline::PipelineContext ctx{i18n::Language::EnUs};
   const std::string source =
       generate_source(SourceSpec{.functions = 40, .statements = 2, .depth = 2});
   base::Result<pipeline::CheckResult, diag::Reported> checked =

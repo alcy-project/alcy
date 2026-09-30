@@ -12,6 +12,7 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "i18n/messages.h"
 #include "lexer/token.h"
 #include "source/source.h"
 
@@ -219,17 +220,6 @@ bool Lexer::at_end() const {
   return pos_ >= bytes_.size();
 }
 
-void Lexer::emit_error(std::vector<Token>& out,
-                       usize start,
-                       usize length,
-                       u32 code,
-                       std::string_view message) {
-  const diag::Span span = span_at(start, length);
-  const u32 index = bag_.emit(diag::Severity::Error, code, span, "{}", message);
-  (void)index;
-  out.push_back(Token{.kind = TokenKind::Error, .span = span});
-}
-
 void Lexer::skip_trivia(std::vector<Token>& out) {
   while (!at_end()) {
     const char c = peek();
@@ -274,8 +264,8 @@ void Lexer::skip_trivia(std::vector<Token>& out) {
         }
       }
       if (depth > 0) {
-        emit_error(out, start, pos_ - start, LEXER_UNTERMINATED_BLOCK_COMMENT,
-                   "unterminated block comment");
+        emit_error<i18n::Key::LexerUnterminatedBlockComment>(
+            out, start, pos_ - start, LEXER_UNTERMINATED_BLOCK_COMMENT);
       }
     } else {
       break;
@@ -391,21 +381,21 @@ void Lexer::lex_number(std::vector<Token>& out) {
       while (!at_end() && is_alnum_or_underscore(peek())) {
         advance();
       }
-      emit_error(out, start, pos_ - start, LEXER_INVALID_NUMBER,
-                 "invalid number literal");
+      emit_error<i18n::Key::LexerInvalidNumber>(out, start, pos_ - start,
+                                                LEXER_INVALID_NUMBER);
       return;
     }
     if (trailing_underscore && !is_alpha(peek())) {
-      emit_error(out, start, pos_ - start, LEXER_INVALID_NUMBER,
-                 "invalid number literal");
+      emit_error<i18n::Key::LexerInvalidNumber>(out, start, pos_ - start,
+                                                LEXER_INVALID_NUMBER);
       return;
     }
     if (is_digit(peek())) {
       while (!at_end() && is_alnum_or_underscore(peek())) {
         advance();
       }
-      emit_error(out, start, pos_ - start, LEXER_INVALID_NUMBER,
-                 "invalid number literal");
+      emit_error<i18n::Key::LexerInvalidNumber>(out, start, pos_ - start,
+                                                LEXER_INVALID_NUMBER);
       return;
     }
     while (!at_end() && is_alnum_or_underscore(peek())) {
@@ -435,8 +425,8 @@ void Lexer::lex_number(std::vector<Token>& out) {
       }
     }
     if (bytes_[pos_ - 1] == '_' && !is_alpha(peek())) {
-      emit_error(out, start, pos_ - start, LEXER_INVALID_NUMBER,
-                 "invalid number literal");
+      emit_error<i18n::Key::LexerInvalidNumber>(out, start, pos_ - start,
+                                                LEXER_INVALID_NUMBER);
       return;
     }
   }
@@ -500,13 +490,13 @@ void Lexer::lex_string(std::vector<Token>& out) {
     advance();
   }
   if (!terminated) {
-    emit_error(out, start, pos_ - start, LEXER_UNTERMINATED_STRING,
-               "unterminated string literal");
+    emit_error<i18n::Key::LexerUnterminatedString>(out, start, pos_ - start,
+                                                   LEXER_UNTERMINATED_STRING);
     return;
   }
   if (bad_escape) {
-    emit_error(out, start, pos_ - start, LEXER_INVALID_ESCAPE,
-               "invalid escape in string literal");
+    emit_error<i18n::Key::LexerInvalidEscapeInString>(out, start, pos_ - start,
+                                                      LEXER_INVALID_ESCAPE);
     return;
   }
   last_significant_ = TokenKind::String;
@@ -567,18 +557,18 @@ void Lexer::lex_char(std::vector<Token>& out) {
     empty = false;
   }
   if (!terminated) {
-    emit_error(out, start, pos_ - start, LEXER_UNTERMINATED_CHAR,
-               "unterminated character literal");
+    emit_error<i18n::Key::LexerUnterminatedCharacter>(out, start, pos_ - start,
+                                                      LEXER_UNTERMINATED_CHAR);
     return;
   }
   if (empty) {
-    emit_error(out, start, pos_ - start, LEXER_INVALID_CHAR,
-               "empty character literal");
+    emit_error<i18n::Key::LexerEmptyCharacter>(out, start, pos_ - start,
+                                               LEXER_INVALID_CHAR);
     return;
   }
   if (bad_escape) {
-    emit_error(out, start, pos_ - start, LEXER_INVALID_ESCAPE,
-               "invalid escape in character literal");
+    emit_error<i18n::Key::LexerInvalidEscapeInCharacter>(
+        out, start, pos_ - start, LEXER_INVALID_ESCAPE);
     return;
   }
   last_significant_ = TokenKind::Char;
@@ -754,7 +744,8 @@ void Lexer::lex_symbol(std::vector<Token>& out) {
     if (pos_ + scalar > bytes_.size()) {
       scalar = bytes_.size() - pos_;
     }
-    emit_error(out, start, scalar, LEXER_INVALID_CHAR, "invalid character");
+    emit_error<i18n::Key::LexerInvalidCharacter>(out, start, scalar,
+                                                 LEXER_INVALID_CHAR);
     advance(scalar);
     return;
   }
@@ -771,7 +762,8 @@ void Lexer::tokenize(std::vector<Token>& out) {
     }
     const char c = peek();
     if (c == '\0') {
-      emit_error(out, pos_, 1, LEXER_INVALID_CHAR, "invalid character");
+      emit_error<i18n::Key::LexerInvalidCharacter>(out, pos_, 1,
+                                                   LEXER_INVALID_CHAR);
       advance();
     } else if (is_alpha(c) || c == '_') {
       lex_identifier(out);

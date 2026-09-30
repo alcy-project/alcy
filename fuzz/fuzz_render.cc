@@ -26,6 +26,7 @@
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
+#include "i18n/language.h"
 #include "source/source.h"
 
 namespace {
@@ -95,16 +96,15 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
   }
   // The last four bytes pick the span, so the fuzzer explores the
   // arithmetic rather than the buffer.
-  const u32 offset =
-      (static_cast<u32>(data[size - 4]) << 24) |
-      (static_cast<u32>(data[size - 4 + 1]) << 16) |
-      (static_cast<u32>(data[size - 4 + 2]) << 8) |
-      static_cast<u32>(data[size - 4 + 3]);
+  const u32 offset = (static_cast<u32>(data[size - 4]) << 24) |
+                     (static_cast<u32>(data[size - 4 + 1]) << 16) |
+                     (static_cast<u32>(data[size - 4 + 2]) << 8) |
+                     static_cast<u32>(data[size - 4 + 3]);
   const u32 length = static_cast<u32>(data[size - 2]) * 64u;
 
   mem::Arena arena;
   arena.reserve(1u << 20);
-  diag::DiagBag bag{arena};
+  diag::DiagBag bag{arena, i18n::Language::EnUs};
   const u32 index = bag.emit(
       diag::Severity::Error, 1,
       diag::Span{.file = 1, .offset = offset, .length = length}, "fuzz");
@@ -131,12 +131,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
     const usize eol = text.find('\n', at);
     const std::string_view line = text.substr(
         at, eol == std::string_view::npos ? text.size() - at : eol - at);
-    if (header == std::string_view::npos && header_column(line) !=
-                                                   std::string_view::npos) {
+    if (header == std::string_view::npos &&
+        header_column(line) != std::string_view::npos) {
       header = header_column(line);
     }
-    if (caret == std::string_view::npos && caret_column(line) !=
-                                                 std::string_view::npos) {
+    if (caret == std::string_view::npos &&
+        caret_column(line) != std::string_view::npos) {
       caret = caret_column(line);
     }
     if (eol == std::string_view::npos) {

@@ -1,0 +1,36 @@
+// Copyright 2026 The Alcy Project Authors
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// The message catalog: every user-visible message the compiler can
+// print, one entry each, grouped by the module that emits it. The
+// diagnostic code stays at the call site, because it is a stable
+// identifier for tooling and half of the registered codes carry more
+// than one wording.
+//
+// The list is included with different adapters to build the key enum,
+// the per-language tables, and the cli's choice lists, so the ordinals,
+// the catalogs, and the flag values cannot drift apart. A name is
+// spelled `ModuleWhatIsWrong` after the module that emits it, and
+// changing a text never changes a name: a name is the identity a
+// translation is keyed by.
+//
+// Format strings are fmt syntax. A translation may reorder the
+// placeholders and reword around them, and may not add, drop, or
+// retype one: every catalog is parsed against the call site's
+// arguments at compile time.
+
+#ifndef ALCY_I18N_MESSAGES_DEF_
+#define ALCY_I18N_MESSAGES_DEF_
+
+#define ALCY_I18N_FOREACH_KEY_EN_US(F)          \
+  /* lexer */                                   \
+  F(LexerInvalidCharacter, "invalid character") \
+  F(LexerEmptyCharacter, "empty character literal")            \
+  F(LexerInvalidNumber, "invalid number literal")              \
+  F(LexerInvalidEscapeInCharacter, "invalid escape in character literal") \
+  F(LexerInvalidEscapeInString, "invalid escape in string literal")         \
+  F(LexerUnterminatedBlockComment, "unterminated block comment")           \
+  F(LexerUnterminatedCharacter, "unterminated character literal")           \
+  F(LexerUnterminatedString, "unterminated string literal")
+
+#endif  // ALCY_I18N_MESSAGES_DEF_

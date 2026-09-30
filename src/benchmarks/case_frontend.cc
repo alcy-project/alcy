@@ -16,6 +16,7 @@
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
+#include "i18n/language.h"
 #include "lexer/lexer.h"
 #include "lexer/token.h"
 #include "parser/parser.h"
@@ -43,7 +44,7 @@ struct FrontendFixture {
   // mark on the first parse and staying there is also what the pipeline
   // does across the files of one invocation.
   mem::Arena arena;
-  diag::DiagBag bag{arena};
+  diag::DiagBag bag{arena, i18n::Language::EnUs};
 
   void tokenize() {
     tokens.clear();
@@ -62,7 +63,7 @@ struct FrontendFixture {
 // what is timed is the descent and the storage it needs.
 void parse_once(FrontendFixture& fixture) {
   ast::AstArena ast;
-  diag::DiagBag bag(fixture.arena);
+  diag::DiagBag bag(fixture.arena, i18n::Language::EnUs);
   parser::Parser parser(fixture.tokens_view, fixture.bytes,
                         source::UNKNOWN_FILE, ast, bag);
   static_cast<void>(parser.parse());

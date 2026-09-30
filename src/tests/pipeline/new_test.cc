@@ -12,6 +12,7 @@
 #include "fpag/io/file_handle.h"
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
+#include "i18n/language.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/vcs.h"
 
@@ -33,7 +34,7 @@ TEST_CASE("Invalid package names") {
 
 TEST_CASE("Init derives the package name from the directory") {
   io::TempDir dir = io::TempDir::create_unique("alcy_init_name_test_");
-  PipelineContext ctx;
+  PipelineContext ctx{i18n::Language::EnUs};
   const std::string target = dir.join("myproj");
   CHECK(init_package(ctx, target, Vcs::Git).is_ok());
   io::FileHandle manifest;
@@ -46,7 +47,7 @@ TEST_CASE("Init derives the package name from the directory") {
 
 TEST_CASE("Init depends on the standard suite by default") {
   io::TempDir dir = io::TempDir::create_unique("alcy_init_deps_test_");
-  PipelineContext ctx;
+  PipelineContext ctx{i18n::Language::EnUs};
   const std::string target = dir.join("myproj");
   CHECK(init_package(ctx, target, Vcs::Git).is_ok());
   // The default program prints, so the default manifest names the suite
@@ -57,7 +58,7 @@ TEST_CASE("Init depends on the standard suite by default") {
 
 TEST_CASE("Init refuses to overwrite an existing package") {
   io::TempDir dir = io::TempDir::create_unique("alcy_init_overwrite_test_");
-  PipelineContext ctx;
+  PipelineContext ctx{i18n::Language::EnUs};
   const std::string target = dir.join("myproj");
   CHECK(init_package(ctx, target, Vcs::Git).is_ok());
   CHECK(init_package(ctx, target, Vcs::Git).is_err());
@@ -66,7 +67,7 @@ TEST_CASE("Init refuses to overwrite an existing package") {
 
 TEST_CASE("Init without a VCS writes no ignore file") {
   io::TempDir dir = io::TempDir::create_unique("alcy_init_novcs_test_");
-  PipelineContext ctx;
+  PipelineContext ctx{i18n::Language::EnUs};
   const std::string target = dir.join("myproj");
   CHECK(init_package(ctx, target, Vcs::None).is_ok());
   io::FileHandle manifest;
@@ -84,7 +85,7 @@ TEST_CASE("Init without a VCS leaves an existing ignore file alone") {
                          reinterpret_cast<const u8*>(MINE.data()), MINE.size()),
                      dir.join("mine/.gitignore")));
 
-  PipelineContext ctx;
+  PipelineContext ctx{i18n::Language::EnUs};
   // The ignore file belongs to the user, so its presence is not a reason
   // to refuse: only the package files are alcy's to write.
   CHECK(init_package(ctx, dir.join("mine"), Vcs::None).is_ok());

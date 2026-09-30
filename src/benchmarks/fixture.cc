@@ -16,6 +16,7 @@
 #include "fpag/mem/arena.h"
 #include "fpag/mem/page_allocator.h"
 #include "fpag/str/string_interner.h"
+#include "i18n/language.h"
 #include "ir/type.h"
 #include "lower/lower.h"
 #include "source/source.h"
@@ -26,7 +27,9 @@ CompilerFixture::CompilerFixture(SourceSpec spec)
     : CompilerFixture(generate_source(spec)) {}
 
 CompilerFixture::CompilerFixture(std::string source)
-    : source_(std::move(source)), bag_(arena_), strings_(mem::page_size()) {
+    : source_(std::move(source)),
+      bag_(arena_, i18n::Language::EnUs),
+      strings_(mem::page_size()) {
   arena_.reserve(1u << 22);
   root_ = sources_.add_virtual("bench.al", source_);
   inputs_.push_back(analyzer::ModuleInput{"", root_});

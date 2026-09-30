@@ -15,6 +15,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
 #include "fpag/term/style.h"
+#include "i18n/language.h"
 
 namespace diag {
 
@@ -49,7 +50,7 @@ std::string render_str(const Diagnostic& diag,
 
 struct BagFixture {
   mem::Arena arena;
-  DiagBag bag{arena};
+  DiagBag bag{arena, i18n::Language::EnUs};
 
   BagFixture() { arena.reserve(1u << 20); }
 };

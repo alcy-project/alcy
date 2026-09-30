@@ -12,6 +12,7 @@
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
+#include "i18n/language.h"
 #include "path/path.h"
 #include "pipeline/build.h"
 #include "pipeline/emit_mode.h"
@@ -26,7 +27,7 @@ namespace pipeline {
 
 #if !BUILD_FLAG(IS_OS_ASMJS)
 TEST_CASE("Pipeline stages the standard library prelude") {
-  PipelineContext ctx;
+  PipelineContext ctx{i18n::Language::EnUs};
   const std::span<const analyzer::ModuleInput> inputs =
       std_prelude(ctx, pipeline::full_std_selection());
   CHECK(!ctx.bag.has_errors());
@@ -51,7 +52,7 @@ TEST_CASE("Pipeline build produces object file") {
     return;
   }
 
-  PipelineContext ctx;
+  PipelineContext ctx{i18n::Language::EnUs};
   base::Result<path::Path, path::PathError> root =
       path::Path::from_native(dir.path());
   CHECK(root.is_ok());
@@ -75,7 +76,7 @@ TEST_CASE("Pipeline build produces executable") {
     return;
   }
 
-  PipelineContext ctx;
+  PipelineContext ctx{i18n::Language::EnUs};
   const std::string exe_path = std::string(dir.path()) + "/main_exe";
   auto res = pipeline::build_single_file(
       ctx, dir.join("main.al"), exe_path, false, pipeline::LinkOptions{},
@@ -92,7 +93,7 @@ TEST_CASE("Pipeline release build produces a working executable") {
     return;
   }
 
-  PipelineContext ctx;
+  PipelineContext ctx{i18n::Language::EnUs};
   const std::string exe_path =
       std::string(dir.path()) + "/main_exe" + std::string(exe_suffix());
   auto res = pipeline::build_single_file(
@@ -135,7 +136,7 @@ TEST_CASE("Release optimizes the textual IR, not only the object") {
 
   for (const auto& [optimize, target] :
        {std::pair{false, plain}, std::pair{true, released}}) {
-    PipelineContext ctx;
+    PipelineContext ctx{i18n::Language::EnUs};
     base::Result<std::string, diag::Reported> built = build_single_file(
         ctx, dir.join("main.al"), target, optimize, pipeline::LinkOptions{},
         pipeline::EmitMode::LlvmIr, pipeline::full_std_selection());
@@ -207,7 +208,7 @@ TEST_CASE("A build creates the directory its output names") {
   if (!setup) {
     return;
   }
-  PipelineContext ctx;
+  PipelineContext ctx{i18n::Language::EnUs};
   base::Result<std::string, diag::Reported> built = build_single_file(
       ctx, dir.join("main.al"), out, false, pipeline::LinkOptions{},
       pipeline::EmitMode::Executable, pipeline::full_std_selection());
@@ -224,7 +225,7 @@ TEST_CASE("Pipeline build reports an unwritable object path") {
     return;
   }
 
-  PipelineContext ctx;
+  PipelineContext ctx{i18n::Language::EnUs};
   // A regular file blocks directory creation, so neither creating the
   // parent nor writing the object can succeed.
   const std::string bad_path = std::string(dir.path()) + "/blocker/main.o";

@@ -25,6 +25,7 @@
 #include "fpag/mem/arena.h"
 #include "fpag/mem/page_allocator.h"
 #include "fpag/str/string_interner.h"
+#include "i18n/language.h"
 #include "ir/instruction.h"
 #include "ir/opcode.h"
 #include "ir/storage.h"
@@ -40,7 +41,7 @@ namespace {
 struct Fixture {
   mem::Arena arena;
   ast::AstArena ast;
-  diag::DiagBag bag{arena};
+  diag::DiagBag bag{arena, i18n::Language::EnUs};
   source::SourceManager sources;
   str::StringInterner strings{mem::page_size()};
 

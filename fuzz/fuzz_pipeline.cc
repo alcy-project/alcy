@@ -24,9 +24,10 @@
 #include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
+#include "i18n/language.h"
 #include "pipeline/check.h"
-#include "pipeline/pipeline_context.h"
 #include "pipeline/pipeline.h"
+#include "pipeline/pipeline_context.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
   // A cap keeps one input from stalling the run: the pipeline is
@@ -40,7 +41,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
   if (!dir.write_file("main.al", bytes)) {
     return 0;
   }
-  pipeline::PipelineContext ctx;
+  pipeline::PipelineContext ctx{i18n::Language::EnUs};
   base::Result<pipeline::CheckResult, diag::Reported> result =
       pipeline::check_single_file(ctx, dir.join("main.al"));
   (void)result;

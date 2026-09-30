@@ -55,7 +55,8 @@ base::Result<void, diag::Reported> ensure_directories(PipelineContext& ctx,
   return base::make_ok();
 }
 
-PipelineContext::PipelineContext() : bag(arena), strings(mem::page_size()) {
+PipelineContext::PipelineContext(i18n::Language language)
+    : bag(arena, language), strings(mem::page_size()) {
   arena.reserve(1u << 20);
 }
 

@@ -19,6 +19,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
+#include "i18n/language.h"
 #include "ir/type.h"
 #include "source/source.h"
 #include "tests/util/virtual_source.h"
@@ -30,7 +31,7 @@ namespace {
 struct Fixture {
   mem::Arena arena;
   ast::AstArena ast;
-  diag::DiagBag bag{arena};
+  diag::DiagBag bag{arena, i18n::Language::EnUs};
   source::SourceManager sources;
 
   Fixture() { arena.reserve(1u << 20); }

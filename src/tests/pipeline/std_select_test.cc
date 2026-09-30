@@ -12,6 +12,7 @@
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
+#include "i18n/language.h"
 #include "pkg/manifest.h"
 #include "source/source.h"
 
@@ -21,7 +22,7 @@ namespace {
 
 struct Fixture {
   mem::Arena arena;
-  diag::DiagBag bag{arena};
+  diag::DiagBag bag{arena, i18n::Language::EnUs};
 
   Fixture() { arena.reserve(1u << 20); }
 };

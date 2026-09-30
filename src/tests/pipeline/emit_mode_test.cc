@@ -15,6 +15,7 @@
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
+#include "i18n/language.h"
 #include "path/path.h"
 #include "pipeline/build.h"
 #include "pipeline/link_options.h"
@@ -57,7 +58,7 @@ TEST_CASE("A build writes an object where it was asked for one") {
   // still what was asked for.
   const std::string object_path = dir.join("out.bin");
   {
-    PipelineContext ctx;
+    PipelineContext ctx{i18n::Language::EnUs};
     base::Result<std::string, diag::Reported> built =
         build_single_file(ctx, source, object_path, false, LinkOptions{},
                           EmitMode::Object, pipeline::full_std_selection());
@@ -76,7 +77,7 @@ TEST_CASE("A build writes the module as textual IR") {
 
   const std::string ir_path = dir.join(path::DEFAULT_OUT_DIR);
   {
-    PipelineContext ctx;
+    PipelineContext ctx{i18n::Language::EnUs};
     base::Result<std::string, diag::Reported> built =
         build_single_file(ctx, source, ir_path, false, LinkOptions{},
                           EmitMode::LlvmIr, pipeline::full_std_selection());
@@ -100,7 +101,7 @@ TEST_CASE("A build writes the module as bitcode") {
   // thing left that says what was written.
   const std::string bitcode_path = dir.join("out.bin");
   {
-    PipelineContext ctx;
+    PipelineContext ctx{i18n::Language::EnUs};
     base::Result<std::string, diag::Reported> built = build_single_file(
         ctx, source, bitcode_path, false, LinkOptions{}, EmitMode::LlvmBitcode,
         pipeline::full_std_selection());
@@ -115,7 +116,7 @@ TEST_CASE("The default extension follows the mode") {
   CHECK(dir.write_file("main.al", PROGRAM));
 
   {
-    PipelineContext ctx;
+    PipelineContext ctx{i18n::Language::EnUs};
     base::Result<std::string, diag::Reported> built =
         build_single_file(ctx, dir.join("main.al"), "", false, LinkOptions{},
                           EmitMode::LlvmIr, pipeline::full_std_selection());
@@ -123,7 +124,7 @@ TEST_CASE("The default extension follows the mode") {
   }
   CHECK(io::is_file(dir.join("main.ll")));
   {
-    PipelineContext ctx;
+    PipelineContext ctx{i18n::Language::EnUs};
     base::Result<std::string, diag::Reported> built = build_single_file(
         ctx, dir.join("main.al"), "", false, LinkOptions{},
         EmitMode::LlvmBitcode, pipeline::full_std_selection());
@@ -134,7 +135,7 @@ TEST_CASE("The default extension follows the mode") {
   CHECK(!io::is_file(dir.join("main.o")));
 
   {
-    PipelineContext ctx;
+    PipelineContext ctx{i18n::Language::EnUs};
     base::Result<std::string, diag::Reported> built =
         build_single_file(ctx, dir.join("main.al"), "", false, LinkOptions{},
                           EmitMode::Object, pipeline::full_std_selection());
@@ -172,7 +173,7 @@ TEST_CASE("A package build honours the mode too") {
   };
   for (const Case& one : cases) {
     INFO("mode " << static_cast<u32>(one.mode));
-    PipelineContext ctx;
+    PipelineContext ctx{i18n::Language::EnUs};
     base::Result<path::Path, path::PathError> root =
         path::Path::from_native(dir.join("proj"));
     CHECK(root.is_ok());

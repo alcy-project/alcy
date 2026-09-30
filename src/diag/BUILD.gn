@@ -17,6 +17,7 @@ source_set("diag") {
   # direction is one-way (source never includes diag headers).
   deps = [
     "//src:base_modules",
+    "//src/i18n",
     "//src/source",
   ]
   configs += [ "//src:alcy_config" ]

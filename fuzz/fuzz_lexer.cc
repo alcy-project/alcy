@@ -17,13 +17,14 @@
 #include "diag/bag.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
+#include "i18n/language.h"
 #include "lexer/lexer.h"
 #include "source/source.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
   mem::Arena arena;
   arena.reserve(1u << 20);
-  diag::DiagBag bag{arena};
+  diag::DiagBag bag{arena, i18n::Language::EnUs};
   const std::string_view bytes(reinterpret_cast<const char*>(data), size);
 
   lexer::Lexer lexer(bytes, source::UNKNOWN_FILE, bag);

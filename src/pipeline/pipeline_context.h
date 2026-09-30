@@ -45,7 +45,7 @@ struct PipelineContext {
   // embedding the pipeline points it at its own instance.
   debug::Profiler* profiler = nullptr;
 
-  PipelineContext();
+  explicit PipelineContext(i18n::Language language);
 };
 
 // Returns ".exe" on Windows or else ""
