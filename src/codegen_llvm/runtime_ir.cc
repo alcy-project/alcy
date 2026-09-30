@@ -60,15 +60,21 @@ class RuntimeBuilder {
                                        "alcy.runtime.text", 0, &module_);
   }
 
+  // Every entry point is `linkonce_odr`: an object alcy writes carries
+  // the whole runtime, so two of them in one image would each define
+  // `alcy_*`, and a discardable definition is what lets the linker keep
+  // one copy and the optimizer drop what no program calls.
   llvm::Function* runtime(std::string_view name, llvm::FunctionType* type) {
     if (llvm::Function* declared = module_.getFunction(name)) {
       DCHECK_MSG(declared->getFunctionType() == type,
                  "runtime signature changed under the program's declaration");
       DCHECK_MSG(declared->isDeclaration(), "runtime defined twice");
+      declared->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
       return declared;
     }
-    return llvm::Function::Create(type, llvm::GlobalValue::ExternalLinkage,
-                                  name, module_);
+    return llvm::Function::Create(type,
+                                  llvm::GlobalValue::LinkOnceODRLinkage, name,
+                                  module_);
   }
 
   llvm::Function* libc(std::string_view name, llvm::FunctionType* type) {

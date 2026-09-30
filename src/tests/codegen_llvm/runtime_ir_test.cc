@@ -25,7 +25,10 @@ llvm::FunctionType* signature(llvm::Type* return_type,
 
 // Checks one entry point is defined with the expected signature. The
 // call sites the program emitted hold the declaration, so a mismatch
-// here would only surface as a verifier error much later.
+// here would only surface as a verifier error much later. The linkage is
+// part of the contract for the same reason: an object alcy writes
+// carries the whole runtime, so a second object in one image defines
+// these again unless each definition is discardable.
 void check_definition(llvm::Module& module,
                       std::string_view name,
                       llvm::FunctionType* expected) {
@@ -35,6 +38,7 @@ void check_definition(llvm::Module& module,
     return;
   }
   CHECK(!function->isDeclaration());
+  CHECK(function->hasLinkOnceODRLinkage());
   CHECK(function->getFunctionType() == expected);
 }
 
@@ -100,11 +104,14 @@ TEST_CASE("Runtime fills in the program's declarations") {
   add_runtime_definitions(module, ir::PointerWidth::W64);
 
   // The program's call sites hold these functions, so the definitions
-  // must land in place rather than in a second symbol.
+  // must land in place rather than in a second symbol, carrying the
+  // linkage the runtime defines everything else with.
   CHECK(module.getFunction("alcy_print") == print);
   CHECK(module.getFunction("alcy_alloc") == alloc);
   CHECK(!print->isDeclaration());
   CHECK(!alloc->isDeclaration());
+  CHECK(print->hasLinkOnceODRLinkage());
+  CHECK(alloc->hasLinkOnceODRLinkage());
   CHECK(!llvm::verifyModule(module));
 
   const std::string text = module_text(module);

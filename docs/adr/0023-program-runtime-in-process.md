@@ -38,8 +38,10 @@ length drops with it, `alcy_panic` writes to stderr and aborts,
 and returns null, POSIX promotes alignments below pointer size before
 `posix_memalign`, Windows calls `_aligned_malloc`, and a zero-size
 request still yields a distinct freeable pointer. `write_all` is
-`internal`; the entry points keep the external linkage the C
-definitions had.
+`internal` and the entry points are `linkonce_odr`: every object alcy
+writes carries the runtime, so a definition the linker may discard is
+what lets two of them meet in one image, and it is what lets the
+optimizer drop an entry point no program calls.
 
 The pointer width comes from the target (`TARGET_WIDTH`), not from a
 DataLayout: the IR uses opaque pointers and fixes the element types it
@@ -66,17 +68,22 @@ lookup in the module, not a link of two modules.
 - A build spawns one less process, and its link phase halves on the
   measurement machine: 60.1 ms → 29.2 ms, with the hello-world total at
   114 ms → 85.2 ms. No C compiler is needed to produce an executable.
-- The runtime is optimized with the program. Its internal helper
-  becomes an `internal` function the optimizer gives a private calling
-  convention and inlines where it pays, and the module's functions get
-  attributes inferred from their bodies. Unused entry points still
-  reach the object, because they are externally visible; the C
-  runtime's object kept them too.
-- The runtime's symbols live in the program's object with external
-  linkage, so two alcy programs linked into one image would define
-  `alcy_*` twice. A program is the unit alcy builds; if composing
-  objects returns, the ways out are `linkonce_odr` on the runtime or an
-  emitted runtime-only object.
+- The runtime is optimized with the program. Its internal helper becomes
+  an `internal` function the optimizer gives a private calling convention
+  and inlines where it pays, and the module's functions get attributes
+  inferred from their bodies.
+- Two objects no longer collide on the runtime. Linking two of them
+  relocatably reported all six entry points as duplicate symbols before
+  and none after. What still collides is alcy's own code: a program and
+  the standard library it compiled in are emitted with external linkage
+  ([ADR 0011](0011-symbol-mangling.md)), so two objects sharing a std
+  function collide on that one instead. Making a multi-object image work
+  is lib packages' question, and this change takes the runtime off the
+  list rather than the whole of it.
+- A discardable entry point is also one the optimizer drops, which the C
+  runtime's object could not do. A release hello-world carries no
+  `alcy_*` symbol at all — the reachable path inlined into the program,
+  the rest removed — and its object is 12% smaller for it.
 - Emitted IR and bitcode show the runtime. That is the module, not a
   defect: what an executable links is what `--emit=object` writes, and
   the sanitized exe harness compiles that one module with clang, so the
@@ -86,5 +93,7 @@ lookup in the module, not a link of two modules.
   optimization can promote an address that escapes. Tests that read
   "no alloca after O3" as "mem2reg ran" must count the program's own
   spills, which are told apart by element type.
-- The Windows branch (`_write`, `_aligned_malloc`, `_aligned_free`)
-  compiles but no CI job has run it.
+- The Windows branch is exercised where it matters: the `windows-x64`
+  jobs compile, link, and run the exe acceptance cases, so `_write`,
+  `_aligned_malloc`, and `_aligned_free` all run. The sanitized pass over
+  the same cases is local to `check.sh`.
