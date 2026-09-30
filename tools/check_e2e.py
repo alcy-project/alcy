@@ -16,10 +16,12 @@ An expect.toml file declares the outcome:
 
 `exit` is required (integer value or "non-zero"); `contains` lines must
 all appear in the combined output, `not_contains` lines must all be absent.
-An optional `args` list is inserted before the selected subcommand.
+An optional `args` list is inserted before the selected subcommand, and an
+optional `env` table sets environment variables for the run.
 """
 
 import argparse
+import os
 import subprocess
 import sys
 import tempfile
@@ -52,7 +54,15 @@ def parse_expect(path: Path):
     if not isinstance(subcommand, str):
         sys.exit(f"{path}: 'subcommand' must be a string")
 
-    return expected_exit, contains, not_contains, args, subcommand
+    # Variables the run sets on top of the environment it inherits, so a
+    # case can say what the compiler must ignore.
+    env = data.get("env", {})
+    if not isinstance(env, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in env.items()
+    ):
+        sys.exit(f"{path}: 'env' must be a table of strings")
+
+    return expected_exit, contains, not_contains, args, subcommand, env
 
 
 def run_case(alcy: Path, case_dir: Path):
@@ -60,9 +70,12 @@ def run_case(alcy: Path, case_dir: Path):
     if not expect_path.is_file():
         return False, "missing expect.toml"
 
-    expected_exit, contains, not_contains, extra_args, subcommand = parse_expect(
-        expect_path
+    expected_exit, contains, not_contains, extra_args, subcommand, env = (
+        parse_expect(expect_path)
     )
+    # An unset variable in the table is the case's business, so the run
+    # starts from the environment it inherits with the table applied.
+    process_env = {**os.environ, **env} if env else None
     if (case_dir / "alcy.toml").is_file():
         argv = [str(alcy), *extra_args, subcommand, "."]
         cwd = case_dir
@@ -89,11 +102,21 @@ def run_case(alcy: Path, case_dir: Path):
         with tempfile.TemporaryDirectory() as scratch:
             argv = [*argv, "-o", str(Path(scratch) / "out")]
             proc = subprocess.run(
-                argv, capture_output=True, text=True, encoding="utf-8", cwd=cwd
+                argv,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                cwd=cwd,
+                env=process_env,
             )
             return compare(proc, expected_exit, contains, not_contains)
     proc = subprocess.run(
-        argv, capture_output=True, text=True, encoding="utf-8", cwd=cwd
+        argv,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=cwd,
+        env=process_env,
     )
     return compare(proc, expected_exit, contains, not_contains)
 

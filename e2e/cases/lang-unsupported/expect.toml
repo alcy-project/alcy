@@ -1,0 +1,6 @@
+# A tag with no catalog is rejected rather than falling back to another
+# language: a build that quietly reported in a language nobody asked for
+# would be reporting something else than the flag says.
+exit = 1
+args = ["--lang=ja-jp"]
+contains = ["invalid choice for argument 'lang': 'ja-jp'"]

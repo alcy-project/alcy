@@ -1,0 +1,5 @@
+# The default language needs no flag, and the default is written in the
+# source rather than read from the environment: this case and
+# lang-locale are the same program and the same expectation.
+exit = 4
+contains = ["type mismatch in integer literal"]

@@ -1,0 +1,6 @@
+# Asking for the default language by name prints what asking for
+# nothing prints, which is the whole contract of a default that does not
+# consult the environment.
+exit = 4
+args = ["--lang=en-us"]
+contains = ["type mismatch in integer literal"]
