@@ -5,10 +5,15 @@ on:
     branches: [main]
     paths: &ci_paths
       - src/**
+      - compiler/**
+      - lib/**
       - e2e/**
       - exe/**
+      - samples/**
+      - benchmarks/**
       - third_party/**
       - build/**
+      - tools/**
       - .github/workflows/**
       - .github/actions/**
       - .clang-format
