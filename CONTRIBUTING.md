@@ -13,7 +13,7 @@ Build, test, and check from the repository root:
 
 ```bash
 typos
-uv run ./tools/build.py --target=default --mode=debug
+uv run ./tools/build.py --target=all --mode=debug
 uv run ./tools/run.py --target=tests --mode=debug
 uv run ./tools/check_e2e.py
 uv run ./tools/check_exe.py
@@ -21,7 +21,7 @@ uv run ./tools/lint.py
 uv run ./tools/format.py --dry-run
 uv run ./tools/verify_static_linkage.py
 
-# Or run all of the above commands:
+# Or run all of the above commands at once:
 ./tools/check.sh
 
 # Faster iteration (skips gn gen, gn check, and compdb; never for CI):
@@ -105,12 +105,20 @@ Notes:
 - **Tooling is authoritative:** `.clang-format`, `.clang-tidy`, `CPPLINT.cfg`, and `typos.toml`
   enforce repository style. Use `format.py` and `lint.py --fix` to fix most issues automatically.
   New source files must carry the license header.
-- **Module naming:** Module names stay abbreviated (`pkg`, `diag`, `cfg`). Directory, GN module,
+- **Module naming:** Module names stay abbreviated (`pkg`, `diag`). Directory, GN module,
   and namespace names must always match; full forms live in `docs/architecture.md`.
 - **Wording:** The private LLVM fork is `llvm-alcy-fork` on first mention per document,
   and `the fork` thereafter.
 - **Architecture decisions:** One decision, one record. Significant technical decisions get an ADR
   in `docs/adr/` (copy `docs/adr/0000-template.md`). Small, obvious changes do not need one.
+- **ASCII Character Set**: All C++ source files (`src/`) must remain pure ASCII. Do not use
+  non-ASCII Unicode characters in code or comments (e.g., em-dashes `—`, smart quotes `“”`, or arrows `→`).
+  Use standard ASCII equivalents (`-`, `"..."`, `->`). Non-ASCII characters are permitted only in
+  documentation (`docs/`).
+- **No AI-Generated Walls of Text**: Respect maintainer review time. AI-generated walls of text,
+  verbose speculative explanations, or conversational chat logs in issue descriptions or PRs are
+  not accepted. Keep issue and PR descriptions brief, technical, and written in your own words.
+  Focus strictly on: **What was broken? What was changed? How was it verified?**
 
 ## Changes and review
 

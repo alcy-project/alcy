@@ -183,7 +183,7 @@ shortcuts are not sufficient justification.
 
 In particular:
 
-- Leaf modules such as `base`, `cfg`, and `debug` must remain independent of
+- Leaf modules such as `base`, `config`, and `debug` must remain independent of
   compiler pipeline stages.
 - Core representations such as `ast` and `ir` must not depend on code
   generation policy.
