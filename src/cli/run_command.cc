@@ -19,6 +19,7 @@
 #include "fpag/base/result.h"
 #include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
+#include "i18n/messages.h"
 #include "path/path.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
@@ -61,9 +62,8 @@ i32 run_run(const CliConfig& config,
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
   if (!found.found) {
-    const u32 index =
-        ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
-                     "no manifest found at '{}'; add alcy.toml", raw_dir);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineNoManifest>(
+        diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST, raw_dir);
     (void)index;
     return failed;
   }

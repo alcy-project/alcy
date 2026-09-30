@@ -16,6 +16,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
+#include "i18n/messages.h"
 #include "path/path.h"
 #include "pipeline/build.h"
 #include "pipeline/link_options.h"
@@ -64,13 +65,12 @@ ResultCode run_build(const CliConfig& config,
     // the error instead of claiming a build that never ran.
     if (build_current_dir) {
       const u32 index =
-          ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
-                       "no manifest found at current directory; add alcy.toml");
+          ctx.bag.emit<i18n::Key::PipelineNoManifestInCurrentDirectory>(
+              diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST);
       (void)index;
     } else {
-      const u32 index =
-          ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
-                       "no manifest found at '{}'; add alcy.toml", raw_dir);
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineNoManifest>(
+          diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST, raw_dir);
       (void)index;
     }
     return failed;

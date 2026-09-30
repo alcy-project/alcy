@@ -14,6 +14,7 @@
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "i18n/messages.h"
 #include "path/path.h"
 #include "pipeline/check.h"
 #include "pipeline/pipeline_context.h"
@@ -78,16 +79,13 @@ ResultCode run_check(const CliConfig& config,
   // needs declared roots.
   if (check_current_dir) {
     const u32 index =
-        ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
-                     "no manifest found at current directory; pass a file "
-                     "with --file or add alcy.toml");
+        ctx.bag
+            .emit<i18n::Key::PipelineNoManifestWithFileHintInCurrentDirectory>(
+                diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST);
     (void)index;
   } else {
-    const u32 index = ctx.bag.emit(
-        diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST,
-        "no manifest found at '{}'; pass a file with --file or add "
-        "alcy.toml",
-        raw_target);
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineNoManifestWithFileHint>(
+        diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST, raw_target);
     (void)index;
   }
   return failed;

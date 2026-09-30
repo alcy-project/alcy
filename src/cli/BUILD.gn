@@ -36,7 +36,10 @@ source_set("cli") {
     "validate.cc",
     "validate.h",
   ]
-  deps = [ "//src/pipeline" ]
+  deps = [
+    "//src/i18n",
+    "//src/pipeline",
+  ]
   defines = [
     "ALCY_PROJECT_NAME=\"$project_name\"",
     "ALCY_PROJECT_VERSION=\"$project_version\"",

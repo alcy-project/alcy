@@ -17,6 +17,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
+#include "i18n/messages.h"
 #include "pipeline/build.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
@@ -118,8 +119,8 @@ ResultCode run_compile(const CliConfig& config,
     base::Result<std::string, std::string_view> text = read_stdin();
     if (text.is_err()) {
       const u32 index =
-          ctx.bag.emit(diag::Severity::Error, pipeline::PIPELINE_IO_ERROR,
-                       "cannot read standard input");
+          ctx.bag.emit<i18n::Key::PipelineCannotReadStandardInput>(
+              diag::Severity::Error, pipeline::PIPELINE_IO_ERROR);
       (void)index;
       return failed;
     }

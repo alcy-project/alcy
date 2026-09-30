@@ -234,6 +234,7 @@
   F(PipelineCannotOptimize, "cannot optimize the module") \
   F(PipelineCannotRead, "cannot read '{}'") \
   F(PipelineCannotReadSource, "cannot read source file '{}'") \
+  F(PipelineCannotReadStandardInput, "cannot read standard input") \
   F(PipelineCannotRunSystemCompiler, "cannot run the system compiler") \
   F(PipelineCannotWrite, "cannot write {} '{}'") \
   F(PipelineDependencyIsAStdMember, "dependency '{}' is a member of alcy/std; write \"alcy/std/{}\"") \
@@ -252,6 +253,10 @@
   F(PipelineManifestNotLoaded, "manifest '{}' is not a loaded file") \
   F(PipelineManifestTooManyBinTargets, "manifest '{}' declares {} [[bin]] targets; only one is supported") \
   F(PipelineModuleSharedByTwoFiles, "module '{}' is shared by two files relative to the bin's directory '{}'") \
+  F(PipelineNoManifest, "no manifest found at '{}'; add alcy.toml") \
+  F(PipelineNoManifestInCurrentDirectory, "no manifest found at current directory; add alcy.toml") \
+  F(PipelineNoManifestWithFileHint, "no manifest found at '{}'; pass a file with --file or add alcy.toml") \
+  F(PipelineNoManifestWithFileHintInCurrentDirectory, "no manifest found at current directory; pass a file with --file or add alcy.toml") \
   F(PipelineNoSourceFiles, "no source files found under '{}'") \
   F(PipelinePathExists, "'{}' already exists; refusing to overwrite") \
   F(PipelineSourceDirectoryInaccessible, "source directory '{}' is not accessible") \
