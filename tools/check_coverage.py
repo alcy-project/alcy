@@ -24,7 +24,7 @@ place.
     ./tools/check_coverage.py --report   print the report, no gate
     ./tools/check_coverage.py --update   record the current numbers
 
-Only `src/` counts. The vendored dependencies are compiled into the test
+Only `compiler/` counts. The vendored dependencies are compiled into the test
 binary and would otherwise dominate the total, and a number that mostly
 measures toml++ says nothing about this compiler.
 
@@ -98,7 +98,7 @@ def build(verbose: bool = False) -> int:
 
 
 def measure(verbose: bool = False) -> dict:
-    """Runs every suite and returns line coverage for `src/`, by module."""
+    """Runs every suite and returns line coverage for `compiler/`, by module."""
     for binary in (TEST_BINARY, ALCY_BINARY):
         if not binary.is_file():
             sys.exit(f"{binary} is missing; run without --no-build first")
@@ -177,7 +177,7 @@ def summarize(export: dict) -> dict:
         total_count += lines["count"]
         total_covered += lines["covered"]
     if total_count == 0:
-        sys.exit("the export contained no source files under src/")
+        sys.exit("the export contained no source files under compiler/")
     return {
         "lines": {
             "count": total_count,
@@ -197,7 +197,7 @@ def relative(filename: str) -> str | None:
         name = str(path.relative_to(REPO_ROOT))
     except ValueError:
         return None
-    if not name.startswith("src/"):
+    if not name.startswith("compiler/"):
         return None
     return name
 
@@ -259,7 +259,7 @@ def write_baseline(current: dict) -> None:
         "comment": [
             "Recorded by tools/check_coverage.py --update.",
             "A ratchet: check_coverage.py fails when the measured line",
-            "coverage of src/ drops below this. Move it only on purpose.",
+            "coverage of compiler/ drops below this. Move it only on purpose.",
         ],
         "lines": current["lines"],
         "modules": current["modules"],

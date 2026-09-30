@@ -25,7 +25,7 @@ must be small and replaceable is the *boundary*, not the amount of code.
 
 ## Decision
 
-A microbenchmark engine lives in `src/benchmarks/`, built as its own
+A microbenchmark engine lives in `compiler/benchmarks/`, built as its own
 executable target and never linked into `alcy`. It calls the pipeline's
 public API and adds nothing to it.
 

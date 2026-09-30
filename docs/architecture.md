@@ -100,7 +100,27 @@ runtime polymorphism.
 
 ## Repository layout
 
-- `src/` - the compiler. One directory per module, each with a `BUILD.gn`.
+The repository is the language and the toolchain that compiles it, and the
+two are kept apart: what a program is written against lives at the root, and
+what implements it lives in `compiler/`.
+
+- `docs/` - the language's own documentation: the specification
+  (`docs/spec/`), the decision log (`docs/adr/`), and where the language is
+  going (`principles.md`, `roadmap.md`, `backlog.md`).
+- `compiler/` - the compiler. One directory per module, each with a
+  `BUILD.gn`, which is also the unit the language will call a package once it
+  is self-hosted. Its own documentation is in `compiler/docs/`.
+  `compiler/fuzz/` holds the fuzz targets, which need libFuzzer and are
+  therefore outside `all`.
+- `lib/` - the toolchain standard library as source suites
+  (`lib/std/<member>/`); embedded into the compiler binary and
+  injected as prelude modules, never built as separate packages.
+- `e2e/`, `exe/`, `samples/` - the acceptance suites: what the compiler
+  accepts, what it compiles into a running program, and the programs kept as
+  examples.
+- `benchmarks/` - the measurement contract: which cases exist and what a
+  number from each means. The engine that runs a phase is in
+  `compiler/benchmarks/`.
 - `build/` - GN build configuration: toolchains (`build/toolchains/`) and
   compiler flags (`build/config/`).
 - `tools/` - the helper scripts: build, run, check, lint, format, package.
@@ -109,11 +129,6 @@ runtime polymorphism.
   inside `build/`, which holds only what GN itself reads.
 - `third_party/` - vendored dependencies as submodules (`llvm`, `fpag`,
   `fmt`, `doctest`, `xxhash`), each wrapped with a `BUILD.gn`.
-- `lib/` - the toolchain standard library as source suites
-  (`lib/std/<member>/`); embedded into the compiler binary and
-  injected as prelude modules, never built as separate packages.
-- `docs/` - detailed documentation and architecture decision records
-  (`docs/adr/`).
 
 ## Compiler modules
 
@@ -201,10 +216,10 @@ Avoid cyclic dependencies between modules.
 
 ## Intermediate representation
 
-`src/ir` is the central data structure of the compiler. It models programs
+`compiler/ir` is the central data structure of the compiler. It models programs
 as functions containing basic blocks of instructions over typed registers,
 with explicit control flow (`Br`, `CondBr`, `Switch`, `Call`, `Ret`) and a
-fixed set of opcodes (`src/ir/opcode.h`). Ownership-related operations
+fixed set of opcodes (`compiler/ir/opcode.h`). Ownership-related operations
 (`Move`, `Drop`) are part of the instruction set so later analyses can reason
 about them uniformly.
 
@@ -388,7 +403,7 @@ contributor-facing rules are in
 | Hostile input | The call returns | every build | A generated or random input does not crash or trip a sanitizer |
 | Sanitizers | AddressSanitizer | every debug build | No use-after-free, no out-of-bounds access |
 | Fuzzing | Coverage-guided mutation | on demand | No input reaches a state the existing oracles miss |
-| Coverage | A recorded baseline | `check.sh` | Line coverage of `src/` did not decrease |
+| Coverage | A recorded baseline | `check.sh` | Line coverage of `compiler/` did not decrease |
 
 Two properties of this shape matter more than the table:
 

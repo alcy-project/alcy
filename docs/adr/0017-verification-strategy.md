@@ -88,7 +88,7 @@ another.**
 
 7. **Coverage is a ratchet, not a threshold.** A fixed target pushes
    effort at whichever module is easiest to move rather than the one that
-   matters. `check_coverage.py` fails when line coverage of `src/` falls
+   matters. `check_coverage.py` fails when line coverage of `compiler/` falls
    below `build/coverage_baseline.json`, and the report names the least
    covered modules so the next test goes where the gap is. All three
    suites contribute: measuring the unit tests alone called the lowering

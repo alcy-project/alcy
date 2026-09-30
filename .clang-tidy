@@ -60,7 +60,7 @@ Checks: >
   readability-identifier-naming,
   readability-redundant-member-init,
   readability-redundant-smartptr-get
-HeaderFilterRegex: '^.*[\\/](src)[\\/].*$'
+HeaderFilterRegex: '^.*[\\/](compiler)[\\/].*$'
 ExcludeHeaderFilterRegex: '^.*[\\/](third_party)[\\/].*$'
 SystemHeaders:    false
 WarningsAsErrors: '*'
@@ -74,8 +74,11 @@ CheckOptions:
     value:        CamelCase
   - key:          readability-identifier-naming.FunctionCase
     value:        lower_case
+  # libFuzzer names the entry point of every fuzz target, so the fuzz
+  # targets are the one place a function name is not the project's to
+  # choose.
   - key:          readability-identifier-naming.FunctionIgnoredRegexp
-    value:        ""
+    value:        'LLVMFuzzerTest.*'
   # MemberCase and VariableCase stay off: field names carry a trailing
   # underscore by convention, and enabling them buries the naming rules
   # that matter under a flood of pre-existing violations.
@@ -131,4 +134,4 @@ CheckOptions:
   - key:          modernize-loop-convert.MakeReverseRangeHeader
     value:        1
   - key: misc-include-cleaner.IgnoreHeaders
-    value:        '^.*[\\/](third_party|src[\\/]build|include|catch2)[\\/].*$'
+    value:        '^.*[\\/](third_party|compiler[\\/]build|include|catch2)[\\/].*$'

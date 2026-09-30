@@ -1,0 +1,17 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("debug") {
+  sources = [
+    "check.cc",
+    "check.h",
+    "dcheck.cc",
+    "dcheck.h",
+    "dlog.cc",
+    "dlog.h",
+    "fatal.cc",
+    "fatal.h",
+  ]
+  configs += [ "//compiler:alcy_config" ]
+  deps = [ "//third_party/fpag" ]
+}

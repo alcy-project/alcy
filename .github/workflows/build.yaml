@@ -73,7 +73,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: out/build
-          key: ${{ runner.os }}-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ matrix.nix }}-${{ inputs.llvm_version }}-build-dir-${{ hashFiles('.gn', 'BUILD.gn', 'src/**') }}
+          key: ${{ runner.os }}-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ matrix.nix }}-${{ inputs.llvm_version }}-build-dir-${{ hashFiles('.gn', 'BUILD.gn', 'compiler/**') }}
           restore-keys: ${{ runner.os }}-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ matrix.nix }}-${{ inputs.llvm_version }}-build-dir-
 
       - name: Build All

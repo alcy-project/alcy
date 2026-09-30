@@ -1,0 +1,2513 @@
+// Copyright 2026 The Alcy Project Authors
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "analyzer/types.h"
+
+#include <deque>
+#include <initializer_list>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "analyzer/resolve.h"
+#include "ast/ast.h"
+#include "diag/bag.h"
+#include "doctest/doctest.h"
+#include "fpag/base/idx.h"
+#include "fpag/base/result.h"
+#include "fpag/mem/arena.h"
+#include "i18n/language.h"
+#include "ir/common.h"
+#include "ir/storage.h"
+#include "ir/type.h"
+#include "source/source.h"
+#include "tests/util/virtual_source.h"
+
+namespace analyzer {
+
+namespace {
+
+struct Fixture {
+  mem::Arena arena;
+  ast::AstArena ast;
+  diag::DiagBag bag{arena, i18n::Language::EnUs};
+  source::SourceManager sources;
+
+  Fixture() { arena.reserve(1u << 20); }
+};
+
+// The sources one case declares, held in memory. It stands in for a
+// scratch directory and keeps the `dir` name so the cases below read the
+// way they were written.
+using VirtualDir = tests::DeclaredSources;
+
+// Records the sources rather than writing them, so a case cannot fail for
+// a reason other than what it asserts. Always succeeds, which keeps the
+// call sites' guard meaningful to read.
+bool write_all(
+    VirtualDir& dir,
+    std::initializer_list<std::pair<std::string_view, std::string_view>>
+        files) {
+  for (const auto& [name, bytes] : files) {
+    dir.add(name, bytes);
+  }
+  return true;
+}
+
+struct CheckCase {
+  std::optional<CheckedPackage> package;
+};
+
+CheckCase check_case(
+    VirtualDir& dir,
+    std::string_view root_rel,
+    std::initializer_list<std::string_view> rels,
+    Fixture& f,
+    ir::PointerWidth width = ir::PointerWidth::W64,
+    std::initializer_list<std::pair<std::string_view, std::string_view>>
+        prelude = {}) {
+  std::vector<ModuleInput> inputs;
+  source::FileId root = source::UNKNOWN_FILE;
+  for (std::string_view rel : rels) {
+    const tests::VirtualSource* const file = dir.find(rel);
+    if (file == nullptr) {
+      continue;
+    }
+    const source::FileId id = f.sources.add_virtual(file->name, file->bytes);
+    if (rel == root_rel) {
+      root = id;
+      inputs.push_back({"", id});
+    } else {
+      std::string_view name = rel;
+      constexpr std::string_view suffix = ".al";
+      if (name.size() > suffix.size() &&
+          name.substr(name.size() - suffix.size()) == suffix) {
+        name.remove_suffix(suffix.size());
+      }
+      inputs.push_back({name, id});
+    }
+  }
+  std::deque<std::string> prelude_storage;
+  std::vector<ModuleInput> prelude_inputs;
+  for (const auto& [name, rel] : prelude) {
+    const tests::VirtualSource* const file = dir.find(rel);
+    if (file == nullptr) {
+      continue;
+    }
+    const source::FileId id = f.sources.add_virtual(file->name, file->bytes);
+    prelude_storage.emplace_back(name);
+    // A staged prelude source is a package facade, so its public
+    // surface is in scope without a `use`; see
+    // docs/adr/0016-suites-and-the-std-split.md.
+    prelude_inputs.push_back({prelude_storage.back(), id, true});
+  }
+  base::Result<ModuleTree, diag::Reported> tree_result = resolve_modules(
+      root, inputs, "testpkg", f.sources, f.ast, f.bag, prelude_inputs);
+  if (tree_result.is_err() || f.bag.has_errors()) {
+    return {std::nullopt};
+  }
+  ModuleTree tree = std::move(tree_result).unwrap();
+  CheckedPackage checked = check_package(tree, width, f.ast, f.bag).unwrap();
+  if (f.bag.has_errors()) {
+    return {std::nullopt};
+  }
+  return {std::move(checked)};
+}
+
+const CheckedModule* find_checked(const CheckedPackage& package,
+                                  std::string_view path) {
+  for (const CheckedModule& module : package.modules) {
+    if (package.tree.modules[module.module]->path == path) {
+      return &module;
+    }
+  }
+  return nullptr;
+}
+
+const CheckedModule::NamedType* find_type(const CheckedModule& module,
+                                          std::string_view name) {
+  for (const CheckedModule::NamedType& type : module.types) {
+    if (type.name == name) {
+      return &type;
+    }
+  }
+  return nullptr;
+}
+
+// `Option` and `Result` live in the core prelude since
+// `docs/adr/0009-result-option-library-enums.md`, so
+// tests that mention them inject a matching declaration set.
+constexpr std::string_view CORE_PRELUDE =
+    R"(pub intrinsic fn panic(msg: str) -> !;
+pub fn print(msg: str) {}
+pub enum Option<T> { Some(T), None }
+pub enum Result<T, E> { Ok(T), Err(E) }
+)";
+
+constexpr std::string_view CORE_PRELUDE_FILE = "core.al";
+
+// Static storage keeps the returned initializer_list valid for the
+// caller's use; an initializer_list of temporaries would dangle.
+const std::initializer_list<std::pair<std::string_view, std::string_view>>&
+core_prelude() {
+  static const std::initializer_list<
+      std::pair<std::string_view, std::string_view>>
+      PRELUDE = {{"core", CORE_PRELUDE_FILE}};
+  return PRELUDE;
+}
+
+}  // namespace
+
+TEST_CASE("Check interns structs with named fields") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Point { x: i32, y: i32 }\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const CheckedModule::NamedType* point = find_type(*root, "Point");
+  CHECK(point != nullptr);
+  if (point == nullptr) {
+    return;
+  }
+  CHECK(result.package->types->types()[point->type].tag == ir::TypeTag::Struct);
+  CHECK(result.package->types->is_copy_type(point->type));
+  bool fields_ok = false;
+  for (const CheckedModule::StructInfo& info : root->structs) {
+    if (info.type.idx == point->type.idx) {
+      fields_ok = info.fields.size() == 2 && info.fields[0] == "x" &&
+                  info.fields[1] == "y";
+    }
+  }
+  CHECK(fields_ok);
+}
+
+TEST_CASE("Check interns enums with payloads") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Choice { Yes, No(i32) }\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  const CheckedModule::NamedType* choice =
+      root != nullptr ? find_type(*root, "Choice") : nullptr;
+  CHECK(choice != nullptr);
+  if (choice == nullptr) {
+    return;
+  }
+  CHECK(result.package->types->types()[choice->type].tag == ir::TypeTag::Enum);
+  CHECK(result.package->types->is_copy_type(choice->type));
+}
+
+TEST_CASE("Check instantiates generic structs") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct Pair<A, B> { a: A, b: B }\n"
+                       "fn f(x: Pair<i32, str>) -> Pair<i32, str> {\n"
+                       "  ret x\n"
+                       "}\n"
+                       "fn g(x: Pair<str, i32>) -> i32 {\n"
+                       "  ret 0\n"
+                       "}\n"
+                       "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr || root->functions.size() < 2) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  const ir::TypeIdx pair_i_s = root->functions[0].params[0];
+  CHECK(types.types()[pair_i_s].tag == ir::TypeTag::Struct);
+  // Identical instantiations share one index; different ones do not.
+  CHECK(pair_i_s.idx == root->functions[0].ret.idx);
+  CHECK(pair_i_s.idx != root->functions[1].params[0].idx);
+}
+
+TEST_CASE("Check keeps generic struct field copies contiguous") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct Leaf<T> { slot: T }\n"
+                       "struct Pair<S, T> { first: Leaf<S>, second: Leaf<T> }\n"
+                       "fn f(x: Pair<i32, u8>) -> i32 {\n"
+                       "  ret 0\n"
+                       "}\n"
+                       "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr || root->functions.empty()) {
+    return;
+  }
+  // The first field's `Leaf<i32>` instantiation creates types of its
+  // own while the fields resolve; the copies that follow must still
+  // form one contiguous range.
+  const ir::Storage& types = *result.package->types;
+  const ir::TypeIdx pair_ty = root->functions[0].params[0];
+  CHECK(types.types()[pair_ty].tag == ir::TypeTag::Struct);
+  if (types.types()[pair_ty].tag != ir::TypeTag::Struct) {
+    return;
+  }
+  const ir::StructType& pair_shape =
+      types.struct_types()[types.types()[pair_ty].as_struct()];
+  CHECK(pair_shape.fields.size() == 2);
+  if (pair_shape.fields.size() != 2) {
+    return;
+  }
+  CHECK(pair_shape.fields[0].idx + 1 == pair_shape.fields[1].idx);
+  CHECK(types.types()[pair_shape.fields[0]].tag == ir::TypeTag::Struct);
+  CHECK(types.types()[pair_shape.fields[1]].tag == ir::TypeTag::Struct);
+}
+
+TEST_CASE("Check publishes a generic instance nested in a field") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Leaf<T> { slot: T }\n"
+                                      "struct Wrap<T> { only: Leaf<T> }\n"
+                                      "fn f(x: Wrap<i32>) -> i32 {\n"
+                                      "  ret 0\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr || root->functions.empty()) {
+    return;
+  }
+  // Instantiating `Wrap<i32>` instantiates `Leaf<i32>` while the field
+  // resolves; the outer instance is the one completed, so its fields
+  // publish for lowering lookups.
+  const ir::TypeIdx wrap_ty = root->functions[0].params[0];
+  bool wrap_published = false;
+  bool leaf_published = false;
+  for (const CheckedModule::StructInfo& info : root->structs) {
+    if (info.type.idx == wrap_ty.idx) {
+      wrap_published = info.fields.size() == 1 && info.fields[0] == "only";
+    }
+    if (info.fields.size() == 1 && info.fields[0] == "slot") {
+      leaf_published = true;
+    }
+  }
+  CHECK(wrap_published);
+  CHECK(leaf_published);
+}
+
+TEST_CASE("Check keeps outer type parameters across nested instantiation") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn id<A>(x: A) -> A {\n"
+                                      "  ret x\n"
+                                      "}\n"
+                                      "fn keep<T>(x: T) -> T {\n"
+                                      "  _ := id::<u8>(7 as u8)\n"
+                                      "  z: T := x\n"
+                                      "  ret z\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  ret keep(42i32) - 42\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  // Binding `id`'s parameter must not replace `keep`'s scope: `T` still
+  // names the outer argument in the annotation that follows.
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check instantiates generic struct methods") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Pair<A, B> { a: A, b: B }\n"
+                                      "impl<A, B> Pair<A, B> {\n"
+                                      "  fn first(self: Self) -> A {\n"
+                                      "    ret self.a\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn f(p: Pair<i32, bool>) -> i32 {\n"
+                                      "  ret p.first()\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects arity mismatch on generic structs") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Pair<A, B> { a: A, b: B }\n"
+                                      "fn f(x: Pair<i32>) -> i32 {\n"
+                                      "  ret 0\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check resolves annotations and signatures") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn f(a: i32, b: &i32, c: (i32, bool), d: !) -> str {\n"
+                       "  ret \"x\"\n"
+                       "}\n"
+                       "static count: u64 = 0\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr || root->functions.empty()) {
+    return;
+  }
+  const CheckedModule::FnSig& sig = root->functions[0];
+  CHECK(sig.name == "f");
+  CHECK(sig.params.size() == 4);
+  if (sig.params.size() != 4) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  CHECK(types.types()[sig.params[0]].tag == ir::TypeTag::I32);
+  CHECK(types.types()[sig.params[1]].tag == ir::TypeTag::Ref);
+  CHECK(types.types()[sig.params[2]].tag == ir::TypeTag::Tuple);
+  CHECK(types.types()[sig.params[3]].tag == ir::TypeTag::Never);
+  CHECK(types.types()[sig.ret].tag == ir::TypeTag::Str);
+  CHECK(!root->statics.empty());
+  CHECK(root->statics[0].name == "count");
+  CHECK(types.types()[root->statics[0].type].tag == ir::TypeTag::U64);
+}
+
+TEST_CASE("Check instantiates generic enums") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Box<T> { Filled(T), Empty }\n"
+                                      "fn f(x: Box<i32>) -> Box<i32> {\n"
+                                      "  ret x\n"
+                                      "}\n"
+                                      "fn g(x: Box<Box<i32>>) -> i32 {\n"
+                                      "  ret 0\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr || root->functions.empty()) {
+    return;
+  }
+  const CheckedModule::FnSig& sig = root->functions[0];
+  CHECK(sig.name == "f");
+  const ir::Storage& types = *result.package->types;
+  CHECK(types.types()[sig.params[0]].tag == ir::TypeTag::Enum);
+  CHECK(types.types()[sig.ret].tag == ir::TypeTag::Enum);
+  CHECK(sig.params[0].idx == sig.ret.idx);
+  if (root->functions.size() < 2) {
+    return;
+  }
+  const CheckedModule::FnSig& nested = root->functions[1];
+  CHECK(types.types()[nested.params[0]].tag == ir::TypeTag::Enum);
+  CHECK(nested.params[0].idx != sig.params[0].idx);
+}
+
+TEST_CASE("Check rejects generic arity mismatches") {
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "enum Box<T> { Filled(T), Empty }\n"
+                                        "fn f(x: Box) -> i32 {\n"
+                                        "  ret 0\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+    CHECK(f.bag.has_errors());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "enum Box<T> { Filled(T), Empty }\n"
+                                        "fn f(x: Box<i32, u8>) -> i32 {\n"
+                                        "  ret 0\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+    CHECK(f.bag.has_errors());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(x: T) -> i32 {\n"
+                                        "  ret 0\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+    CHECK(f.bag.has_errors());
+  }
+}
+
+TEST_CASE("Check constructs generic enums from annotations") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Box<T> { Filled(T), Empty }\n"
+                                      "fn f(x: Box<i32>) -> i32 {\n"
+                                      "  ret match x {\n"
+                                      "    Box::Filled(v) => v,\n"
+                                      "    Box::Empty => 0,\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  b: Box<i32> := Box::Filled(41i32)\n"
+                                      "  ret f(b) - 41\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+}
+
+TEST_CASE("Check infers generic constructors from payload arguments") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Box<T> { Filled(T), Empty }\n"
+                                      "fn main() -> i32 {\n"
+                                      "  b := Box::Filled(41i32)\n"
+                                      "  ret match b {\n"
+                                      "    Box::Filled(v) => v - 41,\n"
+                                      "    Box::Empty => 1,\n"
+                                      "  }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects generic constructors with no binding argument") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Box<T> { Filled(T), Empty }\n"
+                                      "fn main() -> i32 {\n"
+                                      "  b := Box::Empty\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check enforces generic match exhaustiveness") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Box<T> { Filled(T), Empty }\n"
+                                      "fn f(x: Box<i32>) -> i32 {\n"
+                                      "  ret match x {\n"
+                                      "    Box::Filled(v) => v,\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check instantiates generic methods") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Box<T> { Filled(T), Empty }\n"
+                                      "impl<T> Box<T> {\n"
+                                      "  fn is_filled(self: Self) -> bool {\n"
+                                      "    ret match self {\n"
+                                      "      Box::Filled(_) => true,\n"
+                                      "      Box::Empty => false,\n"
+                                      "    }\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  b: Box<i32> := Box::Filled(1i32)\n"
+                                      "  if b.is_filled() {\n"
+                                      "    ret 0\n"
+                                      "  }\n"
+                                      "  ret 1\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+}
+
+TEST_CASE("Check instantiates generic methods recursively") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "enum Box<T> { Filled(T), Empty }\n"
+                       "impl<T> Box<T> {\n"
+                       "  fn or(self: Self, d: T) -> T {\n"
+                       "    ret match self {\n"
+                       "      Box::Filled(v) => v,\n"
+                       "      Box::Empty => d,\n"
+                       "    }\n"
+                       "  }\n"
+                       "  fn rec(self: Self, n: i32, d: T) -> T {\n"
+                       "    if n <= 0 {\n"
+                       "      ret self.or(d)\n"
+                       "    }\n"
+                       "    ret self.rec(n - 1, d)\n"
+                       "  }\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  a: Box<i32> := Box::Filled(1i32)\n"
+                       "  b: Box<bool> := Box::Filled(true)\n"
+                       "  if a.rec(2, 0i32) != 1 {\n"
+                       "    ret 1\n"
+                       "  }\n"
+                       "  if b.rec(2, false) != true {\n"
+                       "    ret 2\n"
+                       "  }\n"
+                       "  ret 0\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+}
+
+TEST_CASE("Check rejects unknown generic methods") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Box<T> { Filled(T), Empty }\n"
+                                      "impl<T> Box<T> {\n"
+                                      "  fn is_filled(self: Self) -> bool {\n"
+                                      "    ret true\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  b: Box<i32> := Box::Filled(1i32)\n"
+                                      "  ret b.missing()\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check resolves cross-module types") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir,
+      {
+          {"main.al",
+           "use a::Point;\nstruct Holder { p: Point, q: a::Other }\nfn "
+           "main() {}\n"},
+          {"a.al", "pub struct Point { x: i32 }\nstruct Other { y: bool }\n"},
+      });
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al", "a.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const CheckedModule::NamedType* holder = find_type(*root, "Holder");
+  CHECK(holder != nullptr);
+  if (holder == nullptr) {
+    return;
+  }
+  CHECK(result.package->types->is_copy_type(holder->type));
+}
+
+TEST_CASE("Check instantiates core generic types with dedup") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn f(a: Result<i32, bool>) -> Option<i32> {\n"
+                       "  ret Option::None\n"
+                       "}\n"
+                       "fn g(b: Result<i32, bool>) -> i32 {\n"
+                       "  ret 0\n"
+                       "}\n"},
+                      {CORE_PRELUDE_FILE, CORE_PRELUDE}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                      ir::PointerWidth::W64, core_prelude());
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr || root->functions.size() != 2) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  CHECK(types.types()[root->functions[0].params[0]].tag == ir::TypeTag::Enum);
+  CHECK(types.types()[root->functions[0].ret].tag == ir::TypeTag::Enum);
+  // Identical instantiations share one index.
+  CHECK(root->functions[0].params[0].idx == root->functions[1].params[0].idx);
+  CHECK(root->functions[0].ret.idx != root->functions[0].params[0].idx);
+}
+
+TEST_CASE("Check lets user code define Result and Option") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "pub enum Option<T> { Only(T), Never }\n"
+                       "pub enum Result<T, E> { Yes(T), No(E) }\n"
+                       "fn main() -> i32 {\n"
+                       "  o: Option<i32> := Option::Only(1i32)\n"
+                       "  ret match o {\n"
+                       "    Option::Only(v) => v - 1,\n"
+                       "    Option::Never => 1,\n"
+                       "  }\n"
+                       "}\n"},
+                      {CORE_PRELUDE_FILE, CORE_PRELUDE}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                      ir::PointerWidth::W64, core_prelude());
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check maps pointer widths for sized integers") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct W { a: isize, b: usize }\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture narrow;
+  const CheckCase narrow_result =
+      check_case(dir, "main.al", {"main.al"}, narrow, ir::PointerWidth::W32);
+  CHECK(narrow_result.package.has_value());
+  Fixture wide;
+  const CheckCase wide_result =
+      check_case(dir, "main.al", {"main.al"}, wide, ir::PointerWidth::W64);
+  CHECK(wide_result.package.has_value());
+  if (!narrow_result.package.has_value() || !wide_result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* narrow_root = find_checked(*narrow_result.package, "");
+  const CheckedModule* wide_root = find_checked(*wide_result.package, "");
+  CHECK(narrow_root != nullptr);
+  CHECK(wide_root != nullptr);
+  if (narrow_root == nullptr || wide_root == nullptr) {
+    return;
+  }
+  const CheckedModule::NamedType* narrow_w = find_type(*narrow_root, "W");
+  const CheckedModule::NamedType* wide_w = find_type(*wide_root, "W");
+  CHECK(narrow_w != nullptr);
+  CHECK(wide_w != nullptr);
+  if (narrow_w == nullptr || wide_w == nullptr) {
+    return;
+  }
+  const ir::StructType& narrow_struct =
+      narrow_result.package->types->struct_types()
+          [narrow_result.package->types->types()[narrow_w->type].as_struct()];
+  const ir::StructType& wide_struct =
+      wide_result.package->types->struct_types()
+          [wide_result.package->types->types()[wide_w->type].as_struct()];
+  CHECK(narrow_result.package->types->types()[narrow_struct.fields[0]].tag ==
+        ir::TypeTag::I32);
+  CHECK(wide_result.package->types->types()[wide_struct.fields[0]].tag ==
+        ir::TypeTag::I64);
+}
+
+TEST_CASE("Check rejects unknown types") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Holder { p: Nope }\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects value-recursive types") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct A { b: B }\n"
+                                      "struct B { a: A }\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check accepts reference cycles") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct A { r: &B }\n"
+                                      "struct B { r: &A }\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects duplicate definitions") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Foo { x: i32 }\n"
+                                      "struct Foo { y: bool }\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects malformed generics") {
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(x: Result<i32>) -> i32 {\n"
+                                        "  ret 0\n"
+                                        "}\n"},
+                                       {CORE_PRELUDE_FILE, CORE_PRELUDE}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
+    CHECK(!result.package.has_value());
+    CHECK(f.bag.has_errors());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "struct Box { x: i32 }\n"
+                                        "fn f(x: Box<i32>) -> i32 {\n"
+                                        "  ret 0\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+    CHECK(f.bag.has_errors());
+  }
+}
+
+TEST_CASE("Check accepts mutable reference fields as move-only") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Holder { r: &mut i32, s: &i32 }\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  const CheckedModule::NamedType* holder =
+      root != nullptr ? find_type(*root, "Holder") : nullptr;
+  CHECK(holder != nullptr);
+  if (holder == nullptr) {
+    return;
+  }
+  CHECK(!result.package->types->is_copy_type(holder->type));
+}
+
+TEST_CASE("Check resolves a slice behind a reference") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn first(v: &[i32]) -> i32 {\n"
+                                      "  ret v[0]\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  mut a := [1i32, 2i32]\n"
+                                      "  ret first(&a) - 1\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const CheckedModule::FnSig* first = nullptr;
+  for (const CheckedModule::FnSig& fn : root->functions) {
+    if (fn.name == "first") {
+      first = &fn;
+      break;
+    }
+  }
+  CHECK(first != nullptr);
+  if (first == nullptr) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  CHECK(types.types()[first->params[0]].tag == ir::TypeTag::Ref);
+  const ir::TypeIdx pointee =
+      types.ref_types()[types.types()[first->params[0]].as_ref()].pointee;
+  CHECK(types.types()[pointee].tag == ir::TypeTag::Slice);
+  const ir::SliceType& slice =
+      types.slice_types()[types.types()[pointee].as_slice()];
+  CHECK(types.types()[slice.element].tag == ir::TypeTag::I32);
+}
+
+TEST_CASE("Check rejects a bare slice type") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn f(v: [i32]) {}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check exposes core generic shapes through the IR") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn f(a: Result<i32, bool>) -> Option<i32> {\n"
+                       "  ret Option::None\n"
+                       "}\n"},
+                      {CORE_PRELUDE_FILE, CORE_PRELUDE}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                      ir::PointerWidth::W64, core_prelude());
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr || root->functions.empty()) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  const ir::TypeIdx result_ty = root->functions[0].params[0];
+  const ir::TypeIdx option_ty = root->functions[0].ret;
+  const ir::EnumType& result_shape =
+      types.enum_types()[types.types()[result_ty].as_enum()];
+  const ir::EnumType& option_shape =
+      types.enum_types()[types.types()[option_ty].as_enum()];
+  CHECK(result_shape.variants.size() == 2);
+  CHECK(option_shape.variants.size() == 2);
+  const ir::EnumVariantType& ok =
+      types.enum_variant_types()[result_shape.variants.head()];
+  const ir::EnumVariantType& err =
+      types.enum_variant_types()[ir::EnumVariantTypeIdx(
+          result_shape.variants.head().idx + 1)];
+  CHECK(ok.fields.size() == 1);
+  CHECK(err.fields.size() == 1);
+  CHECK(types.types()[ok.fields[0]].tag == ir::TypeTag::I32);
+  CHECK(types.types()[err.fields[0]].tag == ir::TypeTag::I1);
+  const ir::EnumVariantType& some =
+      types.enum_variant_types()[option_shape.variants.head()];
+  const ir::EnumVariantType& none =
+      types.enum_variant_types()[ir::EnumVariantTypeIdx(
+          option_shape.variants.head().idx + 1)];
+  CHECK(some.fields.size() == 1);
+  CHECK(none.fields.empty());
+  CHECK(types.types()[some.fields[0]].tag == ir::TypeTag::I32);
+}
+
+TEST_CASE("Check judges Copy structurally") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct AllCopy { a: i32, b: &i32, c: (bool, str) }\n"
+                       "struct HasMut { r: &mut i32 }\n"
+                       "enum Mixed { A(i32), B(&mut bool) }\n"
+                       "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const CheckedModule::NamedType* all_copy = find_type(*root, "AllCopy");
+  const CheckedModule::NamedType* has_mut = find_type(*root, "HasMut");
+  const CheckedModule::NamedType* mixed = find_type(*root, "Mixed");
+  CHECK(all_copy != nullptr);
+  CHECK(has_mut != nullptr);
+  CHECK(mixed != nullptr);
+  if (all_copy == nullptr || has_mut == nullptr || mixed == nullptr) {
+    return;
+  }
+  CHECK(result.package->types->is_copy_type(all_copy->type));
+  CHECK(!result.package->types->is_copy_type(has_mut->type));
+  CHECK(!result.package->types->is_copy_type(mixed->type));
+}
+
+TEST_CASE("Check expressions accept well-typed programs") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Point { x: i32, y: i32 }\n"
+                                      "fn add(a: i32, b: i32) -> i32 {\n"
+                                      "  ret a + b\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  x: u8 := 42u8\n"
+                                      "  y := x + 1\n"
+                                      "  p := Point { x: 1, y: 2 }\n"
+                                      "  t := (1, true)\n"
+                                      "  c := 1 as u64\n"
+                                      "  d := 1.5 + 2.0\n"
+                                      "  print(\"hi\")\n"
+                                      "  _ := y\n"
+                                      "  _ := p\n"
+                                      "  _ := t\n"
+                                      "  _ := c\n"
+                                      "  _ := d\n"
+                                      "}\n"},
+                                     {CORE_PRELUDE_FILE, CORE_PRELUDE}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                      ir::PointerWidth::W64, core_prelude());
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check expressions reject mismatches") {
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() {\n"
+                                        "  x: u8 := 42i32\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() {\n"
+                                        "  x := 1 + true\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f() -> i32 {\n"
+                                        "  ret true\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn add(a: i32, b: i32) -> i32 {\n"
+                                        "  ret a + b\n"
+                                        "}\n"
+                                        "fn main() {\n"
+                                        "  _ := add(1)\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "struct Point { x: i32 }\n"
+                                        "fn main() {\n"
+                                        "  p := Point { x: 1 }\n"
+                                        "  _ := p.y\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+}
+
+TEST_CASE("Check question-mark propagation") {
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn get() -> Result<i32, bool> {\n"
+                                        "  ret Result::Ok(1i32)\n"
+                                        "}\n"
+                                        "fn caller() -> Result<i32, bool> {\n"
+                                        "  x := get()?\n"
+                                        "  ret Result::Ok(x + 1i32)\n"
+                                        "}\n"},
+                                       {CORE_PRELUDE_FILE, CORE_PRELUDE}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
+    CHECK(result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn get() -> Result<i32, bool> {\n"
+                                        "  ret Result::Ok(1i32)\n"
+                                        "}\n"
+                                        "fn caller() -> Result<i32, str> {\n"
+                                        "  x := get()?\n"
+                                        "  ret Result::Ok(x + 1i32)\n"
+                                        "}\n"},
+                                       {CORE_PRELUDE_FILE, CORE_PRELUDE}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
+    CHECK(!result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn get() -> Result<i32, bool> {\n"
+                                        "  ret Result::Ok(1i32)\n"
+                                        "}\n"
+                                        "fn caller() -> i32 {\n"
+                                        "  ret get()?\n"
+                                        "}\n"},
+                                       {CORE_PRELUDE_FILE, CORE_PRELUDE}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
+    CHECK(!result.package.has_value());
+  }
+}
+
+TEST_CASE("Check question-mark works on any enum") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Early<T> { Value(T), Stop }\n"
+                                      "fn lookup(x: i32) -> Early<i32> {\n"
+                                      "  if x > 0 {\n"
+                                      "    ret Early::Value(x)\n"
+                                      "  }\n"
+                                      "  ret Early::Stop\n"
+                                      "}\n"
+                                      "fn caller(x: i32) -> Early<i32> {\n"
+                                      "  v := lookup(x)?\n"
+                                      "  ret Early::Value(v + 1i32)\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  ret match caller(1i32) {\n"
+                                      "    Early::Value(v) => v - 2i32,\n"
+                                      "    Early::Stop => 1i32,\n"
+                                      "  }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check match exhaustiveness") {
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(b: bool) -> i32 {\n"
+                                        "  ret match b {\n"
+                                        "    true => 1,\n"
+                                        "    false => 0,\n"
+                                        "  }\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(b: bool) -> i32 {\n"
+                                        "  ret match b {\n"
+                                        "    true => 1,\n"
+                                        "  }\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "enum Choice { Yes, No(i32) }\n"
+                                        "fn f(c: Choice) -> i32 {\n"
+                                        "  ret match c {\n"
+                                        "    Yes => 1,\n"
+                                        "    No(x) => x,\n"
+                                        "  }\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "enum Choice { Yes, No(i32) }\n"
+                                        "fn f(c: Choice) -> i32 {\n"
+                                        "  ret match c {\n"
+                                        "    Yes => 1,\n"
+                                        "  }\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(x: i32) -> i32 {\n"
+                                        "  ret match x {\n"
+                                        "    0 => 1,\n"
+                                        "    _ => 0,\n"
+                                        "  }\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(o: Option<i32>) -> i32 {\n"
+                                        "  ret match o {\n"
+                                        "    Option::Some(x) => x,\n"
+                                        "    Option::None => 0,\n"
+                                        "  }\n"
+                                        "}\n"},
+                                       {CORE_PRELUDE_FILE, CORE_PRELUDE}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
+    CHECK(result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(o: Option<i32>) -> i32 {\n"
+                                        "  ret match o {\n"
+                                        "    Option::Some(x) => x,\n"
+                                        "  }\n"
+                                        "}\n"},
+                                       {CORE_PRELUDE_FILE, CORE_PRELUDE}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
+    CHECK(!result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(x: i32) -> i32 {\n"
+                                        "  ret match x {\n"
+                                        "    0 => 1,\n"
+                                        "  }\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+}
+
+TEST_CASE("Check or-patterns bind shared names") {
+  {
+    VirtualDir dir;
+    const bool setup =
+        write_all(dir, {{"main.al",
+                         "enum Shape { Circle(i32), Square(i32), Rect }\n"
+                         "fn f(s: Shape) -> i32 {\n"
+                         "  ret match s {\n"
+                         "    Shape::Circle(x) | Shape::Square(x) => x,\n"
+                         "    Shape::Rect => 0,\n"
+                         "  }\n"
+                         "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup =
+        write_all(dir, {{"main.al",
+                         "enum Shape { Circle(i32), Square(i32), Rect }\n"
+                         "fn f(s: Shape) -> i32 {\n"
+                         "  ret match s {\n"
+                         "    Shape::Circle(x) | Shape::Rect => x,\n"
+                         "    Shape::Square(y) => y,\n"
+                         "  }\n"
+                         "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+}
+
+TEST_CASE("Check inherent and core generic methods") {
+  {
+    VirtualDir dir;
+    const bool setup =
+        write_all(dir, {{"main.al",
+                         "struct Point { x: i32 }\n"
+                         "impl Point {\n"
+                         "  fn get(self: &Self) -> i32 {\n"
+                         "    ret self.x\n"
+                         "  }\n"
+                         "}\n"
+                         "fn f(r: Result<i32, bool>) -> i32 {\n"
+                         "  p := Point { x: 1 }\n"
+                         "  v := r.unwrap()\n"
+                         "  ok := r.is_ok()\n"
+                         "  _ := ok\n"
+                         "  ret p.get() + v\n"
+                         "}\n"},
+                        {CORE_PRELUDE_FILE,
+                         R"(pub intrinsic fn panic(msg: str) -> !;
+pub enum Option<T> { Some(T), None }
+pub enum Result<T, E> { Ok(T), Err(E) }
+impl<T, E> Result<T, E> {
+  fn is_ok(self: Self) -> bool { ret true }
+  fn is_err(self: Self) -> bool { ret false }
+  fn unwrap(self: Self) -> T { ret panic("stub") }
+  fn expect(self: Self, msg: str) -> T { ret panic(msg) }
+}
+)"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
+    CHECK(result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn f(r: Result<i32, bool>) -> i32 {\n"
+                                        "  ret r.no_such_method()\n"
+                                        "}\n"},
+                                       {CORE_PRELUDE_FILE, CORE_PRELUDE}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                        ir::PointerWidth::W64, core_prelude());
+    CHECK(!result.package.has_value());
+    CHECK(f.bag.has_errors());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "struct Point { x: i32 }\n"
+                                        "fn f() {\n"
+                                        "  p := Point { x: 1 }\n"
+                                        "  _ := p.missing()\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+}
+
+TEST_CASE("Check unused-value warnings") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn get() -> Result<i32, bool> {\n"
+                                      "  ret Result::Ok(1i32)\n"
+                                      "}\n"
+                                      "fn plain() -> i32 {\n"
+                                      "  ret 1\n"
+                                      "}\n"
+                                      "fn side() {\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  _ := get()\n"
+                                      "  _ := plain()\n"
+                                      "  get()\n"
+                                      "  side()\n"
+                                      "}\n"},
+                                     {CORE_PRELUDE_FILE, CORE_PRELUDE}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
+                                      ir::PointerWidth::W64, core_prelude());
+  CHECK(result.package.has_value());
+  // Only the bare get() statement warns; _ := and void calls do not.
+  CHECK(f.bag.warning_count() == 1);
+}
+
+TEST_CASE("Check items enforce entry and initializer rules") {
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() -> bool {\n"
+                                        "  ret true\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup =
+        write_all(dir, {{"main.al", "static r: &mut i32 = 0\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn one() -> i32 {\n"
+                                        "  ret 1\n"
+                                        "}\n"
+                                        "const k: i32 = one()\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() {\n"
+                                        "  0 := 1\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() {\n"
+                                        "  _ := 1..10\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() {\n"
+                                        "  break\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+  }
+}
+
+TEST_CASE("Check borrow expressions") {
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() {\n"
+                                        "  x := 1\n"
+                                        "  r: &i32 := &x\n"
+                                        "  m: &mut i32 := &mut x\n"
+                                        "  _ := r\n"
+                                        "  _ := m\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+  }
+  {
+    // `&mut T` where `&T` is expected is a shared reborrow, so this
+    // binds rather than mismatching. See
+    // docs/adr/0012-reborrow-on-reference-read.md rule 3.
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al",
+                                        "fn main() {\n"
+                                        "  mut x := 1\n"
+                                        "  r: &i32 := &mut x\n"
+                                        "  _ := *r\n"
+                                        "  x = 2\n"
+                                        "  _ := x\n"
+                                        "}\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+  }
+}
+
+TEST_CASE("Check accepts comp declarations and blocks") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn double(comp n: i32) -> i32 {\n"
+                                      "  ret n * 2\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  comp k := 21\n"
+                                      "  _ := double(k)\n"
+                                      "  _ := comp { 1 + 2 }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects runtime arguments for comp parameters") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn double(comp n: i32) -> i32 {\n"
+                                      "  ret n * 2\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  x := 21\n"
+                                      "  _ := double(x)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects non-comp-known comp initializers") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  x := 1\n"
+                                      "  comp k := x\n"
+                                      "  _ := k\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects ret inside comp blocks") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  ret comp { ret 1 }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects print inside comp blocks") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  _ := comp { print(\"hi\") }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check accepts memcopy intrinsic declarations") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "intrinsic fn memcopy(dst: &mut u8, "
+                                      "src: &u8, n: usize);\n"
+                                      "fn main() {\n"
+                                      "  mut a := 1u8\n"
+                                      "  b := 2u8\n"
+                                      "  memcopy(&mut a, &b, 1)\n"
+                                      "  _ := a\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects unknown intrinsics") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "intrinsic fn frobnicate(x: i32);\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects mistyped intrinsic signatures") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "intrinsic fn memcopy(x: i32);\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects comp parameters on intrinsics") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "intrinsic fn memcopy(dst: &mut u8, "
+                                      "src: &u8, comp n: usize);\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check resolves prelude calls without imports") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  _ := help()\n"
+                                      "}\n"},
+                                     {"core.al",
+                                      "pub fn help() -> i32 {\n"
+                                      "  ret 1\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check accepts string intrinsic declarations") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir,
+      {{"main.al",
+        "intrinsic fn str_len(s: str) -> usize;\n"
+        "intrinsic fn str_byte(s: str, i: usize) -> u8;\n"
+        "intrinsic fn str_slice(s: str, start: usize, end: usize) -> str;\n"
+        "fn main() {\n"
+        "  s := \"hi\"\n"
+        "  _ := str_len(s)\n"
+        "  _ := str_byte(s, 0)\n"
+        "  _ := str_slice(s, 0, 2)\n"
+        "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects mistyped string intrinsic signatures") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "intrinsic fn str_len(s: str) -> i32;\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check accepts array construction and indexing") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  mut buf := [0u8; 4]\n"
+                                      "  buf[0] = 1u8\n"
+                                      "  _ := buf[0]\n"
+                                      "  _ := [1i32, 2i32]\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects heterogeneous array literals") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  _ := [1i32, true]\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects oversized array repeats") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  _ := [0u8; 9999999999]\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects fmt arity mismatches") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "fn main() {\n"
+             "  mut buf := [0u8; 8]\n"
+             "  _ := write(\"a={} b={}\", &mut buf, (1i32,))\n"
+             "}\n"},
+            {"core.al",
+             "pub struct WriteOutcome { written: usize, total: usize }\n"
+             "pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ()) -> "
+             "WriteOutcome {\n"
+             "  panic(\"x\")\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects non-tuple fmt arguments") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "fn main() {\n"
+             "  mut buf := [0u8; 8]\n"
+             "  _ := write(\"a={}\", &mut buf, 1i32)\n"
+             "}\n"},
+            {"core.al",
+             "pub struct WriteOutcome { written: usize, total: usize }\n"
+             "pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ()) -> "
+             "WriteOutcome {\n"
+             "  panic(\"x\")\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check accepts generic free functions and turbofish arguments") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn id<T>(x: T) -> T {\n"
+                                      "  ret x\n"
+                                      "}\n"
+                                      "fn pair<T>(a: T, b: T) -> T {\n"
+                                      "  ret a\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  a := id(1i32)\n"
+                                      "  b := id::<i32>(2i32)\n"
+                                      "  c := pair(3i32, 4i32)\n"
+                                      "  _ := id(true)\n"
+                                      "  ret a + b + c - 10\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects uninferable generic call arguments") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn make<T>() -> T {\n"
+                                      "  panic(\"x\")\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  _ := make()\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check accepts typed heap intrinsics") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "pub intrinsic fn alloc<T>(count: "
+                       "usize) -> &mut MaybeUninit<T>;\n"
+                       "pub intrinsic fn dealloc<T>(ptr: &mut "
+                       "MaybeUninit<T>, count: usize);\n"
+                       "pub intrinsic fn size_of<T>() -> "
+                       "usize;\n"
+                       "pub intrinsic fn align_of<T>() -> "
+                       "usize;\n"
+                       "pub intrinsic fn elem_ptr<T>(ptr: &mut "
+                       "MaybeUninit<T>, index: usize) -> &mut "
+                       "MaybeUninit<T>;\n"
+                       "pub intrinsic fn uninit_write<T>(slot: "
+                       "&mut MaybeUninit<T>, value: T);\n"
+                       "pub intrinsic fn uninit_assume<T>(slot: "
+                       "&mut MaybeUninit<T>) -> &mut T;\n"
+                       "fn main() {\n"
+                       "  data := alloc::<i32>(4)\n"
+                       "  uninit_write(elem_ptr(data, 0), 1i32)\n"
+                       "  _ := *uninit_assume(elem_ptr(data, 0))\n"
+                       "  _ := size_of::<i32>()\n"
+                       "  _ := align_of::<i32>()\n"
+                       "  dealloc(data, 4)\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects reading an uninitialized slot") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "pub intrinsic fn alloc<T>(count: "
+                                      "usize) -> &mut MaybeUninit<T>;\n"
+                                      "pub intrinsic fn elem_ptr<T>(ptr: &mut "
+                                      "MaybeUninit<T>, index: usize) -> &mut "
+                                      "MaybeUninit<T>;\n"
+                                      "fn main() -> i32 {\n"
+                                      "  data := alloc::<i32>(1)\n"
+                                      "  ret *elem_ptr(data, 0)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects declaring MaybeUninit") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct MaybeUninit<T> { value: T }\n"
+                                      "fn main() {\n"
+                                      "  _ := MaybeUninit { value: 1i32 }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects an intrinsic declared with the wrong shape") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "pub intrinsic fn elem_ptr<T>(ptr: "
+                                      "&MaybeUninit<T>, index: usize) -> "
+                                      "&MaybeUninit<T>;\n"
+                                      "fn main() {\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects dereferencing a non-reference") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  x := 1i32\n"
+                                      "  _ := *x\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects assignment through a shared reference") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn bump(p: &i32) {\n"
+                                      "  *p = 1\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check resolves an associated function of a generic type") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Box<T> { item: T }\n"
+                                      "impl<T> Box<T> {\n"
+                                      "  fn empty() -> Box<T> {\n"
+                                      "    ret Box { item: 0i32 }\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  b := Box::<i32>::empty()\n"
+                                      "  ret b.item\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE(
+    "Check rejects an associated function of a generic type without "
+    "type arguments") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Box<T> { item: T }\n"
+                                      "impl<T> Box<T> {\n"
+                                      "  fn empty() -> Box<T> {\n"
+                                      "    ret Box { item: 0i32 }\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  b := Box::empty()\n"
+                                      "  ret b.item\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+namespace {
+
+// The type a struct local ends up with, found by its first field: a
+// struct's field range holds storage copies so it stays contiguous, so
+// this is not the index the field's own declaration published.
+ir::TypeIdx struct_with_field(const CheckedPackage& package,
+                              std::string_view field) {
+  for (const CheckedModule& checked : package.modules) {
+    for (const CheckedModule::StructInfo& info : checked.structs) {
+      if (!info.fields.empty() && info.fields[0] == field) {
+        return info.type;
+      }
+    }
+  }
+  return ir::TypeIdx(base::INVALID_IDX);
+}
+
+}  // namespace
+
+TEST_CASE("Analyze marks a type with a destructor as needing one") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir,
+      {{"main.al",
+        "pub intrinsic fn alloc<T>(count: usize) -> &mut MaybeUninit<T>;\n"
+        "pub intrinsic fn dealloc<T>(ptr: &mut MaybeUninit<T>, count: usize);\n"
+        "struct R { buf: &mut MaybeUninit<u8> }\n"
+        "impl R {\n"
+        "  fn drop(self: R) {\n"
+        "    dealloc(self.buf, 1 as usize)\n"
+        "  }\n"
+        "}\n"
+        "struct P { n: i32 }\n"
+        "fn main() {\n"
+        "  r := R { buf: alloc::<u8>(4) }\n"
+        "  p := P { n: 1 }\n"
+        "  _ := r.buf\n"
+        "  _ := p.n\n"
+        "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const ir::TypeIdx owns = struct_with_field(*result.package, "buf");
+  const ir::TypeIdx plain = struct_with_field(*result.package, "n");
+  CHECK(owns.is_valid());
+  CHECK(plain.is_valid());
+  if (!owns.is_valid() || !plain.is_valid()) {
+    return;
+  }
+  CHECK(result.package->needs_drop[owns.idx]);
+  CHECK(result.package->drop_glue[owns.idx].index != base::INVALID_IDX);
+  CHECK(!result.package->needs_drop[plain.idx]);
+  CHECK(result.package->drop_glue[plain.idx].index == base::INVALID_IDX);
+}
+
+TEST_CASE("Analyze propagates a destructor through a containing struct") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "pub intrinsic fn alloc<T>(count: usize) -> &mut "
+                       "MaybeUninit<T>;\n"
+                       "pub intrinsic fn dealloc<T>(ptr: &mut "
+                       "MaybeUninit<T>, count: usize);\n"
+                       "struct R { buf: &mut MaybeUninit<u8> }\n"
+                       "impl R {\n"
+                       "  fn drop(self: R) {\n"
+                       "    dealloc(self.buf, 1 as usize)\n"
+                       "  }\n"
+                       "}\n"
+                       "struct H { inner: R, tag: i32 }\n"
+                       "fn main() {\n"
+                       "  h := H { inner: R { buf: alloc::<u8>(4) },"
+                       " tag: 1 }\n"
+                       "  _ := h.tag\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const ir::TypeIdx holder = struct_with_field(*result.package, "inner");
+  CHECK(holder.is_valid());
+  if (!holder.is_valid()) {
+    return;
+  }
+  // Ending it ends what it holds, even though it declares no destructor.
+  CHECK(result.package->needs_drop[holder.idx]);
+  CHECK(result.package->drop_glue[holder.idx].index == base::INVALID_IDX);
+}
+
+TEST_CASE("Analyze resolves a generic type's destructor") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "pub intrinsic fn alloc<T>(count: usize) -> &mut "
+                       "MaybeUninit<T>;\n"
+                       "pub intrinsic fn dealloc<T>(ptr: &mut "
+                       "MaybeUninit<T>, count: usize);\n"
+                       "struct Box<T> { item: T,"
+                       " raw: &mut MaybeUninit<u8> }\n"
+                       "impl<T> Box<T> {\n"
+                       "  fn wrap(v: T) -> Box<T> {\n"
+                       "    ret Box { item: v, raw: alloc::<u8>(1) }\n"
+                       "  }\n"
+                       "  fn drop(self: Box<T>) {\n"
+                       "    dealloc(self.raw, 1 as usize)\n"
+                       "  }\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  b := Box::<i32>::wrap(1i32)\n"
+                       "  ret b.item\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const ir::TypeIdx box = struct_with_field(*result.package, "item");
+  CHECK(box.is_valid());
+  if (!box.is_valid()) {
+    return;
+  }
+  // The declared `Box<T>` and the `Box<i32>` it was instantiated on both
+  // resolve a destructor: the instantiated one is what scope exit calls.
+  CHECK(result.package->needs_drop[box.idx]);
+  CHECK(result.package->drop_glue[box.idx].index != base::INVALID_IDX);
+  for (ir::TypeIdx inst : result.package->generic_insts) {
+    if (inst.idx >= result.package->needs_drop.size()) {
+      continue;
+    }
+    CHECK(result.package->needs_drop[inst.idx]);
+  }
+}
+
+TEST_CASE("Check reads a base prefix as digits, not a suffix") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  _ := 0xFF\n"
+                                      "  _ := 0x1A\n"
+                                      "  _ := 0xdeadbeef\n"
+                                      "  _ := 0b1010\n"
+                                      "  _ := 0o17\n"
+                                      "  _ := 0xFFu8\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects an unknown suffix after a base prefix") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  _ := 0xFFi\n"
+                                      "  _ := 42i128\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a remainder or bitwise operator on a float") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> f64 {\n"
+                                      "  ret 5.0 % 2.0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+}  // namespace analyzer

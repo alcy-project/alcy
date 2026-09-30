@@ -1,0 +1,29 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("analyzer") {
+  sources = [
+    "checker.cc",
+    "checker.h",
+    "fmt.cc",
+    "fmt.h",
+    "resolve.cc",
+    "resolve.h",
+    "types.cc",
+    "types.h",
+    "types_expr.cc",
+  ]
+  deps = [
+    "//compiler:base_modules",
+    "//compiler/ast",
+    "//compiler/diag",
+    "//compiler/i18n",
+    "//compiler/ir",
+    "//compiler/lexer",
+    "//compiler/parser",
+    "//compiler/path",
+    "//compiler/source",
+    "//compiler/text",
+  ]
+  configs += [ "//compiler:alcy_config" ]
+}

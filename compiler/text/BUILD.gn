@@ -1,0 +1,13 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("text") {
+  sources = [
+    "json.cc",
+    "json.h",
+    "unescape.cc",
+    "unescape.h",
+  ]
+  deps = [ "//compiler:base_modules" ]
+  configs += [ "//compiler:alcy_config" ]
+}

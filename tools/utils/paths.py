@@ -15,15 +15,21 @@ default_out_dir: Path = out_dir / "build"
 config_toml_file: Path = project_root_dir / "config.toml"
 
 # include_dir: Path = project_root_dir / "include"
-src_dir: Path = project_root_dir / "src"
+compiler_dir: Path = project_root_dir / "compiler"
 # tests_dir: Path = project_root_dir / "tests"
 # benchmarks_dir: Path = project_root_dir / "benchmarks"
 
 
 project_source_dirs: list[Path] = [
-    src_dir,
+    compiler_dir,
     # tests_dir,
     # benchmarks_dir,
 ]
 
 third_party_dir: Path = project_root_dir / "third_party"
+
+# Directory names inside the source root that the checks skip: the fuzz
+# targets need libFuzzer and exist only under `--args=is_fuzz=true`, so a
+# default build describes no target for them and a walk of the source root
+# finds files that belong to none.
+excluded_source_dirs: list[str] = ["fuzz"]

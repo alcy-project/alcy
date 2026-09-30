@@ -1,0 +1,24 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("diag") {
+  sources = [
+    "bag.cc",
+    "bag.h",
+    "diagnostic.cc",
+    "diagnostic.h",
+    "render.cc",
+    "render.h",
+    "span.cc",
+    "span.h",
+  ]
+
+  # Depends on source only for the FileId identity minted there; the
+  # direction is one-way (source never includes diag headers).
+  deps = [
+    "//compiler:base_modules",
+    "//compiler/i18n",
+    "//compiler/source",
+  ]
+  configs += [ "//compiler:alcy_config" ]
+}

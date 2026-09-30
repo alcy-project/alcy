@@ -1,0 +1,14 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("base") {
+  sources = [
+    "nesting.cc",
+    "nesting.h",
+  ]
+  configs += [ "//compiler:alcy_config" ]
+  deps = [
+    "//compiler/debug",
+    "//third_party/fpag",
+  ]
+}

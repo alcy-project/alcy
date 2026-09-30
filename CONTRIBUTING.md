@@ -88,7 +88,7 @@ Notes:
 - **Code style:** Use `#pragma once` for include guards and relative includes from project root.
   Prefer `std::string_view` over `std::string` and `std::span` over `std::vector` unless
   ownership retention is required.
-- **One translation unit per header:** Every header under `src/` gets a sibling `.cc`, listed in
+- **One translation unit per header:** Every header under `compiler/` gets a sibling `.cc`, listed in
   its module's `BUILD.gn`. Put the header's out-of-line definitions in it; when it declares none,
   it holds only the license header and an `#include` of the header.
 
@@ -97,7 +97,7 @@ Notes:
   include goes unseen: `clang-tidy` ran only on `.c`/`.cc`, and a header with no translation
   unit is compiled with a command that has no include paths, so the check reports nothing
   rather than failing. Generated translation units are the exception:
-  `src/pipeline/embedded_std.h` is implemented by a generated file that already occupies
+  `compiler/pipeline/embedded_std.h` is implemented by a generated file that already occupies
   the sibling name, so it is listed in `lint.py`
   until the generator is renamed.
 - **Comments:** English only. Write comments sparingly-only for design rationale, invariants or
@@ -113,7 +113,7 @@ Notes:
   in `docs/adr/` (copy `docs/adr/0000-template.md`). Small, obvious changes do not need one. A
   reference names the file (`docs/adr/0011-symbol-mangling.md`), never the number alone: a number
   breaks when the log is renumbered, and a filename is what a reader can open.
-- **ASCII Character Set**: All C++ source files (`src/`) must remain pure ASCII. Do not use
+- **ASCII Character Set**: All C++ source files (`compiler/`) must remain pure ASCII. Do not use
   non-ASCII Unicode characters in code or comments (e.g., em-dashes `—`, smart quotes `“”`, or arrows `→`).
   Use standard ASCII equivalents (`-`, `"..."`, `->`). Non-ASCII characters are permitted only in
   documentation (`docs/`).
@@ -200,7 +200,7 @@ so it is not a test.
 6. **A failure found by a fuzzer is checked in as a seed and a unit test.** The
    artifact alone is not a regression test, because it is only replayed by a fuzzer.
 7. **Coverage may not go down.** `./tools/check_coverage.py` fails when line
-   coverage of `src/` drops below the recorded baseline. Move the baseline with
+   coverage of `compiler/` drops below the recorded baseline. Move the baseline with
    `--update` only in a commit that says so.
 8. **`fmt`, `lint`, and the unit suite are clean before you push.** Coverage and the
    fuzzer are not: the first is slow and the second needs clang's fuzzer runtime.

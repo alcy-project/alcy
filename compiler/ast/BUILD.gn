@@ -1,0 +1,16 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("ast") {
+  sources = [
+    "ast.cc",
+    "ast.h",
+    "verify.cc",
+    "verify.h",
+  ]
+  deps = [
+    "//compiler:base_modules",
+    "//compiler/diag",
+  ]
+  configs += [ "//compiler:alcy_config" ]
+}

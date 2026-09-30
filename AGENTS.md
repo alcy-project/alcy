@@ -19,7 +19,7 @@ Prior to generating, refactoring, or reviewing code, strictly follow the specifi
 - **Error Handling & Constraints**:
   - The project builds with `-fno-exceptions` and `-fno-rtti`. **Do not use `try`, `catch`, `throw`, `dynamic_cast`, or RTTI.**
   - Use explicit, zero-overhead error reporting abstractions (e.g., `std::optional`, custom `Result`/`AutoTaggedUnion` types, or diagnostic handlers) instead of exceptions.
-  - Use assertions (`DCHECK()`) or diagnostic logging (`src/base/`, `src/debug/`) for internal compiler invariant failures.
+  - Use assertions (`DCHECK()`) or diagnostic logging (`compiler/base/`, `compiler/debug/`) for internal compiler invariant failures.
 - **Signal-to-Noise Ratio in Comments**:
   - **No Session or Metacognitive Leakage**: NEVER write comments that reference the prompt, chat session, negative decisions, or omitted alternatives (e.g., BAD: `// No std::filesystem, we don't use it here`, `// Per user instruction`). Write comments purely from the perspective of long-term codebase maintenance.
   - **No Over-Explanation or Justifications**: Do not write multi-line defenses or excuses for obvious code choices.
@@ -28,6 +28,6 @@ Prior to generating, refactoring, or reviewing code, strictly follow the specifi
 
 # Code Generation Directives
 
-- Respect module boundaries inside `src/*` and adhere strictly to the linear pipeline flow defined in `docs/architecture.md`.
+- Respect module boundaries inside `compiler/*` and adhere strictly to the linear pipeline flow defined in `docs/architecture.md`.
 - Ensure new files include the project license header and have corresponding target entries in their module's `BUILD.gn`.
 - Code generation, comments, documentation, and commit messages must be written in English.

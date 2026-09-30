@@ -1,6 +1,6 @@
 # IR construction guide
 
-How to build well-formed `ir::Storage` (`src/ir/`). The verifier
+How to build well-formed `ir::Storage` (`compiler/ir/`). The verifier
 (`verify_storage`) is authoritative; this guide explains the conventions it
 enforces so frontend code gets them right the first time.
 

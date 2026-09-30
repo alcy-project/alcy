@@ -10,13 +10,13 @@ late-stage ones:
 | --------- | ----------- | ----------------------------- |
 | 0–999     | tests       | Synthetic codes for unit tests; never emitted by the compiler itself |
 | 1000–1999 | pkg         | Manifests, modules, resolution |
-| 2000–2999 | lexer       | `src/lexer/lexer.cc`          |
-| 3000–3999 | parser      | `src/parser/parser.h`, `src/parser/desugar.cc` |
-| 4000–4999 | analyzer    | `src/analyzer/resolve.*`, `src/analyzer/checker.h` |
-| 5000–5999 | lower       | `src/lower/lowerer.h`         |
-| 6000–6999 | borrow      | `src/borrow/borrow.cc`        |
-| 7000–7999 | ir          | `src/ir/verifier.h` (7100+, one per `VerifyErrorKind`) |
-| 8000–8999 | pipeline    | `src/pipeline/pipeline_context.h` |
+| 2000–2999 | lexer       | `compiler/lexer/lexer.cc`          |
+| 3000–3999 | parser      | `compiler/parser/parser.h`, `compiler/parser/desugar.cc` |
+| 4000–4999 | analyzer    | `compiler/analyzer/resolve.*`, `compiler/analyzer/checker.h` |
+| 5000–5999 | lower       | `compiler/lower/lowerer.h`         |
+| 6000–6999 | borrow      | `compiler/borrow/borrow.cc`        |
+| 7000–7999 | ir          | `compiler/ir/verifier.h` (7100+, one per `VerifyErrorKind`) |
+| 8000–8999 | pipeline    | `compiler/pipeline/pipeline_context.h` |
 | 9000+     | future      | Unassigned                    |
 
 Each stage owns a stride of 1000 with sub-ranges of 100 per area, so
@@ -27,7 +27,7 @@ A code is not a message. It identifies a check for whatever reads the
 output, and most checks say more than one thing: `2000` is an invalid
 character and an empty character literal, `4024` covers a missing
 wildcard arm, an uncovered variant, and a missing variant by name. The
-text of each of those is a separate entry in `src/i18n/messages.def`,
+text of each of those is a separate entry in `compiler/i18n/messages.def`,
 keyed by an `i18n::Key` that names what is wrong rather than where it
 happened, because a translation is keyed by the message and half the
 codes here have no single wording to key it with. A code stays at the
@@ -35,24 +35,24 @@ call site, where the check that found it lives.
 
 ## pkg (1000–1999)
 
-Manifests (`src/pkg/manifest.cc`, 1000–1099):
+Manifests (`compiler/pkg/manifest.cc`, 1000–1099):
 
 - `1000` syntax error: the manifest does not parse.
 - `1001` semantic error: parsed but invalid (see `ManifestError`).
 
-Modules (`src/pkg/modules.cc`, 1100–1199):
+Modules (`compiler/pkg/modules.cc`, 1100–1199):
 
 - `1100` semantic error: a module entry selects nothing or conflicts.
 - `1101` unselected file: a source file belongs to no module.
 
-Resolution (`src/pkg/resolve.cc`, 1200–1299):
+Resolution (`compiler/pkg/resolve.cc`, 1200–1299):
 
 - `1200` I/O error: the package root or manifest cannot be read.
 - `1201` cycle error: package dependencies form a cycle.
 
 ## lexer (2000–2099)
 
-`src/lexer/lexer.cc`:
+`compiler/lexer/lexer.cc`:
 
 - `2000` invalid character.
 - `2001` unterminated string.
@@ -63,7 +63,7 @@ Resolution (`src/pkg/resolve.cc`, 1200–1299):
 
 ## parser (3000–3999)
 
-Grammar (`src/parser/parser.h`, 3000–3099):
+Grammar (`compiler/parser/parser.h`, 3000–3099):
 
 - `3000` unexpected token.
 - `3001` reserved word used as an identifier.
@@ -72,14 +72,14 @@ Grammar (`src/parser/parser.h`, 3000–3099):
 - `3003` internal error: the parsed arena failed structural
   verification (see `ast::verify_file`).
 
-Desugar (`src/parser/desugar.cc`, 3100–3199):
+Desugar (`compiler/parser/desugar.cc`, 3100–3199):
 
 - `3100` `or`-pattern alternatives bind different name sets.
 - `3101` a name is already bound in the innermost scope.
 
 ## analyzer (4000–4999)
 
-Module resolution (`src/analyzer/resolve.cc`, `src/analyzer/resolve.h`,
+Module resolution (`compiler/analyzer/resolve.cc`, `compiler/analyzer/resolve.h`,
 4000–4009):
 
 - `4000` duplicate module.
@@ -90,7 +90,7 @@ Module resolution (`src/analyzer/resolve.cc`, `src/analyzer/resolve.h`,
 - `4005` internal error: the module tree failed structural
   verification (see `analyzer::verify_module_tree`).
 
-Type checking (`src/analyzer/checker.h`, 4010–4019):
+Type checking (`compiler/analyzer/checker.h`, 4010–4019):
 
 - `4010` recursive type.
 - `4011` unknown type.
@@ -101,7 +101,7 @@ Type checking (`src/analyzer/checker.h`, 4010–4019):
 - `4016` unsupported type.
 - `4017` internal error: checked types failed storage verification.
 
-Expression checking (`src/analyzer/checker.h`, 4020–4039):
+Expression checking (`compiler/analyzer/checker.h`, 4020–4039):
 
 - `4020` type mismatch.
 - `4021` unknown value.
@@ -119,14 +119,14 @@ Expression checking (`src/analyzer/checker.h`, 4020–4039):
 - `4033` invalid compile-time value.
 - `4034` unknown intrinsic.
 
-Destructors (`src/analyzer/checker.h`, 4040–4049):
+Destructors (`compiler/analyzer/checker.h`, 4040–4049):
 
 - `4040` bad `drop` signature.
 - `4041` `drop` on a copyable type.
 
 ## lower (5000–5099)
 
-`src/lower/lowerer.h`:
+`compiler/lower/lowerer.h`:
 
 - `5000` unsupported construct.
 - `5001` internal error: lowered IR failed verification.
@@ -136,7 +136,7 @@ Destructors (`src/analyzer/checker.h`, 4040–4049):
 
 ## borrow (6000–6099)
 
-`src/borrow/borrow.cc`:
+`compiler/borrow/borrow.cc`:
 
 - `6000` use after move.
 - `6001` borrow conflict.
@@ -145,7 +145,7 @@ Destructors (`src/analyzer/checker.h`, 4040–4049):
 
 ## ir (7000–7999)
 
-`src/ir/verifier.h` emits one code per `VerifyErrorKind`, numbered in
+`compiler/ir/verifier.h` emits one code per `VerifyErrorKind`, numbered in
 declaration order from `7100`: the message is the kind name, and the
 diagnostic carries no span. Adding a kind takes the next ordinal; the
 range up to 8000 is reserved, so no renumbering is needed. These are
@@ -155,7 +155,7 @@ here.
 
 ## pipeline (8000–8999)
 
-`src/pipeline/pipeline_context.h`:
+`compiler/pipeline/pipeline_context.h`:
 
 - `8000` no manifest found.
 - `8001` I/O error reading, writing, or staging files.

@@ -1,0 +1,17 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("borrow") {
+  sources = [
+    "borrow.cc",
+    "borrow.h",
+  ]
+  deps = [
+    "//compiler:base_modules",
+    "//compiler/diag",
+    "//compiler/i18n",
+    "//compiler/ir",
+    "//compiler/lower",
+  ]
+  configs += [ "//compiler:alcy_config" ]
+}

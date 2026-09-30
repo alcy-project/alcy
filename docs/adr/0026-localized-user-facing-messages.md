@@ -27,7 +27,7 @@ has to exist at the call site.
 ## Decision
 
 **A message is identified by `i18n::Key`, and the key names the message
-rather than the code.** `src/i18n/messages.def` lists every
+rather than the code.** `compiler/i18n/messages.def` lists every
 user-visible message once, as `F(Name, "text")`, grouped by the module
 that emits it. The list is included with different adapters to build the
 `Key` enum, each language's catalog, and the CLI's choices, so the
@@ -64,7 +64,7 @@ which a header gives for free; a generator would add a build step whose
 only advantage is translator ergonomics that no translator needs yet.
 `Key` and `format_to<K>` are the seam: when a second language arrives
 with contributors who do not write C++, the data moves to
-`src/i18n/lang/<tag>.toml` with a generator that emits the same tables,
+`compiler/i18n/lang/<tag>.toml` with a generator that emits the same tables,
 and no call site changes.
 
 **Internal diagnostics stay in English.** `DLOG`, `DCHECK`,

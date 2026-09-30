@@ -2,15 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 group("default") {
-  deps = [ "//src:alcy" ]
+  deps = [ "//compiler:alcy" ]
 }
 
 group("tests") {
-  deps = [ "//src/tests" ]
+  deps = [ "//compiler/tests" ]
 }
 
 group("benchmarks") {
-  deps = [ "//src/benchmarks" ]
+  deps = [ "//compiler/benchmarks" ]
 }
 
 # Fuzz targets are a development tool and are not part of `all`: they
@@ -18,7 +18,7 @@ group("benchmarks") {
 # with `./tools/build.py --target=fuzz --args=is_fuzz=true`.
 group("fuzz") {
   testonly = true
-  deps = [ "//fuzz" ]
+  deps = [ "//compiler/fuzz" ]
 }
 
 group("all") {

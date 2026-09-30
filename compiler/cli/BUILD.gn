@@ -1,0 +1,69 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("cli") {
+  sources = [
+    "build_command.cc",
+    "build_command.h",
+    "check_command.cc",
+    "check_command.h",
+    "cli_config.cc",
+    "cli_config.h",
+    "cli_main.cc",
+    "cli_main.h",
+    "compile_command.cc",
+    "compile_command.h",
+    "converters.cc",
+    "converters.h",
+    "init_command.cc",
+    "init_command.h",
+    "init_handler.cc",
+    "init_handler.h",
+    "new_command.cc",
+    "new_command.h",
+    "output.cc",
+    "output.h",
+    "parse_args.cc",
+    "parse_args.h",
+    "parse_output.cc",
+    "parse_output.h",
+    "result_code.cc",
+    "result_code.h",
+    "run_command.cc",
+    "run_command.h",
+    "trace.cc",
+    "trace.h",
+    "usage.cc",
+    "usage.h",
+    "validate.cc",
+    "validate.h",
+  ]
+  deps = [
+    "//compiler/i18n",
+    "//compiler/pipeline",
+  ]
+  defines = [
+    "ALCY_PROJECT_NAME=\"$project_name\"",
+    "ALCY_PROJECT_VERSION=\"$project_version\"",
+  ]
+
+  configs += [
+    "//compiler:alcy_config",
+    "//compiler:win_sys_libs",
+  ]
+
+  # Public: cli headers include compiler and third-party headers, so
+  # dependents need the same include paths (private deps would not forward
+  # them, breaking both compilation and gn check of dependents).
+  public_deps = [ "//compiler:alcy_lib" ]
+}
+
+executable("alcy") {
+  sources = [ "main.cc" ]
+
+  configs += [
+    "//compiler:alcy_config",
+    "//compiler:win_sys_libs",
+  ]
+  deps = [ ":cli" ]
+}

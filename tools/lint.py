@@ -18,6 +18,7 @@ from utils.paths import (
     out_dir,
     project_root_dir,
     project_source_dirs,
+    excluded_source_dirs,
 )
 from utils.source import (
     compile_unit_extensions,
@@ -70,7 +71,7 @@ def check_ascii_only(files: list[str]) -> bool:
 # outside the header gate until the generator is renamed. A stale
 # entry fails the run instead of silently passing.
 GENERATED_HEADER_EXCLUSIONS = [
-    "src/pipeline/embedded_std.h",
+    "compiler/pipeline/embedded_std.h",
 ]
 
 
@@ -186,7 +187,7 @@ def lint_files(
         print(f"Compilation database not found at: {compdb}")
 
     for src_dir in project_source_dirs:
-        ret = gn_check.check_sources(build_dir, src_dir)
+        ret = gn_check.check_sources(build_dir, src_dir, excluded_source_dirs)
         if ret != 0:
             failed = True
 
@@ -215,8 +216,12 @@ def lint_files(
     if fix or fix_errors:
         format.format_files(dry_run=False)
 
+    # A lint that lints nothing is not a pass: a source directory that no
+    # longer exists leaves every check silently unapplied, which is exactly
+    # what a tree reorganization looks like from here.
     if len(commands) == 0:
         print("None of the files were linted")
+        failed = True
 
     if failed:
         print("lint failed")

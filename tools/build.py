@@ -83,7 +83,7 @@ def build(
 
             # gn check
             subprocess.run(
-                ["gn", "check", str(build_dir), "//src/*"],
+                ["gn", "check", str(build_dir), "//compiler/*"],
                 check=True,
                 cwd=project_root_dir,
             )

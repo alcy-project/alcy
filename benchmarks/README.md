@@ -5,7 +5,7 @@ Two runners, kept apart because they measure different things.
 - The **process runner** times the real `alcy` binary as a process, so
   it includes startup, argument parsing, the filesystem, the linker,
   and process overhead. This is what a user waits for.
-- The **microbenchmark engine** (`src/benchmarks`) times a compiler
+- The **microbenchmark engine** (`compiler/benchmarks`) times a compiler
   phase in process, so none of the above is in the number and a phase
   can be compared on its own.
 

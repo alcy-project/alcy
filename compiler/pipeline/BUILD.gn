@@ -1,0 +1,91 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+action("embed_std") {
+  script = "//tools/embed_std.py"
+  inputs = [
+    "//lib/std/alcy.toml",
+    "//lib/std/core/alcy.toml",
+    "//lib/std/alloc/alcy.toml",
+    "//lib/std/fmt/alcy.toml",
+    "//lib/std/atomic/alcy.toml",
+    "//lib/std/sync/alcy.toml",
+    "//lib/std/io/alcy.toml",
+    "//lib/std/network/alcy.toml",
+    "//lib/std/thread/alcy.toml",
+    "//lib/std/arch/alcy.toml",
+    "//lib/std/simd/alcy.toml",
+    "//lib/std/time/alcy.toml",
+    "//lib/std/core/prelude.al",
+    "//lib/std/core/mem.al",
+    "//lib/std/core/option.al",
+    "//lib/std/core/range.al",
+    "//lib/std/core/result.al",
+    "//lib/std/core/slice.al",
+    "//lib/std/core/string.al",
+    "//lib/std/alloc/prelude.al",
+    "//lib/std/alloc/heap.al",
+    "//lib/std/alloc/vec.al",
+    "//lib/std/alloc/string.al",
+    "//lib/std/alloc/map.al",
+    "//lib/std/alloc/set.al",
+    "//lib/std/fmt/prelude.al",
+    "//lib/std/fmt/write.al",
+    "//lib/std/fmt/format.al",
+    "//lib/std/atomic/prelude.al",
+    "//lib/std/sync/prelude.al",
+    "//lib/std/io/prelude.al",
+    "//lib/std/network/prelude.al",
+    "//lib/std/thread/prelude.al",
+    "//lib/std/arch/prelude.al",
+    "//lib/std/simd/prelude.al",
+    "//lib/std/time/prelude.al",
+  ]
+  outputs = [ "$target_gen_dir/embedded_std.cc" ]
+  args = [
+    "--std-dir",
+    rebase_path("//lib/std", root_build_dir),
+    "--output",
+    rebase_path("$target_gen_dir/embedded_std.cc", root_build_dir),
+  ]
+}
+
+source_set("pipeline") {
+  sources = [
+    "$target_gen_dir/embedded_std.cc",
+    "build.cc",
+    "build.h",
+    "check.cc",
+    "check.h",
+    "embedded_std.h",
+    "emit_mode.cc",
+    "emit_mode.h",
+    "frontend.cc",
+    "frontend.h",
+    "link_options.h",
+    "new.cc",
+    "new.h",
+    "pipeline.cc",
+    "pipeline.h",
+    "pipeline_context.cc",
+    "pipeline_context.h",
+    "run.cc",
+    "run.h",
+    "spawn.cc",
+    "spawn.h",
+    "std_select.cc",
+    "std_select.h",
+    "std_stage.cc",
+    "std_stage.h",
+    "target.cc",
+    "target.h",
+    "vcs.cc",
+    "vcs.h",
+  ]
+  deps = [
+    ":embed_std",
+    "//compiler:base_modules",
+    "//compiler:modules",
+  ]
+  configs += [ "//compiler:alcy_config" ]
+}

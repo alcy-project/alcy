@@ -1,0 +1,22 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("parser") {
+  sources = [
+    "desugar.cc",
+    "desugar.h",
+    "parser.cc",
+    "parser.h",
+    "parser_expr.cc",
+    "parser_type.cc",
+  ]
+  deps = [
+    "//compiler:base_modules",
+    "//compiler/ast",
+    "//compiler/diag",
+    "//compiler/i18n",
+    "//compiler/lexer",
+    "//compiler/source",
+  ]
+  configs += [ "//compiler:alcy_config" ]
+}

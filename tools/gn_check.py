@@ -12,7 +12,9 @@ from pathlib import Path
 from utils.source import source_extensions
 
 
-def check_sources(out_dir: Path, source_root_dir: Path):
+def check_sources(
+    out_dir: Path, source_root_dir: Path, excluded_dirs: list[str] = []
+):
     # Get list of all tracked source files from GN description
     cmd = ["gn", "desc", out_dir, "*", "sources", "--format=json"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -34,7 +36,8 @@ def check_sources(out_dir: Path, source_root_dir: Path):
     # Walk source directory to find unlisted source files
     disk_sources = set()
     exts = tuple(source_extensions)
-    for root, _, files in os.walk(source_root_dir):
+    for root, dirs, files in os.walk(source_root_dir):
+        dirs[:] = [d for d in dirs if d not in excluded_dirs]
         for file in files:
             if file.endswith(exts):
                 disk_sources.add(os.path.abspath(os.path.join(root, file)))
@@ -52,12 +55,12 @@ def check_sources(out_dir: Path, source_root_dir: Path):
 def main():
     from utils.paths import (
         default_out_dir,
-        src_dir,
+        compiler_dir,
+        excluded_source_dirs,
     )
 
     out_dir = default_out_dir
-    source_root_dir = src_dir
-    return check_sources(out_dir, source_root_dir)
+    return check_sources(out_dir, compiler_dir, excluded_source_dirs)
 
 
 if __name__ == "__main__":
