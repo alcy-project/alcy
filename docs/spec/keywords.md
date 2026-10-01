@@ -9,8 +9,8 @@ update.
 Declarations: `fn`, `struct`, `enum`, `impl`, `spec`, `static`, `pub`,
 `const`, `mut`, `use`
 
-Control flow: `if`, `else`, `loop`, `while`, `break`, `continue`,
-`ret`, `match`
+Control flow: `if`, `else`, `loop`, `while`, `for`, `in`, `break`,
+`continue`, `ret`, `match`
 
 Paths and casts: `package`, `self`, `super`, `Self`, `as`
 
@@ -20,10 +20,11 @@ Primitive types: `i8`, `i16`, `i32`, `i64`, `isize`, `u8`,
 ## Reserved (parsed, rejected with guidance)
 
 `async`, `await`, `union`, `register`, `extern`,
-`unsafe`, `in`, `where`, `dyn`
+`unsafe`, `where`, `dyn`
 
-`for` is reserved for loops; it also separates the spec from the
-target in `impl S for T` headers (see `items.md`).
+`for` introduces a loop and separates the spec from the target in
+`impl S for T` headers (see `items.md`); `in` is read only between a
+`for` pattern and its head (see `control.md`).
 
 ## Bootstrap
 

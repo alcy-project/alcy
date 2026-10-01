@@ -1051,13 +1051,23 @@ ir::TypeIdx Checker::check_method_call(u32 module,
   if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
     nominal = builder.ref_types()[builder.types()[receiver].as_ref()].pointee;
   }
+  const bool spec_only = node.payload.get<ast::ExprMethodCall>().spec_only;
   const CheckedModule::MethodInfo* method =
-      lookup_method(nominal, name, module, node.span);
+      lookup_method(nominal, name, module, node.span, spec_only);
   if (method == nullptr) {
-    const u32 index = bag.emit<i18n::Key::AnalyzerUnknownMethod>(
-        diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
-        node.payload.get<ast::ExprMethodCall>().name.span, name);
-    (void)index;
+    if (spec_only) {
+      // The `for` desugar's generated `next` reaches the cursor
+      // through a spec or not at all, so an inherent method of the
+      // same name cannot stand in for `Iterator`.
+      const u32 index = bag.emit<i18n::Key::AnalyzerForRequiresIterator>(
+          diag::Severity::Error, ANALYZER_UNKNOWN_VALUE, span);
+      (void)index;
+    } else {
+      const u32 index = bag.emit<i18n::Key::AnalyzerUnknownMethod>(
+          diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
+          node.payload.get<ast::ExprMethodCall>().name.span, name);
+      (void)index;
+    }
     for (ast::ExprIdx arg : node.payload.get<ast::ExprMethodCall>().args) {
       check_expr(module, arg, nullptr);
     }

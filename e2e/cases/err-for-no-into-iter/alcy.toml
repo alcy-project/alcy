@@ -1,0 +1,13 @@
+[package]
+name = "demofornoi"
+version = "0.1.0"
+
+[modules]
+include = ["main"]
+
+[dependencies]
+"alcy/std/core" = {}
+
+[[bin]]
+name = "demofornoi"
+path = "main.al"

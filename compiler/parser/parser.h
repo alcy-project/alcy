@@ -124,10 +124,12 @@ class Parser {
   ast::ExprIdx parse_unary();
   ast::ExprIdx parse_postfix();
   ast::ExprIdx parse_primary();
+  ast::ExprIdx parse_paren_expr(usize mark);
   ast::ExprIdx parse_if();
   ast::ExprIdx parse_match();
   ast::ExprIdx parse_loop();
   ast::ExprIdx parse_while();
+  ast::ExprIdx parse_for();
   ast::ExprIdx parse_block_expr();
   ast::ExprIdx parse_comp_block();
   ast::ExprIdx parse_array_literal();

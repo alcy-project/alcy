@@ -25,8 +25,9 @@ with `Bound = Included(T) | Excluded(T) | Unbounded`, both declared by
 `core` as ordinary generic types, so a range expression constructs a
 value that user code matches, passes, and stores like any other. No
 iterator exists yet: iteration arrives with `spec` as an `Iterator`
-implementation over this same type, and stepping lives on the
-iterator, never on the interval.
+implementation over a cursor type built from this interval (reached
+through `into_iter`, per `docs/adr/0028-spec-system.md`), and stepping
+lives on the cursor, never on the interval.
 
 **The names are reserved.** `Range` and `Bound` may only be declared
 by the staged `core` package, the way `MaybeUninit` is compiler-owned.
@@ -59,8 +60,9 @@ precede the inclusion arithmetic, so neither the bounds nor the
 with "slice out of bounds".
 
 Only integer ranges are indexable; float ranges are legal data with
-no index meaning. `for` over a range, stepping, and slice patterns
-wait for `spec` and the pattern work. A `str` run extends whatever
+no index meaning. The cursor that exposes integer ranges to `for`,
+with the stepping it carries, and slice patterns remain the open
+pieces. A `str` run extends whatever
 loan the buffer carries, but views derived through `ExtractValue` on
 a `str` drop it — the `str_slice` intrinsic has the same hole today —
 so that case is tracked as a known gap in

@@ -637,9 +637,97 @@ TEST_CASE("Parser reports errors without stopping at the first") {
 
 TEST_CASE("Parser rejects reserved words with guidance") {
   Fixture f;
-  const ParseResult result = parse("fn f() { for x in y {} }", f);
+  const ParseResult result = parse("fn f() { unsafe x := y }", f);
   CHECK(!result.ok);
   CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Parentheses lift the struct-literal ban") {
+  Fixture f;
+  const ParseResult result = parse(
+      "struct Foo { x: i32 }\n"
+      "fn f() { if (Foo { x: 1 }).x > 0 {} }",
+      f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Parser desugars for into a loop over into_iter") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { for x in xs {}\n 1 }", f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+  if (result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn fn = as_fn(result.items[0], f);
+  const ast::Block& body = f.ast.blocks[fn.body];
+  CHECK(body.statements.size() == 1);
+  if (body.statements.size() != 1) {
+    return;
+  }
+  const ast::StmtNode& stmt = f.ast.stmts[body.statements[0]];
+  CHECK(stmt.kind == ast::StmtKind::Expr);
+  if (stmt.kind != ast::StmtKind::Expr) {
+    return;
+  }
+  // The statement is the desugared block: one cursor declaration whose
+  // initializer calls `into_iter`, and a loop as its value.
+  const ast::ExprNode& block_expr =
+      f.ast.exprs[stmt.payload.get<ast::StmtExpr>().value];
+  CHECK(block_expr.kind == ast::ExprKind::Block);
+  if (block_expr.kind != ast::ExprKind::Block) {
+    return;
+  }
+  const ast::Block& block =
+      f.ast.blocks[block_expr.payload.get<ast::ExprBlock>().block];
+  CHECK(block.statements.size() == 1);
+  CHECK(block.value.is_valid());
+  if (block.statements.size() != 1 || !block.value.is_valid()) {
+    return;
+  }
+  const ast::StmtNode& decl = f.ast.stmts[block.statements[0]];
+  CHECK(decl.kind == ast::StmtKind::Decl);
+  if (decl.kind != ast::StmtKind::Decl) {
+    return;
+  }
+  const ast::ExprNode& init =
+      f.ast.exprs[decl.payload.get<ast::StmtDecl>().init];
+  CHECK(init.kind == ast::ExprKind::MethodCall);
+  if (init.kind == ast::ExprKind::MethodCall) {
+    CHECK(init.payload.get<ast::ExprMethodCall>().name.name == "into_iter");
+  }
+  const ast::ExprNode& loop = f.ast.exprs[block.value];
+  CHECK(loop.kind == ast::ExprKind::Loop);
+  if (loop.kind != ast::ExprKind::Loop) {
+    return;
+  }
+  const ast::Block& loop_body =
+      f.ast.blocks[loop.payload.get<ast::ExprLoop>().body];
+  CHECK(loop_body.value.is_valid());
+  if (!loop_body.value.is_valid()) {
+    return;
+  }
+  const ast::ExprNode& match = f.ast.exprs[loop_body.value];
+  CHECK(match.kind == ast::ExprKind::Match);
+  if (match.kind != ast::ExprKind::Match) {
+    return;
+  }
+  const ast::ExprMatch arms = match.payload.get<ast::ExprMatch>();
+  CHECK(arms.arms.size() == 2);
+  if (arms.arms.size() != 2) {
+    return;
+  }
+  // The scrutinee is the spec-only `next` call; the second arm breaks.
+  const ast::ExprNode& scrutinee = f.ast.exprs[arms.scrutinee];
+  CHECK(scrutinee.kind == ast::ExprKind::MethodCall);
+  if (scrutinee.kind == ast::ExprKind::MethodCall) {
+    const ast::ExprMethodCall& call =
+        scrutinee.payload.get<ast::ExprMethodCall>();
+    CHECK(call.name.name == "next");
+    CHECK(call.spec_only);
+  }
+  CHECK(f.ast.exprs[arms.arms[1].body].kind == ast::ExprKind::Break);
 }
 
 TEST_CASE("Parser rejects struct field assignment syntax") {

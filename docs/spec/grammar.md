@@ -87,11 +87,12 @@ Declaration left-hand sides use this grammar with `:=`
 - Calls to `panic(...)` diverge with type `!`.
 - Closures do not exist; `||` is logical-or only.
 - In statement position `Path {` opens a struct expression. After
-  `if`/`while`/`match` conditions and `else`, `{` always opens a
-  block: parenthesize conditions containing struct literals.
+  `if`/`while`/`match` conditions, `for` heads, and `else`, `{` always
+  opens a block: parenthesize expressions containing struct literals.
 - `match` scrutinees and `if`/`while` conditions never parse a
   struct literal directly (the `{` belongs to the body); this keeps
-  `match x {` and `if c {` unambiguous without lookahead.
+  `match x {` and `if c {` unambiguous without lookahead. Parentheses
+  lift the ban, so `if (Foo { x: 1 }).x > 0` parses.
 
 ## Statements and blocks
 
@@ -104,8 +105,9 @@ Declaration left-hand sides use this grammar with `:=`
   (else block)?`; `while` mirrors `if` (both accept
   pattern-declarations).
 - `match scrutinee "{" (pattern "=>" expr ",")* "}"`
-- `loop block`, `while cond block`; `break`, `continue` (unlabeled);
-  loops evaluate to `()`.
+- `loop block`, `while cond block`, `for pattern "in" expr block`;
+  `break`, `continue` (unlabeled); loops evaluate to `()`. The `for`
+  rule lives in `control.md`.
 - `ret expr?` returns early from the enclosing function.
 
 ## Modules and paths

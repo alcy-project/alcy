@@ -1,5 +1,23 @@
 # Control Flow (MVP)
 
+## For
+
+- `for pat in head block` iterates a cursor obtained from the head:
+  `head.into_iter()` runs once, and each iteration binds `pat` to the
+  next item until the cursor reports the end. `into_iter` is an
+  ordinary method resolved in the caller's scope; a head whose type
+  does not have one is an error naming that method.
+- The cursor must implement core's `Iterator` for the item type. The
+  loop reaches `next` through that spec and never through an inherent
+  method of the same name, so an `Iterator` implementation must be in
+  scope or the loop is an error.
+- `Some(item)` binds `pat` against the item, and `None` ends the
+  loop. The pattern must match every item: a refutable pattern is
+  rejected rather than filtering for now (see `deferred.md`).
+- `for` is a block-like expression evaluating to `()`, so it works as
+  a statement and in value position. `break` and `continue` in the
+  body act on this loop, and nested loops keep independent cursors.
+
 ## Match
 
 - `match` requires exhaustive arms over integer/bool literals, unit

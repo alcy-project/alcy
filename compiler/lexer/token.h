@@ -63,8 +63,10 @@ enum class TokenKind : u8 {
   // Reserved words (parsed, rejected with guidance), plus the
   // contextual keywords the parser matches in position: `comp` in
   // signatures and bodies, `spec` in item position, `for` in `impl`
-  // headers. Those three lex distinctly but are never skipped, so a
-  // use outside their position is an ordinary parse error.
+  // headers and loop position. Those three lex distinctly but are
+  // never skipped, so a use outside their position is an ordinary
+  // parse error. `in` is read only by a `for` header and is an
+  // ordinary parse error elsewhere.
   Async,
   Await,
   Union,

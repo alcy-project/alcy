@@ -112,7 +112,8 @@ tuple_expr    = "(" , expr , "," , expr , { "," , expr } , [ "," ] , ")"
               | "(" , ")" ;
 array_expr    = "[" , [ expr , { "," , expr } , [ "," ] ] , "]"
               | "[" , expr , ";" , INTEGER , "]" ;
-block_like    = block | if_expr | match_expr | loop_expr | while_expr ;
+block_like    = block | if_expr | match_expr | loop_expr | while_expr
+              | for_expr ;
 comp_block    = "comp" , block ;
 
 (* Statements and blocks *)
@@ -130,6 +131,7 @@ if_expr     = "if" , ( expr | pattern , ":=" , expr ) , block ,
               [ "else" , block ] ;
 while_expr  = "while" , ( expr | pattern , ":=" , expr ) , block ;
 loop_expr   = "loop" , block ;
+for_expr    = "for" , pattern , "in" , expr , block ;
 match_expr  = "match" , expr , "{" , { match_arm , ( "," | ";" ) } , "}" ;
 match_arm   = pattern , "=>" , expr ;
 
@@ -153,11 +155,11 @@ LINE_COMMENT  = "//" , { ANY_BUT_NEWLINE } ;
 BLOCK_COMMENT = "/*" , { ANY | BLOCK_COMMENT } , "*/" ;
 DOC_COMMENT   = "///" , { ANY_BUT_NEWLINE } ;
 
-(* Keywords: fn struct enum impl static pub const mut use
- *   if else loop while break continue ret match
+(* Keywords: fn struct enum impl spec static pub const mut use
+ *   if else loop while for in break continue ret match
  *   package self super Self as
  *   i8 i16 i32 i64 isize u8 u16 u32 u64 usize f32 f64 bool str
- * Reserved: async await union register extern unsafe for in
+ * Reserved: async await union register extern unsafe
  *   where dyn comp intrinsic
  *
  * Nesting is bounded at 256 levels on expressions, types, blocks,
@@ -165,6 +167,6 @@ DOC_COMMENT   = "///" , { ANY_BUT_NEWLINE } ;
  * Newlines are significant outside brackets (lexed as `;` after a
  * statement-ending token, with continuation positions); block openers
  * stay on their header line. `1..2` lexes as range, never float.
- * `match`/`if`/`while` conditions and `else` never open a struct
- * literal: `{` after them always opens the body block.
+ * `match`/`if`/`while` conditions, `for` heads, and `else` never open
+ * a struct literal: `{` after them always opens the body block.
  *)

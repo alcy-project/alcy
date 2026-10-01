@@ -75,10 +75,11 @@
   and cannot be assigned to.
 - Iteration is explicit and separate: core declares `Iterator` as
   the capability. Only integer ranges will expose an iterator that
-  way, and float ranges have no iteration method. Range iteration
-  itself arrives with the `for` rule. Stepping lives on the iterator,
+  way, and float ranges have no iteration method. The range cursor
+  arrives with the stepping work; stepping lives on the iterator,
   never on the interval.
-- `for` over a range desugars through a single documented rule to
-  the explicit iterator form. Index and slice APIs accept bound
-  data, never iterators.
+- `for` names the cursor through `into_iter` and consumes it as an
+  `Iterator` (see `control.md`). A range head becomes iterable once
+  its cursor lands. Index and slice APIs accept bound data, never
+  iterators.
 

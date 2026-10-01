@@ -121,6 +121,7 @@
   F(AnalyzerDuplicateModule, "module '{}' is declared more than once") \
   F(AnalyzerDuplicatePreludeModule, "prelude module '{}' is declared more than once") \
   F(AnalyzerFloatSuffixOnInteger, "float suffix on an integer literal") \
+  F(AnalyzerForRequiresIterator, "'for' requires an 'Iterator' implementation in scope for this type") \
   F(AnalyzerFormatArity, "'format' expects 2 arguments, found {}") \
   F(AnalyzerFormatInCompEvaluation, "'format' is not allowed in comp evaluation") \
   F(AnalyzerFormatPlaceholderArity, "format string has {} placeholders for {} arguments") \

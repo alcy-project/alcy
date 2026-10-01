@@ -53,11 +53,15 @@ relied upon by MVP programs or by the MVP compiler implementation.
 - `pub(...)` restricted visibility; glob imports.
 - `f16`, 128-bit integers, posit, and decimal types; `Char`/`Ascii`/
   grapheme semantics in core (see `types.md`).
-- `Range` iteration, stepping, and `for` loops. `Iterator` itself is
-  declared by core; the range cursor and the `for` rule that consumes
-  it are not yet implemented. Representation, endpoint-marking, and
-  sub-slicing are frozen in `types.md`. Slice patterns wait for the
-  pattern work.
+- `Range` iteration and stepping. `Iterator` and the `for` rule that
+  consumes it are in place (see `control.md`); what remains is the
+  range cursor, which only integer ranges will expose, and the
+  per-width stepping it carries. Representation, endpoint-marking,
+  and sub-slicing are frozen in `types.md`. Slice patterns wait for
+  the pattern work.
+- Refutable `for` patterns. The pattern must match every item;
+  whether a refutable pattern filters or is an error is undecided, so
+  a program that builds with one is rejected for now.
 - Two-phase borrows, so `v.push(v.len())` resolves the receiver before
   the arguments; see `docs/adr/0012-reborrow-on-reference-read.md`.
 - Interior mutability; mutable statics; `const`-position extensions.
@@ -84,5 +88,5 @@ relied upon by MVP programs or by the MVP compiler implementation.
 ## Keywords reserved for the above
 
 `async`, `await`, `union`, `register`, `extern`,
-`unsafe`, `for`, `in`, `where`, `dyn`. The MVP keyword set is
+`unsafe`, `where`, `dyn`. The MVP keyword set is
 frozen in `keywords.md`; additions require a specification update.

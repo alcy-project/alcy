@@ -600,48 +600,14 @@ ast::ExprIdx Parser::parse_primary() {
     }
     case lexer::TokenKind::LParen: {
       advance();
-      if (check(lexer::TokenKind::RParen)) {
-        advance();
-        ast::ExprNode unit_node;
-        unit_node.kind = ast::ExprKind::Tuple;
-        unit_node.span = span_from(mark);
-        unit_node.payload.set(ast::ExprTuple{
-            .elements = {},
-        });
-        return ast_.exprs.push_back(unit_node);
-      }
-      ast::ExprIdx first = parse_expr();
-      if (!first.is_valid()) {
-        return ast::ExprIdx::invalid();
-      }
-      if (!match(lexer::TokenKind::Comma)) {
-        if (!expect(lexer::TokenKind::RParen, "`)`")) {
-          return ast::ExprIdx::invalid();
-        }
-        return first;
-      }
-      std::vector<ast::ExprIdx> elements;
-      elements.push_back(first);
-      while (!check(lexer::TokenKind::RParen) && !at_end()) {
-        ast::ExprIdx element = parse_expr();
-        if (!element.is_valid()) {
-          return ast::ExprIdx::invalid();
-        }
-        elements.push_back(element);
-        if (!match(lexer::TokenKind::Comma)) {
-          break;
-        }
-      }
-      if (!expect(lexer::TokenKind::RParen, "`)`")) {
-        return ast::ExprIdx::invalid();
-      }
-      ast::ExprNode tuple_node;
-      tuple_node.kind = ast::ExprKind::Tuple;
-      tuple_node.span = span_from(mark);
-      tuple_node.payload.set(ast::ExprTuple{
-          .elements = ast::copy_to_arena(ast_.spans, elements),
-      });
-      return ast_.exprs.push_back(tuple_node);
+      // Parentheses lift the struct-literal ban a surrounding condition
+      // imposes: the matching `)` still ends any literal before the
+      // block, so `(Foo { .. })` is unambiguous.
+      const bool saved = allow_struct_lit_;
+      allow_struct_lit_ = true;
+      const ast::ExprIdx inner = parse_paren_expr(mark);
+      allow_struct_lit_ = saved;
+      return inner;
     }
     case lexer::TokenKind::LBrace: {
       return parse_block_expr();
@@ -656,6 +622,7 @@ ast::ExprIdx Parser::parse_primary() {
     case lexer::TokenKind::Match: return parse_match();
     case lexer::TokenKind::Loop: return parse_loop();
     case lexer::TokenKind::While: return parse_while();
+    case lexer::TokenKind::For: return parse_for();
     case lexer::TokenKind::Ret: {
       advance();
       ast::ExprIdx ret_val = ast::ExprIdx::invalid();
@@ -826,6 +793,54 @@ ast::CondIdx Parser::parse_cond() {
   return ast_.conds.push_back(cond);
 }
 
+// The body of a `(` after the opener is consumed: unit `()`, a
+// parenthesized expression, or a tuple. The caller owns the
+// struct-literal flag around it.
+ast::ExprIdx Parser::parse_paren_expr(usize mark) {
+  if (check(lexer::TokenKind::RParen)) {
+    advance();
+    ast::ExprNode unit_node;
+    unit_node.kind = ast::ExprKind::Tuple;
+    unit_node.span = span_from(mark);
+    unit_node.payload.set(ast::ExprTuple{
+        .elements = {},
+    });
+    return ast_.exprs.push_back(unit_node);
+  }
+  ast::ExprIdx first = parse_expr();
+  if (!first.is_valid()) {
+    return ast::ExprIdx::invalid();
+  }
+  if (!match(lexer::TokenKind::Comma)) {
+    if (!expect(lexer::TokenKind::RParen, "`)`")) {
+      return ast::ExprIdx::invalid();
+    }
+    return first;
+  }
+  std::vector<ast::ExprIdx> elements;
+  elements.push_back(first);
+  while (!check(lexer::TokenKind::RParen) && !at_end()) {
+    ast::ExprIdx element = parse_expr();
+    if (!element.is_valid()) {
+      return ast::ExprIdx::invalid();
+    }
+    elements.push_back(element);
+    if (!match(lexer::TokenKind::Comma)) {
+      break;
+    }
+  }
+  if (!expect(lexer::TokenKind::RParen, "`)`")) {
+    return ast::ExprIdx::invalid();
+  }
+  ast::ExprNode tuple_node;
+  tuple_node.kind = ast::ExprKind::Tuple;
+  tuple_node.span = span_from(mark);
+  tuple_node.payload.set(ast::ExprTuple{
+      .elements = ast::copy_to_arena(ast_.spans, elements),
+  });
+  return ast_.exprs.push_back(tuple_node);
+}
+
 ast::ExprIdx Parser::parse_if() {
   const usize mark = pos_;
   if (!expect(lexer::TokenKind::If, "if")) {
@@ -961,6 +976,184 @@ ast::ExprIdx Parser::parse_while() {
   node.payload.set(ast::ExprWhile{
       .cond = cond,
       .body = body,
+  });
+  return ast_.exprs.push_back(node);
+}
+
+ast::ExprIdx Parser::parse_for() {
+  const usize mark = pos_;
+  const diag::Span keyword = peek().span;
+  if (!expect(lexer::TokenKind::For, "for")) {
+    return ast::ExprIdx::invalid();
+  }
+  const ast::PatternIdx pattern = parse_pattern();
+  if (!pattern.is_valid()) {
+    return ast::ExprIdx::invalid();
+  }
+  if (!expect(lexer::TokenKind::In, "`in`")) {
+    return ast::ExprIdx::invalid();
+  }
+  ast::ExprIdx head = ast::ExprIdx::invalid();
+  {
+    // The `{` after the head always opens the loop body, never a
+    // struct literal; parenthesize a struct-valued head.
+    const bool saved = allow_struct_lit_;
+    allow_struct_lit_ = false;
+    head = parse_expr();
+    allow_struct_lit_ = saved;
+  }
+  if (!head.is_valid()) {
+    return ast::ExprIdx::invalid();
+  }
+  const ast::BlockIdx body = parse_block();
+  if (!body.is_valid()) {
+    return ast::ExprIdx::invalid();
+  }
+
+  // The one rule of docs/adr/0028-spec-system.md: `for pat in head {
+  // body }` means
+  //
+  //   {
+  //     mut _it := head.into_iter()
+  //     loop {
+  //       match _it.next() {
+  //         Option::Some(pat) => body,
+  //         Option::None => break,
+  //       }
+  //     }
+  //   }
+  //
+  // Everything is built from ordinary nodes, so resolution, checking,
+  // and lowering see only the desugared form. The shadowing pass
+  // freshens `_it` wherever it nests, so a body that spells `_it`, or
+  // an enclosing `for`, keeps its own cursor.
+  const diag::Span span = span_from(mark);
+  const ast::Ident it_name{"_it", keyword};
+
+  ast::PatternNode it_binding;
+  it_binding.kind = ast::PatternKind::MutIdent;
+  it_binding.span = keyword;
+  it_binding.payload.mut_ident.name = it_name;
+  const ast::PatternIdx cursor = ast_.patterns.push_back(it_binding);
+
+  // `head.into_iter()`
+  ast::ExprNode into_iter;
+  into_iter.kind = ast::ExprKind::MethodCall;
+  into_iter.span = keyword;
+  into_iter.payload.set(ast::ExprMethodCall{
+      .receiver = head,
+      .name = ast::Ident{"into_iter", keyword},
+      .args = {},
+  });
+  const ast::ExprIdx iterator = ast_.exprs.push_back(into_iter);
+
+  ast::StmtNode decl;
+  decl.kind = ast::StmtKind::Decl;
+  decl.span = keyword;
+  decl.payload.set(ast::StmtDecl{
+      .pattern = cursor,
+      .type = ast::TypeIdx::invalid(),
+      .init = iterator,
+      .is_comp = false,
+  });
+  const ast::StmtIdx iterator_decl = ast_.stmts.push_back(decl);
+
+  // `_it.next()`, resolved through specs only: the cursor must reach
+  // `next` through `Iterator`, never through an inherent method.
+  const std::vector<ast::Ident> it_segments{it_name};
+  ast::Path it_path;
+  it_path.span = keyword;
+  it_path.segments = ast::copy_to_arena(ast_.spans, it_segments);
+  ast::ExprNode it_use;
+  it_use.kind = ast::ExprKind::Path;
+  it_use.span = keyword;
+  it_use.payload.set(ast::ExprPath{
+      .idx = ast_.paths.push_back(it_path),
+      .type_args = {},
+  });
+  ast::ExprNode next_call;
+  next_call.kind = ast::ExprKind::MethodCall;
+  next_call.span = keyword;
+  next_call.payload.set(ast::ExprMethodCall{
+      .receiver = ast_.exprs.push_back(it_use),
+      .name = ast::Ident{"next", keyword},
+      .args = {},
+      .spec_only = true,
+  });
+  const ast::ExprIdx next = ast_.exprs.push_back(next_call);
+
+  const std::vector<ast::Ident> some_segments{ast::Ident{"Option", keyword},
+                                              ast::Ident{"Some", keyword}};
+  ast::Path some_path;
+  some_path.span = keyword;
+  some_path.segments = ast::copy_to_arena(ast_.spans, some_segments);
+  const std::vector<ast::PatternIdx> some_elements{pattern};
+  ast::PatternNode some;
+  some.kind = ast::PatternKind::Tuple;
+  some.span = keyword;
+  some.payload.tuple.path = ast_.paths.push_back(some_path);
+  some.payload.tuple.elements = ast::copy_to_arena(ast_.spans, some_elements);
+  const ast::PatternIdx some_pattern = ast_.patterns.push_back(some);
+
+  ast::ExprNode arm_body;
+  arm_body.kind = ast::ExprKind::Block;
+  arm_body.span = ast_.blocks[body].span;
+  arm_body.payload.set(ast::ExprBlock{
+      .block = body,
+  });
+  const ast::ExprIdx body_expr = ast_.exprs.push_back(arm_body);
+
+  const std::vector<ast::Ident> none_segments{ast::Ident{"Option", keyword},
+                                              ast::Ident{"None", keyword}};
+  ast::Path none_path;
+  none_path.span = keyword;
+  none_path.segments = ast::copy_to_arena(ast_.spans, none_segments);
+  ast::PatternNode none;
+  none.kind = ast::PatternKind::Tuple;
+  none.span = keyword;
+  none.payload.tuple.path = ast_.paths.push_back(none_path);
+  none.payload.tuple.elements = {};
+  const ast::PatternIdx none_pattern = ast_.patterns.push_back(none);
+
+  ast::ExprNode stop;
+  stop.kind = ast::ExprKind::Break;
+  stop.span = keyword;
+  const ast::ExprIdx stop_expr = ast_.exprs.push_back(stop);
+
+  const std::vector<ast::ExprMatchArm> arms{
+      ast::ExprMatchArm{some_pattern, body_expr},
+      ast::ExprMatchArm{none_pattern, stop_expr},
+  };
+  ast::ExprNode match;
+  match.kind = ast::ExprKind::Match;
+  match.span = span;
+  match.payload.set(ast::ExprMatch{
+      .scrutinee = next,
+      .arms = ast::copy_to_arena(ast_.spans, arms),
+  });
+  const ast::ExprIdx match_expr = ast_.exprs.push_back(match);
+
+  ast::Block loop_body;
+  loop_body.span = span;
+  loop_body.value = match_expr;
+  ast::ExprNode loop;
+  loop.kind = ast::ExprKind::Loop;
+  loop.span = span;
+  loop.payload.set(ast::ExprLoop{
+      .body = ast_.blocks.push_back(loop_body),
+  });
+  const ast::ExprIdx loop_expr = ast_.exprs.push_back(loop);
+
+  const std::vector<ast::StmtIdx> statements{iterator_decl};
+  ast::Block desugared;
+  desugared.span = span;
+  desugared.statements = ast::copy_to_arena(ast_.spans, statements);
+  desugared.value = loop_expr;
+  ast::ExprNode node;
+  node.kind = ast::ExprKind::Block;
+  node.span = span;
+  node.payload.set(ast::ExprBlock{
+      .block = ast_.blocks.push_back(desugared),
   });
   return ast_.exprs.push_back(node);
 }

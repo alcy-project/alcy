@@ -35,10 +35,12 @@ peripheral work lives in `backlog.md`.
 
   Range expressions build the interval types (`docs/adr/0025-ranges-as-data.md`), and an
   index accepts a run (`&a[1..3]`, `s[1..]`), both endpoints
-  bounds-checked. Iteration and `for` wait for `spec`: a blessed
-  iterator would be thrown away there. Pinned by `exe-range`,
-  `exe-subslice`, `exe-subslice-panic`, the `ok-range`/`err-range-*`
-  cases, and the `subslice` cases in `tools/check_borrow_rules.py`.
+  bounds-checked. `spec` and the `for` rule have since landed
+  (`docs/adr/0028-spec-system.md`); the cursor that exposes an integer
+  range to `for`, with per-width stepping, is what remains. Pinned by
+  `exe-range`, `exe-subslice`, `exe-subslice-panic`, the
+  `ok-range`/`err-range-*` cases, and the `subslice` cases in
+  `tools/check_borrow_rules.py`.
 - [ ] `ArrayVec<T, N>`, a fixed-capacity inline container.
 
   The baremetal case proper: no heap, so no realloc hazard, and the

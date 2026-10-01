@@ -33,7 +33,6 @@ bool is_reserved(lexer::TokenKind kind) {
     case lexer::TokenKind::Register:
     case lexer::TokenKind::Extern:
     case lexer::TokenKind::Unsafe:
-    case lexer::TokenKind::In:
     case lexer::TokenKind::Where:
     case lexer::TokenKind::Dyn: return true;
     default: return false;
@@ -297,16 +296,6 @@ ast::ItemIdx Parser::parse_item() {
     case lexer::TokenKind::Enum: return parse_enum(is_pub);
     case lexer::TokenKind::Impl: return parse_impl(is_pub);
     case lexer::TokenKind::Spec: return parse_spec(is_pub);
-    case lexer::TokenKind::For: {
-      // `for` survives only in `impl S for T`, which parse_impl
-      // consumes; anywhere else the loops it will one day introduce
-      // are still future use.
-      const diag::Span span = peek().span;
-      const u32 index = bag_.emit<i18n::Key::ParserReservedName>(
-          diag::Severity::Error, PARSER_RESERVED_WORD, span, "for");
-      (void)index;
-      return ast::ItemIdx::invalid();
-    }
     case lexer::TokenKind::Static: return parse_static(is_pub);
     case lexer::TokenKind::Const: return parse_const(is_pub);
     case lexer::TokenKind::Use: return parse_use(is_pub);
@@ -1044,16 +1033,8 @@ ast::StmtIdx Parser::parse_stmt() {
     case lexer::TokenKind::If:
     case lexer::TokenKind::While:
     case lexer::TokenKind::Loop:
-    case lexer::TokenKind::Match: lead = StmtLead::None; break;
-    case lexer::TokenKind::For: {
-      // `for` survives only in `impl S for T`, which parse_impl
-      // consumes; a loop here is still future use.
-      const diag::Span span = peek().span;
-      const u32 index = bag_.emit<i18n::Key::ParserReservedName>(
-          diag::Severity::Error, PARSER_RESERVED_WORD, span, "for");
-      (void)index;
-      return ast::StmtIdx::invalid();
-    }
+    case lexer::TokenKind::Match:
+    case lexer::TokenKind::For: lead = StmtLead::None; break;
     default: break;
   }
   if (lead == StmtLead::Decl) {

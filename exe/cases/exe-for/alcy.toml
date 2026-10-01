@@ -1,0 +1,13 @@
+[package]
+name = "forcase"
+version = "0.1.0"
+
+[modules]
+include = ["main", "cursors"]
+
+[dependencies]
+"alcy/std/core" = {}
+
+[[bin]]
+name = "forcase"
+path = "main.al"

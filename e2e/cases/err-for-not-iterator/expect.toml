@@ -1,0 +1,2 @@
+exit = 4
+contains = ["'for' requires an 'Iterator' implementation in scope for this type"]

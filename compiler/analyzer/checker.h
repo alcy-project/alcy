@@ -372,10 +372,17 @@ class Checker {
   NominalEntry* find_nominal_in_scope(u32 module, std::string_view name);
   // Finds an inherent method, instantiating generic impls on demand
   // (which checks the method body under the substitution).
+  const CheckedModule::MethodInfo* lookup_inherent_method(
+      ir::TypeIdx self,
+      std::string_view name);
+  // Finds a method for `self`: an inherent one, or with `spec_only` a
+  // spec implementation reachable from `module`. Only in-scope specs
+  // match.
   const CheckedModule::MethodInfo* lookup_method(ir::TypeIdx self,
                                                  std::string_view name,
                                                  u32 module,
-                                                 diag::Span span);
+                                                 diag::Span span,
+                                                 bool spec_only);
   const CheckedModule::MethodInfo* instantiate_method(
       u32 impl_module,
       ir::TypeIdx self_type,

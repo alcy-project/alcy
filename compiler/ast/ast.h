@@ -444,6 +444,11 @@ struct ExprMethodCall {
   ExprIdx receiver = ExprIdx::invalid();
   Ident name;
   std::span<const ExprIdx> args;
+  // Resolves through spec impls only, never inherent ones. The `for`
+  // desugar sets this on the generated `next` call so the cursor must
+  // reach the method through `Iterator`, not through a same-named
+  // inherent method.
+  bool spec_only = false;
 };
 
 struct ExprField {

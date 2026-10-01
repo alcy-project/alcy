@@ -1738,7 +1738,7 @@ CheckedModule::DropGlue Checker::find_drop_glue(ir::TypeIdx type) {
   // A generic type reaches its destructor through `impl<T> Name<T>`,
   // which only exists once instantiated.
   const CheckedModule::MethodInfo* method =
-      lookup_method(type, "drop", NO_MODULE, diag::Span{});
+      lookup_method(type, "drop", NO_MODULE, diag::Span{}, false);
   if (method == nullptr) {
     return {};
   }
@@ -2445,10 +2445,9 @@ NominalEntry* Checker::find_nominal_in_scope(u32 module,
   return nullptr;
 }
 
-const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
-                                                        std::string_view name,
-                                                        u32 module,
-                                                        diag::Span span) {
+const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
+    ir::TypeIdx self,
+    std::string_view name) {
   for (const CheckedModule& checked : modules) {
     for (const CheckedModule::MethodInfo& method : checked.methods) {
       if (method.spec != NO_SPEC) {
@@ -2529,10 +2528,24 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
       }
     }
   }
-  // Spec dispatch: `impl S for T` blocks, after inherent methods.  // Coherence
-  // leaves at most one impl per spec overlapping a concrete type, so every
-  // in-scope match is a different spec; two providing the same name is an
-  // ambiguity, not a choice.
+  return nullptr;
+}
+
+const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
+                                                        std::string_view name,
+                                                        u32 module,
+                                                        diag::Span span,
+                                                        bool spec_only) {
+  if (!spec_only) {
+    if (const CheckedModule::MethodInfo* inherent =
+            lookup_inherent_method(self, name)) {
+      return inherent;
+    }
+  }
+  // Spec dispatch: `impl S for T` blocks, after inherent methods.
+  // Coherence leaves at most one impl per spec overlapping a concrete
+  // type, so every in-scope match is a different spec; two providing the
+  // same name is an ambiguity, not a choice.
   u32 target_nominal = 0;
   std::vector<ir::TypeIdx> target_args;
   if (const GenericInstance* instance = generic_find(self)) {
@@ -3284,7 +3297,7 @@ bool Checker::resolve_value_path(u32 module,
         return false;
       }
       if (const CheckedModule::MethodInfo* method =
-              lookup_method(self, member, module, node.span)) {
+              lookup_method(self, member, module, node.span, false)) {
         if (method->receiver == CheckedModule::ReceiverKind::None) {
           out.kind = PathValue::Kind::AssocFunction;
           out.method = method;
