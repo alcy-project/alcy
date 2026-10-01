@@ -34,7 +34,7 @@ bool is_keyword_name(std::string_view name) {
          name == "Self";
 }
 
-class Desugar {
+class Desugarer {
  public:
   struct Binding {
     std::string_view orig;
@@ -54,7 +54,7 @@ class Desugar {
   base::NestingGuard nesting_{base::MAX_NESTING};
   bool reported_too_deep_ = false;
 
-  Desugar(ast::AstArena& ast, diag::DiagBag& bag) : ast(ast), bag(bag) {}
+  Desugarer(ast::AstArena& ast, diag::DiagBag& bag) : ast(ast), bag(bag) {}
 
   // Reports the nesting budget once and returns true when the caller
   // must stop descending.
@@ -550,7 +550,7 @@ base::Result<void, diag::Reported> desugar_shadowing(
     std::span<const ast::ItemIdx> items,
     ast::AstArena& ast,
     diag::DiagBag& bag) {
-  Desugar desugar{ast, bag};
+  Desugarer desugar{ast, bag};
   desugar.run(items);
   if (base::Result<void, ast::VerifyError> verified = ast::verify_file(ast);
       verified.is_err()) {
