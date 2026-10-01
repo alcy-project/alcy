@@ -31,7 +31,6 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] Doc-comment collection in the parser (the SSG itself waits).
 - [ ] alcy IR text format: define, serialize, deserialize; ahead of
   `--emit=ir` and any cache.
-- [ ] Lib packages: the suite's other half next to `[[bin]]`.
 - [ ] Link-time measurement: a benchmark reporting where a link goes —
   driver startup, the object write, the linker — and asserting nothing
   about wall time.
