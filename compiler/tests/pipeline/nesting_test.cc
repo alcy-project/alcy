@@ -21,7 +21,7 @@ namespace pipeline {
 
 namespace {
 
-struct CheckOutcome {
+struct CheckProbe {
   bool ran = false;
   bool rejected = false;
   bool too_deep = false;
@@ -33,20 +33,20 @@ struct CheckOutcome {
 //
 // The source is held in memory, so a case costs a string and no
 // filesystem.
-CheckOutcome run_check(const std::string& source) {
-  CheckOutcome outcome;
+CheckProbe run_check(const std::string& source) {
+  CheckProbe probe;
   PipelineContext ctx{i18n::Language::EnUs};
-  const base::Result<CheckResult, diag::Reported> result =
+  const base::Result<CheckOutcome, diag::Reported> result =
       check_source(ctx, "main.al", source);
-  outcome.ran = true;
-  outcome.rejected = ctx.bag.has_errors();
+  probe.ran = true;
+  probe.rejected = ctx.bag.has_errors();
   for (u32 i = 0; i < ctx.bag.size(); ++i) {
     const u32 code = ctx.bag.at(i)->code;
     if (code == 3004 || code == 4050 || code == 5005) {
-      outcome.too_deep = true;
+      probe.too_deep = true;
     }
   }
-  return outcome;
+  return probe;
 }
 
 // Repeats one opener/closer past the budget, which is the shape that used
@@ -77,13 +77,13 @@ constexpr usize WAY_PAST = static_cast<usize>(base::MAX_NESTING) * 8;
 // Well under the budget, so these must still compile: a guard that
 // rejected ordinary nesting would be worse than the crash it prevents.
 TEST_CASE("Nesting within the budget still checks") {
-  const CheckOutcome parens = run_check("fn main() -> i32 {\n  ret " +
-                                        nested("(", ")", 8, "1") + "\n}\n");
+  const CheckProbe parens = run_check("fn main() -> i32 {\n  ret " +
+                                      nested("(", ")", 8, "1") + "\n}\n");
   CHECK(parens.ran);
   CHECK(!parens.rejected);
   CHECK(!parens.too_deep);
 
-  const CheckOutcome blocks =
+  const CheckProbe blocks =
       run_check("fn main() " + nested("{", "}", 8, "") + "\n");
   CHECK(blocks.ran);
   CHECK(!blocks.rejected);
@@ -95,19 +95,19 @@ TEST_CASE("Nesting within the budget still checks") {
 // long operator chain builds in a loop and so the parser never sees as
 // deep.
 TEST_CASE("Deep nesting is a diagnostic, not a crash") {
-  const CheckOutcome parens = run_check(
+  const CheckProbe parens = run_check(
       "fn main() -> i32 {\n  ret " + nested("(", ")", WAY_PAST, "1") + "\n}\n");
   CHECK(parens.ran);
   CHECK(parens.rejected);
   CHECK(parens.too_deep);
 
-  const CheckOutcome blocks =
+  const CheckProbe blocks =
       run_check("fn main() " + nested("{", "}", WAY_PAST, "") + "\n");
   CHECK(blocks.ran);
   CHECK(blocks.rejected);
   CHECK(blocks.too_deep);
 
-  const CheckOutcome unary =
+  const CheckProbe unary =
       run_check("fn main() {\n  x := " + std::string(WAY_PAST, '!') +
                 "true\n  _ := x\n}\n");
   CHECK(unary.ran);
@@ -121,14 +121,14 @@ TEST_CASE("Deep nesting is a diagnostic, not a crash") {
     chain += "1+";
   }
   chain += "1\n  _ := x\n}\n";
-  const CheckOutcome operators = run_check(chain);
+  const CheckProbe operators = run_check(chain);
   CHECK(operators.ran);
   CHECK(operators.rejected);
   CHECK(operators.too_deep);
 }
 
 TEST_CASE("Deeply nested types are a diagnostic") {
-  const CheckOutcome types = run_check(
+  const CheckProbe types = run_check(
       "fn f() -> " + nested("[", "]", WAY_PAST, "u8") + " {\n  x\n}\n");
   CHECK(types.ran);
   CHECK(types.rejected);
@@ -146,7 +146,7 @@ TEST_CASE("Deeply nested tuple patterns are a diagnostic") {
   for (usize i = 0; i < WAY_PAST; ++i) {
     pattern.push_back(')');
   }
-  const CheckOutcome patterns =
+  const CheckProbe patterns =
       run_check("fn main() {\n  " + pattern + " := ()\n}\n");
   CHECK(patterns.ran);
   CHECK(patterns.rejected);

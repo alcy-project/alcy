@@ -42,7 +42,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
     return 0;
   }
   pipeline::PipelineContext ctx{i18n::Language::EnUs};
-  base::Result<pipeline::CheckResult, diag::Reported> result =
+  base::Result<pipeline::CheckOutcome, diag::Reported> result =
       pipeline::check_single_file(ctx, dir.join("main.al"));
   (void)result;
   return 0;

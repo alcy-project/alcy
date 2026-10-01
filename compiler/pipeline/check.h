@@ -15,7 +15,7 @@
 
 namespace pipeline {
 
-struct CheckResult {
+struct CheckOutcome {
   usize file_count;
   usize module_count;
   usize function_count;
@@ -23,10 +23,10 @@ struct CheckResult {
 
 // Success is the stats payload itself; failure is diag::Reported with
 // diagnostics in the bag. There is no success flag inside the payload.
-base::Result<CheckResult, diag::Reported>
+base::Result<CheckOutcome, diag::Reported>
 finish_check(PipelineContext& ctx, analyzer::ModuleTree tree, usize file_count);
 
-base::Result<CheckResult, diag::Reported> check_single_file(
+base::Result<CheckOutcome, diag::Reported> check_single_file(
     PipelineContext& ctx,
     std::string_view target);
 
@@ -35,17 +35,17 @@ base::Result<CheckResult, diag::Reported> check_single_file(
 // file can go through the whole front end without touching the
 // filesystem. This is check_single_file without the load, and it is what
 // a test wants.
-base::Result<CheckResult, diag::Reported> check_source(PipelineContext& ctx,
-                                                       std::string_view name,
-                                                       std::string_view bytes);
+base::Result<CheckOutcome, diag::Reported> check_source(PipelineContext& ctx,
+                                                        std::string_view name,
+                                                        std::string_view bytes);
 
 // The shared tail of the two entry points above: everything from the
 // root file's module input onwards, which does not care where the bytes
 // came from.
-base::Result<CheckResult, diag::Reported> check_root(PipelineContext& ctx,
-                                                     source::FileId root);
+base::Result<CheckOutcome, diag::Reported> check_root(PipelineContext& ctx,
+                                                      source::FileId root);
 
-base::Result<CheckResult, diag::Reported> check_package(
+base::Result<CheckOutcome, diag::Reported> check_package(
     PipelineContext& ctx,
     const path::Path& root,
     source::FileId manifest_file,

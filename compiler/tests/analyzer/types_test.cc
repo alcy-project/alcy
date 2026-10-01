@@ -57,11 +57,11 @@ bool write_all(
   return true;
 }
 
-struct CheckCase {
+struct CheckOutcome {
   std::optional<CheckedPackage> package;
 };
 
-CheckCase check_case(
+CheckOutcome check_case(
     VirtualDir& dir,
     std::string_view root_rel,
     std::initializer_list<std::string_view> rels,
@@ -172,7 +172,7 @@ TEST_CASE("Check interns structs with named fields") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -210,7 +210,7 @@ TEST_CASE("Check interns enums with payloads") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -244,7 +244,7 @@ TEST_CASE("Check instantiates generic structs") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -278,7 +278,7 @@ TEST_CASE("Check keeps generic struct field copies contiguous") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -323,7 +323,7 @@ TEST_CASE("Check publishes a generic instance nested in a field") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -371,7 +371,7 @@ TEST_CASE("Check keeps outer type parameters across nested instantiation") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   // Binding `id`'s parameter must not replace `keep`'s scope: `T` still
   // names the outer argument in the annotation that follows.
   CHECK(result.package.has_value());
@@ -396,7 +396,7 @@ TEST_CASE("Check instantiates generic struct methods") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
 }
 
@@ -413,7 +413,7 @@ TEST_CASE("Check rejects arity mismatch on generic structs") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -432,7 +432,7 @@ TEST_CASE("Check resolves annotations and signatures") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -476,7 +476,7 @@ TEST_CASE("Check instantiates generic enums") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -513,7 +513,7 @@ TEST_CASE("Check rejects generic arity mismatches") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
     CHECK(f.bag.has_errors());
   }
@@ -529,7 +529,7 @@ TEST_CASE("Check rejects generic arity mismatches") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
     CHECK(f.bag.has_errors());
   }
@@ -544,7 +544,7 @@ TEST_CASE("Check rejects generic arity mismatches") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
     CHECK(f.bag.has_errors());
   }
@@ -570,7 +570,7 @@ TEST_CASE("Check constructs generic enums from annotations") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -593,7 +593,7 @@ TEST_CASE("Check infers generic constructors from payload arguments") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
 }
 
@@ -610,7 +610,7 @@ TEST_CASE("Check rejects generic constructors with no binding argument") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -630,7 +630,7 @@ TEST_CASE("Check enforces generic match exhaustiveness") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -660,7 +660,7 @@ TEST_CASE("Check instantiates generic methods") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -703,7 +703,7 @@ TEST_CASE("Check instantiates generic methods recursively") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -728,7 +728,7 @@ TEST_CASE("Check rejects unknown generic methods") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -749,7 +749,8 @@ TEST_CASE("Check resolves cross-module types") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al", "a.al"}, f);
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al", "a.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -784,8 +785,8 @@ TEST_CASE("Check instantiates core generic types with dedup") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
-                                      ir::PointerWidth::W64, core_prelude());
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f,
+                                         ir::PointerWidth::W64, core_prelude());
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -822,8 +823,8 @@ TEST_CASE("Check lets user code define Result and Option") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
-                                      ir::PointerWidth::W64, core_prelude());
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f,
+                                         ir::PointerWidth::W64, core_prelude());
   CHECK(result.package.has_value());
 }
 
@@ -838,11 +839,11 @@ TEST_CASE("Check maps pointer widths for sized integers") {
   }
 
   Fixture narrow;
-  const CheckCase narrow_result =
+  const CheckOutcome narrow_result =
       check_case(dir, "main.al", {"main.al"}, narrow, ir::PointerWidth::W32);
   CHECK(narrow_result.package.has_value());
   Fixture wide;
-  const CheckCase wide_result =
+  const CheckOutcome wide_result =
       check_case(dir, "main.al", {"main.al"}, wide, ir::PointerWidth::W64);
   CHECK(wide_result.package.has_value());
   if (!narrow_result.package.has_value() || !wide_result.package.has_value()) {
@@ -885,7 +886,7 @@ TEST_CASE("Check rejects unknown types") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -902,7 +903,7 @@ TEST_CASE("Check rejects value-recursive types") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -919,7 +920,7 @@ TEST_CASE("Check accepts reference cycles") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
 }
 
@@ -934,7 +935,7 @@ TEST_CASE("Check rejects duplicate definitions") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -952,8 +953,8 @@ TEST_CASE("Check rejects malformed generics") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
-                                        ir::PointerWidth::W64, core_prelude());
+    const CheckOutcome result = check_case(
+        dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64, core_prelude());
     CHECK(!result.package.has_value());
     CHECK(f.bag.has_errors());
   }
@@ -969,7 +970,7 @@ TEST_CASE("Check rejects malformed generics") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
     CHECK(f.bag.has_errors());
   }
@@ -986,7 +987,7 @@ TEST_CASE("Check accepts mutable reference fields as move-only") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -1017,7 +1018,7 @@ TEST_CASE("Check resolves a slice behind a reference") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -1059,7 +1060,7 @@ TEST_CASE("Check rejects a bare slice type") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -1078,8 +1079,8 @@ TEST_CASE("Check exposes core generic shapes through the IR") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
-                                      ir::PointerWidth::W64, core_prelude());
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f,
+                                         ir::PointerWidth::W64, core_prelude());
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -1131,7 +1132,7 @@ TEST_CASE("Check judges Copy structurally") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -1183,8 +1184,8 @@ TEST_CASE("Check expressions accept well-typed programs") {
   }
 
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
-                                      ir::PointerWidth::W64, core_prelude());
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f,
+                                         ir::PointerWidth::W64, core_prelude());
   CHECK(result.package.has_value());
 }
 
@@ -1200,7 +1201,7 @@ TEST_CASE("Check expressions reject mismatches") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
   {
@@ -1214,7 +1215,7 @@ TEST_CASE("Check expressions reject mismatches") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
   {
@@ -1228,7 +1229,7 @@ TEST_CASE("Check expressions reject mismatches") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
   {
@@ -1245,7 +1246,7 @@ TEST_CASE("Check expressions reject mismatches") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
   {
@@ -1261,7 +1262,7 @@ TEST_CASE("Check expressions reject mismatches") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
 }
@@ -1283,8 +1284,8 @@ TEST_CASE("Check question-mark propagation") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
-                                        ir::PointerWidth::W64, core_prelude());
+    const CheckOutcome result = check_case(
+        dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64, core_prelude());
     CHECK(result.package.has_value());
   }
   {
@@ -1303,8 +1304,8 @@ TEST_CASE("Check question-mark propagation") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
-                                        ir::PointerWidth::W64, core_prelude());
+    const CheckOutcome result = check_case(
+        dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64, core_prelude());
     CHECK(!result.package.has_value());
   }
   {
@@ -1322,8 +1323,8 @@ TEST_CASE("Check question-mark propagation") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
-                                        ir::PointerWidth::W64, core_prelude());
+    const CheckOutcome result = check_case(
+        dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64, core_prelude());
     CHECK(!result.package.has_value());
   }
 }
@@ -1353,7 +1354,7 @@ TEST_CASE("Check question-mark works on any enum") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
 }
 
@@ -1372,7 +1373,7 @@ TEST_CASE("Check match exhaustiveness") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(result.package.has_value());
   }
   {
@@ -1387,7 +1388,7 @@ TEST_CASE("Check match exhaustiveness") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
   {
@@ -1405,7 +1406,7 @@ TEST_CASE("Check match exhaustiveness") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(result.package.has_value());
   }
   {
@@ -1421,7 +1422,7 @@ TEST_CASE("Check match exhaustiveness") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
   {
@@ -1438,7 +1439,7 @@ TEST_CASE("Check match exhaustiveness") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(result.package.has_value());
   }
   {
@@ -1456,8 +1457,8 @@ TEST_CASE("Check match exhaustiveness") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
-                                        ir::PointerWidth::W64, core_prelude());
+    const CheckOutcome result = check_case(
+        dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64, core_prelude());
     CHECK(result.package.has_value());
   }
   {
@@ -1474,8 +1475,8 @@ TEST_CASE("Check match exhaustiveness") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
-                                        ir::PointerWidth::W64, core_prelude());
+    const CheckOutcome result = check_case(
+        dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64, core_prelude());
     CHECK(!result.package.has_value());
   }
   {
@@ -1490,7 +1491,7 @@ TEST_CASE("Check match exhaustiveness") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
 }
@@ -1512,7 +1513,7 @@ TEST_CASE("Check or-patterns bind shared names") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(result.package.has_value());
   }
   {
@@ -1531,7 +1532,7 @@ TEST_CASE("Check or-patterns bind shared names") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
 }
@@ -1570,8 +1571,8 @@ impl<T, E> Result<T, E> {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
-                                        ir::PointerWidth::W64, core_prelude());
+    const CheckOutcome result = check_case(
+        dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64, core_prelude());
     CHECK(result.package.has_value());
   }
   {
@@ -1586,8 +1587,8 @@ impl<T, E> Result<T, E> {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
-                                        ir::PointerWidth::W64, core_prelude());
+    const CheckOutcome result = check_case(
+        dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64, core_prelude());
     CHECK(!result.package.has_value());
     CHECK(f.bag.has_errors());
   }
@@ -1604,7 +1605,7 @@ impl<T, E> Result<T, E> {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
 }
@@ -1632,8 +1633,8 @@ TEST_CASE("Check unused-value warnings") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f,
-                                      ir::PointerWidth::W64, core_prelude());
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f,
+                                         ir::PointerWidth::W64, core_prelude());
   CHECK(result.package.has_value());
   // Only the bare get() statement warns; _ := and void calls do not.
   CHECK(f.bag.warning_count() == 1);
@@ -1651,7 +1652,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
   {
@@ -1663,7 +1664,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
   {
@@ -1678,7 +1679,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
   {
@@ -1692,7 +1693,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
   {
@@ -1706,7 +1707,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
   {
@@ -1720,7 +1721,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(!result.package.has_value());
   }
 }
@@ -1741,7 +1742,7 @@ TEST_CASE("Check borrow expressions") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(result.package.has_value());
   }
   {
@@ -1762,7 +1763,7 @@ TEST_CASE("Check borrow expressions") {
       return;
     }
     Fixture f;
-    const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
     CHECK(result.package.has_value());
   }
 }
@@ -1783,7 +1784,7 @@ TEST_CASE("Check accepts comp declarations and blocks") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
 }
 
@@ -1802,7 +1803,7 @@ TEST_CASE("Check rejects runtime arguments for comp parameters") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -1820,7 +1821,7 @@ TEST_CASE("Check rejects non-comp-known comp initializers") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -1836,7 +1837,7 @@ TEST_CASE("Check rejects ret inside comp blocks") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -1852,7 +1853,7 @@ TEST_CASE("Check rejects print inside comp blocks") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -1873,7 +1874,7 @@ TEST_CASE("Check accepts memcopy intrinsic declarations") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
 }
 
@@ -1887,7 +1888,7 @@ TEST_CASE("Check rejects unknown intrinsics") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -1902,7 +1903,7 @@ TEST_CASE("Check rejects mistyped intrinsic signatures") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -1918,7 +1919,7 @@ TEST_CASE("Check rejects comp parameters on intrinsics") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -1938,7 +1939,7 @@ TEST_CASE("Check resolves prelude calls without imports") {
     return;
   }
   Fixture f;
-  const CheckCase result =
+  const CheckOutcome result =
       check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
                  {{"core", "core.al"}});
   CHECK(result.package.has_value());
@@ -1963,7 +1964,7 @@ TEST_CASE("Check accepts string intrinsic declarations") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
 }
 
@@ -1977,7 +1978,7 @@ TEST_CASE("Check rejects mistyped string intrinsic signatures") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -1996,7 +1997,7 @@ TEST_CASE("Check accepts array construction and indexing") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
 }
 
@@ -2011,7 +2012,7 @@ TEST_CASE("Check rejects heterogeneous array literals") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -2027,7 +2028,7 @@ TEST_CASE("Check rejects oversized array repeats") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -2051,7 +2052,7 @@ TEST_CASE("Check rejects fmt arity mismatches") {
     return;
   }
   Fixture f;
-  const CheckCase result =
+  const CheckOutcome result =
       check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
                  {{"core", "core.al"}});
   CHECK(!result.package.has_value());
@@ -2077,7 +2078,7 @@ TEST_CASE("Check rejects non-tuple fmt arguments") {
     return;
   }
   Fixture f;
-  const CheckCase result =
+  const CheckOutcome result =
       check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
                  {{"core", "core.al"}});
   CHECK(!result.package.has_value());
@@ -2105,7 +2106,7 @@ TEST_CASE("Check accepts generic free functions and turbofish arguments") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
 }
 
@@ -2123,7 +2124,7 @@ TEST_CASE("Check rejects uninferable generic call arguments") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -2160,7 +2161,7 @@ TEST_CASE("Check accepts typed heap intrinsics") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
 }
 
@@ -2181,7 +2182,7 @@ TEST_CASE("Check rejects reading an uninitialized slot") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -2198,7 +2199,7 @@ TEST_CASE("Check rejects declaring MaybeUninit") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -2216,7 +2217,7 @@ TEST_CASE("Check rejects an intrinsic declared with the wrong shape") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -2233,7 +2234,7 @@ TEST_CASE("Check rejects dereferencing a non-reference") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -2251,7 +2252,7 @@ TEST_CASE("Check rejects assignment through a shared reference") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -2274,7 +2275,7 @@ TEST_CASE("Check resolves an associated function of a generic type") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
 }
 
@@ -2298,7 +2299,7 @@ TEST_CASE(
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -2347,7 +2348,7 @@ TEST_CASE("Analyze marks a type with a destructor as needing one") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -2390,7 +2391,7 @@ TEST_CASE("Analyze propagates a destructor through a containing struct") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -2432,7 +2433,7 @@ TEST_CASE("Analyze resolves a generic type's destructor") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   if (!result.package.has_value()) {
     return;
@@ -2471,7 +2472,7 @@ TEST_CASE("Check reads a base prefix as digits, not a suffix") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.package.has_value());
   CHECK(!f.bag.has_errors());
 }
@@ -2489,7 +2490,7 @@ TEST_CASE("Check rejects an unknown suffix after a base prefix") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
@@ -2505,7 +2506,7 @@ TEST_CASE("Check rejects a remainder or bitwise operator on a float") {
     return;
   }
   Fixture f;
-  const CheckCase result = check_case(dir, "main.al", {"main.al"}, f);
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }

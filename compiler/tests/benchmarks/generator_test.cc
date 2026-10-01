@@ -51,7 +51,7 @@ TEST_CASE("A generated source is a program the compiler accepts") {
   pipeline::PipelineContext ctx{i18n::Language::EnUs};
   const std::string source =
       generate_source(SourceSpec{.functions = 40, .statements = 2, .depth = 2});
-  base::Result<pipeline::CheckResult, diag::Reported> checked =
+  base::Result<pipeline::CheckOutcome, diag::Reported> checked =
       pipeline::check_source(ctx, "bench.al", source);
   CHECK(checked.is_ok());
   CHECK(!ctx.bag.has_errors());

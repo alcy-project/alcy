@@ -197,7 +197,7 @@ TEST_CASE("Hostile input never crashes the checker") {
     // The call returning at all is the assertion: a crash would take
     // the process with it. The source is held in memory, so a case costs
     // a string rather than a file.
-    const base::Result<CheckResult, diag::Reported> result =
+    const base::Result<CheckOutcome, diag::Reported> result =
         check_source(ctx, "main.al", source);
     (void)result;
   }
@@ -218,7 +218,7 @@ TEST_CASE("Hostile input never crashes on raw bytes") {
     INFO("case: " << i);
 
     PipelineContext ctx{i18n::Language::EnUs};
-    const base::Result<CheckResult, diag::Reported> result =
+    const base::Result<CheckOutcome, diag::Reported> result =
         check_source(ctx, "main.al", source);
     (void)result;
   }

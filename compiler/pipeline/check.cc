@@ -24,13 +24,13 @@ namespace pipeline {
 
 namespace {
 
-base::Result<CheckResult, diag::Reported> fail() {
+base::Result<CheckOutcome, diag::Reported> fail() {
   return base::make_err(diag::Reported{});
 }
 
 }  // namespace
 
-base::Result<CheckResult, diag::Reported> finish_check(
+base::Result<CheckOutcome, diag::Reported> finish_check(
     PipelineContext& ctx,
     analyzer::ModuleTree tree,
     usize file_count) {
@@ -39,14 +39,14 @@ base::Result<CheckResult, diag::Reported> finish_check(
     return fail();
   }
   FrontendOutput done = std::move(out).unwrap();
-  return base::make_ok(CheckResult{
+  return base::make_ok(CheckOutcome{
       .file_count = file_count,
       .module_count = done.module_count,
       .function_count = done.function_count,
   });
 }
 
-base::Result<CheckResult, diag::Reported> check_single_file(
+base::Result<CheckOutcome, diag::Reported> check_single_file(
     PipelineContext& ctx,
     std::string_view target) {
   base::Result<source::FileId, source::SourceError> file = [&] {
@@ -62,16 +62,17 @@ base::Result<CheckResult, diag::Reported> check_single_file(
   return check_root(ctx, std::move(file).unwrap());
 }
 
-base::Result<CheckResult, diag::Reported> check_source(PipelineContext& ctx,
-                                                       std::string_view name,
-                                                       std::string_view bytes) {
+base::Result<CheckOutcome, diag::Reported> check_source(
+    PipelineContext& ctx,
+    std::string_view name,
+    std::string_view bytes) {
   return check_root(ctx, ctx.sources.add_virtual(name, bytes));
 }
 
 // Single-file checks name the whole suite: there is no manifest to
 // select from, and no flags to narrow it with.
-base::Result<CheckResult, diag::Reported> check_root(PipelineContext& ctx,
-                                                     source::FileId root) {
+base::Result<CheckOutcome, diag::Reported> check_root(PipelineContext& ctx,
+                                                      source::FileId root) {
   base::Result<analyzer::ModuleTree, diag::Reported> tree =
       front_end_root(ctx, root, full_std_selection());
   if (tree.is_err()) {
@@ -80,7 +81,7 @@ base::Result<CheckResult, diag::Reported> check_root(PipelineContext& ctx,
   return finish_check(ctx, std::move(tree).unwrap(), 1);
 }
 
-base::Result<CheckResult, diag::Reported> check_package(
+base::Result<CheckOutcome, diag::Reported> check_package(
     PipelineContext& ctx,
     const path::Path& root,
     source::FileId manifest_file,

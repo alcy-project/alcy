@@ -24,7 +24,7 @@ namespace cli {
 
 namespace {
 
-ResultCode finish(const pipeline::CheckResult& result, Envelope& envelope) {
+ResultCode finish(const pipeline::CheckOutcome& result, Envelope& envelope) {
   envelope.status = Status::Ok;
   envelope.outcome = Outcome::Checked;
   envelope.file_count = result.file_count;
@@ -46,7 +46,7 @@ ResultCode run_check(const CliConfig& config,
   // Validation keeps the two forms apart: `--file` names one source,
   // and the positional names a package directory.
   if (!config.file.empty()) {
-    base::Result<pipeline::CheckResult, diag::Reported> result =
+    base::Result<pipeline::CheckOutcome, diag::Reported> result =
         pipeline::check_single_file(ctx, config.file);
     envelope.trace = trace.take_events();
     if (result.is_err()) {
@@ -65,7 +65,7 @@ ResultCode run_check(const CliConfig& config,
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
   if (found.found) {
-    base::Result<pipeline::CheckResult, diag::Reported> result =
+    base::Result<pipeline::CheckOutcome, diag::Reported> result =
         pipeline::check_package(ctx, found.root, found.manifest,
                                 found.manifest_name);
     envelope.trace = trace.take_events();

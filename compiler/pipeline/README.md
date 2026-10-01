@@ -12,7 +12,7 @@ shared `DiagBag` in `PipelineContext`.
 ## Entry points
 
 - `build_single_file` / `build_package` -> object or executable.
-- `check_single_file` / `check_package_tree` -> `CheckResult` counts.
+- `check_single_file` / `check_package_tree` -> `CheckOutcome` counts.
 - `run_single_file` / `run_package` -> `RunOutcome{exit_code}`.
 - `std_prelude` -> `std::span<const analyzer::ModuleInput>`;
   `link_executable` -> `base::Result<void, diag::Reported>`.
