@@ -66,7 +66,7 @@ another.**
    cannot fail.
 
 4. **libFuzzer owns coverage-guided exploration, interactively.** Six
-   targets sit behind `is_fuzz` and are driven by `fuzz/run.py`. They are
+   targets sit behind `is_fuzz` and are driven by `tools/run_fuzz.py`. They are
    a development tool, not a gate: they need clang's fuzzer runtime and
    take minutes, so `check.sh` does not run them. Two of them assert an
    invariant rather than merely surviving, and abort on a violation,

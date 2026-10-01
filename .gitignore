@@ -12,6 +12,9 @@ compile_commands.json
 .cache/
 __pycache__/
 .xmake/
+# libFuzzer corpus: a cache that grows without bound, kept between runs
+# and never an artifact.
+/compiler/fuzz/corpus/
 
 # Prerequisites
 *.d

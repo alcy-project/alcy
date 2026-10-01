@@ -4,9 +4,9 @@
 # Fuzz targets, built only with `--args=is_fuzz=true`.
 #
 # These are development tools, not part of the compiler: nothing in `src`
-# depends on them and a normal build never sees them. `./fuzz/run.py`
-# builds and drives them, and is the entry point a developer should use
-# rather than invoking the binaries by hand.
+# depends on them and a normal build never sees them. `uv run
+# ./tools/run_fuzz.py` builds and drives them, and is the entry point a
+# developer should use rather than invoking the binaries by hand.
 #
 # The oracle is the existing verifier layer rather than a comparison
 # against a known answer. Every byte-level entry point already returns a

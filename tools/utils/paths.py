@@ -16,6 +16,7 @@ config_toml_file: Path = project_root_dir / "config.toml"
 
 # include_dir: Path = project_root_dir / "include"
 compiler_dir: Path = project_root_dir / "compiler"
+fuzz_dir: Path = compiler_dir / "fuzz"
 # tests_dir: Path = project_root_dir / "tests"
 # benchmarks_dir: Path = project_root_dir / "benchmarks"
 

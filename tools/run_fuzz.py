@@ -2,18 +2,18 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Builds and drives the libFuzzer targets under //fuzz.
+"""Builds and drives the libFuzzer targets under //compiler/fuzz.
 
 The targets themselves carry no CLI: each one is a plain libFuzzer
 binary. This wraps them so the common cases need no recall of libFuzzer
-flags and so a crash is classified against fuzz/known before it is
-reported.
+flags and so a crash is classified against compiler/fuzz/known before it
+is reported.
 
-    ./fuzz/run.py                      build, then 30s per target
-    ./fuzz/run.py --seconds 300        a longer soak
-    ./fuzz/run.py fuzz_render          one target
-    ./fuzz/run.py --replay <path>...   run inputs or corpus dirs once
-    ./fuzz/run.py --list               the targets and their entry points
+    uv run ./tools/run_fuzz.py                      build, then 30s per target
+    uv run ./tools/run_fuzz.py --seconds 300        a longer soak
+    uv run ./tools/run_fuzz.py fuzz_render          one target
+    uv run ./tools/run_fuzz.py --replay <path>...   run inputs or corpus dirs once
+    uv run ./tools/run_fuzz.py --list               the targets and their entry points
 
 A target's own exit status is not the signal: libFuzzer exits 0 after a
 run that found a crash it already knows how to minimise. The signal is
@@ -31,16 +31,17 @@ import sys
 import tempfile
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from utils.paths import fuzz_dir, out_dir, project_root_dir, tools_dir
+
 BUILD_SUBDIR = "fuzz"
 # libFuzzer grows this without bound; it is a cache for the next run, not
 # an artifact.
-CORPUS_DIR = REPO_ROOT / "fuzz" / "corpus"
-KNOWN_DIR = REPO_ROOT / "fuzz" / "known"
+CORPUS_DIR = fuzz_dir / "corpus"
+KNOWN_DIR = fuzz_dir / "known"
 
-# Kept in step with //fuzz/BUILD.gn. Each entry names the byte-level
-# boundary a target drives; see the comment at the top of that file for
-# what the oracle is in each case.
+# Kept in step with //compiler/fuzz/BUILD.gn. Each entry names the
+# byte-level boundary a target drives; see the comment at the top of that
+# file for what the oracle is in each case.
 TARGETS = {
     "fuzz_lexer": "bytes -> lex -> verify_token_stream",
     "fuzz_parser": "bytes -> lex -> parse -> verify_file",
@@ -58,7 +59,7 @@ def build(verbose: bool = False) -> int:
     wants, so they get a separate GN output directory rather than
     disturbing the compiler build.
     """
-    script = REPO_ROOT / "build" / "scripts" / "build.py"
+    script = tools_dir / "build.py"
     command = [
         "uv",
         "run",
@@ -69,14 +70,16 @@ def build(verbose: bool = False) -> int:
     ]
     if verbose:
         command.append("--verbose")
-    return subprocess.run(command, cwd=REPO_ROOT).returncode
+    return subprocess.run(command, cwd=project_root_dir).returncode
 
 
 def binary(name: str) -> Path:
     """Path to a built target, or an error naming how to get one."""
-    out = REPO_ROOT / "out" / BUILD_SUBDIR / name
+    out = out_dir / BUILD_SUBDIR / name
     if not out.is_file():
-        sys.exit(f"{out} is missing; run ./fuzz/run.py --build first")
+        sys.exit(
+            f"{out} is missing; run `uv run ./tools/run_fuzz.py --build` first"
+        )
     return out
 
 
@@ -211,7 +214,7 @@ def replay(paths: list[str]) -> int:
             print(f"==> {name} {target_path}", flush=True)
             completed = subprocess.run(
                 [str(binary(name)), str(target_path)],
-                cwd=REPO_ROOT,
+                cwd=project_root_dir,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT,
             )

@@ -2,18 +2,18 @@
 
 A fuzz target that always finds a crash is a target nobody runs. This
 directory records the failures that are already understood, so
-`fuzz/run.py` can tell a new defect apart from the same known one.
+`tools/run_fuzz.py` can tell a new defect apart from the same known one.
 
 `crashes.json` holds the record. There are two kinds of entry, and the
 distinction is the whole point:
 
 - **`targets`** — the target cannot be a gate at all, because a
-  dependency fails on a *class* of inputs. `fuzz/run.py` reports the
+  dependency fails on a *class* of inputs. `tools/run_fuzz.py` reports the
   target as `DISABLED`: never counted as passing, never counted as
   failing, and always visible. Use this when enumerating inputs is
   hopeless, which is the normal case for a third-party parser.
 - **`inputs`** — one specific input is expected to fail, keyed on the
-  sha256 of its bytes. `fuzz/run.py` suppresses that one hash and
+  sha256 of its bytes. `tools/run_fuzz.py` suppresses that one hash and
   reports the reason.
 
 `inputs/` holds the bytes for each `inputs` entry, so a developer can
@@ -34,8 +34,8 @@ about it.
 
 ## Replaying an entry
 
-    out/fuzz/fuzz_manifest fuzz/known/inputs/<sha256>
-    ./fuzz/run.py --replay fuzz/known/inputs/<sha256>
+    out/fuzz/fuzz_manifest <repo>/compiler/fuzz/known/inputs/<sha256>
+    uv run ./tools/run_fuzz.py --replay <repo>/compiler/fuzz/known/inputs/<sha256>
 
 ## Dropping an entry
 

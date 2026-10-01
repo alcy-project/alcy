@@ -60,9 +60,9 @@ declare_args() {
   use_lld = true
 }
 
-# Builds the libFuzzer targets under //fuzz. Off by default: they need
+# Builds the libFuzzer targets under //compiler/fuzz. Off by default: they need
 # clang's fuzzer runtime and are a development tool, so a normal build
-# should not carry them. See //fuzz/BUILD.gn.
+# should not carry them. See //compiler/fuzz/BUILD.gn.
 declare_args() {
   is_fuzz = false
 }
