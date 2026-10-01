@@ -19,7 +19,9 @@
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/debug/profiler/profile_event.h"
+#include "fpag/debug/profiler/profiler.h"
 #include "fpag/io/io_util.h"
+#include "fpag/str/string_pool_id.h"
 #include "fpag/term/style.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"
@@ -123,20 +125,29 @@ void append_diagnostic_json(std::string& out,
   out += "]}";
 }
 
+// An id the profiler never interned points outside its pool, so it is
+// answered here. Empty is what an event without a name reports.
+std::string_view resolve_name(const debug::Profiler& profiler,
+                              str::StringPoolId id) {
+  return id == str::INVALID_STRING_POOL_ID ? std::string_view()
+                                           : profiler.name(id);
+}
+
 // One phase per name, summed. Names repeat when a phase runs more than
 // once, and the reader wants the phase's cost rather than the two runs'
 // identities.
 struct PhaseTotal {
-  const char* name = nullptr;
-  const char* category = nullptr;
+  str::StringPoolId name = str::INVALID_STRING_POOL_ID;
+  str::StringPoolId category = str::INVALID_STRING_POOL_ID;
   u64 ns = 0;
   u32 count = 0;
 };
 
 std::vector<PhaseTotal> phase_totals(const Envelope& envelope) {
+  const debug::Profiler& profiler = *envelope.trace.profiler;
   std::vector<PhaseTotal> totals;
-  for (const debug::ProfileEvent& event : envelope.trace) {
-    if (event.name == nullptr) {
+  for (const debug::ProfileEvent& event : envelope.trace.events) {
+    if (event.name == str::INVALID_STRING_POOL_ID) {
       continue;
     }
     const auto found = std::find_if(
@@ -153,11 +164,12 @@ std::vector<PhaseTotal> phase_totals(const Envelope& envelope) {
   // Longest first, then by name, so two runs of the same command produce
   // the same table in the same order.
   std::stable_sort(totals.begin(), totals.end(),
-                   [](const PhaseTotal& a, const PhaseTotal& b) {
+                   [&](const PhaseTotal& a, const PhaseTotal& b) {
                      if (a.ns != b.ns) {
                        return a.ns > b.ns;
                      }
-                     return std::string_view(a.name) < std::string_view(b.name);
+                     return resolve_name(profiler, a.name) <
+                            resolve_name(profiler, b.name);
                    });
   return totals;
 }
@@ -167,15 +179,16 @@ void append_trace_json(std::string& out, const Envelope& envelope) {
   // the array sits at the top level because that is what a trace viewer
   // reads.
   out += R"(,"traceEvents":[)";
-  for (usize i = 0; i < envelope.trace.size(); ++i) {
-    const debug::ProfileEvent& event = envelope.trace[i];
+  const debug::Profiler& profiler = *envelope.trace.profiler;
+  for (usize i = 0; i < envelope.trace.events.size(); ++i) {
+    const debug::ProfileEvent& event = envelope.trace.events[i];
     if (i > 0) {
       out += ',';
     }
     out += R"({"name":)";
-    append_json_string(out, event.name != nullptr ? event.name : "");
+    append_json_string(out, resolve_name(profiler, event.name));
     out += R"(,"cat":)";
-    append_json_string(out, event.category != nullptr ? event.category : "");
+    append_json_string(out, resolve_name(profiler, event.category));
     out += R"(,"ph":"X","pid":)";
     append_json_number(out, event.process_id);
     out += R"(,"tid":)";
@@ -203,16 +216,18 @@ void append_trace_json(std::string& out, const Envelope& envelope) {
 void append_trace_text(std::string& out,
                        const Envelope& envelope,
                        i18n::Language language) {
-  if (envelope.trace.empty()) {
+  if (envelope.trace.events.empty()) {
     return;
   }
   out += '\n';
   out += i18n::text<i18n::Key::CliPhaseTimings>(language);
   out += ":\n";
+  const debug::Profiler& profiler = *envelope.trace.profiler;
   for (const PhaseTotal& total : phase_totals(envelope)) {
     fmt::format_to(std::back_inserter(out), "  {:<14} {:>8.3} ms  {}\n",
-                   total.name, static_cast<double>(total.ns) / 1.0e6,
-                   total.category);
+                   resolve_name(profiler, total.name),
+                   static_cast<double>(total.ns) / 1.0e6,
+                   resolve_name(profiler, total.category));
   }
 }
 
@@ -575,7 +590,7 @@ std::string render_json(const Envelope& envelope, i18n::Language language) {
   out += ']';
   // Only when there is something to carry: an empty array would say the
   // trace ran and recorded nothing, which is a different statement.
-  if (!envelope.trace.empty()) {
+  if (!envelope.trace.events.empty()) {
     append_trace_json(out, envelope);
   }
   out += '}';

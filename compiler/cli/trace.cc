@@ -27,13 +27,15 @@ TraceSession::~TraceSession() {
   }
 }
 
-std::vector<debug::ProfileEvent> TraceSession::take_events() {
+TraceCapture TraceSession::take_events() {
   done_ = true;
   if (!enabled_) {
     return {};
   }
   debug::Profiler::global().stop();
-  return debug::Profiler::global().copy_events();
+  // The global outlives every render of the capture, which is what lets
+  // the envelope own the events without owning the interner.
+  return {debug::Profiler::global().copy_events(), &debug::Profiler::global()};
 }
 
 }  // namespace cli

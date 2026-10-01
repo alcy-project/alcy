@@ -683,8 +683,7 @@ ir::TypeIdx Checker::uninit_payload(ir::TypeIdx type) const {
   }
   const ir::StructType& shape =
       builder.struct_types()[builder.types()[type.idx].as_struct()];
-  if (shape.name.offset != uninit_name_id.offset ||
-      shape.name.length != uninit_name_id.length) {
+  if (shape.name != uninit_name_id) {
     return ir::TypeIdx::invalid();
   }
   return shape.fields.size() == 1 ? shape.fields[0] : ir::TypeIdx::invalid();

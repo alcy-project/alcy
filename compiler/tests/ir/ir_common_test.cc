@@ -20,14 +20,15 @@
 
 namespace ir {
 
-// StringPoolId is a fixed 8-byte pair, so sizes below are host-independent.
+// StringPoolId is a fixed 4-byte id, so sizes below are host-independent.
+// A type carrying N of them loses 4N bytes when the id shrinks.
 TEST_CASE("Static assertion for IR elements") {
   static_assert(sizeof(Block) == 16);
   static_assert(sizeof(BlockParam) == 8);
 
-  static_assert(sizeof(ExternalFunction) == 44);
-  static_assert(sizeof(Function) == 48);
-  static_assert(sizeof(FunctionMeta) == 40);
+  static_assert(sizeof(ExternalFunction) == 36);
+  static_assert(sizeof(Function) == 40);
+  static_assert(sizeof(FunctionMeta) == 32);
 
   static_assert(sizeof(Immutable) == 16);
   static_assert(sizeof(Instruction) == 20);
@@ -39,7 +40,7 @@ TEST_CASE("Static assertion for IR elements") {
   static_assert(sizeof(Register) == 8);
   static_assert(sizeof(TypeTag) == 1);
   static_assert(sizeof(TypeNode) == 8);
-  static_assert(sizeof(StructType) == 24);
+  static_assert(sizeof(StructType) == 20);
 }
 
 TEST_CASE("SeqBuilder accumulates consecutive indexes") {

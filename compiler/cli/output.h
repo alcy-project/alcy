@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "cli/trace.h"
 #include "diag/render.h"
 #include "fpag/base/numeric.h"
 #include "fpag/debug/profiler/profile_event.h"
@@ -88,8 +89,8 @@ struct Envelope {
   const source::SourceManager* sources = nullptr;
   // Recorded phases, empty unless --time-trace ran. Copied rather than
   // borrowed because the profiler's storage is not the envelope's to
-  // keep alive.
-  std::vector<debug::ProfileEvent> trace;
+  // keep alive, and carried with the profiler that resolves their names.
+  TraceCapture trace;
 };
 
 // Diagnostics, the result line, and the time-trace summary, as text.

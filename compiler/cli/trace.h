@@ -6,9 +6,18 @@
 #include <vector>
 
 #include "fpag/debug/profiler/profile_event.h"
+#include "fpag/debug/profiler/profiler.h"
 #include "pipeline/pipeline_context.h"
 
 namespace cli {
+
+// A recorded trace and the profiler that resolves it. An event names its
+// phase and category with ids into that profiler rather than with text,
+// so the two travel together.
+struct TraceCapture {
+  std::vector<debug::ProfileEvent> events;
+  const debug::Profiler* profiler = nullptr;
+};
 
 // A --time-trace session for one command. While alive it points the
 // context at the global profiler; take_events() stops the profiler and
@@ -25,7 +34,7 @@ class TraceSession {
 
   // Stops the profiler and returns its events, newest last. Empty when
   // tracing was off. Safe to call once; later calls return nothing.
-  std::vector<debug::ProfileEvent> take_events();
+  TraceCapture take_events();
 
  private:
   pipeline::PipelineContext& ctx_;
