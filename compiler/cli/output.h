@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "cli/logger.h"
 #include "cli/trace.h"
 #include "diag/render.h"
 #include "fpag/base/numeric.h"
@@ -97,14 +98,15 @@ struct Envelope {
 std::string render_text(const Envelope& envelope, const diag::RenderOptions& r);
 
 // Writes the line that labels what a command is about to do, to
-// standard error, immediately before the command does it.
+// `err`, immediately before the command does it.
 //
 // Standard error because standard output belongs to whatever the
 // command is about to run: `alcy run | grep` sees the program's output
 // and nothing else. The options carry the capability of the stream
 // actually written to, so a label on a redirected standard error is
 // plain while one on a terminal is not.
-void announce(std::string_view verb,
+void announce(const Logger& err,
+              std::string_view verb,
               std::string_view subject,
               const diag::RenderOptions& options);
 
@@ -113,12 +115,12 @@ void announce(std::string_view verb,
 // document can be pasted into a trace viewer unchanged.
 std::string render_json(const Envelope& envelope, i18n::Language language);
 
-// Writes a finished envelope to standard output: the text report, or
-// the JSON document when the invocation asked for it. This is the only
-// exit for command results, which is what keeps "standard output is
-// exactly one JSON document" true without any command knowing that
-// JSON exists.
-void report(const Envelope& envelope,
+// Writes a finished envelope to `out`: the text report, or the JSON
+// document when the invocation asked for it. This is the only exit for
+// command results, which is what keeps "standard output is exactly one
+// JSON document" true without any command knowing that JSON exists.
+void report(const Logger& out,
+            const Envelope& envelope,
             const diag::RenderOptions& options,
             bool json);
 

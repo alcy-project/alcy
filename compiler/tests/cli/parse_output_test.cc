@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "cli/cli_config.h"
+#include "cli/logger.h"
 #include "cli/parse_args.h"
 #include "cli/result_code.h"
 #include "doctest/doctest.h"
@@ -29,6 +30,12 @@ ParseOutcome parse(std::span<const std::string_view> args) {
 std::string render(ParseOutcome&& outcome) {
   arg::Parser parser = build_parser();
   return render_outcome(parser, outcome, term::ColorStyle::Off);
+}
+
+// The empty string is the one legitimate non-block: a parse that
+// succeeded has nothing to interrupt with, and `report` skips it.
+bool is_block_or_empty(std::string_view text) {
+  return text.empty() || cli::is_block(text);
 }
 
 }  // namespace
@@ -61,6 +68,35 @@ TEST_CASE("Render unknown subcommand") {
   const std::string text = render(parse(args));
   CHECK(text.find("frobnicate") != std::string::npos);
   CHECK(text.find("--help") != std::string::npos);
+}
+
+// An interruption is written as one block, whatever produced its text.
+// The version line and the unknown-subcommand lines are the two a
+// formatter hands over as bare sentences, so they are the two a newline
+// has to be added to.
+TEST_CASE("Every interruption is one finished block") {
+  const std::string_view help[] = {"alcy", "--help"};
+  CHECK(is_block(render(parse(help))));
+
+  const std::string_view bare[] = {"alcy"};
+  CHECK(is_block(render(parse(bare))));
+
+  const std::string_view version[] = {"alcy", "--version"};
+  CHECK(is_block(render(parse(version))));
+
+  const std::string_view unknown[] = {"alcy", "frobnicate"};
+  CHECK(is_block(render(parse(unknown))));
+
+  const std::string_view suggested[] = {"alcy", "buid"};
+  CHECK(is_block(render(parse(suggested))));
+
+  const std::string_view bad_flag[] = {"alcy", "--nonsense"};
+  CHECK(is_block(render(parse(bad_flag))));
+
+  // A bare parse succeeds, and the one render that is not a block is the
+  // one with nothing to report.
+  const std::string_view valid[] = {"alcy", "build"};
+  CHECK(is_block_or_empty(render(parse(valid))));
 }
 
 TEST_CASE("Render subcommand suggestion") {

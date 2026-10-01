@@ -16,6 +16,7 @@
 #include "cli/compile_command.h"
 #include "cli/init_command.h"
 #include "cli/init_handler.h"
+#include "cli/logger.h"
 #include "cli/new_command.h"
 #include "cli/output.h"
 #include "cli/parse_args.h"
@@ -58,13 +59,6 @@ i32 dispatch(const CliConfig& config,
   UNREACHABLE();
 }
 
-void write_stdout(std::string_view text) {
-  if (text.empty()) {
-    return;
-  }
-  io::write(io::STDOUT_FD, text.data(), text.size());
-}
-
 // The verb as spelled on the command line, which is also what the
 // envelope reports as its command.
 std::string_view command_name(Subcommand subcommand) {
@@ -88,7 +82,12 @@ ResultCode run_interruption(const arg::Parser& parser,
                             i18n::Language language) {
   const term::ColorStyle style = term::console_color_style(
       term::Stream::Stdout, scan_color_mode(argc, argv));
-  write_stdout(render_outcome(parser, outcome, style, language));
+  FdSink out_sink{io::STDOUT_FD};
+  const Logger out{&FdSink::write, &out_sink};
+  const std::string text = render_outcome(parser, outcome, style, language);
+  if (!text.empty()) {
+    out.block(text);
+  }
   return code;
 }
 
@@ -137,7 +136,9 @@ i32 cli_main(i32 argc, char** argv) {
       envelope.failure = describe_config_error(
           std::move(validated).unwrap_err(), config.language);
       envelope.wall_ns = elapsed_ns_since(started);
-      report(envelope, options, json);
+      FdSink out_sink{io::STDOUT_FD};
+      const Logger out{&FdSink::write, &out_sink};
+      report(out, envelope, options, json);
       exit_code = result_code(ResultCode::ArgParseError);
     } else {
       // One context for the invocation: the command fills it and the
@@ -148,7 +149,9 @@ i32 cli_main(i32 argc, char** argv) {
       envelope.command = command_name(config.subcommand);
       exit_code = dispatch(config, ctx, envelope);
       envelope.wall_ns = elapsed_ns_since(started);
-      report(envelope, options, json);
+      FdSink out_sink{io::STDOUT_FD};
+      const Logger out{&FdSink::write, &out_sink};
+      report(out, envelope, options, json);
     }
   }
   return exit_code;

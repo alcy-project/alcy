@@ -41,6 +41,8 @@ source_set("cli") {
     "init_command.h",
     "init_handler.cc",
     "init_handler.h",
+    "logger.cc",
+    "logger.h",
     "new_command.cc",
     "new_command.h",
     "output.cc",

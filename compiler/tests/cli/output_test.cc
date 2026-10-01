@@ -6,10 +6,15 @@
 #include <string>
 #include <utility>
 
+#include "cli/logger.h"
+#include "diag/bag.h"
+#include "diag/diagnostic.h"
 #include "diag/render.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
+#include "fpag/mem/arena.h"
 #include "i18n/language.h"
+#include "source/source.h"
 
 namespace cli {
 
@@ -162,6 +167,34 @@ TEST_CASE("A failure with a diagnostic prints no result line") {
   CHECK(text(envelope).empty());
   CHECK(render_json(envelope, i18n::Language::EnUs)
             .find("\"outcome\":\"failed\"") != std::string::npos);
+}
+
+// A report is written as one block, so it has to end in exactly one
+// newline whatever it contains. A diagnostic contributes its own lines
+// and adds nothing to them.
+TEST_CASE("Every text report is one finished block") {
+  CHECK(is_block(text(built("out/demo", 2048, 2000000))));
+
+  Envelope failure;
+  failure.command = "build";
+  failure.status = Status::Error;
+  failure.failure = "--emit needs a value";
+  CHECK(is_block(text(failure)));
+
+  mem::Arena arena;
+  arena.reserve(1u << 20);
+  diag::DiagBag bag{arena, i18n::Language::EnUs};
+  bag.emit_untranslated(diag::Severity::Error, 1, "first thing");
+  bag.emit_untranslated(diag::Severity::Warning, 2, "second thing");
+  source::SourceManager sources;
+  Envelope diagnosed;
+  diagnosed.command = "check";
+  diagnosed.status = Status::Error;
+  diagnosed.bag = &bag;
+  diagnosed.sources = &sources;
+  const std::string two = text(diagnosed);
+  CHECK(two == "error[E1]: first thing\nwarning[W2]: second thing\n");
+  CHECK(is_block(two));
 }
 
 TEST_CASE("Colour reaches the verb, the subject, and nothing else") {

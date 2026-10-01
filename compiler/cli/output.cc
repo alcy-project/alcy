@@ -11,6 +11,7 @@
 #include <string_view>
 #include <vector>
 
+#include "cli/logger.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/render.h"
@@ -52,7 +53,6 @@ void append_diagnostic_text(std::string& out,
   fmt::memory_buffer rendered;
   diag::render(diagnostic, rendered, options, fetch_source, &sources);
   out.append(rendered.data(), rendered.size());
-  out.push_back('\n');
 }
 
 const char* severity_name(diag::Severity severity) {
@@ -489,12 +489,13 @@ std::string result_line(const Envelope& envelope, i18n::Language language) {
 
 }  // namespace
 
-void announce(std::string_view verb,
+void announce(const Logger& err,
+              std::string_view verb,
               std::string_view subject,
               const diag::RenderOptions& options) {
   std::string line;
   render_labelled(line, verb, subject, true, options.color, true);
-  io::write(io::STDERR_FD, line.data(), line.size());
+  err.block(line);
 }
 
 u64 elapsed_ns_since(std::chrono::steady_clock::time_point start) {
@@ -533,7 +534,8 @@ std::string render_text(const Envelope& envelope,
   return out;
 }
 
-void report(const Envelope& envelope,
+void report(const Logger& out,
+            const Envelope& envelope,
             const diag::RenderOptions& options,
             bool json) {
   const std::string text = json ? render_json(envelope, options.language)
@@ -541,7 +543,7 @@ void report(const Envelope& envelope,
   if (text.empty()) {
     return;
   }
-  io::write(io::STDOUT_FD, text.data(), text.size());
+  out.block(text);
 }
 
 std::string render_json(const Envelope& envelope, i18n::Language language) {

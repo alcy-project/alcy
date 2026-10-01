@@ -95,7 +95,13 @@ std::string render_outcome(const arg::Parser& parser,
     return parser.help_message(help, style);
   }
   if (outcome.is<VersionRequested>()) {
-    return parser.version_message(arg::DefaultVersionFormatter{}, style);
+    // The parser's formatter writes the sentence; the newline that ends
+    // the block is this layer's, because this is the layer that hands the
+    // block to a writer.
+    std::string text =
+        parser.version_message(arg::DefaultVersionFormatter{}, style);
+    text += '\n';
+    return text;
   }
   if (outcome.is<UnknownSubcommand>()) {
     const UnknownSubcommand& unknown = outcome.get<UnknownSubcommand>();
@@ -106,6 +112,7 @@ std::string render_outcome(const arg::Parser& parser,
       text +=
           i18n::format<i18n::Key::CliDidYouMean>(language, unknown.suggestion);
     }
+    text += '\n';
     return text;
   }
   if (outcome.is<ParseFailure>()) {

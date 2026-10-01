@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "cli/cli_config.h"
+#include "cli/logger.h"
 #include "cli/output.h"
 #include "cli/result_code.h"
 #include "cli/trace.h"
@@ -17,6 +18,7 @@
 #include "diag/render.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/io/io_util.h"
 #include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
 #include "i18n/messages.h"
@@ -35,9 +37,14 @@ namespace {
 // what standard error can do rather than by what standard output can:
 // redirecting the program's output to a pipe must not strip the label
 // of the program that produced it, or vice versa.
+struct Announcement {
+  const diag::RenderOptions& options;
+  const Logger& err;
+};
+
 void announce_exec(std::string_view target, const void* ctx) {
-  const auto& options = *static_cast<const diag::RenderOptions*>(ctx);
-  announce("Running", target, options);
+  const auto& a = *static_cast<const Announcement*>(ctx);
+  announce(a.err, "Running", target, a.options);
 }
 
 }  // namespace
@@ -79,10 +86,13 @@ i32 run_run(const CliConfig& config,
   const diag::RenderOptions announce_options{
       .color = style != term::ColorStyle::Off,
   };
+  FdSink err_sink{io::STDERR_FD};
+  const Logger err{&FdSink::write, &err_sink};
+  const Announcement announcement{announce_options, err};
   base::Result<pipeline::RunOutcome, diag::Reported> result =
       pipeline::run_package(ctx, found.root, found.manifest,
                             found.manifest_name, config.release, link, args,
-                            announce_exec, &announce_options);
+                            announce_exec, &announcement);
   envelope.trace = trace.take_events();
   if (result.is_err()) {
     return failed;
