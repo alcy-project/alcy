@@ -160,7 +160,7 @@ std::optional<std::string_view> selected_subcommand(
     }
     // A lone dash is positional for the parser too; only a longer dash
     // token can be a flag with a value to skip.
-    if (token.starts_with("-") && token.size() > 1) {
+    if (token.starts_with('-') && token.size() > 1) {
       if (takes_value(value_longs, value_shorts, token)) {
         ++i;
       }

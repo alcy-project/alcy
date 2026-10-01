@@ -287,7 +287,7 @@ TEST_CASE("The root version names the build") {
     CHECK(version.ends_with("-snapshot"));
   } else {
     CHECK(open > 0);
-    CHECK(version.ends_with(")"));
+    CHECK(version.ends_with(')'));
   }
 }
 

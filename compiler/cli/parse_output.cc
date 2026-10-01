@@ -102,7 +102,7 @@ std::string render_outcome(const arg::Parser& parser,
     std::string text = i18n::format<i18n::Key::CliUnknownSubcommand>(
         language, unknown.name, parser.root_command().name());
     if (!unknown.suggestion.empty()) {
-      text += "\n";
+      text += '\n';
       text +=
           i18n::format<i18n::Key::CliDidYouMean>(language, unknown.suggestion);
     }
