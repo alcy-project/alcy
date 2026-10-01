@@ -48,14 +48,16 @@ peripheral work lives in `backlog.md`.
   `exe-subslice`, `exe-subslice-panic`, the
   `ok-range`/`ok-range-iter`/`err-range-*` cases, and the `subslice`
   cases in `tools/check_borrow_rules.py`.
-- [ ] Generic instances intern by structure, not by index.
+- [x] Generic instances intern by structure, not by index.
 
   Two spellings of one instantiation must be one type, but tuple
-  types are re-minted on each resolution while generic instances
-  dedupe by exact argument index, so `Iterator<(i32, i32)>` fails its
-  own signature check (`docs/adr/0031-for-desugar-in-the-parser.md`).
-  The fix belongs with type-table interning rather than with any
-  single rule, and unblocks tuple-item iterators everywhere.
+  types were re-minted on each resolution while generic instances
+  deduped by exact argument index, so `Iterator<(i32, i32)>` failed
+  its own signature check (`docs/adr/0031-for-desugar-in-the-parser.md`).
+  Slot copies now record their origins, instance lookup falls back to
+  structural arguments, and equality normalizes at every level
+  (`docs/adr/0035-instances-intern-by-structure.md`). Pinned by
+  `exe-iterator-tuple` and the nested-tuple analyzer test.
 - [ ] Refutable `for` patterns: filter or error.
 
   The pattern must match every item; whether a refutable pattern

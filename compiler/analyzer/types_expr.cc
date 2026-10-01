@@ -2118,7 +2118,9 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
       }
       ir::TypeSeq seq;
       for (ir::TypeIdx element : elements) {
-        seq.push(builder.ref_type(element));
+        // Origin-recorded like every other slot copy, so structural
+        // equality sees through the contiguity copies.
+        seq.push(storage_copy(element));
       }
       const ir::TypeIdx type = builder.tuple_type(seq.finish());
       if (expected != nullptr) {

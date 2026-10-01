@@ -902,6 +902,24 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
       return instance.type;
     }
   }
+  // Index equality under-compares compound arguments: tuple types are
+  // re-minted on each resolution, so two spellings of one
+  // instantiation carry different indices. Fall back to structural
+  // equality before minting another; instances are interned once and
+  // shared by identity.
+  for (const GenericInstance& instance : generic_instances) {
+    if (instance.nominal != nominal ||
+        instance.args.size() != args.size()) {
+      continue;
+    }
+    bool same = true;
+    for (usize i = 0; same && i < args.size(); ++i) {
+      same = types_equal(instance.args[i], args[i]);
+    }
+    if (same) {
+      return instance.type;
+    }
+  }
   const NominalEntry& entry = nominals[nominal];
   const ast::ItemNode& node = ast.items[entry.item];
   const str::StringPoolId name = interner.intern(entry.name);
@@ -1069,7 +1087,9 @@ ir::TypeIdx Checker::resolve_type(u32 module,
       }
       ir::TypeSeq seq;
       for (ir::TypeIdx element : elements) {
-        seq.push(builder.ref_type(element));
+        // Origin-recorded like every other slot copy, so structural
+        // equality sees through the contiguity copies.
+        seq.push(storage_copy(element));
       }
       return builder.tuple_type(seq.finish());
     }
@@ -1915,6 +1935,10 @@ bool Checker::types_equal(ir::TypeIdx a, ir::TypeIdx b) {
 bool Checker::types_equal_inner(ir::TypeIdx a,
                                 ir::TypeIdx b,
                                 std::vector<u64>& seen) {
+  // Slot copies nest: tuple and array elements are copies of their own,
+  // so each level normalizes before comparing, not just the top one.
+  a = type_origin(a);
+  b = type_origin(b);
   if (a.idx == b.idx) {
     return true;
   }

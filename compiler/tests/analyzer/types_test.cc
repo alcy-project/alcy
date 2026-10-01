@@ -581,6 +581,26 @@ TEST_CASE("Check constructs generic enums from annotations") {
   }
 }
 
+TEST_CASE("Check unifies tuples holding generic instances") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Maybe<T> { Yes(T), No }\n"
+                                      "struct Holder<T> { v: T }\n"
+                                      "fn f() -> Holder<(Maybe<i32>, i32)> {\n"
+                                      "  ret Holder { v: (Maybe::Yes(1), 2) }\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
 TEST_CASE("Check infers generic constructors from payload arguments") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
