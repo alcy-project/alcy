@@ -2,89 +2,101 @@
   "comment": [
     "Recorded by tools/check_coverage.py --update.",
     "A ratchet: check_coverage.py fails when the measured line",
-    "coverage of src/ drops below this. Move it only on purpose."
+    "coverage of compiler/ drops below this. Move it only on purpose."
   ],
   "lines": {
-    "count": 29693,
-    "covered": 23732,
-    "percent": 79.92456134442462
+    "count": 36740,
+    "covered": 29659,
+    "percent": 80.7267283614589
   },
   "modules": {
     "analyzer": {
-      "count": 5491,
-      "covered": 4089
+      "count": 6447,
+      "covered": 4793
     },
     "ast": {
-      "count": 439,
-      "covered": 338
+      "count": 463,
+      "covered": 356
     },
     "base": {
-      "count": 18,
-      "covered": 18
+      "count": 13,
+      "covered": 13
+    },
+    "benchmarks": {
+      "count": 506,
+      "covered": 182
     },
     "borrow": {
-      "count": 730,
-      "covered": 666
+      "count": 1147,
+      "covered": 1049
     },
     "cli": {
-      "count": 438,
-      "covered": 355
+      "count": 1718,
+      "covered": 1493
     },
     "codegen_llvm": {
-      "count": 1061,
-      "covered": 928
+      "count": 1343,
+      "covered": 1204
+    },
+    "config": {
+      "count": 0,
+      "covered": 0
     },
     "debug": {
       "count": 0,
       "covered": 0
     },
     "diag": {
-      "count": 292,
-      "covered": 277
+      "count": 310,
+      "covered": 295
+    },
+    "i18n": {
+      "count": 58,
+      "covered": 37
     },
     "ir": {
-      "count": 1077,
-      "covered": 816
+      "count": 1129,
+      "covered": 858
     },
     "lexer": {
-      "count": 678,
-      "covered": 667
+      "count": 682,
+      "covered": 671
     },
     "lower": {
-      "count": 5203,
-      "covered": 3219
+      "count": 5820,
+      "covered": 3716
     },
     "parser": {
-      "count": 2887,
-      "covered": 2445
+      "count": 2982,
+      "covered": 2531
     },
     "path": {
       "count": 80,
       "covered": 77
     },
     "pipeline": {
-      "count": 868,
-      "covered": 583
+      "count": 1056,
+      "covered": 817
     },
     "pkg": {
-      "count": 725,
-      "covered": 562
+      "count": 1045,
+      "covered": 856
     },
     "source": {
       "count": 61,
       "covered": 57
     },
     "symbol": {
-      "count": 339,
+      "count": 345,
       "covered": 251
     },
     "tests": {
-      "count": 9223,
-      "covered": 8301
+      "count": 11427,
+      "covered": 10307
     },
     "text": {
-      "count": 83,
-      "covered": 83
+      "count": 108,
+      "covered": 96
     }
   }
 }
