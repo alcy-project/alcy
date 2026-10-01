@@ -1,2 +1,2 @@
 exit = 4
-contains = ["'extra' is not a method of 'Display'"]
+contains = ["Method 'extra' is not one of 'Display'"]
