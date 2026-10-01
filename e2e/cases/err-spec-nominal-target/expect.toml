@@ -1,0 +1,2 @@
+exit = 4
+contains = ["spec implementation requires a nominal type"]

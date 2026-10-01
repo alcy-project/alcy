@@ -34,9 +34,10 @@ relied upon by MVP programs or by the MVP compiler implementation.
   reborrow carries its parent's loans rather than because the relation
   is solved. Each rule is stated as a case the
   conformance suite runs. See `docs/adr/0012-reborrow-on-reference-read.md`.
-- `spec` (trait) definitions and dispatch, coherence rules, and
+- `spec` (trait) bounds on type parameters, `where` clauses, and
   monomorphization beyond per-instantiation enum, struct, and method
-  specialization.
+  specialization. Declarations, implementations, dispatch, and
+  coherence are settled (see `items.md` and `grammar.md`).
 - Closures and spec objects; higher-ranked region polymorphism beyond
   struct projection; two-phase borrows.
 - `match` guards, string literal patterns.

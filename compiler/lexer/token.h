@@ -60,12 +60,17 @@ enum class TokenKind : u8 {
   Bool,
   Str,
 
-  // Reserved words (parsed, rejected with guidance).
+  // Reserved words (parsed, rejected with guidance), plus the
+  // contextual keywords the parser matches in position: `comp` in
+  // signatures and bodies, `spec` in item position, `for` in `impl`
+  // headers. Those three lex distinctly but are never skipped, so a
+  // use outside their position is an ordinary parse error.
   Async,
   Await,
   Union,
   Register,
   Comp,
+  Spec,
   Extern,
   Unsafe,
   For,

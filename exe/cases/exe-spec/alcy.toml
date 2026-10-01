@@ -1,0 +1,13 @@
+[package]
+name = "speccase"
+version = "0.1.0"
+
+[modules]
+include = ["main", "shapes"]
+
+[dependencies]
+"alcy/std/core" = {}
+
+[[bin]]
+name = "speccase"
+path = "main.al"

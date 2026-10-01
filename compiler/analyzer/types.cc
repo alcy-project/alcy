@@ -50,7 +50,12 @@ void Checker::register_nominals() {
     for (ast::ItemIdx item : tree.modules[m]->items) {
       const ast::ItemNode& node = ast.items[item];
       if (node.kind != ast::ItemKind::Struct &&
-          node.kind != ast::ItemKind::Enum) {
+          node.kind != ast::ItemKind::Enum &&
+          node.kind != ast::ItemKind::Spec) {
+        continue;
+      }
+      if (node.kind == ast::ItemKind::Spec) {
+        register_spec(m, item);
         continue;
       }
       std::string_view name;
@@ -108,6 +113,158 @@ NominalEntry* Checker::find_nominal(u32 module, std::string_view name) {
   return nullptr;
 }
 
+SpecEntry* Checker::find_spec(u32 module, std::string_view name) {
+  for (SpecEntry& entry : specs) {
+    if (entry.module == module && entry.name == name) {
+      return &entry;
+    }
+  }
+  return nullptr;
+}
+
+SpecEntry* Checker::find_spec_in_scope(u32 module, std::string_view name) {
+  if (SpecEntry* entry = find_spec(module, name)) {
+    return entry;
+  }
+  for (const Import& import : tree.modules[module]->imports) {
+    if (import.ns != Namespace::Type || import.name != name) {
+      continue;
+    }
+    if (SpecEntry* target = find_spec(import.target_module, import.member)) {
+      return target;
+    }
+  }
+  return nullptr;
+}
+
+bool Checker::spec_in_scope(u32 module, const SpecEntry& spec) {
+  if (module >= static_cast<u32>(tree.modules.size())) {
+    return false;
+  }
+  if (spec.module == module) {
+    return true;
+  }
+  for (u32 scope : spec_scope) {
+    if (scope < specs.size() && specs[scope].module == spec.module &&
+        specs[scope].name == spec.name) {
+      return true;
+    }
+  }
+  for (const Import& import : tree.modules[module]->imports) {
+    if (import.ns != Namespace::Type) {
+      continue;
+    }
+    if (import.target_module == spec.module && import.member == spec.name) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void Checker::register_spec(u32 module, ast::ItemIdx item) {
+  const ast::ItemNode& node = ast.items[item];
+  const ast::ItemSpec& spec = node.payload.get<ast::ItemSpec>();
+  for (const NominalEntry& entry : nominals) {
+    if (entry.module == module && entry.name == spec.name.name) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
+          diag::Severity::Error, ANALYZER_DUPLICATE_DEFINITION, spec.name.span,
+          spec.name.name);
+      (void)index;
+      return;
+    }
+  }
+  for (const SpecEntry& entry : specs) {
+    if (entry.module == module && entry.name == spec.name.name) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
+          diag::Severity::Error, ANALYZER_DUPLICATE_DEFINITION, spec.name.span,
+          spec.name.name);
+      (void)index;
+      return;
+    }
+  }
+  for (usize i = 0; i < spec.methods.size(); ++i) {
+    for (usize j = 0; j < i; ++j) {
+      if (spec.methods[j].name.name == spec.methods[i].name.name) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
+            diag::Severity::Error, ANALYZER_DUPLICATE_DEFINITION,
+            spec.methods[i].name.span, spec.methods[i].name.name);
+        (void)index;
+        return;
+      }
+    }
+    if (!spec.methods[i].generic.empty()) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerSpecMethodTypeParameters>(
+          diag::Severity::Error, ANALYZER_GENERIC_ARGUMENTS,
+          spec.methods[i].name.span, spec.methods[i].name.name);
+      (void)index;
+      return;
+    }
+  }
+  specs.push_back(SpecEntry{module, spec.name.name, item, node.span});
+}
+
+bool Checker::spec_method_sig(u32 spec,
+                              std::string_view name,
+                              std::span<const ir::TypeIdx> spec_args,
+                              ir::TypeIdx self_type,
+                              u32 module,
+                              std::vector<ir::TypeIdx>& params_out,
+                              ir::TypeIdx& ret_out,
+                              CheckedModule::ReceiverKind& receiver_out) {
+  if (spec >= specs.size()) {
+    return false;
+  }
+  const ast::ItemNode& node = ast.items[specs[spec].item];
+  const ast::ItemSpec& declaration = node.payload.get<ast::ItemSpec>();
+  if (spec_args.size() != declaration.params.size()) {
+    return false;
+  }
+  for (const ast::SpecMethod& method : declaration.methods) {
+    if (method.name.name != name) {
+      continue;
+    }
+    if (!method.generic.empty()) {
+      return false;
+    }
+    const usize pushed = type_params.size();
+    for (usize i = 0; i < declaration.params.size(); ++i) {
+      type_params.emplace_back(declaration.params[i].name, spec_args[i]);
+    }
+    params_out.clear();
+    for (const ast::ItemFnParam& param : method.params) {
+      params_out.push_back(resolve_type(module, param.type, &self_type));
+    }
+    ret_out = builder.primitive(ir::TypeTag::Void);
+    if (method.return_type.is_valid()) {
+      ret_out = resolve_type(module, method.return_type, &self_type);
+    }
+    receiver_out = CheckedModule::ReceiverKind::None;
+    if (!params_out.empty()) {
+      receiver_out = classify_receiver(params_out[0], self_type);
+    }
+    while (type_params.size() > pushed) {
+      type_params.pop_back();
+    }
+    return true;
+  }
+  return false;
+}
+
+bool Checker::spec_targets_overlap(const SpecTarget& a, const SpecTarget& b) {
+  if (a.nominal != b.nominal || a.args.size() != b.args.size()) {
+    return false;
+  }
+  for (usize i = 0; i < a.args.size(); ++i) {
+    if (a.args[i].is_param || b.args[i].is_param) {
+      continue;
+    }
+    if (!types_equal(a.args[i].type, b.args[i].type)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // A declaration recognized by its reserved name rather than by path.
 // Range and Bound are reserved, so a tree holds at most one of each.
 NominalEntry* Checker::builtin_nominal(std::string_view name) {
@@ -117,6 +274,306 @@ NominalEntry* Checker::builtin_nominal(std::string_view name) {
     }
   }
   return nullptr;
+}
+
+void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
+  const ast::ItemNode& node = ast.items[item];
+  const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
+  // The spec side parses through the type grammar; only a path names
+  // a spec. Anything else is rejected where the impl is written.
+  SpecEntry* spec_entry = nullptr;
+  std::string_view spec_spelling;
+  const ast::TypeNode& spec_node = ast.types[impl.spec];
+  if (spec_node.kind == ast::TypeKind::Path) {
+    const ast::TypePath& spec_path = spec_node.payload.get<ast::TypePath>();
+    const std::span<const ast::Ident> segments =
+        ast.paths[spec_path.path].segments;
+    if (!segments.empty()) {
+      spec_spelling = segments.back().name;
+      if (segments.size() == 1) {
+        spec_entry = find_spec_in_scope(module, spec_spelling);
+      } else {
+        u32 spec_module = NO_MODULE;
+        std::string_view spec_name;
+        if (resolve_type_path(module, spec_path.path, spec_module, spec_name)) {
+          spec_entry = find_spec(spec_module, spec_name);
+        }
+      }
+    }
+  }
+  if (spec_entry == nullptr) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerUnresolved>(
+        diag::Severity::Error, ANALYZER_UNKNOWN_TYPE, spec_node.span, "spec",
+        spec_spelling);
+    (void)index;
+    return;
+  }
+  const u32 spec_index = static_cast<u32>(spec_entry - specs.data());
+  const ast::ItemSpec& declaration =
+      ast.items[spec_entry->item].payload.get<ast::ItemSpec>();
+  const bool generic_impl = !impl.params.empty();
+  // Spec arguments bind the spec's parameters; a generic impl names
+  // its own parameters directly, exactly like an inherent target.
+  std::vector<ir::TypeIdx> spec_args;
+  std::vector<std::string_view> spec_arg_params;
+  {
+    const ast::TypePath& spec_path = spec_node.payload.get<ast::TypePath>();
+    if (spec_path.args.size() != declaration.params.size()) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
+          diag::Severity::Error, ANALYZER_ARITY_MISMATCH, spec_node.span,
+          spec_entry->name, declaration.params.size(),
+          declaration.params.size() == 1 ? "" : "s");
+      (void)index;
+      return;
+    }
+    for (ast::TypeIdx arg : spec_path.args) {
+      if (generic_impl) {
+        const ast::TypeNode& arg_node = ast.types[arg];
+        bool direct = false;
+        std::string_view param;
+        if (arg_node.kind == ast::TypeKind::Path) {
+          const ast::Path& path =
+              ast.paths[arg_node.payload.get<ast::TypePath>().path];
+          if (path.segments.size() == 1 &&
+              arg_node.payload.get<ast::TypePath>().args.empty()) {
+            for (const ast::Ident& candidate : impl.params) {
+              if (candidate.name == path.segments[0].name) {
+                direct = true;
+                param = candidate.name;
+                break;
+              }
+            }
+          }
+        }
+        if (!direct) {
+          const u32 index = bag.emit<i18n::Key::AnalyzerSpecTargetNotDirect>(
+              diag::Severity::Error, ANALYZER_GENERIC_ARGUMENTS, arg_node.span);
+          (void)index;
+          return;
+        }
+        spec_arg_params.push_back(param);
+      } else {
+        const ir::TypeIdx resolved = resolve_type(module, arg, nullptr);
+        if (is_error(resolved)) {
+          return;
+        }
+        spec_args.push_back(resolved);
+      }
+    }
+  }
+  // The target is a nominal type in scope; v1 never implements a
+  // spec for a compound or reference type.
+  NominalEntry* target_entry = nullptr;
+  const ast::TypeNode& target_node = ast.types[impl.type];
+  if (target_node.kind == ast::TypeKind::Path) {
+    const ast::TypePath& target_path = target_node.payload.get<ast::TypePath>();
+    const std::span<const ast::Ident> segments =
+        ast.paths[target_path.path].segments;
+    if (!segments.empty()) {
+      if (segments.size() == 1) {
+        target_entry = find_nominal_in_scope(module, segments.back().name);
+      } else {
+        u32 target_module = NO_MODULE;
+        std::string_view target_name;
+        if (resolve_type_path(module, target_path.path, target_module,
+                              target_name)) {
+          target_entry = find_nominal(target_module, target_name);
+        }
+      }
+    }
+  }
+  if (target_entry == nullptr) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerSpecRequiresNominalTarget>(
+        diag::Severity::Error, ANALYZER_UNKNOWN_TYPE, target_node.span);
+    (void)index;
+    return;
+  }
+  SpecTarget target;
+  target.nominal = nominal_index(target_entry);
+  ir::TypeIdx self_type = error_type();
+  {
+    const ast::TypePath& target_path = target_node.payload.get<ast::TypePath>();
+    if (target_path.args.size() != nominal_params(*target_entry).size()) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
+          diag::Severity::Error, ANALYZER_ARITY_MISMATCH, target_node.span,
+          target_entry->name, nominal_params(*target_entry).size(),
+          nominal_params(*target_entry).size() == 1 ? "" : "s");
+      (void)index;
+      return;
+    }
+    if (generic_impl) {
+      for (ast::TypeIdx arg : target_path.args) {
+        const ast::TypeNode& arg_node = ast.types[arg];
+        bool direct = false;
+        std::string_view param;
+        if (arg_node.kind == ast::TypeKind::Path) {
+          const ast::Path& path =
+              ast.paths[arg_node.payload.get<ast::TypePath>().path];
+          if (path.segments.size() == 1 &&
+              arg_node.payload.get<ast::TypePath>().args.empty()) {
+            for (const ast::Ident& candidate : impl.params) {
+              if (candidate.name == path.segments[0].name) {
+                direct = true;
+                param = candidate.name;
+                break;
+              }
+            }
+          }
+        }
+        if (!direct) {
+          const u32 index = bag.emit<i18n::Key::AnalyzerSpecTargetNotDirect>(
+              diag::Severity::Error, ANALYZER_GENERIC_ARGUMENTS, arg_node.span);
+          (void)index;
+          return;
+        }
+        target.args.push_back(SpecTarget::Arg{true, param, error_type()});
+      }
+    } else {
+      std::vector<ir::TypeIdx> args;
+      for (ast::TypeIdx arg : target_path.args) {
+        const ir::TypeIdx resolved = resolve_type(module, arg, nullptr);
+        if (is_error(resolved)) {
+          return;
+        }
+        args.push_back(resolved);
+        target.args.push_back(SpecTarget::Arg{false, {}, resolved});
+      }
+      // A non-generic nominal interns; instantiating would mint a
+      // second type the call site never names.
+      if (args.empty()) {
+        self_type = intern_nominal(*target_entry);
+      } else {
+        self_type = instantiate_generic(target.nominal, args, target_node.span);
+      }
+      if (is_error(self_type)) {
+        return;
+      }
+    }
+  }
+  for (const SpecImplEntry& existing : spec_impls) {
+    if (existing.spec == spec_index &&
+        spec_targets_overlap(existing.target, target)) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerConflictingSpecImpl>(
+          diag::Severity::Error, ANALYZER_DUPLICATE_DEFINITION, node.span,
+          spec_entry->name, target_entry->name);
+      (void)index;
+      return;
+    }
+  }
+  // Method presence is syntactic, so generic impls check it now and
+  // everything else waits for a concrete self.
+  for (ast::ItemIdx method_item : impl.methods) {
+    const ast::ItemNode& method_node = ast.items[method_item];
+    const std::string_view name =
+        method_node.payload.get<ast::ItemFn>().name.name;
+    if (!method_node.payload.get<ast::ItemFn>().generic.empty()) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerSpecMethodTypeParameters>(
+          diag::Severity::Error, ANALYZER_GENERIC_ARGUMENTS,
+          method_node.payload.get<ast::ItemFn>().name.span, name);
+      (void)index;
+      return;
+    }
+    bool declared = false;
+    for (const ast::SpecMethod& method : declaration.methods) {
+      if (method.name.name == name) {
+        declared = true;
+        break;
+      }
+    }
+    if (!declared) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerSpecUnknownMethod>(
+          diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
+          method_node.payload.get<ast::ItemFn>().name.span, name,
+          spec_entry->name);
+      (void)index;
+      return;
+    }
+  }
+  for (const ast::SpecMethod& method : declaration.methods) {
+    bool implemented = false;
+    for (ast::ItemIdx method_item : impl.methods) {
+      if (ast.items[method_item].payload.get<ast::ItemFn>().name.name ==
+          method.name.name) {
+        implemented = true;
+        break;
+      }
+    }
+    if (!implemented) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerMissingSpecMethod>(
+          diag::Severity::Error, ANALYZER_ARITY_ERROR, node.span,
+          method.name.name, spec_entry->name);
+      (void)index;
+      return;
+    }
+  }
+  if (generic_impl) {
+    std::vector<SpecTarget::Arg> shapes;
+    shapes.reserve(spec_arg_params.size());
+    for (std::string_view param : spec_arg_params) {
+      shapes.push_back(SpecTarget::Arg{true, param, error_type()});
+    }
+    spec_impls.push_back(SpecImplEntry{spec_index, module, std::move(target),
+                                       std::move(shapes), item, node.span});
+    return;
+  }
+  for (ast::ItemIdx method_item : impl.methods) {
+    const ast::ItemNode& method_node = ast.items[method_item];
+    const std::string_view name =
+        method_node.payload.get<ast::ItemFn>().name.name;
+    std::vector<ir::TypeIdx> declared_params;
+    ir::TypeIdx declared_ret = error_type();
+    CheckedModule::ReceiverKind declared_receiver =
+        CheckedModule::ReceiverKind::None;
+    if (!spec_method_sig(spec_index, name, spec_args, self_type, module,
+                         declared_params, declared_ret, declared_receiver)) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerSpecUnknownMethod>(
+          diag::Severity::Error, ANALYZER_UNKNOWN_VALUE,
+          method_node.payload.get<ast::ItemFn>().name.span, name,
+          spec_entry->name);
+      (void)index;
+      return;
+    }
+    std::vector<ir::TypeIdx> params;
+    for (const ast::ItemFnParam& param :
+         method_node.payload.get<ast::ItemFn>().params) {
+      params.push_back(resolve_type(module, param.type, &self_type));
+    }
+    ir::TypeIdx ret = builder.primitive(ir::TypeTag::Void);
+    if (method_node.payload.get<ast::ItemFn>().return_type.is_valid()) {
+      ret = resolve_type(module,
+                         method_node.payload.get<ast::ItemFn>().return_type,
+                         &self_type);
+    }
+    CheckedModule::ReceiverKind receiver = CheckedModule::ReceiverKind::None;
+    if (!params.empty()) {
+      receiver = classify_receiver(params[0], self_type);
+    }
+    bool matches = params.size() == declared_params.size() &&
+                   receiver == declared_receiver &&
+                   types_equal(ret, declared_ret);
+    for (usize i = 0; matches && i < params.size(); ++i) {
+      matches = types_equal(params[i], declared_params[i]);
+    }
+    if (!matches) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerSpecSignatureMismatch>(
+          diag::Severity::Error, ANALYZER_TYPE_MISMATCH, method_node.span, name,
+          spec_entry->name);
+      (void)index;
+      return;
+    }
+    modules[module].functions.push_back({name, params, ret, method_item});
+    const CheckedModule::FnSig& sig = modules[module].functions.back();
+    modules[module].methods.push_back({self_type, name, sig.params, sig.ret,
+                                       receiver, method_item, false,
+                                       spec_index});
+  }
+  std::vector<SpecTarget::Arg> shapes;
+  shapes.reserve(spec_args.size());
+  for (ir::TypeIdx arg : spec_args) {
+    shapes.push_back(SpecTarget::Arg{false, {}, arg});
+  }
+  spec_impls.push_back(SpecImplEntry{spec_index, module, std::move(target),
+                                     std::move(shapes), item, node.span});
 }
 
 u32 Checker::find_child_module(u32 module, std::string_view name) const {
@@ -1082,6 +1539,10 @@ void Checker::process_module(u32 module) {
         break;
       }
       case ast::ItemKind::Impl: {
+        if (node.payload.get<ast::ItemImpl>().spec.is_valid()) {
+          register_spec_impl(module, item);
+          break;
+        }
         ir::TypeIdx self_type = error_type();
         bool self_ok = false;
         // Generic impls instantiate per method call; their methods
@@ -1162,6 +1623,7 @@ void Checker::process_module(u32 module) {
         }
         break;
       }
+      case ast::ItemKind::Spec: break;
       case ast::ItemKind::Use: break;
     }
   }
@@ -1989,86 +2451,201 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
                                                         diag::Span span) {
   for (const CheckedModule& checked : modules) {
     for (const CheckedModule::MethodInfo& method : checked.methods) {
+      if (method.spec != NO_SPEC) {
+        continue;
+      }
       if (method.self_type.idx == self.idx && method.name == name) {
         return &method;
       }
     }
   }
   // Generic instantiation: match `impl<...> Nominal<...>` blocks.
-  const GenericInstance* instance = generic_find(self);
-  if (instance == nullptr) {
-    return nullptr;
+  if (const GenericInstance* instance = generic_find(self)) {
+    const u32 nominal = instance->nominal;
+    const std::vector<ir::TypeIdx> args = instance->args;
+    for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
+      for (ast::ItemIdx item : tree.modules[m]->items) {
+        const ast::ItemNode& node = ast.items[item];
+        if (node.kind != ast::ItemKind::Impl) {
+          continue;
+        }
+        const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
+        if (impl.params.empty()) {
+          continue;
+        }
+        const ast::TypeNode& target = ast.types[impl.type];
+        if (target.kind != ast::TypeKind::Path) {
+          continue;
+        }
+        u32 target_module = NO_MODULE;
+        std::string_view target_name;
+        if (!resolve_type_path(m, target.payload.get<ast::TypePath>().path,
+                               target_module, target_name)) {
+          continue;
+        }
+        NominalEntry* target_entry = find_nominal(target_module, target_name);
+        if (target_entry == nullptr || nominal_index(target_entry) != nominal) {
+          continue;
+        }
+        const std::span<const ast::TypeIdx> target_args =
+            target.payload.get<ast::TypePath>().args;
+        if (target_args.size() != nominal_params(nominals[nominal]).size()) {
+          continue;
+        }
+        // Target arguments must name impl parameters directly.
+        std::vector<std::pair<std::string_view, ir::TypeIdx>> scope;
+        bool shape_ok = true;
+        for (usize i = 0; i < target_args.size() && shape_ok; ++i) {
+          const ast::TypeNode& arg = ast.types[target_args[i]];
+          if (arg.kind != ast::TypeKind::Path) {
+            shape_ok = false;
+            break;
+          }
+          const ast::Path& path =
+              ast.paths[arg.payload.get<ast::TypePath>().path];
+          if (path.segments.size() != 1 ||
+              !arg.payload.get<ast::TypePath>().args.empty()) {
+            shape_ok = false;
+            break;
+          }
+          bool found = false;
+          for (const auto& param : impl.params) {
+            if (param.name == path.segments[0].name) {
+              scope.emplace_back(param.name, args[i]);
+              found = true;
+              break;
+            }
+          }
+          shape_ok = found;
+        }
+        if (!shape_ok) {
+          continue;
+        }
+        const CheckedModule::MethodInfo* method =
+            instantiate_method(m, self, scope, impl, name);
+        if (method != nullptr) {
+          return method;
+        }
+      }
+    }
   }
-  const u32 nominal = instance->nominal;
-  const std::vector<ir::TypeIdx> args = instance->args;
-  for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
-    for (ast::ItemIdx item : tree.modules[m]->items) {
-      const ast::ItemNode& node = ast.items[item];
-      if (node.kind != ast::ItemKind::Impl) {
-        continue;
+  // Spec dispatch: `impl S for T` blocks, after inherent methods.  // Coherence
+  // leaves at most one impl per spec overlapping a concrete type, so every
+  // in-scope match is a different spec; two providing the same name is an
+  // ambiguity, not a choice.
+  u32 target_nominal = 0;
+  std::vector<ir::TypeIdx> target_args;
+  if (const GenericInstance* instance = generic_find(self)) {
+    target_nominal = instance->nominal;
+    target_args = instance->args;
+  } else {
+    bool plain = false;
+    for (u32 i = 0; i < static_cast<u32>(nominals.size()); ++i) {
+      if (nominals[i].complete && nominals[i].type.idx == self.idx) {
+        target_nominal = i;
+        plain = true;
+        break;
       }
-      const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
-      if (impl.params.empty()) {
-        continue;
+    }
+    if (!plain) {
+      return nullptr;
+    }
+  }
+  const CheckedModule::MethodInfo* match = nullptr;
+  for (const SpecImplEntry& entry : spec_impls) {
+    if (entry.target.nominal != target_nominal ||
+        entry.target.args.size() != target_args.size()) {
+      continue;
+    }
+    bool generic_record = false;
+    std::vector<std::pair<std::string_view, ir::TypeIdx>> scope;
+    bool shape_ok = true;
+    for (usize i = 0; i < target_args.size() && shape_ok; ++i) {
+      if (entry.target.args[i].is_param) {
+        generic_record = true;
+        scope.emplace_back(entry.target.args[i].param, target_args[i]);
+      } else if (!types_equal(entry.target.args[i].type, target_args[i])) {
+        shape_ok = false;
       }
-      const ast::TypeNode& target = ast.types[impl.type];
-      if (target.kind != ast::TypeKind::Path) {
-        continue;
-      }
-      u32 target_module = NO_MODULE;
-      std::string_view target_name;
-      if (!resolve_type_path(m, target.payload.get<ast::TypePath>().path,
-                             target_module, target_name)) {
-        continue;
-      }
-      NominalEntry* target_entry = find_nominal(target_module, target_name);
-      if (target_entry == nullptr || nominal_index(target_entry) != nominal) {
-        continue;
-      }
-      const std::span<const ast::TypeIdx> target_args =
-          target.payload.get<ast::TypePath>().args;
-      if (target_args.size() != nominal_params(nominals[nominal]).size()) {
-        continue;
-      }
-      // Target arguments must name impl parameters directly.
-      std::vector<std::pair<std::string_view, ir::TypeIdx>> scope;
-      bool shape_ok = true;
-      for (usize i = 0; i < target_args.size() && shape_ok; ++i) {
-        const ast::TypeNode& arg = ast.types[target_args[i]];
-        if (arg.kind != ast::TypeKind::Path) {
-          shape_ok = false;
+    }
+    if (!shape_ok) {
+      continue;
+    }
+    if (!spec_in_scope(module, specs[entry.spec])) {
+      continue;
+    }
+    const CheckedModule::MethodInfo* candidate = nullptr;
+    if (generic_record) {
+      const ast::ItemImpl& impl =
+          ast.items[entry.item].payload.get<ast::ItemImpl>();
+      bool provides = false;
+      for (ast::ItemIdx method_item : impl.methods) {
+        if (ast.items[method_item].payload.get<ast::ItemFn>().name.name ==
+            name) {
+          provides = true;
           break;
         }
-        const ast::Path& path =
-            ast.paths[arg.payload.get<ast::TypePath>().path];
-        if (path.segments.size() != 1 ||
-            !arg.payload.get<ast::TypePath>().args.empty()) {
-          shape_ok = false;
-          break;
-        }
-        bool found = false;
-        for (const auto& param : impl.params) {
-          if (param.name == path.segments[0].name) {
-            scope.emplace_back(param.name, args[i]);
-            found = true;
+      }
+      if (!provides) {
+        continue;
+      }
+    } else {
+      for (const CheckedModule& checked : modules) {
+        for (const CheckedModule::MethodInfo& method : checked.methods) {
+          if (method.spec == entry.spec && method.self_type.idx == self.idx &&
+              method.name == name) {
+            candidate = &method;
             break;
           }
         }
-        shape_ok = found;
+        if (candidate != nullptr) {
+          break;
+        }
+      }
+      if (candidate == nullptr) {
+        continue;
+      }
+    }
+    if (match != nullptr) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerAmbiguousMethod>(
+          diag::Severity::Error, ANALYZER_UNKNOWN_VALUE, span, name);
+      (void)index;
+      return nullptr;
+    }
+    if (generic_record) {
+      const ast::ItemImpl& impl =
+          ast.items[entry.item].payload.get<ast::ItemImpl>();
+      std::vector<ir::TypeIdx> record_spec_args;
+      for (const SpecTarget::Arg& shape : entry.spec_args) {
+        if (!shape.is_param) {
+          record_spec_args.push_back(shape.type);
+          continue;
+        }
+        ir::TypeIdx bound = error_type();
+        for (const auto& binding : scope) {
+          if (binding.first == shape.param) {
+            bound = binding.second;
+            break;
+          }
+        }
+        if (is_error(bound)) {
+          shape_ok = false;
+          break;
+        }
+        record_spec_args.push_back(bound);
       }
       if (!shape_ok) {
         continue;
       }
-      const CheckedModule::MethodInfo* method =
-          instantiate_method(m, self, scope, impl, name);
-      if (method != nullptr) {
-        return method;
+      candidate = instantiate_spec_method(
+          entry.module, entry.spec, record_spec_args, self, scope, impl, name);
+      if (candidate == nullptr) {
+        return nullptr;
       }
     }
+    match = candidate;
   }
-  (void)module;
-  (void)span;
-  return nullptr;
+  return match;
 }
 
 std::string_view Checker::fn_name(ast::ItemIdx item) const {
@@ -2397,6 +2974,136 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     return entry;
   }
   return nullptr;
+}
+
+// Synthesizes one spec method entry for a generic instantiation and
+// checks its body under the substitution. The declared signature is
+// the check: the impl method resolves beside it, and any mismatch is
+// reported where the impl is written rather than at the call.
+const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
+    u32 impl_module,
+    u32 spec,
+    std::span<const ir::TypeIdx> spec_args,
+    ir::TypeIdx self_type,
+    const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
+    const ast::ItemImpl& impl,
+    std::string_view name) {
+  for (ast::ItemIdx method_item : impl.methods) {
+    const ast::ItemNode& method_node = ast.items[method_item];
+    if (method_node.payload.get<ast::ItemFn>().name.name != name) {
+      continue;
+    }
+    for (const CheckedModule::MethodInfo& existing :
+         modules[impl_module].methods) {
+      if (existing.item == method_item &&
+          existing.self_type.idx == self_type.idx) {
+        return &existing;
+      }
+    }
+    std::vector<ir::TypeIdx> declared_params;
+    ir::TypeIdx declared_ret = error_type();
+    CheckedModule::ReceiverKind declared_receiver =
+        CheckedModule::ReceiverKind::None;
+    // The callee resolves its own parameters only: the caller scope
+    // is hidden so a same-named parameter cannot leak through.
+    std::vector<std::pair<std::string_view, ir::TypeIdx>> outer_scope =
+        std::move(type_params);
+    type_params.clear();
+    for (const auto& binding : scope) {
+      type_params.push_back(binding);
+    }
+    if (!spec_method_sig(spec, name, spec_args, self_type, impl_module,
+                         declared_params, declared_ret, declared_receiver)) {
+      type_params = std::move(outer_scope);
+      return nullptr;
+    }
+    std::vector<ir::TypeIdx> params;
+    for (const ast::ItemFnParam& param :
+         method_node.payload.get<ast::ItemFn>().params) {
+      params.push_back(resolve_type(impl_module, param.type, &self_type));
+    }
+    ir::TypeIdx ret = builder.primitive(ir::TypeTag::Void);
+    if (method_node.payload.get<ast::ItemFn>().return_type.is_valid()) {
+      ret = resolve_type(impl_module,
+                         method_node.payload.get<ast::ItemFn>().return_type,
+                         &self_type);
+    }
+    CheckedModule::ReceiverKind receiver = CheckedModule::ReceiverKind::None;
+    if (!params.empty()) {
+      receiver = classify_receiver(params[0], self_type);
+    }
+    bool matches = params.size() == declared_params.size() &&
+                   receiver == declared_receiver &&
+                   types_equal(ret, declared_ret);
+    for (usize i = 0; matches && i < params.size(); ++i) {
+      matches = types_equal(params[i], declared_params[i]);
+    }
+    if (!matches) {
+      const SpecEntry& entry = specs[spec];
+      const u32 index = bag.emit<i18n::Key::AnalyzerSpecSignatureMismatch>(
+          diag::Severity::Error, ANALYZER_TYPE_MISMATCH, method_node.span, name,
+          entry.name);
+      (void)index;
+      type_params = std::move(outer_scope);
+      return nullptr;
+    }
+    modules[impl_module].functions.push_back(
+        {method_node.payload.get<ast::ItemFn>().name.name, params, ret,
+         method_item});
+    modules[impl_module].methods.push_back(
+        {self_type, method_node.payload.get<ast::ItemFn>().name.name, params,
+         ret, receiver, method_item, false, spec});
+    CheckedModule::MethodInfo* entry = &modules[impl_module].methods.back();
+    const u32 inst = inst_index(self_type);
+    spec_scope.push_back(spec);
+    const ir::TypeIdx saved_ret = fn_ret;
+    const u32 saved_loop = loop_depth;
+    const bool saved_in_fn = in_fn;
+    const bool saved_bind = bind_comp_known;
+    const u32 saved_inst = cur_inst;
+    cur_inst = inst;
+    check_fn(impl_module, method_item, &self_type);
+    cur_inst = saved_inst;
+    fn_ret = saved_ret;
+    loop_depth = saved_loop;
+    in_fn = saved_in_fn;
+    bind_comp_known = saved_bind;
+    spec_scope.pop_back();
+    type_params = std::move(outer_scope);
+    return entry;
+  }
+  return nullptr;
+}
+
+void Checker::check_spec_impl_bodies(u32 module, ast::ItemIdx item) {
+  const ast::ItemImpl& impl = ast.items[item].payload.get<ast::ItemImpl>();
+  for (const SpecImplEntry& entry : spec_impls) {
+    if (entry.item != item) {
+      continue;
+    }
+    std::vector<ir::TypeIdx> args;
+    for (const SpecTarget::Arg& arg : entry.target.args) {
+      if (arg.is_param) {
+        return;
+      }
+      args.push_back(arg.type);
+    }
+    ir::TypeIdx self_type = error_type();
+    if (args.empty()) {
+      self_type = intern_nominal(nominals[entry.target.nominal]);
+    } else {
+      self_type = instantiate_generic(entry.target.nominal, args, entry.span);
+    }
+    if (is_error(self_type)) {
+      return;
+    }
+    spec_scope.push_back(entry.spec);
+    for (ast::ItemIdx method_item : impl.methods) {
+      check_fn(module, method_item, &self_type);
+    }
+    spec_scope.pop_back();
+    return;
+  }
 }
 
 void Checker::record_call(u32 module,
@@ -2883,6 +3590,10 @@ void Checker::check_bodies() {
           break;
         }
         case ast::ItemKind::Impl: {
+          if (node.payload.get<ast::ItemImpl>().spec.is_valid()) {
+            check_spec_impl_bodies(m, item);
+            break;
+          }
           // Generic impls instantiate per method call; their bodies
           // wait for instantiation-time checking.
           if (!node.payload.get<ast::ItemImpl>().params.empty()) {
@@ -2914,6 +3625,7 @@ void Checker::check_bodies() {
           }
           break;
         }
+        case ast::ItemKind::Spec: break;
         case ast::ItemKind::Static:
         case ast::ItemKind::Const: {
           std::string_view name;

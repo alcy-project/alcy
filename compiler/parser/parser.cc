@@ -33,7 +33,6 @@ bool is_reserved(lexer::TokenKind kind) {
     case lexer::TokenKind::Register:
     case lexer::TokenKind::Extern:
     case lexer::TokenKind::Unsafe:
-    case lexer::TokenKind::For:
     case lexer::TokenKind::In:
     case lexer::TokenKind::Where:
     case lexer::TokenKind::Dyn: return true;
@@ -297,6 +296,17 @@ ast::ItemIdx Parser::parse_item() {
     case lexer::TokenKind::Struct: return parse_struct(is_pub);
     case lexer::TokenKind::Enum: return parse_enum(is_pub);
     case lexer::TokenKind::Impl: return parse_impl(is_pub);
+    case lexer::TokenKind::Spec: return parse_spec(is_pub);
+    case lexer::TokenKind::For: {
+      // `for` survives only in `impl S for T`, which parse_impl
+      // consumes; anywhere else the loops it will one day introduce
+      // are still future use.
+      const diag::Span span = peek().span;
+      const u32 index = bag_.emit<i18n::Key::ParserReservedName>(
+          diag::Severity::Error, PARSER_RESERVED_WORD, span, "for");
+      (void)index;
+      return ast::ItemIdx::invalid();
+    }
     case lexer::TokenKind::Static: return parse_static(is_pub);
     case lexer::TokenKind::Const: return parse_const(is_pub);
     case lexer::TokenKind::Use: return parse_use(is_pub);
@@ -409,35 +419,41 @@ bool Parser::parse_turbofish(std::vector<ast::TypeIdx>& type_args) {
   return true;
 }
 
-ast::ItemIdx Parser::parse_fn(bool is_pub) {
-  const usize mark = pos_;
+bool Parser::parse_fn_signature(FnSignature& signature) {
   if (!expect(lexer::TokenKind::Fn, "function")) {
-    return ast::ItemIdx::invalid();
+    return false;
   }
   base::Result<ast::Ident, diag::Reported> name = parse_ident("function name");
   if (name.is_err()) {
-    return ast::ItemIdx::invalid();
+    return false;
   }
-  std::vector<ast::Ident> generic;
-  if (!parse_generic_params(generic)) {
-    return ast::ItemIdx::invalid();
+  signature.name = std::move(name).unwrap();
+  if (!parse_generic_params(signature.generic)) {
+    return false;
   }
   if (!expect(lexer::TokenKind::LParen, "`(`")) {
-    return ast::ItemIdx::invalid();
+    return false;
   }
-  std::vector<ast::ItemFnParam> params;
-  if (!parse_fn_params(params)) {
-    return ast::ItemIdx::invalid();
+  if (!parse_fn_params(signature.params)) {
+    return false;
   }
   if (!expect(lexer::TokenKind::RParen, "`)`")) {
-    return ast::ItemIdx::invalid();
+    return false;
   }
-  ast::TypeIdx return_type = ast::TypeIdx::invalid();
   if (match(lexer::TokenKind::Arrow)) {
-    return_type = parse_closed_type();
-    if (!return_type.is_valid()) {
-      return ast::ItemIdx::invalid();
+    signature.return_type = parse_closed_type();
+    if (!signature.return_type.is_valid()) {
+      return false;
     }
+  }
+  return true;
+}
+
+ast::ItemIdx Parser::parse_fn(bool is_pub) {
+  const usize mark = pos_;
+  FnSignature signature;
+  if (!parse_fn_signature(signature)) {
+    return ast::ItemIdx::invalid();
   }
   ast::BlockIdx body = parse_block();
   if (!body.is_valid()) {
@@ -448,10 +464,10 @@ ast::ItemIdx Parser::parse_fn(bool is_pub) {
   node.span = span_from(mark);
   node.is_pub = is_pub;
   node.payload.set(ast::ItemFn{
-      .name = std::move(name).unwrap(),
-      .generic = ast::copy_to_arena(ast_.spans, generic),
-      .params = ast::copy_to_arena(ast_.spans, params),
-      .return_type = return_type,
+      .name = signature.name,
+      .generic = ast::copy_to_arena(ast_.spans, signature.generic),
+      .params = ast::copy_to_arena(ast_.spans, signature.params),
+      .return_type = signature.return_type,
       .body = body,
   });
   return ast_.items.push_back(node);
@@ -695,6 +711,25 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
   if (!type.is_valid()) {
     return ast::ItemIdx::invalid();
   }
+  ast::TypeIdx spec = ast::TypeIdx::invalid();
+  if (match(lexer::TokenKind::For)) {
+    // `impl S for T`: the type just parsed is the spec side, so it
+    // must be a plain path. Spec arguments (`Iterator<T>`) ride the
+    // same type grammar as the target.
+    if (ast_.types[type].kind != ast::TypeKind::Path) {
+      const diag::Span span = ast_.types[type].span;
+      const u32 index = bag_.emit<i18n::Key::ParserExpectedFound>(
+          diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span, "a spec",
+          bytes_.substr(span.offset, span.length));
+      (void)index;
+      return ast::ItemIdx::invalid();
+    }
+    spec = type;
+    type = parse_closed_type();
+    if (!type.is_valid()) {
+      return ast::ItemIdx::invalid();
+    }
+  }
   if (!expect(lexer::TokenKind::LBrace, "`{`")) {
     return ast::ItemIdx::invalid();
   }
@@ -720,6 +755,73 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
   node.payload.set(ast::ItemImpl{
       .params = ast::copy_to_arena(ast_.spans, params),
       .type = type,
+      .spec = spec,
+      .methods = ast::copy_to_arena(ast_.spans, methods),
+  });
+  return ast_.items.push_back(node);
+}
+
+bool Parser::parse_spec_method(ast::SpecMethod& method) {
+  FnSignature signature;
+  if (!parse_fn_signature(signature)) {
+    return false;
+  }
+  // No default bodies in v1: a spec declares signatures, and every
+  // implementation supplies each one.
+  if (!expect(lexer::TokenKind::Semicolon, "`;`")) {
+    return false;
+  }
+  method = ast::SpecMethod{
+      .name = signature.name,
+      .generic = ast::copy_to_arena(ast_.spans, signature.generic),
+      .params = ast::copy_to_arena(ast_.spans, signature.params),
+      .return_type = signature.return_type,
+  };
+  return true;
+}
+
+ast::ItemIdx Parser::parse_spec(bool is_pub) {
+  const usize mark = pos_;
+  if (!expect(lexer::TokenKind::Spec, "spec")) {
+    return ast::ItemIdx::invalid();
+  }
+  base::Result<ast::Ident, diag::Reported> name = parse_ident("spec name");
+  if (name.is_err()) {
+    return ast::ItemIdx::invalid();
+  }
+  std::vector<ast::Ident> params;
+  if (!parse_generic_params(params)) {
+    return ast::ItemIdx::invalid();
+  }
+  if (!expect(lexer::TokenKind::LBrace, "`{`")) {
+    return ast::ItemIdx::invalid();
+  }
+  std::vector<ast::SpecMethod> methods;
+  while (!check(lexer::TokenKind::RBrace) && !at_end()) {
+    if (match(lexer::TokenKind::Semicolon)) {
+      continue;
+    }
+    if (match(lexer::TokenKind::Pub)) {
+      // Method visibility is not checked; accept the marker for
+      // consistency with inherent impl blocks.
+    }
+    ast::SpecMethod method;
+    if (!parse_spec_method(method)) {
+      synchronize();
+      continue;
+    }
+    methods.push_back(method);
+  }
+  if (!expect(lexer::TokenKind::RBrace, "`}`")) {
+    return ast::ItemIdx::invalid();
+  }
+  ast::ItemNode node;
+  node.kind = ast::ItemKind::Spec;
+  node.span = span_from(mark);
+  node.is_pub = is_pub;
+  node.payload.set(ast::ItemSpec{
+      .name = std::move(name).unwrap(),
+      .params = ast::copy_to_arena(ast_.spans, params),
       .methods = ast::copy_to_arena(ast_.spans, methods),
   });
   return ast_.items.push_back(node);
@@ -943,6 +1045,15 @@ ast::StmtIdx Parser::parse_stmt() {
     case lexer::TokenKind::While:
     case lexer::TokenKind::Loop:
     case lexer::TokenKind::Match: lead = StmtLead::None; break;
+    case lexer::TokenKind::For: {
+      // `for` survives only in `impl S for T`, which parse_impl
+      // consumes; a loop here is still future use.
+      const diag::Span span = peek().span;
+      const u32 index = bag_.emit<i18n::Key::ParserReservedName>(
+          diag::Severity::Error, PARSER_RESERVED_WORD, span, "for");
+      (void)index;
+      return ast::StmtIdx::invalid();
+    }
     default: break;
   }
   if (lead == StmtLead::Decl) {

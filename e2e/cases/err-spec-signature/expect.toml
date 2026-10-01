@@ -1,0 +1,2 @@
+exit = 4
+contains = ["method 'show' does not match the declaration in 'Display'"]

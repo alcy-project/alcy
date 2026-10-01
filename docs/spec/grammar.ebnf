@@ -21,7 +21,7 @@ file        = { item } ;
 (* Items *)
 
 item        = [ vis ] , ( fn_item | struct_item | enum_item | impl_item
-                        | static_item | const_item | use_item ) ;
+                        | spec_item | static_item | const_item | use_item ) ;
 vis         = "pub" ;
 fn_item     = "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
             , [ "->" , type ] , block ;
@@ -36,7 +36,17 @@ field       = IDENT , ":" , type ;
 enum_item   = "enum" , IDENT , [ type_params ] , "{"
             , variant , { "," , variant } , [ "," ] , "}" ;
 variant     = IDENT | IDENT , "(" , [ type , { "," , type } ] , ")" ;
-impl_item   = "impl" , [ type_params ] , type , "{" , { fn_item } , "}" ;
+impl_item   = "impl" , [ type_params ] , type , [ "for" , type ] , "{"
+            , { fn_item } , "}" ;
+              (* Without "for" the block is inherent. With it the first
+                 type is the implemented spec as a path, optionally with
+                 arguments, and the second is the target. *)
+spec_item   = "spec" , IDENT , [ type_params ] , "{"
+            , { [ vis ] , spec_method } , "}" ;
+spec_method = "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
+            , [ "->" , type ] , ";" ;
+              (* Signatures only: a body here is an error, and every
+                 implementation supplies each declared method. *)
 static_item = "static" , IDENT , ":" , type , "=" , expr ;
 const_item  = "const" , IDENT , ":" , type , "=" , literal ;
 use_item    = [ "pub" ] , "use" , path , [ "as" , IDENT ] , ";" ;

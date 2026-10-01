@@ -104,6 +104,12 @@ const ast::ItemImpl as_impl(const ast::ItemIdx item_idx, Fixture& f) {
   return item.payload.get<ast::ItemImpl>();
 }
 
+const ast::ItemSpec as_spec(const ast::ItemIdx item_idx, Fixture& f) {
+  const ast::ItemNode& item = f.ast.items[item_idx];
+  CHECK(item.kind == ast::ItemKind::Spec);
+  return item.payload.get<ast::ItemSpec>();
+}
+
 const ast::ItemUse as_use(const ast::ItemIdx item_idx, Fixture& f) {
   const ast::ItemNode& item = f.ast.items[item_idx];
   CHECK(item.kind == ast::ItemKind::Use);
@@ -800,6 +806,64 @@ TEST_CASE("Parser rejects an array length that overflows") {
   // Wrapping would silently turn this into a length of zero.
   const ParseResult result =
       parse("fn f() -> [u8; 18446744073709551616] { [0u8; 0] }", f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Parser builds spec declarations and impl blocks") {
+  Fixture f;
+  const ParseResult result = parse(
+      "spec Iterator<T> {\n"
+      "  fn next(mut self: &mut Self) -> Option<T>;\n"
+      "  fn done(self: &Self) -> bool;\n"
+      "}\n"
+      "struct Counter { n: i32 }\n"
+      "impl Iterator<i32> for Counter {\n"
+      "  fn next(mut self: &mut Self) -> Option<i32> { ret Option::None }\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 3) {
+    return;
+  }
+  const ast::ItemSpec spec = as_spec(result.items[0], f);
+  CHECK(spec.name.name == "Iterator");
+  CHECK(spec.params.size() == 1);
+  CHECK(spec.methods.size() == 2);
+  if (spec.methods.size() != 2) {
+    return;
+  }
+  CHECK(spec.methods[0].name.name == "next");
+  CHECK(spec.methods[0].return_type.is_valid());
+  CHECK(spec.methods[1].name.name == "done");
+  const ast::ItemImpl impl = as_impl(result.items[2], f);
+  CHECK(impl.spec.is_valid());
+  CHECK(impl.methods.size() == 1);
+}
+
+TEST_CASE("Parser keeps inherent impl blocks spec-free") {
+  Fixture f;
+  const ParseResult result = parse(
+      "struct S { x: i32 }\n"
+      "impl S {\n"
+      "  fn get(self: &Self) -> i32 { ret 0 }\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 2) {
+    return;
+  }
+  const ast::ItemImpl impl = as_impl(result.items[1], f);
+  CHECK(!impl.spec.is_valid());
+}
+
+TEST_CASE("Parser rejects spec method bodies") {
+  Fixture f;
+  const ParseResult result = parse(
+      "spec S {\n"
+      "  fn f(self: &Self) -> i32 { ret 0 }\n"
+      "}\n",
+      f);
   CHECK(!result.ok);
   CHECK(f.bag.has_errors());
 }

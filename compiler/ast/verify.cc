@@ -364,8 +364,26 @@ bool verify_item_children(const ItemNode& node, const AstArena& arena) {
       if (!bound(impl.type, arena.types.size())) {
         return false;
       }
+      if (impl.spec.is_valid() && !bound(impl.spec, arena.types.size())) {
+        return false;
+      }
       for (const ItemIdx method : impl.methods) {
         if (!bound(method, arena.items.size())) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case ItemKind::Spec: {
+      const ItemSpec spec = node.payload.get<ItemSpec>();
+      for (const SpecMethod& method : spec.methods) {
+        for (const ItemFnParam& param : method.params) {
+          if (!verify_param_children(param, arena)) {
+            return false;
+          }
+        }
+        if (method.return_type.is_valid() &&
+            !bound(method.return_type, arena.types.size())) {
           return false;
         }
       }

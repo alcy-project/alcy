@@ -86,6 +86,15 @@ struct NameCollector {
         }
         break;
       }
+      case ast::ItemKind::Spec: {
+        const ast::ItemSpec& spec = item.payload.get<ast::ItemSpec>();
+        for (const ast::SpecMethod& method : spec.methods) {
+          for (const ast::ItemFnParam& param : method.params) {
+            visit_pattern(param.pattern);
+          }
+        }
+        break;
+      }
       case ast::ItemKind::Struct:
       case ast::ItemKind::Enum:
       case ast::ItemKind::Use:

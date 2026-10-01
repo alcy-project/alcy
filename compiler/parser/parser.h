@@ -18,6 +18,15 @@
 
 namespace parser {
 
+// A function signature without its body, shared by `fn` items and
+// spec method signatures (`fn f(...) -> T;`).
+struct FnSignature {
+  ast::Ident name;
+  std::vector<ast::Ident> generic;
+  std::vector<ast::ItemFnParam> params;
+  ast::TypeIdx return_type = ast::TypeIdx::invalid();
+};
+
 // Diagnostic codes 3000-3199 are reserved for the parser.
 inline constexpr u32 PARSER_UNEXPECTED_TOKEN = 3000;
 inline constexpr u32 PARSER_RESERVED_WORD = 3001;
@@ -81,6 +90,9 @@ class Parser {
   ast::ItemIdx parse_struct(bool is_pub);
   ast::ItemIdx parse_enum(bool is_pub);
   ast::ItemIdx parse_impl(bool is_pub);
+  ast::ItemIdx parse_spec(bool is_pub);
+  bool parse_fn_signature(FnSignature& signature);
+  bool parse_spec_method(ast::SpecMethod& method);
   // Parses an optional `<T, ...>` parameter list; empty when absent.
   bool parse_generic_params(std::vector<ast::Ident>& params);
   ast::ItemIdx parse_static(bool is_pub);

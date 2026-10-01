@@ -286,6 +286,10 @@ class Resolver {
             local_values[m].push_back(NameEntry{name});
             break;
           }
+          case I::Spec: {
+            local_types[m].push_back(NameEntry{name});
+            break;
+          }
           case I::Fn:
           case I::Intrinsic:
           case I::Static:
@@ -324,7 +328,8 @@ class Resolver {
         for (Namespace ns : namespaces) {
           const bool declared =
               (ns == Namespace::Type &&
-               (node.kind == I::Struct || node.kind == I::Enum)) ||
+               (node.kind == I::Struct || node.kind == I::Enum ||
+                node.kind == I::Spec)) ||
               (ns == Namespace::Value &&
                (node.kind == I::Struct || node.kind == I::Enum ||
                 node.kind == I::Fn || node.kind == I::Intrinsic ||

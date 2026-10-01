@@ -196,6 +196,19 @@ class Desugar {
         }
         break;
       }
+      case ast::ItemKind::Spec: {
+        // Signatures carry patterns but no bodies; renaming inside
+        // them keeps the pass uniform with `Fn`.
+        for (const ast::SpecMethod& method :
+             node.payload.get<ast::ItemSpec>().methods) {
+          push_scope();
+          for (const ast::ItemFnParam& param : method.params) {
+            visit_pattern(param.pattern);
+          }
+          pop_scope();
+        }
+        break;
+      }
       case ast::ItemKind::Struct:
       case ast::ItemKind::Enum:
       case ast::ItemKind::Use: break;

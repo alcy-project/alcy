@@ -151,6 +151,7 @@ constexpr Keyword KEYWORDS[] = {
     {"register", TokenKind::Register},
     {"ret", TokenKind::Ret},
     {"self", TokenKind::Self},
+    {"spec", TokenKind::Spec},
     {"static", TokenKind::Static},
     {"str", TokenKind::Str},
     {"struct", TokenKind::Struct},

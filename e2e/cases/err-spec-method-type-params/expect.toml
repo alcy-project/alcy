@@ -1,0 +1,2 @@
+exit = 4
+contains = ["spec method 'f' must not declare type parameters"]

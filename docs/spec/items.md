@@ -19,6 +19,13 @@
 - Inherent `impl` blocks are MVP. A parameter list (`impl<T> ...`)
   makes the block generic; its methods are checked and specialized per
   receiver instantiation.
+- A `spec` declares a capability as method signatures, and
+  `impl S for T` opts one type in. Specs live in the type namespace:
+  `use` imports them and a prelude facade re-exports core's, which is
+  what puts a spec's methods on a call — dispatch tries inherent
+  methods first, then the in-scope spec impls. Coherence is global
+  (one impl per spec and type), and every method the spec declares
+  must be implemented with a matching signature. See `grammar.md`.
 - The compiler provides a `print(msg: str)` intrinsic, lowered
   directly to a write syscall. It migrates to an ordinary core
   function once FFI lands.

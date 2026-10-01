@@ -70,6 +70,7 @@
   F(ParserNestingTooDeep, "nesting is deeper than the limit of {}") \
   F(ParserReservedName, "`{}` is reserved for future use") \
   /* analyzer */ \
+  F(AnalyzerAmbiguousMethod, "ambiguous method '{}'") \
   F(AnalyzerAmbiguousVariant, "ambiguous variant '{}'") \
   F(AnalyzerArgumentsNotTuple, "arguments must be a tuple") \
   F(AnalyzerArityMismatch, "'{}' expects {} argument{}") \
@@ -110,6 +111,7 @@
   F(AnalyzerCompParameterArgument, "argument for `comp` parameter must be comp-known") \
   F(AnalyzerCompParameterOnIntrinsic, "`comp` parameters on intrinsics are not supported") \
   F(AnalyzerCompoundAssignNeedsNumeric, "compound assignment needs a numeric place") \
+  F(AnalyzerConflictingSpecImpl, "conflicting implementation of '{}' for '{}'") \
   F(AnalyzerConflictsWithLocalItem, "`{}` conflicts with a local item") \
   F(AnalyzerConstNeedsLiteral, "const '{}' admits literal expressions only") \
   F(AnalyzerContinueOutsideLoop, "'continue' outside of a loop") \
@@ -144,6 +146,7 @@
   F(AnalyzerMatchNotExhaustiveTuple, "non-exhaustive tuple match: add a wildcard arm") \
   F(AnalyzerMaybeUninitArity, "'MaybeUninit' takes one type argument") \
   F(AnalyzerMissingField, "missing field '{}'") \
+  F(AnalyzerMissingSpecMethod, "missing method '{}' in implementation of '{}'") \
   F(AnalyzerNoFields, "no fields on '{}'") \
   F(AnalyzerNotAnAssignablePlace, "cannot assign to this place") \
   F(AnalyzerNotCallable, "not callable") \
@@ -164,6 +167,11 @@
   F(AnalyzerRootModuleHasNoParent, "the root module has no parent") \
   F(AnalyzerSelfOutsideImpl, "Self outside of an impl block") \
   F(AnalyzerSourceFileHasNoModule, "source file '{}' has no module") \
+  F(AnalyzerSpecMethodTypeParameters, "spec method '{}' must not declare type parameters") \
+  F(AnalyzerSpecRequiresNominalTarget, "spec implementation requires a nominal type") \
+  F(AnalyzerSpecSignatureMismatch, "method '{}' does not match the declaration in '{}'") \
+  F(AnalyzerSpecTargetNotDirect, "spec implementation target must name its type parameters directly") \
+  F(AnalyzerSpecUnknownMethod, "'{}' is not a method of '{}'") \
   F(AnalyzerStaticHoldsMutableRef, "static '{}' must not contain '&mut'") \
   F(AnalyzerStaticReadInCompEvaluation, "statics with storage cannot be read in comp evaluation") \
   F(AnalyzerStringNotInScope, "'String' is not in scope") \

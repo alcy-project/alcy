@@ -71,6 +71,43 @@ struct NominalEntry {
   bool complete = false;
 };
 
+// A declared capability: `spec Name<params>`. Method signatures live
+// on the item; implementations register their methods as ordinary
+// `MethodInfo` entries carrying this index.
+struct SpecEntry {
+  u32 module;
+  std::string_view name;
+  ast::ItemIdx item;
+  diag::Span span;
+};
+
+// The target of one `impl S for T`: the nominal with one argument
+// descriptor per parameter. A descriptor is either a concrete type
+// or the name of the impl parameter standing in that position;
+// nested shapes never reach the table, so overlap stays decidable.
+struct SpecTarget {
+  u32 nominal = 0;
+  struct Arg {
+    bool is_param = false;
+    std::string_view param;
+    ir::TypeIdx type = ir::TypeIdx::invalid();
+  };
+  std::vector<Arg> args;
+};
+
+// One coherence record: spec `spec` implemented for `target` by
+// `item` in `module`. At most one record per spec overlaps any
+// concrete type. Generic records persist the spec-argument shapes
+// beside the target so call-site instantiation resolves both.
+struct SpecImplEntry {
+  u32 spec = 0;
+  u32 module = 0;
+  SpecTarget target;
+  std::vector<SpecTarget::Arg> spec_args;
+  ast::ItemIdx item = ast::ItemIdx::invalid();
+  diag::Span span;
+};
+
 // One instantiation of a generic enum: the checked shape of
 // `Nominal<args>`, interned once and shared by identity.
 struct GenericInstance {
@@ -97,6 +134,10 @@ class Checker {
   ir::StorageBuilder builder;
   str::StringInterner interner;
   std::vector<NominalEntry> nominals;
+  std::vector<SpecEntry> specs;
+  // Every spec implementation in the tree, in registration order.
+  // Coherence is checked against this as each impl registers.
+  std::vector<SpecImplEntry> spec_impls;
   std::vector<GenericInstance> generic_instances;
   std::vector<FnInstance> fn_instances;
   // Shared instantiation numbering that keys lowering side tables.
@@ -121,6 +162,10 @@ class Checker {
   // Index into generic_instances while checking an instantiated
   // method body (NO_INST otherwise); keys the lowering side tables.
   u32 cur_inst = NO_INST;
+  // The spec whose implementation is being checked, innermost last.
+  // A method body inside `impl S for T` resolves sibling calls
+  // through S itself, which is in scope there by construction.
+  std::vector<u32> spec_scope;
   std::vector<CheckedModule> modules;
   std::vector<u32> parents;
 
@@ -144,6 +189,53 @@ class Checker {
   ir::TypeIdx fn_ret = ir::TypeIdx(0);
   void register_nominals();
   NominalEntry* find_nominal(u32 module, std::string_view name);
+  // A spec declaration by module and name; at most one per module.
+  SpecEntry* find_spec(u32 module, std::string_view name);
+  // A spec visible from `module`: declared there, imported, or
+  // injected from a prelude facade. Mirrors the type-namespace walk.
+  SpecEntry* find_spec_in_scope(u32 module, std::string_view name);
+  // Whether `spec` answers method calls from `module`: declared
+  // there, imported under any local name, or injected from a facade.
+  bool spec_in_scope(u32 module, const SpecEntry& spec);
+  // Registers one `spec` item: rejects a colliding type or spec name
+  // in the same module, duplicate methods, and method-level type
+  // parameters, which arrive with bounds.
+  void register_spec(u32 module, ast::ItemIdx item);
+  // Registers one `impl S for T`: resolves the spec and the target,
+  // enforces coherence, and checks the methods against the declared
+  // signatures. Generic targets defer bodies to call-site
+  // instantiation, exactly like generic inherent impls.
+  void register_spec_impl(u32 module, ast::ItemIdx item);
+  // Declared signature of spec method `name` under `self_type`, with
+  // the spec's parameters bound to `spec_args`. False when the spec
+  // declares no such method.
+  bool spec_method_sig(u32 spec,
+                       std::string_view name,
+                       std::span<const ir::TypeIdx> spec_args,
+                       ir::TypeIdx self_type,
+                       u32 module,
+                       std::vector<ir::TypeIdx>& params_out,
+                       ir::TypeIdx& ret_out,
+                       CheckedModule::ReceiverKind& receiver_out);
+  // Whether two spec targets overlap: same nominal with arguments
+  // pairwise equal or a bare impl parameter. Concrete types never
+  // overlap each other, so coherence needs no solver.
+  bool spec_targets_overlap(const SpecTarget& a, const SpecTarget& b);
+  // Synthesizes one spec method entry for a generic instantiation
+  // and checks its body under the substitution, mirroring
+  // `instantiate_method` with the declared signature as the check.
+  const CheckedModule::MethodInfo* instantiate_spec_method(
+      u32 impl_module,
+      u32 spec,
+      std::span<const ir::TypeIdx> spec_args,
+      ir::TypeIdx self_type,
+      const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
+      const ast::ItemImpl& impl,
+      std::string_view name);
+  // Checks the bodies of a concrete `impl S for T` under the target.
+  // The record carries the resolved arguments, so no path is
+  // re-resolved and a rejected impl simply has no record to find.
+  void check_spec_impl_bodies(u32 module, ast::ItemIdx item);
   // A declaration recognized by its reserved name (`Range`, `Bound`).
   NominalEntry* builtin_nominal(std::string_view name);
   u32 find_child_module(u32 module, std::string_view name) const;

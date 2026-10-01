@@ -735,6 +735,7 @@ enum class ItemKind : u8 {
   Struct,
   Enum,
   Impl,
+  Spec,
   Static,
   Const,
   Use,
@@ -799,7 +800,29 @@ struct ItemEnum {
 struct ItemImpl {
   std::span<const Ident> params;
   TypeIdx type = TypeIdx::invalid();
+  // The implemented spec, as a type path with arguments; invalid for
+  // an inherent impl. `impl Display for Point` parses the spec side
+  // through the same type grammar as the target.
+  TypeIdx spec = TypeIdx::invalid();
   std::span<const ItemIdx> methods;
+};
+
+// One method signature of a spec declaration: a name with parameter
+// and return types, but no body. Implementations supply bodies per
+// type and are checked against these under the target.
+struct SpecMethod {
+  Ident name;
+  std::span<const Ident> generic;
+  std::span<const ItemFnParam> params;
+  TypeIdx return_type = TypeIdx::invalid();
+};
+
+// A named set of method signatures: `spec Iterator<T>`. Method
+// signatures are data, not items, so no pass visits them as bodies.
+struct ItemSpec {
+  Ident name;
+  std::span<const Ident> params;
+  std::span<const SpecMethod> methods;
 };
 
 struct ItemStatic {
@@ -832,6 +855,7 @@ struct ItemNode {
                                   ItemStruct,
                                   ItemEnum,
                                   ItemImpl,
+                                  ItemSpec,
                                   ItemStatic,
                                   ItemConst,
                                   ItemUse>;
@@ -842,6 +866,7 @@ struct ItemNode {
     switch (kind) {
       case I::Struct: return payload.get<ItemStruct>().name.name;
       case I::Enum: return payload.get<ItemEnum>().name.name;
+      case I::Spec: return payload.get<ItemSpec>().name.name;
       case I::Fn: return payload.get<ItemFn>().name.name;
       case I::Intrinsic: return payload.get<ItemIntrinsic>().name.name;
       case I::Static: return payload.get<ItemStatic>().name.name;

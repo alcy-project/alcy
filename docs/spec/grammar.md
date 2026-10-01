@@ -42,8 +42,20 @@ are rejected with guidance diagnostics.
 ## Items
 
 Methods take explicit receivers: `self`, `&self`, `&mut self`.
-`Self` denotes the implementing type inside `impl` blocks. An omitted
+`Self` denotes the implementing type inside `impl` blocks, and the
+spec's own type inside `spec` declarations. An omitted
 return type means `()`; only free functions take type parameters.
+
+A `spec` declares a named capability as `;`-terminated method
+signatures, with no bodies. `impl S for T` implements every
+declared method for one type; a missing or extra method, or a
+signature that differs after substituting the target for `Self`,
+is an error where the impl is written. The tree holds at most one
+impl of a spec for a type: a second overlapping impl conflicts,
+and two in-scope specs providing one method name make a call
+ambiguous. A method call tries inherent impls first, then spec
+impls whose spec is in scope (declared alongside, imported, or in
+the prelude).
 
 ## Types
 

@@ -25,6 +25,11 @@ namespace analyzer {
 // outside any instantiation-time checking carry this key.
 constexpr u32 NO_INST = 0xFFFFFFFFu;
 
+// Sentinel for an inherent method: `MethodInfo::spec` carries the
+// index of the implemented spec in the checker's spec table, and
+// this for methods from inherent impl blocks.
+constexpr u32 NO_SPEC = 0xFFFFFFFFu;
+
 // Per-module type information for type checking and lowering. All TypeIdx
 // refer to the package Storage below; all views borrow source bytes.
 struct CheckedModule {
@@ -66,6 +71,9 @@ struct CheckedModule {
   // Inherent methods per impl block, including associated functions
   // (receiver None). Mirrors the resolved signatures above so call
   // checking can match (self type, name) without re-walking AST.
+  // Spec implementations register here too, carrying their spec; the
+  // method phase of lookup skips those, and lowering treats both the
+  // same, since dispatch is fully static.
   enum class ReceiverKind : u8 { None, ByValue, Shared, Exclusive };
   struct MethodInfo {
     ir::TypeIdx self_type;
@@ -78,6 +86,9 @@ struct CheckedModule {
     // it where the value ends, so it consumes the value and the
     // borrow checker sees that as a move.
     bool is_drop = false;
+    // Index of the implemented spec in the checker's spec table;
+    // NO_SPEC for methods from inherent impl blocks.
+    u32 spec = NO_SPEC;
   };
   // Destructor glue for one type: the `drop` method to call, as an
   // index into `modules[module].methods`. A method reached through a

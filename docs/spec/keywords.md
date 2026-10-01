@@ -6,7 +6,7 @@ update.
 
 ## MVP
 
-Declarations: `fn`, `struct`, `enum`, `impl`, `static`, `pub`,
+Declarations: `fn`, `struct`, `enum`, `impl`, `spec`, `static`, `pub`,
 `const`, `mut`, `use`
 
 Control flow: `if`, `else`, `loop`, `while`, `break`, `continue`,
@@ -20,7 +20,10 @@ Primitive types: `i8`, `i16`, `i32`, `i64`, `isize`, `u8`,
 ## Reserved (parsed, rejected with guidance)
 
 `async`, `await`, `union`, `register`, `extern`,
-`unsafe`, `for`, `in`, `where`, `dyn`
+`unsafe`, `in`, `where`, `dyn`
+
+`for` is reserved for loops; it also separates the spec from the
+target in `impl S for T` headers (see `items.md`).
 
 ## Bootstrap
 
