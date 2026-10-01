@@ -5,8 +5,6 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
-- [ ] Noun-form audit: modules, structs, and classes read as nouns
-  (stdlib and compiler alike).
 - [ ] `unsafe` design as an ADR; implementation waits for the package
   suite.
 - [ ] Doc-comment collection in the parser (the SSG itself waits).
@@ -22,6 +20,14 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Shipped
 
+- [x] Noun-form audit: modules, structs, and classes read as nouns
+  (stdlib and compiler alike). The rule is that the last word of a name
+  is a noun, recorded in `CONTRIBUTING.md`; the audit found `lower`
+  (now `lowering`), `Desugar` (now `Desugarer`), `FmtParse` (now
+  `FmtTemplate`), and `VerifyError` (now `VerificationError`, which also
+  retired a name two modules shared), plus three ways one concept was
+  spelled. Stdlib needed nothing. `debug` keeps its name as the one
+  recorded exception.
 - [x] Verb split: `compile` takes a file, `build` a package, `check`
   neither emits. The three verbs each sniffed the target's extension, so
   the sniff lived in three places and `build` carried options for two
