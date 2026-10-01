@@ -72,7 +72,7 @@ Grammar (`compiler/parser/parser.h`, 3000–3099):
 - `3003` internal error: the parsed arena failed structural
   verification (see `ast::verify_file`).
 
-Desugar (`compiler/parser/desugar.cc`, 3100–3199):
+Desugaring (`compiler/parser/desugar.cc`, 3100–3199):
 
 - `3100` `or`-pattern alternatives bind different name sets.
 - `3101` a name is already bound in the innermost scope.

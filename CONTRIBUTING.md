@@ -85,6 +85,15 @@ Notes:
   `snake_case_with_trailing_underscore_` for class fields, and `snake_case` otherwise. Use
   numeric types from `"fpag/base/numeric.h"` (`i32`, `usize`, `f64`, etc.) instead of primitive
   C++ types.
+- **Noun-form names:** A type or module name names a thing, so its last word is a noun.
+  Adjectives and participles are fine in front of it (`CheckedModule`, `VerifiedStorage`,
+  `LoweredPackage`); a bare verb is not a name. Write the agent (`Parser`, `Lowerer`,
+  `Desugarer`), the artifact (`FmtTemplate`, `VerificationError`), or the domain noun
+  (`borrow`, because a borrow is a thing in the language). A module named after its action
+  is the same mistake one level up, which is why the directory, the GN target, and the
+  namespace are all `lowering` and not `lower`. `debug` is the one module that keeps a
+  verb's name, as the convention every C++ toolchain already uses for assertions and
+  logging.
 - **Code style:** Use `#pragma once` for include guards and relative includes from project root.
   Prefer `std::string_view` over `std::string` and `std::span` over `std::vector` unless
   ownership retention is required.
