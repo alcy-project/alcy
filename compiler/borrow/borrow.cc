@@ -21,7 +21,7 @@
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
-#include "lower/lower.h"
+#include "lowering/lowering.h"
 
 namespace borrow {
 
@@ -112,12 +112,12 @@ struct SummaryEntry {
 
 class Checker {
  public:
-  Checker(const lower::LoweredPackage& lowered,
+  Checker(const lowering::LoweredPackage& lowered,
           const ir::Storage& storage,
           diag::DiagBag& bag)
       : lowered(lowered), storage(storage), bag(bag) {}
 
-  const lower::LoweredPackage& lowered;
+  const lowering::LoweredPackage& lowered;
   const ir::Storage& storage;
   diag::DiagBag& bag;
 
@@ -1365,7 +1365,7 @@ class Checker {
 }  // namespace
 
 base::Result<void, diag::Reported> check_borrows(
-    const lower::LoweredPackage& lowered,
+    const lowering::LoweredPackage& lowered,
     diag::DiagBag& bag) {
   const u32 errors = bag.error_count();
   Checker checker{lowered, *lowered.storage, bag};

@@ -30,10 +30,10 @@
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
-#include "lower/lowerer.h"
+#include "lowering/lowerer.h"
 #include "text/unescape.h"
 
-namespace lower {
+namespace lowering {
 
 void Lowerer::unsupported(diag::Span span, std::string_view what) {
   const u32 index = bag.emit<i18n::Key::LowerUnsupportedConstruct>(
@@ -3480,4 +3480,4 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
   }
   return value;
 }
-}  // namespace lower
+}  // namespace lowering

@@ -18,7 +18,7 @@
 #include "fpag/str/string_interner.h"
 #include "i18n/language.h"
 #include "ir/type.h"
-#include "lower/lower.h"
+#include "lowering/lowering.h"
 #include "source/source.h"
 
 namespace bench {
@@ -76,9 +76,9 @@ void CompilerFixture::lower() {
     ok_ = false;
     return;
   }
-  base::Result<lower::LoweredPackage, diag::Reported> lowered =
-      lower::lower_package(std::move(*checked_), ir::PointerWidth::W64, ast_,
-                           strings_, bag_);
+  base::Result<lowering::LoweredPackage, diag::Reported> lowered =
+      lowering::lower_package(std::move(*checked_), ir::PointerWidth::W64, ast_,
+                              strings_, bag_);
   checked_.reset();
   if (lowered.is_err() || failed()) {
     ok_ = false;

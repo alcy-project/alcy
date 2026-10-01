@@ -7,7 +7,7 @@
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "lower/lower.h"
+#include "lowering/lowering.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
 #include "source/source.h"
@@ -19,7 +19,7 @@ namespace pipeline {
 // and check lower identical IR through this, so check is a projection
 // of build rather than a second implementation.
 struct FrontendOutput {
-  lower::LoweredPackage package;
+  lowering::LoweredPackage package;
   usize module_count = 0;
   usize function_count = 0;
 };

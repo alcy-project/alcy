@@ -1,4 +1,4 @@
-# lower
+# lowering
 
 Lowering from `CheckedPackage` to `LoweredPackage` (IR plus side
 tables for ownership analysis).

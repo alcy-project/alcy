@@ -17,7 +17,7 @@
 #include "fpag/mem/arena.h"
 #include "fpag/str/string_interner.h"
 #include "ir/storage.h"
-#include "lower/lower.h"
+#include "lowering/lowering.h"
 #include "source/source.h"
 
 namespace bench {
@@ -67,7 +67,7 @@ class CompilerFixture {
     DCHECK(checked_.has_value());
     return *checked_;
   }
-  const lower::LoweredPackage& lowered() const {
+  const lowering::LoweredPackage& lowered() const {
     DCHECK(lowered_.has_value());
     return *lowered_;
   }
@@ -99,7 +99,7 @@ class CompilerFixture {
   source::FileId root_ = source::UNKNOWN_FILE;
   std::optional<analyzer::ModuleTree> tree_;
   std::optional<analyzer::CheckedPackage> checked_;
-  std::optional<lower::LoweredPackage> lowered_;
+  std::optional<lowering::LoweredPackage> lowered_;
   bool ok_ = true;
 
   // Declared ahead of the bag, which borrows the arena.

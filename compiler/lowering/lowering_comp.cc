@@ -23,10 +23,10 @@
 #include "ir/storage_builder.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
-#include "lower/lowerer.h"
+#include "lowering/lowerer.h"
 #include "text/unescape.h"
 
-namespace lower {
+namespace lowering {
 
 bool Lowerer::comp_is_signed(ir::TypeTag tag) {
   return tag == ir::TypeTag::I8 || tag == ir::TypeTag::I16 ||
@@ -2038,4 +2038,4 @@ Val Lowerer::lower_fmt_format(ast::ExprIdx expr,
             {to_operand(written, len_ty), to_operand(len_addr, len_ty)});
   return Val{to_operand(slot, sig.ret), sig.ret, true, false};
 }
-}  // namespace lower
+}  // namespace lowering

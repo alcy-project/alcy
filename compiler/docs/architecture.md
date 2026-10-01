@@ -174,8 +174,8 @@ flowchart TD
         parser --> ast
         ast --> analyzer
         analyzer --> ir
-        ir --> lower
-        lower --> borrow
+        ir --> lowering
+        lowering --> borrow
     end
 
     subgraph Backend

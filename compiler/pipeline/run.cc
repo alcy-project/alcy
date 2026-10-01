@@ -15,7 +15,7 @@
 #include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/messages.h"
-#include "lower/lower.h"
+#include "lowering/lowering.h"
 #include "path/path.h"
 #include "pipeline/build.h"
 #include "pipeline/link_options.h"
@@ -32,7 +32,7 @@ namespace {
 // inherited stdio, forwarding args to the program.
 base::Result<RunOutcome, diag::Reported> link_and_run(
     PipelineContext& ctx,
-    lower::LoweredPackage& lowered,
+    lowering::LoweredPackage& lowered,
     std::string_view target,
     bool optimize,
     LinkOptions link,
@@ -90,12 +90,12 @@ base::Result<RunOutcome, diag::Reported> run_package(
     return base::make_err(diag::Reported{});
   }
   BinTarget resolved = std::move(target).unwrap();
-  base::Result<lower::LoweredPackage, diag::Reported> package =
+  base::Result<lowering::LoweredPackage, diag::Reported> package =
       compile_tree(ctx, resolved.tree);
   if (package.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  lower::LoweredPackage lowered = std::move(package).unwrap();
+  lowering::LoweredPackage lowered = std::move(package).unwrap();
   return link_and_run(ctx, lowered, resolved.bin_name, optimize, link, args,
                       announce, announce_ctx);
 }

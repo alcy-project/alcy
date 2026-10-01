@@ -10,7 +10,7 @@
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "lower/lower.h"
+#include "lowering/lowering.h"
 #include "path/path.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/link_options.h"
@@ -22,7 +22,7 @@ namespace pipeline {
 
 // Shared frontend: type checking, lowering, and borrow checking over a
 // resolved tree. Used by build and run so both lower identical IR.
-base::Result<lower::LoweredPackage, diag::Reported> compile_tree(
+base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
     PipelineContext& ctx,
     analyzer::ModuleTree tree);
 
@@ -33,7 +33,7 @@ base::Result<lower::LoweredPackage, diag::Reported> compile_tree(
 // output's parent directory is the caller's to have made.
 base::Result<void, diag::Reported> emit_package_object(
     PipelineContext& ctx,
-    lower::LoweredPackage& package,
+    lowering::LoweredPackage& package,
     bool optimize,
     const std::string& output_path);
 
@@ -41,7 +41,7 @@ base::Result<void, diag::Reported> emit_package_object(
 // terms as emit_package_object.
 base::Result<void, diag::Reported> emit_package_ir(
     PipelineContext& ctx,
-    lower::LoweredPackage& package,
+    lowering::LoweredPackage& package,
     bool optimize,
     const std::string& output_path);
 
@@ -49,7 +49,7 @@ base::Result<void, diag::Reported> emit_package_ir(
 // emit_package_ir.
 base::Result<void, diag::Reported> emit_package_bitcode(
     PipelineContext& ctx,
-    lower::LoweredPackage& package,
+    lowering::LoweredPackage& package,
     bool optimize,
     const std::string& output_path);
 
@@ -69,7 +69,7 @@ base::Result<void, diag::Reported> link_executable(
 // empty.
 base::Result<std::string, diag::Reported> emit_output(
     PipelineContext& ctx,
-    lower::LoweredPackage& lowered,
+    lowering::LoweredPackage& lowered,
     bool optimize,
     LinkOptions link,
     EmitMode mode,

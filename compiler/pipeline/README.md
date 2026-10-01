@@ -4,7 +4,7 @@ Compilation pipeline: the linear stage flow that wires every module
 together (see `compiler/docs/architecture.md`).
 
 Stages run frontend (discovery, std staging) -> analyzer
-(resolve, check) -> lower -> borrow -> codegen_llvm (emit, link) ->
+(resolve, check) -> lowering -> borrow -> codegen_llvm (emit, link) ->
 run. Each stage takes validated artifacts from the previous one and
 returns `base::Result<T, diag::Reported>`, reporting through the
 shared `DiagBag` in `PipelineContext`.

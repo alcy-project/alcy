@@ -1,14 +1,14 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-source_set("lower") {
+source_set("lowering") {
   sources = [
-    "lower.cc",
-    "lower.h",
-    "lower_comp.cc",
-    "lower_expr.cc",
     "lowerer.cc",
     "lowerer.h",
+    "lowering.cc",
+    "lowering.h",
+    "lowering_comp.cc",
+    "lowering_expr.cc",
   ]
   deps = [
     "//compiler:base_modules",

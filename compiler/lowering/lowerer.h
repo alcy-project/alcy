@@ -27,9 +27,9 @@
 #include "ir/storage_builder.h"
 #include "ir/type.h"
 #include "ir/verifier.h"
-#include "lower/lower.h"
+#include "lowering/lowering.h"
 
-namespace lower {
+namespace lowering {
 
 // Diagnostic codes 5000-5099 are reserved for lowering.
 constexpr u32 LOWER_UNSUPPORTED = 5000;
@@ -536,4 +536,4 @@ class Lowerer {
   base::Result<ir::VerifiedStorage, ir::VerificationError> finish() &&;
 };
 
-}  // namespace lower
+}  // namespace lowering

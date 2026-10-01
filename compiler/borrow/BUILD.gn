@@ -11,7 +11,7 @@ source_set("borrow") {
     "//compiler/diag",
     "//compiler/i18n",
     "//compiler/ir",
-    "//compiler/lower",
+    "//compiler/lowering",
   ]
   configs += [ "//compiler:alcy_config" ]
 }

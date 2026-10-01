@@ -17,7 +17,7 @@
 #include "ir/storage.h"
 #include "ir/type.h"
 
-namespace lower {
+namespace lowering {
 
 // AST-to-IR lowering.
 //
@@ -88,4 +88,4 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     str::StringInterner& strings,
     diag::DiagBag& bag);
 
-}  // namespace lower
+}  // namespace lowering

@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "lower/lower.h"
+#include "lowering/lowering.h"
 
 #include <deque>
 #include <initializer_list>
@@ -34,7 +34,7 @@
 #include "source/source.h"
 #include "tests/util/virtual_source.h"
 
-namespace lower {
+namespace lowering {
 
 namespace {
 
@@ -638,4 +638,4 @@ TEST_CASE("Lower emits verifiable LLVM IR for enums and calls") {
   CHECK(!llvm::verifyModule(*module));
 }
 
-}  // namespace lower
+}  // namespace lowering

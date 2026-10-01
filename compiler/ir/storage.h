@@ -222,7 +222,7 @@ inline TypeLayout type_layout(const StorageState& state,
 }
 
 // Structural Copy query over raw state, shared by Storage and passes
-// that read through a builder before build() (see lower). Cycle-free
+// that read through a builder before build() (see lowering). Cycle-free
 // input required (see Storage::is_copy_type).
 inline bool is_copy_type(const StorageState& state, TypeIdx idx) {
   const TypeNode& node = state.types[idx];

@@ -12,7 +12,7 @@
 #include "diag/bag.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
-#include "lower/lower.h"
+#include "lowering/lowering.h"
 #include "pipeline/embedded_std.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
@@ -40,15 +40,15 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
   const usize module_count = package.modules.size() > tree.staged_modules
                                  ? package.modules.size() - tree.staged_modules
                                  : 0;
-  base::Result<lower::LoweredPackage, diag::Reported> lowered = [&] {
+  base::Result<lowering::LoweredPackage, diag::Reported> lowered = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "lower", "frontend");
-    return lower::lower_package(std::move(package), TARGET_WIDTH, ctx.ast,
-                                ctx.strings, ctx.bag);
+    return lowering::lower_package(std::move(package), TARGET_WIDTH, ctx.ast,
+                                   ctx.strings, ctx.bag);
   }();
   if (lowered.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  lower::LoweredPackage package_ir = std::move(lowered).unwrap();
+  lowering::LoweredPackage package_ir = std::move(lowered).unwrap();
   const usize function_count =
       package_ir.storage->functions().size() > package_ir.prelude_functions
           ? package_ir.storage->functions().size() -

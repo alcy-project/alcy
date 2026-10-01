@@ -13,7 +13,7 @@ late-stage ones:
 | 2000–2999 | lexer       | `compiler/lexer/lexer.cc`          |
 | 3000–3999 | parser      | `compiler/parser/parser.h`, `compiler/parser/desugar.cc` |
 | 4000–4999 | analyzer    | `compiler/analyzer/resolve.*`, `compiler/analyzer/checker.h` |
-| 5000–5999 | lower       | `compiler/lower/lowerer.h`         |
+| 5000–5999 | lowering    | `compiler/lowering/lowerer.h`   |
 | 6000–6999 | borrow      | `compiler/borrow/borrow.cc`        |
 | 7000–7999 | ir          | `compiler/ir/verifier.h` (7100+, one per `VerificationErrorKind`) |
 | 8000–8999 | pipeline    | `compiler/pipeline/pipeline_context.h` |
@@ -124,9 +124,9 @@ Destructors (`compiler/analyzer/checker.h`, 4040–4049):
 - `4040` bad `drop` signature.
 - `4041` `drop` on a copyable type.
 
-## lower (5000–5099)
+## lowering (5000–5099)
 
-`compiler/lower/lowerer.h`:
+`compiler/lowering/lowerer.h`:
 
 - `5000` unsupported construct.
 - `5001` internal error: lowered IR failed verification.

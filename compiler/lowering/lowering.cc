@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "lower/lower.h"
+#include "lowering/lowering.h"
 
 #include <cstdlib>
 #include <ranges>
@@ -36,9 +36,9 @@
 #include "ir/storage_builder.h"
 #include "ir/type.h"
 #include "ir/verifier.h"
-#include "lower/lowerer.h"
+#include "lowering/lowerer.h"
 
-namespace lower {
+namespace lowering {
 
 bool Lowerer::is_block_terminator(ir::Opcode op) {
   return op == ir::Opcode::Br || op == ir::Opcode::CondBr ||
@@ -855,4 +855,4 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   return base::make_ok(std::move(lowered));
 }
 
-}  // namespace lower
+}  // namespace lowering

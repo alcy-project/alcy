@@ -5,7 +5,7 @@
 
 #include "diag/bag.h"
 #include "fpag/base/result.h"
-#include "lower/lower.h"
+#include "lowering/lowering.h"
 
 namespace borrow {
 
@@ -19,7 +19,7 @@ namespace borrow {
 // Findings accumulate in the bag; err marks a package that gained
 // errors. The cli still gates the exit code on the bag.
 base::Result<void, diag::Reported> check_borrows(
-    const lower::LoweredPackage& lowered,
+    const lowering::LoweredPackage& lowered,
     diag::DiagBag& bag);
 
 }  // namespace borrow

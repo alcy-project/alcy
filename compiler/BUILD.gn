@@ -33,7 +33,7 @@ group("modules") {
     "i18n",
     "ir",
     "lexer",
-    "lower",
+    "lowering",
     "parser",
     "path",
     "pkg",

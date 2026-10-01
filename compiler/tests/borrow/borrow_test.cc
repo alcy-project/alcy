@@ -22,7 +22,7 @@
 #include "fpag/str/string_interner.h"
 #include "i18n/language.h"
 #include "ir/type.h"
-#include "lower/lower.h"
+#include "lowering/lowering.h"
 #include "source/source.h"
 #include "tests/util/virtual_source.h"
 
@@ -105,9 +105,9 @@ bool check_case(
   if (checked_result.is_err() || f.bag.has_errors()) {
     return false;
   }
-  base::Result<lower::LoweredPackage, diag::Reported> lowered_result =
-      lower::lower_package(std::move(checked_result).unwrap(),
-                           ir::PointerWidth::W64, f.ast, f.strings, f.bag);
+  base::Result<lowering::LoweredPackage, diag::Reported> lowered_result =
+      lowering::lower_package(std::move(checked_result).unwrap(),
+                              ir::PointerWidth::W64, f.ast, f.strings, f.bag);
   if (lowered_result.is_err() || f.bag.has_errors()) {
     return false;
   }

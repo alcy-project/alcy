@@ -24,7 +24,7 @@
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/messages.h"
-#include "lower/lower.h"
+#include "lowering/lowering.h"
 #include "path/path.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/frontend.h"
@@ -37,7 +37,7 @@
 
 namespace pipeline {
 
-base::Result<lower::LoweredPackage, diag::Reported> compile_tree(
+base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
     PipelineContext& ctx,
     analyzer::ModuleTree tree) {
   base::Result<FrontendOutput, diag::Reported> out = run_frontend(ctx, tree);
@@ -77,7 +77,7 @@ struct EmittedModule {
   // backend goes on to consume it, and a backend that ran the pipeline
   // on its own left every other consumer reading unoptimized IR.
   base::Result<void, diag::Reported> build(PipelineContext& ctx,
-                                           lower::LoweredPackage& package,
+                                           lowering::LoweredPackage& package,
                                            bool optimize) {
     module = std::make_unique<llvm::Module>("alcy_module", context);
     codegen_llvm::LlvmIrEmitter emitter(
@@ -120,7 +120,7 @@ base::Result<void, diag::Reported> write_output(PipelineContext& ctx,
 
 base::Result<void, diag::Reported> emit_package_object(
     PipelineContext& ctx,
-    lower::LoweredPackage& package,
+    lowering::LoweredPackage& package,
     bool optimize,
     const std::string& output_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-object",
@@ -142,7 +142,7 @@ base::Result<void, diag::Reported> emit_package_object(
 
 base::Result<void, diag::Reported> emit_package_ir(
     PipelineContext& ctx,
-    lower::LoweredPackage& package,
+    lowering::LoweredPackage& package,
     bool optimize,
     const std::string& output_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-ir", "backend");
@@ -158,7 +158,7 @@ base::Result<void, diag::Reported> emit_package_ir(
 
 base::Result<void, diag::Reported> emit_package_bitcode(
     PipelineContext& ctx,
-    lower::LoweredPackage& package,
+    lowering::LoweredPackage& package,
     bool optimize,
     const std::string& output_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-bitcode",
@@ -211,7 +211,7 @@ base::Result<void, diag::Reported> link_executable(
 
 base::Result<std::string, diag::Reported> emit_output(
     PipelineContext& ctx,
-    lower::LoweredPackage& lowered,
+    lowering::LoweredPackage& lowered,
     bool optimize,
     LinkOptions link,
     EmitMode mode,
@@ -303,12 +303,12 @@ base::Result<std::string, diag::Reported> build_single_root(
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  base::Result<lower::LoweredPackage, diag::Reported> package =
+  base::Result<lowering::LoweredPackage, diag::Reported> package =
       compile_tree(ctx, std::move(tree).unwrap());
   if (package.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  lower::LoweredPackage lowered = std::move(package).unwrap();
+  lowering::LoweredPackage lowered = std::move(package).unwrap();
   return emit_output(ctx, lowered, optimize, link, mode, std::string(output));
 }
 
@@ -327,12 +327,12 @@ base::Result<std::string, diag::Reported> build_package(
     return base::make_err(diag::Reported{});
   }
   BinTarget resolved = std::move(target).unwrap();
-  base::Result<lower::LoweredPackage, diag::Reported> package =
+  base::Result<lowering::LoweredPackage, diag::Reported> package =
       compile_tree(ctx, resolved.tree);
   if (package.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  lower::LoweredPackage lowered = std::move(package).unwrap();
+  lowering::LoweredPackage lowered = std::move(package).unwrap();
   // An executable goes where the manifest says builds go; the other two
   // are inspection outputs, so they land beside the manifest unless the
   // caller named a path.
