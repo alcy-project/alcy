@@ -11,9 +11,9 @@ is the structural checker both build-time and test-time use.
 ## Entry points
 
 - `StorageBuilder::build()` ->
-  `base::Result<VerifiedStorage, ir::VerifyError>`. Invalid builder
+  `base::Result<VerifiedStorage, ir::VerificationError>`. Invalid builder
   output becomes a structured error instead of corrupt IR.
-- `verify_storage(storage)` -> `VerifyResult`. Pure structural check.
+- `verify_storage(storage)` -> `VerificationResult`. Pure structural check.
 - `VerifiedStorage` - move-only proof that verification ran. The
   constructor is private (`StorageBuilder` is the only factory);
   consumers that require valid IR (`LoweredPackage::storage`, the

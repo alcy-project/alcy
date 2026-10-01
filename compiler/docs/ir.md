@@ -51,7 +51,7 @@ parameter/field lists) must reference **consecutive** vector entries.
 ## Verification
 
 Call `verify_storage(storage)` before consuming IR. It returns
-`base::Result<void, VerifyError>` covering index bounds, single-definition
+`base::Result<void, VerificationError>` covering index bounds, single-definition
 of registers (block parameters count as definitions), terminator placement
 (last instruction only), callee/branch shapes, call arity, and the
 control/memory shapes below. `LlvmIrEmitter::emit()` runs it in debug

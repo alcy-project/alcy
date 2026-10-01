@@ -13,7 +13,7 @@ namespace ir {
 
 class Storage;
 
-enum class VerifyErrorKind : u8 {
+enum class VerificationErrorKind : u8 {
   FunctionBlocksOutOfRange,
   FunctionParamTypesOutOfRange,
   BlockInstrsOutOfRange,
@@ -43,15 +43,15 @@ enum class VerifyErrorKind : u8 {
   TupleFieldsOutOfRange,
 };
 
-struct VerifyError {
-  VerifyErrorKind kind;
+struct VerificationError {
+  VerificationErrorKind kind;
   // The idx value of the offending entity (function, block, instruction,
   // operand, or register, depending on kind).
   u32 index;
 };
 
-constexpr std::string_view format_as(const VerifyErrorKind kind) {
-  using K = VerifyErrorKind;
+constexpr std::string_view format_as(const VerificationErrorKind kind) {
+  using K = VerificationErrorKind;
   switch (kind) {
     case K::FunctionBlocksOutOfRange: return "FunctionBlocksOutOfRange";
     case K::FunctionParamTypesOutOfRange: return "FunctionParamTypesOutOfRange";
@@ -83,14 +83,14 @@ constexpr std::string_view format_as(const VerifyErrorKind kind) {
   }
 }
 
-using VerifyResult = base::Result<void, VerifyError>;
+using VerificationResult = base::Result<void, VerificationError>;
 
 // Converts a structural error into a span-less diagnostic. Codes
 // 7100-7999 are reserved for IR verification, so adding a
-// VerifyErrorKind needs no renumbering as long as the range holds; the
+// VerificationErrorKind needs no renumbering as long as the range holds; the
 // message is the kind name. Human-friendly texts arrive with later
 // phases that know source locations.
-inline diag::Diagnostic to_diagnostic(const VerifyError& error) {
+inline diag::Diagnostic to_diagnostic(const VerificationError& error) {
   return diag::Diagnostic{
       .severity = diag::Severity::Error,
       .code = 7100 + static_cast<u32>(error.kind),
@@ -103,6 +103,6 @@ inline diag::Diagnostic to_diagnostic(const VerifyError& error) {
 // tag validity, single-definition of registers, terminator placement, and
 // callee/branch target shapes. Does not type-check instructions; that is
 // the analyzer's job.
-VerifyResult verify_storage(const Storage& storage);
+VerificationResult verify_storage(const Storage& storage);
 
 }  // namespace ir

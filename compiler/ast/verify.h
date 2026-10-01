@@ -14,7 +14,7 @@ namespace ast {
 // Structural failure of an AST arena: a child index names no node in
 // its table. Invalid indices are allowed absent edges; anything else
 // must be in range.
-enum class VerifyError : u8 {
+enum class VerificationError : u8 {
   DanglingType,
   DanglingPath,
   DanglingPattern,
@@ -31,9 +31,9 @@ enum class VerifyError : u8 {
 // Parser-built arenas satisfy this by construction; hand-built
 // arenas must pass before crossing into the analyzer. No I/O, no
 // logging, no bag writes.
-base::Result<void, VerifyError> verify_file(const AstArena& arena);
+base::Result<void, VerificationError> verify_file(const AstArena& arena);
 
 // Short human-readable detail for a verification failure.
-std::string_view describe_verify_error(VerifyError error);
+std::string_view describe_verification_error(VerificationError error);
 
 }  // namespace ast

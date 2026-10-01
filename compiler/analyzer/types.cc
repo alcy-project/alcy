@@ -3706,11 +3706,12 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  if (base::Result<void, ast::VerifyError> verified = ast::verify_file(ast);
+  if (base::Result<void, ast::VerificationError> verified =
+          ast::verify_file(ast);
       verified.is_err()) {
     const u32 index = bag.emit<i18n::Key::ParserInvalidSyntaxTree>(
         diag::Severity::Error, ANALYZER_INVALID_MODULE_TREE,
-        ast::describe_verify_error(std::move(verified).unwrap_err()));
+        ast::describe_verification_error(std::move(verified).unwrap_err()));
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -3738,10 +3739,10 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   // while the type builder is still live and before the type table is
   // moved out.
   checker.resolve_drops();
-  base::Result<ir::VerifiedStorage, ir::VerifyError> built =
+  base::Result<ir::VerifiedStorage, ir::VerificationError> built =
       std::move(checker.builder).build();
   if (built.is_err()) {
-    const ir::VerifyError error = std::move(built).unwrap_err();
+    const ir::VerificationError error = std::move(built).unwrap_err();
     const u32 index =
         bag.emit<i18n::Key::AnalyzerCheckedTypesFailedVerification>(
             diag::Severity::Error, ANALYZER_INVALID_IR, diag::Span{},

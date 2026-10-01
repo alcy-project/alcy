@@ -77,10 +77,10 @@ TEST_CASE("Verification rejects a dangling expression edge") {
   expr.payload.set(ExprBinary{
       .op = BinaryOp::Add, .lhs = ExprIdx(7), .rhs = ExprIdx::invalid()});
   f.ast.exprs.emplace_back(expr);
-  base::Result<void, VerifyError> result = verify_file(f.ast);
+  base::Result<void, VerificationError> result = verify_file(f.ast);
   CHECK(result.is_err());
   if (result.is_err()) {
-    CHECK(std::move(result).unwrap_err() == VerifyError::DanglingExpr);
+    CHECK(std::move(result).unwrap_err() == VerificationError::DanglingExpr);
   }
 }
 
@@ -96,10 +96,10 @@ TEST_CASE("Verification rejects a dangling item edge") {
                           .return_type = TypeIdx::invalid(),
                           .body = BlockIdx(3)});
   f.ast.items.emplace_back(item);
-  base::Result<void, VerifyError> result = verify_file(f.ast);
+  base::Result<void, VerificationError> result = verify_file(f.ast);
   CHECK(result.is_err());
   if (result.is_err()) {
-    CHECK(std::move(result).unwrap_err() == VerifyError::DanglingItem);
+    CHECK(std::move(result).unwrap_err() == VerificationError::DanglingItem);
   }
 }
 
@@ -110,10 +110,10 @@ TEST_CASE("Verification rejects a dangling type edge") {
   node.span = test_span();
   node.payload.set(TypeArray{.element = TypeIdx(4), .count = 2});
   f.ast.types.emplace_back(node);
-  base::Result<void, VerifyError> result = verify_file(f.ast);
+  base::Result<void, VerificationError> result = verify_file(f.ast);
   CHECK(result.is_err());
   if (result.is_err()) {
-    CHECK(std::move(result).unwrap_err() == VerifyError::DanglingType);
+    CHECK(std::move(result).unwrap_err() == VerificationError::DanglingType);
   }
 }
 

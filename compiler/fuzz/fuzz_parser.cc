@@ -49,7 +49,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
   // The parser verifies on exit only when it ran to completion; a
   // grammar error leaves a partial arena, so this is checked
   // independently rather than trusted.
-  base::Result<void, ast::VerifyError> verified = ast::verify_file(ast);
+  base::Result<void, ast::VerificationError> verified = ast::verify_file(ast);
   (void)verified;
   return 0;
 }

@@ -15,7 +15,7 @@ late-stage ones:
 | 4000–4999 | analyzer    | `compiler/analyzer/resolve.*`, `compiler/analyzer/checker.h` |
 | 5000–5999 | lower       | `compiler/lower/lowerer.h`         |
 | 6000–6999 | borrow      | `compiler/borrow/borrow.cc`        |
-| 7000–7999 | ir          | `compiler/ir/verifier.h` (7100+, one per `VerifyErrorKind`) |
+| 7000–7999 | ir          | `compiler/ir/verifier.h` (7100+, one per `VerificationErrorKind`) |
 | 8000–8999 | pipeline    | `compiler/pipeline/pipeline_context.h` |
 | 9000+     | future      | Unassigned                    |
 
@@ -145,7 +145,7 @@ Destructors (`compiler/analyzer/checker.h`, 4040–4049):
 
 ## ir (7000–7999)
 
-`compiler/ir/verifier.h` emits one code per `VerifyErrorKind`, numbered in
+`compiler/ir/verifier.h` emits one code per `VerificationErrorKind`, numbered in
 declaration order from `7100`: the message is the kind name, and the
 diagnostic carries no span. Adding a kind takes the next ordinal; the
 range up to 8000 is reserved, so no renumbering is needed. These are

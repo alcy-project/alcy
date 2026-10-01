@@ -552,11 +552,12 @@ base::Result<void, diag::Reported> desugar_shadowing(
     diag::DiagBag& bag) {
   Desugarer desugar{ast, bag};
   desugar.run(items);
-  if (base::Result<void, ast::VerifyError> verified = ast::verify_file(ast);
+  if (base::Result<void, ast::VerificationError> verified =
+          ast::verify_file(ast);
       verified.is_err()) {
     const u32 index = bag.emit<i18n::Key::ParserInvalidSyntaxTree>(
         diag::Severity::Error, PARSER_INVALID_AST,
-        ast::describe_verify_error(std::move(verified).unwrap_err()));
+        ast::describe_verification_error(std::move(verified).unwrap_err()));
     (void)index;
     return base::make_err(diag::Reported{});
   }

@@ -241,7 +241,7 @@ Key design points:
 - **Structural verification**: `verify_storage()` checks structural
   invariants including index bounds, single-definition of registers,
   terminator placement, and per-opcode operand shapes. It returns
-  `base::Result<void, VerifyError>`. The emitter runs verification in debug
+  `base::Result<void, VerificationError>`. The emitter runs verification in debug
   builds before LLVM verification.
 
 - **Invariant-preserving construction**: Important structural invariants
@@ -302,12 +302,12 @@ and nowhere else by default. The contract (decided in
   implementations live in private headers or `.cc` files.
 - **One rule chooses `E`.** A module-local error type when the caller must
   handle the failure programmatically (`path::PathError`,
-  `ir::VerifyError`, ...); `diag::Reported` when details are accumulated in
+  `ir::VerificationError`, ...); `diag::Reported` when details are accumulated in
   a `DiagBag` and only success/failure crosses the boundary. The
   `diag::Fallible` container alias is not used: the error type is spelled
   out in every signature.
 - **Verifiers are pure.** `verify_*` functions return
-  `base::Result<void, VerifyError>` (or a validated artifact) and never
+  `base::Result<void, VerificationError>` (or a validated artifact) and never
   mutate input, perform I/O, log, write to a `DiagBag`, or touch global
   state. Public entries convert a verifier failure into a diagnostic and
   return early.

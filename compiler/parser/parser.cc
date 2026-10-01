@@ -275,11 +275,12 @@ base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
     }
     items.push_back(item);
   }
-  if (base::Result<void, ast::VerifyError> verified = ast::verify_file(ast_);
+  if (base::Result<void, ast::VerificationError> verified =
+          ast::verify_file(ast_);
       verified.is_err()) {
     const u32 index = bag_.emit<i18n::Key::ParserInvalidSyntaxTree>(
         diag::Severity::Error, PARSER_INVALID_AST,
-        ast::describe_verify_error(std::move(verified).unwrap_err()));
+        ast::describe_verification_error(std::move(verified).unwrap_err()));
     (void)index;
     return base::make_err(diag::Reported{});
   }

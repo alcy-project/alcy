@@ -409,60 +409,64 @@ bool verify_item_children(const ItemNode& node, const AstArena& arena) {
 
 }  // namespace
 
-base::Result<void, VerifyError> verify_file(const AstArena& arena) {
+base::Result<void, VerificationError> verify_file(const AstArena& arena) {
   PROFILE_SCOPE_WITH_CATEGORY("verify-ast", "frontend");
   for (usize i = 0; i < arena.conds.size(); ++i) {
     if (!verify_cond_children(arena.conds[i], arena)) {
-      return base::make_err(VerifyError::DanglingCond);
+      return base::make_err(VerificationError::DanglingCond);
     }
   }
   for (usize i = 0; i < arena.blocks.size(); ++i) {
     if (!verify_block_children(arena.blocks[i], arena)) {
-      return base::make_err(VerifyError::DanglingBlock);
+      return base::make_err(VerificationError::DanglingBlock);
     }
   }
   for (usize i = 0; i < arena.types.size(); ++i) {
     if (!verify_type_children(arena.types[i], arena)) {
-      return base::make_err(VerifyError::DanglingType);
+      return base::make_err(VerificationError::DanglingType);
     }
   }
   for (usize i = 0; i < arena.patterns.size(); ++i) {
     if (!verify_pattern_children(arena.patterns[i], arena)) {
-      return base::make_err(VerifyError::DanglingPattern);
+      return base::make_err(VerificationError::DanglingPattern);
     }
   }
   for (usize i = 0; i < arena.exprs.size(); ++i) {
     if (!verify_expr_children(arena.exprs[i], arena)) {
-      return base::make_err(VerifyError::DanglingExpr);
+      return base::make_err(VerificationError::DanglingExpr);
     }
   }
   for (usize i = 0; i < arena.stmts.size(); ++i) {
     if (!verify_stmt_children(arena.stmts[i], arena)) {
-      return base::make_err(VerifyError::DanglingStmt);
+      return base::make_err(VerificationError::DanglingStmt);
     }
   }
   for (usize i = 0; i < arena.items.size(); ++i) {
     if (!verify_item_children(arena.items[i], arena)) {
-      return base::make_err(VerifyError::DanglingItem);
+      return base::make_err(VerificationError::DanglingItem);
     }
   }
   return base::make_ok();
 }
 
-std::string_view describe_verify_error(VerifyError error) {
+std::string_view describe_verification_error(VerificationError error) {
   switch (error) {
-    case VerifyError::DanglingType: return "type index names no type node";
-    case VerifyError::DanglingPath: return "path index names no path";
-    case VerifyError::DanglingPattern:
+    case VerificationError::DanglingType:
+      return "type index names no type node";
+    case VerificationError::DanglingPath: return "path index names no path";
+    case VerificationError::DanglingPattern:
       return "pattern index names no pattern node";
-    case VerifyError::DanglingExpr:
+    case VerificationError::DanglingExpr:
       return "expression index names no expression node";
-    case VerifyError::DanglingStmt:
+    case VerificationError::DanglingStmt:
       return "statement index names no statement node";
-    case VerifyError::DanglingBlock: return "block index names no block";
-    case VerifyError::DanglingCond: return "condition index names no condition";
-    case VerifyError::DanglingItem: return "item index names no item node";
-    case VerifyError::DanglingLiteral: return "literal index names no literal";
+    case VerificationError::DanglingBlock: return "block index names no block";
+    case VerificationError::DanglingCond:
+      return "condition index names no condition";
+    case VerificationError::DanglingItem:
+      return "item index names no item node";
+    case VerificationError::DanglingLiteral:
+      return "literal index names no literal";
   }
   return "invalid abstract syntax tree";
 }

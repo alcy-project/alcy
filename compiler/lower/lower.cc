@@ -817,7 +817,7 @@ void Lowerer::run() {
   }
 }
 
-base::Result<ir::VerifiedStorage, ir::VerifyError> Lowerer::finish() && {
+base::Result<ir::VerifiedStorage, ir::VerificationError> Lowerer::finish() && {
   return std::move(builder).build();
 }
 base::Result<LoweredPackage, diag::Reported> lower_package(
@@ -835,10 +835,10 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   std::vector<diag::Span> spans = std::move(lowerer.instr_spans_);
   std::vector<LoweredPackage::AddrInfo> addrs = std::move(lowerer.addr_names_);
   const usize prelude_functions = lowerer.prelude_functions_;
-  base::Result<ir::VerifiedStorage, ir::VerifyError> built =
+  base::Result<ir::VerifiedStorage, ir::VerificationError> built =
       std::move(lowerer).finish();
   if (built.is_err()) {
-    const ir::VerifyError error = std::move(built).unwrap_err();
+    const ir::VerificationError error = std::move(built).unwrap_err();
     const u32 index = bag.emit<i18n::Key::LowerIrVerificationFailed>(
         diag::Severity::Error, LOWER_INTERNAL, diag::Span{});
     (void)index;

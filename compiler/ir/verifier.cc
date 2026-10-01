@@ -33,13 +33,13 @@ constexpr bool range_in_bounds(const Idx head,
   return static_cast<u64>(head.idx) + size <= vec_size;
 }
 
-VerifyResult err(const VerifyErrorKind kind, const u32 index) {
-  return base::make_err(VerifyError{.kind = kind, .index = index});
+VerificationResult err(const VerificationErrorKind kind, const u32 index) {
+  return base::make_err(VerificationError{.kind = kind, .index = index});
 }
 
 }  // namespace
 
-VerifyResult verify_storage(const Storage& storage) {
+VerificationResult verify_storage(const Storage& storage) {
   PROFILE_SCOPE_WITH_CATEGORY("verify-ir", "frontend");
   // The global profiler is deliberate: this takes no context, so an
   // explicit instance would thread a pointer through StorageBuilder and
@@ -49,40 +49,40 @@ VerifyResult verify_storage(const Storage& storage) {
     if (node.tag == TypeTag::Struct) {
       const StructTypeIdx sidx = node.as_struct();
       if (sidx.idx >= storage.struct_types().size()) {
-        return err(VerifyErrorKind::TypeMetadataOutOfRange, tidx.idx);
+        return err(VerificationErrorKind::TypeMetadataOutOfRange, tidx.idx);
       }
       const StructType& struct_type = storage.struct_types()[sidx];
       if (!range_in_bounds(struct_type.fields.head(), struct_type.fields.size(),
                            storage.types().size())) {
-        return err(VerifyErrorKind::StructFieldsOutOfRange, sidx.idx);
+        return err(VerificationErrorKind::StructFieldsOutOfRange, sidx.idx);
       }
     } else if (node.tag == TypeTag::Slice) {
       const SliceTypeIdx sidx = node.as_slice();
       if (sidx.idx >= storage.slice_types().size()) {
-        return err(VerifyErrorKind::TypeMetadataOutOfRange, tidx.idx);
+        return err(VerificationErrorKind::TypeMetadataOutOfRange, tidx.idx);
       }
       if (storage.slice_types()[sidx].element.idx >= storage.types().size()) {
-        return err(VerifyErrorKind::TypeIdxOutOfRange,
+        return err(VerificationErrorKind::TypeIdxOutOfRange,
                    storage.slice_types()[sidx].element.idx);
       }
     } else if (node.tag == TypeTag::Array) {
       const ArrayTypeIdx aidx = node.as_array();
       if (aidx.idx >= storage.array_types().size()) {
-        return err(VerifyErrorKind::TypeMetadataOutOfRange, tidx.idx);
+        return err(VerificationErrorKind::TypeMetadataOutOfRange, tidx.idx);
       }
       if (storage.array_types()[aidx].element.idx >= storage.types().size()) {
-        return err(VerifyErrorKind::TypeIdxOutOfRange,
+        return err(VerificationErrorKind::TypeIdxOutOfRange,
                    storage.array_types()[aidx].element.idx);
       }
     } else if (node.tag == TypeTag::Enum) {
       const EnumTypeIdx eidx = node.as_enum();
       if (eidx.idx >= storage.enum_types().size()) {
-        return err(VerifyErrorKind::TypeMetadataOutOfRange, tidx.idx);
+        return err(VerificationErrorKind::TypeMetadataOutOfRange, tidx.idx);
       }
       const EnumType& enum_type = storage.enum_types()[eidx];
       if (!range_in_bounds(enum_type.variants.head(), enum_type.variants.size(),
                            storage.enum_variant_types().size())) {
-        return err(VerifyErrorKind::TypeMetadataOutOfRange, tidx.idx);
+        return err(VerificationErrorKind::TypeMetadataOutOfRange, tidx.idx);
       }
       for (EnumVariantTypeIdx vidx = enum_type.variants.head();
            vidx.idx < enum_type.variants.head().idx + enum_type.variants.size();
@@ -90,31 +90,31 @@ VerifyResult verify_storage(const Storage& storage) {
         const EnumVariantType& variant = storage.enum_variant_types()[vidx];
         if (!range_in_bounds(variant.fields.head(), variant.fields.size(),
                              storage.types().size())) {
-          return err(VerifyErrorKind::EnumFieldsOutOfRange, vidx.idx);
+          return err(VerificationErrorKind::EnumFieldsOutOfRange, vidx.idx);
         }
       }
     } else if (node.tag == TypeTag::Tuple) {
       const TupleTypeIdx tuple_idx = node.as_tuple();
       if (tuple_idx.idx >= storage.tuple_types().size()) {
-        return err(VerifyErrorKind::TypeMetadataOutOfRange, tidx.idx);
+        return err(VerificationErrorKind::TypeMetadataOutOfRange, tidx.idx);
       }
       const TupleType& tuple = storage.tuple_types()[tuple_idx];
       if (!range_in_bounds(tuple.elements.head(), tuple.elements.size(),
                            storage.types().size())) {
-        return err(VerifyErrorKind::TupleFieldsOutOfRange, tuple_idx.idx);
+        return err(VerificationErrorKind::TupleFieldsOutOfRange, tuple_idx.idx);
       }
     }
   }
 
   for (RegisterIdx ridx(0); ridx.idx < storage.registers().size(); ++ridx) {
     if (storage.registers()[ridx].type.idx >= storage.types().size()) {
-      return err(VerifyErrorKind::TypeIdxOutOfRange, ridx.idx);
+      return err(VerificationErrorKind::TypeIdxOutOfRange, ridx.idx);
     }
   }
 
   for (ImmutableIdx iidx(0); iidx.idx < storage.immutables().size(); ++iidx) {
     if (storage.immutables()[iidx].type.idx >= storage.types().size()) {
-      return err(VerifyErrorKind::TypeIdxOutOfRange, iidx.idx);
+      return err(VerificationErrorKind::TypeIdxOutOfRange, iidx.idx);
     }
   }
 
@@ -122,14 +122,14 @@ VerifyResult verify_storage(const Storage& storage) {
     const Function& func = storage.functions()[fidx];
     if (!range_in_bounds(func.blocks.head(), func.blocks.size(),
                          storage.blocks().size())) {
-      return err(VerifyErrorKind::FunctionBlocksOutOfRange, fidx.idx);
+      return err(VerificationErrorKind::FunctionBlocksOutOfRange, fidx.idx);
     }
     if (func.meta.return_type.idx >= storage.types().size()) {
-      return err(VerifyErrorKind::TypeIdxOutOfRange, fidx.idx);
+      return err(VerificationErrorKind::TypeIdxOutOfRange, fidx.idx);
     }
     for (const TypeIdx tidx : func.meta.param_types) {
       if (tidx.idx >= storage.types().size()) {
-        return err(VerifyErrorKind::TypeIdxOutOfRange, tidx.idx);
+        return err(VerificationErrorKind::TypeIdxOutOfRange, tidx.idx);
       }
     }
   }
@@ -140,23 +140,23 @@ VerifyResult verify_storage(const Storage& storage) {
     const Block& block = storage.blocks()[bidx];
     if (!range_in_bounds(block.instrs.head(), block.instrs.size(),
                          storage.instrs().size())) {
-      return err(VerifyErrorKind::BlockInstrsOutOfRange, bidx.idx);
+      return err(VerificationErrorKind::BlockInstrsOutOfRange, bidx.idx);
     }
     if (!range_in_bounds(block.block_params.head(), block.block_params.size(),
                          storage.block_params().size())) {
-      return err(VerifyErrorKind::BlockParamsOutOfRange, bidx.idx);
+      return err(VerificationErrorKind::BlockParamsOutOfRange, bidx.idx);
     }
     for (const BlockParamIdx pidx : block.block_params) {
       const BlockParam& param = storage.block_params()[pidx];
       if (param.type.idx >= storage.types().size()) {
-        return err(VerifyErrorKind::TypeIdxOutOfRange, pidx.idx);
+        return err(VerificationErrorKind::TypeIdxOutOfRange, pidx.idx);
       }
       const RegisterIdx reg = param.reg;
       if (reg.idx >= storage.registers().size()) {
-        return err(VerifyErrorKind::BlockParamRegOutOfRange, reg.idx);
+        return err(VerificationErrorKind::BlockParamRegOutOfRange, reg.idx);
       }
       if (defined[reg.idx]) {
-        return err(VerifyErrorKind::RedefinedRegister, reg.idx);
+        return err(VerificationErrorKind::RedefinedRegister, reg.idx);
       }
       defined[reg.idx] = true;
     }
@@ -164,10 +164,10 @@ VerifyResult verify_storage(const Storage& storage) {
       const RegisterIdx dst = storage.instrs()[iidx].dst;
       if (dst.is_valid()) {
         if (dst.idx >= storage.registers().size()) {
-          return err(VerifyErrorKind::InstrDstOutOfRange, iidx.idx);
+          return err(VerificationErrorKind::InstrDstOutOfRange, iidx.idx);
         }
         if (defined[dst.idx]) {
-          return err(VerifyErrorKind::RedefinedRegister, dst.idx);
+          return err(VerificationErrorKind::RedefinedRegister, dst.idx);
         }
         defined[dst.idx] = true;
       }
@@ -177,7 +177,7 @@ VerifyResult verify_storage(const Storage& storage) {
   for (BlockIdx bidx(0); bidx.idx < storage.blocks().size(); ++bidx) {
     const Block& block = storage.blocks()[bidx];
     if (block.instrs.empty()) {
-      return err(VerifyErrorKind::UnterminatedBlock, bidx.idx);
+      return err(VerificationErrorKind::UnterminatedBlock, bidx.idx);
     }
     for (const InstructionIdx iidx : block.instrs) {
       const Instruction& instr = storage.instrs()[iidx];
@@ -185,61 +185,61 @@ VerifyResult verify_storage(const Storage& storage) {
           (iidx.idx + 1 == block.instrs.head().idx + block.instrs.size());
       if (last ? !is_terminator(instr.op) : is_terminator(instr.op)) {
         if (last) {
-          return err(VerifyErrorKind::UnterminatedBlock, bidx.idx);
+          return err(VerificationErrorKind::UnterminatedBlock, bidx.idx);
         }
-        return err(VerifyErrorKind::MisplacedTerminator, iidx.idx);
+        return err(VerificationErrorKind::MisplacedTerminator, iidx.idx);
       }
       if (!range_in_bounds(instr.operands.head(), instr.operands.size(),
                            storage.operands().size())) {
-        return err(VerifyErrorKind::InstrOperandsOutOfRange, iidx.idx);
+        return err(VerificationErrorKind::InstrOperandsOutOfRange, iidx.idx);
       }
       for (const OperandIdx oidx : instr.operands) {
         const Operand& operand = storage.operands()[oidx];
         if (operand.type.idx >= storage.types().size()) {
-          return err(VerifyErrorKind::TypeIdxOutOfRange, oidx.idx);
+          return err(VerificationErrorKind::TypeIdxOutOfRange, oidx.idx);
         }
         switch (operand.tag()) {
           case Operand::TAG_OF<RegisterIdx>:
             if (operand.as_register().idx >= storage.registers().size()) {
-              return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
+              return err(VerificationErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
             if (!defined[operand.as_register().idx]) {
-              return err(VerifyErrorKind::UndefinedRegister,
+              return err(VerificationErrorKind::UndefinedRegister,
                          operand.as_register().idx);
             }
             break;
           case Operand::TAG_OF<FunctionIdx>:
             if (operand.as_function().idx >= storage.functions().size()) {
-              return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
+              return err(VerificationErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
             break;
           case Operand::TAG_OF<BlockIdx>:
             if (operand.as_block().idx >= storage.blocks().size()) {
-              return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
+              return err(VerificationErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
             break;
           case Operand::TAG_OF<ImmutableIdx>:
             if (operand.as_immutable().idx >= storage.immutables().size()) {
-              return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
+              return err(VerificationErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
             break;
           case Operand::TAG_OF<ExternalFunctionIdx>:
             if (operand.as_external_function().idx >=
                 storage.external_functions().size()) {
-              return err(VerifyErrorKind::OperandIdxOutOfRange, oidx.idx);
+              return err(VerificationErrorKind::OperandIdxOutOfRange, oidx.idx);
             }
             break;
           case Operand::TAG_OF<void>:
-            return err(VerifyErrorKind::UnknownOperandTag, oidx.idx);
+            return err(VerificationErrorKind::UnknownOperandTag, oidx.idx);
         }
       }
       if (instr.op == Opcode::Call) {
         if (instr.operands.empty()) {
-          return err(VerifyErrorKind::InvalidCallee, iidx.idx);
+          return err(VerificationErrorKind::InvalidCallee, iidx.idx);
         }
         const Operand& head = storage.operands()[instr.operands.head()];
         if (!head.is<FunctionIdx>() && !head.is<ExternalFunctionIdx>()) {
-          return err(VerifyErrorKind::InvalidCallee, iidx.idx);
+          return err(VerificationErrorKind::InvalidCallee, iidx.idx);
         }
         const FunctionMeta& meta =
             head.is<FunctionIdx>()
@@ -247,35 +247,35 @@ VerifyResult verify_storage(const Storage& storage) {
                 : storage.external_functions()[head.as_external_function()]
                       .meta;
         if (instr.operands.size() - 1 != meta.param_types.size()) {
-          return err(VerifyErrorKind::InvalidCallee, iidx.idx);
+          return err(VerificationErrorKind::InvalidCallee, iidx.idx);
         }
       }
       if (instr.op == Opcode::Br) {
         if (instr.operands.empty()) {
-          return err(VerifyErrorKind::InvalidBranchTarget, iidx.idx);
+          return err(VerificationErrorKind::InvalidBranchTarget, iidx.idx);
         }
         if (!storage.operands()[instr.operands.head()].is<BlockIdx>()) {
-          return err(VerifyErrorKind::InvalidBranchTarget, iidx.idx);
+          return err(VerificationErrorKind::InvalidBranchTarget, iidx.idx);
         }
       }
       if (instr.op == Opcode::CondBr) {
         // operands = [cond(i1), true_block, false_block]; targets take no
         // block parameters in MVP.
         if (instr.operands.size() != 3) {
-          return err(VerifyErrorKind::InvalidCondBr, iidx.idx);
+          return err(VerificationErrorKind::InvalidCondBr, iidx.idx);
         }
         const Operand& cond = storage.operands()[instr.operands.head()];
         if (storage.types()[cond.type.idx].tag != TypeTag::I1) {
-          return err(VerifyErrorKind::InvalidCondBr, iidx.idx);
+          return err(VerificationErrorKind::InvalidCondBr, iidx.idx);
         }
         for (u32 offset = 1; offset <= 2; ++offset) {
           const Operand& target =
               storage.operands()[instr.operands.head() + offset];
           if (!target.is<BlockIdx>()) {
-            return err(VerifyErrorKind::InvalidCondBr, iidx.idx);
+            return err(VerificationErrorKind::InvalidCondBr, iidx.idx);
           }
           if (!storage.blocks()[target.as_block()].block_params.empty()) {
-            return err(VerifyErrorKind::InvalidCondBr, iidx.idx);
+            return err(VerificationErrorKind::InvalidCondBr, iidx.idx);
           }
         }
       }
@@ -283,19 +283,19 @@ VerifyResult verify_storage(const Storage& storage) {
         // operands = [value, default_block, (case_imm, case_block)...];
         // targets take no block parameters in MVP.
         if (instr.operands.size() < 2 || (instr.operands.size() % 2) != 0) {
-          return err(VerifyErrorKind::InvalidSwitch, iidx.idx);
+          return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
         }
         const Operand& value = storage.operands()[instr.operands.head()];
         if (!is_integer_type(storage.types()[value.type.idx].tag)) {
-          return err(VerifyErrorKind::InvalidSwitch, iidx.idx);
+          return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
         }
         const Operand& default_target =
             storage.operands()[instr.operands.head() + 1];
         if (!default_target.is<BlockIdx>()) {
-          return err(VerifyErrorKind::InvalidSwitch, iidx.idx);
+          return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
         }
         if (!storage.blocks()[default_target.as_block()].block_params.empty()) {
-          return err(VerifyErrorKind::InvalidSwitch, iidx.idx);
+          return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
         }
         for (u32 offset = 2; offset < instr.operands.size(); offset += 2) {
           const Operand& case_value =
@@ -303,26 +303,26 @@ VerifyResult verify_storage(const Storage& storage) {
           const Operand& case_target =
               storage.operands()[instr.operands.head() + offset + 1];
           if (!case_value.is<ImmutableIdx>() || !case_target.is<BlockIdx>()) {
-            return err(VerifyErrorKind::InvalidSwitch, iidx.idx);
+            return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
           }
           if (!storage.blocks()[case_target.as_block()].block_params.empty()) {
-            return err(VerifyErrorKind::InvalidSwitch, iidx.idx);
+            return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
           }
         }
       }
       if (instr.op == Opcode::GetElementPtr) {
         // operands = [base_ptr(register), index(integer)...].
         if (instr.operands.size() < 2) {
-          return err(VerifyErrorKind::InvalidGetElementPtr, iidx.idx);
+          return err(VerificationErrorKind::InvalidGetElementPtr, iidx.idx);
         }
         if (!storage.operands()[instr.operands.head()].is<RegisterIdx>()) {
-          return err(VerifyErrorKind::InvalidGetElementPtr, iidx.idx);
+          return err(VerificationErrorKind::InvalidGetElementPtr, iidx.idx);
         }
         for (u32 offset = 1; offset < instr.operands.size(); ++offset) {
           const Operand& index =
               storage.operands()[instr.operands.head() + offset];
           if (!is_integer_type(storage.types()[index.type.idx].tag)) {
-            return err(VerifyErrorKind::InvalidGetElementPtr, iidx.idx);
+            return err(VerificationErrorKind::InvalidGetElementPtr, iidx.idx);
           }
         }
       }
@@ -336,29 +336,29 @@ VerifyResult verify_storage(const Storage& storage) {
                                  .type.idx]
                     .tag) ||
             !instr.dst.is_valid()) {
-          return err(VerifyErrorKind::InvalidGetElementPtr, iidx.idx);
+          return err(VerificationErrorKind::InvalidGetElementPtr, iidx.idx);
         }
       }
       if (instr.op == Opcode::TypeSizeOf || instr.op == Opcode::TypeAlignOf) {
         if (!instr.operands.empty() || !instr.measure.is_valid() ||
             !instr.dst.is_valid()) {
-          return err(VerifyErrorKind::InvalidTypeQuery, iidx.idx);
+          return err(VerificationErrorKind::InvalidTypeQuery, iidx.idx);
         }
       }
       if (instr.op == Opcode::Borrow) {
         if (instr.operands.size() != 1) {
-          return err(VerifyErrorKind::InvalidBorrow, iidx.idx);
+          return err(VerificationErrorKind::InvalidBorrow, iidx.idx);
         }
         if (!storage.operands()[instr.operands.head()].is<RegisterIdx>()) {
-          return err(VerifyErrorKind::InvalidBorrow, iidx.idx);
+          return err(VerificationErrorKind::InvalidBorrow, iidx.idx);
         }
         if (!instr.dst.is_valid()) {
-          return err(VerifyErrorKind::InvalidBorrow, iidx.idx);
+          return err(VerificationErrorKind::InvalidBorrow, iidx.idx);
         }
       }
       if (instr.op == Opcode::Memcopy) {
         if (instr.operands.size() != 3 || instr.dst.is_valid()) {
-          return err(VerifyErrorKind::InvalidMemcopy, iidx.idx);
+          return err(VerificationErrorKind::InvalidMemcopy, iidx.idx);
         }
         for (u32 offset = 0; offset < 2; ++offset) {
           const Operand& ptr =
@@ -366,12 +366,12 @@ VerifyResult verify_storage(const Storage& storage) {
           const TypeTag tag = storage.types()[ptr.type.idx].tag;
           if (tag != TypeTag::Ref && tag != TypeTag::MutRef &&
               tag != TypeTag::Ptr) {
-            return err(VerifyErrorKind::InvalidMemcopy, iidx.idx);
+            return err(VerificationErrorKind::InvalidMemcopy, iidx.idx);
           }
         }
         const Operand& len = storage.operands()[instr.operands.head() + 2];
         if (!is_integer_type(storage.types()[len.type.idx].tag)) {
-          return err(VerifyErrorKind::InvalidMemcopy, iidx.idx);
+          return err(VerificationErrorKind::InvalidMemcopy, iidx.idx);
         }
       }
       if (instr.op == Opcode::ExtractValue || instr.op == Opcode::InsertValue) {
@@ -379,7 +379,7 @@ VerifyResult verify_storage(const Storage& storage) {
         // index(imm)...]. Indexes must be integer immediates.
         const u32 first_index = (instr.op == Opcode::ExtractValue) ? 1 : 2;
         if (instr.operands.size() < first_index + 1) {
-          return err(VerifyErrorKind::InvalidExtractInsert, iidx.idx);
+          return err(VerificationErrorKind::InvalidExtractInsert, iidx.idx);
         }
         for (u32 offset = first_index; offset < instr.operands.size();
              ++offset) {
@@ -387,7 +387,7 @@ VerifyResult verify_storage(const Storage& storage) {
               storage.operands()[instr.operands.head() + offset];
           if (!index.is<ImmutableIdx>() ||
               !is_integer_type(storage.types()[index.type.idx].tag)) {
-            return err(VerifyErrorKind::InvalidExtractInsert, iidx.idx);
+            return err(VerificationErrorKind::InvalidExtractInsert, iidx.idx);
           }
         }
       }
@@ -396,7 +396,7 @@ VerifyResult verify_storage(const Storage& storage) {
 
   for (FunctionIdx fidx(0); fidx.idx < storage.functions().size(); ++fidx) {
     if (storage.functions()[fidx].blocks.empty()) {
-      return err(VerifyErrorKind::UnterminatedBlock, fidx.idx);
+      return err(VerificationErrorKind::UnterminatedBlock, fidx.idx);
     }
   }
 

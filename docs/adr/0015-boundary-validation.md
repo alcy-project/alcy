@@ -42,7 +42,7 @@ Concretely:
 2. **One rule chooses `E`:**
    - Callers that must handle the failure programmatically get a
      module-local error type: `path::PathError`, `source::SourceError`,
-     `pipeline::SpawnError`, `ir::VerifyError`, ...
+     `pipeline::SpawnError`, `ir::VerificationError`, ...
    - APIs that accumulate diagnostics in a `diag::DiagBag` and only need to
      convey success/failure return `base::Result<T, diag::Reported>`.
      `Reported` is a zero-sized marker meaning "the details are already in
@@ -52,7 +52,7 @@ Concretely:
      every signature.
 
 3. **Verifiers are pure.** `verify_*` functions take their input by
-   `const` reference, return `base::Result<void, VerifyError>` (or a
+   `const` reference, return `base::Result<void, VerificationError>` (or a
    validated artifact), and perform no input mutation, I/O, logging,
    `DiagBag` writes, or global state access. The first structural error is
    returned; the caller decides how to turn it into a diagnostic.

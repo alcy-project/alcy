@@ -81,19 +81,19 @@ FunctionMeta void_meta() {
                       .generics = TypeIdxRange{}};
 }
 
-VerifyErrorKind check(Storage&& storage) {
-  VerifyResult result = verify_storage(storage);
+VerificationErrorKind check(Storage&& storage) {
+  VerificationResult result = verify_storage(storage);
   CHECK(result.is_err());
   if (!result.is_err()) {
-    return VerifyErrorKind::UnterminatedBlock;
+    return VerificationErrorKind::UnterminatedBlock;
   }
   return std::move(result).unwrap_err().kind;
 }
 
 // build() verifies, so invalid builder output surfaces as a build
 // error: assert the failure kind directly.
-void check_invalid(base::Result<VerifiedStorage, VerifyError>&& result,
-                   VerifyErrorKind expected) {
+void check_invalid(base::Result<VerifiedStorage, VerificationError>&& result,
+                   VerificationErrorKind expected) {
   CHECK(result.is_err());
   if (result.is_err()) {
     CHECK(std::move(result).unwrap_err().kind == expected);
@@ -129,7 +129,8 @@ TEST_CASE("Verify unterminated block") {
       .meta = void_meta(),
       .blocks = {block, 1},
   });
-  check_invalid(std::move(builder).build(), VerifyErrorKind::UnterminatedBlock);
+  check_invalid(std::move(builder).build(),
+                VerificationErrorKind::UnterminatedBlock);
 }
 
 TEST_CASE("Verify misplaced terminator") {
@@ -177,7 +178,7 @@ TEST_CASE("Verify misplaced terminator") {
       .blocks = {block, 1},
   });
   check_invalid(std::move(builder).build(),
-                VerifyErrorKind::MisplacedTerminator);
+                VerificationErrorKind::MisplacedTerminator);
 }
 
 TEST_CASE("Verify unknown operand tag") {
@@ -199,7 +200,8 @@ TEST_CASE("Verify unknown operand tag") {
       .meta = void_meta(),
       .blocks = {block, 1},
   });
-  check_invalid(std::move(builder).build(), VerifyErrorKind::UnknownOperandTag);
+  check_invalid(std::move(builder).build(),
+                VerificationErrorKind::UnknownOperandTag);
 }
 
 TEST_CASE("Verify undefined register") {
@@ -231,7 +233,8 @@ TEST_CASE("Verify undefined register") {
                .generics = TypeIdxRange{}},
       .blocks = {block, 1},
   });
-  check_invalid(std::move(builder).build(), VerifyErrorKind::UndefinedRegister);
+  check_invalid(std::move(builder).build(),
+                VerificationErrorKind::UndefinedRegister);
 }
 
 TEST_CASE("Verify redefined register") {
@@ -278,7 +281,8 @@ TEST_CASE("Verify redefined register") {
       .meta = void_meta(),
       .blocks = {block, 1},
   });
-  check_invalid(std::move(builder).build(), VerifyErrorKind::RedefinedRegister);
+  check_invalid(std::move(builder).build(),
+                VerificationErrorKind::RedefinedRegister);
 }
 
 TEST_CASE("Verify invalid callee") {
@@ -314,7 +318,8 @@ TEST_CASE("Verify invalid callee") {
       .meta = void_meta(),
       .blocks = {block, 1},
   });
-  check_invalid(std::move(builder).build(), VerifyErrorKind::InvalidCallee);
+  check_invalid(std::move(builder).build(),
+                VerificationErrorKind::InvalidCallee);
 }
 
 TEST_CASE("Verify invalid branch target") {
@@ -344,7 +349,7 @@ TEST_CASE("Verify invalid branch target") {
       .blocks = {block, 1},
   });
   check_invalid(std::move(builder).build(),
-                VerifyErrorKind::InvalidBranchTarget);
+                VerificationErrorKind::InvalidBranchTarget);
 }
 
 TEST_CASE("Verify out of range indexes") {
@@ -369,7 +374,7 @@ TEST_CASE("Verify out of range indexes") {
         .blocks = {block, 1},
     });
     check_invalid(std::move(builder).build(),
-                  VerifyErrorKind::InstrOperandsOutOfRange);
+                  VerificationErrorKind::InstrOperandsOutOfRange);
   }
   // Instruction dst exceeds the registers storage.
   {
@@ -396,7 +401,7 @@ TEST_CASE("Verify out of range indexes") {
     });
     // The block has no terminator, but dst bounds are checked first.
     check_invalid(std::move(builder).build(),
-                  VerifyErrorKind::InstrDstOutOfRange);
+                  VerificationErrorKind::InstrDstOutOfRange);
   }
 }
 
@@ -462,7 +467,7 @@ TEST_CASE("Verify struct and array types") {
     builder.struct_type(str::EMPTY_STRING_ID, {TypeIdx(99), 1},
                         ir::TypeIdxRange{});
     check_invalid(std::move(builder).build(),
-                  VerifyErrorKind::StructFieldsOutOfRange);
+                  VerificationErrorKind::StructFieldsOutOfRange);
   }
   // Struct node references a missing metadata entry.
   {
@@ -472,7 +477,8 @@ TEST_CASE("Verify struct and array types") {
     bad.data.set(StructTypeIdx(7));
     state.types.emplace_back(bad);
     Storage storage(std::move(state));
-    CHECK(check(std::move(storage)) == VerifyErrorKind::TypeMetadataOutOfRange);
+    CHECK(check(std::move(storage)) ==
+          VerificationErrorKind::TypeMetadataOutOfRange);
   }
 }
 
@@ -504,7 +510,8 @@ TEST_CASE("Verify enum types") {
     bad.data.set(EnumTypeIdx(0));
     state.types.emplace_back(bad);
     Storage storage(std::move(state));
-    CHECK(check(std::move(storage)) == VerifyErrorKind::TypeMetadataOutOfRange);
+    CHECK(check(std::move(storage)) ==
+          VerificationErrorKind::TypeMetadataOutOfRange);
   }
   // Variant payload range exceeds the types storage.
   {
@@ -523,7 +530,8 @@ TEST_CASE("Verify enum types") {
     bad.data.set(EnumTypeIdx(0));
     state.types.emplace_back(bad);
     Storage storage(std::move(state));
-    CHECK(check(std::move(storage)) == VerifyErrorKind::EnumFieldsOutOfRange);
+    CHECK(check(std::move(storage)) ==
+          VerificationErrorKind::EnumFieldsOutOfRange);
   }
 }
 
@@ -586,7 +594,8 @@ TEST_CASE("Verify CondBr shapes") {
                  .generics = TypeIdxRange{}},
         .blocks = blocks.finish(),
     });
-    check_invalid(std::move(builder).build(), VerifyErrorKind::InvalidCondBr);
+    check_invalid(std::move(builder).build(),
+                  VerificationErrorKind::InvalidCondBr);
   }
   // CondBr with two operands (missing a target) reports InvalidCondBr.
   {
@@ -620,7 +629,8 @@ TEST_CASE("Verify CondBr shapes") {
                  .generics = TypeIdxRange{}},
         .blocks = {entry, 1},
     });
-    check_invalid(std::move(builder).build(), VerifyErrorKind::InvalidCondBr);
+    check_invalid(std::move(builder).build(),
+                  VerificationErrorKind::InvalidCondBr);
   }
 }
 
@@ -674,7 +684,8 @@ TEST_CASE("Verify Switch shapes") {
                  .generics = TypeIdxRange{}},
         .blocks = {entry, 1},
     });
-    check_invalid(std::move(builder).build(), VerifyErrorKind::InvalidSwitch);
+    check_invalid(std::move(builder).build(),
+                  VerificationErrorKind::InvalidSwitch);
   }
   // Switch with a non-immediate case value reports InvalidSwitch.
   {
@@ -723,7 +734,8 @@ TEST_CASE("Verify Switch shapes") {
                  .generics = TypeIdxRange{}},
         .blocks = {entry, 1},
     });
-    check_invalid(std::move(builder).build(), VerifyErrorKind::InvalidSwitch);
+    check_invalid(std::move(builder).build(),
+                  VerificationErrorKind::InvalidSwitch);
   }
 }
 
@@ -774,7 +786,7 @@ TEST_CASE("Verify memory shapes") {
         .blocks = {entry, 1},
     });
     check_invalid(std::move(builder).build(),
-                  VerifyErrorKind::InvalidGetElementPtr);
+                  VerificationErrorKind::InvalidGetElementPtr);
   }
   // ExtractValue without indexes reports InvalidExtractInsert.
   {
@@ -823,7 +835,7 @@ TEST_CASE("Verify memory shapes") {
         .blocks = {entry, 1},
     });
     check_invalid(std::move(builder).build(),
-                  VerifyErrorKind::InvalidExtractInsert);
+                  VerificationErrorKind::InvalidExtractInsert);
   }
 }
 
@@ -872,12 +884,13 @@ TEST_CASE("Verify call arity") {
       .blocks = {entry, 1},
   });
   // One declared parameter but zero call arguments.
-  check_invalid(std::move(builder).build(), VerifyErrorKind::InvalidCallee);
+  check_invalid(std::move(builder).build(),
+                VerificationErrorKind::InvalidCallee);
 }
 
-TEST_CASE("VerifyError converts to diagnostic") {
-  const VerifyError error{.kind = VerifyErrorKind::UndefinedRegister,
-                          .index = 5};
+TEST_CASE("VerificationError converts to diagnostic") {
+  const VerificationError error{
+      .kind = VerificationErrorKind::UndefinedRegister, .index = 5};
   const diag::Diagnostic diag = to_diagnostic(error);
   CHECK(diag.severity == diag::Severity::Error);
   CHECK(diag.code >= 7100);
@@ -886,8 +899,8 @@ TEST_CASE("VerifyError converts to diagnostic") {
   CHECK(!diag.has_primary_span);
 
   // Codes are stable per kind.
-  const VerifyError other{.kind = VerifyErrorKind::UnterminatedBlock,
-                          .index = 0};
+  const VerificationError other{
+      .kind = VerificationErrorKind::UnterminatedBlock, .index = 0};
   CHECK(to_diagnostic(other).code != diag.code);
 }
 

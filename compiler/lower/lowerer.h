@@ -533,7 +533,7 @@ class Lowerer {
   void run();
 
   ir::BlockParamIdxRange pending_block_params_;
-  base::Result<ir::VerifiedStorage, ir::VerifyError> finish() &&;
+  base::Result<ir::VerifiedStorage, ir::VerificationError> finish() &&;
 };
 
 }  // namespace lower
