@@ -26,7 +26,7 @@ number, and caret elements, with resets around each styled span.
 
 Superseded in part by `docs/adr/0020-command-result-envelope.md`, which replaced the stdout logger with a
 result envelope and a pair of renderers, and by
-`docs/adr/0032-errors-on-stderr-results-on-stdout.md`, which answered the
+`docs/adr/0033-errors-on-stderr-results-on-stdout.md`, which answered the
 follow-up below by putting diagnostics on standard error.
 
 ## Consequences
@@ -39,5 +39,5 @@ follow-up below by putting diagnostics on standard error.
   bytes to diagnostic data.
 - Moving diagnostics to stderr, adding true-color themes, and interpreting ANSI
   markup in user text remain separate follow-up decisions. The first is now
-  `docs/adr/0032-errors-on-stderr-results-on-stdout.md`; the other two are
+  `docs/adr/0033-errors-on-stderr-results-on-stdout.md`; the other two are
   still open.

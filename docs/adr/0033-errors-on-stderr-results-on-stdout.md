@@ -1,4 +1,4 @@
-# ADR-0032: Errors on standard error, results on standard output
+# ADR-0033: Errors on standard error, results on standard output
 
 - Subject: the compiler
 - Status: Accepted

@@ -31,7 +31,7 @@ without a descriptor.
 
 Standard error carries the diagnostics and standard output carries the
 answer: the result line, the time-trace summary, `--help`, `--version`,
-and the whole `--json` document. `docs/adr/0032-errors-on-stderr-results-on-stdout.md`
+and the whole `--json` document. `docs/adr/0033-errors-on-stderr-results-on-stdout.md`
 has the reasoning; `Interruption` is the split for an invocation that
 stopped before a command ran.
 
