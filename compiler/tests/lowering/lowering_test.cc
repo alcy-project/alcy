@@ -639,4 +639,63 @@ TEST_CASE("Lower emits verifiable LLVM IR for enums and calls") {
   CHECK(!llvm::verifyModule(*module));
 }
 
+// A `match` or `if` whose every arm ends the path produces no value, so
+// there is no join and no arm ever stored into the result slot. Reading
+// that slot anyway emitted an instruction after the `ret` or
+// `Unreachable` the last arm left behind, which is two terminators in one
+// block and fails verification.
+TEST_CASE("Lower answers an all-terminated match or if with never") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "enum Opt {\n"
+                                      "  Some(i32),\n"
+                                      "  None,\n"
+                                      "}\n"
+                                      "fn classify(o: Opt) -> i32 {\n"
+                                      "  match o {\n"
+                                      "    Opt::Some(v) => { ret v * 2 }\n"
+                                      "    Opt::None => { ret 0 - 1 }\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn pick(x: i32) -> i32 {\n"
+                                      "  if x > 0 {\n"
+                                      "    ret 1\n"
+                                      "  } else {\n"
+                                      "    ret 0\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn pick_let(o: Opt) -> i32 {\n"
+                                      "  if Opt::Some(v) := o {\n"
+                                      "    ret v\n"
+                                      "  } else {\n"
+                                      "    ret 0\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn mixed(o: Opt) -> i32 {\n"
+                                      "  match o {\n"
+                                      "    Opt::Some(v) => { ret v }\n"
+                                      "    Opt::None => 0\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  _ := classify(Opt::Some(2))\n"
+                                      "  _ := pick(1)\n"
+                                      "  _ := pick_let(Opt::Some(3))\n"
+                                      "  _ := mixed(Opt::Some(4))\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  CHECK(ir::verify_storage(*result.lowered->storage).is_ok());
+}
+
 }  // namespace lowering

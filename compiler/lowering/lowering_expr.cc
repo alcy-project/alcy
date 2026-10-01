@@ -2808,13 +2808,16 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   }
   switch_to(fail);
   emit_void(ir::Opcode::Unreachable, {});
-  if (join.is_valid()) {
-    switch_to(join);
-    // A by-value match consumes a non-Copy scrutinee, but the arms read
-    // its discriminant and payloads to do so, so the move lands after
-    // them. Every arm that falls through reaches the join.
-    mark_move(addr);
+  if (!join.is_valid()) {
+    // Every arm ended the path, so the slot holds nothing and the match is
+    // `!`. Reading it would emit past the `Unreachable` above.
+    return Val{size_one, builder.never_type(), false, false};
   }
+  switch_to(join);
+  // A by-value match consumes a non-Copy scrutinee, but the arms read
+  // its discriminant and payloads to do so, so the move lands after
+  // them. Every arm that falls through reaches the join.
+  mark_move(addr);
   if (has_slot) {
     return materialize(slot);
   }
@@ -2920,9 +2923,12 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       return Val{size_one, error_type(), false, false};
     }
   }
-  if (join.is_valid()) {
-    switch_to(join);
+  if (!join.is_valid()) {
+    // Both arms ended the path, so the slot holds nothing and the `if`
+    // is `!`.
+    return Val{size_one, builder.never_type(), false, false};
   }
+  switch_to(join);
   if (has_slot) {
     return materialize(slot);
   }
