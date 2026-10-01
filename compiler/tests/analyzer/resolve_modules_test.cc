@@ -221,7 +221,7 @@ TEST_CASE("Resolve attaches unreferenced files as modules") {
 // here is small enough for a case to spend it, which a real input would
 // need far too much source to reach.
 TEST_CASE("Resolve refuses an input the span arena cannot hold") {
-  constexpr usize CAPACITY = 4096;
+  const usize capacity = mem::page_size();
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al", "fn main() {}\n"}});
   CHECK(setup);
@@ -233,9 +233,9 @@ TEST_CASE("Resolve refuses an input the span arena cannot hold") {
   arena.reserve(1u << 20);
   diag::DiagBag bag{arena, i18n::Language::EnUs};
   source::SourceManager sources;
-  ast::AstArena ast{CAPACITY};
+  ast::AstArena ast{capacity};
   // Past the headroom, which is what the check asks about.
-  CHECK(ast.spans.alloc(CAPACITY - 1) != nullptr);
+  CHECK(ast.spans.alloc(capacity - 1) != nullptr);
   CHECK(ast.spans_nearly_full());
 
   std::deque<std::string> name_storage;
