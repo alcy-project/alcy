@@ -48,6 +48,25 @@ peripheral work lives in `backlog.md`.
   `exe-subslice`, `exe-subslice-panic`, the
   `ok-range`/`ok-range-iter`/`err-range-*` cases, and the `subslice`
   cases in `tools/check_borrow_rules.py`.
+- [ ] Generic instances intern by structure, not by index.
+
+  Two spellings of one instantiation must be one type, but tuple
+  types are re-minted on each resolution while generic instances
+  dedupe by exact argument index, so `Iterator<(i32, i32)>` fails its
+  own signature check (`docs/adr/0031-for-desugar-in-the-parser.md`).
+  The fix belongs with type-table interning rather than with any
+  single rule, and unblocks tuple-item iterators everywhere.
+- [ ] Refutable `for` patterns: filter or error.
+
+  The pattern must match every item; whether a refutable pattern
+  filters or is an error is undecided, so a program that builds with
+  one is rejected by the lowerer for now. Decide it, specify it in
+  `control.md`, and pin both sides with `for` cases.
+- [ ] Strided range iteration.
+
+  The cursor yields consecutive values; a stride is the remaining
+  range API. Design it against the cursor first — the stride meets
+  the inclusive-end rule the cursor already carries — then build it.
 - [ ] `ArrayVec<T, N>`, a fixed-capacity inline container.
 
   The baremetal case proper: no heap, so no realloc hazard, and the
