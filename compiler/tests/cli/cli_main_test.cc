@@ -13,6 +13,7 @@
 #include "config/build_config.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
+#include "fpag/debug/logger.h"
 #include "fpag/io/file_handle.h"
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
@@ -1014,6 +1015,18 @@ TEST_CASE("Init creates a package in an existing directory") {
   io::FileHandle main;
   CHECK(main.open(dir.join("proj/main.al"), io::FileAccess::Read));
   CHECK(run_init_on(dir, "proj") != 0);
+}
+
+// Startup hands the debug logger a sink, without which an internal-error
+// path traps instead of reporting. The assertion is about the state a run
+// leaves rather than the state it found: every case in this binary shares
+// one process, and a sink outlives the invocation that created it, so no
+// case here can say the sink was absent beforehand.
+TEST_CASE("Startup gives the debug logger a sink") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_init_test_");
+  SilencedOutput silenced;
+  CHECK(run_check_on(dir, "missing.al") != 0);
+  CHECK(debug::debug_logger.has_sink());
 }
 
 }  // namespace cli
