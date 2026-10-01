@@ -19,6 +19,8 @@
 #include "fpag/base/idx.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
+#include "fpag/mem/page_allocator.h"
+#include "fpag/str/string_interner.h"
 #include "i18n/language.h"
 #include "ir/common.h"
 #include "ir/storage.h"
@@ -92,6 +94,7 @@ CheckOutcome check_case(
   }
   std::deque<std::string> prelude_storage;
   std::vector<ModuleInput> prelude_inputs;
+  str::StringInterner strings{mem::page_size()};
   for (const auto& [name, rel] : prelude) {
     const tests::VirtualSource* const file = dir.find(rel);
     if (file == nullptr) {
@@ -110,7 +113,8 @@ CheckOutcome check_case(
     return {std::nullopt};
   }
   ModuleTree tree = std::move(tree_result).unwrap();
-  CheckedPackage checked = check_package(tree, width, f.ast, f.bag).unwrap();
+  CheckedPackage checked =
+      check_package(tree, width, f.ast, f.bag, strings).unwrap();
   if (f.bag.has_errors()) {
     return {std::nullopt};
   }

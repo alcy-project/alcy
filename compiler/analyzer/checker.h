@@ -56,9 +56,6 @@ constexpr u32 ANALYZER_DROP_ON_COPY = 4041;
 // Diagnostic codes 4050-4059 are reserved for resource limits.
 constexpr u32 ANALYZER_TOO_DEEP = 4050;
 
-// Name-interning map capacity (power of two, fixed: the table never
-// resizes and traps on overflow, so size for programs, not tests).
-constexpr u32 INTERNER_CAPACITY = 1u << 16;
 constexpr u32 NO_MODULE = 0xFFFFFFFFu;
 
 struct NominalEntry {
@@ -124,6 +121,7 @@ class Checker {
           ir::PointerWidth width,
           ast::AstArena& ast,
           diag::DiagBag& bag,
+          str::StringInterner& strings,
           std::span<const StdHint> std_hints = {});
 
   const ModuleTree& tree;
@@ -132,7 +130,9 @@ class Checker {
   diag::DiagBag& bag;
   std::span<const StdHint> std_hints;
   ir::StorageBuilder builder;
-  str::StringInterner interner;
+  // The compilation's one interner; a second one here would mint storage ids
+  // that lowering and codegen could not resolve.
+  str::StringInterner& interner;
   std::vector<NominalEntry> nominals;
   std::vector<SpecEntry> specs;
   // Every spec implementation in the tree, in registration order.

@@ -29,7 +29,8 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "analyze",
                                              "frontend");
     const std::span<const analyzer::StdHint> hints(STD_HINTS, STD_HINT_COUNT);
-    return analyzer::check_package(tree, TARGET_WIDTH, ctx.ast, ctx.bag, hints);
+    return analyzer::check_package(tree, TARGET_WIDTH, ctx.ast, ctx.bag,
+                                   ctx.strings, hints);
   }();
   if (checked.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});

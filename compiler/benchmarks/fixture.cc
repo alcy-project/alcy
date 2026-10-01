@@ -63,7 +63,8 @@ void CompilerFixture::analyze() {
     return;
   }
   base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyzer::check_package(*tree_, ir::PointerWidth::W64, ast_, bag_);
+      analyzer::check_package(*tree_, ir::PointerWidth::W64, ast_, bag_,
+                              strings_);
   if (checked.is_err() || failed()) {
     ok_ = false;
     return;

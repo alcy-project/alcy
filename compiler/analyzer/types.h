@@ -15,6 +15,7 @@
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
@@ -184,11 +185,15 @@ struct CheckedPackage {
 // nominal definitions (structs, enums), signatures, and generic
 // instantiations. Reports unknown, duplicate, recursive, and malformed
 // types, then checks bodies.
+//
+// `strings` is the compilation's interner: the storage this returns holds ids
+// into it, and lowering and codegen read them back out of it.
 base::Result<CheckedPackage, diag::Reported> check_package(
     const ModuleTree& tree,
     ir::PointerWidth width,
     ast::AstArena& ast,
     diag::DiagBag& bag,
+    str::StringInterner& strings,
     std::span<const StdHint> std_hints = {});
 
 }  // namespace analyzer

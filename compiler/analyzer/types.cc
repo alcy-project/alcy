@@ -35,13 +35,14 @@ Checker::Checker(const ModuleTree& tree,
                  ir::PointerWidth width,
                  ast::AstArena& ast,
                  diag::DiagBag& bag,
+                 str::StringInterner& strings,
                  std::span<const StdHint> std_hints)
     : tree(tree),
       ast(ast),
       width(width),
       bag(bag),
       std_hints(std_hints),
-      interner(INTERNER_CAPACITY) {}
+      interner(strings) {}
 
 // Pass 1: registers every nominal definition, diagnosing duplicates
 // and reserved names. No interning happens here.
@@ -3694,6 +3695,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     ir::PointerWidth width,
     ast::AstArena& ast,
     diag::DiagBag& bag,
+    str::StringInterner& strings,
     std::span<const StdHint> std_hints) {
   // Consumer precondition: the tree shape and every arena index the
   // checker dereferences are validated before any pass runs, so
@@ -3715,7 +3717,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  Checker checker{tree, width, ast, bag, std_hints};
+  Checker checker{tree, width, ast, bag, strings, std_hints};
   checker.uninit_name_id = checker.interner.intern("MaybeUninit");
   checker.register_nominals();
   checker.parents.assign(tree.modules.size(), NO_MODULE);

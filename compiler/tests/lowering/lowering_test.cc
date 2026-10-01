@@ -114,7 +114,8 @@ LowerCase lower_case(
   }
   analyzer::ModuleTree tree = std::move(tree_result).unwrap();
   base::Result<analyzer::CheckedPackage, diag::Reported> checked_result =
-      analyzer::check_package(tree, ir::PointerWidth::W64, f.ast, f.bag);
+      analyzer::check_package(tree, ir::PointerWidth::W64, f.ast, f.bag,
+                              f.strings);
   if (checked_result.is_err() || f.bag.has_errors()) {
     return {std::nullopt, false};
   }

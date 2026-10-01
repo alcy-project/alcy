@@ -19,6 +19,8 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
+#include "fpag/mem/page_allocator.h"
+#include "fpag/str/string_interner.h"
 #include "i18n/language.h"
 #include "ir/type.h"
 #include "source/source.h"
@@ -660,8 +662,10 @@ TEST_CASE("Module tree verification rejects malformed trees") {
 
 TEST_CASE("Check package rejects a malformed module tree") {
   Fixture f;
+  str::StringInterner strings{mem::page_size()};
   const ModuleTree empty{.modules = {}, .root = 0};
-  CHECK(check_package(empty, ir::PointerWidth::W64, f.ast, f.bag).is_err());
+  CHECK(check_package(empty, ir::PointerWidth::W64, f.ast, f.bag, strings)
+            .is_err());
   CHECK(f.bag.has_errors());
 }
 
