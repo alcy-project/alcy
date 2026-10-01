@@ -55,6 +55,15 @@ Resolution (`compiler/pkg/resolve.cc`, 1200–1299):
 - `1200` I/O error: the package root or manifest cannot be read.
 - `1201` Cycle error: package dependencies form a cycle.
 
+Toolchain (`compiler/pkg/toolchain.cc`, 1300–1399):
+
+- `1300` Syntax error: the toolchain file does not parse. The file is
+  read without a source location, so the message names the file rather
+  than pointing into it.
+- `1301` Semantic error: parsed but not a usable toolchain. Covers a
+  `linker` that is not a string and a `link-args` that is not a list of
+  strings.
+
 ## lexer (2000–2099)
 
 `compiler/lexer/lexer.cc`:
@@ -76,8 +85,8 @@ Grammar (`compiler/parser/parser.h`, 3000–3099):
   verification (see `lexer::verify_token_stream`).
 - `3003` Internal error: the parsed arena failed structural
   verification (see `ast::verify_file`).
-- `3004` nesting deeper than the language's budget.
-- `3005` a range end that is not spelled `..<` or `..=`.
+- `3004` Nesting deeper than the language's budget.
+- `3005` A range end that is not spelled `..<` or `..=`.
 
 Desugaring (`compiler/parser/desugar.cc`, 3100–3199):
 
@@ -121,7 +130,9 @@ Expression checking (`compiler/analyzer/checker.h`, 4020–4039):
 - `4028` Bad `return`.
 - `4029` Bad assignment.
 - `4030` Break outside a loop.
-- `4031` Unsupported expression.
+- `4031` Reserved: defined but no check reports it yet. An unsupported
+  primitive currently uses `4016`, which names the type rather than the
+  expression.
 - `4032` Not compile-time known.
 - `4033` Invalid compile-time value.
 - `4034` Unknown intrinsic.
@@ -130,6 +141,11 @@ Destructors (`compiler/analyzer/checker.h`, 4040–4049):
 
 - `4040` Bad `drop` signature.
 - `4041` Drop on a copyable type.
+
+Recursion budget (`compiler/analyzer/checker.h`, 4050–4059):
+
+- `4050` Nesting deeper than the language's budget. One walk per
+  `base::NestingGuard`, so the code names the pass rather than the tree.
 
 ## lowering (5000–5099)
 
@@ -140,6 +156,7 @@ Destructors (`compiler/analyzer/checker.h`, 4040–4049):
 - `5002` Unreachable code reached lowering.
 - `5003` Destructor glue could not be placed.
 - `5004` Discarded destructor.
+- `5005` Nesting deeper than the language's budget.
 
 ## borrow (6000–6099)
 
