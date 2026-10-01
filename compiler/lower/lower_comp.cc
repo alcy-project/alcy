@@ -1853,7 +1853,7 @@ Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
       elem_types.push_back(element);
     }
   }
-  const analyzer::FmtParse parsed =
+  const analyzer::FmtTemplate parsed =
       analyzer::parse_format_string(fmt_val.value.str_value);
   if (parsed.error != analyzer::FmtError::None) {
     unsupported(node.span, "invalid format string");
@@ -1945,7 +1945,7 @@ Val Lowerer::lower_fmt_format(ast::ExprIdx expr,
     internal(node.span, "arguments without tuple");
     return Val{size_one, error_type(), false, false};
   }
-  const analyzer::FmtParse parsed =
+  const analyzer::FmtTemplate parsed =
       analyzer::parse_format_string(fmt_val.value.str_value);
   if (parsed.error != analyzer::FmtError::None) {
     unsupported(node.span, "invalid format string");

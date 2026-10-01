@@ -695,7 +695,7 @@ bool Checker::verify_fmt_literal(ast::ExprIdx fmt_expr,
   if (literal.kind != ast::LiteralKind::String) {
     return true;
   }
-  const FmtParse parsed =
+  const FmtTemplate parsed =
       parse_format_string(unescape_format_string(literal.spelling));
   if (parsed.error != FmtError::None) {
     const u32 index = bag.emit<i18n::Key::AnalyzerInvalidFormatString>(

@@ -36,7 +36,7 @@ inline std::string unescape_format_string(std::string_view spelling) {
   return text::unescape_string(spelling);
 }
 
-struct FmtParse {
+struct FmtTemplate {
   std::vector<FmtPiece> pieces;
   u32 placeholders = 0;
   FmtError error = FmtError::None;
@@ -45,8 +45,8 @@ struct FmtParse {
 
 // Splits decoded bytes into literal pieces and sequential `{}`
 // placeholders. `{{`/`}}` escape; anything else in braces errors.
-inline FmtParse parse_format_string(const std::string& bytes) {
-  FmtParse result;
+inline FmtTemplate parse_format_string(const std::string& bytes) {
+  FmtTemplate result;
   std::string literal;
   auto flush = [&]() {
     if (!literal.empty()) {
