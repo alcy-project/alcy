@@ -3,6 +3,7 @@
 
 #include "base/nesting.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -41,7 +42,7 @@ CheckProbe run_check(const std::string& source) {
   probe.ran = true;
   probe.rejected = ctx.bag.has_errors();
   for (u32 i = 0; i < ctx.bag.size(); ++i) {
-    const u32 code = ctx.bag.at(i)->code;
+    const std::optional<u32> code = ctx.bag.at(i)->code;
     if (code == 3004 || code == 4050 || code == 5005) {
       probe.too_deep = true;
     }

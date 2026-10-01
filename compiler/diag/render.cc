@@ -181,6 +181,29 @@ void write_gutter(fmt::memory_buffer& out, u32 width) {
   fmt::format_to(std::back_inserter(out), " |");
 }
 
+// One marker for every severity, in colour or not: the word and the code
+// the diagnostic carries, and nothing else. A message from outside a
+// check area opens with `error: `, which is the honest form when no code
+// was ever allocated for it.
+void append_marker(fmt::memory_buffer& out,
+                   const Diagnostic& diag,
+                   const RenderOptions& options) {
+  const bool color = options.color;
+  if (color) {
+    begin_style(out, true, severity_color(diag.severity), true);
+  }
+  fmt::format_to(std::back_inserter(out), "{}",
+                 severity_text(diag.severity, options.language));
+  if (diag.code.has_value()) {
+    fmt::format_to(std::back_inserter(out), "[{}{}]",
+                   severity_code(diag.severity), *diag.code);
+  }
+  if (color) {
+    end_style(out, true);
+  }
+  fmt::format_to(std::back_inserter(out), ": {}\n", diag.message);
+}
+
 }  // namespace
 
 void render(const Diagnostic& diag,
@@ -188,17 +211,7 @@ void render(const Diagnostic& diag,
             const RenderOptions& options,
             SourceFetch fetch,
             const void* ctx) {
-  const std::string_view sev = severity_text(diag.severity, options.language);
-  if (options.color) {
-    begin_style(out, true, severity_color(diag.severity), true);
-    fmt::format_to(std::back_inserter(out), "{}[{}{}]", sev,
-                   severity_code(diag.severity), diag.code);
-    end_style(out, true);
-    fmt::format_to(std::back_inserter(out), ": {}\n", diag.message);
-  } else {
-    fmt::format_to(std::back_inserter(out), "{}[{}{}]: {}\n", sev,
-                   severity_code(diag.severity), diag.code, diag.message);
-  }
+  append_marker(out, diag, options);
 
   if (!diag.has_primary_span) {
     return;

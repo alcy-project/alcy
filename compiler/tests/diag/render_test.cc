@@ -67,6 +67,34 @@ TEST_CASE("Render without source") {
   CHECK(render_str(*f.bag.at(j)) == "warning[W8]: shaky\n");
 }
 
+// A message from outside a check area has no code to show, so the marker
+// is the word alone. Every severity takes the same shape.
+TEST_CASE("Render without a code omits the bracket") {
+  const Diagnostic coded{.severity = Severity::Error,
+                         .code = 7,
+                         .message = "has a code",
+                         .primary_span = {}};
+  CHECK(render_str(coded) == "error[E7]: has a code\n");
+
+  const Diagnostic uncoded{.severity = Severity::Error,
+                           .code = std::nullopt,
+                           .message = "has none",
+                           .primary_span = {}};
+  CHECK(render_str(uncoded) == "error: has none\n");
+
+  const Diagnostic warned{.severity = Severity::Warning,
+                          .code = std::nullopt,
+                          .message = "hmm",
+                          .primary_span = {}};
+  CHECK(render_str(warned) == "warning: hmm\n");
+
+  const Diagnostic noted{.severity = Severity::Note,
+                         .code = std::nullopt,
+                         .message = "fyi",
+                         .primary_span = {}};
+  CHECK(render_str(noted) == "note: fyi\n");
+}
+
 TEST_CASE("Render with source snippet") {
   BagFixture f;
   const u32 i = f.bag.emit_untranslated(

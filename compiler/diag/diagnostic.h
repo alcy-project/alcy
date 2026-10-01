@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string_view>
 
 #include "diag/span.h"
@@ -31,8 +32,10 @@ struct Label {
 struct Diagnostic {
   Severity severity = Severity::Error;
   // Numeric code rendered as E<code>/W<code>/N<code>. Ranges are
-  // partitioned by producer; see compiler/docs/diagnostics.md.
-  u32 code = 0;
+  // partitioned by producer; see compiler/docs/diagnostics.md. Empty for
+  // a message from outside a check area, which renders as `error: `
+  // rather than inventing a number nobody allocated.
+  std::optional<u32> code;
   std::string_view message;
   bool has_primary_span = false;
   Span primary_span;

@@ -98,8 +98,16 @@ void append_diagnostic_json(std::string& out,
                             const diag::Diagnostic& diagnostic,
                             const source::SourceManager* sources) {
   fmt::format_to(std::back_inserter(out),
-                 R"json({{"severity":"{}","code":{},"message":)json",
-                 severity_name(diagnostic.severity), diagnostic.code);
+                 R"json({{"severity":"{}","code":)json",
+                 severity_name(diagnostic.severity));
+  // A message from outside a check area carries no code, and null says so
+  // where a number would imply one that exists.
+  if (diagnostic.code.has_value()) {
+    fmt::format_to(std::back_inserter(out), "{}", *diagnostic.code);
+  } else {
+    out += "null";
+  }
+  out += R"(,"message":)";
   append_json_string(out, diagnostic.message);
   out += R"(,"span":)";
   if (diagnostic.has_primary_span) {
