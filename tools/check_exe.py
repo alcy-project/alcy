@@ -59,8 +59,9 @@ def parse_expect(path: Path):
 # wrong rather than fatal.
 SANITIZERS = ["-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-g"]
 
-# Both of these come from the system toolchain rather than from alcy, so
-# the sanitized path is skipped rather than failed where they are absent.
+# The system compiler, not alcy's, is what instruments a generated
+# program. Without it the sanitized run cannot happen, and asking for one
+# that cannot happen is a refusal rather than a downgrade: see main().
 SYSTEM_CLANG = shutil.which("clang")
 
 
@@ -241,8 +242,15 @@ def main():
     args = parser.parse_args()
 
     if args.sanitize and SYSTEM_CLANG is None:
-        print("clang is not on PATH; skipping the sanitized build")
-        args.sanitize = False
+        # A run without the sanitizer would pass while testing none of what
+        # was asked for, so this refuses rather than degrades. A gate that
+        # cannot discriminate is worse than no gate: it is green for a
+        # reason nobody reading it can see.
+        print(
+            "error: --sanitize needs clang on PATH, and it is not there",
+            file=sys.stderr,
+        )
+        return 1
 
     alcy = project_root_dir / "out" / args.build_subdir / "alcy"
     if not alcy.is_file():
