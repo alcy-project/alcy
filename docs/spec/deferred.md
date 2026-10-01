@@ -40,7 +40,7 @@ relied upon by MVP programs or by the MVP compiler implementation.
   coherence are settled (see `items.md` and `grammar.md`).
 - Closures and spec objects; higher-ranked region polymorphism beyond
   struct projection; two-phase borrows.
-- `match` guards, string literal patterns.
+- `match` guards, string literal patterns, slice patterns.
 - An or-pattern nested inside another pattern (`(A | B, x) => ...`),
   which needs the distributive expansion `(A, x) | (B, x)`. The
   top-level form works in `match` arms and in `if`/`while`
@@ -53,11 +53,6 @@ relied upon by MVP programs or by the MVP compiler implementation.
 - `pub(...)` restricted visibility; glob imports.
 - `f16`, 128-bit integers, posit, and decimal types; `Char`/`Ascii`/
   grapheme semantics in core (see `types.md`).
-- Range stepping. Integer ranges iterate through their cursor
-  (see `types.md`); what remains is strided iteration, which the
-  cursor does not offer. Representation, endpoint-marking, and
-  sub-slicing are frozen in `types.md`. Slice patterns wait for the
-  pattern work.
 - Two-phase borrows, so `v.push(v.len())` resolves the receiver before
   the arguments; see `docs/adr/0012-reborrow-on-reference-read.md`.
 - Interior mutability; mutable statics; `const`-position extensions.

@@ -88,6 +88,14 @@
   value, so naming a cursor for one fails; a range with no end
   yields until the loop stops it. Stepping lives on the cursor,
   never on the interval.
+- `(0..<10).step_by(2)` names a cursor advancing two values at a
+  time: 0, 2, 4, 6, 8. The stride must be positive; zero — or a
+  negative one — fails rather than yielding one value forever. An
+  inclusive end hit exactly is yielded and ends the run; a stride
+  that would pass the end stops before it instead, so no step after
+  the last value ever wraps. The rules above apply unchanged: an
+  inverted range with any stride yields nothing, and an open end
+  strides until the loop stops it.
 - `for` names the cursor through `into_iter` and consumes it as an
   `Iterator` (see `control.md`). Index and slice APIs accept bound
   data, never iterators.

@@ -17,7 +17,8 @@
   some items should skip the body.
 - A range head names its end explicitly: `for i in 0..<n` yields
   `0` through `n - 1` and `for i in 0..=n` yields `0` through `n`
-  (see `types.md`).
+  (see `types.md`). A stepped head spells the stride on the range:
+  `for i in (0..<n).step_by(2)`.
 - `for` is a block-like expression evaluating to `()`, so it works as
   a statement and in value position. `break` and `continue` in the
   body act on this loop, and nested loops keep independent cursors.

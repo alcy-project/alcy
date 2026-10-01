@@ -28,12 +28,13 @@ pub struct Range<T> {
 
 // A cursor over a range: `Range::into_iter` builds one, and it
 // implements `Iterator` for the element type. The cursor holds the
-// next value to yield, the end it stops at, and whether it is spent.
-// Only integer ranges iterate; the endpoints of a range expression
-// are always integers.
+// next value to yield, the end it stops at, the stride it advances
+// by, and whether it is spent. Only integer ranges iterate; the
+// endpoints of a range expression are always integers.
 pub struct RangeIter<T> {
   current: T,
   end: Bound<T>,
+  stride: T,
   done: bool,
 }
 
@@ -62,26 +63,54 @@ impl<T> Bound<T> {
     }
   }
 
-  // Whether `current` is the last value this end bound yields: only
-  // an inclusive end has one. The cursor stops without stepping past
-  // it, so `0..=255u8` never computes `255 + 1`.
-  fn is_last(self: Self, current: T) -> bool {
+  // Whether the cursor is spent after yielding `current` with this
+  // stride: an inclusive end hit exactly, or a next step that would
+  // pass the end. The differences are exact — a yielded value always
+  // lies on the admitted side — so nothing wraps while deciding, and
+  // `0..=255u8` never computes `255 + 1` at any stride.
+  fn done_after(self: Self, current: T, stride: T) -> bool {
     ret match self {
-      Bound::Included(e) => current == e,
-      Bound::Excluded(_) => false,
+      Bound::Included(e) => current == e || stride > e - current,
+      Bound::Excluded(e) => stride >= e - current,
       Bound::Unbounded => false,
     }
   }
 }
 
 impl<T> Range<T> {
-  // Names the cursor `for` iterates.
+  // Names the cursor `for` iterates, advancing one value at a time.
   pub fn into_iter(self: Self) -> RangeIter<T> {
     ret RangeIter {
       current: self.start.first(),
       end: self.end,
+      stride: 1,
       done: false,
     }
+  }
+
+  // Names a cursor advancing `stride` values at a time: `(0..<10)`
+  // `.step_by(2)` yields 0, 2, 4, 6, 8. A stride must be positive;
+  // zero — or, for signed ranges, a negative one — has no meaning as
+  // a step, so asking for one fails rather than yielding one value
+  // forever or walking downward.
+  pub fn step_by(self: Self, stride: T) -> RangeIter<T> {
+    if stride <= 0 {
+      panic("stride must be positive")
+    }
+    ret RangeIter {
+      current: self.start.first(),
+      end: self.end,
+      stride: stride,
+      done: false,
+    }
+  }
+}
+
+impl<T> RangeIter<T> {
+  // A cursor already iterates: this names itself for `for`, so both
+  // `for i in 0..<n` and `for i in (0..<n).step_by(2)` read.
+  pub fn into_iter(self: Self) -> RangeIter<T> {
+    ret self
   }
 }
 
@@ -95,10 +124,10 @@ impl<T> Iterator<T> for RangeIter<T> {
       ret Option::None
     }
     v := self.current
-    if self.end.is_last(v) {
+    if self.end.done_after(v, self.stride) {
       self.done = true
     } else {
-      self.current = self.current + 1
+      self.current = self.current + self.stride
     }
     ret Option::Some(v)
   }

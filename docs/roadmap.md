@@ -63,11 +63,15 @@ peripheral work lives in `backlog.md`.
   The pattern must match every item, like `:=` and parameter
   patterns before it: a refutable one is a check-time error naming
   the loop, never a filter. Pinned by `err-for-refutable`.
-- [ ] Strided range iteration.
+- [x] Strided range iteration.
 
-  The cursor yields consecutive values; a stride is the remaining
-  range API. Design it against the cursor first — the stride meets
-  the inclusive-end rule the cursor already carries — then build it.
+  The stride lives on the cursor next to the end it must respect:
+  `(0..<10).step_by(2)` yields 0, 2, 4, 6, 8, an inclusive end hit
+  exactly ends the run, and an overshoot stops before wrapping, at
+  every width with one generic implementation
+  (`docs/adr/0037-strided-range-iteration.md`). A non-positive stride
+  fails rather than yielding one value forever. Pinned by
+  `exe-range-stride` and `exe-range-stride-zero`.
 - [ ] `ArrayVec<T, N>`, a fixed-capacity inline container.
 
   The baremetal case proper: no heap, so no realloc hazard, and the

@@ -24,5 +24,11 @@ fn main() -> i32 {
     twice = twice + i
   }
   if twice != 6 { ret 3 }
+  // A stepped head yields every stride-th value from the start.
+  mut stepped := 0
+  for i in (0..<10).step_by(3) {
+    stepped = stepped + i
+  }
+  if stepped != 18 { ret 4 }
   ret 0
 }
