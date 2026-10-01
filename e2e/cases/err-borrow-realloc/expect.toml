@@ -1,2 +1,2 @@
 exit = 4
-contains = ["conflicting borrows"]
+contains = ["Conflicting borrows"]

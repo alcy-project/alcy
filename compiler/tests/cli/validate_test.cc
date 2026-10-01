@@ -14,7 +14,7 @@ TEST_CASE("Config validation requires a subcommand") {
   const CliConfig config{};
   CHECK(validate_cli_config(config).is_err());
   CHECK(describe_config_error(ConfigError::MissingSubcommand,
-                              i18n::Language::EnUs) == "no subcommand given");
+                              i18n::Language::EnUs) == "No subcommand given");
 }
 
 TEST_CASE("Config validation rejects program arguments outside run") {

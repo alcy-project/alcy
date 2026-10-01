@@ -1,2 +1,2 @@
 exit = 4
-contains = ["missing method 'show' in implementation of 'Display'"]
+contains = ["Missing method 'show' in implementation of 'Display'"]

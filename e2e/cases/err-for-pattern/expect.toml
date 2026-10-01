@@ -1,2 +1,2 @@
 exit = 4
-contains = ["type mismatch in tuple pattern"]
+contains = ["Type mismatch in tuple pattern"]

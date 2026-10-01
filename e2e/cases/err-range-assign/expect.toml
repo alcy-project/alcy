@@ -1,2 +1,2 @@
 exit = 4
-contains = ["cannot assign to a run"]
+contains = ["Cannot assign to a run"]

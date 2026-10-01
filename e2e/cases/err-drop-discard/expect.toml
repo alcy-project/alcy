@@ -1,2 +1,2 @@
 exit = 4
-contains = ["discarded value holds something with a destructor"]
+contains = ["Discarded value holds something with a destructor"]

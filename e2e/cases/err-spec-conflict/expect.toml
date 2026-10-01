@@ -1,2 +1,2 @@
 exit = 4
-contains = ["conflicting implementation of 'Display' for 'Point'"]
+contains = ["Conflicting implementation of 'Display' for 'Point'"]

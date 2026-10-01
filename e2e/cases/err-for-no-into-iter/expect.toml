@@ -1,2 +1,2 @@
 exit = 4
-contains = ["no method 'into_iter'"]
+contains = ["No method 'into_iter'"]

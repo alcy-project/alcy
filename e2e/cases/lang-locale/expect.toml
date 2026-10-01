@@ -3,4 +3,4 @@
 # output language depends on it is a different compiler on every machine.
 exit = 4
 env = { LANG = "ja_JP.UTF-8", LC_ALL = "ja_JP.UTF-8", LANGUAGE = "ja" }
-contains = ["type mismatch in integer literal"]
+contains = ["Type mismatch in integer literal"]

@@ -33,117 +33,122 @@ happened, because a translation is keyed by the message and half the
 codes here have no single wording to key it with. A code stays at the
 call site, where the check that found it lives.
 
+A message is a sentence, so it starts with a capital, and the wording
+below is in the same voice: these are descriptions of what a code
+means, close enough to the message to be recognisable in the output and
+deliberately not a second copy of it.
+
 ## pkg (1000–1999)
 
 Manifests (`compiler/pkg/manifest.cc`, 1000–1099):
 
-- `1000` syntax error: the manifest does not parse.
-- `1001` semantic error: parsed but invalid (see `ManifestError`).
+- `1000` Syntax error: the manifest does not parse.
+- `1001` Semantic error: parsed but invalid (see `ManifestError`).
 
 Modules (`compiler/pkg/modules.cc`, 1100–1199):
 
-- `1100` semantic error: a module entry selects nothing or conflicts.
-- `1101` unselected file: a source file belongs to no module.
+- `1100` Semantic error: a module entry selects nothing or conflicts.
+- `1101` Unselected file: a source file belongs to no module.
 
 Resolution (`compiler/pkg/resolve.cc`, 1200–1299):
 
 - `1200` I/O error: the package root or manifest cannot be read.
-- `1201` cycle error: package dependencies form a cycle.
+- `1201` Cycle error: package dependencies form a cycle.
 
 ## lexer (2000–2099)
 
 `compiler/lexer/lexer.cc`:
 
-- `2000` invalid character.
-- `2001` unterminated string.
-- `2002` unterminated character literal.
-- `2003` invalid number.
-- `2004` unterminated block comment.
-- `2005` invalid escape.
+- `2000` Invalid character.
+- `2001` Unterminated string.
+- `2002` Unterminated character literal.
+- `2003` Invalid number.
+- `2004` Unterminated block comment.
+- `2005` Invalid escape.
 
 ## parser (3000–3999)
 
 Grammar (`compiler/parser/parser.h`, 3000–3099):
 
-- `3000` unexpected token.
-- `3001` reserved word used as an identifier.
-- `3002` internal error: the token stream failed structural
+- `3000` Unexpected token.
+- `3001` Reserved word used as an identifier.
+- `3002` Internal error: the token stream failed structural
   verification (see `lexer::verify_token_stream`).
-- `3003` internal error: the parsed arena failed structural
+- `3003` Internal error: the parsed arena failed structural
   verification (see `ast::verify_file`).
 - `3004` nesting deeper than the language's budget.
 - `3005` a range end that is not spelled `..<` or `..=`.
 
 Desugaring (`compiler/parser/desugar.cc`, 3100–3199):
 
-- `3100` `or`-pattern alternatives bind different name sets.
-- `3101` a name is already bound in the innermost scope.
+- `3100` Or-pattern alternatives bind different name sets.
+- `3101` A name is already bound in the innermost scope.
 
 ## analyzer (4000–4999)
 
 Module resolution (`compiler/analyzer/resolve.cc`, `compiler/analyzer/resolve.h`,
 4000–4009):
 
-- `4000` duplicate module.
-- `4001` unresolved import.
-- `4002` ambiguous import.
-- `4003` unreachable file (warning).
-- `4004` invalid path: an unknown file id reached resolution.
-- `4005` internal error: the module tree failed structural
+- `4000` Duplicate module.
+- `4001` Unresolved import.
+- `4002` Ambiguous import.
+- `4003` Unreachable file (warning).
+- `4004` Invalid path: an unknown file id reached resolution.
+- `4005` Internal error: the module tree failed structural
   verification (see `analyzer::verify_module_tree`).
 
 Type checking (`compiler/analyzer/checker.h`, 4010–4019):
 
-- `4010` recursive type.
-- `4011` unknown type.
-- `4012` duplicate definition.
-- `4013` reserved name.
-- `4014` arity mismatch.
-- `4015` generic argument error.
-- `4016` unsupported type.
-- `4017` internal error: checked types failed storage verification.
+- `4010` Recursive type.
+- `4011` Unknown type.
+- `4012` Duplicate definition.
+- `4013` Reserved name.
+- `4014` Arity mismatch.
+- `4015` Generic argument error.
+- `4016` Unsupported type.
+- `4017` Internal error: checked types failed storage verification.
 
 Expression checking (`compiler/analyzer/checker.h`, 4020–4039):
 
-- `4020` type mismatch.
-- `4021` unknown value.
-- `4022` arity error.
-- `4023` invalid operation.
-- `4024` non-exhaustive match.
-- `4025` refutable `let`.
-- `4026` must-use violation.
-- `4027` bad `?` operator use.
-- `4028` bad `return`.
-- `4029` bad assignment.
-- `4030` `break` outside a loop.
-- `4031` unsupported expression.
-- `4032` not compile-time known.
-- `4033` invalid compile-time value.
-- `4034` unknown intrinsic.
+- `4020` Type mismatch.
+- `4021` Unknown value.
+- `4022` Arity error.
+- `4023` Invalid operation.
+- `4024` Non-exhaustive match.
+- `4025` Refutable `let`.
+- `4026` Must-use violation.
+- `4027` Bad `?` operator use.
+- `4028` Bad `return`.
+- `4029` Bad assignment.
+- `4030` Break outside a loop.
+- `4031` Unsupported expression.
+- `4032` Not compile-time known.
+- `4033` Invalid compile-time value.
+- `4034` Unknown intrinsic.
 
 Destructors (`compiler/analyzer/checker.h`, 4040–4049):
 
-- `4040` bad `drop` signature.
-- `4041` `drop` on a copyable type.
+- `4040` Bad `drop` signature.
+- `4041` Drop on a copyable type.
 
 ## lowering (5000–5099)
 
 `compiler/lowering/lowerer.h`:
 
-- `5000` unsupported construct.
-- `5001` internal error: lowered IR failed verification.
-- `5002` unreachable code reached lowering.
-- `5003` destructor glue could not be placed.
-- `5004` discarded destructor.
+- `5000` Unsupported construct.
+- `5001` Internal error: lowered IR failed verification.
+- `5002` Unreachable code reached lowering.
+- `5003` Destructor glue could not be placed.
+- `5004` Discarded destructor.
 
 ## borrow (6000–6099)
 
 `compiler/borrow/borrow.cc`:
 
-- `6000` use after move.
-- `6001` borrow conflict.
-- `6002` reference escape.
-- `6003` assignment to a borrowed place.
+- `6000` Use after move.
+- `6001` Borrow conflict.
+- `6002` Reference escape.
+- `6003` Assignment to a borrowed place.
 
 ## ir (7000–7999)
 
@@ -159,8 +164,8 @@ here.
 
 `compiler/pipeline/pipeline_context.h`:
 
-- `8000` no manifest found.
+- `8000` No manifest found.
 - `8001` I/O error reading, writing, or staging files.
-- `8002` not implemented: the request names an unwired path.
-- `8003` no targets selected.
-- `8004` link error from the system linker.
+- `8002` Not implemented: the request names an unwired path.
+- `8003` No targets selected.
+- `8004` Link error from the system linker.

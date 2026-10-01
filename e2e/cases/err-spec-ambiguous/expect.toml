@@ -1,2 +1,2 @@
 exit = 4
-contains = ["ambiguous method 'show'"]
+contains = ["Ambiguous method 'show'"]

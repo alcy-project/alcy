@@ -46,9 +46,9 @@ TEST_CASE("every catalog has one entry per key, in key order") {
 
 TEST_CASE("a message with no placeholders renders as itself") {
   CHECK(text<Key::LexerInvalidCharacter>(Language::EnUs) ==
-        "invalid character");
+        "Invalid character");
   CHECK(format<Key::LexerInvalidNumber>(Language::EnUs) ==
-        "invalid number literal");
+        "Invalid number literal");
 }
 
 }  // namespace

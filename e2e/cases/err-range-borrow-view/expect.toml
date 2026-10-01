@@ -1,2 +1,2 @@
 exit = 4
-contains = ["a view is already a reference"]
+contains = ["A view is already a reference"]

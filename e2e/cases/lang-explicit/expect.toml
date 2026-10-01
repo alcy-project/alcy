@@ -3,4 +3,4 @@
 # consult the environment.
 exit = 4
 args = ["--lang=en-us"]
-contains = ["type mismatch in integer literal"]
+contains = ["Type mismatch in integer literal"]

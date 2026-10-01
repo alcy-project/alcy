@@ -957,7 +957,7 @@ TEST_CASE("Run does not announce a program that failed to build") {
   CHECK(said.find("Running   app\n") == std::string::npos);
   // The failure was reported, so the absence above is the absence of an
   // announcement rather than of any output.
-  CHECK(said.find("type mismatch") != std::string::npos);
+  CHECK(said.find("Type mismatch") != std::string::npos);
 }
 
 TEST_CASE("Run tolerates program arguments") {

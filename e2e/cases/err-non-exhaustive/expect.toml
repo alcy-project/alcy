@@ -1,2 +1,2 @@
 exit = 4
-contains = ["non-exhaustive match"]
+contains = ["Non-exhaustive match"]

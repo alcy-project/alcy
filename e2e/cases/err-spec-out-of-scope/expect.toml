@@ -1,2 +1,2 @@
 exit = 4
-contains = ["no method 'show'"]
+contains = ["No method 'show'"]

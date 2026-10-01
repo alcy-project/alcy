@@ -3,4 +3,4 @@
 # would be reporting something else than the flag says.
 exit = 1
 args = ["--lang=ja-jp"]
-contains = ["invalid choice for argument 'lang': 'ja-jp'"]
+contains = ["Invalid choice for argument 'lang': 'ja-jp'"]

@@ -2,4 +2,4 @@
 # source rather than read from the environment: this case and
 # lang-locale are the same program and the same expectation.
 exit = 4
-contains = ["type mismatch in integer literal"]
+contains = ["Type mismatch in integer literal"]
