@@ -44,4 +44,18 @@ struct Diagnostic {
   u32 label_count = 0;
 };
 
+// A message with no span and no code: a complaint about a command line, a
+// configuration, or a process, where there is no source to point at and no
+// check area allocated a number. The severity is then all a reader has to
+// go on, which is why the marker says `error: ` rather than inventing a
+// code. Most of what a command line reports is one of these.
+constexpr Diagnostic message(Severity severity, std::string_view text) {
+  return Diagnostic{
+      .severity = severity,
+      .code = std::nullopt,
+      .message = text,
+      .primary_span = {},
+  };
+}
+
 }  // namespace diag

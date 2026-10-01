@@ -5,6 +5,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "cli/parse_args.h"
 #include "cli/result_code.h"
@@ -28,12 +29,29 @@ term::ColorMode scan_color_mode(i32 argc, const char* const* argv);
 // rather than this scan falling back to it silently.
 i18n::Language scan_language(i32 argc, const char* const* argv);
 
-// Renders an interruption outcome (help, version, error, ...) for display.
-// Returns an empty string for CliConfig, which has nothing to display.
-std::string render_outcome(const arg::Parser& parser,
-                           const ParseOutcome& outcome,
-                           term::ColorStyle style,
-                           i18n::Language language = i18n::Language::EnUs);
+// What an interruption has to say, split by where it belongs. `--help`
+// and `--version` answer a question, so they go to standard output; a
+// parse error or an unknown verb is an error, so it goes to standard
+// error. A successful parse interrupts nothing and carries neither.
+//
+// The errors are already the blocks `diag::render` makes of them, because
+// a diagnostic views the text the catalog formats on demand and the view
+// has to become a block before that text goes away.
+struct Interruption {
+  // The answer, as one block. Empty when the interruption is an error.
+  std::string text;
+  // The errors and any advice, one block each, in reading order. Empty
+  // when the interruption is an answer.
+  std::vector<std::string> errors;
+};
+
+// Renders an interruption outcome: the answer a help or version request
+// wants, or the errors a rejected command line produced. Carries neither
+// for CliConfig, which has nothing to report.
+Interruption render_outcome(const arg::Parser& parser,
+                            const ParseOutcome& outcome,
+                            term::ColorMode color_mode,
+                            i18n::Language language = i18n::Language::EnUs);
 
 // Exit code for interruption outcomes. Returns nullopt for CliConfig,
 // which the cli dispatches instead of exiting.

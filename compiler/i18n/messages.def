@@ -37,7 +37,6 @@
   F(ArgCommands, "Commands") \
   F(ArgDefault, "(default: {})") \
   F(ArgDuplicateOption, "the argument '{}' was provided more than once") \
-  F(ArgError, "error") \
   F(ArgFlagTakesNoValue, "flag '{}' takes no value") \
   F(ArgHelpOption, "Print help message") \
   F(ArgInvalidArgCount, "invalid arg count provided: {}") \
@@ -48,7 +47,7 @@
   F(ArgNullMatchesPointer, "output matches pointer is null") \
   F(ArgOptions, "Options") \
   F(ArgRequired, "[required]") \
-  F(ArgTryHelp, "\nFor more information, try '{0}{1} --help{2}'.\n") \
+  F(ArgTryHelp, "For more information, try '{} --help'.") \
   F(ArgUnknownLongOption, "unexpected argument '--{}' found") \
   F(ArgUnknownShortOption, "unexpected argument '-{}' found") \
   F(ArgUsage, "Usage") \
@@ -319,7 +318,7 @@
   F(CliCompileOutputHelp, "Where the output goes. Empty picks a path beside the input; required with --stdin.") \
   F(CliDepsHelp, "A dependency on top of the default suite, as a specifier (`alcy/std/core`) or `specifier = {{ ... }}`. Repeatable.") \
   F(CliDepsOnlyForCompile, "`--no-std` and `--deps` only mean anything for `compile`") \
-  F(CliDidYouMean, "did you mean '{}'?") \
+  F(CliDidYouMean, "{} (did you mean '{}'?)") \
   F(CliEmitHelp, "What to write: executable (default), object, llvm-ir, or llvm-bc. The output's extension no longer decides.") \
   F(CliFilePlural, "files") \
   F(CliFileSingular, "file") \

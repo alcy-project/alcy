@@ -6,12 +6,15 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "cli/cli_config.h"
 #include "cli/parse_args.h"
 #include "cli/result_code.h"
 #include "cli/usage.h"
 #include "debug/fatal.h"
+#include "diag/diagnostic.h"
+#include "diag/render.h"
 #include "fmt/format.h"
 #include "fpag/arg/error_formatter.h"
 #include "fpag/arg/help_formatter.h"
@@ -83,43 +86,60 @@ i18n::Language scan_language(i32 argc, const char* const* argv) {
   return language;
 }
 
-std::string render_outcome(const arg::Parser& parser,
-                           const ParseOutcome& outcome,
-                           term::ColorStyle style,
-                           i18n::Language language) {
+Interruption render_outcome(const arg::Parser& parser,
+                            const ParseOutcome& outcome,
+                            term::ColorMode color_mode,
+                            i18n::Language language) {
   if (outcome.is<CliConfig>()) {
-    return "";
+    return {};
   }
   const HelpFormatter help{language};
   if (outcome.is<HelpRequested>() || outcome.is<NoSubcommand>()) {
-    return parser.help_message(help, style);
+    return Interruption{
+        .text = parser.help_message(
+            help, term::console_color_style(term::Stream::Stdout, color_mode)),
+        .errors = {},
+    };
   }
   if (outcome.is<VersionRequested>()) {
     // The parser's formatter writes the sentence; the newline that ends
     // the block is this layer's, because this is the layer that hands the
     // block to a writer.
-    std::string text =
-        parser.version_message(arg::DefaultVersionFormatter{}, style);
+    std::string text = parser.version_message(
+        arg::DefaultVersionFormatter{},
+        term::console_color_style(term::Stream::Stdout, color_mode));
     text += '\n';
-    return text;
+    return Interruption{.text = std::move(text), .errors = {}};
   }
+  // An error lands on standard error, so it is styled by what standard
+  // error can do: `alcy --help > /dev/null` on a pipe must not decide
+  // whether the answer is readable.
+  const diag::RenderOptions error{
+      .color = term::console_color_style(term::Stream::Stderr, color_mode) !=
+               term::ColorStyle::Off,
+      .language = language,
+  };
   if (outcome.is<UnknownSubcommand>()) {
     const UnknownSubcommand& unknown = outcome.get<UnknownSubcommand>();
-    std::string text = i18n::format<i18n::Key::CliUnknownSubcommand>(
+    std::string message = i18n::format<i18n::Key::CliUnknownSubcommand>(
         language, unknown.name, parser.root_command().name());
     if (!unknown.suggestion.empty()) {
-      text += '\n';
-      text +=
-          i18n::format<i18n::Key::CliDidYouMean>(language, unknown.suggestion);
+      message = i18n::format<i18n::Key::CliDidYouMean>(
+          language, std::move(message), unknown.suggestion);
     }
-    text += '\n';
-    return text;
+    return Interruption{
+        .text = {},
+        .errors = {diag::render(diag::message(diag::Severity::Error, message),
+                                error)}};
   }
   if (outcome.is<ParseFailure>()) {
     const ParseFailure& failure = outcome.get<ParseFailure>();
-    const ErrorFormatter format{language};
-    return format(parser.root_command().name(), failure.errors,
-                  failure.suggestions, style);
+    return Interruption{
+        .text = {},
+        .errors = render_parse_errors(
+            parser.root_command().name(), failure.errors, failure.suggestions,
+            term::console_color_style(term::Stream::Stderr, color_mode),
+            language)};
   }
   UNREACHABLE();
 }

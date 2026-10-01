@@ -80,13 +80,17 @@ ResultCode run_interruption(const arg::Parser& parser,
                             i32 argc,
                             const char* const* argv,
                             i18n::Language language) {
-  const term::ColorStyle style = term::console_color_style(
-      term::Stream::Stdout, scan_color_mode(argc, argv));
   FdSink out_sink{io::STDOUT_FD};
+  FdSink err_sink{io::STDERR_FD};
   const Logger out{&FdSink::write, &out_sink};
-  const std::string text = render_outcome(parser, outcome, style, language);
-  if (!text.empty()) {
-    out.block(text);
+  const Logger err{&FdSink::write, &err_sink};
+  const Interruption interruption =
+      render_outcome(parser, outcome, scan_color_mode(argc, argv), language);
+  for (const std::string& error : interruption.errors) {
+    err.block(error);
+  }
+  if (!interruption.text.empty()) {
+    out.block(interruption.text);
   }
   return code;
 }

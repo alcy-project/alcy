@@ -63,18 +63,24 @@ struct HelpFormatter {
                          term::ColorStyle color_style) const;
 };
 
-// One line per parse error, then where to read more. The error itself
-// is a message, so it is composed by the catalog against the flag and
-// the value the parser rejected; the label in front of it and the
-// punctuation after it are structure. A suggestion follows the error it
-// explains, naming the flag without dashes; rendering adds them.
-struct ErrorFormatter {
-  i18n::Language language = i18n::Language::EnUs;
-
-  std::string operator()(std::string_view command_name,
-                         const std::vector<arg::ParseError>& errors,
-                         std::span<const FlagSuggestion> suggestions,
-                         term::ColorStyle color_style) const;
-};
+// The errors a rejected command line produced, as the blocks
+// `diag::render` makes of them: one per error, then the note that points
+// at `--help`.
+//
+// Each error is a message, so the catalog composes it against the flag
+// and the value the parser rejected, and the marker in front of it and
+// the punctuation after it belong to the renderer. A suggestion joins
+// the message it explains rather than taking a line of its own, because
+// a block is a run of lines and only the first one carries the marker.
+//
+// Rendering happens here rather than at the call site because a
+// diagnostic views the text the catalog formats on demand, and the view
+// has to become a block before that text goes away.
+std::vector<std::string> render_parse_errors(
+    std::string_view command_name,
+    const std::vector<arg::ParseError>& errors,
+    std::span<const FlagSuggestion> suggestions,
+    term::ColorStyle color_style,
+    i18n::Language language = i18n::Language::EnUs);
 
 }  // namespace cli

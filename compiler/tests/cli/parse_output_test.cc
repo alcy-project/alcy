@@ -27,105 +27,123 @@ ParseOutcome parse(std::span<const std::string_view> args) {
   return parse_args(parser, args);
 }
 
-std::string render(ParseOutcome&& outcome) {
+Interruption render(ParseOutcome&& outcome) {
   arg::Parser parser = build_parser();
-  return render_outcome(parser, outcome, term::ColorStyle::Off);
+  return render_outcome(parser, outcome, term::ColorMode::Never);
 }
 
-// The empty string is the one legitimate non-block: a parse that
-// succeeded has nothing to interrupt with, and `report` skips it.
-bool is_block_or_empty(std::string_view text) {
-  return text.empty() || cli::is_block(text);
+// The answer and the errors as one string, for the cases that assert on a
+// phrase. Which stream a phrase landed on is a separate question, and
+// `render` is what the split is tested with.
+std::string flatten(const Interruption& interruption) {
+  std::string text = interruption.text;
+  for (const std::string& error : interruption.errors) {
+    text += error;
+  }
+  return text;
 }
 
 }  // namespace
 
 TEST_CASE("Render help for explicit and bare invocations") {
   const std::string_view help[] = {"alcy", "--help"};
-  const std::string help_text = render(parse(help));
-  CHECK(!help_text.empty());
-  CHECK(help_text.find("build") != std::string::npos);
+  const Interruption asked = render(parse(help));
+  CHECK(asked.text.find("build") != std::string::npos);
+  CHECK(asked.errors.empty());
 
   const std::string_view bare[] = {"alcy"};
-  const std::string bare_text = render(parse(bare));
-  CHECK(!bare_text.empty());
-  CHECK(bare_text.find("build") != std::string::npos);
+  const Interruption none = render(parse(bare));
+  CHECK(none.text.find("build") != std::string::npos);
+  CHECK(none.errors.empty());
 }
 
 TEST_CASE("Render version") {
   const std::string_view args[] = {"alcy", "--version"};
   arg::Parser parser = build_parser();
-  ParseOutcome outcome = parse(args);
-  const std::string text =
-      render_outcome(parser, outcome, term::ColorStyle::Off);
-  CHECK(!text.empty());
-  CHECK(text.find(std::string(parser.root_command().version())) !=
+  const Interruption interruption =
+      render_outcome(parser, parse(args), term::ColorMode::Never);
+  CHECK(interruption.text.find(std::string(parser.root_command().version())) !=
         std::string::npos);
+  CHECK(interruption.errors.empty());
 }
 
-TEST_CASE("Render unknown subcommand") {
-  const std::string_view args[] = {"alcy", "frobnicate"};
-  const std::string text = render(parse(args));
-  CHECK(text.find("frobnicate") != std::string::npos);
-  CHECK(text.find("--help") != std::string::npos);
-}
+// An answer is standard output and an error is standard error, so the two
+// never arrive in one interruption. What decides it is whether the
+// invocation asked a question or made a mistake.
+TEST_CASE("An answer and an error are never the same interruption") {
+  const std::string_view question[] = {"alcy", "--help"};
+  CHECK(render(parse(question)).errors.empty());
 
-// An interruption is written as one block, whatever produced its text.
-// The version line and the unknown-subcommand lines are the two a
-// formatter hands over as bare sentences, so they are the two a newline
-// has to be added to.
-TEST_CASE("Every interruption is one finished block") {
-  const std::string_view help[] = {"alcy", "--help"};
-  CHECK(is_block(render(parse(help))));
+  const std::string_view mistake[] = {"alcy", "frobnicate"};
+  const Interruption unknown = render(parse(mistake));
+  CHECK(unknown.text.empty());
+  CHECK(unknown.errors.size() == 1);
+  CHECK(unknown.errors[0].find("frobnicate") != std::string::npos);
+  CHECK(unknown.errors[0].find("--help") != std::string::npos);
 
-  const std::string_view bare[] = {"alcy"};
-  CHECK(is_block(render(parse(bare))));
-
-  const std::string_view version[] = {"alcy", "--version"};
-  CHECK(is_block(render(parse(version))));
-
-  const std::string_view unknown[] = {"alcy", "frobnicate"};
-  CHECK(is_block(render(parse(unknown))));
-
-  const std::string_view suggested[] = {"alcy", "buid"};
-  CHECK(is_block(render(parse(suggested))));
-
-  const std::string_view bad_flag[] = {"alcy", "--nonsense"};
-  CHECK(is_block(render(parse(bad_flag))));
-
-  // A bare parse succeeds, and the one render that is not a block is the
-  // one with nothing to report.
-  const std::string_view valid[] = {"alcy", "build"};
-  CHECK(is_block_or_empty(render(parse(valid))));
+  const std::string_view bad_flag[] = {"alcy", "build", "--frobnicator"};
+  const Interruption failed = render(parse(bad_flag));
+  CHECK(failed.text.empty());
+  // The rejected flag, then where to read more, which is a note rather
+  // than a second error.
+  CHECK(failed.errors.size() == 2);
+  CHECK(failed.errors[0].rfind("error: ", 0) == 0);
+  CHECK(failed.errors[1].rfind("note: ", 0) == 0);
 }
 
 TEST_CASE("Render subcommand suggestion") {
   const std::string_view close[] = {"alcy", "buid"};
-  CHECK(render(parse(close)).find("did you mean 'build'?") !=
+  CHECK(flatten(render(parse(close))).find("did you mean 'build'?") !=
         std::string::npos);
 
   const std::string_view far[] = {"alcy", "frobnicate"};
-  CHECK(render(parse(far)).find("did you mean") == std::string::npos);
-}
-
-TEST_CASE("Render parse failure") {
-  const std::string_view args[] = {"alcy", "build", "--frobnicator"};
-  const std::string text = render(parse(args));
-  CHECK(!text.empty());
+  CHECK(flatten(render(parse(far))).find("did you mean") == std::string::npos);
 }
 
 TEST_CASE("Render flag suggestion") {
   const std::string_view close[] = {"alcy", "build", "--outpu"};
-  CHECK(render(parse(close)).find("did you mean '--output'?") !=
+  CHECK(flatten(render(parse(close))).find("did you mean '--output'?") !=
         std::string::npos);
 
   const std::string_view far[] = {"alcy", "build", "--frobnicator"};
-  CHECK(render(parse(far)).find("did you mean") == std::string::npos);
+  CHECK(flatten(render(parse(far))).find("did you mean") == std::string::npos);
 }
 
-TEST_CASE("Render config is empty") {
+// Every block an interruption hands to a writer is a finished block. The
+// version line and the unknown-subcommand line are the two a formatter
+// hands over as bare sentences, so they are the two a newline has to be
+// added to.
+TEST_CASE("Every block an interruption carries is finished") {
+  const std::string_view help[] = {"alcy", "--help"};
+  CHECK(is_block(render(parse(help)).text));
+
+  const std::string_view bare[] = {"alcy"};
+  CHECK(is_block(render(parse(bare)).text));
+
+  const std::string_view version[] = {"alcy", "--version"};
+  CHECK(is_block(render(parse(version)).text));
+
+  const std::string_view unknown[] = {"alcy", "frobnicate"};
+  for (const std::string& error : render(parse(unknown)).errors) {
+    CHECK(is_block(error));
+  }
+
+  const std::string_view suggested[] = {"alcy", "buid"};
+  for (const std::string& error : render(parse(suggested)).errors) {
+    CHECK(is_block(error));
+  }
+
+  const std::string_view bad_flag[] = {"alcy", "build", "--nonsense"};
+  for (const std::string& error : render(parse(bad_flag)).errors) {
+    CHECK(is_block(error));
+  }
+}
+
+TEST_CASE("A successful parse interrupts nothing") {
   const std::string_view args[] = {"alcy", "build"};
-  CHECK(render(parse(args)).empty());
+  const Interruption interruption = render(parse(args));
+  CHECK(interruption.text.empty());
+  CHECK(interruption.errors.empty());
 }
 
 TEST_CASE("Interruption exit codes") {

@@ -5,6 +5,7 @@
 
 #include <iterator>
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "diag/diagnostic.h"
@@ -205,6 +206,12 @@ void append_marker(fmt::memory_buffer& out,
 }
 
 }  // namespace
+
+std::string render(const Diagnostic& diag, const RenderOptions& options) {
+  fmt::memory_buffer out;
+  render(diag, out, options);
+  return std::string(out.data(), out.size());
+}
 
 void render(const Diagnostic& diag,
             fmt::memory_buffer& out,

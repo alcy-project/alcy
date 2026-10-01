@@ -9,9 +9,13 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "cli/suggest.h"
+#include "debug/fatal.h"
+#include "diag/diagnostic.h"
+#include "diag/render.h"
 #include "fmt/base.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
@@ -237,85 +241,95 @@ std::string HelpFormatter::operator()(const arg::Command& command,
   return result;
 }
 
-std::string ErrorFormatter::operator()(
+namespace {
+
+// The message for one parse error, with the flag and the value the
+// parser rejected. Each code is one message, so the catalog decides which
+// arguments it takes and the build checks that the two agree.
+std::string parse_error_message(const arg::ParseError& error,
+                                i18n::Language language) {
+  using i18n::Key;
+  switch (error.code) {
+    case arg::ErrorCode::InvalidArgCount:
+      return i18n::format<Key::ArgInvalidArgCount>(language, error.context,
+                                                   error.value);
+    case arg::ErrorCode::NullMatchesPointer:
+      return i18n::format<Key::ArgNullMatchesPointer>(language);
+    case arg::ErrorCode::UnknownLongOption:
+      return i18n::format<Key::ArgUnknownLongOption>(language, error.context);
+    case arg::ErrorCode::UnknownShortOption:
+      return i18n::format<Key::ArgUnknownShortOption>(language, error.context);
+    case arg::ErrorCode::MissingValueForOption:
+      return i18n::format<Key::ArgMissingValueForOption>(language,
+                                                         error.context);
+    case arg::ErrorCode::FlagTakesNoValue:
+      return i18n::format<Key::ArgFlagTakesNoValue>(language, error.context);
+    case arg::ErrorCode::MissingRequiredArgument:
+      return i18n::format<Key::ArgMissingRequiredArgument>(language,
+                                                           error.context);
+    case arg::ErrorCode::DuplicateOption:
+      return i18n::format<Key::ArgDuplicateOption>(language, error.context);
+    case arg::ErrorCode::InvalidChoice:
+      return i18n::format<Key::ArgInvalidChoice>(language, error.context,
+                                                 error.value);
+    case arg::ErrorCode::InvalidValue:
+      return i18n::format<Key::ArgInvalidValue>(language, error.context,
+                                                error.value);
+    case arg::ErrorCode::None:
+      // The parser reported no reason, so there is none to report. The
+      // block is still an error, so a reader is not left wondering
+      // whether the run succeeded.
+      return i18n::format<Key::CliInvalidConfiguration>(language);
+  }
+  UNREACHABLE();
+}
+
+// The flag spelling a suggestion names, or nothing. A suggestion belongs
+// to the error it explains, so it joins that error's message. An index
+// past the errors matches nothing, which keeps a stale suggestion from
+// rendering against the wrong error.
+std::string parse_error_suggestion(
+    usize index,
+    std::span<const FlagSuggestion> suggestions) {
+  for (const FlagSuggestion& suggestion : suggestions) {
+    if (suggestion.error_index == index) {
+      return fmt::format("--{}", suggestion.flag);
+    }
+  }
+  return "";
+}
+
+}  // namespace
+
+std::vector<std::string> render_parse_errors(
     std::string_view command_name,
     const std::vector<arg::ParseError>& errors,
     std::span<const FlagSuggestion> suggestions,
-    term::ColorStyle color_style) const {
-  std::string result;
-  constexpr usize ESTIMATED_STR_LEN_PER_ERROR = 256;
-  result.reserve(ESTIMATED_STR_LEN_PER_ERROR * errors.size());
-  const std::back_insert_iterator<std::string> out = std::back_inserter(result);
-
-  const char* bold = term::style_code(term::BOLD, color_style);
-  const char* bright_red = term::style_code(term::FG_BRIGHT_RED, color_style);
-  const char* reset = term::style_code(term::RESET, color_style);
-  const char* cyan = term::style_code(term::FG_BRIGHT_CYAN, color_style);
-
+    term::ColorStyle color_style,
+    i18n::Language language) {
+  const diag::RenderOptions options{
+      .color = color_style != term::ColorStyle::Off,
+      .language = language,
+  };
+  std::vector<std::string> blocks;
+  blocks.reserve(errors.size() + 1);
   for (usize i = 0; i < errors.size(); ++i) {
-    const arg::ParseError& error = errors[i];
-    fmt::format_to(out, "{}{}{}{}{}{}", bright_red, bold,
-                   i18n::text<Key::ArgError>(language), reset, ": ", bold);
-    // Each code is one message, so the catalog decides which arguments
-    // it takes and the build checks that the two agree.
-    switch (error.code) {
-      case arg::ErrorCode::InvalidArgCount:
-        i18n::format_to<Key::ArgInvalidArgCount>(out, language, error.context,
-                                                 error.value);
-        break;
-      case arg::ErrorCode::NullMatchesPointer:
-        i18n::format_to<Key::ArgNullMatchesPointer>(out, language);
-        break;
-      case arg::ErrorCode::UnknownLongOption:
-        i18n::format_to<Key::ArgUnknownLongOption>(out, language,
-                                                   error.context);
-        break;
-      case arg::ErrorCode::UnknownShortOption:
-        i18n::format_to<Key::ArgUnknownShortOption>(out, language,
-                                                    error.context);
-        break;
-      case arg::ErrorCode::MissingValueForOption:
-        i18n::format_to<Key::ArgMissingValueForOption>(out, language,
-                                                       error.context);
-        break;
-      case arg::ErrorCode::FlagTakesNoValue:
-        i18n::format_to<Key::ArgFlagTakesNoValue>(out, language, error.context);
-        break;
-      case arg::ErrorCode::MissingRequiredArgument:
-        i18n::format_to<Key::ArgMissingRequiredArgument>(out, language,
-                                                         error.context);
-        break;
-      case arg::ErrorCode::DuplicateOption:
-        i18n::format_to<Key::ArgDuplicateOption>(out, language, error.context);
-        break;
-      case arg::ErrorCode::InvalidChoice:
-        i18n::format_to<Key::ArgInvalidChoice>(out, language, error.context,
-                                               error.value);
-        break;
-      case arg::ErrorCode::InvalidValue:
-        i18n::format_to<Key::ArgInvalidValue>(out, language, error.context,
-                                              error.value);
-        break;
-      case arg::ErrorCode::None: break;
+    std::string message = parse_error_message(errors[i], language);
+    std::string suggestion = parse_error_suggestion(i, suggestions);
+    if (!suggestion.empty()) {
+      message = i18n::format<i18n::Key::CliDidYouMean>(
+          language, std::move(message), std::move(suggestion));
     }
-    fmt::format_to(out, "\n");
-    // A suggestion belongs to the error it explains, so it follows that
-    // error's line. An index past the errors matches nothing, which keeps
-    // a stale suggestion from rendering against the wrong error.
-    for (const FlagSuggestion& suggestion : suggestions) {
-      if (suggestion.error_index == i) {
-        i18n::format_to<Key::CliDidYouMean>(
-            out, language, fmt::format("--{}", suggestion.flag));
-        fmt::format_to(out, "\n");
-        break;
-      }
-    }
+    blocks.push_back(
+        diag::render(diag::message(diag::Severity::Error, message), options));
   }
-
-  fmt::format_to(
-      out, "{}",
-      i18n::format<Key::ArgTryHelp>(language, cyan, command_name, reset));
-  return result;
+  // Where to read more is advice rather than an error, so it is a note:
+  // the same marker, with a word that says which it is.
+  blocks.push_back(diag::render(
+      diag::message(diag::Severity::Note, i18n::format<i18n::Key::ArgTryHelp>(
+                                              language, command_name)),
+      options));
+  return blocks;
 }
 
 }  // namespace cli

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "diag/diagnostic.h"
@@ -46,5 +47,12 @@ void render(const Diagnostic& diag,
             const RenderOptions& options = {},
             SourceFetch fetch = nullptr,
             const void* ctx = nullptr);
+
+// `render` for a caller that wants the text rather than a buffer, and has
+// no source to quote: the marker and the message, and nothing else. A
+// message from outside a check area - a rejected command line, a flag
+// combination the config check turned down - is exactly that, and a
+// buffer it has to copy out of is a step with no other purpose.
+std::string render(const Diagnostic& diag, const RenderOptions& options = {});
 
 }  // namespace diag
