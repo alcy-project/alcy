@@ -27,7 +27,13 @@ value that user code matches, passes, and stores like any other. No
 iterator exists yet: iteration arrives with `spec` as an `Iterator`
 implementation over a cursor type built from this interval (reached
 through `into_iter`, per `docs/adr/0028-spec-system.md`), and stepping
-lives on the cursor, never on the interval.
+lives on the cursor, never on the interval. A present start endpoint
+is always `Included`; nothing in the language can exclude one.
+
+Superseded in part by `docs/adr/0032-explicit-range-end-spelling.md`, which
+requires a range with an end endpoint to spell it as `..<` or `..=`
+instead of accepting bare `..` as a synonym of `..<`. Everything else
+here stands.
 
 **The names are reserved.** `Range` and `Bound` may only be declared
 by the staged `core` package, the way `MaybeUninit` is compiler-owned.

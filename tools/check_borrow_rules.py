@@ -703,7 +703,7 @@ case(
     "subslice", "mut-run-write-then-array-write", "reject",
     """fn main() -> i32 {
   mut a := [1i32, 2i32, 3i32]
-  mut m := &mut a[0..2]
+  mut m := &mut a[0..<2]
   m[0] = 9
   a[2] = 8
   ret m[0] + a[2] - 17
@@ -713,7 +713,7 @@ case(
     "subslice", "mut-run-last-use-then-array-write", "accept",
     """fn main() -> i32 {
   mut a := [1i32, 2i32, 3i32]
-  mut m := &mut a[0..2]
+  mut m := &mut a[0..<2]
   m[0] = 9
   n := m[0]
   a[2] = 8
@@ -724,8 +724,8 @@ case(
     "subslice", "shared-run-then-mut-run", "reject",
     """fn main() -> i32 {
   mut a := [1i32, 2i32, 3i32]
-  s := &a[0..2]
-  mut m := &mut a[1..3]
+  s := &a[0..<2]
+  mut m := &mut a[1..<3]
   ret s[0] + m[0] - 3
 }""")
 
@@ -734,7 +734,7 @@ case(
     """fn main() -> i32 {
   mut a := [1i32, 2i32, 3i32]
   s := &a[..]
-  t := s[0..2]
+  t := s[0..<2]
   a[0] = 9
   ret t[0] + a[0] - 10
 }""")
@@ -744,7 +744,7 @@ case(
     """fn main() -> i32 {
   mut a := [1i32, 2i32, 3i32]
   s := &a[..]
-  t := s[0..2]
+  t := s[0..<2]
   n := t[0]
   a[0] = 9
   ret n + a[0] - 10
@@ -760,7 +760,7 @@ case(
   mut s := String::new()
   s.push(104u8)
   s.push(105u8)
-  t := s.as_str()[0..1]
+  t := s.as_str()[0..<1]
   s.push(106u8)
   ret str_len(t) as i32
 }""",

@@ -1704,7 +1704,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
     VirtualDir dir;
     const bool setup = write_all(dir, {{"main.al",
                                         "fn main() {\n"
-                                        "  _ := 1..10\n"
+                                        "  _ := 1..<10\n"
                                         "}\n"}});
     CHECK(setup);
     if (!setup) {

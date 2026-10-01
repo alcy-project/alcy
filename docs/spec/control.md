@@ -14,6 +14,9 @@
 - `Some(item)` binds `pat` against the item, and `None` ends the
   loop. The pattern must match every item: a refutable pattern is
   rejected rather than filtering for now (see `deferred.md`).
+- A range head names its end explicitly: `for i in 0..<n` yields
+  `0` through `n - 1` and `for i in 0..=n` yields `0` through `n`
+  (see `types.md`).
 - `for` is a block-like expression evaluating to `()`, so it works as
   a statement and in value position. `break` and `continue` in the
   body act on this loop, and nested loops keep independent cursors.

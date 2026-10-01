@@ -10,11 +10,14 @@ are rejected with guidance diagnostics.
 
 - `..`, `..=`, `..<` are single tokens and open a range; either
   endpoint may be absent, and an absent one is unbounded (`1..`,
-  `..3`, `..`). `..=` includes the end endpoint, `..` and `..<`
-  exclude it. A newline after the operator terminates the statement,
-  so `n := 0..` is a complete value. After an integer literal, `..`
-  starts a range operator, never a float fraction (`1..2` is
-  `1 .. 2`); `1. < 2` keeps float-then-compare.
+  `..<3`, `..`). A range that names an end says how it is bound:
+  `..=` includes the end endpoint and `..<` excludes it, and those
+  two are the only operators that may be followed by an endpoint, so
+  a bare `..` before one is an error. A start endpoint is always
+  included; no spelling excludes it. A newline after the operator
+  terminates the statement, so `n := 0..` is a complete value. After
+  an integer literal, `..` starts a range operator, never a float
+  fraction (`1..<2` is `1 ..< 2`); `1. < 2` keeps float-then-compare.
 - Nesting is bounded at 256 levels, counted on expressions, types,
   blocks, patterns, and items alike. Exceeding it is a diagnostic, not
   an error the program can observe: the parser, checker, and lowerer

@@ -402,18 +402,6 @@ TEST_CASE("Parser respects operator precedence") {
 TEST_CASE("Parser reads range expressions") {
   Fixture f;
   {
-    const ParseResult result = parse("fn f() { 1..3 }", f);
-    CHECK(result.ok);
-    if (!result.ok) {
-      return;
-    }
-    const ast::Block& block = f.ast.blocks[as_fn(result.items[0], f).body];
-    const ast::ExprRange range = as_range(block.value, f);
-    CHECK(range.start.is_valid());
-    CHECK(range.end.is_valid());
-    CHECK(!range.inclusive);
-  }
-  {
     const ParseResult result = parse("fn f() { 1..=3 }", f);
     CHECK(result.ok);
     if (!result.ok) {
@@ -449,7 +437,7 @@ TEST_CASE("Parser reads range expressions") {
     CHECK(!range.end.is_valid());
   }
   {
-    const ParseResult result = parse("fn f() { ..3 }", f);
+    const ParseResult result = parse("fn f() { ..<3 }", f);
     CHECK(result.ok);
     if (!result.ok) {
       return;
@@ -472,7 +460,7 @@ TEST_CASE("Parser reads range expressions") {
   }
   // Endpoints are `or` expressions: the range binds loosest.
   {
-    const ParseResult result = parse("fn f() { 1 + 2..3 * 4 }", f);
+    const ParseResult result = parse("fn f() { 1 + 2..<3 * 4 }", f);
     CHECK(result.ok);
     if (!result.ok) {
       return;
@@ -495,6 +483,28 @@ TEST_CASE("Parser reads range expressions") {
     CHECK(f.ast.exprs[block.value].kind == ast::ExprKind::Return);
   }
   CHECK(!f.bag.has_errors());
+}
+
+// A range that names an end says how it is bound, so only `..<` and
+// `..=` may carry an endpoint; bare `..` is the unbounded spelling.
+TEST_CASE("Parser requires a spelled range end") {
+  for (const std::string_view source :
+       {"fn f() { 1..3 }", "fn f() { ..3 }", "fn f() { a[1..2] }",
+        "fn f() { 1..2.5 }"}) {
+    Fixture f;
+    const ParseResult result = parse(source, f);
+    CHECK_MESSAGE(!result.ok, source);
+    CHECK_MESSAGE(f.bag.has_errors(), source);
+  }
+  // The unbounded spellings keep bare `..`.
+  for (const std::string_view source :
+       {"fn f() { 1.. }", "fn f() { .. }", "fn f() { a[..] }",
+        "fn f() { a[1..] }"}) {
+    Fixture f;
+    const ParseResult result = parse(source, f);
+    CHECK_MESSAGE(result.ok, source);
+    CHECK_MESSAGE(!f.bag.has_errors(), source);
+  }
 }
 
 TEST_CASE("Parser treats power as right associative") {

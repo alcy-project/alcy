@@ -71,6 +71,8 @@ Grammar (`compiler/parser/parser.h`, 3000–3099):
   verification (see `lexer::verify_token_stream`).
 - `3003` internal error: the parsed arena failed structural
   verification (see `ast::verify_file`).
+- `3004` nesting deeper than the language's budget.
+- `3005` a range end that is not spelled `..<` or `..=`.
 
 Desugaring (`compiler/parser/desugar.cc`, 3100–3199):
 

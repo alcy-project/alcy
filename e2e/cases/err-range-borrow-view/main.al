@@ -3,6 +3,6 @@
 fn main() -> i32 {
   a := [10i32, 20i32, 30i32]
   s := &a[..]
-  t := &s[0..2]
+  t := &s[0..<2]
   ret slice_len(t) as i32
 }

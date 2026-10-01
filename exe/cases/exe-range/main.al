@@ -11,7 +11,7 @@ fn endpoint(b: Bound<i32>) -> i32 {
 
 fn main() -> i32 {
   mut bad := 0
-  r := 1..3
+  r := 1..<3
   if endpoint(r.start) != 1 {
     bad = 1
   }
@@ -36,7 +36,7 @@ fn main() -> i32 {
   if endpoint(u.end) != -1 {
     bad = 7
   }
-  w := ..4
+  w := ..<4
   if endpoint(w.start) != -1 {
     bad = 8
   }

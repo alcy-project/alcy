@@ -21,8 +21,10 @@ namespace parser {
 
 namespace {
 
-// `..`, `..=`, and `..<` all open a range; the token picks how the end
-// endpoint is bound (`..=` includes it, the others exclude it).
+// `..`, `..=`, and `..<` all open a range. A range that names an end
+// must say how it is bound, so only `..=` (inclusive) and `..<`
+// (exclusive) may be followed by an endpoint; see
+// `docs/adr/0032-explicit-range-end-spelling.md`.
 bool is_range_op(lexer::TokenKind kind) {
   return kind == lexer::TokenKind::DotDot ||
          kind == lexer::TokenKind::DotDotEq ||
@@ -67,11 +69,18 @@ ast::ExprIdx Parser::parse_range() {
     }
   }
   const lexer::TokenKind kind = peek_kind();
+  const diag::Span op = peek().span;
   advance();
   ast::ExprIdx end = ast::ExprIdx::invalid();
   if (starts_range_end(peek_kind())) {
     end = parse_or();
     if (!end.is_valid()) {
+      return ast::ExprIdx::invalid();
+    }
+    if (kind == lexer::TokenKind::DotDot) {
+      const u32 index = bag_.emit<i18n::Key::ParserRangeEndNeedsBound>(
+          diag::Severity::Error, PARSER_RANGE_END_UNSPELLED, op);
+      (void)index;
       return ast::ExprIdx::invalid();
     }
   }

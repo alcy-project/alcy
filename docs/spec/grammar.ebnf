@@ -77,6 +77,10 @@ field_pat   = IDENT | IDENT , ":" , pattern ;
 expr          = range_expr ;
 range_expr    = [ or_expr ] , range_op , [ or_expr ] ;
 range_op      = ".." | "..=" | "..<" ;
+              (* A range naming an end says whether the end is included:
+                 only "..=" (inclusive) and "..<" (exclusive) may be
+                 followed by an endpoint. A bare ".." is the unbounded
+                 spelling, and a start endpoint is always included. *)
 or_expr       = and_expr , { "||" , and_expr } ;
 and_expr      = cmp_expr , { "&&" , cmp_expr } ;
 cmp_expr      = bit_or_expr , [ ( "==" | "!=" | ">" | "<" | ">=" | "<=" ) ,
@@ -166,7 +170,7 @@ DOC_COMMENT   = "///" , { ANY_BUT_NEWLINE } ;
  * patterns, and items alike; exceeding it reports E3004/E4050/E5005.
  * Newlines are significant outside brackets (lexed as `;` after a
  * statement-ending token, with continuation positions); block openers
- * stay on their header line. `1..2` lexes as range, never float.
+ * stay on their header line. `1..<2` lexes as range, never float.
  * `match`/`if`/`while` conditions, `for` heads, and `else` never open
  * a struct literal: `{` after them always opens the body block.
  *)

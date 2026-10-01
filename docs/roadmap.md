@@ -34,10 +34,15 @@ peripheral work lives in `backlog.md`.
 - [x] `Range` data and sub-slicing.
 
   Range expressions build the interval types (`docs/adr/0025-ranges-as-data.md`), and an
-  index accepts a run (`&a[1..3]`, `s[1..]`), both endpoints
-  bounds-checked. `spec` and the `for` rule have since landed
-  (`docs/adr/0028-spec-system.md`); the cursor that exposes an integer
-  range to `for`, with per-width stepping, is what remains. Pinned by
+  index accepts a run (`&a[1..<3]`, `s[1..]`), both endpoints
+  bounds-checked. A range that names an end says how it is bound, so
+  `..=` and `..<` are the only operators that may carry an endpoint
+  and bare `..` is the unbounded spelling
+  (`docs/adr/0032-explicit-range-end-spelling.md`), which also fixes
+  the start side as always inclusive. `spec` and the `for` rule have
+  since landed (`docs/adr/0028-spec-system.md`); the cursor that
+  exposes an integer range to `for`, with per-width stepping, is what
+  remains. Pinned by
   `exe-range`, `exe-subslice`, `exe-subslice-panic`, the
   `ok-range`/`err-range-*` cases, and the `subslice` cases in
   `tools/check_borrow_rules.py`.

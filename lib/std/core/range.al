@@ -15,10 +15,12 @@ pub enum Bound<T> {
 }
 
 // An interval, not an iterator: the endpoints are the value. The
-// language builds one from `1..3`, `1..=3`, `1..<3`, `a..`, `..b`, or
-// `..`; a consumer with a start and an end reads it directly, which is
-// what an index does with a run (`a[1..3]`). A present start endpoint
-// is included; `..=` includes the end and `..` and `..<` exclude it.
+// language builds one from `1..<3`, `1..=3`, `a..`, `..<b`, or `..`;
+// a consumer with a start and an end reads it directly, which is what
+// an index does with a run (`a[1..<3]`). A present start endpoint is
+// always `Included`; the end operator says whether the end is
+// `Included` (`..=`) or `Excluded` (`..<`), and bare `..` names no
+// end at all, so it leaves that side `Unbounded`.
 pub struct Range<T> {
   start: Bound<T>,
   end: Bound<T>,

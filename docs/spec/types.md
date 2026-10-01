@@ -41,7 +41,7 @@
   move-only, and the view keeps the loan of the buffer it reads (see
   `ownership.md`). `str` stays its own type rather than spelling as
   `&[u8]`, with the same representation and the same loan rule.
-- Sub-slicing names a run with a range: `&a[1..3]` is the run of a
+- Sub-slicing names a run with a range: `&a[1..<3]` is the run of a
   fixed array as a `&[T]` (or `&mut [T]`), `s[1..]` re-slices a view
   to its own kind, and a `str` narrows to a `str`. Both endpoints are
   bounds-checked and the run must be ordered, else the program panics
@@ -60,17 +60,22 @@
   `Range<T> { start: Bound<T>, end: Bound<T> }` with
   `Bound = Included(T) | Excluded(T) | Unbounded`, both declared by
   `core` with reserved names so a range expression always constructs
-  the one declaration. `..=` includes its end, `..` and `..<` exclude
-  it, and an absent endpoint is `Unbounded`.
+  the one declaration. A range that names an end says how it is
+  bound: `..=` includes it and `..<` excludes it, and no other
+  operator may be followed by an endpoint, so the choice is never
+  implicit. A present start endpoint is always `Included` — no
+  spelling excludes one — and an absent endpoint is `Unbounded`,
+  which bare `..` alone spells.
 - Both endpoints share one element type: an expected `Range<E>` pins
   it, otherwise the present endpoints agree, with a bare integer
   literal adapting to the other side as in a binary operation. With
   neither endpoint present (`..`) the unsuffixed default applies.
   Only integer ranges are indexable; float ranges are legal data with
   no index meaning.
-- A range expression builds the value; an index with a range reads the
-  half-open run `[start, end)` it names. A bare run of a fixed array
-  is unsized, so only a borrow names it (`&a[1..3]`); borrowing a view
+- A range expression builds the value; an index with a range reads
+  the run it names, `[start, end)` for `..<` and `[start, end]` for
+  `..=`. A bare run of a fixed array is unsized, so only a borrow
+  names it (`&a[1..<3]`); borrowing a view
   is rejected, since no place stands behind one. A run is not a place
   and cannot be assigned to.
 - Iteration is explicit and separate: core declares `Iterator` as

@@ -39,8 +39,9 @@ post-MVP, see `types.md`); `true`, `false`
 Operators and delimiters: `+ - * / % **` `& | ^ ~ << >>` and
 assignment forms; `:=` (declare), `=` (reassign); `!` `&&` `||`
 `!=` `>` `<` `>=` `<=`; `->` `=>` `:` `::` `,` `.` `..` `..=` `..<`
-`(` `)` `{` `}` `[` `]` `?` (error propagation), `_` (wildcard),
-`#` (reserved for future attributes). `;` separates
+(a range end is spelled `..=` or `..<`; bare `..` names no end, see
+`types.md`) `(` `)` `{` `}` `[` `]` `?` (error propagation),
+`_` (wildcard), `#` (reserved for future attributes). `;` separates
 multiple statements on one line only.
 
 Comments: `//`, `/* */`, `///` (only one doc-comment style is MVP).

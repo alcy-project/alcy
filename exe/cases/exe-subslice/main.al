@@ -1,11 +1,11 @@
-// Sub-slicing names a run of a container with a range: `&a[1..3]` is
+// Sub-slicing names a run of a container with a range: `&a[1..<3]` is
 // the middle two elements, re-slicing narrows a view, and `str`
 // narrows the same way. An exclusive borrow of a run writes through
 // to the array behind it.
 fn main() -> i32 {
   mut bad := 0
   mut a := [10i32, 20i32, 30i32, 40i32, 50i32]
-  v := &a[1..4]
+  v := &a[1..<4]
   if slice_len(v) != 3 {
     bad = 1
   }
@@ -15,7 +15,7 @@ fn main() -> i32 {
   if v[2] != 40 {
     bad = 2
   }
-  r := 1..3
+  r := 1..<3
   w := &a[r]
   if slice_len(w) != 2 {
     bad = 3
@@ -51,12 +51,12 @@ fn main() -> i32 {
   if u[0] != 10 {
     bad = 7
   }
-  e := &a[2..2]
+  e := &a[2..<2]
   if slice_len(e) != 0 {
     bad = 8
   }
   // Re-slicing a view narrows it without touching the array.
-  x := g[1..4]
+  x := g[1..<4]
   if slice_len(x) != 3 {
     bad = 9
   }
@@ -70,7 +70,7 @@ fn main() -> i32 {
   if y[0] != 30 {
     bad = 10
   }
-  mut m := &mut a[0..2]
+  mut m := &mut a[0..<2]
   m[0] = 99i32
   if m[1] != 20 {
     bad = 11
@@ -84,7 +84,7 @@ fn main() -> i32 {
   s.push(105u8)
   s.push(106u8)
   s.push(107u8)
-  t2 := s.as_str()[1..3]
+  t2 := s.as_str()[1..<3]
   if str_len(t2) != 2 {
     bad = 12
   }
