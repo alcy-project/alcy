@@ -37,6 +37,9 @@ constexpr u32 ANALYZER_UNRESOLVED_IMPORT = 4001;
 constexpr u32 ANALYZER_AMBIGUOUS_IMPORT = 4002;
 constexpr u32 ANALYZER_UNREACHABLE_FILE = 4003;
 constexpr u32 ANALYZER_INVALID_PATH = 4004;
+// The arena the parser fills reports running out by trapping, so the
+// check that catches it first has to live where the reservation does.
+constexpr u32 ANALYZER_SPAN_ARENA_EXHAUSTED = 4006;
 
 constexpr u32 NO_MODULE = std::numeric_limits<u32>::max();
 
@@ -136,11 +139,23 @@ class Resolver {
     return NO_MODULE;
   }
 
-  void lex_parse_file(FileData& file) {
+  // Lexes, parses and desugars one file, reporting whether it did. The
+  // arena reports running out by trapping, naming neither the file nor
+  // the input, so a file it cannot hold is refused here instead - and it
+  // is what the arena has spent that is checked rather than how large
+  // the file is, since what a file costs is the identifiers it names.
+  bool lex_parse_file(FileData& file) {
     // File ids were validated when the inputs were admitted in run().
     const std::optional<std::string_view> file_bytes = sources.bytes(file.id);
     DCHECK(file_bytes.has_value());
     const std::string_view bytes = file_bytes.value_or(std::string_view{});
+    if (ast.spans_nearly_full()) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerSpanArenaExhausted>(
+          diag::Severity::Error, ANALYZER_SPAN_ARENA_EXHAUSTED,
+          diag::Span{file.id, 0, 0}, ast.spans.capacity());
+      (void)index;
+      return false;
+    }
     lexer::Lexer lexer(bytes, file.id, bag);
     std::vector<lexer::Token> tokens;
     {
@@ -155,16 +170,14 @@ class Resolver {
       return parser.parse();
     }();
     if (parsed.is_err()) {
-      return;
+      return false;
     }
     file.items = std::move(parsed).unwrap();
     const bool desugared = [&] {
       PROFILE_SCOPE_WITH_CATEGORY("desugar", "frontend");
       return parser::desugar_shadowing(file.items, ast, bag).is_ok();
     }();
-    if (!desugared) {
-      return;
-    }
+    return desugared;
   }
 
   void build_tree() {
@@ -618,11 +631,19 @@ class Resolver {
       prelude_facades.push_back(input.is_facade);
       prelude_data.emplace_back(input.id, std::move(path));
     }
-    for (FileData& file : file_data) {
-      lex_parse_file(file);
-    }
-    for (FileData& file : prelude_data) {
-      lex_parse_file(file);
+    // A file that does not fit leaves the arena as it was, so every file
+    // after it would report the same thing; the one diagnostic that names
+    // the input is the one worth printing.
+    const auto parse_all = [this](std::vector<FileData>& files) {
+      for (FileData& file : files) {
+        if (!lex_parse_file(file)) {
+          return false;
+        }
+      }
+      return true;
+    };
+    if (!parse_all(file_data) || !parse_all(prelude_data)) {
+      return ModuleTree{};
     }
     build_tree();
     // A prelude package is a tree: slash-separated names nest, so

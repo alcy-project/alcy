@@ -57,9 +57,21 @@ base::Result<void, diag::Reported> ensure_directories(PipelineContext& ctx,
   return base::make_ok();
 }
 
+// What the diagnostic arena is reserved. Every message a run reports is
+// copied in, so the need follows how much a compiler has to say rather
+// than how much it read: a mebibyte holds a few thousand messages, and a
+// program that produces that many is already past the point where a
+// reader wants them. The reservation is address space, and pages are
+// committed as messages arrive.
+#if BUILD_FLAG(IS_ARCH_64_BITS)
+constexpr usize DIAGNOSTIC_CAPACITY = 16ull << 20;
+#else
+constexpr usize DIAGNOSTIC_CAPACITY = 2ull << 20;
+#endif
+
 PipelineContext::PipelineContext(i18n::Language language)
     : bag(arena, language), strings(mem::page_size()) {
-  arena.reserve(1u << 20);
+  arena.reserve(DIAGNOSTIC_CAPACITY);
 }
 
 }  // namespace pipeline

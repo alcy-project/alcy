@@ -216,6 +216,58 @@ TEST_CASE("Resolve attaches unreferenced files as modules") {
   CHECK(result.ok);
 }
 
+// A run whose arena is spent refuses the next file with a diagnostic,
+// where the arena's own report is a trap naming neither. The reservation
+// here is small enough for a case to spend it, which a real input would
+// need far too much source to reach.
+TEST_CASE("Resolve refuses an input the span arena cannot hold") {
+  constexpr usize CAPACITY = 4096;
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al", "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  mem::Arena arena;
+  arena.reserve(1u << 20);
+  diag::DiagBag bag{arena, i18n::Language::EnUs};
+  source::SourceManager sources;
+  ast::AstArena ast{CAPACITY};
+  // Past the headroom, which is what the check asks about.
+  CHECK(ast.spans.alloc(CAPACITY - 1) != nullptr);
+  CHECK(ast.spans_nearly_full());
+
+  std::deque<std::string> name_storage;
+  std::optional<analyzer::ModuleInput> input =
+      tests::register_source(sources, dir, "main.al", true, name_storage);
+  CHECK(input.has_value());
+  if (!input.has_value()) {
+    return;
+  }
+  const std::vector<ModuleInput> inputs{*input};
+  base::Result<ModuleTree, diag::Reported> result =
+      resolve_modules(input->id, inputs, "testpkg", sources, ast, bag);
+  CHECK(result.is_err());
+  CHECK(bag.has_errors());
+}
+
+// A reservation with room in it reads what it is given, so the check does
+// not refuse an input for being large when the arena can hold it.
+TEST_CASE("Resolve reads an input the span arena can hold") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al", "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  CHECK(!f.ast.spans_nearly_full());
+  const ResolveCase result = resolve_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+}
+
 TEST_CASE("Resolve resolves imports across modules") {
   VirtualDir dir;
   const bool setup = write_all(

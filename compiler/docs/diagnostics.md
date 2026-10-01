@@ -105,6 +105,7 @@ Module resolution (`compiler/analyzer/resolve.cc`, `compiler/analyzer/resolve.h`
 - `4004` Invalid path: an unknown file id reached resolution.
 - `4005` Internal error: the module tree failed structural
   verification (see `analyzer::verify_module_tree`).
+- `4006` The span arena is nearly spent and the input is too large to parse.
 
 Type checking (`compiler/analyzer/checker.h`, 4010–4019):
 

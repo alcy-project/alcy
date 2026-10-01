@@ -945,7 +945,30 @@ struct UseItem : Item {
 // never downcast. Span arrays and identifier spellings live in
 // `spans`, reserved upfront; node tables own the nodes themselves.
 struct AstArena {
-  AstArena() { spans.reserve(1u << 20); }
+  // What `spans` is reserved. About a mebibyte of alcy costs a mebibyte
+  // of it, so the previous mebibyte stopped an input of a little over a
+  // thousand lines. It reserves address space and commits pages as it
+  // hands them out, so a figure no single run reaches costs address space
+  // rather than memory.
+#if FPAG_BUILD_FLAG(IS_ARCH_64_BITS)
+  static constexpr usize DEFAULT_SPAN_CAPACITY = 64ull << 20;
+#else
+  static constexpr usize DEFAULT_SPAN_CAPACITY = 8ull << 20;
+#endif
+
+  // The fraction of the reservation a parse leaves in hand, so the file
+  // being read has room to spend.
+  static constexpr usize SPANS_HEADROOM = 8;
+
+  // The capacity is a parameter so a caller - a case that has to spend it
+  // - can say how much it wants rather than working around the default.
+  explicit AstArena(usize span_capacity = DEFAULT_SPAN_CAPACITY) {
+    spans.reserve(span_capacity);
+  }
+
+  bool spans_nearly_full() const {
+    return spans.capacity() - spans.size() < spans.capacity() / SPANS_HEADROOM;
+  }
 
   template <typename T>
   using Alloc = std::allocator<T>;

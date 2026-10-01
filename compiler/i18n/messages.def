@@ -122,6 +122,7 @@
   F(AnalyzerDuplicatePreludeModule, "Prelude module '{}' is declared more than once") \
   F(AnalyzerFloatSuffixOnInteger, "Float suffix on an integer literal") \
   F(AnalyzerForRequiresIterator, "A 'for' loop requires an 'Iterator' implementation in scope for this type") \
+  F(AnalyzerSpanArenaExhausted, "Parsing this input needs more than the {} bytes of arena the compiler reserves for syntax") \
   F(AnalyzerFormatArity, "Intrinsic 'format' expects 2 arguments, found {}") \
   F(AnalyzerFormatInCompEvaluation, "Intrinsic 'format' is not allowed in comp evaluation") \
   F(AnalyzerFormatPlaceholderArity, "Format string has {} placeholders for {} arguments") \
