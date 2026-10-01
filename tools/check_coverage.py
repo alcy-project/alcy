@@ -110,19 +110,30 @@ def measure(verbose: bool = False) -> dict:
         exported = Path(scratch) / "coverage.json"
         env = dict(os.environ, LLVM_PROFILE_FILE=profile)
 
+        failed_suites = []
         for name, command in SUITES:
             if verbose:
                 print(f"==> {name}")
             # A failing case still produced a profile, and the profile is
-            # the point here, so a suite's own failure is left to the
-            # suite and only a missing binary stops the run.
-            subprocess.run(
+            # the point here, so a suite's own failure is left to the suite.
+            # A process that dies before writing its counters is a different
+            # fault: its profile is corrupt, and the merge below then fails
+            # naming llvm-profdata instead of the process that caused it.
+            result = subprocess.run(
                 command,
                 cwd=REPO_ROOT,
                 env=env,
                 stdout=None if verbose else subprocess.DEVNULL,
                 stderr=subprocess.STDOUT if not verbose else None,
             )
+            if result.returncode != 0:
+                failed_suites.append(f"{name} (exit {result.returncode})")
+        if failed_suites:
+            print(
+                "warning: suites exited non-zero: " + ", ".join(failed_suites),
+                file=sys.stderr,
+            )
+
         raw = sorted(Path(scratch).glob("*.profraw"))
         if not raw:
             sys.exit(
@@ -131,7 +142,7 @@ def measure(verbose: bool = False) -> dict:
         if verbose:
             print(f"merged {len(raw)} profile(s)")
 
-        subprocess.run(
+        merge = subprocess.run(
             [
                 "llvm-profdata",
                 "merge",
@@ -140,9 +151,24 @@ def measure(verbose: bool = False) -> dict:
                 "-o",
                 str(merged),
             ],
-            check=True,
+            capture_output=True,
+            text=True,
             cwd=REPO_ROOT,
         )
+        if merge.returncode != 0:
+            sys.exit(
+                f"llvm-profdata could not merge {len(raw)} profile(s).\n"
+                + (merge.stderr.strip() or merge.stdout.strip())
+                + "\n\nA process that died while writing its profile leaves one "
+                "with no counters, and reusing an instrumented build directory "
+                "is how a binary starts doing that: rebuild it with "
+                f"`rm -rf {OUT_DIR.relative_to(REPO_ROOT)}` and run again."
+                + (
+                    "\nSuites that exited non-zero: " + ", ".join(failed_suites)
+                    if failed_suites
+                    else ""
+                )
+            )
         with exported.open("wb") as out:
             subprocess.run(
                 [
