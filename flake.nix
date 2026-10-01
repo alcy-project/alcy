@@ -10,7 +10,7 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        llvmPkgs = pkgs.llvmPackages_23;
+        llvmPkgs = pkgs.llvmPackages_22;
 
         stdenv = llvmPkgs.libcxxStdenv;
 
