@@ -3,6 +3,7 @@
 
 source_set("base") {
   sources = [
+    "for_each.h",
     "nesting.cc",
     "nesting.h",
   ]

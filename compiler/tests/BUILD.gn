@@ -7,6 +7,7 @@ executable("tests") {
     "analyzer/types_test.cc",
     "ast/ast_test.cc",
     "ast/verify_test.cc",
+    "base/for_each_test.cc",
     "benchmarks/engine_test.cc",
     "benchmarks/generator_test.cc",
     "borrow/borrow_test.cc",
