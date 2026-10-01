@@ -25,7 +25,7 @@
 #include "cli/run_command.h"
 #include "cli/validate.h"
 #include "debug/fatal.h"
-#include "diag/render.h"
+#include "diag/diagnostic.h"
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -118,12 +118,10 @@ i32 cli_main(i32 argc, char** argv) {
         run_interruption(parser, outcome, *code, argc, argv, language));
   } else {
     const CliConfig& config = outcome.get<CliConfig>();
-    const term::ColorStyle style =
-        term::console_color_style(term::Stream::Stdout, config.color_mode);
-    const diag::RenderOptions options{
-        .color = style != term::ColorStyle::Off,
-        .language = config.language,
-    };
+    FdSink out_sink{io::STDOUT_FD};
+    FdSink err_sink{io::STDERR_FD};
+    const Logger out{&FdSink::write, &out_sink};
+    const Logger err{&FdSink::write, &err_sink};
     // Validation has already rejected `--json` on a verb that has no
     // result document to report, so the flag and the renderer agree.
     const bool json = config.json;
@@ -133,16 +131,16 @@ i32 cli_main(i32 argc, char** argv) {
     if (validated.is_err()) {
       // A rejected combination is reported as a result rather than a
       // throwaway line, so `--json` covers the failure the same way it
-      // covers a build that did not compile.
+      // covers a build that did not compile. The envelope's diagnostic
+      // views this text, so it has to outlive the report.
+      const std::string failure = describe_config_error(
+          std::move(validated).unwrap_err(), config.language);
       Envelope envelope;
       envelope.command = command_name(config.subcommand);
       envelope.status = Status::Error;
-      envelope.failure = describe_config_error(
-          std::move(validated).unwrap_err(), config.language);
+      envelope.failure = diag::message(diag::Severity::Error, failure);
       envelope.wall_ns = elapsed_ns_since(started);
-      FdSink out_sink{io::STDOUT_FD};
-      const Logger out{&FdSink::write, &out_sink};
-      report(out, envelope, options, json);
+      report(out, err, envelope, config.color_mode, config.language, json);
       exit_code = result_code(ResultCode::ArgParseError);
     } else {
       // One context for the invocation: the command fills it and the
@@ -153,9 +151,7 @@ i32 cli_main(i32 argc, char** argv) {
       envelope.command = command_name(config.subcommand);
       exit_code = dispatch(config, ctx, envelope);
       envelope.wall_ns = elapsed_ns_since(started);
-      FdSink out_sink{io::STDOUT_FD};
-      const Logger out{&FdSink::write, &out_sink};
-      report(out, envelope, options, json);
+      report(out, err, envelope, config.color_mode, config.language, json);
     }
   }
   return exit_code;

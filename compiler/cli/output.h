@@ -4,15 +4,18 @@
 #pragma once
 
 #include <chrono>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "cli/logger.h"
 #include "cli/trace.h"
+#include "diag/diagnostic.h"
 #include "diag/render.h"
 #include "fpag/base/numeric.h"
 #include "fpag/debug/profiler/profile_event.h"
+#include "fpag/term/color_mode.h"
 #include "i18n/language.h"
 
 namespace diag {
@@ -59,11 +62,16 @@ struct Envelope {
   // failure, so a path that returns early without saying what it reached
   // says it reached nothing.
   Outcome outcome = Outcome::Failed;
-  // Why a command failed, for a failure with no diagnostic behind it: a
-  // rejected flag combination has nothing to point at, so its message
-  // is the whole report. Empty for a failure a diagnostic already
-  // explains, and for every success.
-  std::string failure;
+  // Why a command failed, for a failure raised before any context existed
+  // to hold a bag: a rejected flag combination is the only kind left. It
+  // is a diagnostic all the same, so it renders through the marker every
+  // other error uses, and it carries no code because no check area
+  // allocated one for a command line.
+  //
+  // The message is a view of text the producer keeps alive for the
+  // report, on the same terms as the bag below. Absent for a failure the
+  // bag already explains, and for every success.
+  std::optional<diag::Diagnostic> failure;
   // What the command wrote, as the caller would name it. Empty when it
   // wrote nothing, which is what a check does.
   std::string output_path;
@@ -94,8 +102,21 @@ struct Envelope {
   TraceCapture trace;
 };
 
-// Diagnostics, the result line, and the time-trace summary, as text.
-std::string render_text(const Envelope& envelope, const diag::RenderOptions& r);
+// The diagnostics, as one block: everything in the bag, then a failure
+// the envelope carries itself. Empty when there is nothing to report,
+// which is what a command that succeeded quietly has.
+//
+// Standard error, because a reader who asked for the result does not want
+// the complaints in the same stream: `alcy check > report.txt` keeps a
+// clean file, and `alcy run | grep` never sees them at all.
+std::string render_diagnostics(const Envelope& envelope,
+                               const diag::RenderOptions& r);
+
+// The result line and the time-trace summary, as one block. Empty for a
+// failure the diagnostics already explain, and for a run, which announced
+// itself before the program started.
+std::string render_result(const Envelope& envelope,
+                          const diag::RenderOptions& r);
 
 // Writes the line that labels what a command is about to do, to
 // `err`, immediately before the command does it.
@@ -115,13 +136,20 @@ void announce(const Logger& err,
 // document can be pasted into a trace viewer unchanged.
 std::string render_json(const Envelope& envelope, i18n::Language language);
 
-// Writes a finished envelope to `out`: the text report, or the JSON
-// document when the invocation asked for it. This is the only exit for
-// command results, which is what keeps "standard output is exactly one
-// JSON document" true without any command knowing that JSON exists.
+// Writes a finished envelope: the diagnostics to `err` and the result to
+// `out`, as text, or the whole thing to `out` as one JSON document when
+// the invocation asked for it. This is the only exit for command results,
+// which is what keeps "standard output is exactly one JSON document" true
+// without any command knowing that JSON exists.
+//
+// The colour mode is a mode rather than a decision, because this is where
+// the decision is made: each half is styled by the stream it lands on, so
+// redirecting one of them does not decide whether the other is readable.
 void report(const Logger& out,
+            const Logger& err,
             const Envelope& envelope,
-            const diag::RenderOptions& options,
+            term::ColorMode color_mode,
+            i18n::Language language,
             bool json);
 
 // Elapsed time since start, in nanoseconds, on a monotonic clock. One

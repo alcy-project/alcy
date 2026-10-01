@@ -32,7 +32,11 @@ Envelope built(std::string path, u64 bytes, u64 wall_ns) {
 }
 
 std::string text(const Envelope& envelope, bool color = false) {
-  return render_text(envelope, diag::RenderOptions{.color = color});
+  return render_result(envelope, diag::RenderOptions{.color = color});
+}
+
+std::string complaints(const Envelope& envelope, bool color = false) {
+  return render_diagnostics(envelope, diag::RenderOptions{.color = color});
 }
 
 // The column the subject starts at, which is the point of padding the
@@ -40,6 +44,29 @@ std::string text(const Envelope& envelope, bool color = false) {
 // code, so a change to either shows up here.
 usize subject_column(const std::string& line) {
   return line.find_first_not_of(' ');
+}
+
+// Collects blocks instead of writing them, so a test can read which
+// stream each half of a report reached.
+struct Collector {
+  std::string text;
+
+  static void write(void* ctx, std::string_view block) {
+    static_cast<Collector*>(ctx)->text += block;
+  }
+};
+
+struct Streams {
+  std::string out;
+  std::string err;
+};
+
+Streams report_to(const Envelope& envelope, bool json = false) {
+  Collector out;
+  Collector err;
+  report(Logger(&Collector::write, &out), Logger(&Collector::write, &err),
+         envelope, term::ColorMode::Never, i18n::Language::EnUs, json);
+  return Streams{.out = std::move(out.text), .err = std::move(err.text)};
 }
 
 }  // namespace
@@ -143,17 +170,26 @@ TEST_CASE("A size is counted below a kibibyte and scaled above it") {
         std::string::npos);
 }
 
-TEST_CASE("A failure with no diagnostic prints its own message") {
+// A failure the envelope carries is a diagnostic like any other: the
+// marker is the renderer's, and the message is the only thing the
+// producer supplied.
+TEST_CASE("A failure with no bag is a diagnostic of its own") {
   Envelope envelope;
   envelope.command = "build";
   envelope.status = Status::Error;
-  envelope.failure = "--emit needs a value";
+  envelope.failure =
+      diag::message(diag::Severity::Error, "--emit needs a value");
 
-  CHECK(text(envelope) == "--emit needs a value\n");
-  CHECK(render_json(envelope, i18n::Language::EnUs)
-            .find("\"status\":\"error\"") != std::string::npos);
-  CHECK(render_json(envelope, i18n::Language::EnUs)
-            .find("\"summary\":\"--emit needs a value\"") != std::string::npos);
+  CHECK(complaints(envelope) == "error: --emit needs a value\n");
+  CHECK(text(envelope).empty());
+  const std::string json = render_json(envelope, i18n::Language::EnUs);
+  CHECK(json.find("\"status\":\"error\"") != std::string::npos);
+  CHECK(json.find("\"summary\":\"--emit needs a value\"") != std::string::npos);
+  // The document reports it where every other error is, so a reader has
+  // one array rather than an array and a summary to reconcile.
+  CHECK(json.find(
+            "{\"severity\":\"error\",\"code\":null,\"message\":\"--emit needs "
+            "a value\",\"span\":null}") != std::string::npos);
 }
 
 TEST_CASE("A failure with a diagnostic prints no result line") {
@@ -178,8 +214,10 @@ TEST_CASE("Every text report is one finished block") {
   Envelope failure;
   failure.command = "build";
   failure.status = Status::Error;
-  failure.failure = "--emit needs a value";
-  CHECK(is_block(text(failure)));
+  failure.failure =
+      diag::message(diag::Severity::Error, "--emit needs a value");
+  CHECK(is_block(complaints(failure)));
+  CHECK(text(failure).empty());
 
   mem::Arena arena;
   arena.reserve(1u << 20);
@@ -192,9 +230,72 @@ TEST_CASE("Every text report is one finished block") {
   diagnosed.status = Status::Error;
   diagnosed.bag = &bag;
   diagnosed.sources = &sources;
-  const std::string two = text(diagnosed);
+  const std::string two = complaints(diagnosed);
   CHECK(two == "error[E1]: first thing\nwarning[W2]: second thing\n");
   CHECK(is_block(two));
+  // A success with warnings still reports the warnings, and still has a
+  // result line of its own: the two go to different streams now, so
+  // neither has to be missing for the other to make sense.
+  diagnosed.status = Status::Ok;
+  diagnosed.outcome = Outcome::Checked;
+  CHECK(is_block(complaints(diagnosed)));
+  CHECK(is_block(text(diagnosed)));
+  CHECK(text(diagnosed) != two);
+}
+
+// A reader who asked for the result does not want the complaints in the
+// same stream. `alcy check > report.txt` keeps a clean file; `alcy run |
+// grep` never sees them. `--json` is the exception, because a document a
+// tool parses has to be whole, and it says so by carrying the
+// diagnostics as fields.
+TEST_CASE("A report splits the diagnostics from the result") {
+  mem::Arena arena;
+  arena.reserve(1u << 20);
+  diag::DiagBag bag{arena, i18n::Language::EnUs};
+  bag.emit_untranslated(diag::Severity::Warning, 2, "unused value");
+  source::SourceManager sources;
+  Envelope envelope = built("out/demo", 2048, 2000000);
+  envelope.bag = &bag;
+  envelope.sources = &sources;
+
+  const Streams text = report_to(envelope);
+  CHECK(text.out.find("Built     out/demo") == 0);
+  CHECK(text.out.find("W2") == std::string::npos);
+  CHECK(text.err == "warning[W2]: unused value\n");
+  CHECK(is_block(text.out));
+  CHECK(is_block(text.err));
+
+  const Streams json = report_to(envelope, true);
+  CHECK(json.err.empty());
+  CHECK(json.out.front() == '{');
+  CHECK(json.out.find("\"summary\"") != std::string::npos);
+  CHECK(json.out.find("\"code\":2") != std::string::npos);
+  CHECK(is_block(json.out));
+}
+
+TEST_CASE("A failure reaches only one stream, and it is the error one") {
+  Envelope envelope;
+  envelope.command = "new";
+  envelope.status = Status::Error;
+  envelope.failure =
+      diag::message(diag::Severity::Error, "`--json` only means anything here");
+
+  const Streams text = report_to(envelope);
+  CHECK(text.out.empty());
+  CHECK(text.err == "error: `--json` only means anything here\n");
+
+  // The same failure, asked for as a document: one document, carrying the
+  // error, on the stream the tool is reading.
+  const Streams json = report_to(envelope, true);
+  CHECK(json.err.empty());
+  CHECK(json.out.find("\"status\":\"error\"") != std::string::npos);
+  CHECK(json.out.find("\"code\":null") != std::string::npos);
+}
+
+TEST_CASE("A silent success writes nothing to the error stream") {
+  const Streams text = report_to(built("out/demo", 2048, 2000000));
+  CHECK(text.err.empty());
+  CHECK(text.out.find("Built") == 0);
 }
 
 TEST_CASE("Colour reaches the verb, the subject, and nothing else") {

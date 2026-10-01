@@ -943,20 +943,21 @@ TEST_CASE("Run does not announce a program that failed to build") {
   if (!setup) {
     return;
   }
-  CapturedStderr announced(dir.join("stderr.txt"));
-  CapturedStdout reported(dir.join("stdout.txt"));
-  CHECK(announced.ok());
+  // Both the announcement and the failure are standard error, so one
+  // capture holds the whole story: what a run said, and what it did not.
+  CapturedStderr reported(dir.join("stderr.txt"));
   CHECK(reported.ok());
-  if (!announced.ok() || !reported.ok()) {
+  if (!reported.ok()) {
     return;
   }
+  CHECK(run_run_on(dir, "proj", {"--color=never"}) != 0);
+  const std::string said = reported.text();
   // Pinned for the same reason as above: a plain label would have been
   // plain, so its absence means something.
-  CHECK(run_run_on(dir, "proj", {"--color=never"}) != 0);
-  CHECK(announced.text().find("Running   app\n") == std::string::npos);
+  CHECK(said.find("Running   app\n") == std::string::npos);
   // The failure was reported, so the absence above is the absence of an
   // announcement rather than of any output.
-  CHECK(reported.text().find("type mismatch") != std::string::npos);
+  CHECK(said.find("type mismatch") != std::string::npos);
 }
 
 TEST_CASE("Run tolerates program arguments") {

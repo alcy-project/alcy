@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "cli/logger.h"
+#include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/render.h"
@@ -23,6 +24,8 @@
 #include "fpag/debug/profiler/profiler.h"
 #include "fpag/io/io_util.h"
 #include "fpag/str/string_pool_id.h"
+#include "fpag/term/color_style.h"
+#include "fpag/term/console.h"
 #include "fpag/term/style.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"
@@ -53,6 +56,17 @@ void append_diagnostic_text(std::string& out,
   fmt::memory_buffer rendered;
   diag::render(diagnostic, rendered, options, fetch_source, &sources);
   out.append(rendered.data(), rendered.size());
+}
+
+// A message with no span: the marker and the sentence are the whole of
+// it, and the source manager has nothing to add. A span here would mean
+// the source was not borrowed where the report renders, which is the
+// producer's bug rather than something to paper over.
+void append_diagnostic_text(std::string& out,
+                            const diag::Diagnostic& diagnostic,
+                            const diag::RenderOptions& options) {
+  DCHECK(!diagnostic.has_primary_span);
+  out += diag::render(diagnostic, options);
 }
 
 const char* severity_name(diag::Severity severity) {
@@ -299,12 +313,6 @@ void append_dim(std::string& out, std::string_view text) {
   out.append(term::RESET);
 }
 
-void append_red(std::string& out, std::string_view text) {
-  out += term::FG_RED;
-  out.append(text);
-  out += term::RESET;
-}
-
 // A count with its noun, pluralized. `1 file(s)` was neither: it reads
 // as a placeholder in a sentence and as a mistake in a list. A language
 // that carries the count inside its noun gets two messages and picks
@@ -504,14 +512,23 @@ u64 elapsed_ns_since(std::chrono::steady_clock::time_point start) {
   return static_cast<u64>(elapsed.count());
 }
 
-std::string render_text(const Envelope& envelope,
-                        const diag::RenderOptions& options) {
+std::string render_diagnostics(const Envelope& envelope,
+                               const diag::RenderOptions& options) {
   std::string out;
   if (envelope.bag != nullptr && envelope.sources != nullptr) {
     envelope.bag->for_each([&](const diag::Diagnostic& diagnostic) {
       append_diagnostic_text(out, diagnostic, *envelope.sources, options);
     });
   }
+  if (envelope.failure.has_value()) {
+    append_diagnostic_text(out, *envelope.failure, options);
+  }
+  return out;
+}
+
+std::string render_result(const Envelope& envelope,
+                          const diag::RenderOptions& options) {
+  std::string out;
   if (envelope.status == Status::Ok) {
     // A run already announced itself before the program started, and a
     // second line after the program's own output would sit below that
@@ -520,30 +537,43 @@ std::string render_text(const Envelope& envelope,
     if (envelope.outcome != Outcome::Ran) {
       render_result_line(out, envelope, options.color, true, options.language);
     }
-  } else if (!envelope.failure.empty()) {
-    // A failure with no diagnostic behind it. The message is the result,
-    // and it gets the same colour an error would have.
-    if (options.color) {
-      append_red(out, envelope.failure);
-    } else {
-      out.append(envelope.failure);
-    }
-    out.push_back('\n');
   }
   append_trace_text(out, envelope, options.language);
   return out;
 }
 
 void report(const Logger& out,
+            const Logger& err,
             const Envelope& envelope,
-            const diag::RenderOptions& options,
+            term::ColorMode color_mode,
+            i18n::Language language,
             bool json) {
-  const std::string text = json ? render_json(envelope, options.language)
-                                : render_text(envelope, options);
-  if (text.empty()) {
+  if (json) {
+    // One document, and it carries the diagnostics inside it, so a reader
+    // has one thing to parse whatever the command did.
+    out.block(render_json(envelope, language));
     return;
   }
-  out.block(text);
+  const diag::RenderOptions for_err{
+      .color = term::console_color_style(term::Stream::Stderr, color_mode) !=
+               term::ColorStyle::Off,
+      .language = language,
+  };
+  const diag::RenderOptions for_out{
+      .color = term::console_color_style(term::Stream::Stdout, color_mode) !=
+               term::ColorStyle::Off,
+      .language = language,
+  };
+  // Diagnostics first, so a reader watching a terminal reads the
+  // complaints before the summary that follows them.
+  const std::string diagnostics = render_diagnostics(envelope, for_err);
+  if (!diagnostics.empty()) {
+    err.block(diagnostics);
+  }
+  const std::string result = render_result(envelope, for_out);
+  if (!result.empty()) {
+    out.block(result);
+  }
 }
 
 std::string render_json(const Envelope& envelope, i18n::Language language) {
@@ -558,10 +588,10 @@ std::string render_json(const Envelope& envelope, i18n::Language language) {
   append_json_string(out, outcome_name(envelope.outcome));
   out += R"(,"summary":)";
   if (envelope.status != Status::Ok) {
-    if (envelope.failure.empty()) {
+    if (!envelope.failure.has_value()) {
       out += "null";
     } else {
-      append_json_string(out, envelope.failure);
+      append_json_string(out, envelope.failure->message);
     }
   } else {
     append_json_string(out, result_line(envelope, language));
@@ -587,15 +617,24 @@ std::string render_json(const Envelope& envelope, i18n::Language language) {
   append_json_number(out, envelope.wall_ns);
   out += '}';
   out += R"(,"diagnostics":[)";
-  if (envelope.bag != nullptr) {
+  {
+    // A reader of the document wants every error in one array, so a
+    // failure the envelope carries counts as one more rather than as a
+    // summary that no other failure has.
     u32 index = 0;
-    envelope.bag->for_each([&](const diag::Diagnostic& diagnostic) {
+    const auto append_one = [&](const diag::Diagnostic& diagnostic) {
       if (index > 0) {
         out += ',';
       }
       ++index;
       append_diagnostic_json(out, diagnostic, envelope.sources);
-    });
+    };
+    if (envelope.bag != nullptr) {
+      envelope.bag->for_each(append_one);
+    }
+    if (envelope.failure.has_value()) {
+      append_one(*envelope.failure);
+    }
   }
   out += ']';
   // Only when there is something to carry: an empty array would say the
