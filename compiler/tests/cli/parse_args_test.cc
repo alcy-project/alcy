@@ -273,6 +273,24 @@ TEST_CASE("Parse help and version requests") {
   CHECK(parse(version).is<VersionRequested>());
 }
 
+TEST_CASE("The root version names the build") {
+  arg::Parser parser = build_parser();
+  const std::string_view version = parser.root_command().version();
+  CHECK(!version.empty());
+  // The generator emits the value in one line, so no escape may leak in.
+  CHECK(version.find('\\') == std::string_view::npos);
+  CHECK(version.find('\n') == std::string_view::npos);
+  // A build with git metadata names the commit in parentheses; one
+  // without ends at the snapshot marker.
+  const auto open = version.find('(');
+  if (open == std::string_view::npos) {
+    CHECK(version.ends_with("-snapshot"));
+  } else {
+    CHECK(open > 0);
+    CHECK(version.ends_with(")"));
+  }
+}
+
 TEST_CASE("Parse argv overload") {
   const char* argv[] = {"alcy", "build", "--release", "mydir"};
   arg::Parser parser = build_parser();

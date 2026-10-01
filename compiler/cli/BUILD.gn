@@ -1,8 +1,30 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+# The version string is commit-dependent, so it lives alone in one
+# generated translation unit. Regenerating it on a new commit recompiles
+# this file and relinks; every other cli file keeps its command line. GN
+# writes the file only when the string actually changes, so an unchanged
+# version leaves the timestamp alone and nothing rebuilds.
+write_file(
+    "$target_gen_dir/version.cc",
+    [
+      "// Copyright 2026 The Alcy Project Authors",
+      "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
+      "// Generated at gen time from the build's git state; do not edit.",
+      "",
+      "#include \"cli/version.h\"",
+      "",
+      "namespace cli {",
+      "",
+      "std::string_view alcy_version() { return \"" + alcy_version + "\"; }",
+      "",
+      "}  // namespace cli",
+    ])
+
 source_set("cli") {
   sources = [
+    "$target_gen_dir/version.cc",
     "build_command.cc",
     "build_command.h",
     "check_command.cc",
@@ -39,15 +61,13 @@ source_set("cli") {
     "usage.h",
     "validate.cc",
     "validate.h",
+    "version.h",
   ]
   deps = [
     "//compiler/i18n",
     "//compiler/pipeline",
   ]
-  defines = [
-    "ALCY_PROJECT_NAME=\"$project_name\"",
-    "ALCY_PROJECT_VERSION=\"$project_version\"",
-  ]
+  defines = [ "ALCY_PROJECT_NAME=\"$project_name\"" ]
 
   configs += [
     "//compiler:alcy_config",

@@ -2,7 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 project_name = "alcy"
+
+# The hand-maintained base version, without the `v` of a release tag. It
+# is bumped by hand at each release.
 project_version = "0.1.0"
+
+# The version reported by `--version`. Computed at gen time from the git
+# state so a new commit changes one generated translation unit rather
+# than every file that used to see a `-D`.
+alcy_version = exec_script("//tools/version.py", [ project_version ], "value")
 
 if (target_os == "") {
   target_os = host_os

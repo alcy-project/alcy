@@ -13,6 +13,7 @@
 #include "cli/converters.h"  // IWYU pragma: keep
 #include "cli/suggest.h"
 #include "cli/usage.h"
+#include "cli/version.h"
 #include "debug/fatal.h"
 #include "fpag/arg/arg.h"
 #include "fpag/arg/command.h"
@@ -161,7 +162,7 @@ std::vector<std::string> language_choices() {
 
 arg::Parser build_parser(i18n::Language language) {
   const UsageText& usage = usage_text(language);
-  arg::CommandBuilder builder(ALCY_PROJECT_NAME, ALCY_PROJECT_VERSION);
+  arg::CommandBuilder builder(ALCY_PROJECT_NAME, std::string(alcy_version()));
   builder.about(std::string(usage.text(i18n::Key::CliAbout)));
   builder.builtin_enabled(true);
   builder.add_arg(arg::ArgBuilder("color")

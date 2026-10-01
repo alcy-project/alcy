@@ -23,6 +23,7 @@
         devShells.default = (pkgs.mkShell.override { inherit stdenv; }) {
           nativeBuildInputs = [
             pkgs.gn
+            pkgs.git
             pkgs.ninja
             pkgs.pkg-config
             pkgs.uv

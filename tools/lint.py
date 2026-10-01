@@ -72,6 +72,7 @@ def check_ascii_only(files: list[str]) -> bool:
 # entry fails the run instead of silently passing.
 GENERATED_HEADER_EXCLUSIONS = [
     "compiler/pipeline/embedded_std.h",
+    "compiler/cli/version.h",
 ]
 
 
