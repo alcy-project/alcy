@@ -10,6 +10,7 @@
 // Core is the one package of the suite with no dependencies; see
 // docs/adr/0016-suites-and-the-std-split.md.
 
+pub use super::iterator::Iterator;
 pub use super::mem::memcopy;
 pub use super::mem::panic;
 pub use super::mem::print;

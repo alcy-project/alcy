@@ -1,0 +1,13 @@
+[package]
+name = "itercase"
+version = "0.1.0"
+
+[modules]
+include = ["main", "cursors"]
+
+[dependencies]
+"alcy/std/core" = {}
+
+[[bin]]
+name = "itercase"
+path = "main.al"

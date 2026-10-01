@@ -73,10 +73,11 @@
   is unsized, so only a borrow names it (`&a[1..3]`); borrowing a view
   is rejected, since no place stands behind one. A run is not a place
   and cannot be assigned to.
-- Iteration is explicit and separate: only integer ranges expose an
-  iterator, and it arrives with the `spec` system as an `Iterator`
-  implementation; float ranges have no iteration method. Stepping
-  lives on the iterator, never on the interval.
+- Iteration is explicit and separate: core declares `Iterator` as
+  the capability. Only integer ranges will expose an iterator that
+  way, and float ranges have no iteration method. Range iteration
+  itself arrives with the `for` rule. Stepping lives on the iterator,
+  never on the interval.
 - `for` over a range desugars through a single documented rule to
   the explicit iterator form. Index and slice APIs accept bound
   data, never iterators.

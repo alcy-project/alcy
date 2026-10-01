@@ -53,8 +53,9 @@ relied upon by MVP programs or by the MVP compiler implementation.
 - `pub(...)` restricted visibility; glob imports.
 - `f16`, 128-bit integers, posit, and decimal types; `Char`/`Ascii`/
   grapheme semantics in core (see `types.md`).
-- `Range` iteration, stepping, and `for` loops, which arrive with
-  `spec` (`Iterator`). Representation, endpoint-marking, and
+- `Range` iteration, stepping, and `for` loops. `Iterator` itself is
+  declared by core; the range cursor and the `for` rule that consumes
+  it are not yet implemented. Representation, endpoint-marking, and
   sub-slicing are frozen in `types.md`. Slice patterns wait for the
   pattern work.
 - Two-phase borrows, so `v.push(v.len())` resolves the receiver before
