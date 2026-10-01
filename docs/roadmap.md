@@ -74,5 +74,8 @@ peripheral work lives in `backlog.md`.
   `exe-range-stride` and `exe-range-stride-zero`.
 - [ ] `ArrayVec<T, N>`, a fixed-capacity inline container.
 
-  The baremetal case proper: no heap, so no realloc hazard, and the
-  growth logic it shares with `Vec`.
+  Blocked on value parameters: array lengths take decimal literals
+  only, so a capacity parameter cannot be named in the language as
+  it stands. When value parameters land, this is the baremetal case
+  proper: no heap, so no realloc hazard, and the growth logic it
+  shares with `Vec`.
