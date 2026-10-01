@@ -908,8 +908,7 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   // equality before minting another; instances are interned once and
   // shared by identity.
   for (const GenericInstance& instance : generic_instances) {
-    if (instance.nominal != nominal ||
-        instance.args.size() != args.size()) {
+    if (instance.nominal != nominal || instance.args.size() != args.size()) {
       continue;
     }
     bool same = true;
