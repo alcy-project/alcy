@@ -172,5 +172,6 @@ DOC_COMMENT   = "///" , { ANY_BUT_NEWLINE } ;
  * statement-ending token, with continuation positions); block openers
  * stay on their header line. `1..<2` lexes as range, never float.
  * `match`/`if`/`while` conditions, `for` heads, and `else` never open
- * a struct literal: `{` after them always opens the body block.
+ * a struct literal: `{` after them always opens the body block. A
+ * `for` head never reads a block as a range end either.
  *)

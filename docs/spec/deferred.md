@@ -53,12 +53,11 @@ relied upon by MVP programs or by the MVP compiler implementation.
 - `pub(...)` restricted visibility; glob imports.
 - `f16`, 128-bit integers, posit, and decimal types; `Char`/`Ascii`/
   grapheme semantics in core (see `types.md`).
-- `Range` iteration and stepping. `Iterator` and the `for` rule that
-  consumes it are in place (see `control.md`); what remains is the
-  range cursor, which only integer ranges will expose, and the
-  per-width stepping it carries. Representation, endpoint-marking,
-  and sub-slicing are frozen in `types.md`. Slice patterns wait for
-  the pattern work.
+- Range stepping. Integer ranges iterate through their cursor
+  (see `types.md`); what remains is strided iteration, which the
+  cursor does not offer. Representation, endpoint-marking, and
+  sub-slicing are frozen in `types.md`. Slice patterns wait for the
+  pattern work.
 - Refutable `for` patterns. The pattern must match every item;
   whether a refutable pattern filters or is an error is undecided, so
   a program that builds with one is rejected for now.

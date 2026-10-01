@@ -40,12 +40,14 @@ peripheral work lives in `backlog.md`.
   and bare `..` is the unbounded spelling
   (`docs/adr/0032-explicit-range-end-spelling.md`), which also fixes
   the start side as always inclusive. `spec` and the `for` rule have
-  since landed (`docs/adr/0028-spec-system.md`); the cursor that
-  exposes an integer range to `for`, with per-width stepping, is what
-  remains. Pinned by
-  `exe-range`, `exe-subslice`, `exe-subslice-panic`, the
-  `ok-range`/`err-range-*` cases, and the `subslice` cases in
-  `tools/check_borrow_rules.py`.
+  since landed (`docs/adr/0028-spec-system.md`), and integer ranges
+  iterate through their cursor
+  (`docs/adr/0034-range-iteration-through-a-cursor.md`), so
+  `for i in 0..<n` iterates. Pinned by
+  `exe-range`, `exe-range-iter`, `exe-range-iter-no-start`,
+  `exe-subslice`, `exe-subslice-panic`, the
+  `ok-range`/`ok-range-iter`/`err-range-*` cases, and the `subslice`
+  cases in `tools/check_borrow_rules.py`.
 - [ ] `ArrayVec<T, N>`, a fixed-capacity inline container.
 
   The baremetal case proper: no heap, so no realloc hazard, and the

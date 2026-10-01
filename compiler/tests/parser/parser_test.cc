@@ -507,6 +507,54 @@ TEST_CASE("Parser requires a spelled range end") {
   }
 }
 
+// In a `for` head the `{` opens the body, so an open range reads as
+// the head; anywhere else a block still opens a range end.
+TEST_CASE("Parser reads an open range as a for head") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { for i in 0.. {}\n 1 }", f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::Block& body = f.ast.blocks[as_fn(result.items[0], f).body];
+  if (body.statements.size() != 1) {
+    return;
+  }
+  const ast::StmtNode& stmt = f.ast.stmts[body.statements[0]];
+  if (stmt.kind != ast::StmtKind::Expr) {
+    return;
+  }
+  const ast::ExprNode& block_expr =
+      f.ast.exprs[stmt.payload.get<ast::StmtExpr>().value];
+  if (block_expr.kind != ast::ExprKind::Block) {
+    return;
+  }
+  const ast::Block& block =
+      f.ast.blocks[block_expr.payload.get<ast::ExprBlock>().block];
+  if (block.statements.size() != 1) {
+    return;
+  }
+  const ast::StmtNode& decl = f.ast.stmts[block.statements[0]];
+  if (decl.kind != ast::StmtKind::Decl) {
+    return;
+  }
+  const ast::ExprNode& init =
+      f.ast.exprs[decl.payload.get<ast::StmtDecl>().init];
+  CHECK(init.kind == ast::ExprKind::MethodCall);
+  if (init.kind != ast::ExprKind::MethodCall) {
+    return;
+  }
+  const ast::ExprNode& head =
+      f.ast.exprs[init.payload.get<ast::ExprMethodCall>().receiver];
+  CHECK(head.kind == ast::ExprKind::Range);
+  if (head.kind == ast::ExprKind::Range) {
+    const ast::ExprRange range = head.payload.get<ast::ExprRange>();
+    CHECK(range.start.is_valid());
+    CHECK(!range.end.is_valid());
+  }
+}
+
 TEST_CASE("Parser treats power as right associative") {
   Fixture f;
   const ParseResult result = parse("fn f() { 2 ** 3 ** 2 }", f);

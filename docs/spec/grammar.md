@@ -92,6 +92,8 @@ Declaration left-hand sides use this grammar with `:=`
 - In statement position `Path {` opens a struct expression. After
   `if`/`while`/`match` conditions, `for` heads, and `else`, `{` always
   opens a block: parenthesize expressions containing struct literals.
+  A `for` head additionally never reads a block as a range end, so
+  `for i in 0..` takes the open range as its head.
 - `match` scrutinees and `if`/`while` conditions never parse a
   struct literal directly (the `{` belongs to the body); this keeps
   `match x {` and `if c {` unambiguous without lookahead. Parentheses

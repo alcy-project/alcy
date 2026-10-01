@@ -79,12 +79,16 @@
   is rejected, since no place stands behind one. A run is not a place
   and cannot be assigned to.
 - Iteration is explicit and separate: core declares `Iterator` as
-  the capability. Only integer ranges will expose an iterator that
-  way, and float ranges have no iteration method. The range cursor
-  arrives with the stepping work; stepping lives on the iterator,
+  the capability, and only integer ranges expose one, through a
+  `RangeIter` cursor built by `into_iter`; float ranges have no
+  iteration method. The cursor ascends from the start and stops at
+  the end: `..<` stops before it, `..=` yields it without stepping
+  past it (so `0..=255u8` never computes `255 + 1`). An inverted or
+  empty range yields nothing. A range with no start has no first
+  value, so naming a cursor for one fails; a range with no end
+  yields until the loop stops it. Stepping lives on the cursor,
   never on the interval.
 - `for` names the cursor through `into_iter` and consumes it as an
-  `Iterator` (see `control.md`). A range head becomes iterable once
-  its cursor lands. Index and slice APIs accept bound data, never
-  iterators.
+  `Iterator` (see `control.md`). Index and slice APIs accept bound
+  data, never iterators.
 

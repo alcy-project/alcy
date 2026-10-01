@@ -166,6 +166,10 @@ class Parser {
   // so their "{" reads as the body block (parenthesize to force a
   // struct there).
   bool allow_struct_lit_ = true;
+  // A "{" never starts a range end in a `for` head, so `for i in 0..`
+  // reads the head as the open range and the block as the body.
+  // Parentheses lift the ban for a block-valued end.
+  bool allow_brace_range_end_ = true;
   // Bounds the recursive descent; see base::MAX_NESTING.
   base::NestingGuard nesting_{base::MAX_NESTING};
   // Set once the budget is spent, so the many frames that then fail

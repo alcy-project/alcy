@@ -72,7 +72,10 @@ ast::ExprIdx Parser::parse_range() {
   const diag::Span op = peek().span;
   advance();
   ast::ExprIdx end = ast::ExprIdx::invalid();
-  if (starts_range_end(peek_kind())) {
+  const bool opens_end =
+      starts_range_end(peek_kind()) &&
+      (allow_brace_range_end_ || peek_kind() != lexer::TokenKind::LBrace);
+  if (opens_end) {
     end = parse_or();
     if (!end.is_valid()) {
       return ast::ExprIdx::invalid();
@@ -611,11 +614,15 @@ ast::ExprIdx Parser::parse_primary() {
       advance();
       // Parentheses lift the struct-literal ban a surrounding condition
       // imposes: the matching `)` still ends any literal before the
-      // block, so `(Foo { .. })` is unambiguous.
-      const bool saved = allow_struct_lit_;
+      // block, so `(Foo { .. })` is unambiguous. A block-valued range
+      // end lifts with it.
+      const bool saved_lit = allow_struct_lit_;
+      const bool saved_brace = allow_brace_range_end_;
       allow_struct_lit_ = true;
+      allow_brace_range_end_ = true;
       const ast::ExprIdx inner = parse_paren_expr(mark);
-      allow_struct_lit_ = saved;
+      allow_struct_lit_ = saved_lit;
+      allow_brace_range_end_ = saved_brace;
       return inner;
     }
     case lexer::TokenKind::LBrace: {
@@ -1004,12 +1011,17 @@ ast::ExprIdx Parser::parse_for() {
   }
   ast::ExprIdx head = ast::ExprIdx::invalid();
   {
-    // The `{` after the head always opens the loop body, never a
-    // struct literal; parenthesize a struct-valued head.
-    const bool saved = allow_struct_lit_;
+    // The `{` after the head always opens the loop body: never a
+    // struct literal, and never a block-valued range end, so an open
+    // range reads as the head (`for i in 0..`). Parenthesize a
+    // struct-valued head, or a range ending in a block.
+    const bool saved_lit = allow_struct_lit_;
+    const bool saved_brace = allow_brace_range_end_;
     allow_struct_lit_ = false;
+    allow_brace_range_end_ = false;
     head = parse_expr();
-    allow_struct_lit_ = saved;
+    allow_struct_lit_ = saved_lit;
+    allow_brace_range_end_ = saved_brace;
   }
   if (!head.is_valid()) {
     return ast::ExprIdx::invalid();
