@@ -1,0 +1,3 @@
+exit = 4
+contains = ["Refutable pattern in `for`; use `loop`"]
+not_contains = ["lowering slice"]

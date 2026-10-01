@@ -58,9 +58,6 @@ relied upon by MVP programs or by the MVP compiler implementation.
   cursor does not offer. Representation, endpoint-marking, and
   sub-slicing are frozen in `types.md`. Slice patterns wait for the
   pattern work.
-- Refutable `for` patterns. The pattern must match every item;
-  whether a refutable pattern filters or is an error is undecided, so
-  a program that builds with one is rejected for now.
 - Two-phase borrows, so `v.push(v.len())` resolves the receiver before
   the arguments; see `docs/adr/0012-reborrow-on-reference-read.md`.
 - Interior mutability; mutable statics; `const`-position extensions.

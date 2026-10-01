@@ -776,6 +776,10 @@ TEST_CASE("Parser desugars for into a loop over into_iter") {
   if (arms.arms.size() != 2) {
     return;
   }
+  // The `Some` arm carries the `for` marker, so a refutable item
+  // pattern is a check-time error; the second arm breaks.
+  CHECK(f.ast.patterns[arms.arms[0].pattern].for_pattern);
+  CHECK(!f.ast.patterns[arms.arms[1].pattern].for_pattern);
   // The scrutinee is the spec-only `next` call; the second arm breaks.
   const ast::ExprNode& scrutinee = f.ast.exprs[arms.scrutinee];
   CHECK(scrutinee.kind == ast::ExprKind::MethodCall);

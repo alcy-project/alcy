@@ -1114,6 +1114,7 @@ ast::ExprIdx Parser::parse_for() {
   some.span = keyword;
   some.payload.tuple.path = ast_.paths.push_back(some_path);
   some.payload.tuple.elements = ast::copy_to_arena(ast_.spans, some_elements);
+  some.for_pattern = true;
   const ast::PatternIdx some_pattern = ast_.patterns.push_back(some);
 
   ast::ExprNode arm_body;

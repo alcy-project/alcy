@@ -1953,7 +1953,17 @@ ir::TypeIdx Checker::check_match(u32 module,
   for (const ast::ExprMatchArm& arm : node.payload.get<ast::ExprMatch>().arms) {
     scopes.emplace_back();
     if (!is_error(scrutinee)) {
-      bind_pattern(module, arm.pattern, scrutinee);
+      const bool refutable = bind_pattern(module, arm.pattern, scrutinee);
+      // The `for` desugar marks its `Some` arm: the item pattern must
+      // match every item, so a refutable one is an error here rather
+      // than a filter. Hand-written matches keep lowering's verdict.
+      if (refutable && ast.patterns[arm.pattern].for_pattern) {
+        const u32 index =
+            bag.emit<i18n::Key::AnalyzerRefutablePatternInFor>(
+                diag::Severity::Error, ANALYZER_REFUTABLE_LET,
+                ast.patterns[arm.pattern].span);
+        (void)index;
+      }
     }
     const ir::TypeIdx body = check_expr(module, arm.body, expected);
     scopes.pop_back();

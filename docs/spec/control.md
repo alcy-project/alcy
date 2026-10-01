@@ -12,8 +12,9 @@
   method of the same name, so an `Iterator` implementation must be in
   scope or the loop is an error.
 - `Some(item)` binds `pat` against the item, and `None` ends the
-  loop. The pattern must match every item: a refutable pattern is
-  rejected rather than filtering for now (see `deferred.md`).
+  loop. The pattern must match every item: a refutable pattern is an
+  error naming the loop, never a filter. Write the `loop` out when
+  some items should skip the body.
 - A range head names its end explicitly: `for i in 0..<n` yields
   `0` through `n - 1` and `for i in 0..=n` yields `0` through `n`
   (see `types.md`).

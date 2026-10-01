@@ -275,6 +275,10 @@ struct PatternNode {
   // Leaves members uninitialized; parsers set the active member
   // before pushing the node.
   PatternPayload payload;
+  // The `for` desugar sets this on the generated `Option::Some(pat)`:
+  // the item pattern must match every item, so a refutable one is a
+  // check-time error rather than a filter.
+  bool for_pattern = false;
 };
 
 struct WildcardPattern : Pattern {};

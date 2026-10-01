@@ -162,6 +162,7 @@
   F(AnalyzerRecursiveType, "Recursive type '{}' without indirection") \
   F(AnalyzerReferencePatternType, "Reference pattern on a non-reference type") \
   F(AnalyzerRefutablePatternInDeclaration, "Refutable pattern in declaration; use match") \
+  F(AnalyzerRefutablePatternInFor, "Refutable pattern in `for`; use `loop`") \
   F(AnalyzerRefutablePatternInParameter, "Refutable pattern in function parameter") \
   F(AnalyzerReturnCrossesCompBlock, "A 'ret' must not cross a comp block boundary") \
   F(AnalyzerReturnOutsideFunction, "A 'ret' outside of a function") \

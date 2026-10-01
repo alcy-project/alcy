@@ -58,12 +58,11 @@ peripheral work lives in `backlog.md`.
   structural arguments, and equality normalizes at every level
   (`docs/adr/0035-instances-intern-by-structure.md`). Pinned by
   `exe-iterator-tuple` and the nested-tuple analyzer test.
-- [ ] Refutable `for` patterns: filter or error.
+- [x] Refutable `for` patterns are an error.
 
-  The pattern must match every item; whether a refutable pattern
-  filters or is an error is undecided, so a program that builds with
-  one is rejected by the lowerer for now. Decide it, specify it in
-  `control.md`, and pin both sides with `for` cases.
+  The pattern must match every item, like `:=` and parameter
+  patterns before it: a refutable one is a check-time error naming
+  the loop, never a filter. Pinned by `err-for-refutable`.
 - [ ] Strided range iteration.
 
   The cursor yields consecutive values; a stride is the remaining
