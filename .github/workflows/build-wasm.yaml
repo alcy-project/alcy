@@ -38,7 +38,7 @@ jobs:
           bun-version: 1.4.2
 
       - name: Setup GN
-        uses: pug523/actions/setup-gn@e4abb74456e529372bb1b7ebb71db1b647be3fd1
+        uses: pug523/actions/setup-gn@6a99c1e7020935c77ea80adc3ed0e9365ec8a209
 
       - name: Install Ninja
         shell: bash
