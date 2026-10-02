@@ -6,7 +6,7 @@ replaced. The foundations are in `roadmap.md`.
 ## Open
 
 - [ ] Diagnostic code space: a letter per component, and each component
-  counting its own ids from 1. `docs/adr/0037-diagnostic-code-space.md` is
+  counting its own ids from 1. `docs/adr/0039-diagnostic-code-space.md` is
   the decision; the letters are `A` lexer, `B` parser, `C` analyzer, `D`
   lowering, `F` borrow, `G` ir, `H` pkg, `I` pipeline, `J` codegen_llvm,
   `K` codegen (native, reserved), with `E`/`N`/`W` held back for
