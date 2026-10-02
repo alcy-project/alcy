@@ -96,6 +96,8 @@ another.**
    pass 33% covered, an artifact of where its tests live, and with the
    exe cases the honest figure is 62%. A report that sends the next test
    to the wrong place is worse than no report.
+   `tools/measure_gates.py` times it against every other gate, and the
+   ratchet is not among the slow ones - see the cost bullet below.
 
 8. **A test that has text does not need a file.** `SourceManager::add_virtual`
    and `pipeline::check_source` let a case hand the checker a string.
@@ -113,11 +115,23 @@ another.**
   covered, and the defect was in the encoding rather than the logic.
 - Deterministic generation means a hostile-input failure is a bug report,
   not a "reproduce it locally with libFuzzer" instruction.
-- Cost: the layers overlap in what they build. `fuzz/` maintains its own
-  entry points into the same code the unit tests drive, and
-  `check_coverage.py` rebuilds the tests and the compiler with
-  instrumentation, so it is the slowest gate in `check.sh` and takes
-  `--no-coverage` to skip.
+- Cost: the layers overlap in what they build, and the overlap is the
+  expensive part. `check_coverage.py` rebuilds the tests and the compiler
+  with instrumentation, so it builds a third tree beside the two
+  `check.sh` already makes, and takes `--no-coverage` to skip.
+  `lint` needs a compilation database of its own and is the slowest gate
+  in the tree by a wide margin - this file used to call the ratchet the
+  slowest, which was wrong, and stayed wrong for as long as nobody
+  measured the pair. `tools/measure_gates.py` exists so that a claim
+  about which gate is slow is a number somebody ran rather than a
+  sentence somebody believed; it is a report and never a gate, because
+  the objection to timing a shared runner in
+  `docs/adr/0021-benchmark-measurement.md` applies to the length of a
+  gate at least as much as it applies to the speed of a program.
+- `fuzz/` maintains its own entry points into the same code the unit
+  tests drive, which is the other overlap. It is not in CI: a fuzz run's
+  value decays as its corpus saturates, so a per-push job would mostly
+  re-verify crashes it already knows about.
 - The nesting limit is deliberately low (256) and deliberately shared.
   Real code nests in single digits, so the budget only ever rejects
   generated input, and sharing it means the limit cannot drift between

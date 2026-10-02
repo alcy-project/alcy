@@ -211,8 +211,11 @@ so it is not a test.
 7. **Coverage may not go down.** `./tools/check_coverage.py` fails when line
    coverage of `compiler/` drops below the recorded baseline. Move the baseline with
    `--update` only in a commit that says so.
-8. **`fmt`, `lint`, and the unit suite are clean before you push.** Coverage and the
-   fuzzer are not: the first is slow and the second needs clang's fuzzer runtime.
+8. **`fmt`, `lint`, and the unit suite are clean before you push.** So is the
+   coverage ratchet: it runs in CI, and CI is not a substitute for running
+   the thing yourself. The fuzzer is the exception - it needs clang's fuzzer
+   runtime and its value decays as its corpus saturates, so it is a tool you
+   reach for rather than a gate you clear.
 
 Which tool to reach for, in order: a unit test with an explicit expected value, a
 property test, a sanitized hostile-input case, and libFuzzer for coverage-guided

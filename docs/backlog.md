@@ -5,27 +5,10 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
-- [ ] Diagnostic code space: a letter per component, and each component
-  counting its own ids from 1. `docs/adr/0039-diagnostic-code-space.md` is
-  the decision; the letters are `A` lexer, `B` parser, `C` analyzer, `D`
-  lowering, `F` borrow, `G` ir, `H` pkg, `I` pipeline, `J` codegen_llvm,
-  `K` codegen (native, reserved), with `E`/`N`/`W` held back for
-  severity. A code reads `error[EA001]`: severity, component, id. The
-  reason is that the 1000-per-stage stride has no room for a second
-  code-generating backend and its sub-ranges are narrower than the
-  stages that use them, and that a stage should not have to know the
-  layout of the whole compiler to pick a number. The registry in
-  `compiler/docs/diagnostics.md` stops restating the numbers; the enums
-  own them.
-- [ ] CI: `lint`, the coverage ratchet, and the sanitized exe run as jobs
-  in `ci.yaml`, plus `check.sh` itself as a Linux job so the gate a
-  contributor runs is the gate CI runs. `style.yaml` keeps what needs no
-  compilation database. The benchmark smoke moves out of the ten matrix
-  entries into one job, since it judges nothing about timing and costs
-  156s in each. `tools/measure_gates.py` reports the numbers, so the
-  runtime claims in `docs/adr/0017-verification-strategy.md` and
-  `CONTRIBUTING.md` can be measured rather than believed; both currently
-  call the coverage ratchet the slowest gate and it is the cheapest.
+- [ ] Reserve the next ADR number in this file, so a branch claims it
+  before writing rather than after. 0032, 0037 and 0038 each collided
+  with work landing on `main` in between, and git merged two records
+  that carried one number without complaint - the filenames differ.
 - [ ] `unsafe` design as an ADR; implementation waits for the package
   suite.
 - [ ] Doc-comment collection in the parser (the SSG itself waits).
@@ -96,3 +79,24 @@ replaced. The foundations are in `roadmap.md`.
   LLVM ships no clang and a host-made `.bc` would couple every build to
   its version, so the functions are built as IR rather than linked in.
   Designed in `docs/adr/0023-program-runtime-in-process.md`.
+- [x] Diagnostic code space: a letter per component, and each component
+  counting its own ids from 1. The letters are `A` lexer, `B` parser,
+  `C` analyzer, `D` lowering, `F` borrow, `G` ir, `H` pkg, `I` pipeline,
+  `J` codegen_llvm, `K` codegen (native, reserved), with `E`/`N`/`W`
+  held back for severity, so a code reads `error[EA001]`: severity,
+  component, id. The reason is that the 1000-per-stage stride has no
+  room for a second code-generating backend, that its sub-ranges are
+  narrower than the stages that use them, and that a stage should not
+  have to know the layout of the whole compiler to pick a number. The
+  registry in `compiler/docs/diagnostics.md` stopped restating the
+  numbers; the enums own them, and every id is spelled out.
+  Designed in `docs/adr/0039-diagnostic-code-space.md`.
+- [x] CI carries the gates: `lint`, the coverage ratchet, the sanitized
+  exe run, `check.sh` itself, and the benchmark smoke are jobs in
+  `ci.yaml`; `style.yaml` keeps what needs no compilation database. The
+  smoke ran in all ten matrix entries, judging shape and not timing,
+  which is ten answers to one question. Cost was not the obstacle for
+  any of them - two documents called the coverage ratchet the slowest
+  gate in `check.sh` and it is among the cheapest, which
+  `tools/measure_gates.py` now reports rather than leaves to be believed.
+  Designed in `docs/adr/0040-gates-live-beside-the-builds.md`.
