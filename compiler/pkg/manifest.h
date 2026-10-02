@@ -160,6 +160,18 @@ struct PackageManifest {
   ModuleSet modules;
 };
 
+// A suite manifest ([suite] table): a named set of packages under one
+// owner, addressed as `<owner>/<suite>` with a member at
+// `<owner>/<suite>/<package>`. `packages` is an arena-owned array of
+// member names. Views borrow arena storage owned by the caller of
+// parse_suite_manifest().
+struct SuiteManifest {
+  std::string_view owner;
+  std::string_view name;
+  const std::string_view* packages = nullptr;
+  u32 package_count = 0;
+};
+
 // Structural failure of a manifest assembled outside parse_manifest.
 enum class ManifestError : u8 {
   EmptyName,
@@ -202,6 +214,45 @@ base::Result<Dependency, diag::Reported> parse_dependency_flag(
     std::string_view fragment);
 
 base::Result<PackageManifest, diag::Reported> parse_manifest(
+    std::string_view bytes,
+    std::string_view filename,
+    source::FileId file,
+    diag::DiagBag& bag,
+    mem::Arena& arena);
+
+// Structural failure of a suite manifest assembled outside
+// parse_suite_manifest. Mirrors ManifestError for the [suite] shape:
+// pointer/count pairs agree, required strings are present, and the
+// member list holds unique non-empty names.
+enum class SuiteError : u8 {
+  EmptyOwner,
+  EmptyName,
+  NoPackages,
+  NullPackageArray,
+  EmptyPackageEntry,
+  DuplicatePackageEntry,
+};
+
+// Pure structural verifier for suite manifests. Its own output satisfies
+// this; a manifest assembled directly (notably in tests) must pass it
+// before crossing a public API. No I/O, no allocation, no bag writes,
+// no input mutation.
+base::Result<void, SuiteError> verify_suite_manifest(
+    const SuiteManifest& manifest);
+
+// Entry-point conversion helper: emits `manifest '<name>': <detail>`
+// (code 1001, the manifest semantic range) into bag. Verifiers stay
+// pure; this is how an entry turns their structured failure into a
+// diagnostic.
+void report_suite_error(SuiteError error,
+                        std::string_view name,
+                        diag::DiagBag& bag);
+
+// Parses suite manifest bytes; all strings reference arena copies.
+// `file` backs spans for syntax errors (pass source::UNKNOWN_FILE when
+// unknown). A manifest holding [package] is rejected as the wrong kind,
+// the way parse_manifest rejects one holding [suite].
+base::Result<SuiteManifest, diag::Reported> parse_suite_manifest(
     std::string_view bytes,
     std::string_view filename,
     source::FileId file,

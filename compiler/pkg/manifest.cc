@@ -463,6 +463,83 @@ void report_manifest_error(ManifestError error,
   (void)index;
 }
 
+base::Result<void, SuiteError> verify_suite_manifest(
+    const SuiteManifest& manifest) {
+  if (manifest.owner.empty()) {
+    return base::make_err(SuiteError::EmptyOwner);
+  }
+  if (manifest.name.empty()) {
+    return base::make_err(SuiteError::EmptyName);
+  }
+  if (manifest.package_count == 0) {
+    return base::make_err(SuiteError::NoPackages);
+  }
+  if (manifest.packages == nullptr) {
+    return base::make_err(SuiteError::NullPackageArray);
+  }
+  for (u32 i = 0; i < manifest.package_count; ++i) {
+    if (manifest.packages[i].empty()) {
+      return base::make_err(SuiteError::EmptyPackageEntry);
+    }
+    for (u32 j = 0; j < i; ++j) {
+      if (manifest.packages[j] == manifest.packages[i]) {
+        return base::make_err(SuiteError::DuplicatePackageEntry);
+      }
+    }
+  }
+  return base::make_ok();
+}
+
+void report_suite_error(SuiteError error,
+                        std::string_view name,
+                        diag::DiagBag& bag) {
+  std::string_view detail = "invalid manifest";
+  switch (error) {
+    case SuiteError::EmptyOwner: detail = "empty [suite] owner"; break;
+    case SuiteError::EmptyName: detail = "empty [suite] name"; break;
+    case SuiteError::NoPackages: detail = "[suite] declares no packages"; break;
+    case SuiteError::NullPackageArray:
+      detail = "package count without a package array";
+      break;
+    case SuiteError::EmptyPackageEntry:
+      detail = "[suite] package list with an empty entry";
+      break;
+    case SuiteError::DuplicatePackageEntry:
+      detail = "duplicate [suite] package entry";
+      break;
+  }
+  const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
+      diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSemanticError,
+      name, detail);
+  (void)index;
+}
+
+// Reports a TOML syntax failure with its source span; only syntax errors
+// have a position to report.
+diag::Reported toml_syntax_error(diag::DiagBag& bag,
+                                 std::string_view bytes,
+                                 source::FileId file,
+                                 const toml::parse_error& error) {
+  const u32 index = bag.emit<i18n::Key::PkgTomlSyntaxError>(
+      diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSyntaxError,
+      toml_span(bytes, file, error.source()), error.description());
+  (void)index;
+  return diag::Reported{};
+}
+
+base::Result<SuiteManifest, diag::Reported> suite_semantic_error(
+    diag::DiagBag& bag,
+    std::string_view filename,
+    std::string_view message) {
+  // Same shape as semantic_error, for the suite parser: semantic errors
+  // name the manifest in the message and carry no span.
+  const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
+      diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSemanticError,
+      filename, message);
+  (void)index;
+  return base::make_err(diag::Reported{});
+}
+
 base::Result<PackageManifest, diag::Reported> parse_manifest(
     std::string_view bytes,
     std::string_view filename,
@@ -471,17 +548,19 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
     mem::Arena& arena) {
   toml::parse_result result = toml::parse(bytes, filename);
   if (!result) {
-    const toml::parse_error& error = result.error();
-    const u32 index = bag.emit<i18n::Key::PkgTomlSyntaxError>(
-        diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSyntaxError,
-        toml_span(bytes, file, error.source()), error.description());
-    (void)index;
-    return base::make_err(diag::Reported{});
+    return base::make_err(toml_syntax_error(bag, bytes, file, result.error()));
   }
 
   const toml::table& root = result.table();
   const auto pkg_it = root.find("package");
   if (pkg_it == root.end() || !pkg_it->second.is_table()) {
+    // A suite manifest names the same file, so reaching for the wrong
+    // parser names the kind it found rather than just the table absent.
+    const auto suite_it = root.find("suite");
+    if (suite_it != root.end() && suite_it->second.is_table()) {
+      return semantic_error(bag, filename,
+                            "is a suite manifest, not a package manifest");
+    }
     return semantic_error(bag, filename, "missing [package] table");
   }
   const toml::table* const pkg_table = pkg_it->second.as_table();
@@ -721,6 +800,86 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
       .bin_count = bin_count,
       .lib = lib,
       .modules = modules,
+  });
+}
+
+base::Result<SuiteManifest, diag::Reported> parse_suite_manifest(
+    std::string_view bytes,
+    std::string_view filename,
+    source::FileId file,
+    diag::DiagBag& bag,
+    mem::Arena& arena) {
+  toml::parse_result result = toml::parse(bytes, filename);
+  if (!result) {
+    return base::make_err(toml_syntax_error(bag, bytes, file, result.error()));
+  }
+
+  const toml::table& root = result.table();
+  if (root.find("package") != root.end()) {
+    return suite_semantic_error(bag, filename,
+                                "is a package manifest, not a suite manifest");
+  }
+  const auto suite_it = root.find("suite");
+  if (suite_it == root.end() || !suite_it->second.is_table()) {
+    return suite_semantic_error(bag, filename, "missing [suite] table");
+  }
+  const toml::table* const suite_table = suite_it->second.as_table();
+
+  const auto owner_it = suite_table->find("owner");
+  if (owner_it == suite_table->end()) {
+    return suite_semantic_error(bag, filename, "missing [suite] owner");
+  }
+  const auto owner = owner_it->second.value<std::string_view>();
+  if (!owner.has_value() || owner->empty()) {
+    return suite_semantic_error(bag, filename,
+                                "[suite] owner must be a string");
+  }
+
+  const auto name_it = suite_table->find("name");
+  if (name_it == suite_table->end()) {
+    return suite_semantic_error(bag, filename, "missing [suite] name");
+  }
+  const auto name = name_it->second.value<std::string_view>();
+  if (!name.has_value() || name->empty()) {
+    return suite_semantic_error(bag, filename, "[suite] name must be a string");
+  }
+
+  const auto packages_it = suite_table->find("packages");
+  if (packages_it == suite_table->end()) {
+    return suite_semantic_error(bag, filename, "missing [suite] packages");
+  }
+  if (!packages_it->second.is_array()) {
+    return suite_semantic_error(bag, filename,
+                                "[suite] packages must be an array");
+  }
+  const toml::array* const packages_array = packages_it->second.as_array();
+  const u32 package_count = static_cast<u32>(packages_array->size());
+  if (package_count == 0) {
+    return suite_semantic_error(bag, filename, "[suite] declares no packages");
+  }
+  std::string_view* const packages = static_cast<std::string_view*>(arena.alloc(
+      sizeof(std::string_view) * package_count, alignof(std::string_view)));
+  u32 filled = 0;
+  for (const toml::node& node : *packages_array) {
+    const auto entry = node.value<std::string_view>();
+    if (!entry.has_value() || entry->empty()) {
+      return suite_semantic_error(bag, filename,
+                                  "[suite] package entries must be strings");
+    }
+    for (u32 i = 0; i < filled; ++i) {
+      if (packages[i] == *entry) {
+        return suite_semantic_error(bag, filename,
+                                    "duplicate [suite] package entry");
+      }
+    }
+    packages[filled++] = copy_str(arena, *entry);
+  }
+
+  return base::make_ok(SuiteManifest{
+      .owner = copy_str(arena, *owner),
+      .name = copy_str(arena, *name),
+      .packages = packages,
+      .package_count = filled,
   });
 }
 

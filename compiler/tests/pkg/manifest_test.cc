@@ -181,6 +181,113 @@ TEST_CASE("Manifest rejects library targets without paths") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Suite manifest parses the std suite") {
+  Fixture f;
+  // The [suite] table of lib/std/alcy.toml, comments aside: the parser
+  // must accept the suite the compiler embeds.
+  constexpr std::string_view bytes =
+      "[suite]\nname = \"std\"\nowner = \"alcy\"\n"
+      "packages = [\"core\", \"fmt\", \"alloc\", \"atomic\", \"sync\", "
+      "\"io\", \"network\", \"thread\", \"arch\", \"simd\", \"time\"]\n";
+  base::Result<SuiteManifest, diag::Reported> result = parse_suite_manifest(
+      bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  const SuiteManifest manifest = std::move(result).unwrap();
+  CHECK(!f.bag.has_errors());
+  CHECK(manifest.owner == "alcy");
+  CHECK(manifest.name == "std");
+  CHECK(manifest.package_count == 11);
+  if (manifest.package_count != 11) {
+    return;
+  }
+  CHECK(manifest.packages[0] == "core");
+  CHECK(manifest.packages[2] == "alloc");
+  CHECK(manifest.packages[10] == "time");
+  CHECK(verify_suite_manifest(manifest).is_ok());
+}
+
+TEST_CASE("Suite manifest rejects the wrong kind and bad shapes") {
+  Fixture f;
+  constexpr std::string_view package_manifest =
+      "[package]\nname = \"hash\"\nversion = \"0.1.0\"\n";
+  CHECK(parse_suite_manifest(package_manifest, "alcy.toml",
+                             source::UNKNOWN_FILE, f.bag, f.arena)
+            .is_err());
+  constexpr std::string_view no_suite = "[other]\n";
+  CHECK(parse_suite_manifest(no_suite, "alcy.toml", source::UNKNOWN_FILE, f.bag,
+                             f.arena)
+            .is_err());
+  constexpr std::string_view no_owner =
+      "[suite]\nname = \"std\"\npackages = [\"core\"]\n";
+  CHECK(parse_suite_manifest(no_owner, "alcy.toml", source::UNKNOWN_FILE, f.bag,
+                             f.arena)
+            .is_err());
+  constexpr std::string_view no_name =
+      "[suite]\nowner = \"alcy\"\npackages = [\"core\"]\n";
+  CHECK(parse_suite_manifest(no_name, "alcy.toml", source::UNKNOWN_FILE, f.bag,
+                             f.arena)
+            .is_err());
+  constexpr std::string_view no_packages =
+      "[suite]\nowner = \"alcy\"\nname = \"std\"\n";
+  CHECK(parse_suite_manifest(no_packages, "alcy.toml", source::UNKNOWN_FILE,
+                             f.bag, f.arena)
+            .is_err());
+  constexpr std::string_view empty_packages =
+      "[suite]\nowner = \"alcy\"\nname = \"std\"\npackages = []\n";
+  CHECK(parse_suite_manifest(empty_packages, "alcy.toml", source::UNKNOWN_FILE,
+                             f.bag, f.arena)
+            .is_err());
+  constexpr std::string_view empty_entry =
+      "[suite]\nowner = \"alcy\"\nname = \"std\"\n"
+      "packages = [\"\"]\n";
+  CHECK(parse_suite_manifest(empty_entry, "alcy.toml", source::UNKNOWN_FILE,
+                             f.bag, f.arena)
+            .is_err());
+  constexpr std::string_view duplicate =
+      "[suite]\nowner = \"alcy\"\nname = \"std\"\n"
+      "packages = [\"core\", \"core\"]\n";
+  CHECK(parse_suite_manifest(duplicate, "alcy.toml", source::UNKNOWN_FILE,
+                             f.bag, f.arena)
+            .is_err());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Suite manifest verification rejects bad shapes") {
+  CHECK(verify_suite_manifest(SuiteManifest{}).unwrap_err() ==
+        SuiteError::EmptyOwner);
+  const std::string_view members[] = {"core", "core"};
+  CHECK(verify_suite_manifest(SuiteManifest{
+                                  .owner = "alcy",
+                                  .name = "std",
+                                  .packages = members,
+                                  .package_count = 2,
+                              })
+            .unwrap_err() == SuiteError::DuplicatePackageEntry);
+  CHECK(verify_suite_manifest(SuiteManifest{
+                                  .owner = "alcy",
+                                  .name = "std",
+                                  .packages = nullptr,
+                                  .package_count = 0,
+                              })
+            .unwrap_err() == SuiteError::NoPackages);
+  Fixture f;
+  report_suite_error(SuiteError::NoPackages, "alcy.toml", f.bag);
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Package manifest names a suite manifest") {
+  Fixture f;
+  constexpr std::string_view bytes =
+      "[suite]\nname = \"std\"\nowner = \"alcy\"\n"
+      "packages = [\"core\"]\n";
+  CHECK(parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena)
+            .is_err());
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Manifest rejects binary targets without paths") {
   Fixture f;
   constexpr std::string_view bytes =
