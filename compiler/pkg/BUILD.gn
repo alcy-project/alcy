@@ -15,7 +15,6 @@ source_set("pkg") {
     "//compiler:base_modules",
     "//compiler/diag",
     "//compiler/i18n",
-    "//compiler/path",
     "//compiler/source",
     "//third_party/toml",
   ]

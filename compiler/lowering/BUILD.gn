@@ -18,7 +18,6 @@ source_set("lowering") {
     "//compiler/diag",
     "//compiler/i18n",
     "//compiler/ir",
-    "//compiler/source",
     "//compiler/text",
   ]
   configs += [ "//compiler:alcy_config" ]

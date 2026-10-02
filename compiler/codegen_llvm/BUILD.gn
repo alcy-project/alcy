@@ -18,14 +18,15 @@ source_set("codegen_llvm") {
     "runtime_ir.cc",
     "runtime_ir.h",
   ]
+
+  # `ir` is public because the emitter's header names ir types; `symbol`
+  # is not, because only the .cc mangles a name.
   deps = [
     "//compiler:base_modules",
-    "//compiler/diag",
-    "//compiler/i18n",
+    "//compiler/symbol",
   ]
   public_deps = [
     "//compiler/ir",
-    "//compiler/symbol",
     "//third_party/llvm",
   ]
 

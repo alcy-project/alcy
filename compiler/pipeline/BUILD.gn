@@ -88,10 +88,26 @@ source_set("pipeline") {
     "vcs.cc",
     "vcs.h",
   ]
+
+  # The modules this one includes, named rather than reached through
+  # `//compiler:modules`: an include that no direct dependency covers is a
+  # `gn check` failure, so the pipeline's reach is its declared edges.
   deps = [
     ":embed_std",
     "//compiler:base_modules",
-    "//compiler:modules",
+    "//compiler/analyzer",
+    "//compiler/ast",
+    "//compiler/borrow",
+    "//compiler/codegen_llvm",
+    "//compiler/diag",
+    "//compiler/i18n",
+    "//compiler/ir",
+    "//compiler/lexer",
+    "//compiler/lowering",
+    "//compiler/parser",
+    "//compiler/path",
+    "//compiler/pkg",
+    "//compiler/source",
   ]
   configs += [ "//compiler:alcy_config" ]
 }
