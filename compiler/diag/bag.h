@@ -143,6 +143,19 @@ class DiagBag {
   u32 warning_count() const { return warning_count_; }
   u32 size() const { return size_; }
 
+  // The language its messages were composed in, which a caller building
+  // another bag over the same input needs to agree on.
+  [[nodiscard]] i18n::Language language() const noexcept { return language_; }
+
+  // Appends every diagnostic of `other`, in order, copying the messages and
+  // labels into this bag's arena. The two share nothing afterwards, so the
+  // one merged from can be read no further.
+  //
+  // This is what lets a run's diagnostics read the same however many threads
+  // read the input: each thread collects into a bag of its own, and the bags
+  // are merged in the order the work was listed.
+  void merge(const DiagBag& other);
+
   // Iteration for renderers. Diagnostics are stored newest-last.
   template <typename F>
   void for_each(F&& f) const {

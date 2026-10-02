@@ -3,6 +3,8 @@
 
 #include "analyzer/resolve.h"
 
+#include <atomic>
+#include <deque>
 #include <limits>
 #include <optional>
 #include <span>
@@ -13,6 +15,7 @@
 
 #include "analyzer/diag_code.h"
 #include "ast/ast.h"
+#include "base/for_each.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -21,6 +24,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
+#include "i18n/language.h"
 #include "i18n/messages.h"
 #include "lexer/lexer.h"
 #include "lexer/token.h"
@@ -54,16 +58,48 @@ struct NameEntry {
   std::string_view name;
 };
 
+// One file's diagnostics, and whether reading it worked. Composing a message
+// copies bytes into an arena and appends to an array in it, and neither takes
+// two threads at once, so a file that might report needs a bag of its own.
+//
+// The reservation is a single file's worth of messages, which a file reporting
+// that many has that many problems in it. It is address space: the pages are
+// committed as the messages arrive.
+#if FPAG_BUILD_FLAG(IS_ARCH_64_BITS)
+constexpr usize FILE_DIAGNOSTIC_CAPACITY = 1ull << 20;
+#else
+constexpr usize FILE_DIAGNOSTIC_CAPACITY = 128ull << 10;
+#endif
+
+struct PerFileDiagnostics {
+  explicit PerFileDiagnostics(i18n::Language language) : bag(arena, language) {
+    arena.reserve(FILE_DIAGNOSTIC_CAPACITY);
+  }
+
+  PerFileDiagnostics(const PerFileDiagnostics&) = delete;
+  PerFileDiagnostics& operator=(const PerFileDiagnostics&) = delete;
+  PerFileDiagnostics(PerFileDiagnostics&&) = delete;
+  PerFileDiagnostics& operator=(PerFileDiagnostics&&) = delete;
+
+  mem::Arena arena;
+  diag::DiagBag bag;
+  std::atomic<bool> ok{true};
+};
+
 class Resolver {
  public:
   Resolver(source::SourceManager& sources,
            ast::AstArena& ast,
-           diag::DiagBag& bag)
-      : sources(sources), ast(ast), bag(bag) {}
+           diag::DiagBag& bag,
+           u32 jobs)
+      : sources(sources), ast(ast), bag(bag), jobs(jobs) {}
 
   source::SourceManager& sources;
   ast::AstArena& ast;
   diag::DiagBag& bag;
+  // How many threads may read files at once. One reads them on the calling
+  // thread, which is the default: reading the source is a small part of a run.
+  u32 jobs;
   std::string_view package_name;
   source::FileId root = source::UNKNOWN_FILE;
   std::vector<FileData> file_data;
@@ -133,12 +169,19 @@ class Resolver {
     return NO_MODULE;
   }
 
-  // Lexes, parses and desugars one file, reporting whether it did. The
-  // arena reports running out by trapping, naming neither the file nor
-  // the input, so a file it cannot hold is refused here instead - and it
-  // is what the arena has spent that is checked rather than how large
-  // the file is, since what a file costs is the identifiers it names.
-  bool lex_parse_file(FileData& file) {
+  // Lexes, parses and desugars one file, reporting whether it did.
+  //
+  // The arena reports running out by trapping, naming neither the file nor
+  // the input, so a file it cannot hold is refused here instead - and it is
+  // what the arena has spent that is checked rather than how large the file
+  // is, since what a file costs is the identifiers it names.
+  //
+  // `bag` is the caller's: the run's own when one thread reads the input, and
+  // this file's when several do. `profiler` is where the phases are recorded,
+  // and null when they should not be.
+  bool lex_parse_file(FileData& file,
+                      diag::DiagBag& bag,
+                      debug::Profiler* profiler) {
     // File ids were validated when the inputs were admitted in run().
     const std::optional<std::string_view> file_bytes = sources.bytes(file.id);
     DCHECK(file_bytes.has_value());
@@ -154,14 +197,15 @@ class Resolver {
     lexer::Lexer lexer(bytes, file.id, bag);
     std::vector<lexer::Token> tokens;
     {
-      PROFILE_SCOPE_WITH_CATEGORY("tokenize", "frontend");
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "tokenize",
+                                               "frontend");
       lexer.tokenize(tokens);
     }
     parser::Parser parser(
         std::span<const lexer::Token>(tokens.data(), tokens.size()), bytes,
         file.id, ast, bag);
     base::Result<std::span<const ast::ItemIdx>, diag::Reported> parsed = [&] {
-      PROFILE_SCOPE_WITH_CATEGORY("parse", "frontend");
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "parse", "frontend");
       return parser.parse();
     }();
     if (parsed.is_err()) {
@@ -169,7 +213,7 @@ class Resolver {
     }
     file.items = std::move(parsed).unwrap();
     {
-      PROFILE_SCOPE_WITH_CATEGORY("desugar", "frontend");
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "desugar", "frontend");
       parser::desugar_shadowing(file.items, ast, bag);
     }
     return true;
@@ -634,20 +678,58 @@ class Resolver {
       prelude_facades.push_back(input.is_facade);
       prelude_data.emplace_back(input.id, std::move(path));
     }
-    // A file that does not fit leaves the arena as it was, so every file
-    // after it would report the same thing; the one diagnostic that names
-    // the input is the one worth printing.
-    const auto parse_all = [this](std::vector<FileData>& files) {
-      for (FileData& file : files) {
-        if (!lex_parse_file(file)) {
-          return false;
-        }
-      }
-      return true;
-    };
-    if (!parse_all(file_data) || !parse_all(prelude_data)) {
-      return ModuleTree{};
+    // Reading a file depends on nothing in any other, so several threads read
+    // them at once. What each reports goes into a bag of its own, and the
+    // bags are merged in file order below, so a run's diagnostics read the
+    // same however many threads read the input.
+    //
+    // A deque rather than a vector because each bag holds the address of the
+    // arena beside it: an entry that moved would leave its bag pointing at
+    // the entry that took its place.
+    std::deque<PerFileDiagnostics> per_file;
+    while (per_file.size() < file_data.size() + prelude_data.size()) {
+      per_file.emplace_back(bag.language());
     }
+    const bool threaded = jobs > 1;
+    // The phases are named when one thread reads the input and the region is
+    // named when several do, never both: under several threads a phase's
+    // duration is its thread's rather than the run's, and a report that sums
+    // them reads as though one file took as many threads as there are.
+    debug::Profiler* const phase_profiler =
+        threaded ? nullptr : &debug::Profiler::global();
+    const auto parse_all = [&](std::vector<FileData>& files, usize first) {
+      base::for_each(0, files.size(), threaded ? jobs : 1, [&](usize at) {
+        PerFileDiagnostics& into = per_file[first + at];
+        const bool ok = lex_parse_file(files[at], into.bag, phase_profiler);
+        into.ok.store(ok, std::memory_order_relaxed);
+      });
+    };
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(
+          threaded ? &debug::Profiler::global() : nullptr, "parse-files",
+          "frontend");
+      parse_all(file_data, 0);
+      parse_all(prelude_data, file_data.size());
+    }
+
+    // The first file that failed ends the run, as it did when one thread did
+    // the reading: the files before it keep their diagnostics and the rest are
+    // not reported at all. Taking the lowest failing index is what keeps that
+    // a property of the input rather than of the schedule - and it matters
+    // because a file that did not fit leaves the arena as it was, so every
+    // file after it would report the same thing.
+    for (usize i = 0; i < per_file.size(); ++i) {
+      if (!per_file[i].ok.load(std::memory_order_relaxed)) {
+        for (usize j = 0; j <= i; ++j) {
+          bag.merge(per_file[j].bag);
+        }
+        return ModuleTree{};
+      }
+    }
+    for (PerFileDiagnostics& into : per_file) {
+      bag.merge(into.bag);
+    }
+
     // Once, here, rather than after each file: see `verify_trees`.
     if (parser::verify_trees(ast, bag).is_err()) {
       return ModuleTree{};
@@ -745,8 +827,9 @@ base::Result<ModuleTree, diag::Reported> resolve_modules(
     ast::AstArena& ast,
     diag::DiagBag& bag,
     std::span<const ModuleInput> prelude,
-    std::span<const StdHint> std_hints) {
-  Resolver resolver{sources, ast, bag};
+    std::span<const StdHint> std_hints,
+    u32 jobs) {
+  Resolver resolver{sources, ast, bag, jobs};
   ModuleTree tree =
       resolver.run(root, modules, package_name, prelude, std_hints);
   if (bag.has_errors()) {

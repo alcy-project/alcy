@@ -11,10 +11,13 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/diag_code.h"
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "diag/bag.h"
+#include "diag/diagnostic.h"
+#include "diag/stage.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -101,6 +104,58 @@ const ModuleNode* find_module(const ModuleTree& tree, std::string_view path) {
     }
   }
   return nullptr;
+}
+
+// What a reader can see of a resolve: the modules it produced and the
+// diagnostics it reported, in the order it reported them. The node indices
+// are deliberately absent, because a threaded run hands them out in whatever
+// order the threads read the files in.
+struct ResolveOutcome {
+  std::vector<std::string> module_paths;
+  std::vector<std::string> diagnostics;
+};
+
+ResolveOutcome resolve_with(VirtualDir& dir, u32 jobs) {
+  Fixture f;
+  ResolveOutcome outcome;
+  std::deque<std::string> name_storage;
+  std::vector<ModuleInput> inputs;
+  source::FileId root = source::UNKNOWN_FILE;
+  for (u32 i = 0; i < dir.size(); ++i) {
+    const tests::VirtualSource& file = dir.at(i);
+    const bool is_root = file.name == "main.al";
+    std::optional<analyzer::ModuleInput> input = tests::register_source(
+        f.sources, dir, file.name, is_root, name_storage);
+    if (!input.has_value()) {
+      continue;
+    }
+    if (is_root) {
+      root = input->id;
+    }
+    inputs.push_back(*input);
+  }
+  base::Result<ModuleTree, diag::Reported> result = resolve_modules(
+      root, inputs, "testpkg", f.sources, f.ast, f.bag, {}, {}, jobs);
+  if (result.is_ok()) {
+    for (const ModuleNode* const node : std::move(result).unwrap().modules) {
+      outcome.module_paths.emplace_back(node->path);
+    }
+  }
+  f.bag.for_each([&outcome](const diag::Diagnostic& d) {
+    // The code as a reader sees it - a letter and an id - rather than as the
+    // pair it is, so the summary reads the way the report does.
+    std::string code = "-";
+    if (d.code.has_value()) {
+      code = std::string(1, diag::stage_letter(d.code->stage)) +
+             std::to_string(d.code->id);
+    }
+    outcome.diagnostics.push_back(
+        std::to_string(static_cast<u32>(d.severity)) + "/" + code + "/" +
+        std::string(d.message) + "@" +
+        std::to_string(static_cast<u32>(d.primary_span.file)) + ":" +
+        std::to_string(d.primary_span.offset));
+  });
+  return outcome;
 }
 
 }  // namespace
@@ -719,6 +774,98 @@ TEST_CASE("Check package rejects a malformed module tree") {
   CHECK(check_package(empty, ir::PointerWidth::W64, f.ast, f.bag, strings)
             .is_err());
   CHECK(f.bag.has_errors());
+}
+
+// Reading files on several threads gives the same answer as reading them on
+// one: the same modules, and the same diagnostics in the same order. The node
+// indices are not compared, because a threaded run hands them out in whatever
+// order the threads read the files in - what has to hold is that a reader
+// cannot tell the two apart.
+//
+// The input is a dozen files with a diagnostic in each, so that the threads
+// have work to disagree about and the bags have something to order.
+TEST_CASE("Resolving on several threads gives what resolving on one gives") {
+  VirtualDir dir;
+  // The declarations are views, so the names and the text have to outlive
+  // the directory that points at them.
+  std::deque<std::string> names;
+  std::deque<std::string> text;
+  dir.add("main.al", "fn main() {}\n");
+  for (u32 i = 0; i < 12; ++i) {
+    names.push_back("m" + std::to_string(i) + ".al");
+    // A name the module does not declare is an unresolved import, which is
+    // a diagnostic with a span and an order.
+    text.push_back("import \"nowhere::missing" + std::to_string(i) + "\"\n");
+    dir.add(names.back(), text.back());
+  }
+
+  const ResolveOutcome serial = resolve_with(dir, 1);
+  const ResolveOutcome threaded = resolve_with(dir, 8);
+
+  CHECK(serial.module_paths == threaded.module_paths);
+  CHECK(serial.diagnostics.size() == 12);
+  CHECK(serial.diagnostics == threaded.diagnostics);
+}
+
+// A run whose arena is spent refuses the file it was about to read, and stops
+// there. The files before it keep their diagnostics and the files after it
+// are not reported at all, so a refusal is one diagnostic however many files
+// the input has - and it is the same one whichever thread read the input
+// first.
+TEST_CASE("A resolve stops at the first file the arena cannot hold") {
+  // A reservation is taken in whole pages, and the page is not 4 KiB on
+  // every platform, so the size asked for is the size that can be had.
+  const usize capacity = mem::page_size();
+  std::deque<std::string> names;
+  std::deque<std::string> text;
+  VirtualDir dir;
+  dir.add("main.al", "fn main() {}\n");
+  for (u32 i = 0; i < 3; ++i) {
+    names.push_back("m" + std::to_string(i) + ".al");
+    text.push_back("fn f" + std::to_string(i) + "() {}\n");
+    dir.add(names.back(), text.back());
+  }
+
+  for (u32 jobs : {1u, 8u}) {
+    mem::Arena arena;
+    arena.reserve(1u << 20);
+    diag::DiagBag bag{arena, i18n::Language::EnUs};
+    source::SourceManager sources;
+    ast::AstArena ast{capacity};
+    // Past the headroom, which is what the check asks about.
+    CHECK(ast.spans.alloc(capacity - 1) != nullptr);
+    CHECK(ast.nearly_full());
+
+    std::deque<std::string> name_storage;
+    std::vector<ModuleInput> inputs;
+    source::FileId root = source::UNKNOWN_FILE;
+    for (u32 i = 0; i < dir.size(); ++i) {
+      const tests::VirtualSource& file = dir.at(i);
+      const bool is_root = file.name == "main.al";
+      std::optional<analyzer::ModuleInput> input = tests::register_source(
+          sources, dir, file.name, is_root, name_storage);
+      if (!input.has_value()) {
+        continue;
+      }
+      if (is_root) {
+        root = input->id;
+      }
+      inputs.push_back(*input);
+    }
+    base::Result<ModuleTree, diag::Reported> result = resolve_modules(
+        root, inputs, "testpkg", sources, ast, bag, {}, {}, jobs);
+    CHECK(result.is_err());
+    CHECK(bag.size() == 1);
+    const diag::Diagnostic* const only = bag.at(0);
+    CHECK(only != nullptr);
+    if (only != nullptr) {
+      // The refusal is the analyzer's span-arena code, which is what says
+      // the input was too large rather than wrong.
+      CHECK(only->code ==
+            diag::Code{diag::Stage::Analyzer,
+                       static_cast<u8>(DiagCode::SpanArenaExhausted)});
+    }
+  }
 }
 
 }  // namespace analyzer

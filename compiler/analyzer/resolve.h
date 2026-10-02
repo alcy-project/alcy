@@ -196,6 +196,9 @@ base::Result<ModuleTree, diag::Reported> resolve_modules(
     ast::AstArena& ast,
     diag::DiagBag& bag,
     std::span<const ModuleInput> prelude = {},
-    std::span<const StdHint> std_hints = {});
+    std::span<const StdHint> std_hints = {},
+    // How many threads may read files at once. One reads them on the
+    // calling thread, which is the default.
+    u32 jobs = 1);
 
 }  // namespace analyzer

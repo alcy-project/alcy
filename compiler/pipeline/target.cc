@@ -172,7 +172,7 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
     const std::span<const analyzer::StdHint> hints(STD_HINTS, STD_HINT_COUNT);
     return analyzer::resolve_modules(root_file, inputs, manifest.name,
                                      ctx.sources, ctx.ast, ctx.bag, prelude,
-                                     hints);
+                                     hints, ctx.front_end_jobs());
   }();
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});

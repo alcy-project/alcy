@@ -78,6 +78,9 @@ struct CliConfig {
   // Emit the result as one JSON document on standard output instead of
   // the text report, for an editor or another tool reading it.
   bool json = false;
+  // How many threads may read the source at once. Zero means the command
+  // line did not say, which the pipeline answers with one.
+  u32 jobs = 0;
 
   constexpr bool operator==(const CliConfig&) const = default;
 };

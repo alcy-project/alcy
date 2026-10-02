@@ -34,10 +34,26 @@ namespace cli {
 
 namespace {
 
-CliConfig extract_from_matches(arg::Matches&& matches) {
+base::Result<CliConfig, ParseFailure> extract_from_matches(
+    arg::Matches&& matches) {
   CliConfig c{};
   c.time_trace = matches.get<bool>("time-trace").unwrap_or(c.time_trace);
   c.json = matches.get<bool>("json").unwrap_or(c.json);
+  // A count the parser cannot read is a rejected command line rather than a
+  // default nobody asked for, so it is reported the way the parser reports
+  // the rest. Zero is refused with it: no thread is not a count of one.
+  if (matches.has("jobs")) {
+    const std::string asked{
+        matches.get<std::string_view>("jobs").unwrap_or("")};
+    const u32 count = matches.get<u32>("jobs").unwrap_or(0);
+    if (count == 0) {
+      ParseFailure failure;
+      failure.errors.emplace_back(arg::ErrorCode::InvalidValue, "--jobs",
+                                  asked);
+      return base::make_err(std::move(failure));
+    }
+    c.jobs = count;
+  }
   c.color_mode = matches.get<term::ColorMode>("color").unwrap_or(c.color_mode);
   c.language = matches.get<i18n::Language>("lang").unwrap_or(c.language);
 
@@ -90,7 +106,7 @@ CliConfig extract_from_matches(arg::Matches&& matches) {
     c.program_args.assign(positionals.begin() + 1, positionals.end());
   }
 
-  return c;
+  return base::make_ok(c);
 }
 
 ParseOutcome to_outcome(arg::Parser& parser,
@@ -98,7 +114,11 @@ ParseOutcome to_outcome(arg::Parser& parser,
                         arg::ParseResult<arg::Matches>&& result) {
   switch (result.status()) {
     case arg::ParseStatus::Success: {
-      CliConfig config = extract_from_matches(std::move(result).unwrap());
+      auto extracted = extract_from_matches(std::move(result).unwrap());
+      if (extracted.is_err()) {
+        return std::move(extracted).unwrap_err();
+      }
+      CliConfig config = std::move(extracted).unwrap();
       if (config.subcommand == Subcommand::None) {
         if (!config.target_dir.empty()) {
           UnknownSubcommand unknown{std::string(config.target_dir), ""};
@@ -183,6 +203,11 @@ arg::Parser build_parser(i18n::Language language) {
   builder.add_arg(arg::ArgBuilder("json")
                       .help(usage.text(i18n::Key::CliJsonHelp))
                       .is_flag(true)
+                      .build());
+  builder.add_arg(arg::ArgBuilder("jobs")
+                      .short_name('j')
+                      .help(usage.text(i18n::Key::CliJobsHelp))
+                      .value_name("N")
                       .build());
   builder.add_subcommand(
       build_subcommand("build",

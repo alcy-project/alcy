@@ -77,4 +77,11 @@ PipelineContext::PipelineContext(i18n::Language language)
   arena.reserve(DIAGNOSTIC_CAPACITY);
 }
 
+u32 PipelineContext::front_end_jobs() const {
+  // Zero means the command line did not ask for threads, and one thread is
+  // the answer: reading the source is a small part of a run, so spreading it
+  // costs the passes that read what it built more than it saves.
+  return jobs == 0 ? 1 : jobs;
+}
+
 }  // namespace pipeline

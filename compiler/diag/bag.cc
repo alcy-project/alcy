@@ -85,4 +85,28 @@ base::Result<void, BagError> DiagBag::label(
   return base::make_ok();
 }
 
+void DiagBag::merge(const DiagBag& other) {
+  for (u32 i = 0; i < other.size_; ++i) {
+    const Diagnostic& from = other.entries_[i];
+    // Every entry a bag holds went through `push`, which sets a code; a
+    // default-constructed one is the "no check" a message from outside a
+    // check area carries.
+    const u32 at = push(from.severity, from.code.value_or(Code{}),
+                        from.primary_span, from.has_primary_span, from.message);
+    if (from.label_count == 0) {
+      continue;
+    }
+    Label* const labels = static_cast<Label*>(
+        arena_->alloc(sizeof(Label) * from.label_count, alignof(Label)));
+    for (u32 l = 0; l < from.label_count; ++l) {
+      labels[l] = from.labels[l];
+      // The message is a view into the other bag's arena, which this bag
+      // does not own and cannot read once the caller is done with it.
+      labels[l].message = intern(from.labels[l].message);
+    }
+    entries_[at].labels = labels;
+    entries_[at].label_count = from.label_count;
+  }
+}
+
 }  // namespace diag

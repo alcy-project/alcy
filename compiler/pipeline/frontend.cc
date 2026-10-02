@@ -85,7 +85,8 @@ base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
                                              "frontend");
     const std::span<const analyzer::StdHint> hints(STD_HINTS, STD_HINT_COUNT);
     return analyzer::resolve_modules(root, {&single_input, 1}, "", ctx.sources,
-                                     ctx.ast, ctx.bag, prelude, hints);
+                                     ctx.ast, ctx.bag, prelude, hints,
+                                     ctx.front_end_jobs());
   }();
 }
 

@@ -147,6 +147,7 @@ i32 cli_main(i32 argc, char** argv) {
       // envelope borrows it, so the bag and the sources it points at are
       // still alive when the report is rendered.
       pipeline::PipelineContext ctx{config.language};
+      ctx.jobs = config.jobs;
       Envelope envelope;
       envelope.command = command_name(config.subcommand);
       exit_code = dispatch(config, ctx, envelope);

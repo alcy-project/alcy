@@ -333,6 +333,7 @@
   F(CliInitAbout, "Create a package in an existing directory") \
   F(CliInvalidConfiguration, "Invalid configuration") \
   F(CliJsonHelp, "Report the result as one JSON document on standard output, for a tool reading it. Applies to build, compile, and check.") \
+  F(CliJobsHelp, "How many threads read the source at once. Reading files is the only part of a run spread over them; everything after it is one thread. One by default, because a threaded read leaves the passes that read what it built to find nodes in an order that costs them more than the read saves.") \
   F(CliJsonOnlyForResultVerbs, "`--json` only means anything for `build`, `compile`, and `check`") \
   F(CliLangHelp, "Language for every message this run prints. Taken from this flag alone: the locale the shell exports is not consulted, so the same command line reports the same text on every machine.") \
   F(CliLinkArgsOverrideHelp, "Argument for the link driver, after the objects. Repeatable, one argument each; overrides .alcy/toolchain.toml.") \

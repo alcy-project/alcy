@@ -46,6 +46,11 @@ class DeclaredSources {
     return nullptr;
   }
 
+  // The declaration at an index, in the order it was added. A case that
+  // builds its inputs rather than listing them walks the declarations this
+  // way, and `find` only answers by name.
+  const VirtualSource& at(usize index) const { return files_.at(index); }
+
   usize size() const { return files_.size(); }
 
  private:

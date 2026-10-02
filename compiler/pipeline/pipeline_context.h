@@ -40,8 +40,16 @@ struct PipelineContext {
   // points it at Profiler::global() when --time-trace is given; a host
   // embedding the pipeline points it at its own instance.
   debug::Profiler* profiler = nullptr;
+  // How many threads the front end may read files with. Zero means the
+  // caller did not ask for any.
+  u32 jobs = 0;
 
   explicit PipelineContext(i18n::Language language);
+
+  // The thread count the front end reads with, which is one unless the
+  // command line asked for more. Reading files is the only phase spread over
+  // threads, so nothing after it is bounded by this.
+  [[nodiscard]] u32 front_end_jobs() const;
 };
 
 // Returns ".exe" on Windows or else ""
