@@ -255,4 +255,72 @@ TEST_CASE("A package build honours the mode too") {
   }
 }
 
+TEST_CASE("A package build refuses targets sharing one output") {
+  // A binary and a library under one default name write one file in
+  // every mode but the executable one, and the second silently wins.
+  // The build names the collision instead, before compiling either.
+  io::TempDir dir = io::TempDir::create_unique("alcy_emit_collide_test_");
+  const bool setup =
+      dir.write_file("proj/alcy.toml",
+                     "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+                     "[modules]\ninclude = [\"main\", \"lib\"]\n\n"
+                     "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+                     "[[bin]]\npath = \"main.al\"\n\n"
+                     "[lib]\npath = \"lib.al\"\n") &&
+      dir.write_file("proj/main.al", PROGRAM) &&
+      dir.write_file("proj/lib.al",
+                     "pub fn double(x: i32) -> i32 {\n  ret x + x\n}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(dir.join("proj"));
+  CHECK(root.is_ok());
+  if (root.is_err()) {
+    return;
+  }
+  const path::Path root_path = std::move(root).unwrap();
+
+  {
+    // The object mode collides: both targets default to out/app.o.
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", false, LinkOptions{}, EmitMode::Object);
+    CHECK(built.is_err());
+    CHECK(ctx.bag.has_errors());
+    CHECK(!io::is_file(dir.join("proj/out/app.o")));
+  }
+
+  // The refusal happens before either target compiles, so it needs no
+  // backend; the coexistence below links, so it does.
+#if !BUILD_FLAG(IS_OS_ASMJS)
+  {
+    // The executable mode does not collide: the binary links to out/app
+    // while the library stays an object beside it.
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", false, LinkOptions{}, EmitMode::Executable);
+    CHECK(built.is_ok());
+    CHECK(!ctx.bag.has_errors());
+    CHECK(io::is_file(dir.join("proj/out/app")));
+    CHECK(io::is_file(dir.join("proj/out/app.o")));
+  }
+#endif  // !BUILD_FLAG(IS_OS_ASMJS
+}
+
 }  // namespace pipeline

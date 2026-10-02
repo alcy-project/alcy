@@ -417,16 +417,14 @@ base::Result<std::string, diag::Reported> build_package(
   // are inspection outputs, so they land beside the manifest unless the
   // caller named a path.
   const path::Path out_dir = root.join(path::DEFAULT_OUT_DIR);
-  // The cli reports one artifact per build, so a package with several
-  // targets names the first: the binary, resolved ahead of the library.
-  std::string first_output;
+  struct PlannedTarget {
+    PackageTarget* target;
+    EmitMode mode;
+    std::string path;
+  };
+  std::vector<PlannedTarget> planned;
+  planned.reserve(resolved.size());
   for (PackageTarget& target : resolved) {
-    base::Result<lowering::LoweredPackage, diag::Reported> package =
-        compile_tree(ctx, target.tree);
-    if (package.is_err() || ctx.bag.has_errors()) {
-      return base::make_err(diag::Reported{});
-    }
-    lowering::LoweredPackage lowered = std::move(package).unwrap();
     // A library has no entry to link, so an executable request becomes
     // an object one.
     const EmitMode target_mode =
@@ -444,8 +442,41 @@ base::Result<std::string, diag::Reported> build_package(
     } else {
       output_path = std::string(output);
     }
-    base::Result<std::string, diag::Reported> written = emit_output(
-        ctx, lowered, optimize, link, target_mode, output_path, target.is_lib);
+    planned.push_back({&target, target_mode, std::move(output_path)});
+  }
+  for (usize i = 0; i < planned.size(); ++i) {
+    for (usize j = i + 1; j < planned.size(); ++j) {
+      if (planned[i].path != planned[j].path) {
+        continue;
+      }
+      // Two targets sharing a default name write the same file in every
+      // mode but the executable one, and the second silently wins. Refuse
+      // the pair before compiling either, naming what collided.
+      const PackageTarget& one = *planned[i].target;
+      const PackageTarget& other = *planned[j].target;
+      const PackageTarget& bin = one.is_lib ? other : one;
+      const PackageTarget& lib = one.is_lib ? one : other;
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineTargetOutputsCollide>(
+          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
+          bin.name, lib.name, planned[i].path);
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
+  }
+  // The cli reports one artifact per build, so a package with several
+  // targets names the first: the binary, resolved ahead of the library.
+  std::string first_output;
+  for (PlannedTarget& planned_target : planned) {
+    PackageTarget& target = *planned_target.target;
+    base::Result<lowering::LoweredPackage, diag::Reported> package =
+        compile_tree(ctx, target.tree);
+    if (package.is_err() || ctx.bag.has_errors()) {
+      return base::make_err(diag::Reported{});
+    }
+    lowering::LoweredPackage lowered = std::move(package).unwrap();
+    base::Result<std::string, diag::Reported> written =
+        emit_output(ctx, lowered, optimize, link, planned_target.mode,
+                    planned_target.path, target.is_lib);
     if (written.is_err() || ctx.bag.has_errors()) {
       return base::make_err(diag::Reported{});
     }
