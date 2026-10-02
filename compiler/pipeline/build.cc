@@ -348,7 +348,8 @@ base::Result<std::string, diag::Reported> build_package(
     // One `-o` cannot name two artifacts.
     const u32 index =
         ctx.bag.emit<i18n::Key::PipelineMultipleTargetsWithOutput>(
-            diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets, output);
+            diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
+            output);
     (void)index;
     return base::make_err(diag::Reported{});
   }

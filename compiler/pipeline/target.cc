@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "pipeline/target.h"
-#include "pipeline/diag_code.h"
 
 #include <cstdlib>
 #include <optional>
@@ -22,6 +21,7 @@
 #include "fpag/debug/profiler/profile_scope.h"
 #include "i18n/messages.h"
 #include "path/path.h"
+#include "pipeline/diag_code.h"
 #include "pipeline/embedded_std.h"
 #include "pipeline/pipeline.h"
 #include "pipeline/pipeline_context.h"
@@ -90,9 +90,11 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
   if (root_file == source::UNKNOWN_FILE) {
     const u32 index =
         is_lib ? ctx.bag.emit<i18n::Key::PipelineLibTargetNotDiscovered>(
-                     diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets, target_path)
+                     diag::Severity::Error, diag::Stage::Pipeline,
+                     DiagCode::NoTargets, target_path)
                : ctx.bag.emit<i18n::Key::PipelineBinTargetNotDiscovered>(
-                     diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets, target_path);
+                     diag::Severity::Error, diag::Stage::Pipeline,
+                     DiagCode::NoTargets, target_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -132,8 +134,8 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
       if (prior.id != entry.id && prior.name == name) {
         const u32 index =
             ctx.bag.emit<i18n::Key::PipelineModuleSharedByTwoFiles>(
-                diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets, diag::Span{}, name,
-                target_dir);
+                diag::Severity::Error, diag::Stage::Pipeline,
+                DiagCode::NoTargets, diag::Span{}, name, target_dir);
         (void)index;
         return base::make_err(diag::Reported{});
       }
@@ -143,9 +145,11 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
   if (!root_selected) {
     const u32 index =
         is_lib ? ctx.bag.emit<i18n::Key::PipelineLibTargetNotSelected>(
-                     diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets, target_path)
+                     diag::Severity::Error, diag::Stage::Pipeline,
+                     DiagCode::NoTargets, target_path)
                : ctx.bag.emit<i18n::Key::PipelineBinTargetNotSelected>(
-                     diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets, target_path);
+                     diag::Severity::Error, diag::Stage::Pipeline,
+                     DiagCode::NoTargets, target_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -197,7 +201,8 @@ resolve_package_targets(PipelineContext& ctx,
       ctx.sources.bytes(manifest_file);
   if (!manifest_bytes.has_value()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNotLoaded>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, manifest_name);
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
+        manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -217,15 +222,16 @@ resolve_package_targets(PipelineContext& ctx,
   }
   if (manifest.bin_count == 0 && manifest.lib == nullptr) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNoTarget>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets, manifest_name);
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
+        manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }
   if (manifest.bin_count > 1) {
     const u32 index =
         ctx.bag.emit<i18n::Key::PipelineManifestTooManyBinTargets>(
-            diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets, manifest_name,
-            manifest.bin_count);
+            diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
+            manifest_name, manifest.bin_count);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -273,7 +279,8 @@ base::Result<pkg::Toolchain, diag::Reported> load_toolchain(
   const std::optional<std::string_view> bytes = ctx.sources.bytes(loaded);
   if (!bytes.has_value()) {
     const u32 index = ctx.bag.emit<i18n::Key::PkgToolchainNotLoaded>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, path.as_view());
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
+        path.as_view());
     (void)index;
     return base::make_err(diag::Reported{});
   }

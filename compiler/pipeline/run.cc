@@ -98,7 +98,8 @@ base::Result<RunOutcome, diag::Reported> run_package(
   if (resolved.empty() || resolved.front().is_lib) {
     // A library builds but never runs: there is no entry to execute.
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNoBinToRun>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets, manifest_name);
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
+        manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }
