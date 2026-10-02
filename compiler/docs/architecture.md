@@ -148,7 +148,7 @@ state between stages beyond the data explicitly passed along.
 | `path`                    | Canonical path value type: native-separator folding, lexical normalization, and joining.                                               | Owned strings; setup-time use only.                                               |
 | `ast`                     | Abstract syntax tree node definitions shared by the parser and later stages.                                                           | Arena-allocated nodes; no independent heap allocation outside the arena.          |
 | `ir`                      | Core intermediate representation: functions, blocks, instructions, operands, and types, plus storage that owns them.                   | Flat, arena-backed storage.                                                       |
-| `analyzer`                | Name resolution and type checking on the AST, plus ownership checking on the IR.                                                       | No heap allocation on hot paths; operates over immutable views where possible.    |
+| `analyzer`                | Name resolution and type checking on the AST: module imports, types, and bodies. Ownership is `borrow`'s, over lowered IR.             | No heap allocation on hot paths; operates over immutable views where possible.    |
 | `lowering`                | AST-to-IR lowering: a checked package becomes verifier-ready IR storage, reusing the checked type table in place.                      | Borrows the caller's arena, sources, and interner; owns the storage it returns.   |
 | `borrow`                  | Ownership checking over lowered IR: use-after-move, borrow exclusivity, assignment to borrowed places, and reference escape.           | No heap allocation; per-block states live in the pass's own frames.               |
 | `pipeline`                | Project-level build flow: package discovery, source loading, and per-file stage orchestration. It calls every stage; none calls the next. | Explicit phase boundaries and arena resets.                                       |
@@ -368,20 +368,23 @@ that happens to read them.
 2. **Parsing** - `parser` consumes the token buffer and emits a typed AST
    into the module's arena. IR construction is a later stage.
 
-3. **Semantic analysis** - `analyzer` resolves names and checks types
-   on the attributed AST, then checks ownership on the IR:
+3. **Semantic analysis** - `analyzer` resolves names and checks types on
+   the attributed AST:
 
    * **Name resolution**: mapping interned `SymbolId`s to declarations.
    * **Type checking**: computing and verifying type signatures.
-   * **Ownership analysis**: tracking `Move`/`Drop` instructions across the
-     control-flow graph to enforce single-ownership guarantees.
 
-   Typed high-level desugars (`?`, `match` lowering, loop lowering) run
-   during AST-to-IR lowering, which consumes the type information above.
-   A separate HIR is revisited only if match-lowering complexity,
-   optimization passes, or region precision demand it.
+4. **Lowering** - `lowering` turns the checked package into IR, consuming
+   the type information above. Typed high-level desugars (`?`,
+   `match` lowering, loop lowering) run here. A separate HIR is revisited
+   only if match-lowering complexity, optimization passes, or region
+   precision demand it.
 
-4. **LLVM code generation** - `codegen_llvm` walks verified basic blocks and
+5. **Ownership analysis** - `borrow` tracks `Move`/`Drop` instructions
+   across the control-flow graph to enforce single-ownership guarantees.
+   It is the stage after lowering, not part of the analyzer.
+
+6. **LLVM code generation** - `codegen_llvm` walks verified basic blocks and
    lowers alcy IR operations to LLVM IR. The program runtime — `alcy_alloc`,
    `alcy_dealloc`, `alcy_print`, `alcy_println`, `alcy_panic`, and
    `alcy_sys_write`, over libc — is defined in that same module, so a build

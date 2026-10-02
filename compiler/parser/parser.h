@@ -27,14 +27,13 @@ struct FnSignature {
   ast::TypeIdx return_type = ast::TypeIdx::invalid();
 };
 
-// Diagnostic codes 3000-3199 are reserved for the parser.
-// The token stream handed to the parser failed structural verification.
-// The parsed arena failed structural verification.
-// Nesting exceeded the language's budget, so the descent stopped.
-// A range names an end without saying whether the end is included.
+// The checks this module reports: the token stream handed to the parser
+// failed structural verification, the parsed arena did, nesting exceeded
+// the language's budget so the descent stopped, and a range named an end
+// without saying whether the end is included.
 
 // Verifies that every node the arena holds points at nodes the arena
-// holds, and reports `3003` when one does not.
+// holds, and reports `InvalidAst` when one does not.
 //
 // This is over the whole arena rather than over one file's nodes, so it
 // belongs once per run and not once per file: a file's nodes are not a

@@ -19,8 +19,6 @@
 
 namespace pipeline {
 
-// Diagnostic codes 8000-8099 are reserved for the pipeline.
-
 struct PipelineContext {
   mem::Arena arena;
   ast::AstArena ast;
