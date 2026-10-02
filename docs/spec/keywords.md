@@ -22,6 +22,22 @@ Primitive types: `i8`, `i16`, `i32`, `i64`, `isize`, `u8`,
 `async`, `await`, `union`, `register`, `extern`,
 `unsafe`, `where`, `dyn`
 
+A reserved word is read past rather than refused: the diagnostic names it
+and parsing continues, so a program using one is a program with an error
+in it rather than one that fails to read. `i128`, `u128`, and `f16` are
+reserved the same way; the lexer knows them so that naming one produces a
+diagnostic about the type rather than about the token, and `types.md`
+records them as deferred.
+
+## Contextual
+
+`comp`, `intrinsic`, `spec`, `for`, and `in` are keywords rather than
+reserved words, because each means something in one position and nothing
+outside it: `comp` in a signature, a declaration, or a block;
+`intrinsic` and `spec` in item position; `for` in a loop head and in an
+`impl` header; `in` in a `for` head. Using one outside its position is an
+ordinary parse error, not a reserved-name diagnostic.
+
 `for` introduces a loop and separates the spec from the target in
 `impl S for T` headers (see `items.md`); `in` is read only between a
 `for` pattern and its head (see `control.md`).

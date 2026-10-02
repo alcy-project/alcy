@@ -38,6 +38,9 @@ are rejected with guidance diagnostics.
 - Integer literals accept `_` separators between digits. Suffixes
   (`42i32`, `1.5f64`) select the type; unsuffixed integers default
   to `i32`, floats to `f64`.
+- A float literal may carry an exponent, with or without a fraction:
+  `2e9`, `1.5e-3`, `6.02E23`. The exponent needs at least one digit, and
+  its sign is optional.
 - String escapes: `\n \t \r \\ \" \0 \u{HEX}`. `'x'` character
   syntax exists but resolves only with core (see `types.md`).
 - Longest-match lexing applies throughout.
@@ -80,6 +83,8 @@ Declaration left-hand sides use this grammar with `:=`
 ## Expressions (lowest to highest precedence)
 
 - `?` binds tighter than all binary operators.
+- `?` is a postfix operator, so it may be followed by a field or method
+  access: `f()?.x` reads as `(f()?).x`, and so does `v.pop()?.0`.
 - `%`, `&`, `|`, `^`, `<<`, and `>>` are integer-only; applying one to
   a float is rejected. Floats admit `+ - * /` and the comparisons.
 - Unary `*` dereferences a reference into the place it names.
@@ -105,6 +110,13 @@ Declaration left-hand sides use this grammar with `:=`
   one line only (a trailing `;` is an allowed no-op). Stray `;` are
   skipped in item, block, and arm lists; `match` arms accept runs of
   `,` and `;` as separators.
+- `x = v` assigns, and so does `x += v` and each of the other compound
+  forms the operator set defines. A declaration always spells `:=`.
+- The left side of an assignment is read as an ordinary expression, and
+  whether it names a place is decided after the whole line is read. So
+  `g() = 1` is a diagnostic about the place rather than a syntax error,
+  which is what lets the diagnostic point at the expression that cannot be
+  assigned to.
 - A block's value is its last expression; `{}` evaluates to `()`.
 - `if cond block (else block)?` and `if pattern := expr block
   (else block)?`; `while` mirrors `if` (both accept

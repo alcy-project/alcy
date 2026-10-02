@@ -20,11 +20,16 @@ file        = { item } ;
 
 (* Items *)
 
-item        = [ vis ] , ( fn_item | struct_item | enum_item | impl_item
-                        | spec_item | static_item | const_item | use_item ) ;
+item        = [ vis ] , ( fn_item | intrinsic_fn_item | struct_item
+                        | enum_item | impl_item | spec_item | static_item
+                        | const_item | use_item ) ;
 vis         = "pub" ;
 fn_item     = "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
             , [ "->" , type ] , block ;
+intrinsic_fn_item = "intrinsic" , "fn" , IDENT , [ type_params ] ,
+            "(" , [ params ] , ")" , [ "->" , type ] , ";" ;
+              (* A signature with no body, terminated by `;`. See
+                 docs/spec/items.md, "Intrinsic declarations". *)
 type_params = "<" , IDENT , { "," , IDENT } , ">" ;
 params      = [ [ "comp" ] , pattern , ":" , type ,
                 { "," , [ "comp" ] , pattern , ":" , type } , [ "," ] ] ;
@@ -93,10 +98,9 @@ add_expr      = mul_expr , { ( "+" | "-" ) , mul_expr } ;
 mul_expr      = pow_expr , { ( "*" | "/" | "%" ) , pow_expr } ;
 pow_expr      = cast_expr , [ "**" , pow_expr ] ;
 cast_expr     = unary_expr , [ "as" , type ] ;
-unary_expr    = ( "-" | "!" | "~" | "&" , [ "mut" ] | "*" ) , unary_expr
-              | question_expr ;
+unary_expr    = ( "-" | "!" | "~" | "&" , [ "mut" ] | "*" ) , unary_expr ;
 question_expr = postfix_expr , [ "?" ] ;
-postfix_expr  = primary , { call | field | method | index } ;
+postfix_expr  = primary , { call | field | method | index | "?" } ;
 call          = [ turbofish ] , "(" , [ expr , { "," , expr } ] , ")" ;
 turbofish     = "::" , "<" , type , { "," , type } , ">" ;
 field         = "." , ( IDENT | INTEGER ) ;
@@ -105,6 +109,9 @@ index         = "[" , expr , "]" ;
 primary       = literal | path | struct_expr | tuple_expr | array_expr
               | paren_expr | block_like | comp_block
               | ret_expr | break_expr | continue_expr ;
+              (* `?` is a postfix operator, so it may be followed by a
+                 field or method access: `f()?.x` reads as `(f()?).x`.
+                 See docs/spec/grammar.md, "Expressions". *)
 ret_expr      = "ret" , [ expr ] ;
 break_expr    = "break" ;
 continue_expr = "continue" ;
@@ -127,9 +134,13 @@ statement   = decl_stmt | reassign_stmt | expr_stmt ;
 decl_stmt   = [ "comp" ] , pattern , [ ":" , type ] , ":=" , expr ;
               (* `mut` in declaration position folds into the pattern
                  (`mut` ident); only `comp` is a decl-level modifier. *)
-reassign_stmt = place , "=" , expr ;
-place       = deref , { field | index } ;
-deref       = "*" , unary_expr | path ;
+reassign_stmt = expr , assign_op , expr ;
+assign_op     = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "**=" | "&="
+              | "|=" | "^=" | "<<=" | ">>=" ;
+              (* The left side is read as an ordinary expression; whether
+                 it names a place is decided after parsing, so `g() = 1`
+                 is a diagnostic about the place rather than a syntax
+                 error. See docs/spec/grammar.md, "Statements". *)
 expr_stmt   = expr ;
 if_expr     = "if" , ( expr | pattern , ":=" , expr ) , block ,
               [ "else" , block ] ;
@@ -150,7 +161,9 @@ INTEGER   = DIGIT , { DIGIT | "_" } , [ TYPE_SUFFIX ]
           | ( "0b" | "0o" | "0x" ) , DIGIT , { DIGIT | "_" } ,
             [ TYPE_SUFFIX ] ;
 FLOAT     = DIGIT , { DIGIT | "_" } , "." , DIGIT , { DIGIT | "_" } ,
-            [ TYPE_SUFFIX ] ;
+            [ EXPONENT ] , [ TYPE_SUFFIX ]
+          | DIGIT , { DIGIT | "_" } , EXPONENT , [ TYPE_SUFFIX ] ;
+EXPONENT   = ( "e" | "E" ) , [ "+" | "-" ] , DIGIT , { DIGIT | "_" } ;
 STRING    = '"' , { STRING_CHAR | ESCAPE } , '"' ;
 ESCAPE    = "\n" | "\t" | "\r" | "\\" | '\"' | "\0" | "\u{" , HEXDIGIT ,
             { HEXDIGIT } , "}" ;
@@ -159,12 +172,18 @@ LINE_COMMENT  = "//" , { ANY_BUT_NEWLINE } ;
 BLOCK_COMMENT = "/*" , { ANY | BLOCK_COMMENT } , "*/" ;
 DOC_COMMENT   = "///" , { ANY_BUT_NEWLINE } ;
 
-(* Keywords: fn struct enum impl spec static pub const mut use
+(* Keywords: fn intrinsic struct enum impl spec static pub const mut use
  *   if else loop while for in break continue ret match
  *   package self super Self as
  *   i8 i16 i32 i64 isize u8 u16 u32 u64 usize f32 f64 bool str
- * Reserved: async await union register extern unsafe
- *   where dyn comp intrinsic
+ * Reserved: async await union register extern unsafe where dyn
+ *   i128 u128 f16
+ * Contextual, and a keyword rather than a reserved word because it only
+ *   has a meaning in one position: `comp` in signatures, declarations, and
+ *   blocks; `intrinsic` in item position; `spec` in item position; `for`
+ *   in a loop head and in an `impl` header; `in` in a `for` head. Using
+ *   one outside its position is an ordinary parse error rather than a
+ *   reserved-name diagnostic. See docs/spec/keywords.md.
  *
  * Nesting is bounded at 256 levels on expressions, types, blocks,
  * patterns, and items alike; exceeding it reports E3004/E4050/E5005.
