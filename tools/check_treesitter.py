@@ -60,7 +60,9 @@ def recorded_cli_version() -> str:
 
 
 def run(command: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(command, cwd=cwd or project_root_dir, capture_output=True, text=True)
+    return subprocess.run(
+        command, cwd=cwd or project_root_dir, capture_output=True, text=True
+    )
 
 
 def report(step: str, result: subprocess.CompletedProcess) -> bool:
@@ -98,21 +100,23 @@ def check_version(cli: str) -> bool:
     return False
 
 
-def check_generated(cli: str) -> bool:
+def check_generated() -> bool:
     """A change to `grammar.js` that leaves `src/` alone is a change whose
     effect nobody committed."""
     generated = run(["tree-sitter", "generate"], cwd=GRAMMAR_DIR)
     if not report("generate", generated):
         return False
     relative = str(GENERATED_DIR.relative_to(project_root_dir))
-    return report("generated sources", run(["git", "diff", "--exit-code", "--", relative]))
+    return report(
+        "generated sources", run(["git", "diff", "--exit-code", "--", relative])
+    )
 
 
-def check_corpus(cli: str) -> bool:
+def check_corpus() -> bool:
     return report("corpus", run(["tree-sitter", "test"], cwd=GRAMMAR_DIR))
 
 
-def check_queries(cli: str, sample: Path) -> bool:
+def check_queries(sample: Path) -> bool:
     """`tree-sitter test` does not read the queries, so a typo in one is
     invisible until an editor loads it."""
     ok = True
@@ -138,9 +142,7 @@ def unread(paths: list[Path]) -> set[Path]:
     """
     if not paths:
         return set()
-    result = run(
-        ["tree-sitter", "parse", "--quiet", *map(str, paths)], cwd=GRAMMAR_DIR
-    )
+    result = run(["tree-sitter", "parse", "--quiet", *map(str, paths)], cwd=GRAMMAR_DIR)
     # The names are printed relative to where the parser runs, which is the
     # grammar directory, and padded into a column, so the name has to be
     # trimmed before it is a path.
@@ -171,7 +173,9 @@ def compiler_verdicts(alcy: Path) -> dict[Path, bool]:
             for member in case.rglob("*.al"):
                 verdicts[member] = result.returncode == 0
         else:
-            verdicts[path] = run([str(alcy), "check", "--file", str(path)]).returncode == 0
+            verdicts[path] = (
+                run([str(alcy), "check", "--file", str(path)]).returncode == 0
+            )
     return verdicts
 
 
@@ -187,7 +191,7 @@ def expected_parse_errors() -> set[str]:
     }
 
 
-def check_differential(cli: str, alcy: Path) -> bool:
+def check_differential(alcy: Path) -> bool:
     verdicts = compiler_verdicts(alcy)
     accepted = sorted(path for path, ok in verdicts.items() if ok)
     rejected = sorted(path for path, ok in verdicts.items() if not ok)
@@ -221,7 +225,9 @@ def check_differential(cli: str, alcy: Path) -> bool:
         if not case.is_dir():
             problems.append(f"test/parse_errors.txt names {name}, which is not a case")
         elif all(verdicts[path] for path in verdicts if path.is_relative_to(case)):
-            problems.append(f"test/parse_errors.txt names {name}, which the compiler accepts")
+            problems.append(
+                f"test/parse_errors.txt names {name}, which the compiler accepts"
+            )
 
     for problem in problems:
         print(f"  {problem}")
@@ -233,7 +239,7 @@ def check_differential(cli: str, alcy: Path) -> bool:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser = argparse.ArgumentParser(description=str(__doc__).split("\n")[0])
     parser.add_argument(
         "--grammar",
         action="store_true",
@@ -266,9 +272,9 @@ def main() -> int:
     sample = project_root_dir / "samples" / "primes" / "main.al"
     checks = [check_version(cli)]
     if args.grammar:
-        checks.append(check_generated(cli))
-        checks.append(check_corpus(cli))
-        checks.append(check_queries(cli, sample))
+        checks.append(check_generated())
+        checks.append(check_corpus())
+        checks.append(check_queries(sample))
 
     if args.differential:
         alcy = project_root_dir / "out" / args.build_subdir / "alcy"
@@ -281,7 +287,7 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
-        checks.append(check_differential(cli, alcy))
+        checks.append(check_differential(alcy))
 
     return 0 if all(checks) else 1
 
