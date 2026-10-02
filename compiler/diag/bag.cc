@@ -5,6 +5,7 @@
 
 #include <cstring>
 #include <initializer_list>
+#include <optional>
 #include <string_view>
 
 #include "debug/dcheck.h"
@@ -17,7 +18,7 @@
 namespace diag {
 
 u32 DiagBag::push(Severity severity,
-                  Code code,
+                  std::optional<Code> code,
                   Span primary,
                   bool has_primary,
                   std::string_view message) {
@@ -88,11 +89,11 @@ base::Result<void, BagError> DiagBag::label(
 void DiagBag::merge(const DiagBag& other) {
   for (u32 i = 0; i < other.size_; ++i) {
     const Diagnostic& from = other.entries_[i];
-    // Every entry a bag holds went through `push`, which sets a code; a
-    // default-constructed one is the "no check" a message from outside a
-    // check area carries.
-    const u32 at = push(from.severity, from.code.value_or(Code{}),
-                        from.primary_span, from.has_primary_span, from.message);
+    // The code crosses as-is, including its absence: a message from
+    // outside a check area has none, and a default-constructed code
+    // would render as a check nobody allocated.
+    const u32 at = push(from.severity, from.code, from.primary_span,
+                        from.has_primary_span, from.message);
     if (from.label_count == 0) {
       continue;
     }

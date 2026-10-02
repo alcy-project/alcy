@@ -80,4 +80,39 @@ TEST_CASE("Reported result smoke test") {
   CHECK(!err.is_ok());
 }
 
+TEST_CASE("DiagBag merge keeps every entry whole") {
+  BagFixture from;
+  BagFixture into;
+  const Span span{.file = 2, .offset = 4, .length = 5};
+  const u32 e = from.bag.emit_untranslated(Severity::Error, Stage::Parser, 3,
+                                           span, "bad {}", "node");
+  CHECK(from.bag.label(e, {{{.file = 2, .offset = 9, .length = 1}, "here"}})
+            .is_ok());
+  from.bag.emit_untranslated(Severity::Warning, Stage::Lexer, 8, "shaky");
+
+  into.bag.merge(from.bag);
+  CHECK(into.bag.size() == 2);
+  CHECK(into.bag.error_count() == 1);
+  CHECK(into.bag.warning_count() == 1);
+  const Diagnostic* const merged = into.bag.at(0);
+  CHECK(merged != nullptr);
+  if (merged == nullptr) {
+    return;
+  }
+  // The code crosses the merge rather than being reissued: a message
+  // that had none must keep having none, and one that had one must
+  // keep that exact check.
+  CHECK(merged->code.has_value());
+  if (!merged->code.has_value()) {
+    return;
+  }
+  CHECK(merged->code->stage == Stage::Parser);
+  CHECK(merged->code->id == 3);
+  CHECK(merged->message == "bad node");
+  CHECK(merged->has_primary_span);
+  CHECK(merged->primary_span.offset == 4);
+  CHECK(merged->label_count == 1);
+  CHECK(merged->labels[0].message == "here");
+}
+
 }  // namespace diag

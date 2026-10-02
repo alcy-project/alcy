@@ -5,6 +5,7 @@
 
 #include <initializer_list>
 #include <iterator>
+#include <optional>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -77,7 +78,7 @@ class DiagBag {
     fmt::memory_buffer out;
     i18n::format_to<K>(std::back_inserter(out), language_,
                        std::forward<Args>(args)...);
-    return push(severity, {stage, static_cast<u8>(id)}, {}, false,
+    return push(severity, Code{stage, static_cast<u8>(id)}, {}, false,
                 {out.data(), out.size()});
   }
 
@@ -90,7 +91,7 @@ class DiagBag {
     fmt::memory_buffer out;
     i18n::format_to<K>(std::back_inserter(out), language_,
                        std::forward<Args>(args)...);
-    return push(severity, {stage, static_cast<u8>(id)}, primary, true,
+    return push(severity, Code{stage, static_cast<u8>(id)}, primary, true,
                 {out.data(), out.size()});
   }
 
@@ -107,7 +108,7 @@ class DiagBag {
     fmt::memory_buffer out;
     fmt::format_to(std::back_inserter(out), format,
                    std::forward<Args>(args)...);
-    return push(severity, {stage, id}, {}, false, {out.data(), out.size()});
+    return push(severity, Code{stage, id}, {}, false, {out.data(), out.size()});
   }
 
   template <typename... Args>
@@ -120,7 +121,8 @@ class DiagBag {
     fmt::memory_buffer out;
     fmt::format_to(std::back_inserter(out), format,
                    std::forward<Args>(args)...);
-    return push(severity, {stage, id}, primary, true, {out.data(), out.size()});
+    return push(severity, Code{stage, id}, primary, true,
+                {out.data(), out.size()});
   }
 
   // Attaches secondary labels to a previously emitted diagnostic. The labels
@@ -167,9 +169,11 @@ class DiagBag {
  private:
   // Appends a diagnostic with an already-composed message. Copies the
   // message into the arena; grows the entries array as needed. Returns the
-  // stable index of the new entry.
+  // stable index of the new entry. The code stays optional: a message
+  // from outside a check area has none, and inventing one would render a
+  // code nobody allocated.
   u32 push(Severity severity,
-           Code code,
+           std::optional<Code> code,
            Span primary,
            bool has_primary,
            std::string_view message);
