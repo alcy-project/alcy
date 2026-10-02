@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "ir/type.h"
+#include "codegen_llvm/target.h"
 
 namespace llvm {
 class Module;
@@ -20,10 +20,10 @@ namespace codegen_llvm {
 // every build, so no system compiler is spawned for it and it joins the
 // same optimization pipeline as the program.
 //
-// Pointer-sized values follow `width`, which must be the width the
-// program was lowered with. The module is left without a target: the
-// functions use opaque pointers and fix the few element types they
-// address, and the emitter sets the triple afterwards.
-void add_runtime_definitions(llvm::Module& module, ir::PointerWidth width);
+// Pointer-sized values follow `target.width`, which must be the width the
+// program was lowered with, and the libc bindings follow the target's OS:
+// a Windows target gets `_write` and `_aligned_malloc` whoever is
+// building it.
+void add_runtime_definitions(llvm::Module& module, const Target& target);
 
 }  // namespace codegen_llvm

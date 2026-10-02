@@ -177,6 +177,31 @@ TEST_CASE("Layout sizes an enum area for its widest variant") {
   CHECK(both_layout.size == 16);
 }
 
+TEST_CASE("Layout rounds an enum up to its alignment") {
+  // `enum E { A(u8) }`: a discriminant and a one-byte area are five
+  // bytes, and the enum is four-aligned. Five is not a multiple of four,
+  // and an array of the enum strides by the size, so without the final
+  // rounding the second element would start at byte five - where the
+  // emitted LLVM struct, allocated at eight, has padding.
+  StorageBuilder builder;
+  const TypeIdx u8_ty = builder.primitive(TypeTag::U8);
+  TypeSeq byte;
+  byte.push(builder.ref_type(u8_ty));
+  const EnumVariantTypeIdx variant =
+      builder.enum_variant(str::INVALID_STRING_POOL_ID, byte.finish());
+  const TypeIdx byte_enum =
+      builder.enum_type(str::INVALID_STRING_POOL_ID,
+                        EnumVariantTypeIdxRange{variant, 1}, TypeIdxRange{});
+  const TypeIdx pair = builder.array_type(byte_enum, 2);
+
+  Storage storage = std::move(builder).build().unwrap().unwrap();
+  const TypeLayout layout =
+      layout_of(storage.state(), byte_enum, PointerWidth::W64);
+  CHECK(layout.align == 4);
+  CHECK(layout.size == 8);
+  CHECK(layout_of(storage.state(), pair, PointerWidth::W64).size == 16);
+}
+
 TEST_CASE("Layout gives a payload-less enum only its discriminant") {
   StorageBuilder builder;
   TypeSeq none;

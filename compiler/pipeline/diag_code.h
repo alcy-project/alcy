@@ -42,6 +42,9 @@ enum class DiagCode : u8 {
   // to the module that ran it.
   InvalidModuleSelection = 10,
   UnselectedFile = 11,
+  // The triple names a backend this build of the compiler does not
+  // contain, so there is no layout to emit against.
+  UnknownTarget = 12,
 };
 
 }  // namespace pipeline

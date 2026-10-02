@@ -11,18 +11,12 @@
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "ir/type.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
 #include "pkg/toolchain.h"
 #include "source/source.h"
 
 namespace pipeline {
-
-// MVP pointer width: isize/usize map to 64-bit integers. An explicit
-// choice (never sniffed from the host); a --target flag selects it
-// once cross builds land.
-constexpr ir::PointerWidth TARGET_WIDTH = ir::PointerWidth::W64;
 
 // Resolved build target: the module tree plus its source count,
 // target name, and whether it is a library. Shared by check, build,

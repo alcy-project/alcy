@@ -8,6 +8,8 @@
 #include <utility>
 
 #include "codegen_llvm/common.h"
+#include "codegen_llvm/llvm_backend.h"
+#include "codegen_llvm/target.h"
 #include "doctest/doctest.h"
 #include "fpag/base/idx.h"
 #include "fpag/mem/page_allocator.h"
@@ -24,6 +26,17 @@
 #include "ir/type.h"
 
 namespace codegen_llvm {
+
+namespace {
+
+// The host machine, which is what a test emits for. The pipeline builds
+// this once per run; a test that calls the emitter directly configures the
+// module itself, because the emitter reads the data layout.
+Target host_target() {
+  return Target{host_triple(), ir::PointerWidth::W64};
+}
+
+}  // namespace
 
 ir::VerifiedStorage hello_world_ir(str::StringInterner* interner) {
   ir::StorageBuilder builder;
@@ -137,11 +150,12 @@ TEST_CASE("Emit Hello World") {
   llvm::LLVMContext context;
   std::unique_ptr<llvm::Module> module =
       std::make_unique<llvm::Module>("llvm_ir_emitter_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
 
   str::StringInterner interner(mem::page_size());
   ir::VerifiedStorage storage = hello_world_ir(&interner);
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
-                        ir::PointerWidth::W64, true);
+                        host_target(), true);
 
   std::move(emitter).emit();
 
@@ -156,6 +170,7 @@ TEST_CASE("Emit struct and array calls") {
   llvm::LLVMContext context;
   std::unique_ptr<llvm::Module> module =
       std::make_unique<llvm::Module>("struct_array_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
 
   str::StringInterner interner(mem::page_size());
   ir::StorageBuilder builder;
@@ -263,7 +278,7 @@ TEST_CASE("Emit struct and array calls") {
 
   ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
-                        ir::PointerWidth::W64, true);
+                        host_target(), true);
 
   std::move(emitter).emit();
 
@@ -281,6 +296,7 @@ TEST_CASE("Emit compute instructions") {
   llvm::LLVMContext context;
   std::unique_ptr<llvm::Module> module =
       std::make_unique<llvm::Module>("compute_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
 
   str::StringInterner interner(mem::page_size());
   ir::StorageBuilder builder;
@@ -428,7 +444,7 @@ TEST_CASE("Emit compute instructions") {
 
   ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
-                        ir::PointerWidth::W64, true);
+                        host_target(), true);
 
   std::move(emitter).emit();
 
@@ -450,6 +466,7 @@ TEST_CASE("Emit control flow") {
   llvm::LLVMContext context;
   std::unique_ptr<llvm::Module> module =
       std::make_unique<llvm::Module>("control_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
 
   str::StringInterner interner(mem::page_size());
   ir::StorageBuilder builder;
@@ -570,7 +587,7 @@ TEST_CASE("Emit control flow") {
 
   ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
-                        ir::PointerWidth::W64, true);
+                        host_target(), true);
 
   std::move(emitter).emit();
 
@@ -588,6 +605,7 @@ TEST_CASE("Emit memory instructions") {
   llvm::LLVMContext context;
   std::unique_ptr<llvm::Module> module =
       std::make_unique<llvm::Module>("memory_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
 
   str::StringInterner interner(mem::page_size());
   ir::StorageBuilder builder;
@@ -798,7 +816,7 @@ TEST_CASE("Emit memory instructions") {
 
   ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
-                        ir::PointerWidth::W64, true);
+                        host_target(), true);
 
   std::move(emitter).emit();
 
@@ -819,6 +837,7 @@ TEST_CASE("Emit ignores Drop markers") {
   llvm::LLVMContext context;
   std::unique_ptr<llvm::Module> module =
       std::make_unique<llvm::Module>("marker_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
 
   str::StringInterner interner(mem::page_size());
   ir::StorageBuilder builder;
@@ -873,7 +892,7 @@ TEST_CASE("Emit ignores Drop markers") {
 
   ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
-                        ir::PointerWidth::W64, true);
+                        host_target(), true);
 
   std::move(emitter).emit();
 

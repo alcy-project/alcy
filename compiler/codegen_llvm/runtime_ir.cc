@@ -6,7 +6,7 @@
 #include <string_view>
 
 #include "codegen_llvm/common.h"
-#include "config/build_config.h"
+#include "codegen_llvm/target.h"
 #include "debug/dcheck.h"
 #include "ir/type.h"
 
@@ -21,11 +21,12 @@ using Builder =
 // than compiled per build (see `docs/adr/0023-program-runtime-in-process.md`).
 class RuntimeBuilder {
  public:
-  RuntimeBuilder(llvm::Module& module, ir::PointerWidth width)
+  RuntimeBuilder(llvm::Module& module, const Target& target)
       : module_(module),
         builder_(module.getContext()),
-        usize_(width == ir::PointerWidth::W64 ? builder_.getInt64Ty()
-                                              : builder_.getInt32Ty()) {}
+        windows_(target.is_windows()),
+        usize_(target.width == ir::PointerWidth::W64 ? builder_.getInt64Ty()
+                                                     : builder_.getInt32Ty()) {}
 
   void build() {
     empty_text_ = text_constant("");
@@ -95,29 +96,28 @@ class RuntimeBuilder {
                           llvm::Value* data,
                           llvm::Value* len) {
     llvm::SmallVector<llvm::Value*, 3> args{fd_value, data};
-#if BUILD_FLAG(IS_OS_WIN)
-    // `_write` takes and returns the narrower count.
-    llvm::Function* write_function = libc(
-        "_write",
-        llvm::FunctionType::get(
-            builder_.getInt32Ty(),
-            {builder_.getInt32Ty(), builder_.getPtrTy(), builder_.getInt32Ty()},
-            false));
-    args.push_back(builder_.CreateTrunc(len, builder_.getInt32Ty()));
-    llvm::Value* count = builder_.CreateCall(write_function, args, "count");
-    if (count->getType() != usize_) {
-      count = builder_.CreateSExt(count, usize_, "count.wide");
+    if (windows_) {
+      // `_write` takes and returns the narrower count.
+      llvm::Function* write_function = libc(
+          "_write",
+          llvm::FunctionType::get(builder_.getInt32Ty(),
+                                  {builder_.getInt32Ty(), builder_.getPtrTy(),
+                                   builder_.getInt32Ty()},
+                                  false));
+      args.push_back(builder_.CreateTrunc(len, builder_.getInt32Ty()));
+      llvm::Value* count = builder_.CreateCall(write_function, args, "count");
+      if (count->getType() != usize_) {
+        count = builder_.CreateSExt(count, usize_, "count.wide");
+      }
+      return count;
     }
-#else
     llvm::Function* write_function =
         libc("write",
              llvm::FunctionType::get(
                  usize_, {builder_.getInt32Ty(), builder_.getPtrTy(), usize_},
                  false));
     args.push_back(len);
-    llvm::Value* count = builder_.CreateCall(write_function, args, "count");
-#endif
-    return count;
+    return builder_.CreateCall(write_function, args, "count");
   }
 
   // Writes the whole buffer, retrying short writes and giving up when
@@ -239,12 +239,12 @@ class RuntimeBuilder {
     llvm::Value* align = function->getArg(1);
 
     builder_.SetInsertPoint(entry);
-#if !BUILD_FLAG(IS_OS_WIN)
-    // `posix_memalign` writes its result here; `_aligned_malloc`
-    // returns it directly.
-    llvm::AllocaInst* slot =
-        builder_.CreateAlloca(builder_.getPtrTy(), nullptr, "slot");
-#endif
+    // `posix_memalign` writes its result here; `_aligned_malloc` returns
+    // it directly, so the slot exists only where it is read.
+    llvm::AllocaInst* slot = nullptr;
+    if (!windows_) {
+      slot = builder_.CreateAlloca(builder_.getPtrTy(), nullptr, "slot");
+    }
     llvm::Value* zero = llvm::ConstantInt::get(usize_, 0);
     llvm::Value* one = llvm::ConstantInt::get(usize_, 1);
     llvm::Value* no_align = builder_.CreateICmpEQ(align, zero, "no_align");
@@ -260,32 +260,32 @@ class RuntimeBuilder {
     builder_.CreateRet(null_pointer());
 
     builder_.SetInsertPoint(prepare);
-#if BUILD_FLAG(IS_OS_WIN)
-    // Windows takes the requested alignment as it is.
     llvm::Value* effective = align;
-#else
-    // POSIX allocators want at least pointer-sized alignment.
-    llvm::Value* min_align =
-        llvm::ConstantInt::get(usize_, usize_->getBitWidth() / 8);
-    llvm::Value* too_small =
-        builder_.CreateICmpULT(align, min_align, "too_small");
-    llvm::Value* effective =
-        builder_.CreateSelect(too_small, min_align, align, "effective");
-#endif
+    if (!windows_) {
+      // POSIX allocators want at least pointer-sized alignment; Windows
+      // takes the requested alignment as it is.
+      llvm::Value* min_align =
+          llvm::ConstantInt::get(usize_, usize_->getBitWidth() / 8);
+      llvm::Value* too_small =
+          builder_.CreateICmpULT(align, min_align, "too_small");
+      effective =
+          builder_.CreateSelect(too_small, min_align, align, "effective");
+    }
     llvm::Value* size_is_zero =
         builder_.CreateICmpEQ(size, zero, "size_is_zero");
     llvm::Value* requested =
         builder_.CreateSelect(size_is_zero, effective, size, "requested");
 
-#if BUILD_FLAG(IS_OS_WIN)
-    // `_aligned_malloc` returns null on failure and is released with
-    // `_aligned_free`, so there is no result slot to read back.
-    llvm::Function* aligned = libc(
-        "_aligned_malloc",
-        llvm::FunctionType::get(builder_.getPtrTy(), {usize_, usize_}, false));
-    builder_.CreateRet(
-        builder_.CreateCall(aligned, {requested, align}, "block"));
-#else
+    if (windows_) {
+      // `_aligned_malloc` returns null on failure, so there is no result
+      // slot to read back and nothing to check.
+      llvm::Function* aligned = libc(
+          "_aligned_malloc", llvm::FunctionType::get(builder_.getPtrTy(),
+                                                     {usize_, usize_}, false));
+      builder_.CreateRet(
+          builder_.CreateCall(aligned, {requested, align}, "block"));
+      return;
+    }
     builder_.CreateStore(null_pointer(), slot);
     llvm::Function* memalign = libc(
         "posix_memalign",
@@ -300,7 +300,6 @@ class RuntimeBuilder {
 
     builder_.SetInsertPoint(ok);
     builder_.CreateRet(builder_.CreateLoad(builder_.getPtrTy(), slot, "block"));
-#endif
   }
 
   void build_dealloc() {
@@ -323,18 +322,11 @@ class RuntimeBuilder {
     builder_.CreateCondBr(is_null, done, release);
 
     builder_.SetInsertPoint(release);
-#if BUILD_FLAG(IS_OS_WIN)
     builder_.CreateCall(
-        libc("_aligned_free",
+        libc(windows_ ? "_aligned_free" : "free",
              llvm::FunctionType::get(builder_.getVoidTy(),
                                      {builder_.getPtrTy()}, false)),
         {block});
-#else
-    builder_.CreateCall(
-        libc("free", llvm::FunctionType::get(builder_.getVoidTy(),
-                                             {builder_.getPtrTy()}, false)),
-        {block});
-#endif
     builder_.CreateBr(done);
 
     builder_.SetInsertPoint(done);
@@ -343,6 +335,7 @@ class RuntimeBuilder {
 
   llvm::Module& module_;
   Builder builder_;
+  bool windows_;
   llvm::IntegerType* usize_;
   llvm::Constant* empty_text_ = nullptr;
   llvm::Constant* newline_text_ = nullptr;
@@ -351,8 +344,8 @@ class RuntimeBuilder {
 
 }  // namespace
 
-void add_runtime_definitions(llvm::Module& module, ir::PointerWidth width) {
-  RuntimeBuilder(module, width).build();
+void add_runtime_definitions(llvm::Module& module, const Target& target) {
+  RuntimeBuilder(module, target).build();
 }
 
 }  // namespace codegen_llvm

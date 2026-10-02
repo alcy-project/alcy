@@ -7,11 +7,19 @@
 #include <string_view>
 
 #include "codegen_llvm/common.h"
+#include "codegen_llvm/target.h"
 #include "config/build_config.h"
 #include "doctest/doctest.h"
 #include "ir/type.h"
 
 namespace codegen_llvm {
+
+// The runtime keys its libc bindings on the target's OS and its
+// pointer-sized types on the width; a case varies the width.
+codegen_llvm::Target target_of(ir::PointerWidth width) {
+  return codegen_llvm::Target{codegen_llvm::host_triple(), width};
+}
+
 namespace {
 
 llvm::PointerType* opaque_pointer(llvm::LLVMContext& context) {
@@ -68,7 +76,7 @@ TEST_CASE("Runtime defines every entry point") {
   const auto void_ty = llvm::Type::getVoidTy(context);
   const auto pointer = opaque_pointer(context);
 
-  add_runtime_definitions(module, ir::PointerWidth::W64);
+  add_runtime_definitions(module, target_of(ir::PointerWidth::W64));
 
   CHECK(!llvm::verifyModule(module));
 
@@ -101,7 +109,7 @@ TEST_CASE("Runtime fills in the program's declarations") {
   llvm::Function* alloc =
       declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
 
-  add_runtime_definitions(module, ir::PointerWidth::W64);
+  add_runtime_definitions(module, target_of(ir::PointerWidth::W64));
 
   // The program's call sites hold these functions, so the definitions
   // must land in place rather than in a second symbol, carrying the
@@ -126,7 +134,7 @@ TEST_CASE("Runtime follows the target width") {
   const auto void_ty = llvm::Type::getVoidTy(context);
   const auto pointer = opaque_pointer(context);
 
-  add_runtime_definitions(module, ir::PointerWidth::W32);
+  add_runtime_definitions(module, target_of(ir::PointerWidth::W32));
 
   CHECK(!llvm::verifyModule(module));
 
@@ -138,7 +146,7 @@ TEST_CASE("Runtime reaches libc the way the platform expects") {
   llvm::LLVMContext context;
   llvm::Module module("runtime_ir_test", context);
 
-  add_runtime_definitions(module, ir::PointerWidth::W64);
+  add_runtime_definitions(module, target_of(ir::PointerWidth::W64));
 
   CHECK(!llvm::verifyModule(module));
 

@@ -302,6 +302,7 @@
   F(PipelineSourceDirectoryInaccessible, "Source directory '{}' is not accessible") \
   F(PipelineStdIsASuite, "The 'alcy/std' path is a suite, not a package; write \"alcy/std/*\" for every member or \"alcy/std/<package>\" for one") \
   F(PipelineStdPackageRequiresSuite, "Package 'alcy/std/{}' requires alcy/std/{}; add it to [dependencies]") \
+  F(PipelineUnknownTarget, "Cannot build for target '{}'; the compiler was not built with that backend") \
   F(PipelineUnknownSourceFile, "Unknown file id for a source input") \
   /* cli */ \
   F(CliAbout, "alcy language compiler") \

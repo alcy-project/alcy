@@ -4,9 +4,9 @@
 #pragma once
 
 #include <string>
-#include <string_view>
 #include <vector>
 
+#include "codegen_llvm/target.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 
@@ -20,27 +20,35 @@ enum class ObjectEmitError : u8 {
   UnknownTriple,
   NoTargetMachine,
   CannotEmit,
-  IoError,
 };
 
-// Emits a relocatable object file for the module. An empty triple
-// selects the host. Only targets linked into the binary are
-// available (host backends on native builds); anything else reports
-// UnknownTriple without touching the module.
+// Prepares `module` for `target`: registers the linked backends, resolves
+// the target machine, and sets the module's triple and data layout. It
+// must run before the IR emitter, not after: the emitter reads the layout
+// for `TypeSizeOf` and `TypeAlignOf`, and a module that still carries
+// LLVM's default layout answers those for the host.
+//
+// Every entry point below configures the module itself, so this is only
+// for a caller that emits between the two - which the pipeline does.
+base::Result<void, ObjectEmitError> configure_target(llvm::Module& module,
+                                                     const Target& target);
+
+// Emits a relocatable object file for the module. Only targets linked into
+// the binary are available; anything else reports UnknownTriple without
+// touching the module.
 //
 // The module arrives as it will be emitted: optimization is
 // optimize_module's job, run by the caller beforehand, so that every
 // consumer of a module sees the same one.
 base::Result<std::vector<u8>, ObjectEmitError> emit_object(
     llvm::Module& module,
-    std::string_view triple);
+    const Target& target);
 
-// Runs the O3 middle-end pipeline over the module in place, for the
-// given triple (empty selects the host). The module must verify clean;
-// the pipeline preserves that. Unknown triples fail the same way
-// emission does.
+// Runs the O3 middle-end pipeline over the module in place. The module must
+// verify clean; the pipeline preserves that. Unknown triples fail the same
+// way emission does.
 base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
-                                                    std::string_view triple);
+                                                    const Target& target);
 
 // The module as LLVM's textual IR. This is the only output that can be
 // read, diffed, and checked by a tool outside this compiler: an object

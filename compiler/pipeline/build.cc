@@ -12,9 +12,10 @@
 
 #include "analyzer/resolve.h"
 #include "codegen_llvm/common.h"
+#include "codegen_llvm/llvm_backend.h"
 #include "codegen_llvm/llvm_ir_emitter.h"
-#include "codegen_llvm/llvm_object_emitter.h"
 #include "codegen_llvm/runtime_ir.h"
+#include "codegen_llvm/target.h"
 #include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -130,22 +131,33 @@ struct EmittedModule {
                                            bool optimize,
                                            bool is_lib) {
     module = std::make_unique<llvm::Module>("alcy_module", context);
+    // Before the emitter, not after: the emitter asks the layout for
+    // `TypeSizeOf` and `TypeAlignOf`, and a module that still carries
+    // LLVM's default layout answers those for the host rather than for
+    // the target.
+    if (codegen_llvm::configure_target(*module, ctx.target).is_err()) {
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineUnknownTarget>(
+          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::UnknownTarget,
+          ctx.target.triple);
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
     // Entry synthesis wraps a `main` for binaries only; a library
     // object carries its items unwrapped, even one named `main`.
     codegen_llvm::LlvmIrEmitter emitter(module.get(),
                                         std::move(package.storage),
-                                        &ctx.strings, TARGET_WIDTH, !is_lib);
+                                        &ctx.strings, ctx.target, !is_lib);
     std::move(emitter).emit();
     // Before the optimizer, so the runtime is inlined and folded like
     // any other code, and after the program, so its definitions land in
     // the declarations the program's call sites already hold.
-    codegen_llvm::add_runtime_definitions(*module, TARGET_WIDTH);
+    codegen_llvm::add_runtime_definitions(*module, ctx.target);
     if (!optimize) {
       return base::make_ok();
     }
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "optimize",
                                              "backend");
-    if (codegen_llvm::optimize_module(*module, "").is_err()) {
+    if (codegen_llvm::optimize_module(*module, ctx.target).is_err()) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotOptimize>(
           diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError);
       (void)index;
@@ -185,7 +197,7 @@ base::Result<void, diag::Reported> emit_package_object(
     return base::make_err(diag::Reported{});
   }
   base::Result<std::vector<u8>, codegen_llvm::ObjectEmitError> object =
-      codegen_llvm::emit_object(*emitted.module, "");
+      codegen_llvm::emit_object(*emitted.module, ctx.target);
   if (object.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotEmitObject>(
         diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,

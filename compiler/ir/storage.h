@@ -211,11 +211,18 @@ inline TypeLayout type_layout(const StorageState& state,
     }
     case TypeTag::Enum: {
       // Discriminant, padded up to the payload area's alignment, then
-      // the area itself.
+      // the area itself, and the whole rounded up to the alignment as
+      // every other aggregate is. The last step is not cosmetic: an
+      // array of this enum strides by this size, and the LLVM struct the
+      // emitter builds is allocated at its own alignment, so a size that
+      // is not a multiple of it puts every element after the first at
+      // the wrong offset. A byte payload is where the two part company -
+      // `{i32, [1 x i8]}` is five bytes and allocates eight.
       constexpr u64 DISC = 4;
       const TypeLayout area = enum_payload_area(state, idx, width);
       const u64 align = area.align > DISC ? area.align : DISC;
-      return {align_up(DISC, area.align) + area.size, align};
+      const u64 payload_start = align_up(DISC, area.align);
+      return {align_up(payload_start + area.size, align), align};
     }
   }
   UNREACHABLE();

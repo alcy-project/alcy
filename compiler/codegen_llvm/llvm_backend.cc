@@ -1,16 +1,16 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "codegen_llvm/llvm_object_emitter.h"
+#include "codegen_llvm/llvm_backend.h"
 
 #include <memory>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "codegen_llvm/common.h"
+#include "codegen_llvm/target.h"
 #include "config/build_config.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -119,37 +119,52 @@ void init_linked_targets() {
 
 }  // namespace
 
-// Prepares the module for the triple (empty selects the host) and
-// returns its machine. Emission and optimization share it so a bad
-// triple fails identically on both paths.
+namespace {
+
+// The machine `target` names, with the module's triple already set. Both
+// entry points below need one, and both fail the same way.
 base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError>
-prepare_module(llvm::Module& module, std::string_view triple) {
+target_machine(const Target& target) {
   init_linked_targets();
-  const std::string target_triple = triple.empty()
-                                        ? llvm::sys::getDefaultTargetTriple()
-                                        : std::string(triple);
-  const llvm::Triple triple_obj(target_triple);
+  const llvm::Triple triple(target.triple);
   std::string error;
-  const llvm::Target* target =
-      llvm::TargetRegistry::lookupTarget(triple_obj, error);
-  if (target == nullptr) {
+  const llvm::Target* backend =
+      llvm::TargetRegistry::lookupTarget(triple, error);
+  if (backend == nullptr) {
     return base::make_err(ObjectEmitError::UnknownTriple);
   }
-  module.setTargetTriple(triple_obj);
   llvm::TargetOptions options;
-  std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
-      triple_obj, "generic", "", options, llvm::Reloc::PIC_, std::nullopt));
+  std::unique_ptr<llvm::TargetMachine> machine(backend->createTargetMachine(
+      triple, "generic", "", options, llvm::Reloc::PIC_, std::nullopt));
   if (machine == nullptr) {
     return base::make_err(ObjectEmitError::NoTargetMachine);
   }
-  module.setDataLayout(machine->createDataLayout());
   return base::make_ok(std::move(machine));
 }
 
-base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
-                                                    std::string_view triple) {
+}  // namespace
+
+base::Result<void, ObjectEmitError> configure_target(llvm::Module& module,
+                                                     const Target& target) {
   base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError> machine =
-      prepare_module(module, triple);
+      target_machine(target);
+  if (machine.is_err()) {
+    return base::make_err(std::move(machine).unwrap_err());
+  }
+  module.setTargetTriple(llvm::Triple(target.triple));
+  module.setDataLayout(std::move(machine).unwrap()->createDataLayout());
+  return base::make_ok();
+}
+
+base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
+                                                    const Target& target) {
+  base::Result<void, ObjectEmitError> configured =
+      configure_target(module, target);
+  if (configured.is_err()) {
+    return base::make_err(std::move(configured).unwrap_err());
+  }
+  base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError> machine =
+      target_machine(target);
   if (machine.is_err()) {
     return base::make_err(std::move(machine).unwrap_err());
   }
@@ -178,9 +193,14 @@ base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
 
 base::Result<std::vector<u8>, ObjectEmitError> emit_object(
     llvm::Module& module,
-    std::string_view triple) {
+    const Target& target) {
+  base::Result<void, ObjectEmitError> configured =
+      configure_target(module, target);
+  if (configured.is_err()) {
+    return base::make_err(std::move(configured).unwrap_err());
+  }
   base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError> machine =
-      prepare_module(module, triple);
+      target_machine(target);
   if (machine.is_err()) {
     return base::make_err(std::move(machine).unwrap_err());
   }

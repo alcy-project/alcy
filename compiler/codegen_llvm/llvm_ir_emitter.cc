@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "codegen_llvm/common.h"
+#include "codegen_llvm/target.h"
 #include "config/build_config.h"
 #include "debug/dcheck.h"
 #include "debug/dlog.h"
@@ -36,13 +37,13 @@ namespace codegen_llvm {
 LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
                              ir::VerifiedStorage storage,
                              str::StringInterner* interner,
-                             ir::PointerWidth width,
+                             const Target& target,
                              bool emit_entry)
     : module_(module),
       storage_(std::move(storage)),
       builder_(std::make_unique<IRBuilder>(module_->getContext())),
       interner_(interner),
-      width_(width),
+      width_(target.width),
       emit_entry_(emit_entry) {}
 
 void LlvmIrEmitter::check_state() {
@@ -145,14 +146,15 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
           llvm::StructType::get(module_->getContext(), slot_types);
       // The layout ir::type_layout publishes is what field offsets are
       // computed against, so the type built here has to match it. The
-      // module has no DataLayout this early, so the check waits for one.
+      // module carries the target's layout before the emitter runs, so
+      // this checks the two against each other on every build rather
+      // than waiting for a layout to appear.
       const ir::TypeLayout expected =
           ir::type_layout(storage_->state(), idx, width_);
-      if (!module_->getDataLayout().isDefault()) {
-        const llvm::DataLayout& dl = module_->getDataLayout();
-        DCHECK_EQ(dl.getTypeAllocSize(slot).getFixedValue(), expected.size);
-        DCHECK_EQ(dl.getABITypeAlign(slot).value(), expected.align);
-      }
+      const llvm::DataLayout& dl = module_->getDataLayout();
+      DCHECK(!dl.isDefault());
+      DCHECK_EQ(dl.getTypeAllocSize(slot).getFixedValue(), expected.size);
+      DCHECK_EQ(dl.getABITypeAlign(slot).value(), expected.align);
       return slot;
     }
     default: {
@@ -166,9 +168,11 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
 // The payload half of an enum's slot: a byte area on the narrowest
 // carrier primitive that carries the alignment ir::type_layout
 // published. A plain byte array would be align 1, which stores correctly
-// on x86 and is still wrong on a strict-alignment target. The published
-// alignment is used rather than the module's DataLayout because a type is
-// built before the module has one.
+// on x86 and is still wrong on a strict-alignment target. Taking the
+// carrier from the published alignment is what makes LLVM lay the slot
+// out the way ir::type_layout sizes it; the check in `type` holds the
+// two against each other now that the module carries a layout before the
+// emitter runs.
 llvm::Type* LlvmIrEmitter::enum_payload_area_type(ir::TypeIdx idx) const {
   const ir::TypeLayout area =
       ir::enum_payload_area(storage_->state(), idx, width_);

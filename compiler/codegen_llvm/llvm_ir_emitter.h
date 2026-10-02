@@ -8,6 +8,7 @@
 
 #include "codegen_llvm/declaration.h"
 #include "codegen_llvm/llvm_ir_storage.h"
+#include "codegen_llvm/target.h"
 #include "fpag/base/numeric.h"
 #include "fpag/str/string_interner.h"
 #include "ir/common.h"
@@ -29,7 +30,7 @@ class LlvmIrEmitter {
   LlvmIrEmitter(llvm::Module* module,
                 ir::VerifiedStorage storage,
                 str::StringInterner* interner,
-                ir::PointerWidth width,
+                const Target& target,
                 bool emit_entry);
   ~LlvmIrEmitter() = default;
 
