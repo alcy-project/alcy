@@ -42,7 +42,7 @@ partly because UTF-8 validation is coming and it should not have to move.
 | `D` | lowering | `compiler/lowering` | 6 |
 | `F` | borrow | `compiler/borrow` | 4 |
 | `G` | ir | `compiler/ir` | one per `VerificationErrorKind` |
-| `H` | pkg | `compiler/pkg` | 6 |
+| `H` | pkg | `compiler/pkg` | 4 |
 | `I` | pipeline | `compiler/pipeline` | 11 |
 | `J` | codegen_llvm | `compiler/codegen_llvm` | reserved |
 | `K` | codegen | reserved for the native backend | reserved |

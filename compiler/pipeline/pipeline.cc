@@ -21,7 +21,6 @@
 #include "path/path.h"
 #include "pipeline/diag_code.h"
 #include "pkg/manifest.h"
-#include "pkg/resolve.h"
 #include "source/source.h"
 
 #if BUILD_FLAG(IS_OS_WIN)
@@ -165,24 +164,6 @@ base::Result<DiscoveredSources, diag::Reported> discover_sources(
     discovered.files.push_back(std::move(loaded).unwrap());
   }
   return base::make_ok(std::move(discovered));
-}
-
-base::Result<ProjectBuild, diag::Reported> compile_project(
-    std::span<const pkg::ResolvedPackage> packages,
-    source::SourceManager& sources,
-    diag::DiagBag& bag) {
-  ProjectBuild build;
-  for (const pkg::ResolvedPackage& package : packages) {
-    base::Result<DiscoveredSources, diag::Reported> discovered =
-        discover_sources(package.dir.as_view(), sources, bag);
-    if (discovered.is_err()) {
-      return base::make_err(diag::Reported{});
-    }
-    const DiscoveredSources found = std::move(discovered).unwrap();
-    build.files_loaded += static_cast<u32>(found.files.size());
-    ++build.packages;
-  }
-  return base::make_ok(build);
 }
 
 }  // namespace pipeline

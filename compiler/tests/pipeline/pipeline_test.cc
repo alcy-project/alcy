@@ -21,7 +21,6 @@
 #include "fpag/io/temp_dir.h"
 #include "fpag/mem/arena.h"
 #include "i18n/language.h"
-#include "pkg/resolve.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -86,41 +85,6 @@ TEST_CASE("Discover reports missing directories") {
   Fixture f;
   CHECK(discover_sources("/nonexistent-dir-xyz", f.sources, f.bag).is_err());
   CHECK(f.bag.has_errors());
-}
-
-TEST_CASE("Compile project loads every package") {
-  io::TempDir dir = io::TempDir::create_unique("alcy_pipeline_project_test_");
-  const bool setup =
-      dir.write_file("root/alcy.toml",
-                     "[package]\nname = \"root\"\nversion = \"0.1.0\"\n"
-                     "[dependencies]\nlib = { path = \"lib\" }\n") &&
-      dir.write_file("root/main.al", "fn main() {}\n") &&
-      dir.write_file("root/lib/alcy.toml",
-                     "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n") &&
-      dir.write_file("root/lib/lib.al", "");
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
-
-  Fixture f;
-  base::Result<std::vector<pkg::ResolvedPackage>, diag::Reported> resolved =
-      pkg::resolve_package(dir.join("root"), f.sources, f.arena, f.bag);
-  CHECK(resolved.is_ok());
-  if (!resolved.is_ok()) {
-    return;
-  }
-
-  base::Result<ProjectBuild, diag::Reported> built =
-      compile_project(std::move(resolved).unwrap(), f.sources, f.bag);
-  CHECK(built.is_ok());
-  if (!built.is_ok()) {
-    return;
-  }
-  const ProjectBuild build = std::move(built).unwrap();
-  CHECK(!f.bag.has_errors());
-  CHECK(build.packages == 2);
-  CHECK(build.files_loaded == 2);
 }
 
 TEST_CASE("Source fetch feeds the renderer") {

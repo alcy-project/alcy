@@ -13,9 +13,10 @@
 namespace path {
 
 // File paths stored as file names or package directories canonically use
-// '/' on every platform (valid on Windows file APIs too), keeping lockfiles
-// and diagnostics portable. Never branch this per platform: mixing native
-// separators reintroduces mismatched spellings and invalid TOML escapes.
+// '/' on every platform (valid on Windows file APIs too), keeping the
+// spelling a path has in a diagnostic the same one another tool sees.
+// Never branch this per platform: mixing native separators reintroduces
+// mismatched spellings and invalid TOML escapes.
 constexpr char DEFAULT_PATH_SEPARATOR = '/';
 // Folded into DEFAULT_PATH_SEPARATOR on Windows; a valid filename character on
 // POSIX, so it is only ever treated as a separator under IS_OS_WIN.

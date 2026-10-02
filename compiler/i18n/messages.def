@@ -231,10 +231,8 @@
   F(CodegenArgumentNotFormattable, "Argument is not formattable") \
   F(CodegenInvalidModuleTree, "Internal error: invalid module tree: {}") \
   /* pkg */ \
-  F(PkgCannotReadManifest, "Cannot read manifest '{}'") \
   F(PkgDependencyBadSpecifier, "Manifest '{}': dependency '{}' is not of the form name, owner/name, or owner/suite/package") \
   F(PkgDependencyBadVersion, "Manifest '{}': dependency '{}' needs a version of the form =1.2.3, 1.2, or 1") \
-  F(PkgDependencyCycle, "Dependency cycle detected at '{}'") \
   F(PkgDependencyCycleInReExports, "Dependency cycle in re-exports") \
   F(PkgDependencyDoesNotParse, "Manifest '{}': dependency '{}' does not parse") \
   F(PkgDependencyEmptyString, "Manifest '{}': dependency '{}' needs '{}' to be a non-empty string") \
@@ -246,7 +244,6 @@
   F(PkgDependencyTooManyRefs, "Manifest '{}': dependency '{}' names more than one of branch, tag, rev") \
   F(PkgDependencyTooManySources, "Manifest '{}': dependency '{}' names more than one source") \
   F(PkgDependencyUnknownField, "Manifest '{}': dependency '{}' has an unknown field '{}'") \
-  F(PkgInvalidPackageDirectory, "Invalid package directory '{}'") \
   F(PkgManifestInvalid, "Manifest '{}': {}") \
   F(PkgTomlSyntaxError, "TOML syntax error: {}") \
   F(PkgToolchainLinkArgsNotStrings, "Toolchain '{}': link-args must be a list of strings") \
