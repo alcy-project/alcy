@@ -22,8 +22,6 @@
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/mem/arena.h"
-#include "fpag/mem/page_allocator.h"
 #include "fpag/str/string_interner.h"
 #include "i18n/language.h"
 #include "ir/instruction.h"
@@ -31,6 +29,8 @@
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/verifier.h"
+#include "pipeline/parse.h"
+#include "pipeline/pipeline_context.h"
 #include "source/source.h"
 #include "tests/util/virtual_source.h"
 
@@ -39,13 +39,14 @@ namespace lowering {
 namespace {
 
 struct Fixture {
-  mem::Arena arena;
-  ast::AstArena ast;
-  diag::DiagBag bag{arena, i18n::Language::EnUs};
-  source::SourceManager sources;
-  str::StringInterner strings{mem::page_size()};
-
-  Fixture() { arena.reserve(1u << 20); }
+  // Resolution runs through the pipeline's parse, which is where the
+  // items come from, so the context owns the arena, the bag, and the
+  // interner the cases inspect.
+  pipeline::PipelineContext ctx{i18n::Language::EnUs};
+  ast::AstArena& ast = ctx.ast;
+  diag::DiagBag& bag = ctx.bag;
+  source::SourceManager& sources = ctx.sources;
+  str::StringInterner& strings = ctx.strings;
 };
 
 // The sources one case declared, held in memory. It stands in for a
@@ -107,8 +108,7 @@ LowerCase lower_case(
                               true});
   }
   base::Result<analyzer::ModuleTree, diag::Reported> tree_result =
-      analyzer::resolve_modules(root, inputs, "testpkg", f.sources, f.ast,
-                                f.bag, prelude_inputs);
+      pipeline::resolve_inputs(f.ctx, root, inputs, "testpkg", prelude_inputs);
   if (tree_result.is_err() || f.bag.has_errors()) {
     return {std::nullopt, false};
   }

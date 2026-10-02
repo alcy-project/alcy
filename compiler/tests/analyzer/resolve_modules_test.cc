@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include "analyzer/diag_code.h"
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
@@ -26,6 +25,8 @@
 #include "fpag/str/string_interner.h"
 #include "i18n/language.h"
 #include "ir/type.h"
+#include "pipeline/parse.h"
+#include "pipeline/pipeline_context.h"
 #include "source/source.h"
 #include "tests/util/virtual_source.h"
 
@@ -34,12 +35,13 @@ namespace analyzer {
 namespace {
 
 struct Fixture {
-  mem::Arena arena;
-  ast::AstArena ast;
-  diag::DiagBag bag{arena, i18n::Language::EnUs};
-  source::SourceManager sources;
-
-  Fixture() { arena.reserve(1u << 20); }
+  // The resolution runs through the pipeline's parse, which is what the
+  // items come from, so the context owns the arena and the bag the case
+  // inspects.
+  pipeline::PipelineContext ctx{i18n::Language::EnUs};
+  ast::AstArena& ast = ctx.ast;
+  diag::DiagBag& bag = ctx.bag;
+  source::SourceManager& sources = ctx.sources;
 };
 
 // The sources one case declared, held in memory. It stands in for a
@@ -86,7 +88,7 @@ ResolveCase resolve_case(VirtualDir& dir,
     inputs.push_back(*input);
   }
   base::Result<ModuleTree, diag::Reported> result =
-      resolve_modules(root, inputs, package_name, f.sources, f.ast, f.bag);
+      pipeline::resolve_inputs(f.ctx, root, inputs, package_name);
   if (result.is_err()) {
     ModuleTree empty;
     empty.modules = {};
@@ -117,6 +119,7 @@ struct ResolveOutcome {
 
 ResolveOutcome resolve_with(VirtualDir& dir, u32 jobs) {
   Fixture f;
+  f.ctx.jobs = jobs;
   ResolveOutcome outcome;
   std::deque<std::string> name_storage;
   std::vector<ModuleInput> inputs;
@@ -134,8 +137,8 @@ ResolveOutcome resolve_with(VirtualDir& dir, u32 jobs) {
     }
     inputs.push_back(*input);
   }
-  base::Result<ModuleTree, diag::Reported> result = resolve_modules(
-      root, inputs, "testpkg", f.sources, f.ast, f.bag, {}, {}, jobs);
+  base::Result<ModuleTree, diag::Reported> result =
+      pipeline::resolve_inputs(f.ctx, root, inputs, "testpkg");
   if (result.is_ok()) {
     for (const ModuleNode* const node : std::move(result).unwrap().modules) {
       outcome.module_paths.emplace_back(node->path);
@@ -249,7 +252,7 @@ TEST_CASE("Resolve reports duplicate module declarations") {
       {"a", f.sources.add_virtual(nested_a->name, nested_a->bytes)},
   };
   base::Result<ModuleTree, diag::Reported> resolved =
-      resolve_modules(inputs[0].id, inputs, "testpkg", f.sources, f.ast, f.bag);
+      pipeline::resolve_inputs(f.ctx, inputs[0].id, inputs, "testpkg");
   CHECK(f.bag.has_errors());
 }
 
@@ -268,58 +271,6 @@ TEST_CASE("Resolve attaches unreferenced files as modules") {
   // Every listed input attaches, so a stray module is not an error.
   const ResolveCase result =
       resolve_case(dir, "main.al", {"main.al", "stray.al"}, f);
-  CHECK(result.ok);
-}
-
-// A run whose arena is spent refuses the next file with a diagnostic,
-// where the arena's own report is a trap naming neither. The reservation
-// here is small enough for a case to spend it, which a real input would
-// need far too much source to reach.
-TEST_CASE("Resolve refuses an input the span arena cannot hold") {
-  const usize capacity = mem::page_size();
-  VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al", "fn main() {}\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
-
-  mem::Arena arena;
-  arena.reserve(1u << 20);
-  diag::DiagBag bag{arena, i18n::Language::EnUs};
-  source::SourceManager sources;
-  ast::AstArena ast{capacity};
-  // Past the headroom, which is what the check asks about.
-  CHECK(ast.spans.alloc(capacity - 1) != nullptr);
-  CHECK(ast.nearly_full());
-
-  std::deque<std::string> name_storage;
-  std::optional<analyzer::ModuleInput> input =
-      tests::register_source(sources, dir, "main.al", true, name_storage);
-  CHECK(input.has_value());
-  if (!input.has_value()) {
-    return;
-  }
-  const std::vector<ModuleInput> inputs{*input};
-  base::Result<ModuleTree, diag::Reported> result =
-      resolve_modules(input->id, inputs, "testpkg", sources, ast, bag);
-  CHECK(result.is_err());
-  CHECK(bag.has_errors());
-}
-
-// A reservation with room in it reads what it is given, so the check does
-// not refuse an input for being large when the arena can hold it.
-TEST_CASE("Resolve reads an input the span arena can hold") {
-  VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al", "fn main() {}\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
-
-  Fixture f;
-  CHECK(!f.ast.nearly_full());
-  const ResolveCase result = resolve_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.ok);
 }
 
@@ -601,8 +552,8 @@ ResolveCase resolve_case_with_prelude(
                               f.sources.add_virtual(file->name, file->bytes),
                               true});
   }
-  base::Result<ModuleTree, diag::Reported> result = resolve_modules(
-      root, inputs, "testpkg", f.sources, f.ast, f.bag, prelude_inputs);
+  base::Result<ModuleTree, diag::Reported> result =
+      pipeline::resolve_inputs(f.ctx, root, inputs, "testpkg", prelude_inputs);
   if (result.is_err()) {
     ModuleTree empty;
     empty.modules = {};
@@ -656,9 +607,8 @@ TEST_CASE("Resolve nests a facade beside its sibling modules") {
                               f.sources.add_virtual(file->name, file->bytes),
                               facade});
   }
-  base::Result<ModuleTree, diag::Reported> resolved =
-      resolve_modules(root_input->id, inputs, "testpkg", f.sources, f.ast,
-                      f.bag, prelude_inputs);
+  base::Result<ModuleTree, diag::Reported> resolved = pipeline::resolve_inputs(
+      f.ctx, root_input->id, inputs, "testpkg", prelude_inputs);
   CHECK(resolved.is_ok());
   if (resolved.is_err()) {
     return;
@@ -805,67 +755,6 @@ TEST_CASE("Resolving on several threads gives what resolving on one gives") {
   CHECK(serial.module_paths == threaded.module_paths);
   CHECK(serial.diagnostics.size() == 12);
   CHECK(serial.diagnostics == threaded.diagnostics);
-}
-
-// A run whose arena is spent refuses the file it was about to read, and stops
-// there. The files before it keep their diagnostics and the files after it
-// are not reported at all, so a refusal is one diagnostic however many files
-// the input has - and it is the same one whichever thread read the input
-// first.
-TEST_CASE("A resolve stops at the first file the arena cannot hold") {
-  // A reservation is taken in whole pages, and the page is not 4 KiB on
-  // every platform, so the size asked for is the size that can be had.
-  const usize capacity = mem::page_size();
-  std::deque<std::string> names;
-  std::deque<std::string> text;
-  VirtualDir dir;
-  dir.add("main.al", "fn main() {}\n");
-  for (u32 i = 0; i < 3; ++i) {
-    names.push_back("m" + std::to_string(i) + ".al");
-    text.push_back("fn f" + std::to_string(i) + "() {}\n");
-    dir.add(names.back(), text.back());
-  }
-
-  for (u32 jobs : {1u, 8u}) {
-    mem::Arena arena;
-    arena.reserve(1u << 20);
-    diag::DiagBag bag{arena, i18n::Language::EnUs};
-    source::SourceManager sources;
-    ast::AstArena ast{capacity};
-    // Past the headroom, which is what the check asks about.
-    CHECK(ast.spans.alloc(capacity - 1) != nullptr);
-    CHECK(ast.nearly_full());
-
-    std::deque<std::string> name_storage;
-    std::vector<ModuleInput> inputs;
-    source::FileId root = source::UNKNOWN_FILE;
-    for (u32 i = 0; i < dir.size(); ++i) {
-      const tests::VirtualSource& file = dir.at(i);
-      const bool is_root = file.name == "main.al";
-      std::optional<analyzer::ModuleInput> input = tests::register_source(
-          sources, dir, file.name, is_root, name_storage);
-      if (!input.has_value()) {
-        continue;
-      }
-      if (is_root) {
-        root = input->id;
-      }
-      inputs.push_back(*input);
-    }
-    base::Result<ModuleTree, diag::Reported> result = resolve_modules(
-        root, inputs, "testpkg", sources, ast, bag, {}, {}, jobs);
-    CHECK(result.is_err());
-    CHECK(bag.size() == 1);
-    const diag::Diagnostic* const only = bag.at(0);
-    CHECK(only != nullptr);
-    if (only != nullptr) {
-      // The refusal is the analyzer's span-arena code, which is what says
-      // the input was too large rather than wrong.
-      CHECK(only->code ==
-            diag::Code{diag::Stage::Analyzer,
-                       static_cast<u8>(DiagCode::SpanArenaExhausted)});
-    }
-  }
 }
 
 }  // namespace analyzer

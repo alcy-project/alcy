@@ -72,12 +72,12 @@ constexpr usize DIAGNOSTIC_CAPACITY = 16ull << 20;
 constexpr usize DIAGNOSTIC_CAPACITY = 2ull << 20;
 #endif
 
-PipelineContext::PipelineContext(i18n::Language language)
-    : bag(arena, language), strings(mem::page_size()) {
+PipelineContext::PipelineContext(i18n::Language language, usize span_capacity)
+    : ast(span_capacity), bag(arena, language), strings(mem::page_size()) {
   arena.reserve(DIAGNOSTIC_CAPACITY);
 }
 
-u32 PipelineContext::front_end_jobs() const {
+u32 PipelineContext::parse_jobs() const {
   // Zero means the command line did not ask for threads, and one thread is
   // the answer: reading the source is a small part of a run, so spreading it
   // costs the passes that read what it built more than it saves.

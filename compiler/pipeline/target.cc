@@ -23,6 +23,7 @@
 #include "path/path.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/embedded_std.h"
+#include "pipeline/parse.h"
 #include "pipeline/pipeline.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
@@ -59,29 +60,89 @@ base::Result<ManifestProbe, path::PathError> find_package_manifest(
 
 namespace {
 
-// Resolves one target, binary or library, into its module tree. The
-// root file becomes the nameless entry module; the remaining selected
-// modules resolve around it exactly as for a binary.
-base::Result<PackageTarget, diag::Reported> resolve_target(
+// A package's sources after discovery, staging, parsing, and selection:
+// everything every target resolves against. None of that work depends on
+// a target - only the entry file and the directory names are read
+// relative to - so it happens once and this owns the storage the targets
+// borrow while they read it.
+struct PackageSources {
+  ParsedFiles parsed;
+  std::vector<analyzer::ParsedModule> prelude;
+  std::vector<pkg::ModuleFile> selection;
+  usize file_count = 0;
+};
+
+// Discovers, stages, parses, and selects the whole package.
+base::Result<PackageSources, diag::Reported> collect_package_sources(
     PipelineContext& ctx,
     const path::Path& root,
-    const pkg::PackageManifest& manifest,
-    std::string_view target_path,
-    std::string_view target_name,
-    bool is_lib) {
+    const pkg::PackageManifest& manifest) {
   base::Result<pipeline::DiscoveredSources, diag::Reported> discovered =
       pipeline::discover_sources(root.as_view(), ctx.sources, ctx.bag);
   if (discovered.is_err()) {
     return base::make_err(diag::Reported{});
   }
-  pipeline::DiscoveredSources found = std::move(discovered).unwrap();
-  const std::vector<source::FileId>& files = found.files;
+  const pipeline::DiscoveredSources found = std::move(discovered).unwrap();
+
+  // The manifest's dependencies select the staged members; anything
+  // unselected is absent, not merely out of scope.
+  base::Result<StdSelection, diag::Reported> selected = resolve_std_selection(
+      {manifest.dependencies, manifest.dependency_count}, ctx.bag);
+  if (selected.is_err() || ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  const std::span<const analyzer::ModuleInput> prelude = [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "prelude",
+                                             "frontend");
+    return std_prelude(ctx, std::move(selected).unwrap());
+  }();
+  std::vector<source::FileId> parse_ids;
+  parse_ids.reserve(found.files.size() + prelude.size());
+  parse_ids.insert(parse_ids.end(), found.files.begin(), found.files.end());
+  for (const analyzer::ModuleInput& input : prelude) {
+    parse_ids.push_back(input.id);
+  }
+  base::Result<ParsedFiles, diag::Reported> parse_result =
+      parse_files(ctx, parse_ids);
+  if (parse_result.is_err() || ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  PackageSources sources;
+  sources.parsed = std::move(parse_result).unwrap();
+  sources.file_count = found.files.size();
+  sources.prelude.reserve(prelude.size());
+  for (const analyzer::ModuleInput& input : prelude) {
+    sources.prelude.push_back(parsed_module(sources.parsed, input));
+  }
+  base::Result<std::vector<pkg::ModuleFile>, diag::Reported> selection =
+      pkg::resolve_module_files(manifest, root.as_view(), found.files,
+                                ctx.sources, ctx.bag, ctx.arena);
+  if (selection.is_err() || ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  sources.selection = std::move(selection).unwrap();
+  return base::make_ok(std::move(sources));
+}
+
+// Resolves one target, binary or library, into its module tree, from a
+// package whose files have already been parsed. The root file becomes the
+// nameless entry module; the remaining selected modules resolve around it
+// exactly as for a binary. Parsing does not depend on the target, so the
+// only work here is naming: which file is the entry, and which directory
+// the other names are read relative to.
+base::Result<PackageTarget, diag::Reported> resolve_target(
+    PipelineContext& ctx,
+    const path::Path& root,
+    const pkg::PackageManifest& manifest,
+    const PackageSources& sources,
+    std::string_view target_path,
+    std::string_view target_name,
+    bool is_lib) {
   const path::Path target_file_path = root.join(target_path);
   source::FileId root_file = source::UNKNOWN_FILE;
-  for (source::FileId id : files) {
-    const std::optional<std::string_view> name = ctx.sources.name(id);
-    if (name.has_value() && *name == target_file_path.as_view()) {
-      root_file = id;
+  for (const ParsedFile& file : sources.parsed.files) {
+    if (file.path == target_file_path) {
+      root_file = file.id;
       break;
     }
   }
@@ -100,12 +161,6 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
   }
 
   bool root_selected = false;
-  base::Result<std::vector<pkg::ModuleFile>, diag::Reported> selection =
-      pkg::resolve_module_files(manifest, root.as_view(), files, ctx.sources,
-                                ctx.bag, ctx.arena);
-  if (selection.is_err() || ctx.bag.has_errors()) {
-    return base::make_err(diag::Reported{});
-  }
   std::vector<analyzer::ModuleInput> inputs;
   // Module paths resolve relative to the target root's directory.
   std::string_view target_dir;
@@ -115,7 +170,7 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
       target_dir = target_path.substr(0, slash);
     }
   }
-  for (const pkg::ModuleFile& entry : std::move(selection).unwrap()) {
+  for (const pkg::ModuleFile& entry : sources.selection) {
     if (entry.id == root_file) {
       root_selected = true;
       inputs.push_back({"", entry.id});
@@ -154,32 +209,24 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
     return base::make_err(diag::Reported{});
   }
 
-  // The manifest's dependencies select the staged members; anything
-  // unselected is absent, not merely out of scope.
-  base::Result<StdSelection, diag::Reported> selected = resolve_std_selection(
-      {manifest.dependencies, manifest.dependency_count}, ctx.bag);
-  if (selected.is_err() || ctx.bag.has_errors()) {
-    return base::make_err(diag::Reported{});
+  std::vector<analyzer::ParsedModule> modules;
+  modules.reserve(inputs.size());
+  for (const analyzer::ModuleInput& input : inputs) {
+    modules.push_back(parsed_module(sources.parsed, input));
   }
-  const std::span<const analyzer::ModuleInput> prelude = [&] {
-    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "prelude",
-                                             "frontend");
-    return std_prelude(ctx, std::move(selected).unwrap());
-  }();
   base::Result<analyzer::ModuleTree, diag::Reported> tree = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve",
                                              "frontend");
     const std::span<const analyzer::StdHint> hints(STD_HINTS, STD_HINT_COUNT);
-    return analyzer::resolve_modules(root_file, inputs, manifest.name,
-                                     ctx.sources, ctx.ast, ctx.bag, prelude,
-                                     hints, ctx.front_end_jobs());
+    return analyzer::resolve_modules(root_file, modules, manifest.name, ctx.ast,
+                                     ctx.bag, sources.prelude, hints);
   }();
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
   PackageTarget target;
   target.tree = std::move(tree).unwrap();
-  target.file_count = files.size();
+  target.file_count = sources.file_count;
   // A target that names nothing is the package, which is what makes a
   // one-file manifest readable.
   target.name = target_name.empty() ? manifest.name : target_name;
@@ -235,13 +282,20 @@ resolve_package_targets(PipelineContext& ctx,
     (void)index;
     return base::make_err(diag::Reported{});
   }
+  base::Result<PackageSources, diag::Reported> sources =
+      collect_package_sources(ctx, root, manifest);
+  if (sources.is_err() || ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  const PackageSources collected = std::move(sources).unwrap();
+
   std::vector<PackageTarget> targets;
   // The binary comes first: `alcy run` takes the front target, and a
   // package's headline artifact is its executable.
   const auto add = [&](std::string_view path, std::string_view name,
                        bool is_lib) -> base::Result<void, diag::Reported> {
     base::Result<PackageTarget, diag::Reported> target =
-        resolve_target(ctx, root, manifest, path, name, is_lib);
+        resolve_target(ctx, root, manifest, collected, path, name, is_lib);
     if (target.is_err() || ctx.bag.has_errors()) {
       return base::make_err(diag::Reported{});
     }

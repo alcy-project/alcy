@@ -28,6 +28,12 @@ enum class DiagCode : u8 {
   NotImplemented = 3,
   NoTargets = 4,
   LinkError = 5,
+  // Moved here with the parse stage: the syntax arena belongs to the run
+  // rather than to one file, so the check went to whoever drives the
+  // files through it.
+  SpanArenaExhausted = 6,
+  UnknownSourceFile = 7,
+  InvalidSourcePath = 8,
 };
 
 }  // namespace pipeline

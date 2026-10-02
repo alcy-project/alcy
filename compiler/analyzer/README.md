@@ -2,10 +2,12 @@
 
 Module resolution (`resolve.h`) and type checking (`types.h`).
 
-- `resolve_modules` lexes, parses, and desugars every file, builds
-  the `ModuleTree`, and resolves imports. Module membership comes
-  from the caller, never from source items, so no new files enter
-  the compilation. Value and type expressions are NOT resolved here.
+- `resolve_modules` builds the `ModuleTree` from parsed items and
+  resolves imports. Lexing, parsing, and desugaring happen first, in
+  `pipeline`; the items arrive as `ParsedModule`s, so nothing here reads
+  a source byte. Module membership comes from the caller, never from
+  source items, so no new files enter the compilation. Value and type
+  expressions are NOT resolved here.
 - `check_package` resolves every type position to interned `TypeIdx`
   and checks bodies, producing a `CheckedPackage`.
 
@@ -14,10 +16,11 @@ translation units) carries the checking state; it is not public API.
 
 ## Entry points
 
-- `resolve_modules(root, modules, package_name, sources, ast, bag,
-  prelude)` -> `base::Result<ModuleTree, diag::Reported>`. Unknown
-  file ids are rejected (`ANALYZER_INVALID_PATH`); failures leave the
-  tree unusable and the bag holds the diagnostics.
+- `resolve_modules(root, parsed_modules, package_name, ast, bag,
+  prelude)` -> `base::Result<ModuleTree, diag::Reported>`. The caller
+  owns the items, the paths, and the arena, and keeps all three alive
+  for the call; failures leave the tree unusable and the bag holds the
+  diagnostics.
 - `verify_module_tree(tree)` ->
   `base::Result<void, ModuleTreeError>`: non-empty, root in range,
   no null modules, prelude count within range. Pure.

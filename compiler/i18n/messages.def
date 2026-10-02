@@ -122,7 +122,6 @@
   F(AnalyzerDuplicatePreludeModule, "Prelude module '{}' is declared more than once") \
   F(AnalyzerFloatSuffixOnInteger, "Float suffix on an integer literal") \
   F(AnalyzerForRequiresIterator, "A 'for' loop requires an 'Iterator' implementation in scope for this type") \
-  F(AnalyzerSpanArenaExhausted, "Parsing this input needs more than the {} bytes of arena the compiler reserves for syntax") \
   F(AnalyzerFormatArity, "Intrinsic 'format' expects 2 arguments, found {}") \
   F(AnalyzerFormatInCompEvaluation, "Intrinsic 'format' is not allowed in comp evaluation") \
   F(AnalyzerFormatPlaceholderArity, "Format string has {} placeholders for {} arguments") \
@@ -198,8 +197,6 @@
   F(AnalyzerUnknownField, "Unknown field '{}'") \
   F(AnalyzerUnknownIntrinsic, "Unknown intrinsic '{}'") \
   F(AnalyzerUnknownMethod, "No method '{}'") \
-  F(AnalyzerUnknownModuleFileId, "Unknown file id for a module input") \
-  F(AnalyzerUnknownPreludeFileId, "Unknown file id for a prelude input") \
   F(AnalyzerUnknownTupleField, "Unknown tuple field '{}'") \
   F(AnalyzerUnknownType, "Unknown type '{}'") \
   F(AnalyzerUnresolved, "Unresolved {} '{}'") \
@@ -303,9 +300,11 @@
   F(PipelineNoManifestWithFileHintInCurrentDirectory, "No manifest found at current directory; pass a file with --file or add alcy.toml") \
   F(PipelineNoSourceFiles, "No source files found under '{}'") \
   F(PipelinePathExists, "Path '{}' already exists; refusing to overwrite") \
+  F(PipelineSpanArenaExhausted, "Parsing this input needs more than the {} bytes of arena the compiler reserves for syntax") \
   F(PipelineSourceDirectoryInaccessible, "Source directory '{}' is not accessible") \
   F(PipelineStdIsASuite, "The 'alcy/std' path is a suite, not a package; write \"alcy/std/*\" for every member or \"alcy/std/<package>\" for one") \
   F(PipelineStdPackageRequiresSuite, "Package 'alcy/std/{}' requires alcy/std/{}; add it to [dependencies]") \
+  F(PipelineUnknownSourceFile, "Unknown file id for a source input") \
   /* cli */ \
   F(CliAbout, "alcy language compiler") \
   F(CliBuildAbout, "Build a package directory") \

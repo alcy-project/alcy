@@ -151,7 +151,7 @@ state between stages beyond the data explicitly passed along.
 | `analyzer`                | Name resolution and type checking on the AST, plus ownership checking on the IR.                                                       | No heap allocation on hot paths; operates over immutable views where possible.    |
 | `lowering`                | AST-to-IR lowering: a checked package becomes verifier-ready IR storage, reusing the checked type table in place.                      | Borrows the caller's arena, sources, and interner; owns the storage it returns.   |
 | `borrow`                  | Ownership checking over lowered IR: use-after-move, borrow exclusivity, assignment to borrowed places, and reference escape.           | No heap allocation; per-block states live in the pass's own frames.               |
-| `pipeline`                | Project-level build flow: package discovery, source loading, and per-file stage orchestration.                                         | Explicit phase boundaries and arena resets.                                       |
+| `pipeline`                | Project-level build flow: package discovery, source loading, and per-file stage orchestration. It calls every stage; none calls the next. | Explicit phase boundaries and arena resets.                                       |
 | `pkg`                     | Stands for `package`. Package manifests (`alcy.toml`), path-only dependency resolution, and lockfile model.                            | Arena-backed views; no heap allocation in the model itself.                       |
 | `source`                  | Source file registry: memory-mapped file loading with stable file ids.                                                                 | Mapped files plus small owned tables.                                             |
 | `codegen_llvm`            | Emits LLVM IR from analyzed IR. The active MVP code-generation path.                                                                   | Local API buffers only.                                                           |
@@ -352,6 +352,13 @@ Source bytes
 
    (codegen: native backend - reserved, not yet implemented)
 ```
+
+A stage never calls the one that follows it: `pipeline` calls each in turn,
+and passes the output of one to the next as a value. That is what keeps a
+stage's dependencies to the ones below it - `analyzer` reads parsed items and
+cannot lex, and the thread count and the order diagnostics merge in belong to
+`pipeline`, which knows how many files there are, rather than to the stage
+that happens to read them.
 
 1. **Lexing** - `lexer` reads a raw source view and produces a flat token
    buffer; tokens store fixed-width source offsets rather than line/column

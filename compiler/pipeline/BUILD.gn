@@ -67,6 +67,8 @@ source_set("pipeline") {
     "link_options.h",
     "new.cc",
     "new.h",
+    "parse.cc",
+    "parse.h",
     "pipeline.cc",
     "pipeline.h",
     "pipeline_context.cc",

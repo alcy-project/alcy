@@ -1,0 +1,256 @@
+// Copyright 2026 The Alcy Project Authors
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "pipeline/parse.h"
+
+#include <atomic>
+#include <deque>
+#include <optional>
+#include <span>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "analyzer/resolve.h"
+#include "ast/ast.h"
+#include "base/for_each.h"
+#include "debug/dcheck.h"
+#include "diag/bag.h"
+#include "diag/diagnostic.h"
+#include "diag/span.h"
+#include "diag/stage.h"
+#include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
+#include "fpag/build/build_flag.h"
+#include "fpag/debug/profiler/profile_scope.h"
+#include "fpag/debug/profiler/profiler.h"
+#include "fpag/mem/arena.h"
+#include "i18n/language.h"
+#include "i18n/messages.h"
+#include "lexer/lexer.h"
+#include "lexer/token.h"
+#include "parser/desugar.h"
+#include "parser/parser.h"
+#include "path/path.h"
+#include "pipeline/diag_code.h"
+#include "pipeline/pipeline_context.h"
+#include "source/source.h"
+
+namespace pipeline {
+
+namespace {
+
+// One file's diagnostics, and whether parsing it worked. Composing a message
+// copies bytes into an arena and appends to an array in it, and neither takes
+// two threads at once, so a file that might report while others do needs a bag
+// of its own.
+//
+// The reservation is a single file's worth of messages, which a file reporting
+// that many has that many problems in it. It is address space: the pages are
+// committed as the messages arrive.
+#if FPAG_BUILD_FLAG(IS_ARCH_64_BITS)
+constexpr usize FILE_DIAGNOSTIC_CAPACITY = 1ull << 20;
+#else
+constexpr usize FILE_DIAGNOSTIC_CAPACITY = 128ull << 10;
+#endif
+
+struct PerFileDiagnostics {
+  explicit PerFileDiagnostics(i18n::Language language) : bag(arena, language) {
+    arena.reserve(FILE_DIAGNOSTIC_CAPACITY);
+  }
+
+  PerFileDiagnostics(const PerFileDiagnostics&) = delete;
+  PerFileDiagnostics& operator=(const PerFileDiagnostics&) = delete;
+  PerFileDiagnostics(PerFileDiagnostics&&) = delete;
+  PerFileDiagnostics& operator=(PerFileDiagnostics&&) = delete;
+
+  mem::Arena arena;
+  diag::DiagBag bag;
+  std::atomic<bool> ok{true};
+};
+
+// Parses and desugars one admitted file, reporting whether it did.
+//
+// The arena reports running out by trapping, naming neither the file nor
+// the input, so a file it cannot hold is refused here instead - and it is
+// what the arena has spent that is checked rather than how large the file
+// is, since what a file costs is the identifiers it names.
+//
+// `bag` is the caller's: the run's own when one thread reads the input, and
+// this file's when several do. `profiler` is where the phases are recorded,
+// and null when they should not be.
+bool parse_one(PipelineContext& ctx,
+               ParsedFile& file,
+               std::string_view bytes,
+               diag::DiagBag& bag,
+               debug::Profiler* profiler) {
+  if (ctx.ast.nearly_full()) {
+    const u32 index = bag.emit<i18n::Key::PipelineSpanArenaExhausted>(
+        diag::Severity::Error, diag::Stage::Pipeline,
+        DiagCode::SpanArenaExhausted, diag::Span{file.id, 0, 0},
+        ctx.ast.spans.capacity());
+    (void)index;
+    return false;
+  }
+  lexer::Lexer lexer(bytes, file.id, bag);
+  std::vector<lexer::Token> tokens;
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "tokenize", "frontend");
+    lexer.tokenize(tokens);
+  }
+  parser::Parser parser(
+      std::span<const lexer::Token>(tokens.data(), tokens.size()), bytes,
+      file.id, ctx.ast, bag);
+  base::Result<std::span<const ast::ItemIdx>, diag::Reported> parsed = [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "parse", "frontend");
+    return parser.parse();
+  }();
+  if (parsed.is_err()) {
+    return false;
+  }
+  file.items = std::move(parsed).unwrap();
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "desugar", "frontend");
+    parser::desugar_shadowing(file.items, ctx.ast, bag);
+  }
+  return true;
+}
+
+}  // namespace
+
+base::Result<ParsedFiles, diag::Reported> parse_files(
+    PipelineContext& ctx,
+    std::span<const source::FileId> files) {
+  ParsedFiles parsed;
+  parsed.by_id.assign(ctx.sources.file_count(), ParsedFiles::NOT_PARSED);
+  parsed.files.reserve(files.size());
+
+  // Every file is admitted before any is parsed: its name is what a
+  // diagnostic calls it, and its path is what the module tree reports a
+  // stray file by. An id the source manager never minted is a caller's
+  // bug rather than an input, so it ends the run here instead of
+  // becoming a file some later stage trips over.
+  std::vector<std::string_view> bytes;
+  bytes.reserve(files.size());
+  for (source::FileId id : files) {
+    const std::optional<std::string_view> name = ctx.sources.name(id);
+    const std::optional<std::string_view> content = ctx.sources.bytes(id);
+    if (!name.has_value() || !content.has_value()) {
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineUnknownSourceFile>(
+          diag::Severity::Error, diag::Stage::Pipeline,
+          DiagCode::UnknownSourceFile);
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
+    base::Result<path::Path, path::PathError> canonical =
+        path::Path::from_native(*name);
+    if (canonical.is_err()) {
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineInvalidSourcePath>(
+          diag::Severity::Error, diag::Stage::Pipeline,
+          DiagCode::InvalidSourcePath);
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
+    parsed.by_id[id] = static_cast<u32>(parsed.files.size());
+    parsed.files.push_back({id, std::move(canonical).unwrap(), {}});
+    bytes.push_back(*content);
+  }
+
+  // Several threads need a bag per file; one thread writes into the run's
+  // own bag in the same order, so both paths report the same thing.
+  if (ctx.parse_jobs() < 2) {
+    // The phases are named when one thread does the work: a region over
+    // the whole parse would say nothing the phases do not.
+    for (usize i = 0; i < parsed.files.size(); ++i) {
+      if (!parse_one(ctx, parsed.files[i], bytes[i], ctx.bag, ctx.profiler)) {
+        return base::make_err(diag::Reported{});
+      }
+    }
+  } else {
+    // A deque rather than a vector because each bag holds the address of
+    // the arena beside it: an entry that moved would leave its bag
+    // pointing at the entry that took its place.
+    std::deque<PerFileDiagnostics> per_file;
+    while (per_file.size() < parsed.files.size()) {
+      per_file.emplace_back(ctx.bag.language());
+    }
+    {
+      // The region is named when several threads do the work, and the
+      // phases are not: under several threads a phase's duration is its
+      // thread's rather than the run's, and a report that sums them reads
+      // as though one file took as many threads as there are.
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "parse-files",
+                                               "frontend");
+      base::for_each(0, parsed.files.size(), ctx.parse_jobs(), [&](usize at) {
+        const bool ok = parse_one(ctx, parsed.files[at], bytes[at],
+                                  per_file[at].bag, nullptr);
+        per_file[at].ok.store(ok, std::memory_order_relaxed);
+      });
+    }
+
+    // The lowest failing file ends the run; the header says why the
+    // index and not the schedule decides.
+    for (usize i = 0; i < per_file.size(); ++i) {
+      if (!per_file[i].ok.load(std::memory_order_relaxed)) {
+        for (usize j = 0; j <= i; ++j) {
+          ctx.bag.merge(per_file[j].bag);
+        }
+        return base::make_err(diag::Reported{});
+      }
+    }
+    for (PerFileDiagnostics& into : per_file) {
+      ctx.bag.merge(into.bag);
+    }
+  }
+
+  // Once, here, rather than after each file: see `verify_trees`. A file's
+  // nodes are not a range of the arena once files are parsed on several
+  // threads, so the whole arena is walked once every file is in it.
+  if (parser::verify_trees(ctx.ast, ctx.bag).is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  return base::make_ok(std::move(parsed));
+}
+
+analyzer::ParsedModule parsed_module(const ParsedFiles& parsed,
+                                     const analyzer::ModuleInput& input) {
+  const ParsedFile* const file = parsed.find(input.id);
+  DCHECK(file != nullptr);
+  return analyzer::ParsedModule{input, file->path, file->items};
+}
+
+base::Result<analyzer::ModuleTree, diag::Reported> resolve_inputs(
+    PipelineContext& ctx,
+    source::FileId root,
+    std::span<const analyzer::ModuleInput> modules,
+    std::string_view package_name,
+    std::span<const analyzer::ModuleInput> prelude,
+    std::span<const analyzer::StdHint> std_hints) {
+  std::vector<source::FileId> files;
+  files.reserve(modules.size() + prelude.size());
+  for (const analyzer::ModuleInput& input : modules) {
+    files.push_back(input.id);
+  }
+  for (const analyzer::ModuleInput& input : prelude) {
+    files.push_back(input.id);
+  }
+  base::Result<ParsedFiles, diag::Reported> parsed = parse_files(ctx, files);
+  if (parsed.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  const ParsedFiles sources = std::move(parsed).unwrap();
+  const auto pair = [&](std::span<const analyzer::ModuleInput> inputs) {
+    std::vector<analyzer::ParsedModule> paired;
+    paired.reserve(inputs.size());
+    for (const analyzer::ModuleInput& input : inputs) {
+      paired.push_back(parsed_module(sources, input));
+    }
+    return paired;
+  };
+  std::vector<analyzer::ParsedModule> parsed_modules = pair(modules);
+  std::vector<analyzer::ParsedModule> parsed_prelude = pair(prelude);
+  return analyzer::resolve_modules(root, parsed_modules, package_name, ctx.ast,
+                                   ctx.bag, parsed_prelude, std_hints);
+}
+
+}  // namespace pipeline

@@ -10,10 +10,12 @@
 #include "analyzer/types.h"
 #include "borrow/borrow.h"
 #include "diag/bag.h"
+#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
 #include "lowering/lowering.h"
 #include "pipeline/embedded_std.h"
+#include "pipeline/parse.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
 #include "pipeline/std_stage.h"
@@ -80,13 +82,13 @@ base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
                                              "frontend");
     return std_prelude(ctx, selection);
   }();
+  // The root and every staged prelude source parse in one pass, so the
+  // phase covers everything resolution then reads.
   return [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve",
                                              "frontend");
     const std::span<const analyzer::StdHint> hints(STD_HINTS, STD_HINT_COUNT);
-    return analyzer::resolve_modules(root, {&single_input, 1}, "", ctx.sources,
-                                     ctx.ast, ctx.bag, prelude, hints,
-                                     ctx.front_end_jobs());
+    return resolve_inputs(ctx, root, {&single_input, 1}, "", prelude, hints);
   }();
 }
 

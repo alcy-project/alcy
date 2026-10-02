@@ -3,10 +3,7 @@
 
 #include "analyzer/resolve.h"
 
-#include <atomic>
-#include <deque>
 #include <limits>
-#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -15,8 +12,6 @@
 
 #include "analyzer/diag_code.h"
 #include "ast/ast.h"
-#include "base/for_each.h"
-#include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -24,13 +19,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
-#include "i18n/language.h"
 #include "i18n/messages.h"
-#include "lexer/lexer.h"
-#include "lexer/token.h"
-#include "parser/desugar.h"
-#include "parser/parser.h"
-#include "path/path.h"
 #include "source/source.h"
 
 namespace analyzer {
@@ -41,76 +30,40 @@ namespace {
 
 constexpr u32 NO_MODULE = std::numeric_limits<u32>::max();
 
+// One module's file, as `resolve_modules` received it: the name the
+// caller assigned, the syntax parsing produced, and the canonical path
+// the file is reported by. Every view borrows the caller's storage, so
+// nothing here outlives the call.
 struct FileData {
   source::FileId id = source::UNKNOWN_FILE;
-  path::Path path;
-  // Items are parsed into the package AstArena (never a per-file
-  // arena): ModuleNode::items outlives resolve_modules, so per-file
-  // arenas would dangle.
+  // Slash-separated module name; "" is the entry module.
+  std::string_view name;
+  // Canonical file path, named when a file belongs to no module.
+  std::string_view path;
   std::span<const ast::ItemIdx> items;
+  // A facade's public surface attaches without a `use`. Prelude only.
+  bool is_facade = false;
   u32 module = NO_MODULE;
-
-  FileData(source::FileId id, path::Path path)
-      : id(id), path(std::move(path)) {}
 };
 
 struct NameEntry {
   std::string_view name;
 };
 
-// One file's diagnostics, and whether reading it worked. Composing a message
-// copies bytes into an arena and appends to an array in it, and neither takes
-// two threads at once, so a file that might report needs a bag of its own.
-//
-// The reservation is a single file's worth of messages, which a file reporting
-// that many has that many problems in it. It is address space: the pages are
-// committed as the messages arrive.
-#if FPAG_BUILD_FLAG(IS_ARCH_64_BITS)
-constexpr usize FILE_DIAGNOSTIC_CAPACITY = 1ull << 20;
-#else
-constexpr usize FILE_DIAGNOSTIC_CAPACITY = 128ull << 10;
-#endif
-
-struct PerFileDiagnostics {
-  explicit PerFileDiagnostics(i18n::Language language) : bag(arena, language) {
-    arena.reserve(FILE_DIAGNOSTIC_CAPACITY);
-  }
-
-  PerFileDiagnostics(const PerFileDiagnostics&) = delete;
-  PerFileDiagnostics& operator=(const PerFileDiagnostics&) = delete;
-  PerFileDiagnostics(PerFileDiagnostics&&) = delete;
-  PerFileDiagnostics& operator=(PerFileDiagnostics&&) = delete;
-
-  mem::Arena arena;
-  diag::DiagBag bag;
-  std::atomic<bool> ok{true};
-};
-
 class Resolver {
  public:
-  Resolver(source::SourceManager& sources,
-           ast::AstArena& ast,
-           diag::DiagBag& bag,
-           u32 jobs)
-      : sources(sources), ast(ast), bag(bag), jobs(jobs) {}
+  Resolver(ast::AstArena& ast, diag::DiagBag& bag) : ast(ast), bag(bag) {}
 
-  source::SourceManager& sources;
   ast::AstArena& ast;
   diag::DiagBag& bag;
-  // How many threads may read files at once. One reads them on the calling
-  // thread, which is the default: reading the source is a small part of a run.
-  u32 jobs;
   std::string_view package_name;
   source::FileId root = source::UNKNOWN_FILE;
   std::vector<FileData> file_data;
-  // Prelude sources: lexed and parsed like package files but attached
-  // as their own tree, never into the package tree. A facade is the
-  // root of one prelude package; the rest of that package's modules sit
-  // beside it and are ordinary modules.
+  // Prelude sources: attached as their own tree, never into the package
+  // tree. A facade is the root of one prelude package; the rest of that
+  // package's modules sit beside it and are ordinary modules.
   std::span<const StdHint> std_hints_;
   std::vector<FileData> prelude_data;
-  std::vector<std::string> prelude_names;
-  std::vector<bool> prelude_facades;
   std::vector<u32> prelude_modules;
   std::vector<ModuleNode*> modules;
   std::vector<u32> parents;
@@ -169,56 +122,6 @@ class Resolver {
     return NO_MODULE;
   }
 
-  // Lexes, parses and desugars one file, reporting whether it did.
-  //
-  // The arena reports running out by trapping, naming neither the file nor
-  // the input, so a file it cannot hold is refused here instead - and it is
-  // what the arena has spent that is checked rather than how large the file
-  // is, since what a file costs is the identifiers it names.
-  //
-  // `bag` is the caller's: the run's own when one thread reads the input, and
-  // this file's when several do. `profiler` is where the phases are recorded,
-  // and null when they should not be.
-  bool lex_parse_file(FileData& file,
-                      diag::DiagBag& bag,
-                      debug::Profiler* profiler) {
-    // File ids were validated when the inputs were admitted in run().
-    const std::optional<std::string_view> file_bytes = sources.bytes(file.id);
-    DCHECK(file_bytes.has_value());
-    const std::string_view bytes = file_bytes.value_or(std::string_view{});
-    if (ast.nearly_full()) {
-      const u32 index = bag.emit<i18n::Key::AnalyzerSpanArenaExhausted>(
-          diag::Severity::Error, diag::Stage::Analyzer,
-          DiagCode::SpanArenaExhausted, diag::Span{file.id, 0, 0},
-          ast.spans.capacity());
-      (void)index;
-      return false;
-    }
-    lexer::Lexer lexer(bytes, file.id, bag);
-    std::vector<lexer::Token> tokens;
-    {
-      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "tokenize",
-                                               "frontend");
-      lexer.tokenize(tokens);
-    }
-    parser::Parser parser(
-        std::span<const lexer::Token>(tokens.data(), tokens.size()), bytes,
-        file.id, ast, bag);
-    base::Result<std::span<const ast::ItemIdx>, diag::Reported> parsed = [&] {
-      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "parse", "frontend");
-      return parser.parse();
-    }();
-    if (parsed.is_err()) {
-      return false;
-    }
-    file.items = std::move(parsed).unwrap();
-    {
-      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "desugar", "frontend");
-      parser::desugar_shadowing(file.items, ast, bag);
-    }
-    return true;
-  }
-
   void build_tree() {
     u32 root_file = NO_MODULE;
     for (u32 i = 0; i < static_cast<u32>(file_data.size()); ++i) {
@@ -243,7 +146,7 @@ class Resolver {
       if (i == root_file) {
         continue;
       }
-      attach_module(root_module, module_inputs[i], i);
+      attach_module(root_module, file_data[i].name, i);
     }
 
     for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
@@ -259,7 +162,7 @@ class Resolver {
       if (file.module == NO_MODULE) {
         const u32 index = bag.emit<i18n::Key::AnalyzerSourceFileHasNoModule>(
             diag::Severity::Warning, diag::Stage::Analyzer,
-            DiagCode::UnreachableFile, file.path.as_view());
+            DiagCode::UnreachableFile, file.path);
         (void)index;
       }
     }
@@ -620,119 +523,24 @@ class Resolver {
     }
   }
 
-  std::vector<std::string> module_inputs;
-
   ModuleTree run(source::FileId root_id,
-                 std::span<const ModuleInput> inputs,
+                 std::span<const ParsedModule> inputs,
                  std::string_view package_name_in,
-                 std::span<const ModuleInput> prelude = {},
-                 std::span<const StdHint> std_hints = {}) {
+                 std::span<const ParsedModule> prelude,
+                 std::span<const StdHint> std_hints) {
     package_name = package_name_in;
     root = root_id;
     std_hints_ = std_hints;
     file_data.reserve(inputs.size());
-    for (const ModuleInput& input : inputs) {
-      const std::optional<std::string_view> source_name =
-          sources.name(input.id);
-      if (!source_name.has_value()) {
-        const u32 index = bag.emit<i18n::Key::AnalyzerUnknownModuleFileId>(
-            diag::Severity::Error, diag::Stage::Analyzer,
-            DiagCode::InvalidPath);
-        (void)index;
-        continue;
-      }
-      base::Result<path::Path, path::PathError> canonical =
-          path::Path::from_native(*source_name);
-      if (canonical.is_err()) {
-        const u32 index = bag.emit<i18n::Key::PipelineInvalidSourcePath>(
-            diag::Severity::Error, diag::Stage::Analyzer,
-            DiagCode::InvalidPath);
-        (void)index;
-        continue;
-      }
-      path::Path path = std::move(canonical).unwrap();
-      module_inputs.emplace_back(input.name);
-      file_data.emplace_back(input.id, std::move(path));
+    for (const ParsedModule& input : inputs) {
+      file_data.push_back({input.input.id, input.input.name,
+                           input.path.as_view(), input.items});
     }
-    for (const ModuleInput& input : prelude) {
-      const std::optional<std::string_view> source_name =
-          sources.name(input.id);
-      if (!source_name.has_value()) {
-        const u32 index = bag.emit<i18n::Key::AnalyzerUnknownPreludeFileId>(
-            diag::Severity::Error, diag::Stage::Analyzer,
-            DiagCode::InvalidPath);
-        (void)index;
-        continue;
-      }
-      base::Result<path::Path, path::PathError> canonical =
-          path::Path::from_native(*source_name);
-      if (canonical.is_err()) {
-        const u32 index = bag.emit<i18n::Key::PipelineInvalidSourcePath>(
-            diag::Severity::Error, diag::Stage::Analyzer,
-            DiagCode::InvalidPath);
-        (void)index;
-        continue;
-      }
-      path::Path path = std::move(canonical).unwrap();
-      prelude_names.emplace_back(input.name);
-      prelude_facades.push_back(input.is_facade);
-      prelude_data.emplace_back(input.id, std::move(path));
-    }
-    // Reading a file depends on nothing in any other, so several threads read
-    // them at once. What each reports goes into a bag of its own, and the
-    // bags are merged in file order below, so a run's diagnostics read the
-    // same however many threads read the input.
-    //
-    // A deque rather than a vector because each bag holds the address of the
-    // arena beside it: an entry that moved would leave its bag pointing at
-    // the entry that took its place.
-    std::deque<PerFileDiagnostics> per_file;
-    while (per_file.size() < file_data.size() + prelude_data.size()) {
-      per_file.emplace_back(bag.language());
-    }
-    const bool threaded = jobs > 1;
-    // The phases are named when one thread reads the input and the region is
-    // named when several do, never both: under several threads a phase's
-    // duration is its thread's rather than the run's, and a report that sums
-    // them reads as though one file took as many threads as there are.
-    debug::Profiler* const phase_profiler =
-        threaded ? nullptr : &debug::Profiler::global();
-    const auto parse_all = [&](std::vector<FileData>& files, usize first) {
-      base::for_each(0, files.size(), threaded ? jobs : 1, [&](usize at) {
-        PerFileDiagnostics& into = per_file[first + at];
-        const bool ok = lex_parse_file(files[at], into.bag, phase_profiler);
-        into.ok.store(ok, std::memory_order_relaxed);
-      });
-    };
-    {
-      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(
-          threaded ? &debug::Profiler::global() : nullptr, "parse-files",
-          "frontend");
-      parse_all(file_data, 0);
-      parse_all(prelude_data, file_data.size());
-    }
-
-    // The first file that failed ends the run, as it did when one thread did
-    // the reading: the files before it keep their diagnostics and the rest are
-    // not reported at all. Taking the lowest failing index is what keeps that
-    // a property of the input rather than of the schedule - and it matters
-    // because a file that did not fit leaves the arena as it was, so every
-    // file after it would report the same thing.
-    for (usize i = 0; i < per_file.size(); ++i) {
-      if (!per_file[i].ok.load(std::memory_order_relaxed)) {
-        for (usize j = 0; j <= i; ++j) {
-          bag.merge(per_file[j].bag);
-        }
-        return ModuleTree{};
-      }
-    }
-    for (PerFileDiagnostics& into : per_file) {
-      bag.merge(into.bag);
-    }
-
-    // Once, here, rather than after each file: see `verify_trees`.
-    if (parser::verify_trees(ast, bag).is_err()) {
-      return ModuleTree{};
+    prelude_data.reserve(prelude.size());
+    for (const ParsedModule& input : prelude) {
+      prelude_data.push_back({input.input.id, input.input.name,
+                              input.path.as_view(), input.items,
+                              input.input.is_facade});
     }
     build_tree();
     // A prelude package is a tree: slash-separated names nest, so
@@ -740,9 +548,8 @@ class Resolver {
     // and can reach each other. Only a facade is a prelude, so only its
     // public surface is in scope without a `use`.
     const u32 modules_before = static_cast<u32>(modules.size());
-    for (usize i = 0; i < prelude_data.size(); ++i) {
-      const std::string& slash_name = prelude_names[i];
-      const std::vector<std::string_view> segments = split_segments(slash_name);
+    for (FileData& file : prelude_data) {
+      const std::vector<std::string_view> segments = split_segments(file.name);
       u32 parent = NO_MODULE;
       std::string prefix;
       for (usize seg = 0; seg < segments.size(); ++seg) {
@@ -759,9 +566,8 @@ class Resolver {
         }
         if (child == NO_MODULE) {
           child = add_module(
-              child_path, leaf ? prelude_data[i].id : source::UNKNOWN_FILE,
-              leaf ? prelude_data[i].items : std::span<const ast::ItemIdx>{},
-              parent);
+              child_path, leaf ? file.id : source::UNKNOWN_FILE,
+              leaf ? file.items : std::span<const ast::ItemIdx>{}, parent);
           // The whole staged tree is toolchain sources, facades and
           // siblings alike; only facades are preludes.
           modules[child]->is_staged = true;
@@ -771,9 +577,8 @@ class Resolver {
           const u32 index = bag.emit<i18n::Key::AnalyzerDuplicatePreludeModule>(
               diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::DuplicateModule,
-              prelude_data[i].id == source::UNKNOWN_FILE
-                  ? diag::Span{}
-                  : diag::Span{prelude_data[i].id, 0, 0},
+              file.id == source::UNKNOWN_FILE ? diag::Span{}
+                                              : diag::Span{file.id, 0, 0},
               child_path);
           (void)index;
           continue;
@@ -786,8 +591,8 @@ class Resolver {
         prefix = child_path;
         parent = child;
       }
-      prelude_data[i].module = parent;
-      if (prelude_facades[i]) {
+      file.module = parent;
+      if (file.is_facade) {
         modules[parent]->is_prelude = true;
         prelude_modules.push_back(parent);
       }
@@ -821,15 +626,13 @@ class Resolver {
 
 base::Result<ModuleTree, diag::Reported> resolve_modules(
     source::FileId root,
-    std::span<const ModuleInput> modules,
+    std::span<const ParsedModule> modules,
     std::string_view package_name,
-    source::SourceManager& sources,
     ast::AstArena& ast,
     diag::DiagBag& bag,
-    std::span<const ModuleInput> prelude,
-    std::span<const StdHint> std_hints,
-    u32 jobs) {
-  Resolver resolver{sources, ast, bag, jobs};
+    std::span<const ParsedModule> prelude,
+    std::span<const StdHint> std_hints) {
+  Resolver resolver{ast, bag};
   ModuleTree tree =
       resolver.run(root, modules, package_name, prelude, std_hints);
   if (bag.has_errors()) {

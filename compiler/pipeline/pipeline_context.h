@@ -40,16 +40,20 @@ struct PipelineContext {
   // points it at Profiler::global() when --time-trace is given; a host
   // embedding the pipeline points it at its own instance.
   debug::Profiler* profiler = nullptr;
-  // How many threads the front end may read files with. Zero means the
+  // How many threads the parse stage may read files with. Zero means the
   // caller did not ask for any.
   u32 jobs = 0;
 
-  explicit PipelineContext(i18n::Language language);
+  // `span_capacity` is the syntax arena's reservation. A case that has
+  // to spend it can ask for less, the way `ast::AstArena` allows.
+  explicit PipelineContext(
+      i18n::Language language,
+      usize span_capacity = ast::AstArena::DEFAULT_SPAN_CAPACITY);
 
-  // The thread count the front end reads with, which is one unless the
-  // command line asked for more. Reading files is the only phase spread over
-  // threads, so nothing after it is bounded by this.
-  [[nodiscard]] u32 front_end_jobs() const;
+  // The thread count `parse_files` reads with, which is one unless the
+  // command line asked for more. Reading files is the only work spread
+  // over threads, so nothing after it is bounded by this.
+  [[nodiscard]] u32 parse_jobs() const;
 };
 
 // Returns ".exe" on Windows or else ""

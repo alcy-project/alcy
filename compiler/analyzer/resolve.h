@@ -15,6 +15,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
+#include "path/path.h"
 #include "source/source.h"
 
 namespace analyzer {
@@ -124,18 +125,9 @@ inline bool is_core_package(std::string_view path) {
 // Short human-readable detail for a module tree failure.
 std::string_view describe_module_tree_error(ModuleTreeError error);
 
-// Builds the module tree for one package and resolves its imports.
-// `root` is the package entry file; `modules` assigns every source
-// file its slash-separated module name ("" names the root itself).
-// Every file is lexed, parsed, and desugared here. Module membership
-// comes from the caller, never from source items, so no new files enter
-// the compilation. Value and type expressions are NOT resolved here;
-// that is later semantic work over ModuleNode::items.
-//
-// `prelude` lists additional source files resolved as standalone
-// modules outside the package tree. Every facade's public items are
-// implicitly imported by every other module (locals and explicit uses
-// win silently), which is where the toolchain's core sources attach.
+// A module's identity for resolution: the name a `use` path spells, the
+// file the items came from, and whether its public surface is a
+// facade's. The items come alongside it, in `ParsedModule`.
 struct ModuleInput {
   std::string_view name;
   source::FileId id = source::UNKNOWN_FILE;
@@ -143,6 +135,19 @@ struct ModuleInput {
   // std_prelude for a staged `prelude.al`, never from a user's module
   // name.
   bool is_facade = false;
+};
+
+// One module input and the syntax the parser made of its file. Lexing,
+// parsing, and desugaring happen before this, in `pipeline`; resolution
+// starts from the items, so it never reads a source byte and never
+// depends on how many threads produced them. `path` is the file's
+// canonical spelling, kept for the file that turns out to belong to no
+// module. The items borrow the run's arena; the path is owned here, and
+// both outlive the resolution that reads them.
+struct ParsedModule {
+  ModuleInput input;
+  path::Path path;
+  std::span<const ast::ItemIdx> items;
 };
 
 // One public name of one embedded suite member, for the
@@ -188,17 +193,29 @@ inline void emit_unresolved(diag::DiagBag& bag,
   (void)index;
 }
 
+// Builds the module tree for one package and resolves its imports.
+// `root` is the package entry file; `modules` assigns every source
+// file its slash-separated module name ("" names the root itself) and
+// carries the items parsing produced for it. Module membership comes
+// from the caller, never from source items, so no new files enter the
+// compilation. Value and type expressions are NOT resolved here; that
+// is later semantic work over ModuleNode::items.
+//
+// `prelude` lists additional source files resolved as standalone
+// modules outside the package tree. Every facade's public items are
+// implicitly imported by every other module (locals and explicit uses
+// win silently), which is where the toolchain's core sources attach.
+//
+// The caller owns the items, the paths, and the arena they live in,
+// and keeps all three alive for the call. `pipeline::parse_files`
+// produces exactly this input.
 base::Result<ModuleTree, diag::Reported> resolve_modules(
     source::FileId root,
-    std::span<const ModuleInput> modules,
+    std::span<const ParsedModule> modules,
     std::string_view package_name,
-    source::SourceManager& sources,
     ast::AstArena& ast,
     diag::DiagBag& bag,
-    std::span<const ModuleInput> prelude = {},
-    std::span<const StdHint> std_hints = {},
-    // How many threads may read files at once. One reads them on the
-    // calling thread, which is the default.
-    u32 jobs = 1);
+    std::span<const ParsedModule> prelude = {},
+    std::span<const StdHint> std_hints = {});
 
 }  // namespace analyzer

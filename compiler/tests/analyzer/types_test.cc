@@ -18,13 +18,13 @@
 #include "doctest/doctest.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/result.h"
-#include "fpag/mem/arena.h"
-#include "fpag/mem/page_allocator.h"
 #include "fpag/str/string_interner.h"
 #include "i18n/language.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
+#include "pipeline/parse.h"
+#include "pipeline/pipeline_context.h"
 #include "source/source.h"
 #include "tests/util/virtual_source.h"
 
@@ -33,12 +33,14 @@ namespace analyzer {
 namespace {
 
 struct Fixture {
-  mem::Arena arena;
-  ast::AstArena ast;
-  diag::DiagBag bag{arena, i18n::Language::EnUs};
-  source::SourceManager sources;
-
-  Fixture() { arena.reserve(1u << 20); }
+  // Resolution runs through the pipeline's parse, which is where the
+  // items come from, so the context owns the arena, the bag, and the
+  // interner the cases inspect.
+  pipeline::PipelineContext ctx{i18n::Language::EnUs};
+  ast::AstArena& ast = ctx.ast;
+  diag::DiagBag& bag = ctx.bag;
+  source::SourceManager& sources = ctx.sources;
+  str::StringInterner& strings = ctx.strings;
 };
 
 // The sources one case declares, held in memory. It stands in for a
@@ -94,7 +96,6 @@ CheckOutcome check_case(
   }
   std::deque<std::string> prelude_storage;
   std::vector<ModuleInput> prelude_inputs;
-  str::StringInterner strings{mem::page_size()};
   for (const auto& [name, rel] : prelude) {
     const tests::VirtualSource* const file = dir.find(rel);
     if (file == nullptr) {
@@ -107,14 +108,14 @@ CheckOutcome check_case(
     // docs/adr/0016-suites-and-the-std-split.md.
     prelude_inputs.push_back({prelude_storage.back(), id, true});
   }
-  base::Result<ModuleTree, diag::Reported> tree_result = resolve_modules(
-      root, inputs, "testpkg", f.sources, f.ast, f.bag, prelude_inputs);
+  base::Result<ModuleTree, diag::Reported> tree_result =
+      pipeline::resolve_inputs(f.ctx, root, inputs, "testpkg", prelude_inputs);
   if (tree_result.is_err() || f.bag.has_errors()) {
     return {std::nullopt};
   }
   ModuleTree tree = std::move(tree_result).unwrap();
   CheckedPackage checked =
-      check_package(tree, width, f.ast, f.bag, strings).unwrap();
+      check_package(tree, width, f.ast, f.bag, f.strings).unwrap();
   if (f.bag.has_errors()) {
     return {std::nullopt};
   }

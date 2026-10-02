@@ -13,12 +13,10 @@
 #include "benchmarks/generator.h"
 #include "diag/bag.h"
 #include "fpag/base/result.h"
-#include "fpag/mem/arena.h"
-#include "fpag/mem/page_allocator.h"
-#include "fpag/str/string_interner.h"
-#include "i18n/language.h"
 #include "ir/type.h"
 #include "lowering/lowering.h"
+#include "pipeline/parse.h"
+#include "pipeline/pipeline_context.h"
 #include "source/source.h"
 
 namespace bench {
@@ -27,11 +25,8 @@ CompilerFixture::CompilerFixture(SourceSpec spec)
     : CompilerFixture(generate_source(spec)) {}
 
 CompilerFixture::CompilerFixture(std::string source)
-    : source_(std::move(source)),
-      bag_(arena_, i18n::Language::EnUs),
-      strings_(mem::page_size()) {
-  arena_.reserve(1u << 22);
-  root_ = sources_.add_virtual("bench.al", source_);
+    : source_(std::move(source)) {
+  root_ = ctx_.sources.add_virtual("bench.al", source_);
   inputs_.push_back(analyzer::ModuleInput{"", root_});
 }
 
@@ -39,7 +34,7 @@ bool CompilerFixture::failed() {
   // A diagnostic anywhere means the stage that produced it did not
   // finish, so the stages after it have nothing to hand on. A bag that
   // only warns is still a success: the pipeline gates on errors too.
-  if (bag_.has_errors()) {
+  if (ctx_.bag.has_errors()) {
     ok_ = false;
   }
   return !ok_;
@@ -47,9 +42,8 @@ bool CompilerFixture::failed() {
 
 void CompilerFixture::resolve() {
   base::Result<analyzer::ModuleTree, diag::Reported> resolved =
-      analyzer::resolve_modules(root_,
-                                std::span<const analyzer::ModuleInput>(inputs_),
-                                "", sources_, ast_, bag_);
+      pipeline::resolve_inputs(
+          ctx_, root_, std::span<const analyzer::ModuleInput>(inputs_), "");
   if (resolved.is_err() || failed()) {
     ok_ = false;
     return;
@@ -63,8 +57,8 @@ void CompilerFixture::analyze() {
     return;
   }
   base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyzer::check_package(*tree_, ir::PointerWidth::W64, ast_, bag_,
-                              strings_);
+      analyzer::check_package(*tree_, ir::PointerWidth::W64, ctx_.ast, ctx_.bag,
+                              ctx_.strings);
   if (checked.is_err() || failed()) {
     ok_ = false;
     return;
@@ -78,8 +72,8 @@ void CompilerFixture::lower() {
     return;
   }
   base::Result<lowering::LoweredPackage, diag::Reported> lowered =
-      lowering::lower_package(std::move(*checked_), ir::PointerWidth::W64, ast_,
-                              strings_, bag_);
+      lowering::lower_package(std::move(*checked_), ir::PointerWidth::W64,
+                              ctx_.ast, ctx_.strings, ctx_.bag);
   checked_.reset();
   if (lowered.is_err() || failed()) {
     ok_ = false;

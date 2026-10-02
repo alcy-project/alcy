@@ -20,8 +20,6 @@ source_set("analyzer") {
     "//compiler/diag",
     "//compiler/i18n",
     "//compiler/ir",
-    "//compiler/lexer",
-    "//compiler/parser",
     "//compiler/path",
     "//compiler/source",
     "//compiler/text",

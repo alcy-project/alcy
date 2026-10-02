@@ -10,14 +10,14 @@
 
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
-#include "ast/ast.h"
 #include "benchmarks/generator.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
-#include "fpag/mem/arena.h"
 #include "fpag/str/string_interner.h"
+#include "i18n/language.h"
 #include "ir/storage.h"
 #include "lowering/lowering.h"
+#include "pipeline/pipeline_context.h"
 #include "source/source.h"
 
 namespace bench {
@@ -76,11 +76,11 @@ class CompilerFixture {
   // even though it only reads, so the accessor hands out a mutable
   // reference: a case that reuses a package across samples reuses the
   // bag with it.
-  diag::DiagBag& bag() { return bag_; }
+  diag::DiagBag& bag() { return ctx_.bag; }
 
   // The interner lowering interned names into, which the emitter reads
   // while it builds a module.
-  str::StringInterner& strings() { return strings_; }
+  str::StringInterner& strings() { return ctx_.strings; }
 
   // Hands over the verified storage, consuming the proof: the emitter
   // takes it by value, so one emission consumes it and a second needs a
@@ -102,12 +102,10 @@ class CompilerFixture {
   std::optional<lowering::LoweredPackage> lowered_;
   bool ok_ = true;
 
-  // Declared ahead of the bag, which borrows the arena.
-  mem::Arena arena_;
-  ast::AstArena ast_;
-  source::SourceManager sources_;
-  diag::DiagBag bag_;
-  str::StringInterner strings_;
+  // The stages' own state: the arena the syntax lives in, the sources,
+  // the diagnostics, and the interner. One context rather than the
+  // pieces, because the parse stage reads files by id through it.
+  pipeline::PipelineContext ctx_{i18n::Language::EnUs};
   // The root module carries the empty name, as a single-file program's
   // does: the name is what an `import` would have to say, and a file
   // that imports nothing has none.
