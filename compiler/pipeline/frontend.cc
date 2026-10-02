@@ -31,7 +31,7 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
                                              "frontend");
     const std::span<const analyzer::StdHint> hints(STD_HINTS, STD_HINT_COUNT);
     return analyzer::check_package(tree, ctx.target.width, ctx.ast, ctx.bag,
-                                   ctx.strings, hints);
+                                   ctx.strings, hints, ctx.profiler);
   }();
   if (checked.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
@@ -45,7 +45,7 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
   base::Result<lowering::LoweredPackage, diag::Reported> lowered = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "lower", "frontend");
     return lowering::lower_package(std::move(package), ctx.target.width,
-                                   ctx.ast, ctx.strings, ctx.bag);
+                                   ctx.ast, ctx.strings, ctx.bag, ctx.profiler);
   }();
   if (lowered.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
@@ -59,7 +59,8 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
   const bool borrows_ok = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "borrow",
                                              "frontend");
-    return borrow::check_borrows(package_ir, ctx.bag).is_ok();
+    return borrow::check_borrows(package_ir, ctx.bag, ctx.strings, ctx.profiler)
+        .is_ok();
   }();
   if (!borrows_ok || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
@@ -77,14 +78,16 @@ base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
     const StdSelection& selection) {
   const analyzer::ModuleInput single_input{"", root};
   const std::span<const analyzer::ModuleInput> prelude = [&] {
-    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "prelude",
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "std-stage",
                                              "frontend");
     return std_prelude(ctx, selection);
   }();
   // The root and every staged prelude source parse in one pass, so the
   // phase covers everything resolution then reads.
+  // The resolver names nothing here: a single file has one module, so
+  // the whole thing is one module-tree build and the scope covers that.
   return [&] {
-    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve",
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve-tree",
                                              "frontend");
     return resolve_inputs(ctx, root, {&single_input, 1}, "", prelude,
                           std_hints());

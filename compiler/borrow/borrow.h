@@ -5,6 +5,8 @@
 
 #include "diag/bag.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profiler.h"
+#include "fpag/str/string_interner.h"
 #include "lowering/lowering.h"
 
 namespace borrow {
@@ -20,6 +22,8 @@ namespace borrow {
 // errors. The cli still gates the exit code on the bag.
 base::Result<void, diag::Reported> check_borrows(
     const lowering::LoweredPackage& lowered,
-    diag::DiagBag& bag);
+    diag::DiagBag& bag,
+    str::StringInterner& strings,
+    debug::Profiler* profiler = nullptr);
 
 }  // namespace borrow

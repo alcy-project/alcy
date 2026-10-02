@@ -42,6 +42,8 @@ base::Result<ManifestProbe, diag::Reported> require_package_manifest(
     PipelineContext& ctx,
     std::string_view raw,
     bool file_hint) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "manifest",
+                                           "frontend");
   base::Result<path::Path, path::PathError> dir = path::Path::from_native(raw);
   if (dir.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineInvalidTarget>(
@@ -127,8 +129,11 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
   const std::vector<LoadedDependency> dependencies =
       std::move(resolved).unwrap();
 
-  base::Result<pipeline::DiscoveredSources, diag::Reported> discovered =
-      pipeline::discover_sources(root.as_view(), ctx.sources, ctx.bag);
+  base::Result<pipeline::DiscoveredSources, diag::Reported> discovered = [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "discover",
+                                             "frontend");
+    return pipeline::discover_sources(root.as_view(), ctx.sources, ctx.bag);
+  }();
   if (discovered.is_err()) {
     return base::make_err(diag::Reported{});
   }
@@ -149,8 +154,11 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
   }
   // The closure's dependencies select the staged members; anything
   // unselected is absent, not merely out of scope.
-  base::Result<StdSelection, diag::Reported> selected =
-      resolve_std_selection(closure_deps, ctx.bag);
+  base::Result<StdSelection, diag::Reported> selected = [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "select",
+                                             "frontend");
+    return resolve_std_selection(closure_deps, ctx.bag);
+  }();
   if (selected.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
@@ -198,8 +206,11 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
       }
     }
   }
+  // `std_prelude` snapshots `selection.members` for its cache, which is
+  // why the selection is moved once and the bindings are named rather
+  // than dropped at the call.
   const std::span<const analyzer::ModuleInput> prelude = [&] {
-    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "prelude",
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "std-stage",
                                              "frontend");
     return std_prelude(ctx, selection);
   }();
@@ -216,6 +227,11 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
   std::sort(closure_ids.begin(), closure_ids.end());
   closure_ids.erase(std::unique(closure_ids.begin(), closure_ids.end()),
                     closure_ids.end());
+  // The module-input naming is target-relative; the only work `resolve`
+  // does not repeat between a binary and a library is this, so its own
+  // scope shows what repeating it costs.
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve-target",
+                                           "frontend");
   // Parsing admits the closure's files and the staged prelude, and
   // the prelude's ids follow the loaded files', so the order is the
   // one discovery loaded in.
@@ -237,7 +253,11 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
     sources.prelude.push_back(parsed_module(sources.parsed, input));
   }
   base::Result<std::vector<analyzer::ModuleInput>, diag::Reported>
-      selection_inputs = select_modules(ctx, manifest, root, found.files);
+      selection_inputs = [&] {
+        PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "select",
+                                                 "frontend");
+        return select_modules(ctx, manifest, root, found.files);
+      }();
   if (selection_inputs.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
@@ -363,7 +383,7 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
     modules.push_back(parsed_module(sources.parsed, input));
   }
   base::Result<analyzer::ModuleTree, diag::Reported> tree = [&] {
-    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve",
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve-tree",
                                              "frontend");
     return analyzer::resolve_modules(root_file, modules, manifest.name, ctx.ast,
                                      ctx.bag, sources.prelude, std_hints(),
@@ -390,6 +410,7 @@ resolve_package_targets(PipelineContext& ctx,
                         source::FileId manifest_file,
                         std::string_view manifest_name,
                         TargetScope scope) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "targets", "frontend");
   // Entry validation: the caller supplies a raw manifest id, which must
   // name a loaded file, and the bytes must then be structurally whole
   // before any field is read.
@@ -471,6 +492,10 @@ resolve_package_targets(PipelineContext& ctx,
 base::Result<pkg::Toolchain, diag::Reported> load_toolchain(
     PipelineContext& ctx,
     const path::Path& root) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "toolchain",
+                                           "frontend");
+  // The toolchain file is small, so the probe, load, and parse are one
+  // request, with the load the only file access of the three.
   const path::Path path =
       root.join(pkg::CONFIG_DIR_NAME).join(pkg::TOOLCHAIN_FILE_NAME);
   base::Result<source::FileId, source::SourceError> file =

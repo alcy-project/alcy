@@ -18,6 +18,8 @@
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profile_scope.h"
+#include "fpag/debug/profiler/profiler.h"
 #include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/function.h"
@@ -60,6 +62,9 @@ class Lowerer {
   str::StringInterner& strings;
   diag::DiagBag& bag;
   bool failed = false;
+  // Where the trace events go, or nothing. Set where the lowerer is
+  // constructed - `lower_package` - and read by the function loop here.
+  debug::Profiler* profiler = nullptr;
 
   // Side tables for ownership analysis: every emitted instruction
   // records its source span, and every address alloca records the
@@ -190,7 +195,8 @@ class Lowerer {
           ir::PointerWidth width,
           ast::AstArena& ast,
           str::StringInterner& strings,
-          diag::DiagBag& bag);
+          diag::DiagBag& bag,
+          debug::Profiler* profiler = nullptr);
   void unsupported(diag::Span span, std::string_view what);
   void internal(diag::Span span, std::string_view what);
   ir::TypeIdx error_type();

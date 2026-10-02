@@ -39,12 +39,14 @@ Checker::Checker(const ModuleTree& tree,
                  ast::AstArena& ast,
                  diag::DiagBag& bag,
                  str::StringInterner& strings,
-                 std::span<const StdHint> std_hints)
+                 std::span<const StdHint> std_hints,
+                 debug::Profiler* profiler)
     : tree(tree),
       ast(ast),
       width(width),
       bag(bag),
       std_hints(std_hints),
+      profiler(profiler),
       interner(strings) {}
 
 // Pass 1: registers every nominal definition, diagnosing duplicates
@@ -3872,7 +3874,8 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     ast::AstArena& ast,
     diag::DiagBag& bag,
     str::StringInterner& strings,
-    std::span<const StdHint> std_hints) {
+    std::span<const StdHint> std_hints,
+    debug::Profiler* profiler) {
   // Consumer precondition: the tree shape and every arena index the
   // checker dereferences are validated before any pass runs, so
   // hand-built trees fail with a diagnostic instead of UB.
@@ -3895,9 +3898,18 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  Checker checker{tree, width, ast, bag, strings, std_hints};
+  Checker checker{tree, width, ast, bag, strings, std_hints, profiler};
   checker.uninit_name_id = checker.interner.intern("MaybeUninit");
-  checker.register_nominals();
+  // The type passes run module by module: nominals, then imports and
+  // signatures, then bodies and drop glue, each in one sweep. A run
+  // whose cost concentrates in one phase shows as the sweep that grew,
+  // and the profile scopes ride with the checker because no other part
+  // of it is timed.
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "nominals",
+                                             "analyze");
+    checker.register_nominals();
+  }
   checker.parents.assign(tree.modules.size(), NO_MODULE);
   for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
     for (const ModuleNode* child : tree.modules[m]->children) {
@@ -3910,15 +3922,27 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     }
   }
   checker.modules.reserve(tree.modules.size());
-  for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
-    checker.modules.push_back(checker.empty_module(m));
-    checker.process_module(m);
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "signatures",
+                                             "analyze");
+    for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
+      checker.modules.push_back(checker.empty_module(m));
+      checker.process_module(m);
+    }
   }
-  checker.check_bodies();
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "bodies",
+                                             "analyze");
+    checker.check_bodies();
+  }
   // Resolving a generic destructor instantiates it, so this has to run
   // while the type builder is still live and before the type table is
   // moved out.
-  checker.resolve_drops();
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "drops",
+                                             "analyze");
+    checker.resolve_drops();
+  }
   base::Result<ir::VerifiedStorage, ir::VerificationError> built =
       std::move(checker.builder).build();
   if (built.is_err()) {

@@ -14,6 +14,10 @@
 #include "config/build_config.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/process_id.h"
+#include "fpag/debug/profiler/profile_event.h"
+#include "fpag/debug/thread_id.h"
+#include "fpag/debug/time_util.h"
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 // New pass manager pieces name parameters -Wall flags under -Werror;
@@ -157,7 +161,8 @@ base::Result<void, ObjectEmitError> configure_target(llvm::Module& module,
 }
 
 base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
-                                                    const Target& target) {
+                                                    const Target& target,
+                                                    debug::Profiler* profiler) {
   base::Result<void, ObjectEmitError> configured =
       configure_target(module, target);
   if (configured.is_err()) {
@@ -175,6 +180,67 @@ base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
   llvm::PassInstrumentationCallbacks pic;
   llvm::StandardInstrumentations si(module.getContext(), false);
   si.registerCallbacks(pic, &mam);
+  // Each pass run gets its own event under "llvm-pass", named for the
+  // pass: an O3 pipeline is hundreds of runs, and the cheapest part of a
+  // release build hides there.
+  //
+  // The callbacks fire on the thread the pass runs on, and the events
+  // land there too only because passes run there for now: a pass that
+  // moved work elsewhere would show as the pass that moved it. Scopes
+  // are not movable, so no stack of them fits in a callback; the stack
+  // therefore holds interned names and start times, and each exit builds
+  // its event from the entry below.
+  //
+  // Times come from `debug::current_timestamp_ns`, the clock
+  // `ProfileSection` reads: an event recorded against another epoch
+  // would nest under nothing and read as a root.
+  if (profiler != nullptr) {
+    // A thread-local stack of entries, because passes nest: a module
+    // pass runs function passes, which run loop passes. One entry per
+    // before-callback, popped by the matching after-callback, is what
+    // makes the nesting read in a trace viewer.
+    struct PassTimer {
+      explicit PassTimer(debug::Profiler* profiler) : profiler(profiler) {}
+      void push(llvm::StringRef name) {
+        // `runBeforePass` hands the string to the callback, so interning
+        // it here keeps the pool the events resolve into under the
+        // profiler rather than under the pass.
+        stack.push_back({profiler->intern(std::string(name)),
+                         ::debug::current_timestamp_ns()});
+      }
+      void pop() {
+        if (stack.empty()) {
+          return;
+        }
+        const Pending pending = stack.back();
+        stack.pop_back();
+        debug::ProfileEvent event;
+        event.name = pending.name;
+        event.category = profiler->intern("llvm-pass");
+        event.start_time_ns = pending.start_ns;
+        event.duration_ns = ::debug::current_timestamp_ns() - pending.start_ns;
+        event.thread_id = ::debug::current_thread_id();
+        event.process_id = ::debug::current_process_id();
+        profiler->record_event(event);
+      }
+      struct Pending {
+        str::StringPoolId name = str::INVALID_STRING_POOL_ID;
+        u64 start_ns = 0;
+      };
+      debug::Profiler* profiler;
+      // Nested passes are shallow, so a heap vector holds the whole stack
+      // without mattering; passes run rarely enough that one small
+      // allocation per optimize is noise against the pipeline itself.
+      std::vector<Pending> stack;
+    };
+    thread_local PassTimer timer{profiler};
+    pic.registerBeforeNonSkippedPassCallback(
+        [](llvm::StringRef name, const llvm::Any&) { timer.push(name); });
+    pic.registerAfterPassCallback(
+        [](llvm::StringRef, const llvm::Any&, const llvm::PreservedAnalyses&) {
+          timer.pop();
+        });
+  }
   // The machine outlives the builder: unwrap() moves into a temporary,
   // so taking .get() off it would dangle past this statement.
   std::unique_ptr<llvm::TargetMachine> owned = std::move(machine).unwrap();

@@ -15,6 +15,7 @@
 #include "debug/dlog.h"
 #include "debug/fatal.h"
 #include "fpag/base/numeric.h"
+#include "fpag/debug/profiler/profile_scope.h"
 #include "fpag/str/string_interner.h"
 #include "ir/block.h"
 #include "ir/common.h"
@@ -38,12 +39,14 @@ LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
                              ir::VerifiedStorage storage,
                              str::StringInterner* interner,
                              const Target& target,
-                             bool emit_entry)
+                             bool emit_entry,
+                             debug::Profiler* profiler)
     : module_(module),
       storage_(std::move(storage)),
       builder_(std::make_unique<IRBuilder>(module_->getContext())),
       interner_(interner),
       width_(target.width),
+      profiler_(profiler),
       emit_entry_(emit_entry) {}
 
 void LlvmIrEmitter::check_state() {
@@ -244,7 +247,17 @@ void LlvmIrEmitter::emit() && noexcept {
   // PERF: consider running this process concurrently.
   for (const ir::FunctionIdx function_idx : storage_->functions().idx_range()) {
     const ir::Function& function = storage_->functions()[function_idx];
-    emit_function(values_.function(function_idx), function);
+    // Bodies emit independently: no cross-function state moves between
+    // iterations, which is also what the comment above is waiting on.
+    // The name is the source spelling: two instantiations of one generic
+    // read as repeat reports of the same name rather than as distinct
+    // work, so an instantiation-specific cost stays attributable rather
+    // than split across rows.
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(
+          profiler_, interner_->get(function.meta.name), "emit-fn");
+      emit_function(values_.function(function_idx), function);
+    }
   }
   if (entry_function != nullptr) {
     emit_entry(entry_function, entry_return);
@@ -686,6 +699,7 @@ bool LlvmIrEmitter::is_entry_candidate(const ir::Function& function) const {
 
 void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
                                ir::TypeTag ret) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler_, "main", "emit-fn");
   check_state();
   llvm::LLVMContext& context = module_->getContext();
   llvm::Function* main_function = llvm::Function::Create(

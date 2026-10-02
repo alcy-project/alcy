@@ -448,7 +448,7 @@ TEST_CASE("Optimization promotes stack allocas") {
   // The emitter spills every local; mem2reg in the O3 pipeline is what
   // promotes this one, so its absence says the pipeline ran.
   base::Result<void, codegen_llvm::ObjectEmitError> optimized =
-      codegen_llvm::optimize_module(*module, host_target());
+      codegen_llvm::optimize_module(*module, host_target(), nullptr);
   CHECK(optimized.is_ok());
   CHECK(!llvm::verifyModule(*module));
   CHECK(codegen_llvm::emit_ir(*module).find("alloca") == std::string::npos);
@@ -456,7 +456,8 @@ TEST_CASE("Optimization promotes stack allocas") {
   // Unknown triples fail the same way emission does.
   CHECK(codegen_llvm::optimize_module(
             *module,
-            codegen_llvm::Target{"no-such-triple", ir::PointerWidth::W64})
+            codegen_llvm::Target{"no-such-triple", ir::PointerWidth::W64},
+            nullptr)
             .is_err());
 }
 #endif

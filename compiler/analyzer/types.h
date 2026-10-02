@@ -15,6 +15,7 @@
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profiler.h"
 #include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/storage.h"
@@ -231,6 +232,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     ast::AstArena& ast,
     diag::DiagBag& bag,
     str::StringInterner& strings,
-    std::span<const StdHint> std_hints = {});
+    std::span<const StdHint> std_hints = {},
+    debug::Profiler* profiler = nullptr);
 
 }  // namespace analyzer

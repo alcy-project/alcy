@@ -9,6 +9,7 @@
 #include "codegen_llvm/target.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profiler.h"
 
 namespace llvm {
 class Module;
@@ -47,8 +48,14 @@ base::Result<std::vector<u8>, ObjectEmitError> emit_object(
 // Runs the O3 middle-end pipeline over the module in place. The module must
 // verify clean; the pipeline preserves that. Unknown triples fail the same
 // way emission does.
+//
+// With a profiler, each pass run gets its own event under "llvm-pass":
+// an O3 pipeline is hundreds of runs, and the cheapest part of a release
+// build hides there. Without one - tests that only ask whether the
+// pipeline ran - nothing is recorded.
 base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
-                                                    const Target& target);
+                                                    const Target& target,
+                                                    debug::Profiler* profiler);
 
 // The module as LLVM's textual IR. This is the only output that can be
 // read, diffed, and checked by a tool outside this compiler: an object

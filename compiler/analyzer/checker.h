@@ -15,6 +15,8 @@
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
+#include "fpag/debug/profiler/profile_scope.h"
+#include "fpag/debug/profiler/profiler.h"
 #include "fpag/str/string_interner.h"
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
@@ -88,13 +90,18 @@ class Checker {
           ast::AstArena& ast,
           diag::DiagBag& bag,
           str::StringInterner& strings,
-          std::span<const StdHint> std_hints = {});
+          std::span<const StdHint> std_hints = {},
+          debug::Profiler* profiler = nullptr);
 
   const ModuleTree& tree;
   ast::AstArena& ast;
   ir::PointerWidth width;
   diag::DiagBag& bag;
   std::span<const StdHint> std_hints;
+  // Where the trace events go, or nothing. The type passes run module
+  // by module - nominals, signatures, bodies, drops - and each sweep is
+  // wrapped where it is driven, in `check_package`.
+  debug::Profiler* profiler = nullptr;
   ir::StorageBuilder builder;
   // The compilation's one interner; a second one here would mint storage ids
   // that lowering and codegen could not resolve.

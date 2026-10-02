@@ -10,6 +10,7 @@
 #include "codegen_llvm/llvm_ir_storage.h"
 #include "codegen_llvm/target.h"
 #include "fpag/base/numeric.h"
+#include "fpag/debug/profiler/profiler.h"
 #include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/function.h"
@@ -31,7 +32,8 @@ class LlvmIrEmitter {
                 ir::VerifiedStorage storage,
                 str::StringInterner* interner,
                 const Target& target,
-                bool emit_entry);
+                bool emit_entry,
+                debug::Profiler* profiler = nullptr);
   ~LlvmIrEmitter() = default;
 
   LlvmIrEmitter(const LlvmIrEmitter&) = delete;
@@ -79,6 +81,9 @@ class LlvmIrEmitter {
   std::unique_ptr<IRBuilder> builder_;
   str::StringInterner* interner_;
   ir::PointerWidth width_;
+  // Where the trace events go, or nothing. The function bodies emit one
+  // region each under "emit-fn".
+  debug::Profiler* profiler_ = nullptr;
   // Entry synthesis belongs to binaries; a library's `main` stays an
   // ordinary item, wrapped in nothing.
   bool emit_entry_;

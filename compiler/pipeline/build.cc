@@ -144,20 +144,25 @@ struct EmittedModule {
     }
     // Entry synthesis wraps a `main` for binaries only; a library
     // object carries its items unwrapped, even one named `main`.
-    codegen_llvm::LlvmIrEmitter emitter(module.get(),
-                                        std::move(package.storage),
-                                        &ctx.strings, ctx.target, !is_lib);
+    codegen_llvm::LlvmIrEmitter emitter(
+        module.get(), std::move(package.storage), &ctx.strings, ctx.target,
+        !is_lib, ctx.profiler);
     std::move(emitter).emit();
     // Before the optimizer, so the runtime is inlined and folded like
     // any other code, and after the program, so its definitions land in
     // the declarations the program's call sites already hold.
-    codegen_llvm::add_runtime_definitions(*module, ctx.target);
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "runtime",
+                                               "backend");
+      codegen_llvm::add_runtime_definitions(*module, ctx.target);
+    }
     if (!optimize) {
       return base::make_ok();
     }
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "optimize",
                                              "backend");
-    if (codegen_llvm::optimize_module(*module, ctx.target).is_err()) {
+    if (codegen_llvm::optimize_module(*module, ctx.target, ctx.profiler)
+            .is_err()) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotOptimize>(
           diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError);
       (void)index;

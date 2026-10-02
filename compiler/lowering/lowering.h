@@ -12,6 +12,7 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profiler.h"
 #include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/storage.h"
@@ -86,6 +87,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     ir::PointerWidth width,
     ast::AstArena& ast,
     str::StringInterner& strings,
-    diag::DiagBag& bag);
+    diag::DiagBag& bag,
+    debug::Profiler* profiler = nullptr);
 
 }  // namespace lowering

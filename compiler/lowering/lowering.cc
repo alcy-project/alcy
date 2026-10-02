@@ -26,6 +26,8 @@
 #include "fpag/base/limits.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profile_scope.h"
+#include "fpag/debug/profiler/profiler.h"
 #include "fpag/str/string_interner.h"
 #include "i18n/messages.h"
 #include "ir/common.h"
@@ -85,13 +87,15 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
                  ir::PointerWidth width,
                  ast::AstArena& ast,
                  str::StringInterner& strings,
-                 diag::DiagBag& bag)
+                 diag::DiagBag& bag,
+                 debug::Profiler* profiler)
     : pkg(std::move(package)),
       builder(std::move(pkg.types).unwrap().take_state()),
       width(width),
       ast(ast),
       strings(strings),
-      bag(bag) {}
+      bag(bag),
+      profiler(profiler) {}
 
 ir::RegisterIdx Lowerer::claim_reg() {
   return ir::RegisterIdx(static_cast<u32>(builder.state().registers.size()));
@@ -989,7 +993,15 @@ void Lowerer::run() {
   std::vector<Done> done;
   for (usize w = 0; w < worklist_.size() && !failed; ++w) {
     const FnEntry entry = fns[worklist_[w]];
-    lower_fn(entry);
+    // The function name is interned storage: profiling by PrintableName
+    // would allocate, so the trace names what the Lowerer names - the
+    // source spelling, which collides only when overloads do, and
+    // overloads are an instantiation key apart.
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, entry.name,
+                                               "lower-fn");
+      lower_fn(entry);
+    }
     if (failed) {
       return;
     }
@@ -1055,8 +1067,9 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     ir::PointerWidth width,
     ast::AstArena& ast,
     str::StringInterner& strings,
-    diag::DiagBag& bag) {
-  Lowerer lowerer(std::move(package), width, ast, strings, bag);
+    diag::DiagBag& bag,
+    debug::Profiler* profiler) {
+  Lowerer lowerer(std::move(package), width, ast, strings, bag, profiler);
   lowerer.run();
   if (lowerer.failed) {
     return base::make_err(diag::Reported{});

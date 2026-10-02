@@ -15,6 +15,9 @@
 #include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profile_scope.h"
+#include "fpag/debug/profiler/profiler.h"
+#include "fpag/str/string_interner.h"
 #include "i18n/messages.h"
 #include "ir/common.h"
 #include "ir/function.h"
@@ -160,12 +163,23 @@ class Checker {
  public:
   Checker(const lowering::LoweredPackage& lowered,
           const ir::Storage& storage,
-          diag::DiagBag& bag)
-      : lowered(lowered), storage(storage), bag(bag) {}
+          diag::DiagBag& bag,
+          str::StringInterner& strings,
+          debug::Profiler* profiler = nullptr)
+      : lowered(lowered),
+        storage(storage),
+        bag(bag),
+        strings(strings),
+        profiler(profiler) {}
 
   const lowering::LoweredPackage& lowered;
   const ir::Storage& storage;
   diag::DiagBag& bag;
+  str::StringInterner& strings;
+  // Where the trace events go, or nothing. The two sweeps - summaries,
+  // then the check - run function by function on the caller's thread,
+  // and each function body gets its own region under "borrow".
+  debug::Profiler* profiler = nullptr;
 
   // Per-function scratch, indexed by global register.
   std::vector<u32> home;
@@ -199,6 +213,14 @@ class Checker {
   }
 
   ir::TypeTag tag_of(ir::TypeIdx idx) const { return storage.types()[idx].tag; }
+
+  // The trace name for a function: its source spelling. Profiles by
+  // what the borrow checker checked, so two functions that share a
+  // spelling - instantiations of one generic - read as repeat reports
+  // of the same name rather than as one function's work.
+  [[nodiscard]] std::string_view fn_name(const ir::Function& fn) const {
+    return strings.get(fn.meta.name);
+  }
 
   std::string_view addr_name(u32 reg) const {
     for (const auto& entry : lowered.addr_names) {
@@ -1445,7 +1467,12 @@ class Checker {
       for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
            ++fidx) {
         reset_function();
-        forward(storage.functions()[fidx]);
+        const ir::Function& fn = storage.functions()[fidx];
+        {
+          PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, fn_name(fn),
+                                                   "borrow-fn");
+          forward(fn);
+        }
         if (update_summary(fidx)) {
           stable = false;
         }
@@ -1457,7 +1484,12 @@ class Checker {
     for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
          ++fidx) {
       reset_function();
-      check_function(storage.functions()[fidx]);
+      const ir::Function& fn = storage.functions()[fidx];
+      {
+        PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, fn_name(fn),
+                                                 "borrow-fn");
+        check_function(fn);
+      }
     }
   }
 };
@@ -1466,9 +1498,11 @@ class Checker {
 
 base::Result<void, diag::Reported> check_borrows(
     const lowering::LoweredPackage& lowered,
-    diag::DiagBag& bag) {
+    diag::DiagBag& bag,
+    str::StringInterner& strings,
+    debug::Profiler* profiler) {
   const u32 errors = bag.error_count();
-  Checker checker{lowered, *lowered.storage, bag};
+  Checker checker{lowered, *lowered.storage, bag, strings, profiler};
   checker.run();
   if (bag.error_count() != errors) {
     return base::make_err(diag::Reported{});

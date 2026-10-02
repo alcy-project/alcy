@@ -49,9 +49,9 @@ void run_pipeline_cases(Runner<SteadyClock>& runner,
   // there, and a unique_ptr reads without the question.
   std::unique_ptr<CompilerFixture> fixture;
 
-  if (filter.wants(CaseId{"frontend", "resolve"})) {
+  if (filter.wants(CaseId{"frontend", "resolve-tree"})) {
     emit(
-        CaseId{"frontend", "resolve"}, COMPILE,
+        CaseId{"frontend", "resolve-tree"}, COMPILE,
         runner.measure(
             COMPILE, [&] { fixture = std::make_unique<CompilerFixture>(spec); },
             [&] { fixture->resolve(); }));
@@ -93,8 +93,8 @@ void run_pipeline_cases(Runner<SteadyClock>& runner,
                rebuild_through_lower(*fixture);
              },
              [&] {
-               static_cast<void>(
-                   borrow::check_borrows(fixture->lowered(), fixture->bag()));
+               static_cast<void>(borrow::check_borrows(
+                   fixture->lowered(), fixture->bag(), fixture->strings()));
              }));
   }
 

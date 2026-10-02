@@ -112,7 +112,8 @@ bool check_case(
   if (lowered_result.is_err() || f.bag.has_errors()) {
     return false;
   }
-  if (check_borrows(std::move(lowered_result).unwrap(), f.bag).is_err()) {
+  if (check_borrows(std::move(lowered_result).unwrap(), f.bag, f.strings)
+          .is_err()) {
     return false;
   }
   return !f.bag.has_errors();
