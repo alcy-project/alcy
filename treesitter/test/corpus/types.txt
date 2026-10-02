@@ -1,0 +1,359 @@
+================================================================================
+Primitive types
+================================================================================
+
+fn f(a: i8, b: i16, c: i32, d: i64, e: i128, g: isize) {}
+fn h(a: u8, b: u16, c: u32, d: u64, e: u128, g: usize) {}
+fn i(a: f32, b: f64, c: bool) {}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (block))
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (block))
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (block)))
+
+================================================================================
+Unit, never, and str types
+================================================================================
+
+fn f() -> () {
+  ret ()
+}
+
+fn g() -> ! {
+  ret panic("no")
+}
+
+fn h(s: str) -> str {
+  ret s
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (unit_type))
+    (block
+      (return_expression
+        (unit_expression))))
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (never_type))
+    (block
+      (return_expression
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments
+            (string))))))
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (str_type)))
+    (return_type
+      (str_type))
+    (block
+      (return_expression
+        (path_expression
+          (path
+            (identifier)))))))
+
+================================================================================
+Tuple type
+================================================================================
+
+fn f() -> (i32, str, bool) {
+  ret (1, "a", true)
+}
+
+fn g() -> (i32, str) {
+  ret (1, "a")
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (tuple_type
+        (primitive_type)
+        (str_type)
+        (primitive_type)))
+    (block
+      (return_expression
+        (tuple_expression
+          (integer)
+          (string)
+          (boolean)))))
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (tuple_type
+        (primitive_type)
+        (str_type)))
+    (block
+      (return_expression
+        (tuple_expression
+          (integer)
+          (string))))))
+
+================================================================================
+Array and slice types
+================================================================================
+
+fn f(a: [i32; 4], b: &[i32]) -> [u8; 8] {
+  ret a
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (array_type
+          (primitive_type)
+          (integer)))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (reference_type
+          (slice_type
+            (primitive_type)))))
+    (return_type
+      (array_type
+        (primitive_type)
+        (integer)))
+    (block
+      (return_expression
+        (path_expression
+          (path
+            (identifier)))))))
+
+================================================================================
+Shared and exclusive reference types
+================================================================================
+
+fn f(a: &i32, b: &mut i32, c: &[i32], d: &mut [u8; 2]) {}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (reference_type
+          (primitive_type)))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (reference_type
+          (primitive_type)))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (reference_type
+          (slice_type
+            (primitive_type))))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (reference_type
+          (array_type
+            (primitive_type)
+            (integer)))))
+    (block)))
+
+================================================================================
+Path type with type arguments
+================================================================================
+
+fn f(a: Vec<i32>, b: Option<Result<i32, str>>) {}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type)))))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (path_type
+                (path
+                  (identifier)
+                  (type_arguments
+                    (primitive_type)
+                    (str_type)))))))))
+    (block)))
+
+================================================================================
+Nested generic types split the closing >>
+================================================================================
+
+fn f(a: Vec<Vec<i32>>, b: Map<i32, Vec<Vec<str>>>) {}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (path_type
+                (path
+                  (identifier)
+                  (type_arguments
+                    (primitive_type))))))))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type)
+              (path_type
+                (path
+                  (identifier)
+                  (type_arguments
+                    (path_type
+                      (path
+                        (identifier)
+                        (type_arguments
+                          (str_type))))))))))))
+    (block)))
+
+================================================================================
+Type parameters on a struct
+================================================================================
+
+struct Pair<A, B> {
+  first: A,
+  second: B,
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (identifier)
+    (type_parameters
+      (identifier)
+      (identifier))
+    (field_declaration
+      (identifier)
+      (path_type
+        (path
+          (identifier))))
+    (field_declaration
+      (identifier)
+      (path_type
+        (path
+          (identifier))))))

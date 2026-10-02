@@ -1,0 +1,415 @@
+================================================================================
+A declaration without a type
+================================================================================
+
+fn f() {
+  x := 1
+  mut y := 2
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (mut_identifier_pattern
+          (identifier))
+        (integer)))))
+
+================================================================================
+A declaration with a type
+================================================================================
+
+fn f() {
+  x: i32 := 1
+  mut y: i32 := 2
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (primitive_type)
+        (integer))
+      (declaration_statement
+        (mut_identifier_pattern
+          (identifier))
+        (primitive_type)
+        (integer)))))
+
+================================================================================
+Assignment, plain and compound
+================================================================================
+
+fn f(x: i32) {
+  x = 1
+  x += 1
+  x -= 1
+  x *= 1
+  x /= 1
+  x %= 1
+  x **= 1
+  x &= 1
+  x |= 1
+  x ^= 1
+  x <<= 1
+  x >>= 1
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (block
+      (assignment_statement
+        (path_expression
+          (path
+            (identifier)))
+        (integer))
+      (assignment_statement
+        (path_expression
+          (path
+            (identifier)))
+        (integer))
+      (assignment_statement
+        (path_expression
+          (path
+            (identifier)))
+        (integer))
+      (assignment_statement
+        (path_expression
+          (path
+            (identifier)))
+        (integer))
+      (assignment_statement
+        (path_expression
+          (path
+            (identifier)))
+        (integer))
+      (assignment_statement
+        (path_expression
+          (path
+            (identifier)))
+        (integer))
+      (assignment_statement
+        (path_expression
+          (path
+            (identifier)))
+        (integer))
+      (assignment_statement
+        (path_expression
+          (path
+            (identifier)))
+        (integer))
+      (assignment_statement
+        (path_expression
+          (path
+            (identifier)))
+        (integer))
+      (assignment_statement
+        (path_expression
+          (path
+            (identifier)))
+        (integer))
+      (assignment_statement
+        (path_expression
+          (path
+            (identifier)))
+        (integer))
+      (assignment_statement
+        (path_expression
+          (path
+            (identifier)))
+        (integer)))))
+
+================================================================================
+A comparison is not an assignment
+================================================================================
+
+fn f(x: i32, y: i32) -> bool {
+  ret x == y
+}
+
+fn g(x: i32, y: i32) -> bool {
+  x == y
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (comparison_expression
+          (path_expression
+            (path
+              (identifier)))
+          (path_expression
+            (path
+              (identifier)))))))
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (comparison_expression
+        (path_expression
+          (path
+            (identifier)))
+        (path_expression
+          (path
+            (identifier)))))))
+
+================================================================================
+A block evaluates to its last expression
+================================================================================
+
+fn f() -> i32 {
+  {
+    1
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (block_expression
+        (integer)))))
+
+================================================================================
+An empty block evaluates to unit
+================================================================================
+
+fn f() {
+  {}
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (block_expression))))
+
+================================================================================
+A statement on its own line ends at the newline
+================================================================================
+
+fn f() {
+  x := 1
+  y := 2
+  ret x + y
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (return_expression
+        (binary_expression
+          (path_expression
+            (path
+              (identifier)))
+          (path_expression
+            (path
+              (identifier))))))))
+
+================================================================================
+Several statements on one line are separated by semicolons
+================================================================================
+
+fn f() {
+  x := 1; y := 2; ret x + y
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (return_expression
+        (binary_expression
+          (path_expression
+            (path
+              (identifier)))
+          (path_expression
+            (path
+              (identifier))))))))
+
+================================================================================
+A trailing semicolon is a no-op
+================================================================================
+
+fn f() {
+  x := 1;
+  ret x;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (expression_statement
+        (return_expression
+          (path_expression
+            (path
+              (identifier))))))))
+
+================================================================================
+A stray semicolon is skipped
+================================================================================
+
+fn f() {
+  ;
+  x := 1
+  ;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer)))))
+
+================================================================================
+A nested block is a statement of its own
+================================================================================
+
+fn f() {
+  {
+    x := 1
+    ret x
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (block_expression
+        (declaration_statement
+          (identifier_pattern
+            (identifier))
+          (integer))
+        (return_expression
+          (path_expression
+            (path
+              (identifier))))))))
+
+================================================================================
+A declaration of a destructuring pattern
+================================================================================
+
+fn f() {
+  (a, b) := pair()
+  _ := a
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (tuple_pattern
+          (identifier_pattern
+            (identifier))
+          (identifier_pattern
+            (identifier)))
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments)))
+      (declaration_statement
+        (wildcard_pattern)
+        (path_expression
+          (path
+            (identifier)))))))

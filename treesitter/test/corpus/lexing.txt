@@ -1,0 +1,413 @@
+================================================================================
+Integer separators and base prefixes
+================================================================================
+
+fn f() {
+  a := 1_000_000
+  b := 0b1010_1010
+  c := 0o7_7_7
+  d := 0xDEAD_BEEF
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer)))))
+
+================================================================================
+Numeric type suffixes
+================================================================================
+
+fn f() {
+  a := 42i32
+  b := 42u64
+  c := 1.5f64
+  d := 0xFFi8
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer)))))
+
+================================================================================
+String escapes
+================================================================================
+
+fn f() {
+  a := "tab\there"
+  b := "newline\nthere"
+  c := "quote\"inside"
+  d := "backslash\\inside"
+  e := "nul\0byte"
+  g := "unicode\u{1F600}"
+  h := "carriage\rreturn"
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (string))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (string))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (string))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (string))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (string))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (string))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (string)))))
+
+================================================================================
+Character literals
+================================================================================
+
+fn f() {
+  a := 'x'
+  b := '\n'
+  c := '\''
+  d := '\u{41}'
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (char))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (char))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (char))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (char)))))
+
+================================================================================
+Comments
+================================================================================
+
+// a line comment
+fn f() {
+  /* a block comment */
+  a := 1 // a trailing comment
+  /// a doc comment
+  b := 2
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line_comment)
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (block_comment)
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (line_comment)
+      (doc_comment)
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer)))))
+
+================================================================================
+Block comments nest
+================================================================================
+
+fn f() {
+  /* outer /* inner */ still outer */
+  a := 1
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (block_comment)
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer)))))
+
+================================================================================
+Doc comments precede an item
+================================================================================
+
+/// The sum of two integers.
+fn add(a: i32, b: i32) -> i32 {
+  ret a + b
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (doc_comment)
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (binary_expression
+          (path_expression
+            (path
+              (identifier)))
+          (path_expression
+            (path
+              (identifier))))))))
+
+================================================================================
+A newline ends the statement before it
+================================================================================
+
+fn f(a: i32) -> i32 {
+  x := a
+  1
+  ret x
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (path_expression
+          (path
+            (identifier))))
+      (expression_statement
+        (integer))
+      (return_expression
+        (path_expression
+          (path
+            (identifier)))))))
+
+================================================================================
+A newline before a comma does not continue it
+================================================================================
+
+fn f(a: i32
+  , b: i32) -> i32 {
+  ret a + b
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (binary_expression
+          (path_expression
+            (path
+              (identifier)))
+          (path_expression
+            (path
+              (identifier))))))))
+
+================================================================================
+A newline before a closing bracket does not continue it
+================================================================================
+
+fn f(a: [i32]) -> i32 {
+  ret a[0
+  ]
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (slice_type
+          (primitive_type))))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (index_expression
+          (path_expression
+            (path
+              (identifier)))
+          (integer))))))
+
+================================================================================
+A newline before a field access does not continue it
+================================================================================
+
+fn f(p: Point) -> i32 {
+  ret p
+    .x
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)))))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (field_expression
+          (path_expression
+            (path
+              (identifier)))
+          (identifier))))))
+
+================================================================================
+A newline before else does not end the statement
+================================================================================
+
+fn f(c: bool) -> i32 {
+  if c {
+    ret 1
+  }
+  else {
+    ret 2
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (if_expression
+        (path_expression
+          (path
+            (identifier)))
+        (block
+          (return_expression
+            (integer)))
+        (block
+          (return_expression
+            (integer)))))))

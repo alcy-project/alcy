@@ -1,0 +1,781 @@
+================================================================================
+Literals
+================================================================================
+
+fn f() {
+  a := 42
+  b := 1_000
+  c := 0b1010
+  d := 0o777
+  e := 0xFF
+  g := 42i32
+  h := 1.5
+  i := 1.5f64
+  j := 1e9
+  k := 1.5e-3
+  l := "text"
+  m := 'c'
+  n := true
+  o := false
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (float))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (string))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (char))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (boolean))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (boolean)))))
+
+================================================================================
+Postfix chain
+================================================================================
+
+fn f(v: Vec<i32>) -> i32 {
+  ret v.items[0].len()
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type))))))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (call_expression
+          (field_expression
+            (index_expression
+              (field_expression
+                (path_expression
+                  (path
+                    (identifier)))
+                (identifier))
+              (integer))
+            (identifier))
+          (arguments))))))
+
+================================================================================
+Call with a turbofish
+================================================================================
+
+fn f() {
+  alloc::<u8>(4)
+  Option::<i32>::Some(3i32)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (expression_statement
+        (call_expression
+          (path_expression
+            (path
+              (identifier)
+              (type_arguments
+                (primitive_type))))
+          (arguments
+            (integer))))
+      (call_expression
+        (path_expression
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type))
+            (identifier)))
+        (arguments
+          (integer))))))
+
+================================================================================
+Method call
+================================================================================
+
+fn f(v: Vec<i32>) {
+  v.push(1)
+  v.items.push(2)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type))))))
+    (block
+      (expression_statement
+        (call_expression
+          (field_expression
+            (path_expression
+              (path
+                (identifier)))
+            (identifier))
+          (arguments
+            (integer))))
+      (call_expression
+        (field_expression
+          (field_expression
+            (path_expression
+              (path
+                (identifier)))
+            (identifier))
+          (identifier))
+        (arguments
+          (integer))))))
+
+================================================================================
+Tuple element access by number
+================================================================================
+
+fn f(p: (i32, str)) -> i32 {
+  ret p.0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (tuple_type
+          (primitive_type)
+          (str_type))))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (field_expression
+          (path_expression
+            (path
+              (identifier)))
+          (integer))))))
+
+================================================================================
+Borrow, dereference, and try
+================================================================================
+
+fn f(v: Vec<i32>) -> i32 {
+  r := &v
+  m := &mut v
+  p := *m
+  ret v.pop()?
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type))))))
+    (return_type
+      (primitive_type))
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (borrow_expression
+          (path_expression
+            (path
+              (identifier)))))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (borrow_expression
+          (path_expression
+            (path
+              (identifier)))))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (deref_expression
+          (path_expression
+            (path
+              (identifier)))))
+      (return_expression
+        (try_expression
+          (call_expression
+            (field_expression
+              (path_expression
+                (path
+                  (identifier)))
+              (identifier))
+            (arguments)))))))
+
+================================================================================
+Unary operators
+================================================================================
+
+fn f(a: i32, b: bool) -> i32 {
+  x := -a
+  y := !b
+  z := ~a
+  ret x + y + z
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (unary_expression
+          (path_expression
+            (path
+              (identifier)))))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (unary_expression
+          (path_expression
+            (path
+              (identifier)))))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (unary_expression
+          (path_expression
+            (path
+              (identifier)))))
+      (return_expression
+        (binary_expression
+          (binary_expression
+            (path_expression
+              (path
+                (identifier)))
+            (path_expression
+              (path
+                (identifier))))
+          (path_expression
+            (path
+              (identifier))))))))
+
+================================================================================
+Arithmetic precedence
+================================================================================
+
+fn f(a: i32, b: i32, c: i32) -> i32 {
+  ret a + b * c - a / b % c
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (binary_expression
+          (binary_expression
+            (path_expression
+              (path
+                (identifier)))
+            (binary_expression
+              (path_expression
+                (path
+                  (identifier)))
+              (path_expression
+                (path
+                  (identifier)))))
+          (binary_expression
+            (binary_expression
+              (path_expression
+                (path
+                  (identifier)))
+              (path_expression
+                (path
+                  (identifier))))
+            (path_expression
+              (path
+                (identifier)))))))))
+
+================================================================================
+Shift and bitwise precedence
+================================================================================
+
+fn f(a: i32, b: i32) -> i32 {
+  ret a << b | a >> b & a ^ b
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (binary_expression
+          (binary_expression
+            (path_expression
+              (path
+                (identifier)))
+            (path_expression
+              (path
+                (identifier))))
+          (binary_expression
+            (binary_expression
+              (binary_expression
+                (path_expression
+                  (path
+                    (identifier)))
+                (path_expression
+                  (path
+                    (identifier))))
+              (path_expression
+                (path
+                  (identifier))))
+            (path_expression
+              (path
+                (identifier)))))))))
+
+================================================================================
+Power is right-associative and binds tighter than multiplication
+================================================================================
+
+fn f(a: i32, b: i32, c: i32) -> i32 {
+  ret a ** b ** c
+}
+
+fn g(a: i32, b: i32) -> i32 {
+  ret a * b ** a
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (binary_expression
+          (path_expression
+            (path
+              (identifier)))
+          (binary_expression
+            (path_expression
+              (path
+                (identifier)))
+            (path_expression
+              (path
+                (identifier))))))))
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (binary_expression
+          (path_expression
+            (path
+              (identifier)))
+          (binary_expression
+            (path_expression
+              (path
+                (identifier)))
+            (path_expression
+              (path
+                (identifier)))))))))
+
+================================================================================
+Comparison binds tighter than logical operators
+================================================================================
+
+fn f(a: i32, b: i32, c: i32) -> bool {
+  ret a < b && b <= c || !(a == b) && a != c
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (binary_expression
+          (binary_expression
+            (comparison_expression
+              (path_expression
+                (path
+                  (identifier)))
+              (path_expression
+                (path
+                  (identifier))))
+            (comparison_expression
+              (path_expression
+                (path
+                  (identifier)))
+              (path_expression
+                (path
+                  (identifier)))))
+          (binary_expression
+            (unary_expression
+              (parenthesized_expression
+                (comparison_expression
+                  (path_expression
+                    (path
+                      (identifier)))
+                  (path_expression
+                    (path
+                      (identifier))))))
+            (comparison_expression
+              (path_expression
+                (path
+                  (identifier)))
+              (path_expression
+                (path
+                  (identifier))))))))))
+
+================================================================================
+Cast binds tighter than the arithmetic operators
+================================================================================
+
+fn f(a: i32, b: i32) -> u64 {
+  ret a + b as u64
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (binary_expression
+          (path_expression
+            (path
+              (identifier)))
+          (cast_expression
+            (path_expression
+              (path
+                (identifier)))
+            (primitive_type)))))))
+
+================================================================================
+Range with an explicit bound
+================================================================================
+
+fn f() {
+  a := 0..<10
+  b := 0..=10
+  c := 0..
+  d := ..<10
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (range_expression
+          (integer)
+          (integer)))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (range_expression
+          (integer)
+          (integer)))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (range_expression
+          (integer)))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (range_expression
+          (integer))))))
+
+================================================================================
+Struct expression with a move-update
+================================================================================
+
+struct P {
+  x: i32,
+  y: i32,
+}
+
+fn f(base: P) -> P {
+  ret P { x: 1, ..base }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (identifier)
+    (field_declaration
+      (identifier)
+      (primitive_type))
+    (field_declaration
+      (identifier)
+      (primitive_type)))
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)))))
+    (return_type
+      (path_type
+        (path
+          (identifier))))
+    (block
+      (return_expression
+        (struct_expression
+          (path
+            (identifier))
+          (field_initializer
+            (identifier)
+            (integer))
+          (path_expression
+            (path
+              (identifier))))))))
+
+================================================================================
+Array expression and repeat
+================================================================================
+
+fn f() {
+  a := [1, 2, 3]
+  b := [0; 8]
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (array_expression
+          (integer)
+          (integer)
+          (integer)))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (repeat_expression
+          (integer)
+          (integer))))))
+
+================================================================================
+Unit value and empty tuple
+================================================================================
+
+fn f() {
+  a := ()
+  b := (1,)
+  c := (1, 2)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (unit_expression))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (tuple_expression
+          (integer)))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (tuple_expression
+          (integer)
+          (integer))))))

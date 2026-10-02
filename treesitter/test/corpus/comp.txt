@@ -1,0 +1,207 @@
+================================================================================
+A comp parameter
+================================================================================
+
+fn repeat(comp n: usize, x: i32) -> i32 {
+  ret x
+}
+
+fn plain(x: i32) -> i32 {
+  ret x
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (path_expression
+          (path
+            (identifier))))))
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (path_expression
+          (path
+            (identifier)))))))
+
+================================================================================
+A comp variable
+================================================================================
+
+fn f() {
+  comp count := 3
+  comp mut x := 1
+  ret
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (mut_identifier_pattern
+          (identifier))
+        (integer))
+      (return_expression))))
+
+================================================================================
+A comp block is an expression
+================================================================================
+
+fn f() -> i32 {
+  n := comp { 1 + 1 }
+  ret n as i32
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (comp_block
+          (block
+            (binary_expression
+              (integer)
+              (integer)))))
+      (return_expression
+        (cast_expression
+          (path_expression
+            (path
+              (identifier)))
+          (primitive_type))))))
+
+================================================================================
+A comp block with statements
+================================================================================
+
+fn f() -> i32 {
+  ret comp {
+    mut total := 0
+    total = total + 1
+    total
+  } as i32
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (cast_expression
+          (comp_block
+            (block
+              (declaration_statement
+                (mut_identifier_pattern
+                  (identifier))
+                (integer))
+              (assignment_statement
+                (path_expression
+                  (path
+                    (identifier)))
+                (binary_expression
+                  (path_expression
+                    (path
+                      (identifier)))
+                  (integer)))
+              (path_expression
+                (path
+                  (identifier)))))
+          (primitive_type))))))
+
+================================================================================
+An intrinsic rejects a comp parameter
+================================================================================
+
+intrinsic fn panic(msg: str);
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (intrinsic_fn_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (str_type)))))
+
+================================================================================
+A spec method carries a signature and no body
+================================================================================
+
+spec Iterable {
+  fn len(self: &Self) -> usize;
+  pub fn is_empty(self: &Self) -> bool;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (spec_item
+    (identifier)
+    (spec_method
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (self))
+          (reference_type
+            (path_type
+              (path
+                (self_type))))))
+      (return_type
+        (primitive_type)))
+    (spec_method
+      (visibility)
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (self))
+          (reference_type
+            (path_type
+              (path
+                (self_type))))))
+      (return_type
+        (primitive_type)))))

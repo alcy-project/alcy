@@ -1,0 +1,608 @@
+================================================================================
+A brace after an if condition opens the body, not a struct literal
+================================================================================
+
+struct P {
+  x: i32,
+}
+
+fn f(c: bool) -> i32 {
+  if c {
+    ret 1
+  }
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (identifier)
+    (field_declaration
+      (identifier)
+      (primitive_type)))
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (expression_statement
+        (if_expression
+          (path_expression
+            (path
+              (identifier)))
+          (block
+            (return_expression
+              (integer)))))
+      (return_expression
+        (integer)))))
+
+================================================================================
+A brace after a while condition opens the body
+================================================================================
+
+fn f(c: bool) {
+  while c {
+    break
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (block
+      (while_expression
+        (path_expression
+          (path
+            (identifier)))
+        (block
+          (break_expression))))))
+
+================================================================================
+A brace after a match scrutinee opens the arms
+================================================================================
+
+fn f(x: i32) -> i32 {
+  ret match x {
+    0 => 1,
+    _ => 0,
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (match_expression
+          (path_expression
+            (path
+              (identifier)))
+          (match_arm
+            (literal_pattern
+              (integer))
+            (integer))
+          (match_arm
+            (wildcard_pattern)
+            (integer)))))))
+
+================================================================================
+A brace after a for head opens the body
+================================================================================
+
+fn f() {
+  for i in 0.. {
+    break
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (for_expression
+        (identifier_pattern
+          (identifier))
+        (range_expression
+          (integer))
+        (block
+          (break_expression))))))
+
+================================================================================
+A brace after an else opens the block
+================================================================================
+
+fn f(c: bool) -> i32 {
+  if c {
+    ret 1
+  } else {
+    ret 2
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (if_expression
+        (path_expression
+          (path
+            (identifier)))
+        (block
+          (return_expression
+            (integer)))
+        (block
+          (return_expression
+            (integer)))))))
+
+================================================================================
+Parentheses lift the ban on a struct literal in a condition
+================================================================================
+
+fn f() -> bool {
+  if (P { x: 1 }).x > 0 {
+    ret true
+  }
+  ret false
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (expression_statement
+        (if_expression
+          (comparison_expression
+            (field_expression
+              (parenthesized_expression
+                (struct_expression
+                  (path
+                    (identifier))
+                  (field_initializer
+                    (identifier)
+                    (integer))))
+              (identifier))
+            (integer))
+          (block
+            (return_expression
+              (boolean)))))
+      (return_expression
+        (boolean)))))
+
+================================================================================
+A struct literal in statement position
+================================================================================
+
+fn f(base: P) -> P {
+  p := P { x: 1, ..base }
+  ret p
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)))))
+    (return_type
+      (path_type
+        (path
+          (identifier))))
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (struct_expression
+          (path
+            (identifier))
+          (field_initializer
+            (identifier)
+            (integer))
+          (path_expression
+            (path
+              (identifier)))))
+      (return_expression
+        (path_expression
+          (path
+            (identifier)))))))
+
+================================================================================
+A brace on a following line is a block-valued statement
+================================================================================
+
+fn f() {
+  p := value()
+  {
+    use_it(p)
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments)))
+      (block_expression
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments
+            (path_expression
+              (path
+                (identifier)))))))))
+
+================================================================================
+A range operator after an integer is not a float fraction
+================================================================================
+
+fn f() {
+  a := 1..<2
+  b := 1..
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (range_expression
+          (integer)
+          (integer)))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (range_expression
+          (integer))))))
+
+================================================================================
+A closing double angle bracket splits into two closing brackets
+================================================================================
+
+fn f(a: Vec<Vec<i32>>) -> Vec<Vec<i32>> {
+  ret a
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (path_type
+                (path
+                  (identifier)
+                  (type_arguments
+                    (primitive_type)))))))))
+    (return_type
+      (path_type
+        (path
+          (identifier)
+          (type_arguments
+            (path_type
+              (path
+                (identifier)
+                (type_arguments
+                  (primitive_type))))))))
+    (block
+      (return_expression
+        (path_expression
+          (path
+            (identifier)))))))
+
+================================================================================
+A cast to a nested generic type still splits the brackets
+================================================================================
+
+fn f(a: i32) -> i32 {
+  ret a as Vec<Vec<i32>> as i32
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (cast_expression
+        (return_expression
+          (cast_expression
+            (path_expression
+              (path
+                (identifier)))
+            (path_type
+              (path
+                (identifier)
+                (type_arguments
+                  (path_type
+                    (path
+                      (identifier)
+                      (type_arguments
+                        (primitive_type)))))))))
+        (primitive_type)))))
+
+================================================================================
+A comparison is not a pair of type arguments
+================================================================================
+
+fn f(a: i32, b: i32) -> bool {
+  ret a < b
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (comparison_expression
+          (path_expression
+            (path
+              (identifier)))
+          (path_expression
+            (path
+              (identifier))))))))
+
+================================================================================
+A single identifier in a pattern is a binding, not a unit variant
+================================================================================
+
+fn f(x: i32) -> i32 {
+  ret match x {
+    n => n,
+    _ => 0,
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (match_expression
+          (path_expression
+            (path
+              (identifier)))
+          (match_arm
+            (identifier_pattern
+              (identifier))
+            (path_expression
+              (path
+                (identifier))))
+          (match_arm
+            (wildcard_pattern)
+            (integer)))))))
+
+================================================================================
+A struct literal is not an if condition
+================================================================================
+
+fn f(p: P) -> i32 {
+  if p { x: 1 } {
+    ret 1
+  }
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)))))
+    (return_type
+      (primitive_type))
+    (block
+      (expression_statement
+        (if_expression
+          (path_expression
+            (path
+              (identifier)))
+          (block
+            (ERROR
+              (identifier_pattern
+                (identifier)))
+            (integer)))
+        (MISSING ";"))
+      (expression_statement
+        (block_expression
+          (return_expression
+            (integer))))
+      (return_expression
+        (integer)))))
+
+================================================================================
+A struct literal is not a match scrutinee
+================================================================================
+
+fn f() -> i32 {
+  ret match P { x: 1 } {
+    P { x: 0 } => 0,
+    _ => 1,
+  }
+}
+
+--------------------------------------------------------------------------------
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (match_expression
+          (path_expression
+            (path
+              (identifier)))
+          (ERROR
+            (identifier_pattern
+              (identifier))
+            (literal_pattern
+              (integer)))
+          (match_arm
+            (struct_pattern
+              (path
+                (identifier))
+              (field_pattern
+                (identifier)
+                (literal_pattern
+                  (integer))))
+            (integer))
+          (match_arm
+            (wildcard_pattern)
+            (integer)))))))
+
+================================================================================
+A brace that starts a following line is not a block opener
+================================================================================
+
+fn f(c: bool) -> i32 {
+  if c
+  {
+    ret 1
+  }
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+(source_file
+  (ERROR
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (struct_pattern
+      (path
+        (identifier))
+      (field_pattern
+        (identifier))
+      (ERROR
+        (integer)))
+    (identifier)
+    (integer)))
+
+================================================================================
+A bare range operator names no end, so an endpoint after it is an error
+================================================================================
+
+fn f() {
+  a := 1..3
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (range_expression
+          (integer)))
+      (integer))))

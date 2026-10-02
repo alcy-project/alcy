@@ -1,0 +1,204 @@
+================================================================================
+Path segments
+================================================================================
+
+fn f() {
+  a := name
+  b := module::name
+  c := module::inner::name
+  d := package::name
+  e := self::name
+  g := super::name
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (path_expression
+          (path
+            (identifier))))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (path_expression
+          (path
+            (identifier)
+            (identifier))))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (path_expression
+          (path
+            (identifier)
+            (identifier)
+            (identifier))))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (path_expression
+          (path
+            (package)
+            (identifier))))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (path_expression
+          (path
+            (self)
+            (identifier))))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (path_expression
+          (path
+            (super)
+            (identifier)))))))
+
+================================================================================
+A bare path is a unit variant in pattern position
+================================================================================
+
+fn f(x: Option<i32>) {
+  match x {
+    Option::None => ret,
+    Option::Some(_) => ret,
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type))))))
+    (block
+      (match_expression
+        (path_expression
+          (path
+            (identifier)))
+        (match_arm
+          (unit_variant_pattern
+            (path
+              (identifier)
+              (identifier)))
+          (return_expression))
+        (match_arm
+          (tuple_variant_pattern
+            (path
+              (identifier)
+              (identifier))
+            (wildcard_pattern))
+          (return_expression))))))
+
+================================================================================
+Use imports a path and may rename it
+================================================================================
+
+use alcy::std::core;
+use alcy::std::core as std_core;
+use core;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (use_item
+    (path
+      (identifier)
+      (identifier)
+      (identifier)))
+  (use_item
+    (path
+      (identifier)
+      (identifier)
+      (identifier))
+    (identifier))
+  (use_item
+    (path
+      (identifier))))
+
+================================================================================
+A path in a type position
+================================================================================
+
+fn f(a: core::Option<i32>, b: alcy::std::Vec<u8>) {}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (identifier)
+            (type_arguments
+              (primitive_type)))))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (identifier)
+            (identifier)
+            (type_arguments
+              (primitive_type))))))
+    (block)))
+
+================================================================================
+A turbofish names the type arguments of a call
+================================================================================
+
+fn f() {
+  a := Vec::<i32>::new()
+  b := alloc::<u8>(4)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (call_expression
+          (path_expression
+            (path
+              (identifier)
+              (type_arguments
+                (primitive_type))
+              (identifier)))
+          (arguments)))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (call_expression
+          (path_expression
+            (path
+              (identifier)
+              (type_arguments
+                (primitive_type))))
+          (arguments
+            (integer)))))))

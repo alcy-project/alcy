@@ -1,0 +1,390 @@
+================================================================================
+Free function
+================================================================================
+
+fn add(a: i32, b: i32) -> i32 {
+  ret a + b
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (binary_expression
+          (path_expression
+            (path
+              (identifier)))
+          (path_expression
+            (path
+              (identifier))))))))
+
+================================================================================
+Public function with a trailing comma in the parameter list
+================================================================================
+
+pub fn two() -> (i32, i32) {
+  ret (1, 2,)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (visibility)
+    (identifier)
+    (parameters)
+    (return_type
+      (tuple_type
+        (primitive_type)
+        (primitive_type)))
+    (block
+      (return_expression
+        (tuple_expression
+          (integer)
+          (integer))))))
+
+================================================================================
+Generic free function
+================================================================================
+
+fn id<A>(x: A) -> A {
+  ret x
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (type_parameters
+      (identifier))
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)))))
+    (return_type
+      (path_type
+        (path
+          (identifier))))
+    (block
+      (return_expression
+        (path_expression
+          (path
+            (identifier)))))))
+
+================================================================================
+Struct with fields and a trailing comma
+================================================================================
+
+struct Point {
+  x: i32,
+  y: i32,
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (identifier)
+    (field_declaration
+      (identifier)
+      (primitive_type))
+    (field_declaration
+      (identifier)
+      (primitive_type))))
+
+================================================================================
+Unit and tuple enum variants
+================================================================================
+
+enum Option<T> {
+  Some(T),
+  None,
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (enum_item
+    (identifier)
+    (type_parameters
+      (identifier))
+    (enum_variant
+      (identifier)
+      (path_type
+        (path
+          (identifier))))
+    (enum_variant
+      (identifier))))
+
+================================================================================
+Inherent impl
+================================================================================
+
+struct Counter {
+  n: i32,
+}
+
+impl Counter {
+  pub fn bump(mut self: &mut Self) {
+    self.n += 1
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (identifier)
+    (field_declaration
+      (identifier)
+      (primitive_type)))
+  (impl_item
+    (path_type
+      (path
+        (identifier)))
+    (function_item
+      (visibility)
+      (identifier)
+      (parameters
+        (parameter
+          (mut_identifier_pattern
+            (self))
+          (reference_type
+            (path_type
+              (path
+                (self_type))))))
+      (block
+        (assignment_statement
+          (field_expression
+            (path_expression
+              (path
+                (self)))
+            (identifier))
+          (integer))))))
+
+================================================================================
+Generic inherent impl
+================================================================================
+
+impl<T> Wrapper<T> {
+  pub fn get(self: &Self) -> &T {
+    ret &self.item
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (impl_item
+    (type_parameters
+      (identifier))
+    (path_type
+      (path
+        (identifier)
+        (type_arguments
+          (path_type
+            (path
+              (identifier))))))
+    (function_item
+      (visibility)
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (self))
+          (reference_type
+            (path_type
+              (path
+                (self_type))))))
+      (return_type
+        (reference_type
+          (path_type
+            (path
+              (identifier)))))
+      (block
+        (return_expression
+          (borrow_expression
+            (field_expression
+              (path_expression
+                (path
+                  (self)))
+              (identifier))))))))
+
+================================================================================
+Spec impl with a for header
+================================================================================
+
+spec Display {
+  fn show(self: &Self) -> str;
+}
+
+impl Display for Point {
+  pub fn show(self: &Self) -> str {
+    ret "point"
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (spec_item
+    (identifier)
+    (spec_method
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (self))
+          (reference_type
+            (path_type
+              (path
+                (self_type))))))
+      (return_type
+        (str_type))))
+  (impl_item
+    (path_type
+      (path
+        (identifier)))
+    (path_type
+      (path
+        (identifier)))
+    (function_item
+      (visibility)
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (self))
+          (reference_type
+            (path_type
+              (path
+                (self_type))))))
+      (return_type
+        (str_type))
+      (block
+        (return_expression
+          (string))))))
+
+================================================================================
+Static and const items
+================================================================================
+
+static LIMIT: i32 = 10
+
+const MAX: i32 = 99
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (static_item
+    (identifier)
+    (primitive_type)
+    (integer))
+  (const_item
+    (identifier)
+    (primitive_type)
+    (integer)))
+
+================================================================================
+Use with an alias
+================================================================================
+
+use alcy::std::core;
+use alcy::std::alloc as heap;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (use_item
+    (path
+      (identifier)
+      (identifier)
+      (identifier)))
+  (use_item
+    (path
+      (identifier)
+      (identifier)
+      (identifier))
+    (identifier)))
+
+================================================================================
+Methods in an impl block carry pub and a receiver
+================================================================================
+
+impl Counter {
+  fn read(self: &Self) -> i32 {
+    ret self.n
+  }
+  fn write(mut self: &mut Self, v: i32) {
+    self.n = v
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (impl_item
+    (path_type
+      (path
+        (identifier)))
+    (function_item
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (self))
+          (reference_type
+            (path_type
+              (path
+                (self_type))))))
+      (return_type
+        (primitive_type))
+      (block
+        (return_expression
+          (field_expression
+            (path_expression
+              (path
+                (self)))
+            (identifier)))))
+    (function_item
+      (identifier)
+      (parameters
+        (parameter
+          (mut_identifier_pattern
+            (self))
+          (reference_type
+            (path_type
+              (path
+                (self_type)))))
+        (parameter
+          (identifier_pattern
+            (identifier))
+          (primitive_type)))
+      (block
+        (assignment_statement
+          (field_expression
+            (path_expression
+              (path
+                (self)))
+            (identifier))
+          (path_expression
+            (path
+              (identifier))))))))

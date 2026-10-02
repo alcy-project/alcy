@@ -1,0 +1,505 @@
+================================================================================
+If and else
+================================================================================
+
+fn f(c: bool) -> i32 {
+  if c {
+    ret 1
+  } else {
+    ret 2
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (if_expression
+        (path_expression
+          (path
+            (identifier)))
+        (block
+          (return_expression
+            (integer)))
+        (block
+          (return_expression
+            (integer)))))))
+
+================================================================================
+Else-if chains
+================================================================================
+
+fn f(c: bool) -> i32 {
+  if c {
+    ret 1
+  } else if c {
+    ret 2
+  } else {
+    ret 3
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (if_expression
+        (path_expression
+          (path
+            (identifier)))
+        (block
+          (return_expression
+            (integer)))
+        (if_expression
+          (path_expression
+            (path
+              (identifier)))
+          (block
+            (return_expression
+              (integer)))
+          (block
+            (return_expression
+              (integer))))))))
+
+================================================================================
+If without else
+================================================================================
+
+fn f(c: bool) {
+  if c {
+    print("yes")
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (block
+      (if_expression
+        (path_expression
+          (path
+            (identifier)))
+        (block
+          (call_expression
+            (path_expression
+              (path
+                (identifier)))
+            (arguments
+              (string))))))))
+
+================================================================================
+A pattern declaration in a condition
+================================================================================
+
+fn f(o: Option<i32>) -> i32 {
+  if v := o {
+    ret v
+  }
+  ret 0
+}
+
+fn g(o: Option<i32>) -> i32 {
+  while v := next(o) {
+    ret v
+  }
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type))))))
+    (return_type
+      (primitive_type))
+    (block
+      (expression_statement
+        (if_expression
+          (declaration_condition
+            (identifier_pattern
+              (identifier))
+            (path_expression
+              (path
+                (identifier))))
+          (block
+            (return_expression
+              (path_expression
+                (path
+                  (identifier)))))))
+      (return_expression
+        (integer))))
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type))))))
+    (return_type
+      (primitive_type))
+    (block
+      (expression_statement
+        (while_expression
+          (declaration_condition
+            (identifier_pattern
+              (identifier))
+            (call_expression
+              (path_expression
+                (path
+                  (identifier)))
+              (arguments
+                (path_expression
+                  (path
+                    (identifier))))))
+          (block
+            (return_expression
+              (path_expression
+                (path
+                  (identifier)))))))
+      (return_expression
+        (integer)))))
+
+================================================================================
+While
+================================================================================
+
+fn f(c: bool) {
+  while c {
+    c = false
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (block
+      (while_expression
+        (path_expression
+          (path
+            (identifier)))
+        (block
+          (assignment_statement
+            (path_expression
+              (path
+                (identifier)))
+            (boolean)))))))
+
+================================================================================
+Loop with break and continue
+================================================================================
+
+fn f() {
+  loop {
+    if done() {
+      break
+    }
+    continue
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (loop_expression
+        (block
+          (expression_statement
+            (if_expression
+              (call_expression
+                (path_expression
+                  (path
+                    (identifier)))
+                (arguments))
+              (block
+                (break_expression))))
+          (continue_expression))))))
+
+================================================================================
+For over a range
+================================================================================
+
+fn f() {
+  for i in 0..<10 {
+    print(i)
+  }
+}
+
+fn g(v: Vec<i32>) {
+  for x in v {
+    print(x)
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (for_expression
+        (identifier_pattern
+          (identifier))
+        (range_expression
+          (integer)
+          (integer))
+        (block
+          (call_expression
+            (path_expression
+              (path
+                (identifier)))
+            (arguments
+              (path_expression
+                (path
+                  (identifier)))))))))
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type))))))
+    (block
+      (for_expression
+        (identifier_pattern
+          (identifier))
+        (path_expression
+          (path
+            (identifier)))
+        (block
+          (call_expression
+            (path_expression
+              (path
+                (identifier)))
+            (arguments
+              (path_expression
+                (path
+                  (identifier))))))))))
+
+================================================================================
+For over an open range
+================================================================================
+
+fn f() {
+  for i in 0.. {
+    break
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (for_expression
+        (identifier_pattern
+          (identifier))
+        (range_expression
+          (integer))
+        (block
+          (break_expression))))))
+
+================================================================================
+Match with a scrutinee and arms
+================================================================================
+
+fn f(x: Option<i32>) -> i32 {
+  ret match x {
+    Option::Some(v) => v,
+    Option::None => 0,
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type))))))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (match_expression
+          (path_expression
+            (path
+              (identifier)))
+          (match_arm
+            (tuple_variant_pattern
+              (path
+                (identifier)
+                (identifier))
+              (identifier_pattern
+                (identifier)))
+            (path_expression
+              (path
+                (identifier))))
+          (match_arm
+            (unit_variant_pattern
+              (path
+                (identifier)
+                (identifier)))
+            (integer)))))))
+
+================================================================================
+Match arms accept semicolons as separators
+================================================================================
+
+fn f(x: i32) -> i32 {
+  ret match x {
+    0 => 1;
+    1 => 2;
+    _ => 3;
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (match_expression
+          (path_expression
+            (path
+              (identifier)))
+          (match_arm
+            (literal_pattern
+              (integer))
+            (integer))
+          (match_arm
+            (literal_pattern
+              (integer))
+            (integer))
+          (match_arm
+            (wildcard_pattern)
+            (integer)))))))
+
+================================================================================
+A match arm body may be a block
+================================================================================
+
+fn f(x: i32) -> i32 {
+  ret match x {
+    0 => {
+      ret 1
+    }
+    _ => ret 0,
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (match_expression
+          (path_expression
+            (path
+              (identifier)))
+          (match_arm
+            (literal_pattern
+              (integer))
+            (block_expression
+              (return_expression
+                (integer))))
+          (match_arm
+            (wildcard_pattern)
+            (return_expression
+              (integer))))))))
+
+================================================================================
+Return without a value
+================================================================================
+
+fn f() {
+  ret
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (return_expression))))

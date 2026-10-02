@@ -1,0 +1,390 @@
+================================================================================
+Wildcard and binding patterns
+================================================================================
+
+fn f() {
+  _ := 1
+  mut x := 2
+  _ignored := 3
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (wildcard_pattern)
+        (integer))
+      (declaration_statement
+        (mut_identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (literal_pattern
+          (integer))
+        (integer)))))
+
+================================================================================
+Literal patterns, negative included
+================================================================================
+
+fn f(x: i32) {
+  match x {
+    0 => ret 1,
+    -1 => ret 2,
+    1.5 => ret 3,
+    "s" => ret 4,
+    'c' => ret 5,
+    true => ret 6,
+    false => ret 7,
+    _ => ret 0,
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (block
+      (match_expression
+        (path_expression
+          (path
+            (identifier)))
+        (match_arm
+          (literal_pattern
+            (integer))
+          (return_expression
+            (integer)))
+        (match_arm
+          (negative_literal_pattern
+            (integer))
+          (return_expression
+            (integer)))
+        (match_arm
+          (literal_pattern
+            (integer))
+          (return_expression
+            (integer)))
+        (match_arm
+          (literal_pattern
+            (string))
+          (return_expression
+            (integer)))
+        (match_arm
+          (literal_pattern
+            (char))
+          (return_expression
+            (integer)))
+        (match_arm
+          (literal_pattern
+            (boolean))
+          (return_expression
+            (integer)))
+        (match_arm
+          (literal_pattern
+            (boolean))
+          (return_expression
+            (integer)))
+        (match_arm
+          (wildcard_pattern)
+          (return_expression
+            (integer)))))))
+
+================================================================================
+Tuple and tuple-variant patterns
+================================================================================
+
+fn f(p: (i32, str)) {
+  (a, b) := p
+  Some(v) := Option::Some(1)
+  Ok(v) := Result::Ok(1)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (tuple_type
+          (primitive_type)
+          (str_type))))
+    (block
+      (declaration_statement
+        (tuple_pattern
+          (identifier_pattern
+            (identifier))
+          (identifier_pattern
+            (identifier)))
+        (path_expression
+          (path
+            (identifier))))
+      (declaration_statement
+        (tuple_variant_pattern
+          (path
+            (identifier))
+          (identifier_pattern
+            (identifier)))
+        (call_expression
+          (path_expression
+            (path
+              (identifier)
+              (identifier)))
+          (arguments
+            (integer))))
+      (declaration_statement
+        (tuple_variant_pattern
+          (path
+            (identifier))
+          (identifier_pattern
+            (identifier)))
+        (call_expression
+          (path_expression
+            (path
+              (identifier)
+              (identifier)))
+          (arguments
+            (integer)))))))
+
+================================================================================
+Struct pattern with a shorthand field
+================================================================================
+
+fn f(p: Point) {
+  Point { x, y } := p
+  Point { x: a, y: b } := p
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)))))
+    (block
+      (declaration_statement
+        (struct_pattern
+          (path
+            (identifier))
+          (field_pattern
+            (identifier))
+          (field_pattern
+            (identifier)))
+        (path_expression
+          (path
+            (identifier))))
+      (declaration_statement
+        (struct_pattern
+          (path
+            (identifier))
+          (field_pattern
+            (identifier)
+            (identifier_pattern
+              (identifier)))
+          (field_pattern
+            (identifier)
+            (identifier_pattern
+              (identifier))))
+        (path_expression
+          (path
+            (identifier)))))))
+
+================================================================================
+Reference pattern
+================================================================================
+
+fn f(p: &i32, q: &mut i32) {
+  &a := p
+  &mut b := q
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (reference_type
+          (primitive_type)))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (reference_type
+          (primitive_type))))
+    (block
+      (declaration_statement
+        (reference_pattern
+          (identifier_pattern
+            (identifier)))
+        (path_expression
+          (path
+            (identifier))))
+      (declaration_statement
+        (reference_pattern
+          (identifier_pattern
+            (identifier)))
+        (path_expression
+          (path
+            (identifier)))))))
+
+================================================================================
+Or pattern
+================================================================================
+
+fn f(x: i32) {
+  match x {
+    1 | 2 | 3 => ret 1,
+    _ => ret 0,
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (block
+      (match_expression
+        (path_expression
+          (path
+            (identifier)))
+        (match_arm
+          (or_pattern
+            (literal_pattern
+              (integer))
+            (literal_pattern
+              (integer))
+            (literal_pattern
+              (integer)))
+          (return_expression
+            (integer)))
+        (match_arm
+          (wildcard_pattern)
+          (return_expression
+            (integer)))))))
+
+================================================================================
+Unit variant pattern
+================================================================================
+
+fn f(x: Option<i32>) {
+  match x {
+    Option::Some(_) => ret 1,
+    Option::None => ret 0,
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type))))))
+    (block
+      (match_expression
+        (path_expression
+          (path
+            (identifier)))
+        (match_arm
+          (tuple_variant_pattern
+            (path
+              (identifier)
+              (identifier))
+            (wildcard_pattern))
+          (return_expression
+            (integer)))
+        (match_arm
+          (unit_variant_pattern
+            (path
+              (identifier)
+              (identifier)))
+          (return_expression
+            (integer)))))))
+
+================================================================================
+Self receivers are patterns
+================================================================================
+
+struct S {
+  n: i32,
+}
+
+impl S {
+  fn read(self: &Self) -> i32 {
+    ret 0
+  }
+  fn write(mut self: &mut Self) {}
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (identifier)
+    (field_declaration
+      (identifier)
+      (primitive_type)))
+  (impl_item
+    (path_type
+      (path
+        (identifier)))
+    (function_item
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (self))
+          (reference_type
+            (path_type
+              (path
+                (self_type))))))
+      (return_type
+        (primitive_type))
+      (block
+        (return_expression
+          (integer))))
+    (function_item
+      (identifier)
+      (parameters
+        (parameter
+          (mut_identifier_pattern
+            (self))
+          (reference_type
+            (path_type
+              (path
+                (self_type))))))
+      (block))))
