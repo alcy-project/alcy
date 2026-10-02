@@ -140,10 +140,19 @@ class DiagBag {
     return &entries_[index];
   }
 
-  bool has_errors() const { return error_count_ > 0; }
+  // Whether anything observed was an error. A diagnostic the arena could
+  // not hold still counts, so an input that broke the compiler's memory
+  // budget fails the run rather than passing quietly.
+  bool has_errors() const { return error_count_ > 0 || dropped_errors_ > 0; }
   u32 error_count() const { return error_count_; }
   u32 warning_count() const { return warning_count_; }
   u32 size() const { return size_; }
+
+  // Diagnostics observed but not stored, because the arena reserved for
+  // them was spent. They carry no message and no span, so a caller can
+  // only say how many there were; the run's exit code already accounts
+  // for their severities.
+  u32 dropped_count() const { return dropped_count_; }
 
   // The language its messages were composed in, which a caller building
   // another bag over the same input needs to agree on.
@@ -185,8 +194,18 @@ class DiagBag {
            bool has_primary,
            std::string_view message);
 
-  // Copies bytes into the arena and returns a view of the copy.
+  // Copies bytes into the arena and returns a view of the copy. The
+  // caller has checked that they fit.
   std::string_view intern(std::string_view bytes) const;
+
+  // The capacity the entries array grows to next, saturating rather than
+  // wrapping.
+  [[nodiscard]] u32 grown_capacity() const;
+
+  // Whether `bytes` more arena room is free. Every allocation is decided
+  // here first, because the arena reports exhaustion by failing and its
+  // callers may not be in a position to unwind.
+  [[nodiscard]] bool has_room_for(usize bytes) const;
 
   mem::Arena* arena_;
   i18n::Language language_;
@@ -196,8 +215,15 @@ class DiagBag {
   u32 size_ = 0;
   u32 error_count_ = 0;
   u32 warning_count_ = 0;
+  u32 dropped_count_ = 0;
+  u32 dropped_errors_ = 0;
 
   static constexpr u32 INITIAL_CAPACITY = 8;
+
+  // A message is composed from the input, and an input can be anything;
+  // a quoted token longer than this is clipped with an ellipsis rather
+  // than spending the arena on bytes no reader will finish.
+  static constexpr usize MAX_MESSAGE_BYTES = 1u << 10;
 };
 
 }  // namespace diag

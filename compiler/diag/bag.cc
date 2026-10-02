@@ -18,25 +18,52 @@
 
 namespace diag {
 
+u32 DiagBag::grown_capacity() const {
+  // Saturate rather than wrap: a u32 overflow would shrink the capacity
+  // and the next push would write out of bounds.
+  return capacity_ == 0        ? INITIAL_CAPACITY
+         : capacity_ > ~0u / 2 ? ~0u
+                               : capacity_ * 2;
+}
+
+bool DiagBag::has_room_for(usize bytes) const {
+  return arena_->capacity() - arena_->size() >= bytes;
+}
+
 u32 DiagBag::push(Severity severity,
                   std::optional<Code> code,
                   Span primary,
                   bool has_primary,
                   std::string_view message) {
-  if (size_ == capacity_) {
-    // Saturate rather than wrap: a u32 overflow would shrink the
-    // capacity and the next push would write out of bounds.
-    const u32 grown = capacity_ == 0        ? INITIAL_CAPACITY
-                      : capacity_ > ~0u / 2 ? ~0u
-                                            : capacity_ * 2;
-    DCHECK(grown > capacity_);
-    Diagnostic* const mem = static_cast<Diagnostic*>(
-        arena_->alloc(sizeof(Diagnostic) * grown, alignof(Diagnostic)));
+  // A diagnostic is stored whole or not at all: a clipped message and the
+  // entry pointing at it must be decided together, or the entry reads
+  // bytes that were never copied.
+  char clipped[MAX_MESSAGE_BYTES + 4];
+  if (message.size() > MAX_MESSAGE_BYTES) {
+    std::memcpy(clipped, message.data(), MAX_MESSAGE_BYTES);
+    std::memcpy(clipped + MAX_MESSAGE_BYTES, "...", 3);
+    message = std::string_view(clipped, MAX_MESSAGE_BYTES + 3);
+  }
+  const usize growth =
+      size_ == capacity_ ? sizeof(Diagnostic) * grown_capacity() : 0;
+  if (!has_room_for(growth + message.size())) {
+    // The arena is spent. The diagnostic is counted but not stored, and
+    // the caller is told by `dropped_count` at the end of the run.
+    ++dropped_count_;
+    if (severity == Severity::Error) {
+      ++dropped_errors_;
+    }
+    return size_;
+  }
+  if (growth != 0) {
+    DCHECK(grown_capacity() > capacity_);
+    Diagnostic* const mem = static_cast<Diagnostic*>(arena_->alloc(
+        sizeof(Diagnostic) * grown_capacity(), alignof(Diagnostic)));
     for (u32 i = 0; i < size_; ++i) {
       mem[i] = entries_[i];
     }
     entries_ = mem;
-    capacity_ = grown;
+    capacity_ = grown_capacity();
   }
   const u32 index = size_++;
   Diagnostic& slot = entries_[index];
@@ -59,10 +86,14 @@ std::string_view DiagBag::intern(std::string_view bytes) const {
   if (bytes.empty()) {
     return {};
   }
+  // The caller has checked that this fits, so the arena answers with
+  // room; the null test is what an accounting mistake degrades to rather
+  // than a write through nothing.
   char* const mem =
       static_cast<char*>(arena_->alloc(bytes.size(), alignof(char)));
-  // The arena is caller-reserved; exhaustion is a configuration bug, and the
-  // arena already DCHECKs on it. A null here would only follow that.
+  if (mem == nullptr) {
+    return {};
+  }
   std::memcpy(mem, bytes.data(), bytes.size());
   return {mem, bytes.size()};
 }
@@ -74,6 +105,15 @@ base::Result<void, BagError> DiagBag::label(
     return base::make_err(BagError::InvalidIndex);
   }
   if (labels.size() == 0) {
+    return base::make_ok();
+  }
+  usize needed = sizeof(Label) * labels.size();
+  for (const Label& label : labels) {
+    needed += label.message.size();
+  }
+  if (!has_room_for(needed)) {
+    // A label points at a second span; unlike the diagnostic it belongs
+    // to, dropping it leaves a whole rendering rather than a hole.
     return base::make_ok();
   }
   Label* const mem = static_cast<Label*>(
@@ -202,7 +242,16 @@ void DiagBag::merge(const DiagBag& other) {
     // would render as a check nobody allocated.
     const u32 at = push(from.severity, from.code, from.primary_span,
                         from.has_primary_span, from.message);
-    if (from.label_count == 0) {
+    if (at >= size_ || from.label_count == 0) {
+      // Out of range means this bag was full and the diagnostic was
+      // dropped; its labels have nothing to attach to.
+      continue;
+    }
+    usize needed = sizeof(Label) * from.label_count;
+    for (u32 l = 0; l < from.label_count; ++l) {
+      needed += from.labels[l].message.size();
+    }
+    if (!has_room_for(needed)) {
       continue;
     }
     Label* const labels = static_cast<Label*>(
@@ -216,6 +265,10 @@ void DiagBag::merge(const DiagBag& other) {
     entries_[at].labels = labels;
     entries_[at].label_count = from.label_count;
   }
+  // What the other bag could not hold crosses too: the count is what a
+  // caller reports, and an error among them still fails this bag.
+  dropped_count_ += other.dropped_count_;
+  dropped_errors_ += other.dropped_errors_;
 }
 
 }  // namespace diag

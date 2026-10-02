@@ -246,6 +246,38 @@ TEST_CASE("Every text report is one finished block") {
   CHECK(text(diagnosed) != two);
 }
 
+// A bag that ran out of room says so once, after what it did hold: the
+// absent messages are the reason the run failed, and a reader looking
+// for the first error needs to know they are not all that was found.
+TEST_CASE("A bag that dropped diagnostics says how many") {
+  mem::Arena arena;
+  arena.reserve(mem::page_size());
+  diag::DiagBag bag{arena, i18n::Language::EnUs};
+  for (u32 i = 0; i < 1000; ++i) {
+    bag.emit_untranslated(diag::Severity::Error, diag::Stage::Lexer, 1,
+                          "full {}", i);
+  }
+  CHECK(bag.dropped_count() > 0);
+  if (bag.dropped_count() == 0) {
+    return;
+  }
+  source::SourceManager sources;
+  Envelope envelope;
+  envelope.command = "check";
+  envelope.status = Status::Error;
+  envelope.bag = &bag;
+  envelope.sources = &sources;
+
+  const std::string reported = complaints(envelope);
+  CHECK(reported.find("diagnostics were dropped") != std::string::npos);
+  CHECK(reported.find("ran out of memory") != std::string::npos);
+  // The note is a note, not an error for a reader to trip over twice.
+  CHECK(reported.find("note:") != std::string::npos);
+  const std::string json = render_json(envelope, i18n::Language::EnUs);
+  CHECK(json.find("\"severity\":\"note\"") != std::string::npos);
+  CHECK(json.find("diagnostics were dropped") != std::string::npos);
+}
+
 // A reader who asked for the result does not want the complaints in the
 // same stream. `alcy check > report.txt` keeps a clean file; `alcy run |
 // grep` never sees them. `--json` is the exception, because a document a

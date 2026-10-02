@@ -545,6 +545,21 @@ void record_output(const std::string& output, Envelope& envelope) {
   }
 }
 
+// Composes the note that follows a bag whose arena was spent. It is
+// written here rather than emitted into the bag, which has no room left
+// by definition; the caller keeps the text alive while it renders.
+std::string dropped_note(u32 dropped, i18n::Language language) {
+  fmt::memory_buffer text;
+  if (dropped == 1) {
+    i18n::format_to<i18n::Key::CliDiagnosticsDroppedSingular>(
+        std::back_inserter(text), language, dropped);
+  } else {
+    i18n::format_to<i18n::Key::CliDiagnosticsDroppedPlural>(
+        std::back_inserter(text), language, dropped);
+  }
+  return std::string(text.data(), text.size());
+}
+
 std::string render_diagnostics(const Envelope& envelope,
                                const diag::RenderOptions& options) {
   std::string out;
@@ -552,6 +567,12 @@ std::string render_diagnostics(const Envelope& envelope,
     envelope.bag->for_each([&](const diag::Diagnostic& diagnostic) {
       append_diagnostic_text(out, diagnostic, *envelope.sources, options);
     });
+    const u32 dropped = envelope.bag->dropped_count();
+    if (dropped > 0) {
+      const std::string note = dropped_note(dropped, options.language);
+      append_diagnostic_text(out, diag::message(diag::Severity::Note, note),
+                             options);
+    }
   }
   if (envelope.failure.has_value()) {
     append_diagnostic_text(out, *envelope.failure, options);
@@ -664,6 +685,11 @@ std::string render_json(const Envelope& envelope, i18n::Language language) {
     };
     if (envelope.bag != nullptr) {
       envelope.bag->for_each(append_one);
+      const u32 dropped = envelope.bag->dropped_count();
+      if (dropped > 0) {
+        const std::string note = dropped_note(dropped, language);
+        append_one(diag::message(diag::Severity::Note, note));
+      }
     }
     if (envelope.failure.has_value()) {
       append_one(*envelope.failure);

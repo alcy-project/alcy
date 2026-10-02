@@ -67,6 +67,49 @@ constexpr u32 TAB_WIDTH = 4;
 // where the span starts, and the line above already shows the extent.
 constexpr u32 MAX_CARET_RUN = 80;
 
+// The part of a line a snippet shows. A line can be arbitrarily long - an
+// identifier is legal input at any size - so the snippet keeps a window
+// around the caret and marks where it cut.
+struct SnippetWindow {
+  usize begin = 0;
+  usize end = 0;
+  bool clipped_left = false;
+  bool clipped_right = false;
+};
+
+// The window's width in bytes. Bytes rather than columns because a cut
+// is a reading aid, not a layout, and the caret arithmetic measures its
+// own columns from the window's start.
+constexpr usize SNIPPET_MAX_BYTES = 240;
+
+SnippetWindow snippet_window(std::string_view line, usize caret) {
+  if (line.size() <= SNIPPET_MAX_BYTES) {
+    return {0, line.size(), false, false};
+  }
+  // The caret stays visible with more of the line before it than after,
+  // which is where a reader looks first.
+  usize begin =
+      caret > SNIPPET_MAX_BYTES / 3 ? caret - SNIPPET_MAX_BYTES / 3 : 0;
+  usize end = begin + SNIPPET_MAX_BYTES;
+  if (end > line.size()) {
+    end = line.size();
+    begin = end - SNIPPET_MAX_BYTES;
+  }
+  // A cut inside a multi-byte character would render its tail alone, so
+  // the left edge steps over continuation bytes. The right edge is
+  // exclusive and may cut after a character's first byte, which keeps it
+  // whole rather than dropping it.
+  while (begin > 0 &&
+         (static_cast<unsigned char>(line[begin]) & 0xC0) == 0x80) {
+    ++begin;
+  }
+  while (end < line.size() &&
+         (static_cast<unsigned char>(line[end]) & 0xC0) == 0x80) {
+    ++end;
+  }
+  return {begin, end, begin > 0, end < line.size()};
+}
+
 // Display columns spanned by the bytes in [line_start, offset).
 u32 display_column(std::string_view bytes, u32 line_start, u32 offset) {
   u32 col = 1;
@@ -252,6 +295,18 @@ void render(const Diagnostic& diag,
   const LineInfo info = locate(source.bytes, diag.primary_span.offset);
   fmt::format_to(std::back_inserter(out), ":{}:{}\n", info.line, info.col);
 
+  // Caret run clipped to the rendered snippet. locate() clamps
+  // out-of-range offsets; mirror that here.
+  u32 line_offset = diag.primary_span.offset;
+  if (line_offset > source.bytes.size()) {
+    line_offset = static_cast<u32>(source.bytes.size());
+  }
+  // A line can be arbitrarily long - an identifier is legal input at any
+  // size - and printing all of one buries the message it belongs to.
+  const SnippetWindow window =
+      snippet_window(info.text, line_offset - info.start);
+  const u32 base_offset = info.start + static_cast<u32>(window.begin);
+
   const u32 gutter = decimal_width(info.line);
   write_gutter(out, gutter);
   fmt::format_to(std::back_inserter(out), "\n");
@@ -259,24 +314,30 @@ void render(const Diagnostic& diag,
   fmt::format_to(std::back_inserter(out), "{}", info.line);
   end_style(out, options.color);
   fmt::format_to(std::back_inserter(out), " | ");
-  append_expanded(out, info.text);
+  if (window.clipped_left) {
+    append_text(out, "...");
+  }
+  append_expanded(out,
+                  info.text.substr(window.begin, window.end - window.begin));
+  if (window.clipped_right) {
+    append_text(out, "...");
+  }
   fmt::format_to(std::back_inserter(out), "\n");
 
-  // Caret run clipped to the rendered line (at least one caret).
-  // locate() clamps out-of-range offsets; mirror that here.
-  u32 line_offset = diag.primary_span.offset;
-  if (line_offset > source.bytes.size()) {
-    line_offset = static_cast<u32>(source.bytes.size());
-  }
-  const u32 line_end = info.start + static_cast<u32>(info.text.size());
-  u32 caret_end = line_offset + diag.primary_span.length;
-  if (caret_end > line_end) {
-    caret_end = line_end;
-  }
   // The run is measured in display columns, so a span covering
-  // multi-byte characters underlines as wide as it looks.
-  const u32 start_col = info.col;
-  const u32 end_col = display_column(source.bytes, info.start, caret_end);
+  // multi-byte characters underlines as wide as it looks. Columns count
+  // from where the snippet starts, and the left ellipsis is not columns
+  // of its own text.
+  const u32 snippet_shift = window.clipped_left ? 3 : 0;
+  const u32 start_col =
+      display_column(source.bytes, base_offset, line_offset) + snippet_shift;
+  const u32 snippet_end = info.start + static_cast<u32>(window.end);
+  u32 caret_end = line_offset + diag.primary_span.length;
+  if (caret_end > snippet_end) {
+    caret_end = snippet_end;
+  }
+  const u32 end_col =
+      display_column(source.bytes, base_offset, caret_end) + snippet_shift;
   u32 carets = end_col > start_col ? end_col - start_col : 0;
   if (carets == 0) {
     carets = 1;

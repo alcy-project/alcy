@@ -27,6 +27,14 @@ constexpr std::string_view SRC = "x := foo(1, 2)\ny := 2\n";
 // tab, each of which a byte column would misplace.
 constexpr std::string_view WIDE_SRC = "  s := \"\xe6\x97\xa5\xe6\x9c\xac\" @";
 constexpr std::string_view TABBED_SRC = "fn f() {\n\tx := @\n}\n";
+// A line long enough that printing it whole would bury the message it
+// belongs to; the `@` sits four hundred characters from either end. A
+// function-local static keeps the view it is rendered through valid.
+std::string_view long_src() {
+  static std::string text =
+      "x = " + std::string(400, 'a') + " @" + std::string(400, 'b') + "\n";
+  return text;
+}
 
 std::optional<SourceText> fetch_source(u32 file, const void*) {
   if (file == 3) {
@@ -37,6 +45,9 @@ std::optional<SourceText> fetch_source(u32 file, const void*) {
   }
   if (file == 5) {
     return SourceText{"tabbed.al", TABBED_SRC};
+  }
+  if (file == 6) {
+    return SourceText{"long.al", long_src()};
   }
   return std::nullopt;
 }
@@ -237,6 +248,30 @@ TEST_CASE("Render expands tabs so the caret lands under its character") {
         "  |\n"
         "2 |     x := @\n"
         "  |          ^\n");
+}
+
+TEST_CASE("Render windows a line too long to print whole") {
+  // The snippet shows part of the line, cut on both sides, and the
+  // caret still lands under its character.
+  BagFixture f;
+  const u32 i = f.bag.emit_untranslated(
+      Severity::Error, Stage::Lexer, 1,
+      Span{.file = 6, .offset = 405, .length = 1}, "bad");
+  const std::string rendered = render_str(*f.bag.at(i));
+  const usize snippet_at = rendered.find("1 | ");
+  const usize caret_at = rendered.rfind("  | ");
+  CHECK(snippet_at != std::string::npos);
+  CHECK(caret_at != std::string::npos);
+  if (snippet_at == std::string::npos || caret_at == std::string::npos) {
+    return;
+  }
+  const usize at_col = rendered.find('@', snippet_at) - snippet_at;
+  const usize caret_col = rendered.find('^', caret_at) - caret_at;
+  CHECK(at_col == caret_col);
+  // Cut on both sides: an ellipsis before the caret and the line
+  // bounded rather than the four hundred characters either way.
+  CHECK(rendered.find("...", snippet_at) < snippet_at + at_col);
+  CHECK(rendered.size() < 400);
 }
 
 }  // namespace diag

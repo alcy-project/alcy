@@ -45,13 +45,15 @@ namespace {
 // two threads at once, so a file that might report while others do needs a bag
 // of its own.
 //
-// The reservation is a single file's worth of messages, which a file reporting
-// that many has that many problems in it. It is address space: the pages are
-// committed as the messages arrive.
+// The reservation is a single file's worth of messages. It is address
+// space - one mapping per file, committed as the messages arrive - so it
+// stays modest: a file reporting more than this has its excess dropped
+// and counted, which the run reports, rather than holding a reservation
+// per file that a package of a thousand files would pay for.
 #if FPAG_BUILD_FLAG(IS_ARCH_64_BITS)
-constexpr usize FILE_DIAGNOSTIC_CAPACITY = 1ull << 20;
+constexpr usize FILE_DIAGNOSTIC_CAPACITY = 64ull << 10;
 #else
-constexpr usize FILE_DIAGNOSTIC_CAPACITY = 128ull << 10;
+constexpr usize FILE_DIAGNOSTIC_CAPACITY = 32ull << 10;
 #endif
 
 struct PerFileDiagnostics {

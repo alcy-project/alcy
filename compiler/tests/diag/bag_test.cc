@@ -3,6 +3,8 @@
 
 #include "diag/bag.h"
 
+#include <string>
+
 #include "diag/diagnostic.h"
 #include "diag/span.h"
 #include "diag/stage.h"
@@ -10,6 +12,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
+#include "fpag/mem/page_allocator.h"
 #include "i18n/language.h"
 
 namespace diag {
@@ -78,6 +81,59 @@ TEST_CASE("Reported result smoke test") {
   base::Result<i32, diag::Reported> err = base::make_err(Reported{});
   CHECK(err.is_err());
   CHECK(!err.is_ok());
+}
+
+TEST_CASE("A spent diagnostic arena drops rather than crashes") {
+  // The arena is the caller's, and a caller that reserved too little
+  // used to write through nothing in release and trap in debug. What it
+  // gives up now is the diagnostics, counted and reported.
+  mem::Arena arena;
+  arena.reserve(mem::page_size());
+  DiagBag bag{arena, i18n::Language::EnUs};
+  constexpr u32 ATTEMPTS = 1000;
+  for (u32 i = 0; i < ATTEMPTS; ++i) {
+    bag.emit_untranslated(Severity::Error, Stage::Lexer, 7, "no room {}", i);
+  }
+  CHECK(bag.size() < ATTEMPTS);
+  CHECK(bag.dropped_count() == ATTEMPTS - bag.size());
+  // Every one was an error, so the run fails whether or not any was
+  // stored.
+  CHECK(bag.has_errors());
+  CHECK(bag.error_count() > 0);
+}
+
+TEST_CASE("A message longer than the cap is clipped") {
+  mem::Arena arena;
+  arena.reserve(mem::page_size());
+  DiagBag bag{arena, i18n::Language::EnUs};
+  const std::string huge(64u << 10, 'x');
+  const u32 index = bag.emit_untranslated(Severity::Error, Stage::Parser, 1,
+                                          "found {}", huge);
+  CHECK(bag.size() == 1);
+  CHECK(bag.dropped_count() == 0);
+  const Diagnostic* const stored = bag.at(index);
+  CHECK(stored != nullptr);
+  if (stored == nullptr) {
+    return;
+  }
+  CHECK(stored->message.size() < huge.size());
+  CHECK(stored->message.ends_with("..."));
+}
+
+TEST_CASE("DiagBag merge carries dropped diagnostics") {
+  mem::Arena small;
+  small.reserve(mem::page_size());
+  DiagBag from{small, i18n::Language::EnUs};
+  for (u32 i = 0; i < 1000; ++i) {
+    from.emit_untranslated(Severity::Error, Stage::Lexer, 7, "full {}", i);
+  }
+  CHECK(from.dropped_count() > 0);
+
+  BagFixture into;
+  into.bag.merge(from);
+  CHECK(into.bag.dropped_count() == from.dropped_count());
+  // The dropped errors do not vanish with their messages.
+  CHECK(into.bag.has_errors());
 }
 
 TEST_CASE("DiagBag dedup keeps the first of each") {
