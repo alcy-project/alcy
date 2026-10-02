@@ -1,0 +1,15 @@
+[package]
+name = "app"
+version = "0.1.0"
+
+[modules]
+include = ["main", "lib"]
+
+[dependencies]
+"alcy/std/core" = {}
+
+[[bin]]
+path = "main.al"
+
+[lib]
+path = "lib.al"

@@ -68,8 +68,8 @@ relied upon by MVP programs or by the MVP compiler implementation.
   git fetchers that every other owner and suite needs — a specifier
   naming a source the compiler cannot fetch is an explicit error, not a
   silent skip.
-- Summary-carrying package artifacts (`[lib]` targets, cross-package
-  compilation).
+- Summary-carrying package artifacts and cross-package compilation: a
+  `[lib]` target builds to a plain object until then.
 - Custom linker, incremental compilation and linking.
 - Parallel compilation engine with demand-driven summaries.
 - Refinement types over a decidable predicate fragment.

@@ -1,0 +1,7 @@
+# A library that names nothing is the package, so its object lands in
+# `out/` under the package name and carries no entry.
+exit = 0
+subcommand = "build"
+default_output = true
+contains = ["Built", "hash.o"]
+not_contains = ["error"]

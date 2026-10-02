@@ -396,6 +396,12 @@ base::Result<void, ManifestError> verify_manifest(
       return base::make_err(ManifestError::EmptyBinPath);
     }
   }
+  if (manifest.lib != nullptr) {
+    // A lib name may be empty, like a bin name.
+    if (manifest.lib->path.empty()) {
+      return base::make_err(ManifestError::EmptyLibPath);
+    }
+  }
   for (u32 i = 0; i < manifest.modules.include_count; ++i) {
     if (manifest.modules.include[i].empty()) {
       return base::make_err(ManifestError::EmptyModuleEntry);
@@ -435,6 +441,9 @@ void report_manifest_error(ManifestError error,
       break;
     case ManifestError::EmptyBinPath:
       detail = "bin target with an empty path";
+      break;
+    case ManifestError::EmptyLibPath:
+      detail = "lib target with an empty path";
       break;
     case ManifestError::EmptyModuleEntry:
       detail = "module list with an empty entry";
@@ -582,6 +591,40 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
     }
   }
 
+  // The [lib] table is optional and singular: one library per
+  // package, naming its root module the way a bin names its entry.
+  LibTarget* lib = nullptr;
+  const auto lib_it = root.find("lib");
+  if (lib_it != root.end()) {
+    if (!lib_it->second.is_table()) {
+      return semantic_error(bag, filename, "[lib] must be a table");
+    }
+    const toml::table* const lib_table = lib_it->second.as_table();
+    const auto lib_path_it = lib_table->find("path");
+    if (lib_path_it == lib_table->end()) {
+      return semantic_error(bag, filename, "[lib] entry needs a path");
+    }
+    const auto lib_path = lib_path_it->second.value<std::string_view>();
+    if (!lib_path.has_value() || lib_path->empty()) {
+      return semantic_error(bag, filename, "[lib] path must be a string");
+    }
+    std::string_view lib_name;
+    const auto lib_name_it = lib_table->find("name");
+    if (lib_name_it != lib_table->end()) {
+      const auto lib_name_value = lib_name_it->second.value<std::string_view>();
+      if (!lib_name_value.has_value() || lib_name_value->empty()) {
+        return semantic_error(bag, filename, "[lib] name must be a string");
+      }
+      lib_name = copy_str(arena, *lib_name_value);
+    }
+    lib = static_cast<LibTarget*>(
+        arena.alloc(sizeof(LibTarget), alignof(LibTarget)));
+    *lib = LibTarget{
+        .name = lib_name,
+        .path = copy_str(arena, *lib_path),
+    };
+  }
+
   // The [modules] table is optional; an absent table selects every
   // discovered source file, keeping starter packages manifest-light.
   ModuleSet modules;
@@ -667,6 +710,7 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
       .dependency_count = dependency_count,
       .bins = bins,
       .bin_count = bin_count,
+      .lib = lib,
       .modules = modules,
   });
 }

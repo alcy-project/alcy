@@ -5,6 +5,7 @@
 
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "analyzer/resolve.h"
 #include "diag/bag.h"
@@ -86,13 +87,17 @@ base::Result<CheckOutcome, diag::Reported> check_package(
     const path::Path& root,
     source::FileId manifest_file,
     std::string_view manifest_name) {
-  base::Result<BinTarget, diag::Reported> target =
-      resolve_package_target(ctx, root, manifest_file, manifest_name);
-  if (target.is_err() || ctx.bag.has_errors()) {
+  base::Result<std::vector<PackageTarget>, diag::Reported> targets =
+      resolve_package_targets(ctx, root, manifest_file, manifest_name);
+  if (targets.is_err() || ctx.bag.has_errors()) {
     return fail();
   }
-  BinTarget resolved = std::move(target).unwrap();
-  return finish_check(ctx, resolved.tree, resolved.file_count);
+  std::vector<PackageTarget> resolved = std::move(targets).unwrap();
+  // Every target draws on the same module selection and differs only in
+  // which file is its root, so one tree checks the package; the rest
+  // would repeat it.
+  PackageTarget& first = resolved.front();
+  return finish_check(ctx, first.tree, first.file_count);
 }
 
 }  // namespace pipeline

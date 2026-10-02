@@ -41,7 +41,8 @@ base::Result<RunOutcome, diag::Reported> link_and_run(
     const void* announce_ctx) {
   io::TempDir scratch = io::TempDir::create_unique("alcy_run_");
   const std::string object_path = scratch.join("main.o");
-  if (emit_package_object(ctx, lowered, optimize, object_path).is_err()) {
+  if (emit_package_object(ctx, lowered, optimize, object_path, false)
+          .is_err()) {
     return base::make_err(diag::Reported{});
   }
   const std::string exe_path =
@@ -84,20 +85,29 @@ base::Result<RunOutcome, diag::Reported> run_package(
     std::span<const std::string_view> args,
     AnnounceExec announce,
     const void* announce_ctx) {
-  base::Result<BinTarget, diag::Reported> target =
-      resolve_package_target(ctx, root, manifest_file, manifest_name);
-  if (target.is_err() || ctx.bag.has_errors()) {
+  base::Result<std::vector<PackageTarget>, diag::Reported> targets =
+      resolve_package_targets(ctx, root, manifest_file, manifest_name);
+  if (targets.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  BinTarget resolved = std::move(target).unwrap();
+  std::vector<PackageTarget> resolved = std::move(targets).unwrap();
+  // Resolution puts the binary first when the package declares one.
+  if (resolved.empty() || resolved.front().is_lib) {
+    // A library builds but never runs: there is no entry to execute.
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNoBinToRun>(
+        diag::Severity::Error, PIPELINE_NO_TARGETS, manifest_name);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  PackageTarget& bin = resolved.front();
   base::Result<lowering::LoweredPackage, diag::Reported> package =
-      compile_tree(ctx, resolved.tree);
+      compile_tree(ctx, bin.tree);
   if (package.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
   lowering::LoweredPackage lowered = std::move(package).unwrap();
-  return link_and_run(ctx, lowered, resolved.bin_name, optimize, link, args,
-                      announce, announce_ctx);
+  return link_and_run(ctx, lowered, bin.name, optimize, link, args, announce,
+                      announce_ctx);
 }
 
 }  // namespace pipeline

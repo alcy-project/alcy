@@ -1,0 +1,13 @@
+[package]
+name = "hash"
+version = "0.1.0"
+
+[modules]
+include = ["lib"]
+
+[dependencies]
+"alcy/std/core" = {}
+
+[lib]
+name = "hash"
+path = "lib.al"

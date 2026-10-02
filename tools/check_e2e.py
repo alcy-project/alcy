@@ -17,7 +17,9 @@ An expect.toml file declares the outcome:
 `exit` is required (integer value or "non-zero"); `contains` lines must
 all appear in the combined output, `not_contains` lines must all be absent.
 An optional `args` list is inserted before the selected subcommand, and an
-optional `env` table sets environment variables for the run.
+optional `env` table sets environment variables for the run. A `build` case
+gets `-o` pointed at a scratch path unless it sets `default_output = true`,
+which keeps the compiler's own placement.
 """
 
 import argparse
@@ -62,7 +64,22 @@ def parse_expect(path: Path):
     ):
         sys.exit(f"{path}: 'env' must be a table of strings")
 
-    return expected_exit, contains, not_contains, args, subcommand, env
+    # Set by a case that wants the compiler's own output placement, which
+    # names the artifact from the target; every other build is redirected
+    # to scratch instead.
+    default_output = data.get("default_output", False)
+    if not isinstance(default_output, bool):
+        sys.exit(f"{path}: 'default_output' must be a bool")
+
+    return (
+        expected_exit,
+        contains,
+        not_contains,
+        args,
+        subcommand,
+        env,
+        default_output,
+    )
 
 
 def run_case(alcy: Path, case_dir: Path):
@@ -70,9 +87,15 @@ def run_case(alcy: Path, case_dir: Path):
     if not expect_path.is_file():
         return False, "missing expect.toml"
 
-    expected_exit, contains, not_contains, extra_args, subcommand, env = (
-        parse_expect(expect_path)
-    )
+    (
+        expected_exit,
+        contains,
+        not_contains,
+        extra_args,
+        subcommand,
+        env,
+        default_output,
+    ) = parse_expect(expect_path)
     # An unset variable in the table is the case's business, so the run
     # starts from the environment it inherits with the table applied.
     process_env = {**os.environ, **env} if env else None
@@ -96,9 +119,9 @@ def run_case(alcy: Path, case_dir: Path):
     else:
         return False, "no alcy.toml or main.al found"
 
-    # A case that builds would otherwise drop an executable into its own
+    # A case that builds would otherwise drop an artifact into its own
     # source tree, so send the output to a scratch directory instead.
-    if subcommand == "build":
+    if subcommand == "build" and not default_output:
         with tempfile.TemporaryDirectory() as scratch:
             argv = [*argv, "-o", str(Path(scratch) / "out")]
             proc = subprocess.run(

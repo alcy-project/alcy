@@ -292,7 +292,7 @@ TEST_CASE("Lower emits verifiable LLVM IR") {
       std::make_unique<llvm::Module>("lower_emit_test", context);
   codegen_llvm::LlvmIrEmitter emitter(module.get(),
                                       std::move(result.lowered->storage),
-                                      &f.strings, ir::PointerWidth::W64);
+                                      &f.strings, ir::PointerWidth::W64, true);
   std::move(emitter).emit();
   CHECK(!llvm::verifyModule(*module));
 }
@@ -323,7 +323,7 @@ TEST_CASE("Lower emits verifiable LLVM IR for print") {
       std::make_unique<llvm::Module>("lower_emit_print_test", context);
   codegen_llvm::LlvmIrEmitter emitter(module.get(),
                                       std::move(result.lowered->storage),
-                                      &f.strings, ir::PointerWidth::W64);
+                                      &f.strings, ir::PointerWidth::W64, true);
   std::move(emitter).emit();
   CHECK(!llvm::verifyModule(*module));
 
@@ -367,7 +367,7 @@ TEST_CASE("Lower emits relocatable objects") {
       std::make_unique<llvm::Module>("lower_emit_object_test", context);
   codegen_llvm::LlvmIrEmitter emitter(module.get(),
                                       std::move(result.lowered->storage),
-                                      &f.strings, ir::PointerWidth::W64);
+                                      &f.strings, ir::PointerWidth::W64, true);
   std::move(emitter).emit();
   CHECK(!llvm::verifyModule(*module));
 
@@ -422,7 +422,7 @@ TEST_CASE("Optimization promotes stack allocas") {
       std::make_unique<llvm::Module>("lower_optimize_test", context);
   codegen_llvm::LlvmIrEmitter emitter(module.get(),
                                       std::move(result.lowered->storage),
-                                      &f.strings, ir::PointerWidth::W64);
+                                      &f.strings, ir::PointerWidth::W64, true);
   std::move(emitter).emit();
   CHECK(!llvm::verifyModule(*module));
 
@@ -475,9 +475,9 @@ TEST_CASE("Lower wraps all main forms in a C entry") {
     llvm::LLVMContext context;
     std::unique_ptr<llvm::Module> module =
         std::make_unique<llvm::Module>("lower_entry_test", context);
-    codegen_llvm::LlvmIrEmitter emitter(module.get(),
-                                        std::move(result.lowered->storage),
-                                        &f.strings, ir::PointerWidth::W64);
+    codegen_llvm::LlvmIrEmitter emitter(
+        module.get(), std::move(result.lowered->storage), &f.strings,
+        ir::PointerWidth::W64, true);
     std::move(emitter).emit();
     CHECK(!llvm::verifyModule(*module));
 
@@ -578,7 +578,7 @@ TEST_CASE("Lower emits verifiable LLVM IR for control flow") {
       std::make_unique<llvm::Module>("lower_emit_control_test", context);
   codegen_llvm::LlvmIrEmitter emitter(module.get(),
                                       std::move(result.lowered->storage),
-                                      &f.strings, ir::PointerWidth::W64);
+                                      &f.strings, ir::PointerWidth::W64, true);
   std::move(emitter).emit();
   CHECK(!llvm::verifyModule(*module));
 }
@@ -634,7 +634,7 @@ TEST_CASE("Lower emits verifiable LLVM IR for enums and calls") {
       std::make_unique<llvm::Module>("lower_emit_enum_test", context);
   codegen_llvm::LlvmIrEmitter emitter(module.get(),
                                       std::move(result.lowered->storage),
-                                      &f.strings, ir::PointerWidth::W64);
+                                      &f.strings, ir::PointerWidth::W64, true);
   std::move(emitter).emit();
   CHECK(!llvm::verifyModule(*module));
 }

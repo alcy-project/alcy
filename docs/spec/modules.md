@@ -73,12 +73,15 @@ member list and the dependency graph.
 
 - A binary package declares exactly one `[[bin]]` target with an
   explicit `path` in `alcy.toml`; the target name defaults to the
-  package name. A manifest without targets is an error, and so is a
-  directory without a manifest: a directory is a package, and a package
-  says which files it is.
-- Library artifacts do not exist in MVP: path dependencies are
-  source-included. `[lib]` targets arrive with summary-carrying
-  artifacts, post-MVP.
+  package name. A library package declares one `[lib]` table instead,
+  naming its root module the same way. A package holds at most one of
+  each; a manifest with neither is an error, and so is a directory
+  without a manifest: a directory is a package, and a package says
+  which files it is.
+- A library builds to a relocatable object with no entry: `main` is
+  never required, and entry synthesis wraps one for binaries only.
+  Summary-carrying artifacts arrive later; until then a lib artifact
+  is an object file, linkable but opaque.
 - MVP compiles single-package programs only. Cross-package
   compilation follows the whole-program-analysis,
   per-package-emission model (see `deferred.md`).

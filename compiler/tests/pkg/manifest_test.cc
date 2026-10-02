@@ -122,6 +122,64 @@ TEST_CASE("Manifest parses binary targets") {
   CHECK(manifest.bins[1].path == "tool.al");
 }
 
+TEST_CASE("Manifest parses a library target") {
+  Fixture f;
+  constexpr std::string_view bytes =
+      "[package]\nname = \"hash\"\nversion = \"0.1.0\"\n"
+      "\n"
+      "[lib]\nname = \"hash\"\npath = \"lib.al\"\n";
+  base::Result<PackageManifest, diag::Reported> result =
+      parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  const PackageManifest manifest = std::move(result).unwrap();
+  CHECK(!f.bag.has_errors());
+  CHECK(manifest.bin_count == 0);
+  CHECK(manifest.lib != nullptr);
+  if (manifest.lib == nullptr) {
+    return;
+  }
+  CHECK(manifest.lib->name == "hash");
+  CHECK(manifest.lib->path == "lib.al");
+  CHECK(verify_manifest(manifest).is_ok());
+}
+
+TEST_CASE("Manifest library names default empty") {
+  Fixture f;
+  constexpr std::string_view bytes =
+      "[package]\nname = \"hash\"\nversion = \"0.1.0\"\n"
+      "\n"
+      "[lib]\npath = \"lib.al\"\n";
+  base::Result<PackageManifest, diag::Reported> result =
+      parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  const PackageManifest manifest = std::move(result).unwrap();
+  CHECK(!f.bag.has_errors());
+  CHECK(manifest.lib != nullptr);
+  if (manifest.lib == nullptr) {
+    return;
+  }
+  CHECK(manifest.lib->name.empty());
+  CHECK(manifest.lib->path == "lib.al");
+  CHECK(verify_manifest(manifest).is_ok());
+}
+
+TEST_CASE("Manifest rejects library targets without paths") {
+  Fixture f;
+  constexpr std::string_view bytes =
+      "[package]\nname = \"hash\"\nversion = \"0.1.0\"\n"
+      "\n"
+      "[lib]\nname = \"hash\"\n";
+  CHECK(parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena)
+            .is_err());
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Manifest rejects binary targets without paths") {
   Fixture f;
   constexpr std::string_view bytes =

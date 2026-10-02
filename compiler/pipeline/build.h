@@ -35,7 +35,8 @@ base::Result<void, diag::Reported> emit_package_object(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
     bool optimize,
-    const std::string& output_path);
+    const std::string& output_path,
+    bool is_lib);
 
 // Writes the module as LLVM's textual IR, optimized or not on the same
 // terms as emit_package_object.
@@ -43,7 +44,8 @@ base::Result<void, diag::Reported> emit_package_ir(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
     bool optimize,
-    const std::string& output_path);
+    const std::string& output_path,
+    bool is_lib);
 
 // Writes the module as LLVM's bitcode, on the same terms as
 // emit_package_ir.
@@ -51,7 +53,8 @@ base::Result<void, diag::Reported> emit_package_bitcode(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
     bool optimize,
-    const std::string& output_path);
+    const std::string& output_path,
+    bool is_lib);
 
 // Links one object into an executable. An empty driver in `link`
 // selects the default toolchain driver, and its arguments follow the
@@ -73,7 +76,8 @@ base::Result<std::string, diag::Reported> emit_output(
     bool optimize,
     LinkOptions link,
     EmitMode mode,
-    const std::string& output_path);
+    const std::string& output_path,
+    bool is_lib);
 
 base::Result<std::string, diag::Reported> build_single_file(
     PipelineContext& ctx,

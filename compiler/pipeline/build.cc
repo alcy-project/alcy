@@ -78,10 +78,14 @@ struct EmittedModule {
   // on its own left every other consumer reading unoptimized IR.
   base::Result<void, diag::Reported> build(PipelineContext& ctx,
                                            lowering::LoweredPackage& package,
-                                           bool optimize) {
+                                           bool optimize,
+                                           bool is_lib) {
     module = std::make_unique<llvm::Module>("alcy_module", context);
-    codegen_llvm::LlvmIrEmitter emitter(
-        module.get(), std::move(package.storage), &ctx.strings, TARGET_WIDTH);
+    // Entry synthesis wraps a `main` for binaries only; a library
+    // object carries its items unwrapped, even one named `main`.
+    codegen_llvm::LlvmIrEmitter emitter(module.get(),
+                                        std::move(package.storage),
+                                        &ctx.strings, TARGET_WIDTH, !is_lib);
     std::move(emitter).emit();
     // Before the optimizer, so the runtime is inlined and folded like
     // any other code, and after the program, so its definitions land in
@@ -122,11 +126,12 @@ base::Result<void, diag::Reported> emit_package_object(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
     bool optimize,
-    const std::string& output_path) {
+    const std::string& output_path,
+    bool is_lib) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-object",
                                            "backend");
   EmittedModule emitted;
-  if (emitted.build(ctx, package, optimize).is_err()) {
+  if (emitted.build(ctx, package, optimize, is_lib).is_err()) {
     return base::make_err(diag::Reported{});
   }
   base::Result<std::vector<u8>, codegen_llvm::ObjectEmitError> object =
@@ -144,10 +149,11 @@ base::Result<void, diag::Reported> emit_package_ir(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
     bool optimize,
-    const std::string& output_path) {
+    const std::string& output_path,
+    bool is_lib) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-ir", "backend");
   EmittedModule emitted;
-  if (emitted.build(ctx, package, optimize).is_err()) {
+  if (emitted.build(ctx, package, optimize, is_lib).is_err()) {
     return base::make_err(diag::Reported{});
   }
   const std::string ir = codegen_llvm::emit_ir(*emitted.module);
@@ -160,11 +166,12 @@ base::Result<void, diag::Reported> emit_package_bitcode(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
     bool optimize,
-    const std::string& output_path) {
+    const std::string& output_path,
+    bool is_lib) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-bitcode",
                                            "backend");
   EmittedModule emitted;
-  if (emitted.build(ctx, package, optimize).is_err()) {
+  if (emitted.build(ctx, package, optimize, is_lib).is_err()) {
     return base::make_err(diag::Reported{});
   }
   const std::vector<u8> bytes = codegen_llvm::emit_bitcode(*emitted.module);
@@ -215,7 +222,8 @@ base::Result<std::string, diag::Reported> emit_output(
     bool optimize,
     LinkOptions link,
     EmitMode mode,
-    const std::string& output_path) {
+    const std::string& output_path,
+    bool is_lib) {
   // One path, so its parent is made once and every mode agrees about it.
   // The linker creates no directories of its own, which left
   // `alcy build -o out/app` failing where the same `-o` for an object
@@ -236,17 +244,18 @@ base::Result<std::string, diag::Reported> emit_output(
   base::Result<void, diag::Reported> written =
       [&]() -> base::Result<void, diag::Reported> {
     if (mode == EmitMode::Object) {
-      return emit_package_object(ctx, lowered, optimize, output_path);
+      return emit_package_object(ctx, lowered, optimize, output_path, is_lib);
     }
     if (mode == EmitMode::LlvmIr) {
-      return emit_package_ir(ctx, lowered, optimize, output_path);
+      return emit_package_ir(ctx, lowered, optimize, output_path, is_lib);
     }
     if (mode == EmitMode::LlvmBitcode) {
-      return emit_package_bitcode(ctx, lowered, optimize, output_path);
+      return emit_package_bitcode(ctx, lowered, optimize, output_path, is_lib);
     }
     io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
     const std::string object_path = scratch.join("main.o");
-    if (emit_package_object(ctx, lowered, optimize, object_path).is_err()) {
+    if (emit_package_object(ctx, lowered, optimize, object_path, is_lib)
+            .is_err()) {
       return base::make_err(diag::Reported{});
     }
     return link_executable(ctx, link, object_path, output_path);
@@ -309,7 +318,8 @@ base::Result<std::string, diag::Reported> build_single_root(
     return base::make_err(diag::Reported{});
   }
   lowering::LoweredPackage lowered = std::move(package).unwrap();
-  return emit_output(ctx, lowered, optimize, link, mode, std::string(output));
+  return emit_output(ctx, lowered, optimize, link, mode, std::string(output),
+                     false);
 }
 
 base::Result<std::string, diag::Reported> build_package(
@@ -321,36 +331,61 @@ base::Result<std::string, diag::Reported> build_package(
     bool optimize,
     LinkOptions link,
     EmitMode mode) {
-  base::Result<BinTarget, diag::Reported> target =
-      resolve_package_target(ctx, root, manifest_file, manifest_name);
-  if (target.is_err() || ctx.bag.has_errors()) {
+  base::Result<std::vector<PackageTarget>, diag::Reported> targets =
+      resolve_package_targets(ctx, root, manifest_file, manifest_name);
+  if (targets.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  BinTarget resolved = std::move(target).unwrap();
-  base::Result<lowering::LoweredPackage, diag::Reported> package =
-      compile_tree(ctx, resolved.tree);
-  if (package.is_err() || ctx.bag.has_errors()) {
+  std::vector<PackageTarget> resolved = std::move(targets).unwrap();
+  if (resolved.size() > 1 && !output.empty()) {
+    // One `-o` cannot name two artifacts.
+    const u32 index =
+        ctx.bag.emit<i18n::Key::PipelineMultipleTargetsWithOutput>(
+            diag::Severity::Error, PIPELINE_NO_TARGETS, output);
+    (void)index;
     return base::make_err(diag::Reported{});
   }
-  lowering::LoweredPackage lowered = std::move(package).unwrap();
   // An executable goes where the manifest says builds go; the other two
   // are inspection outputs, so they land beside the manifest unless the
   // caller named a path.
   const path::Path out_dir = root.join(path::DEFAULT_OUT_DIR);
-  std::string output_path;
-  if (output.empty()) {
-    // Everything a package build writes goes to the directory the
-    // scaffold's own `.gitignore` names, whatever the mode. An object or
-    // a module beside the manifest landed outside the one region the
-    // compiler told git to ignore, so `git status` reported the build's
-    // own output as untracked.
-    output_path =
-        out_dir.join(std::string(resolved.bin_name) + suffix_for(mode))
-            .as_view();
-  } else {
-    output_path = std::string(output);
+  // The cli reports one artifact per build, so a package with several
+  // targets names the first: the binary, resolved ahead of the library.
+  std::string first_output;
+  for (PackageTarget& target : resolved) {
+    base::Result<lowering::LoweredPackage, diag::Reported> package =
+        compile_tree(ctx, target.tree);
+    if (package.is_err() || ctx.bag.has_errors()) {
+      return base::make_err(diag::Reported{});
+    }
+    lowering::LoweredPackage lowered = std::move(package).unwrap();
+    // A library has no entry to link, so an executable request becomes
+    // an object one.
+    const EmitMode target_mode =
+        target.is_lib && mode == EmitMode::Executable ? EmitMode::Object : mode;
+    std::string output_path;
+    if (output.empty()) {
+      // Everything a package build writes goes to the directory the
+      // scaffold's own `.gitignore` names, whatever the mode. An object or
+      // a module beside the manifest landed outside the one region the
+      // compiler told git to ignore, so `git status` reported the build's
+      // own output as untracked.
+      output_path =
+          out_dir.join(std::string(target.name) + suffix_for(target_mode))
+              .as_view();
+    } else {
+      output_path = std::string(output);
+    }
+    base::Result<std::string, diag::Reported> written = emit_output(
+        ctx, lowered, optimize, link, target_mode, output_path, target.is_lib);
+    if (written.is_err() || ctx.bag.has_errors()) {
+      return base::make_err(diag::Reported{});
+    }
+    if (first_output.empty()) {
+      first_output = std::move(written).unwrap();
+    }
   }
-  return emit_output(ctx, lowered, optimize, link, mode, output_path);
+  return base::make_ok(first_output);
 }
 
 }  // namespace pipeline

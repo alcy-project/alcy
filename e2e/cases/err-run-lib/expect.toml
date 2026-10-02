@@ -1,0 +1,3 @@
+exit = 6
+subcommand = "run"
+contains = ["declares no [[bin]] target to run"]

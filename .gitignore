@@ -1,5 +1,6 @@
 # Build artifacts
 /out/
+/e2e/cases/*/out/
 compile_commands.json
 
 # Virtual Environments

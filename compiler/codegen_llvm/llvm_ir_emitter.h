@@ -29,7 +29,8 @@ class LlvmIrEmitter {
   LlvmIrEmitter(llvm::Module* module,
                 ir::VerifiedStorage storage,
                 str::StringInterner* interner,
-                ir::PointerWidth width);
+                ir::PointerWidth width,
+                bool emit_entry);
   ~LlvmIrEmitter() = default;
 
   LlvmIrEmitter(const LlvmIrEmitter&) = delete;
@@ -77,6 +78,9 @@ class LlvmIrEmitter {
   std::unique_ptr<IRBuilder> builder_;
   str::StringInterner* interner_;
   ir::PointerWidth width_;
+  // Entry synthesis belongs to binaries; a library's `main` stays an
+  // ordinary item, wrapped in nothing.
+  bool emit_entry_;
   LlvmIrStorage values_;
 
   static constexpr usize FUNCTION_ARGS_SOO_SIZE = 8;

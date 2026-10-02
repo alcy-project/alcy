@@ -141,7 +141,7 @@ TEST_CASE("Emit Hello World") {
   str::StringInterner interner(mem::page_size());
   ir::VerifiedStorage storage = hello_world_ir(&interner);
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
-                        ir::PointerWidth::W64);
+                        ir::PointerWidth::W64, true);
 
   std::move(emitter).emit();
 
@@ -263,7 +263,7 @@ TEST_CASE("Emit struct and array calls") {
 
   ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
-                        ir::PointerWidth::W64);
+                        ir::PointerWidth::W64, true);
 
   std::move(emitter).emit();
 
@@ -428,7 +428,7 @@ TEST_CASE("Emit compute instructions") {
 
   ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
-                        ir::PointerWidth::W64);
+                        ir::PointerWidth::W64, true);
 
   std::move(emitter).emit();
 
@@ -570,7 +570,7 @@ TEST_CASE("Emit control flow") {
 
   ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
-                        ir::PointerWidth::W64);
+                        ir::PointerWidth::W64, true);
 
   std::move(emitter).emit();
 
@@ -798,7 +798,7 @@ TEST_CASE("Emit memory instructions") {
 
   ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
-                        ir::PointerWidth::W64);
+                        ir::PointerWidth::W64, true);
 
   std::move(emitter).emit();
 
@@ -873,7 +873,7 @@ TEST_CASE("Emit ignores Drop markers") {
 
   ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
-                        ir::PointerWidth::W64);
+                        ir::PointerWidth::W64, true);
 
   std::move(emitter).emit();
 

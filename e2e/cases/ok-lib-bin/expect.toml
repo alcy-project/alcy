@@ -1,0 +1,7 @@
+# Both declared targets build: the binary first, then the library as an
+# object, each named for the package in the build directory.
+exit = 0
+subcommand = "build"
+default_output = true
+contains = ["Built", "app"]
+not_contains = ["error"]

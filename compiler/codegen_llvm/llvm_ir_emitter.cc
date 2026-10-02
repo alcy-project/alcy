@@ -36,12 +36,14 @@ namespace codegen_llvm {
 LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
                              ir::VerifiedStorage storage,
                              str::StringInterner* interner,
-                             ir::PointerWidth width)
+                             ir::PointerWidth width,
+                             bool emit_entry)
     : module_(module),
       storage_(std::move(storage)),
       builder_(std::make_unique<IRBuilder>(module_->getContext())),
       interner_(interner),
-      width_(width) {}
+      width_(width),
+      emit_entry_(emit_entry) {}
 
 void LlvmIrEmitter::check_state() {
   // DCHECK_MSG(storage_, "IR Storage is null");
@@ -210,7 +212,8 @@ void LlvmIrEmitter::emit() && noexcept {
     const ir::Function& function = storage_->functions()[function_idx];
 
     llvm::Function* llvm_function = nullptr;
-    if (entry_function == nullptr && is_entry_candidate(function)) {
+    if (emit_entry_ && entry_function == nullptr &&
+        is_entry_candidate(function)) {
       // The user entry becomes an implementation detail; a C-ABI
       // `main` below adapts its return form to an exit code.
       ir::FunctionMeta renamed = function.meta;

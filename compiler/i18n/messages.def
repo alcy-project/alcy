@@ -288,11 +288,15 @@
   F(PipelineInvalidSourceDirectory, "Invalid source directory '{}'") \
   F(PipelineInvalidSourcePath, "Invalid source path for file") \
   F(PipelineInvalidTarget, "Invalid target '{}'") \
+  F(PipelineLibTargetNotDiscovered, "Lib target '{}' was not discovered") \
+  F(PipelineLibTargetNotSelected, "Lib target '{}' is not in [modules]") \
   F(PipelineLinkFailed, "Linking '{}' failed") \
-  F(PipelineManifestNoBinTarget, "Manifest '{}' declares no [[bin]] targets") \
+  F(PipelineManifestNoBinToRun, "Manifest '{}' declares no [[bin]] target to run") \
+  F(PipelineManifestNoTarget, "Manifest '{}' declares no [[bin]] or [lib] targets") \
   F(PipelineManifestNotLoaded, "Manifest '{}' is not a loaded file") \
   F(PipelineManifestTooManyBinTargets, "Manifest '{}' declares {} [[bin]] targets; only one is supported") \
-  F(PipelineModuleSharedByTwoFiles, "Module '{}' is shared by two files relative to the bin's directory '{}'") \
+  F(PipelineModuleSharedByTwoFiles, "Module '{}' is shared by two files relative to the target's directory '{}'") \
+  F(PipelineMultipleTargetsWithOutput, "Cannot write multiple targets to '{}'; omit -o") \
   F(PipelineNoManifest, "No manifest found at '{}'; add alcy.toml") \
   F(PipelineNoManifestInCurrentDirectory, "No manifest found at current directory; add alcy.toml") \
   F(PipelineNoManifestWithFileHint, "No manifest found at '{}'; pass a file with --file or add alcy.toml") \

@@ -78,6 +78,14 @@ struct BinTarget {
   std::string_view path;
 };
 
+// A library target: one optional table per package, naming the root
+// module the way a bin names its entry file. Views borrow arena
+// storage owned by the caller of parse_manifest().
+struct LibTarget {
+  std::string_view name;
+  std::string_view path;
+};
+
 // Where a dependency comes from. `Path` is a local directory (the
 // only resolved source today); `Registry` and `Git` parse and validate
 // but resolve to an explicit "not implemented" until their fetchers
@@ -145,6 +153,8 @@ struct PackageManifest {
   // by the pipeline with guidance.
   const BinTarget* bins = nullptr;
   u32 bin_count = 0;
+  // The optional library target ([lib] table). Null when absent.
+  const LibTarget* lib = nullptr;
   // Module membership from the [modules] table. Absent means every
   // discovered source file.
   ModuleSet modules;
@@ -160,6 +170,7 @@ enum class ManifestError : u8 {
   EmptyDependencyName,
   EmptyDependencyPath,
   EmptyBinPath,
+  EmptyLibPath,
   EmptyModuleEntry,
 };
 

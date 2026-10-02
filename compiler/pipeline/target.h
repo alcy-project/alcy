@@ -5,6 +5,7 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "analyzer/resolve.h"
 #include "diag/bag.h"
@@ -13,7 +14,6 @@
 #include "ir/type.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
-#include "pkg/manifest.h"
 #include "pkg/toolchain.h"
 #include "source/source.h"
 
@@ -24,15 +24,17 @@ namespace pipeline {
 // once cross builds land.
 constexpr ir::PointerWidth TARGET_WIDTH = ir::PointerWidth::W64;
 
-// Resolved binary target: the module tree plus its source count and
-// binary name. Shared by check and build; callers report and map
-// failures to their own result codes. `bin_name` borrows manifest arena
-// storage through the caller's PipelineContext, so it stays valid as
-// long as the context outlives the target.
-struct BinTarget {
+// Resolved build target: the module tree plus its source count,
+// target name, and whether it is a library. Shared by check, build,
+// and run; callers report and map failures to their own result codes.
+// `name` borrows manifest arena storage through the caller's
+// PipelineContext, so it stays valid as long as the context outlives
+// the target.
+struct PackageTarget {
   analyzer::ModuleTree tree;
   usize file_count = 0;
-  std::string_view bin_name;
+  std::string_view name;
+  bool is_lib = false;
 };
 
 // A manifest probe result: `found` with a loaded manifest, or absent
@@ -51,19 +53,14 @@ base::Result<ManifestProbe, path::PathError> find_package_manifest(
     PipelineContext& ctx,
     std::string_view raw);
 
-// Parses the manifest and resolves its single binary target. Shared by
-// build and check; the manifest views borrow the context arena.
-base::Result<BinTarget, diag::Reported> resolve_package_target(
-    PipelineContext& ctx,
-    const path::Path& root,
-    source::FileId manifest_file,
-    std::string_view manifest_name);
-
-base::Result<BinTarget, diag::Reported> resolve_bin_target(
-    PipelineContext& ctx,
-    const path::Path& root,
-    const pkg::PackageManifest& manifest,
-    std::string_view manifest_name);
+// Parses the manifest and resolves every declared target: the binary
+// first when one exists, then the library. Shared by build, check,
+// and run; the manifest views borrow the context arena.
+base::Result<std::vector<PackageTarget>, diag::Reported>
+resolve_package_targets(PipelineContext& ctx,
+                        const path::Path& root,
+                        source::FileId manifest_file,
+                        std::string_view manifest_name);
 
 // Loads `.alcy/toolchain.toml` beside the package root. An absent file
 // means defaults; a corrupt one lands in the bag.

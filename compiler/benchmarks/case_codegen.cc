@@ -69,7 +69,7 @@ void run_codegen_cases(Runner<SteadyClock>& runner,
       auto module = std::make_unique<llvm::Module>("bench", context);
       codegen_llvm::LlvmIrEmitter emitter(module.get(), fixture->take_storage(),
                                           &fixture->strings(),
-                                          ir::PointerWidth::W64);
+                                          ir::PointerWidth::W64, true);
       std::move(emitter).emit();
       static_cast<void>(codegen_llvm::emit_ir(*module));
     }));
@@ -91,7 +91,7 @@ void run_codegen_cases(Runner<SteadyClock>& runner,
       auto warm = std::make_unique<llvm::Module>("warm", context);
       codegen_llvm::LlvmIrEmitter emitter(warm.get(), fixture->take_storage(),
                                           &fixture->strings(),
-                                          ir::PointerWidth::W64);
+                                          ir::PointerWidth::W64, true);
       std::move(emitter).emit();
       static_cast<void>(codegen_llvm::emit_object(*warm, ""));
     }
@@ -100,7 +100,7 @@ void run_codegen_cases(Runner<SteadyClock>& runner,
            auto module = std::make_unique<llvm::Module>("bench", context);
            codegen_llvm::LlvmIrEmitter emitter(
                module.get(), fixture->take_storage(), &fixture->strings(),
-               ir::PointerWidth::W64);
+               ir::PointerWidth::W64, true);
            std::move(emitter).emit();
            static_cast<void>(codegen_llvm::emit_object(*module, ""));
          }));
