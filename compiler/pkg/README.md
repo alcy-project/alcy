@@ -1,17 +1,21 @@
 # pkg
 
-Package model: manifests, module discovery, dependency resolution,
-and lockfiles.
+Package model: manifests, dependency resolution, and lockfiles.
 
 - `manifest` parses `alcy.toml`-style manifests. Parsing reports
   through the bag; `verify_manifest` is the pure structural check
   (name present and valid, version parseable, targets well-formed)
   that every entry point runs before trusting a manifest.
-- `modules` assigns source files to slash-separated module names.
-- `resolve` locates the package root, loads the manifest, and
-  resolves binary targets.
+- `resolve` resolves the package's path dependencies: one `ResolvedPackage`
+  per manifest it loads, depth-first and cycle-checked. Only tests call it
+  so far, because a build does not load dependencies yet.
 - `lock` converts resolved packages to lockfiles and serializes
-  them, validating structure before writing.
+  them, validating structure before writing. Written into a buffer, not a
+  file: lockfiles stay out of builds.
+
+Which files a manifest makes modules is `pipeline`'s
+(`pipeline/select_modules`), because that is a question about what
+discovery found rather than about the manifest.
 
 ## Entry points
 
@@ -20,8 +24,8 @@ and lockfiles.
 - `verify_manifest(manifest)` ->
   `base::Result<void, ManifestError>` (pure) with
   `report_manifest_error` converting failures to bag diagnostics.
-- `resolve_module_files`, `resolve_bin_target`, `lock_resolved` -
-  each verifies incoming manifests at entry.
+- `parse_toolchain(bytes, bag)` -> `base::Result<Toolchain, diag::Reported>`;
+  the bytes are the caller's, so nothing here opens a file.
 - `lock_resolved(packages, arena)` / `serialize_lockfile(lock, out)`
   -> `base::Result<_, LockError>`: validated before write, so a
   failed lock never half-writes the buffer.

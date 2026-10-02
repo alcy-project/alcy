@@ -18,6 +18,9 @@ parse stage owns the threads and the diagnostic merge order.
 - `run_package` -> `RunOutcome{exit_code}`.
 - `parse_files` -> the items of every file, once, which every target of a
   package then resolves against; `resolve_inputs` is the one-shot form.
+- `select_modules` -> the module inputs a manifest declares, from the
+  files discovery loaded; `require_package_manifest` -> the package a raw
+  cli target names.
 - `std_prelude` -> `std::span<const analyzer::ModuleInput>`;
   `link_executable` -> `base::Result<void, diag::Reported>`.
 

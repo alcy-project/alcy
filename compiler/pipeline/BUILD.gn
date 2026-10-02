@@ -65,6 +65,8 @@ source_set("pipeline") {
     "frontend.cc",
     "frontend.h",
     "link_options.h",
+    "modules.cc",
+    "modules.h",
     "new.cc",
     "new.h",
     "parse.cc",

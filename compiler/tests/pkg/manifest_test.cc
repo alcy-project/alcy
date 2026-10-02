@@ -372,4 +372,65 @@ TEST_CASE("Manifest rejects malformed specifiers and sources") {
   }
 }
 
+// The `[modules]` table. Parsing it is this module's - deciding which
+// files an entry selects is the pipeline's, and is tested there.
+constexpr std::string_view MODULES_MANIFEST =
+    "[package]\n"
+    "name = \"demo\"\n"
+    "version = \"0.1.0\"\n"
+    "\n"
+    "[[bin]]\n"
+    "name = \"demo\"\n"
+    "path = \"main.al\"\n";
+
+TEST_CASE("Manifest parses explicit module sets") {
+  Fixture f;
+  base::Result<PackageManifest, diag::Reported> result =
+      parse_manifest(std::string(MODULES_MANIFEST) +
+                         "\n[modules]\n"
+                         "include = [\"main\", \"utils/io\"]\n"
+                         "export = [\"api\"]\n",
+                     "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
+  CHECK(result.is_ok());
+  if (result.is_err()) {
+    return;
+  }
+  const PackageManifest manifest = std::move(result).unwrap();
+  CHECK(!manifest.modules.wildcard);
+  CHECK(manifest.modules.include_count == 2);
+  if (manifest.modules.include_count == 2) {
+    CHECK(manifest.modules.include[0] == "main");
+    CHECK(manifest.modules.include[1] == "utils/io");
+  }
+  CHECK(manifest.modules.export_count == 1);
+  if (manifest.modules.export_count == 1) {
+    CHECK(manifest.modules.exports[0] == "api");
+  }
+}
+
+TEST_CASE("Manifest without modules selects wildcards") {
+  Fixture f;
+  base::Result<PackageManifest, diag::Reported> result = parse_manifest(
+      MODULES_MANIFEST, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
+  CHECK(result.is_ok());
+  if (result.is_err()) {
+    return;
+  }
+  const PackageManifest manifest = std::move(result).unwrap();
+  CHECK(manifest.modules.wildcard);
+  CHECK(manifest.modules.include_count == 0);
+  CHECK(manifest.modules.export_count == 0);
+}
+
+TEST_CASE("Manifest rejects duplicate module entries") {
+  Fixture f;
+  base::Result<PackageManifest, diag::Reported> result =
+      parse_manifest(std::string(MODULES_MANIFEST) +
+                         "\n[modules]\n"
+                         "include = [\"main\", \"main\"]\n",
+                     "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
+  CHECK(result.is_err());
+  CHECK(f.bag.has_errors());
+}
+
 }  // namespace pkg

@@ -10,8 +10,6 @@ source_set("pkg") {
     "lock.h",
     "manifest.cc",
     "manifest.h",
-    "modules.cc",
-    "modules.h",
     "resolve.cc",
     "resolve.h",
     "toolchain.cc",

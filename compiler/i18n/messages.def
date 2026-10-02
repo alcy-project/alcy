@@ -248,11 +248,6 @@
   F(PkgDependencyUnknownField, "Manifest '{}': dependency '{}' has an unknown field '{}'") \
   F(PkgInvalidPackageDirectory, "Invalid package directory '{}'") \
   F(PkgManifestInvalid, "Manifest '{}': {}") \
-  F(PkgModuleSelectedTwice, "Module '{}' is selected by more than one file") \
-  F(PkgModulesIncludeEscapesPackage, "Manifest [modules] include '{}' resolves outside the package") \
-  F(PkgModulesIncludeHasNoFile, "Manifest [modules] include '{}' has no file") \
-  F(PkgModulesIncludeNotAModulePath, "Manifest [modules] include '{}' is not a module path") \
-  F(PkgSourceFileNotSelected, "Source file '{}' is not in [modules]") \
   F(PkgTomlSyntaxError, "TOML syntax error: {}") \
   F(PkgToolchainLinkArgsNotStrings, "Toolchain '{}': link-args must be a list of strings") \
   F(PkgToolchainLinkerNotAString, "Toolchain '{}': linker must be a string") \
@@ -293,6 +288,11 @@
   F(PipelineManifestNoTarget, "Manifest '{}' declares no [[bin]] or [lib] targets") \
   F(PipelineManifestNotLoaded, "Manifest '{}' is not a loaded file") \
   F(PipelineManifestTooManyBinTargets, "Manifest '{}' declares {} [[bin]] targets; only one is supported") \
+  F(PipelineModuleIncludeEscapesPackage, "Manifest [modules] include '{}' resolves outside the package") \
+  F(PipelineModuleIncludeHasNoFile, "Manifest [modules] include '{}' has no file") \
+  F(PipelineModuleIncludeNotAModulePath, "Manifest [modules] include '{}' is not a module path") \
+  F(PipelineModuleNotSelected, "Source file '{}' is not in [modules]") \
+  F(PipelineModuleSelectedTwice, "Module '{}' is selected by more than one file") \
   F(PipelineModuleSharedByTwoFiles, "Module '{}' is shared by two files relative to the target's directory '{}'") \
   F(PipelineMultipleTargetsWithOutput, "Cannot write multiple targets to '{}'; omit -o") \
   F(PipelineNoManifest, "No manifest found at '{}'; add alcy.toml") \

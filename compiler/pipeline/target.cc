@@ -23,13 +23,13 @@
 #include "path/path.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/embedded_std.h"
+#include "pipeline/modules.h"
 #include "pipeline/parse.h"
 #include "pipeline/pipeline.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
 #include "pipeline/std_stage.h"
 #include "pkg/manifest.h"
-#include "pkg/modules.h"
 #include "pkg/toolchain.h"
 #include "source/source.h"
 
@@ -96,7 +96,7 @@ namespace {
 struct PackageSources {
   ParsedFiles parsed;
   std::vector<analyzer::ParsedModule> prelude;
-  std::vector<pkg::ModuleFile> selection;
+  std::vector<analyzer::ModuleInput> selection;
   usize file_count = 0;
 };
 
@@ -142,9 +142,8 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
   for (const analyzer::ModuleInput& input : prelude) {
     sources.prelude.push_back(parsed_module(sources.parsed, input));
   }
-  base::Result<std::vector<pkg::ModuleFile>, diag::Reported> selection =
-      pkg::resolve_module_files(manifest, root.as_view(), found.files,
-                                ctx.sources, ctx.bag, ctx.arena);
+  base::Result<std::vector<analyzer::ModuleInput>, diag::Reported> selection =
+      select_modules(ctx, manifest, root, found.files);
   if (selection.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
@@ -198,7 +197,7 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
       target_dir = target_path.substr(0, slash);
     }
   }
-  for (const pkg::ModuleFile& entry : sources.selection) {
+  for (const analyzer::ModuleInput& entry : sources.selection) {
     if (entry.id == root_file) {
       root_selected = true;
       inputs.push_back({"", entry.id});

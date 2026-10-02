@@ -37,6 +37,11 @@ enum class DiagCode : u8 {
   // `compile foo` with no `-o`: a mode whose suffix is empty has nothing
   // to name the artifact with, so the caller has to.
   NoOutputName = 9,
+  // Moved here from `pkg` with the selection: which files a manifest
+  // makes modules is a question about what discovery found, so it belongs
+  // to the module that ran it.
+  InvalidModuleSelection = 10,
+  UnselectedFile = 11,
 };
 
 }  // namespace pipeline

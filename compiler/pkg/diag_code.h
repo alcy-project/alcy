@@ -25,12 +25,10 @@ namespace pkg {
 enum class DiagCode : u8 {
   ManifestSyntaxError = 1,
   ManifestSemanticError = 2,
-  ModulesSemanticError = 3,
-  ModulesUnselectedFile = 4,
-  ResolveIoError = 5,
-  ResolveCycleError = 6,
-  ToolchainSyntaxError = 7,
-  ToolchainSemanticError = 8,
+  ResolveIoError = 3,
+  ResolveCycleError = 4,
+  ToolchainSyntaxError = 5,
+  ToolchainSemanticError = 6,
 };
 
 }  // namespace pkg
