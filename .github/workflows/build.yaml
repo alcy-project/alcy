@@ -127,21 +127,10 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/verify_static_linkage.py --build-dir=out/build
 
-      # The engine is built and run, and what comes out is checked for
-      # shape: every case present, every sample counted, a clock named, a
-      # figure above zero, and a generated source the compiler accepts.
-      #
-      # Nothing here judges a timing. A shared runner is not a quiet
-      # machine, and a gate on a figure it cannot measure is a coin flip
-      # that teaches everyone to re-run. `reconcile` makes that
-      # judgement, on a machine someone controls, and it is run by hand.
-      - name: Check Benchmark Harness
-        shell: bash
-        run: |
-          set -e
-          nix=""
-          if [[ "${{ matrix.nix }}" == "true" ]]; then nix="nix develop .#default --command "; fi
-          $nix uv run ./tools/run_benchmarks.py smoke --build-subdir=build
+      # The benchmark harness is checked once, in the CI workflow's
+      # `benchmarks` job, rather than in each of the ten matrix entries.
+      # It judges shape and not timing, so every entry was answering the
+      # same question ten times over.
 
       - name: Run Smoke Test
         shell: bash

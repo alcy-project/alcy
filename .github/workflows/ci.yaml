@@ -92,6 +92,157 @@ jobs:
       build_type: release
       role: ci
 
+  # Lint needs a compilation database, which `gn gen` produces and the
+  # whole toolchain is needed to produce. It is a minute of clang-tidy
+  # over every translation unit, and it belongs beside the builds rather
+  # than in a workflow that a documentation change also triggers.
+  lint:
+    needs: [load-config]
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build
+        with:
+          nix: "false"
+          os: Linux
+          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
+
+      - name: Lint
+        shell: bash
+        run: uv run ./tools/lint.py
+
+  # The ratchet rather than a threshold: it fails when line coverage of
+  # the compiler falls below build/coverage_baseline.json, so it needs
+  # its own instrumented build and cannot share the matrix's.
+  coverage:
+    needs: [load-config]
+    name: Coverage Ratchet
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build
+        with:
+          nix: "false"
+          os: Linux
+          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
+
+      # Nothing is cached here on purpose. A stale instrumented tree
+      # yields profile data that describes a compiler that no longer
+      # exists, and the ratchet then fails on a number nobody can
+      # account for.
+      - name: Check Coverage
+        shell: bash
+        run: uv run ./tools/check_coverage.py
+
+  # The layer that can see a wrong code-generation decision become memory
+  # corruption: the generated program is instrumented, which alcy cannot
+  # do to an object it wrote itself, so the case goes through
+  # --emit=llvm-ir and clang. Refuses rather than degrading where clang
+  # is absent, so this job cannot pass without having run.
+  sanitizers:
+    needs: [load-config]
+    name: Generated-Code Sanitizers
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build
+        with:
+          nix: "false"
+          os: Linux
+          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
+
+      - name: Build All
+        shell: bash
+        run: uv run ./tools/build.py --target=all --mode=debug --build-subdir=build
+
+      - name: Run exe Acceptance (sanitized)
+        shell: bash
+        run: uv run ./tools/check_exe.py --build-subdir=build --sanitize
+
+  # What a contributor runs before pushing, on the same machine class and
+  # with the same options. Without this, CI is a different gate from the
+  # one the tree is developed against, and the difference shows up as a
+  # failure nobody local predicted.
+  local-gate:
+    needs: [load-config]
+    name: Local Gate (check.sh)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build
+        with:
+          nix: "false"
+          os: Linux
+          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
+
+      # `typos` is not among the tools `setup-build` installs, and
+      # `check.sh` reports a skip rather than passing one silently, so
+      # this step is what guarantees the tree was spell-checked here. If
+      # the action leaves the binary on PATH, `check.sh` runs it again:
+      # it takes a tenth of a second and spells the same thing twice.
+      - name: Spell Check Repository
+        uses: crate-ci/typos@00f422f3b19c57bc6338715ebfe3316d38768461
+
+      - name: Run the Whole Gate
+        shell: bash
+        run: ./tools/check.sh
+
+  # The engine is built and run, and what comes out is checked for shape:
+  # every case present, every sample counted, a clock named, a figure
+  # above zero, and a generated source the compiler accepts. It judges
+  # nothing about timing, and it used to run in all ten matrix entries,
+  # which is ten times the cost for one answer.
+  benchmarks:
+    needs: [load-config]
+    name: Benchmark Harness
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build
+        with:
+          nix: "false"
+          os: Linux
+          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
+
+      - name: Build All
+        shell: bash
+        run: uv run ./tools/build.py --target=all --mode=debug --build-subdir=build
+
+      - name: Check Benchmark Harness
+        shell: bash
+        run: uv run ./tools/run_benchmarks.py smoke --build-subdir=build
+
   summary:
     needs: [debug, release, wasm-debug, wasm-release]
     if: always()

@@ -68,33 +68,33 @@ jobs:
       - name: Check Formatting
         run: uv run ./tools/format.py --dry-run
 
-  lint:
-    name: Lint
+  specification:
+    name: Specification
     needs: [load-config]
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          submodules: recursive
+          submodules: false
           fetch-depth: 1
 
-      - name: Setup Build Environment
-        uses: ./.github/actions/setup-build
-        with:
-          nix: "false"
-          os: Linux
-          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
-
-      - name: Lint
-        shell: bash
-        run: |
-          uv run ./tools/lint.py
-
       # The specification states what a program is written against, so it
-      # names no file, module, or symbol of the compiler that implements
-      # it. It runs here rather than in the build jobs because it reads
-      # documents and needs no build at all.
+      # names no file, module, symbol, or diagnostic code of the compiler
+      # that implements it. It reads documents and needs no build, no
+      # toolchain, and no submodule, so it does not belong in a job that
+      # pays for all three.
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          enable-cache: true
+
+      - name: Setup Python Virtual Environment
+        run: |
+          uv python install
+          uv sync --frozen
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+
       - name: Check the Specification
         shell: bash
         run: uv run ./tools/check_spec.py
