@@ -110,3 +110,22 @@ files the compiler rejects for a reason an editor has no use for.
 `src/` is committed, apart from `src/scanner.c`, so that a consumer links
 the parser without running Node. Everything else in it comes from
 `grammar.js`, and the drift check is what keeps the two in step.
+
+## Using it in an editor
+
+`queries/` is nested under `alcy/` rather than sitting at the top of the
+directory. The tree-sitter CLI reads the paths named in `tree-sitter.json`,
+so it does not care, and every editor that looks for
+`queries/<language>/` finds them without being told where they are. A flat
+`queries/highlights.scm` would have needed a path handed to each editor by
+hand.
+
+Neovim 0.11 and later has treesitter built in, so nothing is installed:
+
+```lua
+-- Build the parser first: tree-sitter build -o parser/alcy.so
+vim.treesitter.language.add("alcy", { path = "<path>/parser/alcy.so" })
+vim.filetype.add({ extension = { al = "alcy" } })
+vim.opt.runtimepath:append("<path>")   -- for the queries
+```
+

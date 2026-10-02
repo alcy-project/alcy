@@ -10,8 +10,8 @@
       "file-types": [
         "al"
       ],
-      "highlights": "queries/highlights.scm",
-      "tags": "queries/tags.scm",
+      "highlights": "queries/alcy/highlights.scm",
+      "tags": "queries/alcy/tags.scm",
       "injection-regex": "^alcy$"
     }
   ],

@@ -39,8 +39,8 @@ GRAMMAR_DIR = project_root_dir / "treesitter"
 GENERATED_DIR = GRAMMAR_DIR / "src"
 PARSE_ERRORS = GRAMMAR_DIR / "test" / "parse_errors.txt"
 QUERIES = [
-    GRAMMAR_DIR / "queries" / "highlights.scm",
-    GRAMMAR_DIR / "queries" / "tags.scm",
+    GRAMMAR_DIR / "queries" / "alcy" / "highlights.scm",
+    GRAMMAR_DIR / "queries" / "alcy" / "tags.scm",
 ]
 # Every directory in the repository that holds alcy sources. A file the
 # compiler accepts is one whose tree this grammar has to agree with.
