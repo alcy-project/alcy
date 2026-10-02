@@ -46,9 +46,13 @@ module.exports = grammar({
 
   // `_block_lbrace` is the opening brace of a block whose header it belongs
   // to, which the scanner produces only when the brace stays on the header
-  // line (grammar.md, "Block openers stay on their header line"). Giving it
-  // a higher token precedence than a plain `{` is what keeps `if c { }` a
-  // block rather than a struct literal on `c`.
+  // line (grammar.md, "Block openers stay on their header line"). The
+  // scanner is asked for it before any other token, so in a header position
+  // it wins over the plain `{` a struct literal would use, which is what
+  // keeps `if c { }` a block rather than a struct literal on `c`. A block
+  // used as an expression in its own right has no header, so it takes a
+  // plain `{` and `{ ... }` on a line of its own is a block-valued
+  // statement.
   //
   // `_newline` is the `;` the lexer inserts at the end of a line
   // (grammar.md, "Newlines are significant"). The scanner produces it only
