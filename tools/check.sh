@@ -45,6 +45,11 @@ done
 
 if command -v typos >/dev/null 2>&1; then
   typos
+else
+  # The other optional tools in this script either refuse or say so;
+  # `typos` was the one that skipped in silence, which is the one way a
+  # skipped check can be mistaken for a check that passed.
+  echo "note: typos not on PATH, so the spell check did not run" >&2
 fi
 
 # Enter nix develop shell if nix = true and nix is available and not already inside
@@ -100,9 +105,18 @@ fi
   --cases-root=samples
 
 # The same cases again through --emit=llvm-ir, so the code alcy generates
-# is compiled by an external toolchain that can instrument it. Skipped
-# where clang is absent, and slow, so it is a separate step.
+# is compiled by an external toolchain that can instrument it. Slow, so
+# it is a separate step, and refused rather than skipped where clang is
+# absent.
 if [[ $run_sanitize == true ]]; then
+  # `check_exe.py --sanitize` refuses without clang rather than degrading,
+  # so this gate fails on a machine that has no clang. Naming the flag is
+  # the difference between a gate somebody can work with and one they
+  # have to read the source of to get past.
+  command -v clang >/dev/null 2>&1 || {
+    echo "error: clang not found; pass --no-sanitize to skip" >&2
+    exit 1
+  }
   "${py_runner[@]}" "$tools_dir/check_exe.py" \
     --build-subdir=$debug_subdir \
     --sanitize
