@@ -531,9 +531,11 @@ stable foundation for evaluating them.
 
 The long-term project goal is to self-host the toolchain: once the MVP
 compiler, build system, core/alloc/std libraries, and surrounding tools
-(formatter, linter, LSP, tree-sitter grammar, setup action) are complete,
-the entire toolchain is rewritten in alcy and the C++ implementation
-retired.
+(formatter, linter, LSP, setup action) are complete, the entire toolchain
+is rewritten in alcy and the C++ implementation retired. The grammar in
+`treesitter/` is written in JavaScript because tree-sitter generates its
+parser from it, so self-hosting means a grammar for the grammar rather
+than a rewrite of this one.
 
 This is outside the MVP architecture. Production code must not depend on
 self-hosting assumptions, and the C++ implementation remains authoritative
