@@ -25,6 +25,7 @@
 #include <string_view>
 #include <vector>
 
+#include "ast/node_vec.h"
 #include "diag/span.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
@@ -63,8 +64,8 @@ using ItemIdx = details::Idx<ItemNode>;
 
 // Copies a scratch list into the arena; the returned span borrows arena
 // storage for the arena's lifetime.
-template <typename T>
-std::span<T> copy_to_arena(mem::Arena& arena, const std::vector<T>& items) {
+template <typename T, typename Arena>
+std::span<T> copy_to_arena(Arena& arena, const std::vector<T>& items) {
   if (items.empty()) {
     return {};
   }
@@ -949,20 +950,28 @@ struct UseItem : Item {
 // never downcast. Span arrays and identifier spellings live in
 // `spans`, reserved upfront; node tables own the nodes themselves.
 struct AstArena {
-  // What `spans` is reserved. About a mebibyte of alcy costs a mebibyte
-  // of it, so the previous mebibyte stopped an input of a little over a
-  // thousand lines. It reserves address space and commits pages as it
-  // hands them out, so a figure no single run reaches costs address space
-  // rather than memory.
+  // What `spans` is reserved. On identifier-dense code it costs about
+  // four bytes per source byte, so the previous mebibyte stopped an input
+  // of about a quarter of a megabyte. It reserves address space and commits
+  // pages as it hands them out, so a figure no single run reaches costs
+  // address space rather than memory.
 #if FPAG_BUILD_FLAG(IS_ARCH_64_BITS)
   static constexpr usize DEFAULT_SPAN_CAPACITY = 64ull << 20;
 #else
   static constexpr usize DEFAULT_SPAN_CAPACITY = 8ull << 20;
 #endif
 
-  // The fraction of the reservation a parse leaves in hand, so the file
-  // being read has room to spend.
-  static constexpr usize SPANS_HEADROOM = 8;
+  // What the node tables are reserved between them. Measured on generated
+  // modules, the whole costs about thirteen bytes per source byte - over
+  // three times what `spans` costs for the same input - so a node
+  // reservation of the same size would bound the input three times sooner
+  // than the span reservation does. Each table takes the part of this that
+  // its own share below names.
+#if FPAG_BUILD_FLAG(IS_ARCH_64_BITS)
+  static constexpr usize DEFAULT_NODE_CAPACITY = 512ull << 20;
+#else
+  static constexpr usize DEFAULT_NODE_CAPACITY = 64ull << 20;
+#endif
 
   // The capacity is a parameter so a caller - a case that has to spend it
   // - can say how much it wants rather than working around the default.
@@ -970,24 +979,38 @@ struct AstArena {
     spans.reserve(span_capacity);
   }
 
-  bool spans_nearly_full() const {
-    return spans.capacity() - spans.size() < spans.capacity() / SPANS_HEADROOM;
+  // Whether the reservation is close enough to spent that the next file
+  // should not be read. Every table answers for itself, and one of them
+  // running out is enough.
+  [[nodiscard]] bool nearly_full() const {
+    return reservation_nearly_full(spans.capacity(), spans.size()) ||
+           exprs.nearly_full() || items.nearly_full() || stmts.nearly_full() ||
+           types.nearly_full() || patterns.nearly_full() ||
+           blocks.nearly_full() || paths.nearly_full() ||
+           literals.nearly_full() || conds.nearly_full();
   }
 
-  template <typename T>
-  using Alloc = std::allocator<T>;
+  // Both reservations are taken here, and an append into either is atomic, so
+  // several parsers can fill one arena at once - which is what reading a
+  // package on several threads means. `mem::Arena` would answer the second
+  // half of that with corruption rather than with a wrong answer.
+  mem::ConcurrentArena spans;
 
-  mem::Arena spans;
-
-  base::Vec<Literal, LiteralIdx, Alloc<Literal>> literals;
-  base::Vec<Path, PathIdx, Alloc<Path>> paths;
-  base::Vec<Cond, CondIdx, Alloc<Cond>> conds;
-  base::Vec<Block, BlockIdx, Alloc<Block>> blocks;
-  base::Vec<TypeNode, TypeIdx, Alloc<TypeNode>> types;
-  base::Vec<PatternNode, PatternIdx, Alloc<PatternNode>> patterns;
-  base::Vec<ExprNode, ExprIdx, Alloc<ExprNode>> exprs;
-  base::Vec<StmtNode, StmtIdx, Alloc<StmtNode>> stmts;
-  base::Vec<ItemNode, ItemIdx, Alloc<ItemNode>> items;
+  // Each table's share of the node reservation, in parts per thousand,
+  // measured on generated modules: expressions 7.4 bytes per source byte,
+  // paths 1.8, items 0.9, types 0.8, patterns 0.8, statements 0.5,
+  // literals 0.4, blocks 0.4, conditions 0.02. The shares are the measured
+  // ones rounded to whole parts, and a source of a different shape moves
+  // them around - which is what the reservation above is sized to absorb.
+  NodeVec<Literal, LiteralIdx> literals{DEFAULT_NODE_CAPACITY * 31 / 1000};
+  NodeVec<Path, PathIdx> paths{DEFAULT_NODE_CAPACITY * 136 / 1000};
+  NodeVec<Cond, CondIdx> conds{DEFAULT_NODE_CAPACITY / 1000};
+  NodeVec<Block, BlockIdx> blocks{DEFAULT_NODE_CAPACITY * 28 / 1000};
+  NodeVec<TypeNode, TypeIdx> types{DEFAULT_NODE_CAPACITY * 65 / 1000};
+  NodeVec<PatternNode, PatternIdx> patterns{DEFAULT_NODE_CAPACITY * 59 / 1000};
+  NodeVec<ExprNode, ExprIdx> exprs{DEFAULT_NODE_CAPACITY * 571 / 1000};
+  NodeVec<StmtNode, StmtIdx> stmts{DEFAULT_NODE_CAPACITY * 42 / 1000};
+  NodeVec<ItemNode, ItemIdx> items{DEFAULT_NODE_CAPACITY * 67 / 1000};
 };
 
 }  // namespace ast

@@ -143,7 +143,7 @@ class Resolver {
     const std::optional<std::string_view> file_bytes = sources.bytes(file.id);
     DCHECK(file_bytes.has_value());
     const std::string_view bytes = file_bytes.value_or(std::string_view{});
-    if (ast.spans_nearly_full()) {
+    if (ast.nearly_full()) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpanArenaExhausted>(
           diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::SpanArenaExhausted, diag::Span{file.id, 0, 0},

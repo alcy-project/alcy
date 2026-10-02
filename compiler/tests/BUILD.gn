@@ -6,6 +6,7 @@ executable("tests") {
     "analyzer/resolve_modules_test.cc",
     "analyzer/types_test.cc",
     "ast/ast_test.cc",
+    "ast/node_vec_test.cc",
     "ast/verify_test.cc",
     "base/for_each_test.cc",
     "benchmarks/engine_test.cc",

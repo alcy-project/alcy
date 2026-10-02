@@ -236,7 +236,7 @@ TEST_CASE("Resolve refuses an input the span arena cannot hold") {
   ast::AstArena ast{capacity};
   // Past the headroom, which is what the check asks about.
   CHECK(ast.spans.alloc(capacity - 1) != nullptr);
-  CHECK(ast.spans_nearly_full());
+  CHECK(ast.nearly_full());
 
   std::deque<std::string> name_storage;
   std::optional<analyzer::ModuleInput> input =
@@ -263,7 +263,7 @@ TEST_CASE("Resolve reads an input the span arena can hold") {
   }
 
   Fixture f;
-  CHECK(!f.ast.spans_nearly_full());
+  CHECK(!f.ast.nearly_full());
   const ResolveCase result = resolve_case(dir, "main.al", {"main.al"}, f);
   CHECK(result.ok);
 }
