@@ -3,6 +3,7 @@
 
 source_set("lexer") {
   sources = [
+    "diag_code.h",
     "lexer.cc",
     "lexer.h",
     "token.cc",

@@ -31,15 +31,6 @@
 
 namespace lowering {
 
-// Diagnostic codes 5000-5099 are reserved for lowering.
-constexpr u32 LOWER_UNSUPPORTED = 5000;
-constexpr u32 LOWER_INTERNAL = 5001;
-constexpr u32 LOWER_UNREACHABLE = 5002;
-constexpr u32 LOWER_DROP_UNPLACED = 5003;
-constexpr u32 LOWER_DISCARDED_DESTRUCTOR = 5004;
-// Nesting exceeded the language's budget, so the walk stopped.
-constexpr u32 LOWER_TOO_DEEP = 5005;
-
 // A lowered value: either an SSA operand or the address of one.
 // Places stay in address form so moves and borrows observe origins.
 struct Val {

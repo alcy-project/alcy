@@ -11,21 +11,19 @@
 #include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
 #include "i18n/messages.h"
 #include "path/path.h"
+#include "pkg/diag_code.h"
 #include "pkg/manifest.h"
 #include "source/source.h"
 
 namespace pkg {
 
 namespace {
-
-// Diagnostic codes 1200-1299 are reserved for dependency resolution.
-constexpr u32 RESOLVE_IO_ERROR = 1200;
-constexpr u32 RESOLVE_CYCLE_ERROR = 1201;
 
 base::Result<std::vector<ResolvedPackage>, diag::Reported> resolve_into(
     const path::Path& canonical_dir,
@@ -36,7 +34,8 @@ base::Result<std::vector<ResolvedPackage>, diag::Reported> resolve_into(
   for (const path::Path& seen : visited) {
     if (seen == canonical_dir) {
       const u32 index = bag.emit<i18n::Key::PkgDependencyCycle>(
-          diag::Severity::Error, RESOLVE_CYCLE_ERROR, canonical_dir.as_view());
+          diag::Severity::Error, diag::Stage::Pkg, DiagCode::ResolveCycleError,
+          canonical_dir.as_view());
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -48,7 +47,8 @@ base::Result<std::vector<ResolvedPackage>, diag::Reported> resolve_into(
       sources.load(manifest_path.as_view());
   if (loaded.is_err()) {
     const u32 index = bag.emit<i18n::Key::PkgCannotReadManifest>(
-        diag::Severity::Error, RESOLVE_IO_ERROR, manifest_path.as_view());
+        diag::Severity::Error, diag::Stage::Pkg, DiagCode::ResolveIoError,
+        manifest_path.as_view());
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -82,7 +82,8 @@ base::Result<std::vector<ResolvedPackage>, diag::Reported> resolve_into(
       // sources have no fetcher yet, and embedded entries never reach
       // a path walk.
       const u32 index = bag.emit<i18n::Key::PipelineDependencyNeedsFetcher>(
-          diag::Severity::Error, RESOLVE_IO_ERROR, dep.spec);
+          diag::Severity::Error, diag::Stage::Pkg, DiagCode::ResolveIoError,
+          dep.spec);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -112,7 +113,7 @@ base::Result<std::vector<ResolvedPackage>, diag::Reported> resolve_package(
       path::Path::from_native(dir);
   if (canonical.is_err()) {
     const u32 index = bag.emit<i18n::Key::PkgInvalidPackageDirectory>(
-        diag::Severity::Error, RESOLVE_IO_ERROR, dir);
+        diag::Severity::Error, diag::Stage::Pkg, DiagCode::ResolveIoError, dir);
     (void)index;
     return base::make_err(diag::Reported{});
   }

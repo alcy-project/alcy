@@ -13,12 +13,14 @@
 #include "cli/trace.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
 #include "i18n/messages.h"
 #include "path/path.h"
 #include "pipeline/build.h"
+#include "pipeline/diag_code.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/target.h"
@@ -66,11 +68,13 @@ ResultCode run_build(const CliConfig& config,
     if (build_current_dir) {
       const u32 index =
           ctx.bag.emit<i18n::Key::PipelineNoManifestInCurrentDirectory>(
-              diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST);
+              diag::Severity::Error, diag::Stage::Pipeline,
+              pipeline::DiagCode::NoManifest);
       (void)index;
     } else {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineNoManifest>(
-          diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST, raw_dir);
+          diag::Severity::Error, diag::Stage::Pipeline,
+          pipeline::DiagCode::NoManifest, raw_dir);
       (void)index;
     }
     return failed;

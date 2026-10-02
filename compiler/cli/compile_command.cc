@@ -14,11 +14,13 @@
 #include "cli/trace.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
 #include "i18n/messages.h"
 #include "pipeline/build.h"
+#include "pipeline/diag_code.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
@@ -121,7 +123,8 @@ ResultCode run_compile(const CliConfig& config,
     if (text.is_err()) {
       const u32 index =
           ctx.bag.emit<i18n::Key::PipelineCannotReadStandardInput>(
-              diag::Severity::Error, pipeline::PIPELINE_IO_ERROR);
+              diag::Severity::Error, diag::Stage::Pipeline,
+              pipeline::DiagCode::IoError);
       (void)index;
       return failed;
     }

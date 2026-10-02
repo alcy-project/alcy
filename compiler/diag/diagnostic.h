@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 
 namespace diag {
@@ -31,11 +32,13 @@ struct Label {
 // Diagnostic is always cheap and never allocates.
 struct Diagnostic {
   Severity severity = Severity::Error;
-  // Numeric code rendered as E<code>/W<code>/N<code>. Ranges are
-  // partitioned by producer; see compiler/docs/diagnostics.md. Empty for
-  // a message from outside a check area, which renders as `error: `
-  // rather than inventing a number nobody allocated.
-  std::optional<u32> code;
+  // Which check produced this, as a component and one of its ids. Empty
+  // for a message from outside a check area - a rejected command line, a
+  // configuration the check turned down - which renders as `error: `
+  // rather than inventing a code nobody allocated. See `stage.h` for the
+  // letter each component is written as, and
+  // `compiler/docs/diagnostics.md` for what each check means.
+  std::optional<Code> code;
   std::string_view message;
   bool has_primary_span = false;
   Span primary_span;

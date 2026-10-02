@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "diag/diagnostic.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 
@@ -85,15 +86,17 @@ constexpr std::string_view format_as(const VerificationErrorKind kind) {
 
 using VerificationResult = base::Result<void, VerificationError>;
 
-// Converts a structural error into a span-less diagnostic. Codes
-// 7100-7999 are reserved for IR verification, so adding a
-// VerificationErrorKind needs no renumbering as long as the range holds; the
-// message is the kind name. Human-friendly texts arrive with later
-// phases that know source locations.
+// Converts a structural error into a span-less diagnostic. `ir` owns no
+// enum of its own: a code here is the VerificationErrorKind's ordinal,
+// shifted by one because ids start at 1, so a kind and its code cannot
+// drift apart and adding a kind needs no renumbering. The message is the
+// kind name. Human-friendly texts arrive with later phases that know
+// source locations.
 inline diag::Diagnostic to_diagnostic(const VerificationError& error) {
+  const u8 id = static_cast<u8>(error.kind) + 1;
   return diag::Diagnostic{
       .severity = diag::Severity::Error,
-      .code = 7100 + static_cast<u32>(error.kind),
+      .code = diag::Code{diag::Stage::Ir, id},
       .message = format_as(error.kind),
       .primary_span = {},
   };

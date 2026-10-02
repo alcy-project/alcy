@@ -10,13 +10,14 @@
 #include "debug/dcheck.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 
 namespace diag {
 
 u32 DiagBag::push(Severity severity,
-                  u32 code,
+                  Code code,
                   Span primary,
                   bool has_primary,
                   std::string_view message) {

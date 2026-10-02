@@ -10,6 +10,7 @@
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "doctest/doctest.h"
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
@@ -59,22 +60,23 @@ struct BagFixture {
 
 TEST_CASE("Render without source") {
   BagFixture f;
-  const u32 i =
-      f.bag.emit_untranslated(Severity::Error, 7, "broken {}", "thing");
-  CHECK(render_str(*f.bag.at(i)) == "error[E7]: broken thing\n");
+  const u32 i = f.bag.emit_untranslated(Severity::Error, Stage::Lexer, 7,
+                                        "broken {}", "thing");
+  CHECK(render_str(*f.bag.at(i)) == "error[EA007]: broken thing\n");
 
-  const u32 j = f.bag.emit_untranslated(Severity::Warning, 8, "shaky");
-  CHECK(render_str(*f.bag.at(j)) == "warning[W8]: shaky\n");
+  const u32 j =
+      f.bag.emit_untranslated(Severity::Warning, Stage::Lexer, 8, "shaky");
+  CHECK(render_str(*f.bag.at(j)) == "warning[WA008]: shaky\n");
 }
 
 // A message from outside a check area has no code to show, so the marker
 // is the word alone. Every severity takes the same shape.
 TEST_CASE("Render without a code omits the bracket") {
   const Diagnostic coded{.severity = Severity::Error,
-                         .code = 7,
+                         .code = Code{Stage::Lexer, 7},
                          .message = "has a code",
                          .primary_span = {}};
-  CHECK(render_str(coded) == "error[E7]: has a code\n");
+  CHECK(render_str(coded) == "error[EA007]: has a code\n");
 
   const Diagnostic uncoded{.severity = Severity::Error,
                            .code = std::nullopt,
@@ -98,10 +100,10 @@ TEST_CASE("Render without a code omits the bracket") {
 TEST_CASE("Render with source snippet") {
   BagFixture f;
   const u32 i = f.bag.emit_untranslated(
-      Severity::Error, 1, Span{.file = 3, .offset = 5, .length = 3},
-      "bad call");
+      Severity::Error, Stage::Lexer, 1,
+      Span{.file = 3, .offset = 5, .length = 3}, "bad call");
   CHECK(render_str(*f.bag.at(i)) ==
-        "error[E1]: bad call\n"
+        "error[EA001]: bad call\n"
         " --> main.al:1:6\n"
         "  |\n"
         "1 | x := foo(1, 2)\n"
@@ -112,10 +114,10 @@ TEST_CASE("Render clips multi-line spans and rejects out-of-range offsets") {
   BagFixture f;
   // The span ends at the line break, so only line 1 is underlined.
   const u32 i = f.bag.emit_untranslated(
-      Severity::Error, 1, Span{.file = 3, .offset = 5, .length = 9},
-      "bad call");
+      Severity::Error, Stage::Lexer, 1,
+      Span{.file = 3, .offset = 5, .length = 9}, "bad call");
   CHECK(render_str(*f.bag.at(i)) ==
-        "error[E1]: bad call\n"
+        "error[EA001]: bad call\n"
         " --> main.al:1:6\n"
         "  |\n"
         "1 | x := foo(1, 2)\n"
@@ -124,8 +126,8 @@ TEST_CASE("Render clips multi-line spans and rejects out-of-range offsets") {
   // An offset past the end of the file is an invalid span: render the
   // raw offset rather than a fabricated line/column.
   const u32 j = f.bag.emit_untranslated(
-      Severity::Error, 2, Span{.file = 3, .offset = 1000, .length = 2},
-      "past the end");
+      Severity::Error, Stage::Lexer, 2,
+      Span{.file = 3, .offset = 1000, .length = 2}, "past the end");
   const std::string rendered = render_str(*f.bag.at(j));
   CHECK(rendered.find(" --> main.al:1000\n") != std::string::npos);
   CHECK(rendered.find("\n1 | ") == std::string::npos);
@@ -134,12 +136,12 @@ TEST_CASE("Render clips multi-line spans and rejects out-of-range offsets") {
 TEST_CASE("Render secondary labels") {
   BagFixture f;
   const u32 i = f.bag.emit_untranslated(
-      Severity::Error, 1, Span{.file = 3, .offset = 5, .length = 3},
-      "bad call");
+      Severity::Error, Stage::Lexer, 1,
+      Span{.file = 3, .offset = 5, .length = 3}, "bad call");
   CHECK(f.bag.label(i, {{{.file = 3, .offset = 15, .length = 1}, "used here"}})
             .is_ok());
   CHECK(render_str(*f.bag.at(i)) ==
-        "error[E1]: bad call\n"
+        "error[EA001]: bad call\n"
         " --> main.al:1:6\n"
         "  |\n"
         "1 | x := foo(1, 2)\n"
@@ -149,7 +151,8 @@ TEST_CASE("Render secondary labels") {
 
 TEST_CASE("Label rejects an index that names no diagnostic") {
   BagFixture f;
-  const u32 i = f.bag.emit_untranslated(Severity::Error, 1, "broken");
+  const u32 i =
+      f.bag.emit_untranslated(Severity::Error, Stage::Lexer, 1, "broken");
   CHECK(f.bag.label(i, {}).is_ok());
   CHECK(f.bag.label(i + 1, {{{.file = 3, .offset = 1, .length = 1}, "nope"}})
             .is_err());
@@ -159,18 +162,18 @@ TEST_CASE("Label rejects an index that names no diagnostic") {
 TEST_CASE("Render unknown file") {
   BagFixture f;
   const u32 i = f.bag.emit_untranslated(
-      Severity::Error, 1, Span{.file = 42, .offset = 8, .length = 3},
-      "bad call");
+      Severity::Error, Stage::Lexer, 1,
+      Span{.file = 42, .offset = 8, .length = 3}, "bad call");
   CHECK(render_str(*f.bag.at(i)) ==
-        "error[E1]: bad call\n"
+        "error[EA001]: bad call\n"
         " --> [unknown file]:8\n");
 }
 
 TEST_CASE("Render colorizes diagnostic elements") {
   BagFixture f;
   const u32 i = f.bag.emit_untranslated(
-      Severity::Error, 1, Span{.file = 3, .offset = 5, .length = 3},
-      "bad call");
+      Severity::Error, Stage::Lexer, 1,
+      Span{.file = 3, .offset = 5, .length = 3}, "bad call");
   CHECK(f.bag.label(i, {{{.file = 3, .offset = 14, .length = 1}, "used here"}})
             .is_ok());
 
@@ -188,9 +191,12 @@ TEST_CASE("Render colorizes diagnostic elements") {
 
 TEST_CASE("Render uses severity-specific colors") {
   BagFixture f;
-  const u32 error = f.bag.emit_untranslated(Severity::Error, 1, "error");
-  const u32 warning = f.bag.emit_untranslated(Severity::Warning, 2, "warning");
-  const u32 note = f.bag.emit_untranslated(Severity::Note, 3, "note");
+  const u32 error =
+      f.bag.emit_untranslated(Severity::Error, Stage::Lexer, 1, "error");
+  const u32 warning =
+      f.bag.emit_untranslated(Severity::Warning, Stage::Lexer, 2, "warning");
+  const u32 note =
+      f.bag.emit_untranslated(Severity::Note, Stage::Lexer, 3, "note");
 
   const std::string error_text = render_str(*f.bag.at(error), {.color = true});
   const std::string warning_text =
@@ -209,9 +215,10 @@ TEST_CASE("Render counts columns in characters, not bytes") {
   // would put the caret three columns to its right.
   BagFixture f;
   const u32 i = f.bag.emit_untranslated(
-      Severity::Error, 1, Span{.file = 4, .offset = 16, .length = 1}, "bad");
+      Severity::Error, Stage::Lexer, 1,
+      Span{.file = 4, .offset = 16, .length = 1}, "bad");
   CHECK(render_str(*f.bag.at(i)) ==
-        "error[E1]: bad\n"
+        "error[EA001]: bad\n"
         " --> wide.al:1:13\n"
         "  |\n"
         "1 |   s := \"\xe6\x97\xa5\xe6\x9c\xac\" @\n"
@@ -222,9 +229,10 @@ TEST_CASE("Render expands tabs so the caret lands under its character") {
   // The leading tab becomes four spaces, so the `@` is column 10.
   BagFixture f;
   const u32 i = f.bag.emit_untranslated(
-      Severity::Error, 1, Span{.file = 5, .offset = 15, .length = 1}, "bad");
+      Severity::Error, Stage::Lexer, 1,
+      Span{.file = 5, .offset = 15, .length = 1}, "bad");
   CHECK(render_str(*f.bag.at(i)) ==
-        "error[E1]: bad\n"
+        "error[EA001]: bad\n"
         " --> tabbed.al:2:10\n"
         "  |\n"
         "2 |     x := @\n"

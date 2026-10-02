@@ -9,6 +9,7 @@
 
 #include "config/build_config.h"
 #include "diag/bag.h"
+#include "diag/stage.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -42,8 +43,10 @@ CheckProbe run_check(const std::string& source) {
   probe.ran = true;
   probe.rejected = ctx.bag.has_errors();
   for (u32 i = 0; i < ctx.bag.size(); ++i) {
-    const std::optional<u32> code = ctx.bag.at(i)->code;
-    if (code == 3004 || code == 4050 || code == 5005) {
+    const std::optional<diag::Code> code = ctx.bag.at(i)->code;
+    if (code.has_value() && (code->stage == diag::Stage::Parser ||
+                             code->stage == diag::Stage::Analyzer ||
+                             code->stage == diag::Stage::Lowering)) {
       probe.too_deep = true;
     }
   }

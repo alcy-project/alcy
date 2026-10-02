@@ -10,6 +10,7 @@
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/render.h"
+#include "diag/stage.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
@@ -222,8 +223,10 @@ TEST_CASE("Every text report is one finished block") {
   mem::Arena arena;
   arena.reserve(1u << 20);
   diag::DiagBag bag{arena, i18n::Language::EnUs};
-  bag.emit_untranslated(diag::Severity::Error, 1, "first thing");
-  bag.emit_untranslated(diag::Severity::Warning, 2, "second thing");
+  bag.emit_untranslated(diag::Severity::Error, diag::Stage::Lexer, 1,
+                        "first thing");
+  bag.emit_untranslated(diag::Severity::Warning, diag::Stage::Lexer, 2,
+                        "second thing");
   source::SourceManager sources;
   Envelope diagnosed;
   diagnosed.command = "check";
@@ -231,7 +234,7 @@ TEST_CASE("Every text report is one finished block") {
   diagnosed.bag = &bag;
   diagnosed.sources = &sources;
   const std::string two = complaints(diagnosed);
-  CHECK(two == "error[E1]: first thing\nwarning[W2]: second thing\n");
+  CHECK(two == "error[EA001]: first thing\nwarning[WA002]: second thing\n");
   CHECK(is_block(two));
   // A success with warnings still reports the warnings, and still has a
   // result line of its own: the two go to different streams now, so
@@ -252,7 +255,8 @@ TEST_CASE("A report splits the diagnostics from the result") {
   mem::Arena arena;
   arena.reserve(1u << 20);
   diag::DiagBag bag{arena, i18n::Language::EnUs};
-  bag.emit_untranslated(diag::Severity::Warning, 2, "unused value");
+  bag.emit_untranslated(diag::Severity::Warning, diag::Stage::Lexer, 2,
+                        "unused value");
   source::SourceManager sources;
   Envelope envelope = built("out/demo", 2048, 2000000);
   envelope.bag = &bag;
@@ -261,7 +265,7 @@ TEST_CASE("A report splits the diagnostics from the result") {
   const Streams text = report_to(envelope);
   CHECK(text.out.find("Built     out/demo") == 0);
   CHECK(text.out.find("W2") == std::string::npos);
-  CHECK(text.err == "warning[W2]: unused value\n");
+  CHECK(text.err == "warning[WA002]: unused value\n");
   CHECK(is_block(text.out));
   CHECK(is_block(text.err));
 
@@ -269,7 +273,8 @@ TEST_CASE("A report splits the diagnostics from the result") {
   CHECK(json.err.empty());
   CHECK(json.out.front() == '{');
   CHECK(json.out.find("\"summary\"") != std::string::npos);
-  CHECK(json.out.find("\"code\":2") != std::string::npos);
+  CHECK(json.out.find("\"stage\":\"lexer\",\"local_id\":2") !=
+        std::string::npos);
   CHECK(is_block(json.out));
 }
 

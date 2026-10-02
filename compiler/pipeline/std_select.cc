@@ -10,10 +10,11 @@
 
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/stage.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
+#include "pipeline/diag_code.h"
 #include "pipeline/embedded_std.h"
-#include "pipeline/pipeline_context.h"
 #include "pkg/manifest.h"
 
 namespace pipeline {
@@ -67,12 +68,14 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
       }
       if (dep.source == pkg::DependencySource::Unspecified) {
         const u32 index = bag.emit<i18n::Key::PipelineDependencyNamesNoSource>(
-            diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, dep.spec);
+            diag::Severity::Error, diag::Stage::Pipeline,
+            DiagCode::NotImplemented, dep.spec);
         (void)index;
         return base::make_err(diag::Reported{});
       }
       const u32 index = bag.emit<i18n::Key::PipelineDependencyNeedsFetcher>(
-          diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, dep.spec);
+          diag::Severity::Error, diag::Stage::Pipeline,
+          DiagCode::NotImplemented, dep.spec);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -80,7 +83,8 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
     // always a mistake rather than a pin.
     if (dep.source != pkg::DependencySource::Unspecified) {
       const u32 index = bag.emit<i18n::Key::PipelineDependencyIsEmbeddedStd>(
-          diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, dep.spec);
+          diag::Severity::Error, diag::Stage::Pipeline,
+          DiagCode::NotImplemented, dep.spec);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -91,14 +95,15 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
       if (dep.owner == STD_OWNER) {
         if (dep.member == STD_SUITE) {
           const u32 index = bag.emit<i18n::Key::PipelineStdIsASuite>(
-              diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED);
+              diag::Severity::Error, diag::Stage::Pipeline,
+              DiagCode::NotImplemented);
           (void)index;
           return base::make_err(diag::Reported{});
         }
         if (find_member(dep.member) != nullptr) {
           const u32 index = bag.emit<i18n::Key::PipelineDependencyIsAStdMember>(
-              diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, dep.spec,
-              dep.member);
+              diag::Severity::Error, diag::Stage::Pipeline,
+              DiagCode::NotImplemented, dep.spec, dep.member);
           (void)index;
           return base::make_err(diag::Reported{});
         }
@@ -108,12 +113,14 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
       }
       if (dep.source == pkg::DependencySource::Unspecified) {
         const u32 index = bag.emit<i18n::Key::PipelineDependencyNamesNoSource>(
-            diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, dep.spec);
+            diag::Severity::Error, diag::Stage::Pipeline,
+            DiagCode::NotImplemented, dep.spec);
         (void)index;
         return base::make_err(diag::Reported{});
       }
       const u32 index = bag.emit<i18n::Key::PipelineDependencyNeedsFetcher>(
-          diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, dep.spec);
+          diag::Severity::Error, diag::Stage::Pipeline,
+          DiagCode::NotImplemented, dep.spec);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -124,7 +131,8 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
     }
     if (find_member(dep.member) == nullptr) {
       const u32 index = bag.emit<i18n::Key::PipelineDependencyNotAStdMember>(
-          diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, dep.spec);
+          diag::Severity::Error, diag::Stage::Pipeline,
+          DiagCode::NotImplemented, dep.spec);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -139,7 +147,8 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
         // A glob overlapping a named member would stage it twice over:
         // one spelling has to go.
         const u32 index = bag.emit<i18n::Key::PipelineDependencyOverlaps>(
-            diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, glob_spec, member);
+            diag::Severity::Error, diag::Stage::Pipeline,
+            DiagCode::NotImplemented, glob_spec, member);
         (void)index;
         return base::make_err(diag::Reported{});
       }
@@ -154,7 +163,8 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
       std::string_view need(info->deps[i]);
       if (!selected(selection.members, need)) {
         const u32 index = bag.emit<i18n::Key::PipelineStdPackageRequiresSuite>(
-            diag::Severity::Error, PIPELINE_NOT_IMPLEMENTED, member, need);
+            diag::Severity::Error, diag::Stage::Pipeline,
+            DiagCode::NotImplemented, member, need);
         (void)index;
         return base::make_err(diag::Reported{});
       }

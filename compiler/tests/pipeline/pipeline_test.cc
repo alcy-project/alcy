@@ -13,6 +13,7 @@
 #include "diag/diagnostic.h"
 #include "diag/render.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "doctest/doctest.h"
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
@@ -139,8 +140,9 @@ TEST_CASE("Source fetch feeds the renderer") {
   }
   const source::FileId id = std::move(loaded).unwrap();
 
-  const u32 index = f.bag.emit_untranslated(diag::Severity::Error, 1,
-                                            diag::Span{id, 4, 1}, "bad token");
+  const u32 index =
+      f.bag.emit_untranslated(diag::Severity::Error, diag::Stage::Pipeline, 1,
+                              diag::Span{id, 4, 1}, "bad token");
   const diag::Diagnostic* const diag = f.bag.at(index);
   CHECK(diag != nullptr);
   if (diag == nullptr) {

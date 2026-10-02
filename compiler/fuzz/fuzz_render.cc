@@ -24,6 +24,7 @@
 #include "diag/diagnostic.h"
 #include "diag/render.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/mem/arena.h"
@@ -106,7 +107,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
   arena.reserve(1u << 20);
   diag::DiagBag bag{arena, i18n::Language::EnUs};
   const u32 index = bag.emit_untranslated(
-      diag::Severity::Error, 1,
+      diag::Severity::Error, diag::Stage::Lexer, 1,
       diag::Span{.file = 1, .offset = offset, .length = length}, "fuzz");
   const diag::Diagnostic* const diag = bag.at(index);
   if (diag == nullptr) {

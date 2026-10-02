@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "diag/diagnostic.h"
+#include "diag/stage.h"
 #include "doctest/doctest.h"
 #include "fpag/base/idx.h"
 #include "fpag/str/string_pool_id.h"
@@ -893,15 +894,25 @@ TEST_CASE("VerificationError converts to diagnostic") {
       .kind = VerificationErrorKind::UndefinedRegister, .index = 5};
   const diag::Diagnostic diag = to_diagnostic(error);
   CHECK(diag.severity == diag::Severity::Error);
-  CHECK(diag.code >= 7100);
-  CHECK(diag.code < 8000);
+  CHECK(diag.code.has_value());
+  if (!diag.code.has_value()) {
+    return;
+  }
+  CHECK(diag.code->stage == diag::Stage::Ir);
+  // Ids start at 1, so the first kind is 1 and none is ever 0.
+  CHECK(diag.code->id >= 1);
   CHECK(diag.message == "UndefinedRegister");
   CHECK(!diag.has_primary_span);
 
   // Codes are stable per kind.
   const VerificationError other{
       .kind = VerificationErrorKind::UnterminatedBlock, .index = 0};
-  CHECK(to_diagnostic(other).code != diag.code);
+  const diag::Diagnostic other_diag = to_diagnostic(other);
+  CHECK(other_diag.code.has_value());
+  if (!other_diag.code.has_value()) {
+    return;
+  }
+  CHECK(other_diag.code->id != diag.code->id);
 }
 
 }  // namespace ir

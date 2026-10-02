@@ -5,6 +5,7 @@ source_set("parser") {
   sources = [
     "desugar.cc",
     "desugar.h",
+    "diag_code.h",
     "parser.cc",
     "parser.h",
     "parser_expr.cc",

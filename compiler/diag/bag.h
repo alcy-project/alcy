@@ -6,10 +6,12 @@
 #include <initializer_list>
 #include <iterator>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 #include "diag/diagnostic.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
@@ -19,6 +21,14 @@
 #include "i18n/messages.h"
 
 namespace diag {
+
+// The id half of a code, as whatever enumerator the reporting component
+// wrote. A scoped enum does not convert to its underlying type, so the
+// parameter is the type itself and the narrowing happens once inside
+// `emit`; the alternative is a cast at every call site. The constraint is
+// what keeps a bare number out, which is the reason the enums exist.
+template <typename Id>
+concept DiagnosticId = std::is_enum_v<Id>;
 
 // Marker error type for APIs that report failure through a DiagBag: the
 // Result conveys only success or failure because the details are already
@@ -62,20 +72,26 @@ class DiagBag {
   // Every catalog's format string for K is checked against Args... at
   // compile time, so a translation that does not fit the call site is a
   // build error rather than a diagnostic printed wrong.
-  template <i18n::Key K, typename... Args>
-  u32 emit(Severity severity, u32 code, Args&&... args) {
+  template <i18n::Key K, DiagnosticId Id, typename... Args>
+  u32 emit(Severity severity, Stage stage, Id id, Args&&... args) {
     fmt::memory_buffer out;
     i18n::format_to<K>(std::back_inserter(out), language_,
                        std::forward<Args>(args)...);
-    return push(severity, code, {}, false, {out.data(), out.size()});
+    return push(severity, {stage, static_cast<u8>(id)}, {}, false,
+                {out.data(), out.size()});
   }
 
-  template <i18n::Key K, typename... Args>
-  u32 emit(Severity severity, u32 code, Span primary, Args&&... args) {
+  template <i18n::Key K, DiagnosticId Id, typename... Args>
+  u32 emit(Severity severity,
+           Stage stage,
+           Id id,
+           Span primary,
+           Args&&... args) {
     fmt::memory_buffer out;
     i18n::format_to<K>(std::back_inserter(out), language_,
                        std::forward<Args>(args)...);
-    return push(severity, code, primary, true, {out.data(), out.size()});
+    return push(severity, {stage, static_cast<u8>(id)}, primary, true,
+                {out.data(), out.size()});
   }
 
   // Appends a diagnostic whose message is composed here rather than from
@@ -84,25 +100,27 @@ class DiagBag {
   // its own inventing one is what is left.
   template <typename... Args>
   u32 emit_untranslated(Severity severity,
-                        u32 code,
+                        Stage stage,
+                        u8 id,
                         fmt::format_string<Args...> format,
                         Args&&... args) {
     fmt::memory_buffer out;
     fmt::format_to(std::back_inserter(out), format,
                    std::forward<Args>(args)...);
-    return push(severity, code, {}, false, {out.data(), out.size()});
+    return push(severity, {stage, id}, {}, false, {out.data(), out.size()});
   }
 
   template <typename... Args>
   u32 emit_untranslated(Severity severity,
-                        u32 code,
+                        Stage stage,
+                        u8 id,
                         Span primary,
                         fmt::format_string<Args...> format,
                         Args&&... args) {
     fmt::memory_buffer out;
     fmt::format_to(std::back_inserter(out), format,
                    std::forward<Args>(args)...);
-    return push(severity, code, primary, true, {out.data(), out.size()});
+    return push(severity, {stage, id}, primary, true, {out.data(), out.size()});
   }
 
   // Attaches secondary labels to a previously emitted diagnostic. The labels
@@ -138,7 +156,7 @@ class DiagBag {
   // message into the arena; grows the entries array as needed. Returns the
   // stable index of the new entry.
   u32 push(Severity severity,
-           u32 code,
+           Code code,
            Span primary,
            bool has_primary,
            std::string_view message);

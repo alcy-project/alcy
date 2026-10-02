@@ -16,6 +16,7 @@
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/render.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
@@ -23,6 +24,7 @@
 #include "fpag/term/console.h"
 #include "i18n/messages.h"
 #include "path/path.h"
+#include "pipeline/diag_code.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/run.h"
@@ -70,7 +72,8 @@ i32 run_run(const CliConfig& config,
   pipeline::ManifestProbe found = std::move(probe).unwrap();
   if (!found.found) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineNoManifest>(
-        diag::Severity::Error, pipeline::PIPELINE_NO_MANIFEST, raw_dir);
+        diag::Severity::Error, diag::Stage::Pipeline,
+        pipeline::DiagCode::NoManifest, raw_dir);
     (void)index;
     return failed;
   }

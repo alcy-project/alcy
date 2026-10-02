@@ -12,22 +12,20 @@
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
 #include "i18n/messages.h"
 #include "path/path.h"
 #include "pkg/arena_copy.h"
+#include "pkg/diag_code.h"
 #include "pkg/manifest.h"
 #include "source/source.h"
 
 namespace pkg {
 
 namespace {
-
-// Diagnostic codes 1100-1199 are reserved for module selection.
-constexpr u32 MODULES_SEMANTIC_ERROR = 1100;
-constexpr u32 MODULES_UNSELECTED_FILE = 1101;
 
 // Strips a root prefix plus any following separators. False when `path`
 // lies outside `root`; the prefix must end on a separator boundary, so
@@ -104,7 +102,8 @@ base::Result<std::vector<ModuleFile>, diag::Reported> resolve_module_files(
     for (const ModuleFile& prior : selected) {
       if (prior.name == name) {
         const u32 index = bag.emit<i18n::Key::PkgModuleSelectedTwice>(
-            diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{}, name);
+            diag::Severity::Error, diag::Stage::Pkg,
+            DiagCode::ModulesSemanticError, diag::Span{}, name);
         (void)index;
         return false;
       }
@@ -132,7 +131,8 @@ base::Result<std::vector<ModuleFile>, diag::Reported> resolve_module_files(
     }
     if (found == source::UNKNOWN_FILE) {
       const u32 index = bag.emit<i18n::Key::PkgModulesIncludeHasNoFile>(
-          diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{}, entry);
+          diag::Severity::Error, diag::Stage::Pkg,
+          DiagCode::ModulesSemanticError, diag::Span{}, entry);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -144,14 +144,16 @@ base::Result<std::vector<ModuleFile>, diag::Reported> resolve_module_files(
     std::string_view relative;
     if (!relative_to(candidate.as_view(), root, relative)) {
       const u32 index = bag.emit<i18n::Key::PkgModulesIncludeEscapesPackage>(
-          diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{}, entry);
+          diag::Severity::Error, diag::Stage::Pkg,
+          DiagCode::ModulesSemanticError, diag::Span{}, entry);
       (void)index;
       return base::make_err(diag::Reported{});
     }
     const std::string name = module_name_of(relative);
     if (name.empty()) {
       const u32 index = bag.emit<i18n::Key::PkgModulesIncludeNotAModulePath>(
-          diag::Severity::Error, MODULES_SEMANTIC_ERROR, diag::Span{}, entry);
+          diag::Severity::Error, diag::Stage::Pkg,
+          DiagCode::ModulesSemanticError, diag::Span{}, entry);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -189,7 +191,8 @@ base::Result<std::vector<ModuleFile>, diag::Reported> resolve_module_files(
     }
     if (!taken) {
       const u32 index = bag.emit<i18n::Key::PkgSourceFileNotSelected>(
-          diag::Severity::Warning, MODULES_UNSELECTED_FILE,
+          diag::Severity::Warning, diag::Stage::Pkg,
+          DiagCode::ModulesUnselectedFile,
           sources.name(id).value_or(std::string_view{"[unknown file]"}));
       (void)index;
     }

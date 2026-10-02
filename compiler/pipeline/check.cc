@@ -10,11 +10,13 @@
 #include "analyzer/resolve.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
 #include "i18n/messages.h"
 #include "path/path.h"
+#include "pipeline/diag_code.h"
 #include "pipeline/frontend.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
@@ -56,7 +58,8 @@ base::Result<CheckOutcome, diag::Reported> check_single_file(
   }();
   if (file.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotRead>(
-        diag::Severity::Error, PIPELINE_IO_ERROR, target);
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
+        target);
     (void)index;
     return fail();
   }

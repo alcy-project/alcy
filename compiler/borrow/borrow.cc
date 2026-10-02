@@ -7,10 +7,12 @@
 #include <utility>
 #include <vector>
 
+#include "borrow/diag_code.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
@@ -27,12 +29,6 @@ namespace borrow {
 
 namespace {
 
-// Diagnostic codes 6000-6099 are reserved for borrow checking.
-constexpr u32 BORROW_USE_AFTER_MOVE = 6000;
-constexpr u32 BORROW_CONFLICT = 6001;
-constexpr u32 BORROW_ESCAPE = 6002;
-constexpr u32 BORROW_ASSIGN_BORROWED = 6003;
-
 constexpr u32 NO_ROOT = 0xFFFFFFFFu;
 
 // A path step is either a field index or a dereference. Reading a place
@@ -40,7 +36,6 @@ constexpr u32 NO_ROOT = 0xFFFFFFFFu;
 // the referent itself nameable: `*b` and `b.field` are `b`'s path plus
 // a dereference, so a loan of one is seen to overlap a store to the
 // other. A field index can never collide with the marker because the
-// table's size bounds every index.
 constexpr u32 DEREF_STEP = 0xFFFFFFFFu;
 
 // A path step for a buffer element. The index is a runtime value, so
@@ -49,7 +44,6 @@ constexpr u32 DEREF_STEP = 0xFFFFFFFFu;
 // loan into the old block. Two such steps never compare equal to each
 // other, so two loans into distinct elements of one buffer do not
 // conflict - the granularity a `&T` accessor can express, since nothing
-// in the source names the index at the borrow.
 constexpr u32 ELEMENT_STEP = 0xFFFFFFFEu;
 
 // A place: a root register (alloca or block parameter) plus a path.
@@ -759,8 +753,8 @@ class Checker {
     for (const Place& gone : moved) {
       if (overlaps(gone, place)) {
         const u32 index = bag.emit<i18n::Key::BorrowUseAfterMove>(
-            diag::Severity::Error, BORROW_USE_AFTER_MOVE, span,
-            addr_name(place.root), action);
+            diag::Severity::Error, diag::Stage::Borrow, DiagCode::UseAfterMove,
+            span, addr_name(place.root), action);
         (void)index;
         return;
       }
@@ -1032,8 +1026,8 @@ class Checker {
               continue;
             }
             const u32 index = bag.emit<i18n::Key::BorrowConflict>(
-                diag::Severity::Error, BORROW_CONFLICT, span,
-                addr_name(place.root));
+                diag::Severity::Error, diag::Stage::Borrow, DiagCode::Conflict,
+                span, addr_name(place.root));
             (void)index;
             break;
           }
@@ -1055,8 +1049,8 @@ class Checker {
             continue;
           }
           const u32 index = bag.emit<i18n::Key::BorrowMoveInvalidatesBorrow>(
-              diag::Severity::Error, BORROW_USE_AFTER_MOVE, span,
-              addr_name(place.root));
+              diag::Severity::Error, diag::Stage::Borrow,
+              DiagCode::UseAfterMove, span, addr_name(place.root));
           (void)index;
           break;
         }
@@ -1099,8 +1093,8 @@ class Checker {
           }
           if (exclusive || loan.exclusive) {
             const u32 index = bag.emit<i18n::Key::BorrowConflict>(
-                diag::Severity::Error, BORROW_CONFLICT, span,
-                addr_name(place.root));
+                diag::Severity::Error, diag::Stage::Borrow, DiagCode::Conflict,
+                span, addr_name(place.root));
             (void)index;
             break;
           }
@@ -1129,8 +1123,8 @@ class Checker {
               continue;
             }
             const u32 index = bag.emit<i18n::Key::BorrowAssignWhileBorrowed>(
-                diag::Severity::Error, BORROW_ASSIGN_BORROWED, span,
-                addr_name(place.root));
+                diag::Severity::Error, diag::Stage::Borrow,
+                DiagCode::AssignBorrowed, span, addr_name(place.root));
             (void)index;
             break;
           }
@@ -1153,7 +1147,8 @@ class Checker {
           const u32 root = loans[loan].place.root;
           if (!is_param_root(root, fn)) {
             const u32 index = bag.emit<i18n::Key::BorrowReturnsLocalReference>(
-                diag::Severity::Error, BORROW_ESCAPE, span, addr_name(root));
+                diag::Severity::Error, diag::Stage::Borrow, DiagCode::Escape,
+                span, addr_name(root));
             (void)index;
             break;
           }

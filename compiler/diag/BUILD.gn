@@ -11,6 +11,8 @@ source_set("diag") {
     "render.h",
     "span.cc",
     "span.h",
+    "stage.cc",
+    "stage.h",
   ]
 
   # Depends on source only for the FileId identity minted there; the

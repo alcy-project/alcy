@@ -3,6 +3,7 @@
 
 source_set("lowering") {
   sources = [
+    "diag_code.h",
     "lowerer.cc",
     "lowerer.h",
     "lowering.cc",

@@ -17,6 +17,7 @@
 #include "diag/diagnostic.h"
 #include "diag/render.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
@@ -78,6 +79,25 @@ const char* severity_name(diag::Severity severity) {
   return "error";
 }
 
+// The component a code came from, in the spelling the module directory
+// uses, so a tool reading `--json` sees the same name a source file does
+// and never has to know the letter table.
+const char* stage_name(diag::Stage stage) {
+  switch (stage) {
+    case diag::Stage::Lexer: return "lexer";
+    case diag::Stage::Parser: return "parser";
+    case diag::Stage::Analyzer: return "analyzer";
+    case diag::Stage::Lowering: return "lowering";
+    case diag::Stage::Borrow: return "borrow";
+    case diag::Stage::Ir: return "ir";
+    case diag::Stage::Pkg: return "pkg";
+    case diag::Stage::Pipeline: return "pipeline";
+    case diag::Stage::CodegenLlvm: return "codegen_llvm";
+    case diag::Stage::CodegenNative: return "codegen";
+  }
+  return "lexer";
+}
+
 // Numbers are written as decimal digits with no locale and no quoting,
 // which is all a JSON number is. Doing it here rather than through the
 // formatter keeps the raw-string literals below free of brace escaping,
@@ -115,9 +135,14 @@ void append_diagnostic_json(std::string& out,
                  R"json({{"severity":"{}","code":)json",
                  severity_name(diagnostic.severity));
   // A message from outside a check area carries no code, and null says so
-  // where a number would imply one that exists.
+  // where one would imply that exists. What a code *is* arrives as its
+  // two parts rather than as a string to be parsed: a tool matches the
+  // printed form, and reads the component and the id without having to
+  // know the letter table.
   if (diagnostic.code.has_value()) {
-    fmt::format_to(std::back_inserter(out), "{}", *diagnostic.code);
+    fmt::format_to(std::back_inserter(out),
+                   R"json({{"stage":"{}","local_id":{}}})json",
+                   stage_name(diagnostic.code->stage), diagnostic.code->id);
   } else {
     out += "null";
   }

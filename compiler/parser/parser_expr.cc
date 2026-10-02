@@ -11,10 +11,12 @@
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
 #include "lexer/token.h"
+#include "parser/diag_code.h"
 #include "parser/parser.h"
 
 namespace parser {
@@ -82,7 +84,8 @@ ast::ExprIdx Parser::parse_range() {
     }
     if (kind == lexer::TokenKind::DotDot) {
       const u32 index = bag_.emit<i18n::Key::ParserRangeEndNeedsBound>(
-          diag::Severity::Error, PARSER_RANGE_END_UNSPELLED, op);
+          diag::Severity::Error, diag::Stage::Parser,
+          DiagCode::RangeEndUnspelled, op);
       (void)index;
       return ast::ExprIdx::invalid();
     }
@@ -1202,7 +1205,8 @@ ast::ExprIdx Parser::parse_array_literal() {
   }
   if (check(lexer::TokenKind::RBracket)) {
     const u32 index = bag_.emit<i18n::Key::AnalyzerArrayLiteralWithoutCount>(
-        diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, peek().span);
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+        peek().span);
     (void)index;
     return ast::ExprIdx::invalid();
   }
@@ -1267,7 +1271,8 @@ ast::ExprIdx Parser::parse_comp_block() {
   }
   if (!check(lexer::TokenKind::LBrace)) {
     const u32 index = bag_.emit<i18n::Key::ParserCompOnlyOnBindings>(
-        diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, peek().span);
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+        peek().span);
     (void)index;
     return ast::ExprIdx::invalid();
   }

@@ -16,18 +16,15 @@
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
-#include "parser/parser.h"
+#include "parser/diag_code.h"
 
 namespace parser {
 
 namespace {
-
-// Diagnostic codes 3100-3199 are reserved for desugaring.
-constexpr u32 PARSER_OR_PATTERN_MISMATCH = 3100;
-constexpr u32 PARSER_ALREADY_BOUND = 3101;
 
 bool is_keyword_name(std::string_view name) {
   return name == "self" || name == "super" || name == "package" ||
@@ -65,7 +62,8 @@ class Desugarer {
     if (!reported_too_deep_) {
       reported_too_deep_ = true;
       const u32 index = bag.emit<i18n::Key::ParserNestingTooDeep>(
-          diag::Severity::Error, PARSER_TOO_DEEP, span, nesting_.limit());
+          diag::Severity::Error, diag::Stage::Parser, DiagCode::TooDeep, span,
+          nesting_.limit());
       (void)index;
     }
     return true;
@@ -121,7 +119,8 @@ class Desugarer {
         return existing->fresh;
       }
       const u32 index = bag.emit<i18n::Key::ParserNameAlreadyBound>(
-          diag::Severity::Error, PARSER_ALREADY_BOUND, ident.span, ident.name);
+          diag::Severity::Error, diag::Stage::Parser, DiagCode::AlreadyBound,
+          ident.span, ident.name);
       (void)index;
       return ident.name;
     }
@@ -342,7 +341,8 @@ class Desugarer {
       if (mismatch) {
         const u32 index =
             bag.emit<i18n::Key::AnalyzerOrPatternBindsDifferentNames>(
-                diag::Severity::Error, PARSER_OR_PATTERN_MISMATCH, node.span);
+                diag::Severity::Error, diag::Stage::Parser,
+                DiagCode::OrPatternMismatch, node.span);
         (void)index;
       }
       pop_scope();
@@ -357,8 +357,8 @@ class Desugarer {
       }
       if (clash) {
         const u32 index = bag.emit<i18n::Key::ParserNameAlreadyBound>(
-            diag::Severity::Error, PARSER_ALREADY_BOUND, node.span,
-            binding.orig);
+            diag::Severity::Error, diag::Stage::Parser, DiagCode::AlreadyBound,
+            node.span, binding.orig);
         (void)index;
         continue;
       }
@@ -556,7 +556,7 @@ base::Result<void, diag::Reported> desugar_shadowing(
           ast::verify_file(ast);
       verified.is_err()) {
     const u32 index = bag.emit<i18n::Key::ParserInvalidSyntaxTree>(
-        diag::Severity::Error, PARSER_INVALID_AST,
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::InvalidAst,
         ast::describe_verification_error(std::move(verified).unwrap_err()));
     (void)index;
     return base::make_err(diag::Reported{});

@@ -14,11 +14,13 @@
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
 #include "lexer/lexer.h"
 #include "lexer/token.h"
+#include "parser/diag_code.h"
 #include "source/source.h"
 
 namespace parser {
@@ -127,7 +129,8 @@ void Parser::skip_insignificant() {
       const diag::Span span = tokens_[pos_].span;
       const std::string_view spelling = bytes_.substr(span.offset, span.length);
       const u32 index = bag_.emit<i18n::Key::ParserReservedName>(
-          diag::Severity::Error, PARSER_RESERVED_WORD, span, spelling);
+          diag::Severity::Error, diag::Stage::Parser, DiagCode::ReservedWord,
+          span, spelling);
       (void)index;
       ++pos_;
       continue;
@@ -160,14 +163,15 @@ bool Parser::expect(lexer::TokenKind kind, std::string_view what) {
   }
   if (at_end()) {
     const u32 index = bag_.emit<i18n::Key::ParserExpectedFoundEndOfFile>(
-        diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span_from(pos_), what);
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+        span_from(pos_), what);
     (void)index;
     return false;
   }
   const diag::Span span = peek().span;
   const u32 index = bag_.emit<i18n::Key::ParserExpectedFound>(
-      diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span, what,
-      bytes_.substr(span.offset, span.length));
+      diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+      span, what, bytes_.substr(span.offset, span.length));
   (void)index;
   return false;
 }
@@ -258,7 +262,8 @@ base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
           lexer::verify_token_stream(tokens_, file_, bytes_);
       verified.is_err()) {
     const u32 index = bag_.emit<i18n::Key::ParserInvalidTokenStream>(
-        diag::Severity::Error, PARSER_INVALID_TOKEN_STREAM,
+        diag::Severity::Error, diag::Stage::Parser,
+        DiagCode::InvalidTokenStream,
         lexer::describe_token_stream_error(std::move(verified).unwrap_err()));
     (void)index;
     return base::make_err(diag::Reported{});
@@ -279,7 +284,7 @@ base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
           ast::verify_file(ast_);
       verified.is_err()) {
     const u32 index = bag_.emit<i18n::Key::ParserInvalidSyntaxTree>(
-        diag::Severity::Error, PARSER_INVALID_AST,
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::InvalidAst,
         ast::describe_verification_error(std::move(verified).unwrap_err()));
     (void)index;
     return base::make_err(diag::Reported{});
@@ -304,14 +309,15 @@ ast::ItemIdx Parser::parse_item() {
   }
   if (at_end()) {
     const u32 index = bag_.emit<i18n::Key::ParserExpectedItemFoundEndOfFile>(
-        diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span_from(pos_));
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+        span_from(pos_));
     (void)index;
     return ast::ItemIdx::invalid();
   }
   const diag::Span span = peek().span;
   const u32 index = bag_.emit<i18n::Key::ParserExpectedItemFound>(
-      diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span,
-      bytes_.substr(span.offset, span.length));
+      diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+      span, bytes_.substr(span.offset, span.length));
   (void)index;
   return ast::ItemIdx::invalid();
 }
@@ -671,8 +677,8 @@ bool Parser::parse_generic_params(std::vector<ast::Ident>& params) {
     for (const ast::Ident& existing : params) {
       if (existing.name == name.name) {
         const u32 index = bag_.emit<i18n::Key::ParserDuplicateTypeParameter>(
-            diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, name.span,
-            name.name);
+            diag::Severity::Error, diag::Stage::Parser,
+            DiagCode::UnexpectedToken, name.span, name.name);
         (void)index;
         return false;
       }
@@ -709,8 +715,8 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
     if (ast_.types[type].kind != ast::TypeKind::Path) {
       const diag::Span span = ast_.types[type].span;
       const u32 index = bag_.emit<i18n::Key::ParserExpectedFound>(
-          diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span, "a spec",
-          bytes_.substr(span.offset, span.length));
+          diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+          span, "a spec", bytes_.substr(span.offset, span.length));
       (void)index;
       return ast::ItemIdx::invalid();
     }
@@ -949,7 +955,8 @@ bool Parser::parse_decimal_u64(u64* out) {
     }
     if (c < '0' || c > '9') {
       const u32 index = bag_.emit<i18n::Key::ParserArrayLengthNotDecimal>(
-          diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span);
+          diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+          span);
       (void)index;
       return false;
     }
@@ -958,7 +965,8 @@ bool Parser::parse_decimal_u64(u64* out) {
     const u64 digit = static_cast<u64>(c - '0');
     if (value > (~0ull - digit) / 10) {
       const u32 index = bag_.emit<i18n::Key::ParserArrayLengthTooLarge>(
-          diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, span);
+          diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+          span);
       (void)index;
       return false;
     }
@@ -975,7 +983,8 @@ bool Parser::nesting_exhausted(diag::Span span) {
   if (!reported_too_deep_) {
     reported_too_deep_ = true;
     const u32 index = bag_.emit<i18n::Key::ParserNestingTooDeep>(
-        diag::Severity::Error, PARSER_TOO_DEEP, span, nesting_.limit());
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::TooDeep, span,
+        nesting_.limit());
     (void)index;
   }
   return true;
@@ -1010,7 +1019,8 @@ ast::BlockIdx Parser::parse_block() {
     if (!match(lexer::TokenKind::Semicolon) &&
         !check(lexer::TokenKind::RBrace) && !at_end()) {
       const u32 index = bag_.emit<i18n::Key::ParserExpectedSemicolon>(
-          diag::Severity::Error, PARSER_UNEXPECTED_TOKEN, peek().span);
+          diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+          peek().span);
       (void)index;
       synchronize();
     }

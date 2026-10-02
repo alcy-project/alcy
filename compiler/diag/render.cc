@@ -10,6 +10,7 @@
 
 #include "diag/diagnostic.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
@@ -196,8 +197,13 @@ void append_marker(fmt::memory_buffer& out,
   fmt::format_to(std::back_inserter(out), "{}",
                  severity_text(diag.severity, options.language));
   if (diag.code.has_value()) {
-    fmt::format_to(std::back_inserter(out), "[{}{}]",
-                   severity_code(diag.severity), *diag.code);
+    // Severity, component, id: `error[EA001]`. The component's letter is
+    // the only part that needs the registry to interpret, and the id is
+    // padded to three digits so codes sort in the order they were
+    // assigned - which is the order a bug report lists them in.
+    fmt::format_to(std::back_inserter(out), "[{}{}{:03}]",
+                   severity_code(diag.severity), stage_letter(diag.code->stage),
+                   diag.code->id);
   }
   if (color) {
     end_style(out, true);

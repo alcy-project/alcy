@@ -20,6 +20,7 @@
 #include "diag/diagnostic.h"
 #include "diag/render.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "fmt/format.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
@@ -36,6 +37,7 @@
 #include "ir/storage_builder.h"
 #include "ir/type.h"
 #include "ir/verifier.h"
+#include "lowering/diag_code.h"
 #include "lowering/lowerer.h"
 
 namespace lowering {
@@ -295,7 +297,8 @@ void Lowerer::emit_drops(u32 mark, diag::Span span) {
       continue;
     }
     const u32 index = bag.emit<i18n::Key::LowerDestructorNotRun>(
-        diag::Severity::Warning, LOWER_DROP_UNPLACED, span, local.name);
+        diag::Severity::Warning, diag::Stage::Lowering, DiagCode::DropUnplaced,
+        span, local.name);
     (void)index;
   }
 }
@@ -840,7 +843,8 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   if (built.is_err()) {
     const ir::VerificationError error = std::move(built).unwrap_err();
     const u32 index = bag.emit<i18n::Key::LowerIrVerificationFailed>(
-        diag::Severity::Error, LOWER_INTERNAL, diag::Span{});
+        diag::Severity::Error, diag::Stage::Lowering, DiagCode::Internal,
+        diag::Span{});
     (void)index;
     const diag::Diagnostic diag = ir::to_diagnostic(error);
     fmt::memory_buffer rendered;

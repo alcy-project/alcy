@@ -5,6 +5,7 @@ source_set("borrow") {
   sources = [
     "borrow.cc",
     "borrow.h",
+    "diag_code.h",
   ]
   deps = [
     "//compiler:base_modules",

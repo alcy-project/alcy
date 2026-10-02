@@ -11,11 +11,13 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/diag_code.h"
 #include "ast/ast.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
@@ -31,15 +33,7 @@ namespace analyzer {
 
 namespace {
 
-// Diagnostic codes 4000-4009 are reserved for module resolution.
-constexpr u32 ANALYZER_DUPLICATE_MODULE = 4000;
-constexpr u32 ANALYZER_UNRESOLVED_IMPORT = 4001;
-constexpr u32 ANALYZER_AMBIGUOUS_IMPORT = 4002;
-constexpr u32 ANALYZER_UNREACHABLE_FILE = 4003;
-constexpr u32 ANALYZER_INVALID_PATH = 4004;
 // The arena the parser fills reports running out by trapping, so the
-// check that catches it first has to live where the reservation does.
-constexpr u32 ANALYZER_SPAN_ARENA_EXHAUSTED = 4006;
 
 constexpr u32 NO_MODULE = std::numeric_limits<u32>::max();
 
@@ -151,8 +145,9 @@ class Resolver {
     const std::string_view bytes = file_bytes.value_or(std::string_view{});
     if (ast.spans_nearly_full()) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpanArenaExhausted>(
-          diag::Severity::Error, ANALYZER_SPAN_ARENA_EXHAUSTED,
-          diag::Span{file.id, 0, 0}, ast.spans.capacity());
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::SpanArenaExhausted, diag::Span{file.id, 0, 0},
+          ast.spans.capacity());
       (void)index;
       return false;
     }
@@ -191,7 +186,8 @@ class Resolver {
       // The root file was not among the inputs, so there is nothing to
       // attach a tree to. A checked index would read out of bounds.
       const u32 index = bag.emit<i18n::Key::AnalyzerRootFileNotAModuleInput>(
-          diag::Severity::Error, ANALYZER_INVALID_PATH, diag::Span{});
+          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::InvalidPath,
+          diag::Span{});
       (void)index;
       return;
     }
@@ -218,8 +214,8 @@ class Resolver {
     for (const FileData& file : file_data) {
       if (file.module == NO_MODULE) {
         const u32 index = bag.emit<i18n::Key::AnalyzerSourceFileHasNoModule>(
-            diag::Severity::Warning, ANALYZER_UNREACHABLE_FILE,
-            file.path.as_view());
+            diag::Severity::Warning, diag::Stage::Analyzer,
+            DiagCode::UnreachableFile, file.path.as_view());
         (void)index;
       }
     }
@@ -274,8 +270,8 @@ class Resolver {
         module_children[parent].push_back(child);
       } else if (leaf) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateModule>(
-            diag::Severity::Error, ANALYZER_DUPLICATE_MODULE, diag::Span{},
-            slash_name);
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::DuplicateModule, diag::Span{}, slash_name);
         (void)index;
         return;
       }
@@ -407,7 +403,8 @@ class Resolver {
     }
     if (exports_state[module] == 1) {
       const u32 index = bag.emit<i18n::Key::PkgDependencyCycleInReExports>(
-          diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT,
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::UnresolvedImport,
           modules[module]->items.empty()
               ? diag::Span{}
               : ast.items[modules[module]->items[0]].span);
@@ -451,16 +448,16 @@ class Resolver {
                                           : local_modules[module],
                  name)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerConflictsWithLocalItem>(
-          diag::Severity::Error, ANALYZER_AMBIGUOUS_IMPORT, use_node.span,
-          name);
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::AmbiguousImport, use_node.span, name);
       (void)index;
       return;
     }
     for (const Import& prior : module_imports[module]) {
       if (prior.ns == ns && prior.name == name) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateImport>(
-            diag::Severity::Error, ANALYZER_AMBIGUOUS_IMPORT, use_node.span,
-            name);
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::AmbiguousImport, use_node.span, name);
         (void)index;
         return;
       }
@@ -501,7 +498,8 @@ class Resolver {
     }
     if (segments.size() < 2) {
       const u32 index = bag.emit<i18n::Key::AnalyzerImportNotQualified>(
-          diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT, node.span);
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::UnresolvedImport, node.span);
       (void)index;
       return;
     }
@@ -520,7 +518,8 @@ class Resolver {
     } else if (head == "super") {
       if (parents[module] == NO_MODULE) {
         const u32 index = bag.emit<i18n::Key::AnalyzerRootModuleHasNoParent>(
-            diag::Severity::Error, ANALYZER_UNRESOLVED_IMPORT, node.span);
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::UnresolvedImport, node.span);
         (void)index;
         return;
       }
@@ -528,16 +527,16 @@ class Resolver {
     } else {
       current = find_child_module(module, head);
       if (current == NO_MODULE) {
-        emit_unresolved(bag, ANALYZER_UNRESOLVED_IMPORT, node.span, std_hints_,
-                        "import", head);
+        emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnresolvedImport,
+                        node.span, std_hints_, "import", head);
         return;
       }
     }
     for (usize i = 1; i + 1 < segments.size(); ++i) {
       current = find_child_module(current, segments[i]);
       if (current == NO_MODULE) {
-        emit_unresolved(bag, ANALYZER_UNRESOLVED_IMPORT, node.span, std_hints_,
-                        "import", segments[i]);
+        emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnresolvedImport,
+                        node.span, std_hints_, "import", segments[i]);
         return;
       }
     }
@@ -572,8 +571,8 @@ class Resolver {
       }
     }
     if (!resolved) {
-      emit_unresolved(bag, ANALYZER_UNRESOLVED_IMPORT, node.span, std_hints_,
-                      "import", member);
+      emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnresolvedImport,
+                      node.span, std_hints_, "import", member);
     }
   }
 
@@ -593,7 +592,8 @@ class Resolver {
           sources.name(input.id);
       if (!source_name.has_value()) {
         const u32 index = bag.emit<i18n::Key::AnalyzerUnknownModuleFileId>(
-            diag::Severity::Error, ANALYZER_INVALID_PATH);
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::InvalidPath);
         (void)index;
         continue;
       }
@@ -601,7 +601,8 @@ class Resolver {
           path::Path::from_native(*source_name);
       if (canonical.is_err()) {
         const u32 index = bag.emit<i18n::Key::PipelineInvalidSourcePath>(
-            diag::Severity::Error, ANALYZER_INVALID_PATH);
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::InvalidPath);
         (void)index;
         continue;
       }
@@ -614,7 +615,8 @@ class Resolver {
           sources.name(input.id);
       if (!source_name.has_value()) {
         const u32 index = bag.emit<i18n::Key::AnalyzerUnknownPreludeFileId>(
-            diag::Severity::Error, ANALYZER_INVALID_PATH);
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::InvalidPath);
         (void)index;
         continue;
       }
@@ -622,7 +624,8 @@ class Resolver {
           path::Path::from_native(*source_name);
       if (canonical.is_err()) {
         const u32 index = bag.emit<i18n::Key::PipelineInvalidSourcePath>(
-            diag::Severity::Error, ANALYZER_INVALID_PATH);
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::InvalidPath);
         (void)index;
         continue;
       }
@@ -680,7 +683,8 @@ class Resolver {
           // Two staged sources resolved to the same leaf: the later one
           // would silently overwrite the earlier module's items.
           const u32 index = bag.emit<i18n::Key::AnalyzerDuplicatePreludeModule>(
-              diag::Severity::Error, ANALYZER_DUPLICATE_MODULE,
+              diag::Severity::Error, diag::Stage::Analyzer,
+              DiagCode::DuplicateModule,
               prelude_data[i].id == source::UNKNOWN_FILE
                   ? diag::Span{}
                   : diag::Span{prelude_data[i].id, 0, 0},

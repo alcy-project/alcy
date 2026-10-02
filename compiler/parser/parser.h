@@ -28,16 +28,10 @@ struct FnSignature {
 };
 
 // Diagnostic codes 3000-3199 are reserved for the parser.
-inline constexpr u32 PARSER_UNEXPECTED_TOKEN = 3000;
-inline constexpr u32 PARSER_RESERVED_WORD = 3001;
 // The token stream handed to the parser failed structural verification.
-inline constexpr u32 PARSER_INVALID_TOKEN_STREAM = 3002;
 // The parsed arena failed structural verification.
-inline constexpr u32 PARSER_INVALID_AST = 3003;
 // Nesting exceeded the language's budget, so the descent stopped.
-inline constexpr u32 PARSER_TOO_DEEP = 3004;
 // A range names an end without saying whether the end is included.
-inline constexpr u32 PARSER_RANGE_END_UNSPELLED = 3005;
 
 // Hand-written recursive-descent parser over a token stream. Parsing is
 // error-tolerant: failures report a diagnostic and synchronize at item,

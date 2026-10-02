@@ -11,6 +11,7 @@
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
@@ -19,7 +20,6 @@
 namespace analyzer {
 
 // A module tree handed to check_package failed structural verification.
-inline constexpr u32 ANALYZER_INVALID_MODULE_TREE = 4005;
 
 // Name namespaces. Structs and enums occupy Type and Value alike
 // (the type and its constructors); functions, statics, and constants
@@ -168,8 +168,10 @@ inline std::string_view std_hint_package(std::span<const StdHint> hints,
 // Emits an unresolved-name error, naming the embedded member when the
 // name is a public item of one. The hint tells a manifest without the
 // package exactly what to add; anything else reads the plain message.
+template <diag::DiagnosticId Id>
 inline void emit_unresolved(diag::DiagBag& bag,
-                            u32 code,
+                            diag::Stage stage,
+                            Id id,
                             diag::Span span,
                             std::span<const StdHint> hints,
                             std::string_view kind,
@@ -177,12 +179,12 @@ inline void emit_unresolved(diag::DiagBag& bag,
   const std::string_view package = std_hint_package(hints, name);
   if (!package.empty()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerUnresolvedInStandardLibrary>(
-        diag::Severity::Error, code, span, kind, name, name, package);
+        diag::Severity::Error, stage, id, span, kind, name, name, package);
     (void)index;
     return;
   }
   const u32 index = bag.emit<i18n::Key::AnalyzerUnresolved>(
-      diag::Severity::Error, code, span, kind, name);
+      diag::Severity::Error, stage, id, span, kind, name);
   (void)index;
 }
 

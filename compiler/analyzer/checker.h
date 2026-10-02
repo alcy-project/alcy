@@ -24,38 +24,6 @@
 
 namespace analyzer {
 
-// Diagnostic codes 4010-4019 are reserved for type checking.
-constexpr u32 ANALYZER_RECURSIVE_TYPE = 4010;
-constexpr u32 ANALYZER_UNKNOWN_TYPE = 4011;
-constexpr u32 ANALYZER_DUPLICATE_DEFINITION = 4012;
-constexpr u32 ANALYZER_RESERVED_NAME = 4013;
-constexpr u32 ANALYZER_ARITY_MISMATCH = 4014;
-constexpr u32 ANALYZER_GENERIC_ARGUMENTS = 4015;
-constexpr u32 ANALYZER_UNSUPPORTED_TYPE = 4016;
-// Checked types failed storage verification on the way out.
-constexpr u32 ANALYZER_INVALID_IR = 4017;
-// Diagnostic codes 4020-4039 are reserved for expression checking.
-constexpr u32 ANALYZER_TYPE_MISMATCH = 4020;
-constexpr u32 ANALYZER_UNKNOWN_VALUE = 4021;
-constexpr u32 ANALYZER_ARITY_ERROR = 4022;
-constexpr u32 ANALYZER_INVALID_OPERATION = 4023;
-constexpr u32 ANALYZER_NON_EXHAUSTIVE_MATCH = 4024;
-constexpr u32 ANALYZER_REFUTABLE_LET = 4025;
-constexpr u32 ANALYZER_MUST_USE = 4026;
-constexpr u32 ANALYZER_BAD_QUESTION = 4027;
-constexpr u32 ANALYZER_BAD_RETURN = 4028;
-constexpr u32 ANALYZER_BAD_ASSIGNMENT = 4029;
-constexpr u32 ANALYZER_BREAK_OUTSIDE_LOOP = 4030;
-constexpr u32 ANALYZER_UNSUPPORTED_EXPR = 4031;
-constexpr u32 ANALYZER_NOT_COMP_KNOWN = 4032;
-constexpr u32 ANALYZER_INVALID_COMP = 4033;
-constexpr u32 ANALYZER_UNKNOWN_INTRINSIC = 4034;
-// Diagnostic codes 4040-4049 are reserved for destructors.
-constexpr u32 ANALYZER_BAD_DROP_SIGNATURE = 4040;
-constexpr u32 ANALYZER_DROP_ON_COPY = 4041;
-// Diagnostic codes 4050-4059 are reserved for resource limits.
-constexpr u32 ANALYZER_TOO_DEEP = 4050;
-
 constexpr u32 NO_MODULE = 0xFFFFFFFFu;
 
 struct NominalEntry {

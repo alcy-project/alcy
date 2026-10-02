@@ -10,6 +10,7 @@
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
@@ -208,7 +209,13 @@ TEST_CASE("Manifest syntax errors carry spans") {
     return;
   }
   CHECK(diag->severity == diag::Severity::Error);
-  CHECK(diag->code == 1000);
+  CHECK(diag->code.has_value());
+  CHECK(diag->code.has_value());
+  if (!diag->code.has_value()) {
+    return;
+  }
+  CHECK(diag->code->stage == diag::Stage::Pkg);
+  CHECK(diag->code->id == 1);
   CHECK(diag->has_primary_span);
   CHECK(diag->primary_span.file == 3);
 }

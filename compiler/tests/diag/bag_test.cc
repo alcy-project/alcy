@@ -5,6 +5,7 @@
 
 #include "diag/diagnostic.h"
 #include "diag/span.h"
+#include "diag/stage.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -29,17 +30,24 @@ TEST_CASE("DiagBag counts and iteration") {
   CHECK(!f.bag.has_errors());
   CHECK(f.bag.size() == 0);
 
-  const u32 e =
-      f.bag.emit_untranslated(Severity::Error, 7, "broken {}", "thing");
-  const u32 w = f.bag.emit_untranslated(Severity::Warning, 8, "shaky");
-  f.bag.emit_untranslated(Severity::Note, 9, "fyi");
+  const u32 e = f.bag.emit_untranslated(Severity::Error, Stage::Lexer, 7,
+                                        "broken {}", "thing");
+  const u32 w =
+      f.bag.emit_untranslated(Severity::Warning, Stage::Lexer, 8, "shaky");
+  f.bag.emit_untranslated(Severity::Note, Stage::Lexer, 9, "fyi");
 
   CHECK(f.bag.size() == 3);
   CHECK(f.bag.has_errors());
   CHECK(f.bag.error_count() == 1);
   CHECK(f.bag.warning_count() == 1);
-  CHECK(f.bag.at(e)->code == 7);
-  CHECK(f.bag.at(e)->message == "broken thing");
+  const Diagnostic* const reported = f.bag.at(e);
+  CHECK(reported->code.has_value());
+  if (!reported->code.has_value()) {
+    return;
+  }
+  CHECK(reported->code->id == 7);
+  CHECK(reported->code->stage == Stage::Lexer);
+  CHECK(reported->message == "broken thing");
   CHECK(f.bag.at(w)->severity == Severity::Warning);
 
   u32 seen = 0;
@@ -50,7 +58,7 @@ TEST_CASE("DiagBag counts and iteration") {
 TEST_CASE("DiagBag spans and labels") {
   BagFixture f;
   const Span span{.file = 3, .offset = 8, .length = 3};
-  const u32 i = f.bag.emit_untranslated(Severity::Error, 1, span,
+  const u32 i = f.bag.emit_untranslated(Severity::Error, Stage::Lexer, 1, span,
                                         "bad call from {}", "here");
   CHECK(f.bag.at(i)->has_primary_span);
   CHECK(f.bag.at(i)->primary_span.offset == 8);

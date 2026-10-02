@@ -34,8 +34,8 @@ namespace lowering {
 // calls (free, associated, and methods), borrows, blocks, control
 // flow, `?`, indexing, enums (including generic instantiations), and
 // `const` statics. Anything outside that set diagnoses
-// `LOWER_UNSUPPORTED` and fails the lowering (fail fast: no dangling
-// references).
+// `diag::Stage::Lowering, DiagCode::Unsupported` and fails the lowering (fail
+// fast: no dangling references).
 //
 // Value model (uniform memory, required by codegen's GEP tracking):
 // every local and parameter owns an Alloca; aggregates live in memory
