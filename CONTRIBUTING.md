@@ -5,6 +5,7 @@
 - A C++20 toolchain: Clang, LLD, and libc++ (see [compiler/docs/build.md](compiler/docs/build.md)).
 - GN and Ninja.
 - Python via `uv` (`uv sync` sets up the environment; `uv run` prefixes commands).
+- The tree-sitter CLI and Node, for the language's grammar (see [treesitter/README.md](treesitter/README.md)).
 - Alternatively, Nix provides the whole toolchain: `nix develop`.
 
 ## Workflow
@@ -21,6 +22,9 @@ uv run ./tools/lint.py
 uv run ./tools/format.py --dry-run
 uv run ./tools/verify_static_linkage.py
 
+# The grammar needs no toolchain but the tree-sitter CLI and Node:
+uv run ./tools/check_treesitter.py --grammar
+
 # Or run all of the above commands at once:
 ./tools/check.sh
 
@@ -33,6 +37,16 @@ End-to-end acceptance cases live in `e2e/cases/<name>/` (sources plus
 runner executes the built `alcy` binary against every case; add a case
 when a user-visible behavior needs a regression anchor that does not
 belong in unit tests.
+
+The grammar in `treesitter/` is a second reading of the language, written
+against `docs/spec/` rather than against the parser. `grammar.js` follows
+`docs/spec/grammar.ebnf` production for production, so a change to the
+grammar means changing the grammar there too. `tools/check_treesitter.py
+--grammar` regenerates the parser and fails when the committed sources do
+not match, runs the corpus, and checks the queries; adding
+`--differential` compares every `.al` file against the compiler's own
+verdict, which is the half of the check that can notice the specification,
+the parser, and the grammar disagreeing.
 
 To automatically fix code style and lint issues:
 

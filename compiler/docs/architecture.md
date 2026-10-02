@@ -129,6 +129,11 @@ what implements it lives in `compiler/`.
   inside `build/`, which holds only what GN itself reads.
 - `third_party/` - vendored dependencies as submodules (`llvm`, `fpag`,
   `fmt`, `doctest`, `xxhash`), each wrapped with a `BUILD.gn`.
+- `treesitter/` - the language's tree-sitter grammar, a second reading of
+  `docs/spec/` for editors. It is not a GN target and shares no build with
+  the compiler; `tools/check_treesitter.py` checks it against the
+  specification's corpus and against the compiler itself. See
+  `docs/adr/0038-alcy-treesitter-grammar.md`.
 
 ## Compiler modules
 
