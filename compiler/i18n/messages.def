@@ -264,6 +264,7 @@
   F(PipelineCannotCreateDirectory, "Cannot create directory '{}'") \
   F(PipelineCannotCreatePackage, "Cannot create package '{}'") \
   F(PipelineCannotCreatePackageFiles, "Cannot create package files: '{}'") \
+  F(PipelineCannotDeriveOutput, "Cannot name the output for '{}'; pass -o") \
   F(PipelineCannotDerivePackageName, "Cannot derive a package name from '{}'; use [A-Za-z0-9_-] only") \
   F(PipelineCannotEmitObject, "Cannot emit object '{}'") \
   F(PipelineCannotExecute, "Cannot execute '{}'") \

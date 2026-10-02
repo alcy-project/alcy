@@ -10,6 +10,8 @@
 
 #include "config/build_config.h"
 #include "diag/bag.h"
+#include "diag/diagnostic.h"
+#include "diag/stage.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -18,6 +20,7 @@
 #include "i18n/language.h"
 #include "path/path.h"
 #include "pipeline/build.h"
+#include "pipeline/diag_code.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
@@ -143,6 +146,56 @@ TEST_CASE("The default extension follows the mode") {
   }
   CHECK(io::is_file(dir.join("main.o")));
 #endif  // !BUILD_FLAG(IS_OS_ASMJS
+}
+
+TEST_CASE("A source without an extension still gets an output name") {
+  // `compile noext` used to abort: the derivation assumed a dot and there
+  // was none to replace. The suffix is appended instead, and a mode with
+  // no suffix at all - the executable one on POSIX - reports that it
+  // cannot name the artifact rather than writing it over the source at
+  // the same path.
+  io::TempDir dir = io::TempDir::create_unique("alcy_emit_noext_test_");
+  CHECK(dir.write_file("noext", PROGRAM));
+
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<std::string, diag::Reported> built =
+        build_single_file(ctx, dir.join("noext"), "", false, LinkOptions{},
+                          EmitMode::Object, pipeline::full_std_selection());
+    CHECK(built.is_ok());
+  }
+  CHECK(io::is_file(dir.join("noext.o")));
+
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<std::string, diag::Reported> refused =
+        build_single_file(ctx, dir.join("noext"), "", false, LinkOptions{},
+                          EmitMode::Executable, pipeline::full_std_selection());
+    CHECK(refused.is_err());
+    const diag::Diagnostic* const only = ctx.bag.at(0);
+    CHECK(only != nullptr);
+    if (only != nullptr) {
+      CHECK(only->code == diag::Code{diag::Stage::Pipeline,
+                                     static_cast<u8>(DiagCode::NoOutputName)});
+    }
+  }
+  // The source is untouched: the refused case named no output, and the
+  // one that only appends never has a reason to write to it.
+  CHECK(read_file(dir.join("noext")) == PROGRAM);
+}
+
+TEST_CASE("A dot in a directory name is not an extension") {
+  // `sub.dir/main.al` must lose `.al` and keep `.dir`, whichever dot
+  // comes last in the whole string.
+  io::TempDir dir = io::TempDir::create_unique("alcy_emit_dotdir_test_");
+  CHECK(dir.write_file("sub.dir/main.al", PROGRAM));
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<std::string, diag::Reported> built = build_single_file(
+      ctx, dir.join("sub.dir/main.al"), "", false, LinkOptions{},
+      EmitMode::Object, pipeline::full_std_selection());
+  CHECK(built.is_ok());
+  CHECK(io::is_file(dir.join("sub.dir/main.o")));
 }
 
 TEST_CASE("A package build honours the mode too") {

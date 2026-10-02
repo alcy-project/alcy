@@ -15,7 +15,7 @@
 #include "codegen_llvm/llvm_ir_emitter.h"
 #include "codegen_llvm/llvm_object_emitter.h"
 #include "codegen_llvm/runtime_ir.h"
-#include "debug/dcheck.h"
+#include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/stage.h"
@@ -50,6 +50,8 @@ base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
   return base::make_ok(std::move(done.package));
 }
 
+namespace {
+
 // The extension an unnamed output gets. It follows the mode rather than
 // the file kind, because the mode is what the caller asked for: naming an
 // object `main.bin` and a module `main` are both fine, and the extension
@@ -63,6 +65,51 @@ std::string suffix_for(EmitMode mode) {
   }
   return std::string(exe_suffix());
 }
+
+// The last separator in `name`, or npos. Both spellings are separators on
+// Windows because the target is what the user typed; on POSIX a backslash
+// is an ordinary character in a name.
+usize last_separator(std::string_view name) {
+#if BUILD_FLAG(IS_OS_WIN)
+  return name.find_last_of("/\\");
+#else
+  return name.find_last_of(path::DEFAULT_PATH_SEPARATOR);
+#endif
+}
+
+// The artifact an unnamed target gets: its own name with the mode's
+// suffix in place of its extension. A dot before the last separator is
+// part of a directory name rather than an extension, and a mode with no
+// suffix - the executable one on POSIX - has nothing to replace an
+// extension with, so a target without one has to be named by the caller.
+// The alternative, appending nothing, would write the artifact over the
+// source at the same path.
+base::Result<std::string, diag::Reported> default_output_path(
+    PipelineContext& ctx,
+    std::string_view target,
+    EmitMode mode) {
+  const usize separator = last_separator(target);
+  const usize dot = target.rfind('.');
+  const bool has_extension =
+      dot != std::string_view::npos &&
+      (separator == std::string_view::npos || dot > separator);
+  std::string output(target);
+  if (has_extension) {
+    output.replace(dot, std::string::npos, suffix_for(mode));
+    return base::make_ok(std::move(output));
+  }
+  std::string suffix = suffix_for(mode);
+  if (suffix.empty()) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotDeriveOutput>(
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoOutputName,
+        target);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  return base::make_ok(std::move(output) + suffix);
+}
+
+}  // namespace
 
 // The module a lowered package becomes, and the context it lives in.
 //
@@ -294,13 +341,14 @@ base::Result<std::string, diag::Reported> build_single_file(
     return base::make_err(diag::Reported{});
   }
   const source::FileId root = std::move(file).unwrap();
-  std::string output_path =
-      output.empty() ? std::string(target) : std::string(output);
+  std::string output_path(output);
   if (output.empty()) {
-    // The target spells a source file, so an extension is present.
-    const usize dot = output_path.rfind('.');
-    DCHECK(dot != std::string::npos);
-    output_path.replace(dot, std::string::npos, suffix_for(mode));
+    base::Result<std::string, diag::Reported> derived =
+        default_output_path(ctx, target, mode);
+    if (derived.is_err()) {
+      return base::make_err(diag::Reported{});
+    }
+    output_path = std::move(derived).unwrap();
   }
   return build_single_root(ctx, root, output_path, optimize, link, mode,
                            selection);

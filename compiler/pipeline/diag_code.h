@@ -34,6 +34,9 @@ enum class DiagCode : u8 {
   SpanArenaExhausted = 6,
   UnknownSourceFile = 7,
   InvalidSourcePath = 8,
+  // `compile foo` with no `-o`: a mode whose suffix is empty has nothing
+  // to name the artifact with, so the caller has to.
+  NoOutputName = 9,
 };
 
 }  // namespace pipeline
