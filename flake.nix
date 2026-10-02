@@ -29,6 +29,12 @@
             pkgs.ast-grep
             llvmPkgs.lld
             llvmPkgs.llvm
+            # The grammar is checked against the compiler, so the CLI that
+            # builds the parser belongs beside it. config.toml names the
+            # version, because the version that generates the parser is the
+            # one its output is compared against.
+            pkgs.tree-sitter
+            pkgs.nodejs
           ];
 
           buildInputs = [];

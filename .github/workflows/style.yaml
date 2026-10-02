@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       llvm_toolchain_version: ${{ steps.parse.outputs.llvm_toolchain_version }}
+      tree_sitter_cli_version: ${{ steps.parse.outputs.tree_sitter_cli_version }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -32,6 +33,8 @@ jobs:
         run: |
           TOOLCHAIN_VER=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["llvm_toolchain_version"])')
           echo "llvm_toolchain_version=${TOOLCHAIN_VER}" >> $GITHUB_OUTPUT
+          TS_VER=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["tree_sitter_cli_version"])')
+          echo "tree_sitter_cli_version=${TS_VER}" >> $GITHUB_OUTPUT
 
   spelling:
     name: Spell Check
@@ -98,3 +101,31 @@ jobs:
       - name: Check the Specification
         shell: bash
         run: uv run ./tools/check_spec.py
+
+  grammar:
+    name: Grammar
+    needs: [load-config]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      # The CLI generates the parser from grammar.js, and the version that
+      # does it is the one config.toml records, since grammar.json is
+      # formatted by whichever version wrote it.
+      - name: Install the tree-sitter CLI
+        run: npm install --global "tree-sitter-cli@${{ needs.load-config.outputs.tree_sitter_cli_version }}"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          enable-cache: true
+
+      # The grammar's corpus is the specification read back as syntax, so it
+      # needs the same treatment as the specification itself: read and
+      # checked without a compiler build.
+      - name: Check the Grammar
+        run: uv run ./tools/check_treesitter.py --grammar

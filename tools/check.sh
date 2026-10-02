@@ -28,10 +28,13 @@ tools_dir="$root_dir/tools"
 #                  and roughly doubles their runtime)
 #   --no-coverage  skip the coverage ratchet (needs llvm-cov, and rebuilds
 #                  the tests and the compiler with instrumentation)
+#   --no-grammar   skip the tree-sitter checks (needs the tree-sitter CLI
+#                  and node, which build the grammar)
 nix=false
 run_wasm=false
 run_sanitize=true
 run_coverage=true
+run_grammar=true
 for flag in "$@"; do
   case "$flag" in
     --nix) nix=true ;;
@@ -39,6 +42,7 @@ for flag in "$@"; do
     --no-wasm) run_wasm=false ;;
     --no-sanitize) run_sanitize=false ;;
     --no-coverage) run_coverage=false ;;
+    --no-grammar) run_grammar=false ;;
     *) echo "error: unknown flag '$flag'" >&2; exit 1 ;;
   esac
 done
@@ -94,6 +98,22 @@ fi
 # `docs/spec/overview.md` and a check here, since a reference that creeps
 # in is the kind of thing nobody notices until the thing it names moves.
 "${py_runner[@]}" "$tools_dir/check_spec.py"
+
+# The tree-sitter grammar is a second reading of the language, so it is
+# checked against the first: its own corpus here, and every .al file in the
+# repository against the binary the checks above just built. It needs no
+# toolchain beyond the CLI, which is why the grammar half is not behind the
+# build.
+if [[ $run_grammar == true ]]; then
+  command -v tree-sitter >/dev/null 2>&1 || {
+    echo "error: tree-sitter not found; pass --no-grammar to skip" >&2
+    exit 1
+  }
+  "${py_runner[@]}" "$tools_dir/check_treesitter.py" --grammar
+  "${py_runner[@]}" "$tools_dir/check_treesitter.py" \
+    --differential \
+    --build-subdir=$debug_subdir
+fi
 
 # The samples run through the harness the cases above use, so a program
 # kept as an example is also one that still compiles and still prints
