@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "doctest/doctest.h"
+#include "fpag/build/build_flag.h"
 #include "fpag/debug/thread_id.h"
 
 namespace base {
@@ -44,6 +45,13 @@ TEST_CASE("for_each runs every index once at any job count") {
 // second unit arrives, so a loop that put the whole range on one thread
 // cannot finish: it would wait out the bound and fail the case. Which
 // threads those are has no bearing on the claim, only how many.
+//
+// Compiled only where there are threads to spread the work over. A target
+// without them runs the range where the call was made from, which is the
+// contract the case above already exercises at every job count - and there
+// is no second thread here for the first unit to wait for, so asking for
+// one would fail a build that is behaving as documented.
+#if !FPAG_BUILD_FLAG(IS_OS_ASMJS)
 TEST_CASE("for_each spreads work over more than one thread") {
   constexpr usize COUNT = 32;
   constexpr auto BOUND = std::chrono::seconds(2);
@@ -75,5 +83,6 @@ TEST_CASE("for_each spreads work over more than one thread") {
   CHECK(released_by.load(std::memory_order_relaxed) !=
         waiting_on.load(std::memory_order_relaxed));
 }
+#endif  // !FPAG_BUILD_FLAG(IS_OS_ASMJS)
 
 }  // namespace base
