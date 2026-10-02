@@ -1,189 +1,90 @@
 # Diagnostic codes
 
-Numeric codes identify compiler diagnostics (`error[E<code>]`,
-`warning[W<code>]`). This document is the single registry: every code
-is assigned here, and definitions in code must match it. Values grow
-along the compile pipeline so that early-stage failures sort before
-late-stage ones:
+A code identifies a check: the letter says which component of the
+compiler found it, and the number says which of that component's checks.
+It reads `error[EC016]` — error, analyzer, check 16 — and it is what a
+tool matches on, what a bug report quotes, and what `--json` carries as
+`{"stage": "analyzer", "local_id": 16}` so a reader never has to parse a
+letter.
 
-| Range     | Stage       | Owner                         |
-| --------- | ----------- | ----------------------------- |
-| 0–999     | tests       | Synthetic codes for unit tests; never emitted by the compiler itself |
-| 1000–1999 | pkg         | Manifests, modules, resolution |
-| 2000–2999 | lexer       | `compiler/lexer/lexer.cc`          |
-| 3000–3999 | parser      | `compiler/parser/parser.h`, `compiler/parser/desugar.cc` |
-| 4000–4999 | analyzer    | `compiler/analyzer/resolve.*`, `compiler/analyzer/checker.h` |
-| 5000–5999 | lowering    | `compiler/lowering/lowerer.h`   |
-| 6000–6999 | borrow      | `compiler/borrow/borrow.cc`        |
-| 7000–7999 | ir          | `compiler/ir/verifier.h` (7100+, one per `VerificationErrorKind`) |
-| 8000–8999 | pipeline    | `compiler/pipeline/pipeline_context.h` |
-| 9000+     | future      | Unassigned                    |
+## Why a letter and not a number
 
-Each stage owns a stride of 1000 with sub-ranges of 100 per area, so
-new checks fit without renumbering. Adding a code means claiming the
-next free value in the owning area here first, then defining it.
+The numbering used to be a stride per stage: `lexer` owned 2000–2999,
+`parser` 3000–3999, and so on to 8000. Two things were wrong with it.
 
-A code is not a message. It identifies a check for whatever reads the
-output, and most checks say more than one thing: `2000` is an invalid
-character and an empty character literal, `4024` covers a missing
-wildcard arm, an uncovered variant, and a missing variant by name. The
-text of each of those is a separate entry in `compiler/i18n/messages.def`,
-keyed by an `i18n::Key` that names what is wrong rather than where it
-happened, because a translation is keyed by the message and half the
-codes here have no single wording to key it with. A code stays at the
-call site, where the check that found it lives.
+A stride is a claim about the whole compiler that a stage has no business
+making. `lexer.cc` writing `2000` says that there are eight stages and
+that lexer is the second; both of those were true, and both were the
+lexer's business only until a ninth stage arrived. A letter says the same
+thing and is stable: `A` is the lexer whether there are eight stages or
+twenty.
 
-A message is a sentence, so it starts with a capital, and the wording
-below is in the same voice: these are descriptions of what a code
-means, close enough to the message to be recognisable in the output and
-deliberately not a second copy of it.
+And a stride runs out. The backend is the case that forced it — a native
+code generator alongside the LLVM one needs its own codes, and a second
+codegen stage inside one stride means either splitting the stride or
+putting a component's codes in two places. Two components that are
+alternative implementations of one position get two letters, because a
+code search that answered for both would answer for neither.
 
-## pkg (1000–1999)
+## The letters
 
-Manifests (`compiler/pkg/manifest.cc`, 1000–1099):
+Assigned in build-flow order, and the flow is what a reader needs to know
+a code's provenance, so `compiler/docs/architecture.md` carries the same
+order. The first letters go to the components that report most, and a
+component that gains its first error does not renumber: `A` is the lexer
+partly because UTF-8 validation is coming and it should not have to move.
 
-- `1000` Syntax error: the manifest does not parse.
-- `1001` Semantic error: parsed but invalid (see `ManifestError`).
+| Letter | Component | Directory | Checks |
+| --- | --- | --- | --- |
+| `A` | lexer | `compiler/lexer` | 6 |
+| `B` | parser | `compiler/parser` | 8 |
+| `C` | analyzer | `compiler/analyzer` | 32 |
+| `D` | lowering | `compiler/lowering` | 6 |
+| `F` | borrow | `compiler/borrow` | 4 |
+| `G` | ir | `compiler/ir` | one per `VerificationErrorKind` |
+| `H` | pkg | `compiler/pkg` | 8 |
+| `I` | pipeline | `compiler/pipeline` | 5 |
+| `J` | codegen_llvm | `compiler/codegen_llvm` | reserved |
+| `K` | codegen | reserved for the native backend | reserved |
 
-Modules (`compiler/pkg/modules.cc`, 1100–1199):
+`E`, `N` and `W` are not in the table because they are the severity
+letters and they sit in the same bracket; a component holding one of them
+would render `EE`. A letter is retired with its component and is never
+reassigned, because a code in a bug report has to mean the same thing for
+as long as the report can survive.
 
-- `1100` Semantic error: a module entry selects nothing or conflicts.
-- `1101` Unselected file: a source file belongs to no module.
+## The ids
 
-Resolution (`compiler/pkg/resolve.cc`, 1200–1299):
+Each component counts its own from 1. Zero is never a check, so a
+diagnostic with no code is not a diagnostic with code zero. The width is
+fixed at three digits so codes sort in the order they were assigned,
+which is the order a report lists them in. 255 is the ceiling, which is
+what a `u8` id gives, and the widest component has 32; a component near
+the ceiling wants its checks split rather than a wider field.
 
-- `1200` I/O error: the package root or manifest cannot be read.
-- `1201` Cycle error: package dependencies form a cycle.
+`ir` is the one component with no enum of its own. A code there is the
+`VerificationErrorKind`'s ordinal shifted by one, so a kind and its code
+cannot drift apart; adding a kind needs no renumbering, and the message
+is the kind name.
 
-Toolchain (`compiler/pkg/toolchain.cc`, 1300–1399):
+## What this document is
 
-- `1300` Syntax error: the toolchain file does not parse. The file is
-  read without a source location, so the message names the file rather
-  than pointing into it.
-- `1301` Semantic error: parsed but not a usable toolchain. Covers a
-  `linker` that is not a string and a `link-args` that is not a list of
-  strings.
+An index. The number a check has lives in its component's
+`diag_code.h`, and this file says what the check means — so the two can
+disagree, and a commit that moves a code moves its line here too. The
+alternative, generating this from the enums, is a tool that has to run
+before every commit to be worth having; saying what a check means is not
+something a program can do.
 
-## lexer (2000–2099)
+`diag::Code` is a pair and not a number, so nothing in the compiler can
+do arithmetic on a code or invent one: `DiagBag::emit` takes a component
+and an enumerator, and the enumerator is what a call site names.
 
-`compiler/lexer/lexer.cc`:
+## Notes on the numbering that is gone
 
-- `2000` Invalid character.
-- `2001` Unterminated string.
-- `2002` Unterminated character literal.
-- `2003` Invalid number.
-- `2004` Unterminated block comment.
-- `2005` Invalid escape.
-
-## parser (3000–3999)
-
-Grammar (`compiler/parser/parser.h`, 3000–3099):
-
-- `3000` Unexpected token.
-- `3001` Reserved word used as an identifier.
-- `3002` Internal error: the token stream failed structural
-  verification (see `lexer::verify_token_stream`).
-- `3003` Internal error: the parsed arena failed structural
-  verification (see `ast::verify_file`).
-- `3004` Nesting deeper than the language's budget.
-- `3005` A range end that is not spelled `..<` or `..=`.
-
-Desugaring (`compiler/parser/desugar.cc`, 3100–3199):
-
-- `3100` Or-pattern alternatives bind different name sets.
-- `3101` A name is already bound in the innermost scope.
-
-## analyzer (4000–4999)
-
-Module resolution (`compiler/analyzer/resolve.cc`, `compiler/analyzer/resolve.h`,
-4000–4009):
-
-- `4000` Duplicate module.
-- `4001` Unresolved import.
-- `4002` Ambiguous import.
-- `4003` Unreachable file (warning).
-- `4004` Invalid path: an unknown file id reached resolution.
-- `4005` Internal error: the module tree failed structural
-  verification (see `analyzer::verify_module_tree`).
-- `4006` The span arena is nearly spent and the input is too large to parse.
-
-Type checking (`compiler/analyzer/checker.h`, 4010–4019):
-
-- `4010` Recursive type.
-- `4011` Unknown type.
-- `4012` Duplicate definition.
-- `4013` Reserved name.
-- `4014` Arity mismatch.
-- `4015` Generic argument error.
-- `4016` Unsupported type.
-- `4017` Internal error: checked types failed storage verification.
-
-Expression checking (`compiler/analyzer/checker.h`, 4020–4039):
-
-- `4020` Type mismatch.
-- `4021` Unknown value.
-- `4022` Arity error.
-- `4023` Invalid operation.
-- `4024` Non-exhaustive match.
-- `4025` Refutable `let`.
-- `4026` Must-use violation.
-- `4027` Bad `?` operator use.
-- `4028` Bad `return`.
-- `4029` Bad assignment.
-- `4030` Break outside a loop.
-- `4031` Reserved: defined but no check reports it yet. An unsupported
-  primitive currently uses `4016`, which names the type rather than the
-  expression.
-- `4032` Not compile-time known.
-- `4033` Invalid compile-time value.
-- `4034` Unknown intrinsic.
-
-Destructors (`compiler/analyzer/checker.h`, 4040–4049):
-
-- `4040` Bad `drop` signature.
-- `4041` Drop on a copyable type.
-
-Recursion budget (`compiler/analyzer/checker.h`, 4050–4059):
-
-- `4050` Nesting deeper than the language's budget. One walk per
-  `base::NestingGuard`, so the code names the pass rather than the tree.
-
-## lowering (5000–5099)
-
-`compiler/lowering/lowerer.h`:
-
-- `5000` Unsupported construct.
-- `5001` Internal error: lowered IR failed verification.
-- `5002` Unreachable code reached lowering.
-- `5003` Destructor glue could not be placed.
-- `5004` Discarded destructor.
-- `5005` Nesting deeper than the language's budget.
-
-## borrow (6000–6099)
-
-`compiler/borrow/borrow.cc`:
-
-- `6000` Use after move.
-- `6001` Borrow conflict.
-- `6002` Reference escape.
-- `6003` Assignment to a borrowed place.
-
-## ir (7000–7999)
-
-`compiler/ir/verifier.h` emits one code per `VerificationErrorKind`, numbered in
-declaration order from `7100`: the message is the kind name, and the
-diagnostic carries no span. Adding a kind takes the next ordinal; the
-range up to 8000 is reserved, so no renumbering is needed. These are
-internal-invariant failures, so a user normally sees the phase that
-caught the bad IR (for example `5001` or `4017`) rather than the code
-here.
-
-## pipeline (8000–8999)
-
-`compiler/pipeline/pipeline_context.h`:
-
-- `8000` No manifest found.
-- `8001` I/O error reading, writing, or staging files.
-- `8002` Not implemented: the request names an unwired path.
-- `8003` No targets selected.
-- `8004` Link error from the system linker.
+The old registry also carried two facts that belong to the code rather
+than to the prose, and both are now enforced by the compiler rather than
+by this file. A duplicate code was a table row that happened to match two
+checks; it is now a duplicate enumerator, which does not compile. A code
+in the wrong stride was invisible; the stride is a letter and a
+component's ids are its own, so there is nothing to get wrong.

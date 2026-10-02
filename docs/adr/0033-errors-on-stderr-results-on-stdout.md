@@ -52,7 +52,7 @@ owns and `cli::is_block` states.
 ## Consequences
 
 - There is one shape for an error line, so a reader who has seen one has
-  seen all of them, and a tool that matches `error[E1234]: ` matches
+  seen all of them, and a tool that matches `error[EC016]: ` matches
   compiler and cli errors alike.
 - A codeless message renders `error: ` rather than a number nobody
   allocated. `--json` reports `"code":null` where a number would imply one.

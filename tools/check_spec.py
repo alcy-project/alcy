@@ -39,6 +39,10 @@ PATTERNS = {
         r"\balcy_(?:print|println|panic|sys_write|alloc|dealloc|write_all"
         r"|runtime\.text)\b"
     ),
+    # A diagnostic code says which component of the compiler answered,
+    # which is not a program the specification is written against. The
+    # rule belongs here and the spelling belongs to the component.
+    "a diagnostic code": re.compile(r"\b[EWN][A-Z]\d{3}\b"),
 }
 
 
