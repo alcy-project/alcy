@@ -13,17 +13,20 @@ namespace borrow {
 // reads. `F` is this component's letter; `diag/stage.h` has the
 // rest and `compiler/docs/diagnostics.md` says what each check means.
 //
-// The first id is spelled because the rule is that ids start at 1: a
-// zero id is never a check that exists, which is the ambiguity an
-// optional code would otherwise have to answer for. The rest follow, so
-// the order here is the order the codes were handed out in, and 999 is
-// the ceiling - a component near it wants its checks split, not a wider
-// field.
+// Every id is spelled out rather than left to count from the one above.
+// A reader then sees a check's code without counting lines, and
+// inserting a check in the middle shows up as a diff to every id after
+// it instead of shifting them silently.
+//
+// Ids start at 1: a zero id is never a check that exists, which is the
+// ambiguity an optional code would otherwise have to answer for. 255 is
+// the ceiling, which is what the `u8` gives; a component near it wants
+// its checks split, not a wider field.
 enum class DiagCode : u8 {
   UseAfterMove = 1,
-  Conflict,
-  Escape,
-  AssignBorrowed,
+  Conflict = 2,
+  Escape = 3,
+  AssignBorrowed = 4,
 };
 
 }  // namespace borrow
