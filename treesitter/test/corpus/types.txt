@@ -2,8 +2,8 @@
 Primitive types
 ================================================================================
 
-fn f(a: i8, b: i16, c: i32, d: i64, e: i128, g: isize) {}
-fn h(a: u8, b: u16, c: u32, d: u64, e: u128, g: usize) {}
+fn f(a: i8, b: i16, c: i32, d: i64, g: isize) {}
+fn h(a: u8, b: u16, c: u32, d: u64, g: usize) {}
 fn i(a: f32, b: f64, c: bool) {}
 
 --------------------------------------------------------------------------------
@@ -31,10 +31,6 @@ fn i(a: f32, b: f64, c: bool) {}
       (parameter
         (identifier_pattern
           (identifier))
-        (primitive_type))
-      (parameter
-        (identifier_pattern
-          (identifier))
         (primitive_type)))
     (block))
   (function_item
@@ -59,10 +55,6 @@ fn i(a: f32, b: f64, c: bool) {}
       (parameter
         (identifier_pattern
           (identifier))
-        (primitive_type))
-      (parameter
-        (identifier_pattern
-          (identifier))
         (primitive_type)))
     (block))
   (function_item
@@ -72,6 +64,28 @@ fn i(a: f32, b: f64, c: bool) {}
         (identifier_pattern
           (identifier))
         (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (block)))
+
+================================================================================
+The deferred integer widths still lex as types
+================================================================================
+
+fn f(a: i128, b: u128) {}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
       (parameter
         (identifier_pattern
           (identifier))

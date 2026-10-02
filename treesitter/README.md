@@ -69,9 +69,13 @@ case:
   end. The corpus case is named for the reading it records.
 - **A chained comparison.** `a < b < c` parses. The compiler takes one
   comparison and no more.
-- **A parenthesized expression is a node.** `(a)` wraps rather than
-  yielding its contents unchanged. The braces it lifts are the reason it is
-  worth having.
+- **The deferred integer widths.** `i128` and `u128` parse as primitive
+  types. The compiler knows the tokens too, and rejects the type itself,
+  which is a diagnostic no parse-only front end has a pass for.
+
+One place reads wider by design: a parenthesized expression is a node.
+`(a)` wraps rather than yielding its contents unchanged, and the braces it
+lifts are the reason it is worth having.
 
 Two places read narrower:
 
