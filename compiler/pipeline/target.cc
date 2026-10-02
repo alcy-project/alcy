@@ -244,9 +244,8 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
   base::Result<analyzer::ModuleTree, diag::Reported> tree = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve",
                                              "frontend");
-    const std::span<const analyzer::StdHint> hints(STD_HINTS, STD_HINT_COUNT);
     return analyzer::resolve_modules(root_file, modules, manifest.name, ctx.ast,
-                                     ctx.bag, sources.prelude, hints);
+                                     ctx.bag, sources.prelude, std_hints());
   }();
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});

@@ -18,8 +18,8 @@ namespace pipeline {
 
 namespace {
 
-bool selected(const std::vector<std::string_view>& members,
-              std::string_view path) {
+bool package_is_selected(const std::vector<std::string_view>& members,
+                         std::string_view path) {
   const usize slash = path.find('/');
   const std::string_view package =
       slash == std::string_view::npos ? path : path.substr(0, slash);
@@ -57,7 +57,8 @@ std::span<const analyzer::ModuleInput> std_prelude(
   // filesystem and two compilations never read each other's prelude.
   for (usize i = 0; i < STAGED_SOURCE_COUNT; ++i) {
     const StagedSource& source = STAGED_SOURCES[i];
-    if (!selected(selection.members, std::string_view(source.path))) {
+    if (!package_is_selected(selection.members,
+                             std::string_view(source.path))) {
       continue;
     }
     const source::FileId id = ctx.sources.add_virtual(

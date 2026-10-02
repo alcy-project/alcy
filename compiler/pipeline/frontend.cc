@@ -87,8 +87,8 @@ base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
   return [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve",
                                              "frontend");
-    const std::span<const analyzer::StdHint> hints(STD_HINTS, STD_HINT_COUNT);
-    return resolve_inputs(ctx, root, {&single_input, 1}, "", prelude, hints);
+    return resolve_inputs(ctx, root, {&single_input, 1}, "", prelude,
+                          std_hints());
   }();
 }
 

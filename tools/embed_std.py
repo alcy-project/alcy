@@ -5,9 +5,11 @@
 
 """Embeds the toolchain standard library sources as byte arrays.
 
-Reads lib/std/<member>/main.al source files, emitting a translation
-unit that exposes their exact bytes. Byte arrays stay portable across
-hosts without external tools or per-architecture handling.
+Reads `lib/std/alcy.toml` and each member's manifest, then emits a
+translation unit exposing the bytes of every staged `.al` file, the
+suite's dependency edges, and the public names of each member. Byte
+arrays stay portable across hosts without external tools or
+per-architecture handling.
 """
 
 import argparse
@@ -183,16 +185,9 @@ def main():
                     if m is not None and (name, m.group(1)) not in seen:
                         seen.add((name, m.group(1)))
                         symbols.append((name, m.group(1)))
-        out.write("const StdSymbol STD_SYMBOLS[] = {\n")
-        for package, item in symbols:
-            out.write('  {"%s", "%s"},\n' % (package, item))
-        out.write("};\n\n")
-        out.write(
-            "const usize STD_SYMBOL_COUNT = "
-            "sizeof(STD_SYMBOLS) / sizeof(STD_SYMBOLS[0]);\n\n"
-        )
-        # The same names as analyzer hints: the analyzer names a missing
-        # package from these without depending on the pipeline.
+        # One table, not two: the analyzer's hint type is the only reader,
+        # and a second copy of the same rows under another name would be a
+        # table with no consumer and two things to keep in step.
         out.write("const analyzer::StdHint STD_HINTS[] = {\n")
         for package, item in symbols:
             out.write('  {"%s", "%s"},\n' % (package, item))

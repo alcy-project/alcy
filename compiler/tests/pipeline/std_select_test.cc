@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "diag/bag.h"
+#include "diag/diagnostic.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
@@ -106,20 +107,27 @@ TEST_CASE("Selection rejects a glob overlapping a member") {
 }
 
 TEST_CASE("Selection rejects a bare suite and unknown members") {
-  {
+  struct Case {
+    std::string_view spec;
+    // What the message has to say, because the spellings are close and
+    // the fix each one names is the part a reader needs.
+    std::string_view message;
+  };
+  const Case cases[] = {
+      {"alcy/std", "is a suite"},
+      {"alcy/nope", "is not a member of alcy/std"},
+      {"alcy/std/nope", "is not a member of alcy/std"},
+      {"alcy/nope/core", "names no source"},
+  };
+  for (const Case& c : cases) {
     Fixture f;
-    const pkg::Dependency entry = dep(f, "alcy/std");
+    const pkg::Dependency entry = dep(f, c.spec);
     CHECK(resolve_std_selection({&entry, 1}, f.bag).is_err());
-  }
-  {
-    Fixture f;
-    const pkg::Dependency entry = dep(f, "alcy/std/nope");
-    CHECK(resolve_std_selection({&entry, 1}, f.bag).is_err());
-  }
-  {
-    Fixture f;
-    const pkg::Dependency entry = dep(f, "alcy/nope/core");
-    CHECK(resolve_std_selection({&entry, 1}, f.bag).is_err());
+    const diag::Diagnostic* const only = f.bag.at(0);
+    CHECK(only != nullptr);
+    if (only != nullptr) {
+      CHECK(only->message.find(c.message) != std::string_view::npos);
+    }
   }
 }
 

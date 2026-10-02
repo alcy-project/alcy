@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstddef>
+#include <span>
 
 #include "analyzer/resolve.h"
 #include "fpag/base/numeric.h"
@@ -37,18 +38,15 @@ extern const usize STD_PACKAGE_COUNT;
 
 // Every public name each member carries, for the missing-dependency
 // hint: an unresolved name found here names the package to add.
-struct StdSymbol {
-  const char* package;
-  const char* name;
-};
-
-extern const StdSymbol STD_SYMBOLS[];
-extern const usize STD_SYMBOL_COUNT;
-
-// The public names above as analyzer hints: an unresolved name found
-// here names the package to add. Declared here so the generated table
-// is defined once and shared.
+// Declared with the analyzer's hint type so the generated table is
+// defined once and shared; see tools/embed_std.py.
 extern const analyzer::StdHint STD_HINTS[];
 extern const usize STD_HINT_COUNT;
+
+// The hint table as a span. The generated arrays carry their count
+// beside them, so the span is built here rather than at each use.
+inline std::span<const analyzer::StdHint> std_hints() {
+  return {STD_HINTS, STD_HINT_COUNT};
+}
 
 }  // namespace pipeline

@@ -36,8 +36,8 @@ const StdPackageDeps* find_member(std::string_view name) {
   return nullptr;
 }
 
-bool selected(const std::vector<std::string_view>& members,
-              std::string_view name) {
+bool is_selected_member(const std::vector<std::string_view>& members,
+                        std::string_view name) {
   for (std::string_view member : members) {
     if (member == name) {
       return true;
@@ -89,36 +89,26 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
       return base::make_err(diag::Reported{});
     }
     if (dep.suite.empty()) {
-      // Two segments name a package of an owner. Inside the embedded
-      // suite the member form is three segments, so `alcy/std` and
-      // `alcy/core` are misspellings with an obvious fix each.
-      if (dep.owner == STD_OWNER) {
-        if (dep.member == STD_SUITE) {
-          const u32 index = bag.emit<i18n::Key::PipelineStdIsASuite>(
-              diag::Severity::Error, diag::Stage::Pipeline,
-              DiagCode::NotImplemented);
-          (void)index;
-          return base::make_err(diag::Reported{});
-        }
-        if (find_member(dep.member) != nullptr) {
-          const u32 index = bag.emit<i18n::Key::PipelineDependencyIsAStdMember>(
-              diag::Severity::Error, diag::Stage::Pipeline,
-              DiagCode::NotImplemented, dep.spec, dep.member);
-          (void)index;
-          return base::make_err(diag::Reported{});
-        }
-      }
-      if (dep.source == pkg::DependencySource::Path) {
-        continue;
-      }
-      if (dep.source == pkg::DependencySource::Unspecified) {
-        const u32 index = bag.emit<i18n::Key::PipelineDependencyNamesNoSource>(
+      // Only an embedded dependency reaches here: anything else left
+      // above, and an embedded one always takes no source. Two segments
+      // name a package rather than a member, so `alcy/std` and
+      // `alcy/core` are misspellings with an obvious fix each, and a
+      // name that is not a member has no fix to offer.
+      if (dep.member == STD_SUITE) {
+        const u32 index = bag.emit<i18n::Key::PipelineStdIsASuite>(
             diag::Severity::Error, diag::Stage::Pipeline,
-            DiagCode::NotImplemented, dep.spec);
+            DiagCode::NotImplemented);
         (void)index;
         return base::make_err(diag::Reported{});
       }
-      const u32 index = bag.emit<i18n::Key::PipelineDependencyNeedsFetcher>(
+      if (find_member(dep.member) != nullptr) {
+        const u32 index = bag.emit<i18n::Key::PipelineDependencyIsAStdMember>(
+            diag::Severity::Error, diag::Stage::Pipeline,
+            DiagCode::NotImplemented, dep.spec, dep.member);
+        (void)index;
+        return base::make_err(diag::Reported{});
+      }
+      const u32 index = bag.emit<i18n::Key::PipelineDependencyNotAStdMember>(
           diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::NotImplemented, dep.spec);
       (void)index;
@@ -136,14 +126,14 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
       (void)index;
       return base::make_err(diag::Reported{});
     }
-    if (!selected(selection.members, dep.member)) {
+    if (!is_selected_member(selection.members, dep.member)) {
       selection.members.push_back(dep.member);
     }
   }
   if (globbed) {
     for (usize i = 0; i < STD_PACKAGE_COUNT; ++i) {
       std::string_view member(STD_PACKAGE_DEPS[i].name);
-      if (selected(selection.members, member)) {
+      if (is_selected_member(selection.members, member)) {
         // A glob overlapping a named member would stage it twice over:
         // one spelling has to go.
         const u32 index = bag.emit<i18n::Key::PipelineDependencyOverlaps>(
@@ -161,7 +151,7 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
     const StdPackageDeps* info = find_member(member);
     for (u64 i = 0; i < info->dep_count; ++i) {
       std::string_view need(info->deps[i]);
-      if (!selected(selection.members, need)) {
+      if (!is_selected_member(selection.members, need)) {
         const u32 index = bag.emit<i18n::Key::PipelineStdPackageRequiresSuite>(
             diag::Severity::Error, diag::Stage::Pipeline,
             DiagCode::NotImplemented, member, need);
