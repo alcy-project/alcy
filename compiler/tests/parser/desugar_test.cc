@@ -369,9 +369,7 @@ bool check_names(std::string_view bytes,
   if (f.bag.has_errors()) {
     return false;
   }
-  if (desugar_shadowing(items, f.ast, f.bag).is_err()) {
-    return false;
-  }
+  desugar_shadowing(items, f.ast, f.bag);
   if (f.bag.has_errors()) {
     return false;
   }
@@ -384,7 +382,7 @@ bool check_desugar_fails(std::string_view bytes, Fixture& f) {
   if (f.bag.has_errors()) {
     return false;
   }
-  (void)desugar_shadowing(items, f.ast, f.bag);
+  desugar_shadowing(items, f.ast, f.bag);
   return f.bag.has_errors();
 }
 

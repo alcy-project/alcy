@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "ast/ast.h"
-#include "ast/verify.h"
 #include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -546,22 +545,11 @@ class Desugarer {
 
 }  // namespace
 
-base::Result<void, diag::Reported> desugar_shadowing(
-    std::span<const ast::ItemIdx> items,
-    ast::AstArena& ast,
-    diag::DiagBag& bag) {
+void desugar_shadowing(std::span<const ast::ItemIdx> items,
+                       ast::AstArena& ast,
+                       diag::DiagBag& bag) {
   Desugarer desugar{ast, bag};
   desugar.run(items);
-  if (base::Result<void, ast::VerificationError> verified =
-          ast::verify_file(ast);
-      verified.is_err()) {
-    const u32 index = bag.emit<i18n::Key::ParserInvalidSyntaxTree>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::InvalidAst,
-        ast::describe_verification_error(std::move(verified).unwrap_err()));
-    (void)index;
-    return base::make_err(diag::Reported{});
-  }
-  return base::make_ok();
 }
 
 }  // namespace parser

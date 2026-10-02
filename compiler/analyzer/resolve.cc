@@ -168,11 +168,11 @@ class Resolver {
       return false;
     }
     file.items = std::move(parsed).unwrap();
-    const bool desugared = [&] {
+    {
       PROFILE_SCOPE_WITH_CATEGORY("desugar", "frontend");
-      return parser::desugar_shadowing(file.items, ast, bag).is_ok();
-    }();
-    return desugared;
+      parser::desugar_shadowing(file.items, ast, bag);
+    }
+    return true;
   }
 
   void build_tree() {
@@ -646,6 +646,10 @@ class Resolver {
       return true;
     };
     if (!parse_all(file_data) || !parse_all(prelude_data)) {
+      return ModuleTree{};
+    }
+    // Once, here, rather than after each file: see `verify_trees`.
+    if (parser::verify_trees(ast, bag).is_err()) {
       return ModuleTree{};
     }
     build_tree();

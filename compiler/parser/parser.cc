@@ -280,17 +280,22 @@ base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
     }
     items.push_back(item);
   }
+  return base::make_ok(
+      std::span<const ast::ItemIdx>(ast::copy_to_arena(ast_.spans, items)));
+}
+
+base::Result<void, diag::Reported> verify_trees(ast::AstArena& ast,
+                                                diag::DiagBag& bag) {
   if (base::Result<void, ast::VerificationError> verified =
-          ast::verify_file(ast_);
+          ast::verify_file(ast);
       verified.is_err()) {
-    const u32 index = bag_.emit<i18n::Key::ParserInvalidSyntaxTree>(
+    const u32 index = bag.emit<i18n::Key::ParserInvalidSyntaxTree>(
         diag::Severity::Error, diag::Stage::Parser, DiagCode::InvalidAst,
         ast::describe_verification_error(std::move(verified).unwrap_err()));
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  return base::make_ok(
-      std::span<const ast::ItemIdx>(ast::copy_to_arena(ast_.spans, items)));
+  return base::make_ok();
 }
 
 ast::ItemIdx Parser::parse_item() {

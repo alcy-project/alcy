@@ -33,6 +33,18 @@ struct FnSignature {
 // Nesting exceeded the language's budget, so the descent stopped.
 // A range names an end without saying whether the end is included.
 
+// Verifies that every node the arena holds points at nodes the arena
+// holds, and reports `3003` when one does not.
+//
+// This is over the whole arena rather than over one file's nodes, so it
+// belongs once per run and not once per file: a file's nodes are not a
+// range of the arena once files are read on several threads, and walking
+// the whole arena after each file verifies every node once per file that
+// came before it. The caller runs it after the last file is parsed and
+// desugared, before anything walks the tree.
+base::Result<void, diag::Reported> verify_trees(ast::AstArena& ast,
+                                                diag::DiagBag& bag);
+
 // Hand-written recursive-descent parser over a token stream. Parsing is
 // error-tolerant: failures report a diagnostic and synchronize at item,
 // statement, or arm boundaries, so one bad construct never hides the
@@ -48,10 +60,11 @@ class Parser {
          diag::DiagBag& bag);
 
   // Parses a whole file into items. The token stream is verified on
-  // entry and the arena on exit, so callers receive validated items;
-  // either failure reports an internal diagnostic and returns err.
-  // Grammar errors still accumulate in the bag with valid items
+  // entry, so a caller receives items the token stream accounted for;
+  // a grammar error accumulates in the bag with the valid items
   // returned: erroneous constructs are simply absent.
+  //
+  // The arena is not verified here. `verify_trees` does that, once per run.
   base::Result<std::span<const ast::ItemIdx>, diag::Reported> parse();
 
  private:

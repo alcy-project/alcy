@@ -25,12 +25,10 @@ namespace parser {
 // each, pre-seeded from the first alternative, and must bind identical
 // name sets.
 //
-// Verifies the arena on exit, so callers receive validated output: a
-// verification failure reports an internal diagnostic and returns err.
-// Name errors still accumulate in the bag with an ok result.
-base::Result<void, diag::Reported> desugar_shadowing(
-    std::span<const ast::ItemIdx> items,
-    ast::AstArena& ast,
-    diag::DiagBag& bag);
+// Name errors accumulate in the bag; the arena is verified once per run by
+// `verify_trees`, not here.
+void desugar_shadowing(std::span<const ast::ItemIdx> items,
+                       ast::AstArena& ast,
+                       diag::DiagBag& bag);
 
 }  // namespace parser
