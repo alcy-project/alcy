@@ -11,14 +11,9 @@
 #include "cli/result_code.h"
 #include "cli/trace.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "i18n/messages.h"
-#include "path/path.h"
 #include "pipeline/check.h"
-#include "pipeline/diag_code.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/target.h"
 
@@ -57,42 +52,22 @@ ResultCode run_check(const CliConfig& config,
     return finish(std::move(result).unwrap(), envelope);
   }
 
-  const bool check_current_dir = config.target_dir.empty();
   const std::string_view raw_target =
-      check_current_dir ? "." : config.target_dir;
-  base::Result<pipeline::ManifestProbe, path::PathError> probe =
-      pipeline::find_package_manifest(ctx, raw_target);
+      config.target_dir.empty() ? "." : config.target_dir;
+  base::Result<pipeline::ManifestProbe, diag::Reported> probe =
+      pipeline::require_package_manifest(ctx, raw_target, true);
   if (probe.is_err()) {
     return failed;
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
-  if (found.found) {
-    base::Result<pipeline::CheckOutcome, diag::Reported> result =
-        pipeline::check_package(ctx, found.root, found.manifest,
-                                found.manifest_name);
-    envelope.trace = trace.take_events();
-    if (result.is_err()) {
-      return failed;
-    }
-    return finish(std::move(result).unwrap(), envelope);
+  base::Result<pipeline::CheckOutcome, diag::Reported> result =
+      pipeline::check_package(ctx, found.root, found.manifest,
+                              found.manifest_name);
+  envelope.trace = trace.take_events();
+  if (result.is_err()) {
+    return failed;
   }
-
-  // Directories without a manifest are not checked: module structure
-  // needs declared roots.
-  if (check_current_dir) {
-    const u32 index =
-        ctx.bag
-            .emit<i18n::Key::PipelineNoManifestWithFileHintInCurrentDirectory>(
-                diag::Severity::Error, diag::Stage::Pipeline,
-                pipeline::DiagCode::NoManifest);
-    (void)index;
-  } else {
-    const u32 index = ctx.bag.emit<i18n::Key::PipelineNoManifestWithFileHint>(
-        diag::Severity::Error, diag::Stage::Pipeline,
-        pipeline::DiagCode::NoManifest, raw_target);
-    (void)index;
-  }
-  return failed;
+  return finish(std::move(result).unwrap(), envelope);
 }
 
 }  // namespace cli

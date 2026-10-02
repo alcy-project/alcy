@@ -14,17 +14,12 @@
 #include "cli/result_code.h"
 #include "cli/trace.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/render.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
 #include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
-#include "i18n/messages.h"
-#include "path/path.h"
-#include "pipeline/diag_code.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/run.h"
@@ -64,19 +59,12 @@ i32 run_run(const CliConfig& config,
       config.target_dir.empty() ? "." : config.target_dir;
   const std::span<const std::string_view> args(config.program_args);
 
-  base::Result<pipeline::ManifestProbe, path::PathError> probe =
-      pipeline::find_package_manifest(ctx, raw_dir);
+  base::Result<pipeline::ManifestProbe, diag::Reported> probe =
+      pipeline::require_package_manifest(ctx, raw_dir, false);
   if (probe.is_err()) {
     return failed;
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
-  if (!found.found) {
-    const u32 index = ctx.bag.emit<i18n::Key::PipelineNoManifest>(
-        diag::Severity::Error, diag::Stage::Pipeline,
-        pipeline::DiagCode::NoManifest, raw_dir);
-    (void)index;
-    return failed;
-  }
   base::Result<pkg::Toolchain, diag::Reported> toolchain =
       pipeline::load_toolchain(ctx, found.root);
   if (toolchain.is_err()) {

@@ -47,11 +47,16 @@ struct ManifestProbe {
   std::string manifest_name;
 };
 
-// Probes a raw cli target for a package manifest, loading it when present.
-// Shared by build and check so manifest discovery lives in one place.
-base::Result<ManifestProbe, path::PathError> find_package_manifest(
+// Probes a raw cli target for a package manifest and loads it. A target
+// without one is reported here, because "build, check, and run all need
+// a manifest" is a pipeline fact and three commands writing that message
+// three ways is three chances to disagree. `file_hint` selects the
+// wording for a command that also accepts a single file with `--file`;
+// only `check` does.
+base::Result<ManifestProbe, diag::Reported> require_package_manifest(
     PipelineContext& ctx,
-    std::string_view raw);
+    std::string_view raw,
+    bool file_hint);
 
 // Parses the manifest and resolves every declared target: the binary
 // first when one exists, then the library. Shared by build, check,

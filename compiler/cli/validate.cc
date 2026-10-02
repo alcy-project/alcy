@@ -14,16 +14,6 @@
 
 namespace cli {
 
-namespace {
-
-bool is_source_file(std::string_view target) {
-  return target.size() >= path::SOURCE_EXTENSION.size() &&
-         target.substr(target.size() - path::SOURCE_EXTENSION.size()) ==
-             path::SOURCE_EXTENSION;
-}
-
-}  // namespace
-
 base::Result<void, ConfigError> validate_cli_config(const CliConfig& config) {
   if (config.subcommand == Subcommand::None) {
     return base::make_err(ConfigError::MissingSubcommand);
@@ -32,11 +22,11 @@ base::Result<void, ConfigError> validate_cli_config(const CliConfig& config) {
     return base::make_err(ConfigError::UnexpectedProgramArgs);
   }
   if (config.subcommand == Subcommand::Build &&
-      is_source_file(config.target_dir)) {
+      path::has_source_extension(config.target_dir)) {
     return base::make_err(ConfigError::BuildSingleFile);
   }
   if (config.subcommand == Subcommand::Run &&
-      is_source_file(config.target_dir)) {
+      path::has_source_extension(config.target_dir)) {
     return base::make_err(ConfigError::RunSingleFile);
   }
   if (config.subcommand == Subcommand::Compile) {

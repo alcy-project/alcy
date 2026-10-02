@@ -35,23 +35,51 @@
 
 namespace pipeline {
 
-base::Result<ManifestProbe, path::PathError> find_package_manifest(
+base::Result<ManifestProbe, diag::Reported> require_package_manifest(
     PipelineContext& ctx,
-    std::string_view raw) {
+    std::string_view raw,
+    bool file_hint) {
   base::Result<path::Path, path::PathError> dir = path::Path::from_native(raw);
   if (dir.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineInvalidTarget>(
         diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, raw);
     (void)index;
-    return base::make_err(std::move(dir).unwrap_err());
+    return base::make_err(diag::Reported{});
   }
   path::Path root = std::move(dir).unwrap();
   const path::Path manifest_path = root.join(pkg::MANIFEST_FILE_NAME);
   base::Result<source::FileId, source::SourceError> manifest =
       ctx.sources.load(manifest_path.as_view());
   if (manifest.is_err()) {
-    return base::make_ok(
-        ManifestProbe{false, std::move(root), source::UNKNOWN_FILE, {}});
+    // Naming the target is the useful part; when there is none, saying
+    // "current directory" reads better than saying ".".
+    const bool current = root == ".";
+    if (file_hint) {
+      if (current) {
+        const u32 index = ctx.bag.emit<
+            i18n::Key::PipelineNoManifestWithFileHintInCurrentDirectory>(
+            diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoManifest);
+        (void)index;
+      } else {
+        const u32 index =
+            ctx.bag.emit<i18n::Key::PipelineNoManifestWithFileHint>(
+                diag::Severity::Error, diag::Stage::Pipeline,
+                DiagCode::NoManifest, raw);
+        (void)index;
+      }
+    } else if (current) {
+      const u32 index =
+          ctx.bag.emit<i18n::Key::PipelineNoManifestInCurrentDirectory>(
+              diag::Severity::Error, diag::Stage::Pipeline,
+              DiagCode::NoManifest);
+      (void)index;
+    } else {
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineNoManifest>(
+          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoManifest,
+          raw);
+      (void)index;
+    }
+    return base::make_err(diag::Reported{});
   }
   const source::FileId loaded = std::move(manifest).unwrap();
   return base::make_ok(ManifestProbe{true, std::move(root), loaded,

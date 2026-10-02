@@ -12,37 +12,16 @@
 #include "cli/result_code.h"
 #include "cli/trace.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
-#include "i18n/messages.h"
-#include "path/path.h"
 #include "pipeline/build.h"
-#include "pipeline/diag_code.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/target.h"
 #include "pkg/toolchain.h"
 
 namespace cli {
-
-namespace {
-
-// What was written is what the reader wants to know after a build. The
-// pipeline resolved the path, so the report names the file that exists
-// and measures that, rather than leaving the reader to guess which of
-// the requested and the written differ.
-void record_output(const std::string& output, Envelope& envelope) {
-  envelope.output_path = output;
-  const isize size = io::file_size(output);
-  if (size > 0) {
-    envelope.output_bytes = static_cast<u64>(size);
-  }
-}
-
-}  // namespace
 
 ResultCode run_build(const CliConfig& config,
                      pipeline::PipelineContext& ctx,
@@ -53,32 +32,14 @@ ResultCode run_build(const CliConfig& config,
   const ResultCode failed = ResultCode::BuildFailed;
   // Validation keeps single files out: `build` takes a package
   // directory, and `compile` takes the file.
-  const bool build_current_dir = config.target_dir.empty();
-  const std::string_view raw_dir = build_current_dir ? "." : config.target_dir;
-
-  base::Result<pipeline::ManifestProbe, path::PathError> probe =
-      pipeline::find_package_manifest(ctx, raw_dir);
+  const std::string_view raw_dir =
+      config.target_dir.empty() ? "." : config.target_dir;
+  base::Result<pipeline::ManifestProbe, diag::Reported> probe =
+      pipeline::require_package_manifest(ctx, raw_dir, false);
   if (probe.is_err()) {
     return failed;
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
-  if (!found.found) {
-    // Without a manifest there is no module structure to build: report
-    // the error instead of claiming a build that never ran.
-    if (build_current_dir) {
-      const u32 index =
-          ctx.bag.emit<i18n::Key::PipelineNoManifestInCurrentDirectory>(
-              diag::Severity::Error, diag::Stage::Pipeline,
-              pipeline::DiagCode::NoManifest);
-      (void)index;
-    } else {
-      const u32 index = ctx.bag.emit<i18n::Key::PipelineNoManifest>(
-          diag::Severity::Error, diag::Stage::Pipeline,
-          pipeline::DiagCode::NoManifest, raw_dir);
-      (void)index;
-    }
-    return failed;
-  }
 
   base::Result<pkg::Toolchain, diag::Reported> toolchain =
       pipeline::load_toolchain(ctx, found.root);

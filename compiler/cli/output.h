@@ -131,6 +131,12 @@ void announce(const Logger& err,
               std::string_view subject,
               const diag::RenderOptions& options);
 
+// Records what was written and how large it is. The pipeline resolved the
+// path, so the report names the file that exists and measures that, rather
+// than leaving the reader to guess which of the requested and the written
+// differ. Any command that produces an artifact records it this way.
+void record_output(const std::string& output, Envelope& envelope);
+
 // One JSON document: the result, its diagnostics, and the trace when
 // there is one. The trace's `traceEvents` sits at the top level so the
 // document can be pasted into a trace viewer unchanged.

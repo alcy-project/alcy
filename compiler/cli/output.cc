@@ -537,6 +537,14 @@ u64 elapsed_ns_since(std::chrono::steady_clock::time_point start) {
   return static_cast<u64>(elapsed.count());
 }
 
+void record_output(const std::string& output, Envelope& envelope) {
+  envelope.output_path = output;
+  const isize size = io::file_size(output);
+  if (size > 0) {
+    envelope.output_bytes = static_cast<u64>(size);
+  }
+}
+
 std::string render_diagnostics(const Envelope& envelope,
                                const diag::RenderOptions& options) {
   std::string out;

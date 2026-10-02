@@ -40,14 +40,6 @@ namespace pipeline {
 
 namespace {
 
-bool has_source_extension(std::string_view path) {
-  if (path.size() < path::SOURCE_EXTENSION.size()) {
-    return false;
-  }
-  return path.substr(path.size() - path::SOURCE_EXTENSION.size()) ==
-         path::SOURCE_EXTENSION;
-}
-
 // A directory containing alcy.toml is a nested package: its sources belong
 // to that package, so the subtree is skipped. The walk root itself is never
 // tested, only its children.
@@ -84,7 +76,7 @@ bool walk_sources(const path::Path& dir, std::vector<path::Path>& paths) {
       if (!is_nested_package(full)) {
         walk_sources(full, paths);
       }
-    } else if (!is_dir && has_source_extension(full.as_view())) {
+    } else if (!is_dir && path::has_source_extension(full.as_view())) {
       paths.push_back(full);
     }
   } while (::FindNextFileA(handle, &found) != 0);
@@ -120,7 +112,7 @@ bool walk_sources(const path::Path& dir, std::vector<path::Path>& paths) {
         ::stat(full.c_str(), &info) == 0) {
       is_source = S_ISREG(info.st_mode);
     }
-    if (is_source && has_source_extension(full.as_view())) {
+    if (is_source && path::has_source_extension(full.as_view())) {
       paths.push_back(full);
     }
   }

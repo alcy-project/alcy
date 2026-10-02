@@ -86,18 +86,6 @@ base::Result<pipeline::StdSelection, diag::Reported> compile_selection(
   return pipeline::resolve_std_selection(deps, ctx.bag);
 }
 
-// What was written is what the reader wants to know after a compile. The
-// pipeline resolved the path, so the report names the file that exists
-// and measures that, rather than leaving the reader to guess which of
-// the requested and the written differ.
-void record_output(const std::string& output, Envelope& envelope) {
-  envelope.output_path = output;
-  const isize size = io::file_size(output);
-  if (size > 0) {
-    envelope.output_bytes = static_cast<u64>(size);
-  }
-}
-
 ResultCode run_compile(const CliConfig& config,
                        pipeline::PipelineContext& ctx,
                        Envelope& envelope) {

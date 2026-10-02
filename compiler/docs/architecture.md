@@ -331,7 +331,8 @@ and nowhere else by default. The contract (decided in
   builds `CliConfig`, dispatches, and maps exit codes; it performs no
   semantic validation of source, manifests, module graphs, or IR.
   Pipeline entries validate their raw request once and pass validated
-  targets down, so the same check is never implemented twice.
+  targets down, so the same check is never implemented twice
+  (`docs/adr/0042-the-pipeline-resolves-the-target.md`).
 
 ## Pipeline & data flow
 

@@ -24,6 +24,16 @@ constexpr char WINDOWS_PATH_SEPARATOR = '\\';
 constexpr std::string_view SOURCE_EXTENSION = ".al";
 constexpr std::string_view DEFAULT_OUT_DIR = "out";
 
+// Whether `name` ends in the source extension. One definition, because
+// "what a source file is called" decides which positional targets are
+// files, which walked entries are sources, and what a module name comes
+// from - and three answers to that is three places to change.
+inline bool has_source_extension(std::string_view name) {
+  return name.size() > SOURCE_EXTENSION.size() &&
+         name.compare(name.size() - SOURCE_EXTENSION.size(),
+                      SOURCE_EXTENSION.size(), SOURCE_EXTENSION) == 0;
+}
+
 enum class PathError : u8 { ContainsNul };
 
 // Canonical path value type. The canonical form is established once at
