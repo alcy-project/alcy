@@ -166,6 +166,13 @@ class DiagBag {
     }
   }
 
+  // Removes exact-duplicate diagnostics, keeping the first of each.
+  // Several targets analyze shared modules, so one problem can be
+  // reported once per tree; the run renders it once. Error and warning
+  // counts follow what remains. Call once analysis is done: indices
+  // handed out before are renumbered by the compaction.
+  void dedup();
+
  private:
   // Appends a diagnostic with an already-composed message. Copies the
   // message into the arena; grows the entries array as needed. Returns the

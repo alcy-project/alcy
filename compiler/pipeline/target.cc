@@ -266,7 +266,8 @@ base::Result<std::vector<PackageTarget>, diag::Reported>
 resolve_package_targets(PipelineContext& ctx,
                         const path::Path& root,
                         source::FileId manifest_file,
-                        std::string_view manifest_name) {
+                        std::string_view manifest_name,
+                        TargetScope scope) {
   // Entry validation: the caller supplies a raw manifest id, which must
   // name a loaded file, and the bytes must then be structurally whole
   // before any field is read.
@@ -335,7 +336,7 @@ resolve_package_targets(PipelineContext& ctx,
       return base::make_err(diag::Reported{});
     }
   }
-  if (manifest.lib != nullptr) {
+  if (scope == TargetScope::All && manifest.lib != nullptr) {
     base::Result<void, diag::Reported> added =
         add(manifest.lib->path, manifest.lib->name, true);
     if (added.is_err()) {

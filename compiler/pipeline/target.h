@@ -52,14 +52,23 @@ base::Result<ManifestProbe, diag::Reported> require_package_manifest(
     std::string_view raw,
     bool file_hint);
 
-// Parses the manifest and resolves every declared target: the binary
-// first when one exists, then the library. Shared by build, check,
-// and run; the manifest views borrow the context arena.
+// Which declared targets resolution returns. A run wants the binary
+// alone: a library it will not execute is not its business, so one
+// the module selection leaves out must not refuse the run.
+enum class TargetScope : u8 {
+  All,
+  BinOnly,
+};
+
+// Parses the manifest and resolves the targets `scope` names: the
+// binary first when one exists, then the library. Shared by build,
+// check, and run; the manifest views borrow the context arena.
 base::Result<std::vector<PackageTarget>, diag::Reported>
 resolve_package_targets(PipelineContext& ctx,
                         const path::Path& root,
                         source::FileId manifest_file,
-                        std::string_view manifest_name);
+                        std::string_view manifest_name,
+                        TargetScope scope);
 
 // Loads `.alcy/toolchain.toml` beside the package root. An absent file
 // means defaults; a corrupt one lands in the bag.

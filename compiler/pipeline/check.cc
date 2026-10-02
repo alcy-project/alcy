@@ -91,16 +91,39 @@ base::Result<CheckOutcome, diag::Reported> check_package(
     source::FileId manifest_file,
     std::string_view manifest_name) {
   base::Result<std::vector<PackageTarget>, diag::Reported> targets =
-      resolve_package_targets(ctx, root, manifest_file, manifest_name);
+      resolve_package_targets(ctx, root, manifest_file, manifest_name,
+                              TargetScope::All);
   if (targets.is_err() || ctx.bag.has_errors()) {
     return fail();
   }
   std::vector<PackageTarget> resolved = std::move(targets).unwrap();
-  // Every target draws on the same module selection and differs only in
-  // which file is its root, so one tree checks the package; the rest
-  // would repeat it.
-  PackageTarget& first = resolved.front();
-  return finish_check(ctx, first.tree, first.file_count);
+  // Every target draws on the same module selection but roots a different
+  // tree, and `package::` resolves at the root: an error in one tree is
+  // invisible from another, so every tree is analyzed. A tree that
+  // follows a failed one still reports its own analysis. Identical
+  // findings from shared modules collapse below into one rendering.
+  bool ok = true;
+  bool have_outcome = false;
+  CheckOutcome outcome{};
+  for (PackageTarget& target : resolved) {
+    base::Result<CheckOutcome, diag::Reported> one =
+        finish_check(ctx, target.tree, target.file_count);
+    if (one.is_err() || ctx.bag.has_errors()) {
+      ok = false;
+      continue;
+    }
+    // Every tree counts the same selection, so the first success
+    // measures the package; summing would count its files twice.
+    if (!have_outcome) {
+      outcome = std::move(one).unwrap();
+      have_outcome = true;
+    }
+  }
+  ctx.bag.dedup();
+  if (!ok || ctx.bag.has_errors()) {
+    return fail();
+  }
+  return base::make_ok(outcome);
 }
 
 }  // namespace pipeline

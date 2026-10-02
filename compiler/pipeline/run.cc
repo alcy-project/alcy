@@ -89,13 +89,13 @@ base::Result<RunOutcome, diag::Reported> run_package(
     AnnounceExec announce,
     const void* announce_ctx) {
   base::Result<std::vector<PackageTarget>, diag::Reported> targets =
-      resolve_package_targets(ctx, root, manifest_file, manifest_name);
+      resolve_package_targets(ctx, root, manifest_file, manifest_name,
+                              TargetScope::BinOnly);
   if (targets.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
   std::vector<PackageTarget> resolved = std::move(targets).unwrap();
-  // Resolution puts the binary first when the package declares one.
-  if (resolved.empty() || resolved.front().is_lib) {
+  if (resolved.empty()) {
     // A library builds but never runs: there is no entry to execute.
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNoBinToRun>(
         diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,

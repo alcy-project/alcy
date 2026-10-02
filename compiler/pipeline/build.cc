@@ -399,7 +399,8 @@ base::Result<std::string, diag::Reported> build_package(
     LinkOptions link,
     EmitMode mode) {
   base::Result<std::vector<PackageTarget>, diag::Reported> targets =
-      resolve_package_targets(ctx, root, manifest_file, manifest_name);
+      resolve_package_targets(ctx, root, manifest_file, manifest_name,
+                              TargetScope::All);
   if (targets.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
@@ -465,24 +466,34 @@ base::Result<std::string, diag::Reported> build_package(
   }
   // The cli reports one artifact per build, so a package with several
   // targets names the first: the binary, resolved ahead of the library.
+  bool failed = false;
   std::string first_output;
   for (PlannedTarget& planned_target : planned) {
     PackageTarget& target = *planned_target.target;
     base::Result<lowering::LoweredPackage, diag::Reported> package =
         compile_tree(ctx, target.tree);
     if (package.is_err() || ctx.bag.has_errors()) {
-      return base::make_err(diag::Reported{});
+      failed = true;
+      break;
     }
     lowering::LoweredPackage lowered = std::move(package).unwrap();
     base::Result<std::string, diag::Reported> written =
         emit_output(ctx, lowered, optimize, link, planned_target.mode,
                     planned_target.path, target.is_lib);
     if (written.is_err() || ctx.bag.has_errors()) {
-      return base::make_err(diag::Reported{});
+      failed = true;
+      break;
     }
     if (first_output.empty()) {
       first_output = std::move(written).unwrap();
     }
+  }
+  // Each target analyzes the shared modules with its own root, so one
+  // warning can arrive once per tree; the run renders it once, whether
+  // or not a later target failed.
+  ctx.bag.dedup();
+  if (failed || ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
   }
   return base::make_ok(first_output);
 }

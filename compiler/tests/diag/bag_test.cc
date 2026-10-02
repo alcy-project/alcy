@@ -80,6 +80,45 @@ TEST_CASE("Reported result smoke test") {
   CHECK(!err.is_ok());
 }
 
+TEST_CASE("DiagBag dedup keeps the first of each") {
+  BagFixture f;
+  const Span span{.file = 1, .offset = 2, .length = 3};
+  f.bag.emit_untranslated(Severity::Warning, Stage::Lowering, 4, span, "twice");
+  f.bag.emit_untranslated(Severity::Warning, Stage::Lowering, 4, span, "twice");
+  f.bag.emit_untranslated(Severity::Warning, Stage::Lowering, 4, span,
+                          "different");
+  f.bag.emit_untranslated(Severity::Warning, Stage::Lowering, 4,
+                          Span{.file = 1, .offset = 9, .length = 3}, "twice");
+  f.bag.emit_untranslated(Severity::Error, Stage::Lowering, 4, span, "twice");
+  CHECK(f.bag.size() == 5);
+  f.bag.dedup();
+  CHECK(f.bag.size() == 4);
+  CHECK(f.bag.warning_count() == 3);
+  CHECK(f.bag.error_count() == 1);
+}
+
+TEST_CASE("DiagBag dedup labels are part of identity") {
+  BagFixture f;
+  const Span span{.file = 1, .offset = 2, .length = 3};
+  const Label label{.span = {.file = 1, .offset = 5, .length = 1},
+                    .message = "here"};
+  const u32 first = f.bag.emit_untranslated(Severity::Warning, Stage::Borrow, 4,
+                                            span, "borrowed");
+  CHECK(f.bag.label(first, {label}).is_ok());
+  // The same message and label from a second tree is the same problem.
+  const u32 again = f.bag.emit_untranslated(Severity::Warning, Stage::Borrow, 4,
+                                            span, "borrowed");
+  CHECK(f.bag.label(again, {label}).is_ok());
+  // One without the label renders differently, so it stands apart.
+  f.bag.emit_untranslated(Severity::Warning, Stage::Borrow, 4, span,
+                          "borrowed");
+  CHECK(f.bag.size() == 3);
+  f.bag.dedup();
+  CHECK(f.bag.size() == 2);
+  CHECK(f.bag.warning_count() == 2);
+  CHECK(f.bag.at(0)->label_count == 1);
+}
+
 TEST_CASE("DiagBag merge keeps every entry whole") {
   BagFixture from;
   BagFixture into;

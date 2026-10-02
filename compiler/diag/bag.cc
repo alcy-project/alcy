@@ -7,6 +7,7 @@
 #include <initializer_list>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 #include "debug/dcheck.h"
 #include "diag/diagnostic.h"
@@ -84,6 +85,113 @@ base::Result<void, BagError> DiagBag::label(
   entries_[index].labels = mem;
   entries_[index].label_count = static_cast<u32>(labels.size());
   return base::make_ok();
+}
+
+namespace {
+
+// Two diagnostics are one problem seen twice when everything a renderer
+// reads matches: severity, code, span, message, and labels.
+bool same_span(Span a, Span b) {
+  return a.file == b.file && a.offset == b.offset && a.length == b.length;
+}
+
+bool same_diagnostic(const Diagnostic& a, const Diagnostic& b) {
+  if (a.severity != b.severity || a.code != b.code ||
+      a.has_primary_span != b.has_primary_span || a.message != b.message ||
+      a.label_count != b.label_count) {
+    return false;
+  }
+  if (a.has_primary_span && !same_span(a.primary_span, b.primary_span)) {
+    return false;
+  }
+  for (u32 i = 0; i < a.label_count; ++i) {
+    if (!same_span(a.labels[i].span, b.labels[i].span) ||
+        a.labels[i].message != b.labels[i].message) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// FNV-1a over the fields `same_diagnostic` reads, so entries that hash
+// apart are known to differ and the ones that hash together are settled
+// by comparing them whole.
+u64 hash_diagnostic(const Diagnostic& d) {
+  u64 hash = 14695981039346656037ull;
+  const auto mix = [&hash](u64 value) {
+    hash ^= value;
+    hash *= 1099511628211ull;
+  };
+  const auto mix_text = [&mix](std::string_view text) {
+    for (const char c : text) {
+      mix(static_cast<u64>(static_cast<unsigned char>(c)));
+    }
+  };
+  mix(static_cast<u64>(d.severity));
+  mix(d.code.has_value() ? (static_cast<u64>(d.code->stage) << 8) | d.code->id
+                         : 1ull << 32);
+  mix(d.has_primary_span ? 1 : 0);
+  if (d.has_primary_span) {
+    mix(d.primary_span.file);
+    mix(d.primary_span.offset);
+    mix(d.primary_span.length);
+  }
+  mix_text(d.message);
+  mix(d.label_count);
+  for (u32 i = 0; i < d.label_count; ++i) {
+    mix(d.labels[i].span.file);
+    mix(d.labels[i].span.offset);
+    mix(d.labels[i].span.length);
+    mix_text(d.labels[i].message);
+  }
+  return hash;
+}
+
+}  // namespace
+
+void DiagBag::dedup() {
+  if (size_ < 2) {
+    return;
+  }
+  // Open addressing, half full at most, so a duplicate lands on the same
+  // probe chain as its first occurrence.
+  usize table_size = 8;
+  while (table_size < static_cast<usize>(size_) * 2) {
+    table_size *= 2;
+  }
+  constexpr u32 EMPTY = ~0u;
+  std::vector<u32> table(table_size, EMPTY);
+  u32 kept = 0;
+  u32 errors = 0;
+  u32 warnings = 0;
+  for (u32 i = 0; i < size_; ++i) {
+    const u64 hash = hash_diagnostic(entries_[i]);
+    usize slot = static_cast<usize>(hash) & (table_size - 1);
+    bool duplicate = false;
+    while (table[slot] != EMPTY) {
+      if (same_diagnostic(entries_[table[slot]], entries_[i])) {
+        duplicate = true;
+        break;
+      }
+      slot = (slot + 1) & (table_size - 1);
+    }
+    if (duplicate) {
+      continue;
+    }
+    table[slot] = kept;
+    if (i != kept) {
+      entries_[kept] = entries_[i];
+    }
+    if (entries_[kept].severity == Severity::Error) {
+      ++errors;
+    } else if (entries_[kept].severity == Severity::Warning) {
+      ++warnings;
+    }
+    ++kept;
+  }
+  size_ = kept;
+  error_count_ = errors;
+  warning_count_ = warnings;
 }
 
 void DiagBag::merge(const DiagBag& other) {

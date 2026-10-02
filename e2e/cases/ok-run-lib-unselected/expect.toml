@@ -1,0 +1,6 @@
+# The library is not in [modules], so it cannot build; the run executes
+# the binary, which never needed it.
+exit = 0
+subcommand = "run"
+contains = ["hi"]
+not_contains = ["EI004", "error"]
