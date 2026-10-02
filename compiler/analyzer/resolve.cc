@@ -26,10 +26,6 @@ namespace analyzer {
 
 namespace {
 
-// The arena the parser fills reports running out by trapping, so the
-
-constexpr u32 NO_MODULE = std::numeric_limits<u32>::max();
-
 // One module's file, as `resolve_modules` received it: the name the
 // caller assigned, the syntax parsing produced, and the canonical path
 // the file is reported by. Every view borrows the caller's storage, so
@@ -623,6 +619,21 @@ class Resolver {
 };
 
 }  // namespace
+
+bool ModuleTree::is_staged_item(std::string_view package,
+                                ast::ItemIdx item) const {
+  for (const ModuleNode* module : modules) {
+    if (!module->is_staged || !is_package_path(module->path, package)) {
+      continue;
+    }
+    for (ast::ItemIdx candidate : module->items) {
+      if (candidate == item) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 base::Result<ModuleTree, diag::Reported> resolve_modules(
     source::FileId root,

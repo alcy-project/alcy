@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -38,6 +39,10 @@ struct Import {
   bool is_pub;
 };
 
+// The module index that names no module. Zero is the entry module, so the
+// sentinel has to sit outside the index space.
+constexpr u32 NO_MODULE = std::numeric_limits<u32>::max();
+
 struct ModuleNode {
   // Dotted path from the root ("foo::bar"); "" for the root itself.
   std::string path;
@@ -67,7 +72,26 @@ struct ModuleTree {
   // package roots between them. Reported counts exclude these, since
   // they are toolchain sources rather than the program's own.
   u32 staged_modules = 0;
+
+  // Whether `item` is declared by the staged package `package`. Only the
+  // embedded standard library is staged, so the staged flag plus a path
+  // check is exactly package identity for now; registry packages will
+  // need a real one.
+  //
+  // Compiler-known expansions key on this rather than on a name, so a
+  // user function called `write` stays ordinary. See
+  // docs/adr/0016-suites-and-the-std-split.md and
+  // docs/adr/0025-ranges-as-data.md.
+  [[nodiscard]] bool is_staged_item(std::string_view package,
+                                    ast::ItemIdx item) const;
 };
+
+// Whether `path` names the package `package` or a module inside it.
+inline bool is_package_path(std::string_view path, std::string_view package) {
+  return path == package || (path.size() > package.size() + 1 &&
+                             path.compare(0, package.size(), package) == 0 &&
+                             path.compare(package.size(), 2, "::") == 0);
+}
 
 // Structural failure of a module tree handed to check_package.
 enum class ModuleTreeError : u8 {
@@ -88,38 +112,12 @@ enum class ModuleTreeError : u8 {
 // logging, no bag writes.
 base::Result<void, ModuleTreeError> verify_module_tree(const ModuleTree& tree);
 
-// The `fmt` package of the staged standard library: the `fmt` root
-// and everything under it. Compiler-known `write`/`format` expansions
-// key on this rather than on a name, so a user function called `write`
-// stays ordinary. See docs/adr/0016-suites-and-the-std-split.md.
-inline bool is_fmt_package(std::string_view path) {
-  return path == "fmt" || (path.size() > 5 && path.substr(0, 5) == "fmt::");
-}
-
-// Whether `item` is declared by the staged `fmt` package. Only the
-// embedded standard library is staged, so a path check plus the staged
-// flag is exactly package identity for now; registry packages will need
-// a real one.
-inline bool is_fmt_item(const ModuleTree& tree, ast::ItemIdx item) {
-  for (const ModuleNode* module : tree.modules) {
-    if (!module->is_staged || !is_fmt_package(module->path)) {
-      continue;
-    }
-    for (ast::ItemIdx candidate : module->items) {
-      if (candidate == item) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 // The `core` package of the staged standard library: the `core` root
 // and everything under it. The interval types are declared there and
 // their names are reserved, so a range expression always constructs
 // the one declaration. See docs/adr/0025-ranges-as-data.md.
 inline bool is_core_package(std::string_view path) {
-  return path == "core" || (path.size() > 6 && path.substr(0, 6) == "core::");
+  return is_package_path(path, "core");
 }
 
 // Short human-readable detail for a module tree failure.

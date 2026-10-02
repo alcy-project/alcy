@@ -24,8 +24,6 @@
 
 namespace analyzer {
 
-constexpr u32 NO_MODULE = 0xFFFFFFFFu;
-
 struct NominalEntry {
   u32 module;
   std::string_view name;

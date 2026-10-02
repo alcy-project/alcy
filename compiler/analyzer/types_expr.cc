@@ -584,7 +584,7 @@ bool Checker::is_core_fmt(const CheckedModule::FnSig* fn) const {
   if (fn->name != "write" && fn->name != "format") {
     return false;
   }
-  return is_fmt_item(tree, fn->item);
+  return tree.is_staged_item("fmt", fn->item);
 }
 
 std::vector<bool> Checker::comp_param_flags(ast::ItemIdx item) const {
