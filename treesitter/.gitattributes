@@ -1,0 +1,7 @@
+# `tree-sitter generate` owns everything below except src/scanner.c, so a
+# review of this directory is about grammar.js and not about the tables it
+# produces.
+src/parser.c -diff linguist-generated=true
+src/grammar.json linguist-generated=true
+src/node-types.json linguist-generated=true
+src/tree_sitter/** -diff linguist-generated=true

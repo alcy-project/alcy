@@ -1,0 +1,7 @@
+# Build products and caches of the tree-sitter CLI. The grammar itself
+# and its generated parser are tracked; nothing here is an artifact of the
+# repository.
+node_modules/
+target/
+*.wasm
+.tree-sitter/
