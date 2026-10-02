@@ -784,7 +784,7 @@ TEST_CASE("Time trace alone summarizes the phases as text") {
   }
   CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) == 0);
   const std::string text = captured.text();
-  CHECK(text.find("phase timings") != std::string::npos);
+  CHECK(text.find("time trace") != std::string::npos);
   CHECK(text.find("parse") != std::string::npos);
   CHECK(text.find("\"traceEvents\"") == std::string::npos);
 }

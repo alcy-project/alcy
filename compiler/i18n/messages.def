@@ -358,7 +358,7 @@
   F(CliNoStdHelp, "Start with no standard library instead of the default suite. Add back with --deps.") \
   F(CliNoSubcommand, "No subcommand given") \
   F(CliPackageCreatedAt, "'{}' in {}") \
-  F(CliPhaseTimings, "phase timings (total, inclusive):") \
+  F(CliPhaseTimings, "time trace (wall clock, nested)") \
   F(CliProgramArgsOnlyForRun, "Program arguments are only accepted by `run`") \
   F(CliReleaseHelp, "Build with optimizations.") \
   F(CliRunAbout, "Build and run a package directory") \

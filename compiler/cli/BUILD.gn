@@ -59,6 +59,8 @@ source_set("cli") {
     "suggest.h",
     "trace.cc",
     "trace.h",
+    "trace_report.cc",
+    "trace_report.h",
     "usage.cc",
     "usage.h",
     "validate.cc",

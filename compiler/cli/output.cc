@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "cli/logger.h"
+#include "cli/trace_report.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -181,45 +182,20 @@ std::string_view resolve_name(const debug::Profiler& profiler,
                                            : profiler.name(id);
 }
 
-// One phase per name, summed. Names repeat when a phase runs more than
-// once, and the reader wants the phase's cost rather than the two runs'
-// identities.
-struct PhaseTotal {
-  str::StringPoolId name = str::INVALID_STRING_POOL_ID;
-  str::StringPoolId category = str::INVALID_STRING_POOL_ID;
-  u64 ns = 0;
-  u32 count = 0;
-};
-
-std::vector<PhaseTotal> phase_totals(const Envelope& envelope) {
-  const debug::Profiler& profiler = *envelope.trace.profiler;
-  std::vector<PhaseTotal> totals;
-  for (const debug::ProfileEvent& event : envelope.trace.events) {
-    if (event.name == str::INVALID_STRING_POOL_ID) {
-      continue;
-    }
-    const auto found = std::find_if(
-        totals.begin(), totals.end(),
-        [&](const PhaseTotal& total) { return total.name == event.name; });
-    if (found == totals.end()) {
-      totals.push_back(
-          PhaseTotal{event.name, event.category, event.duration_ns, 1});
-      continue;
-    }
-    found->ns += event.duration_ns;
-    ++found->count;
+void append_trace_text(std::string& out,
+                       const Envelope& envelope,
+                       i18n::Language language) {
+  if (envelope.trace.events.empty() || envelope.trace.profiler == nullptr) {
+    return;
   }
-  // Longest first, then by name, so two runs of the same command produce
-  // the same table in the same order.
-  std::stable_sort(totals.begin(), totals.end(),
-                   [&](const PhaseTotal& a, const PhaseTotal& b) {
-                     if (a.ns != b.ns) {
-                       return a.ns > b.ns;
-                     }
-                     return resolve_name(profiler, a.name) <
-                            resolve_name(profiler, b.name);
-                   });
-  return totals;
+  // The wall clock every share answers against is the run's own, from
+  // its earliest start to its latest end. Times are inclusive and
+  // children can overlap, so the rows are not expected to add up.
+  const TraceReport report = build_trace_report(envelope.trace);
+  out += '\n';
+  out += i18n::text<i18n::Key::CliPhaseTimings>(language);
+  out += '\n';
+  out += render_trace_text(report, *envelope.trace.profiler);
 }
 
 void append_trace_json(std::string& out, const Envelope& envelope) {
@@ -259,24 +235,6 @@ void append_trace_json(std::string& out, const Envelope& envelope) {
     out += '}';
   }
   out += ']';
-}
-
-void append_trace_text(std::string& out,
-                       const Envelope& envelope,
-                       i18n::Language language) {
-  if (envelope.trace.events.empty()) {
-    return;
-  }
-  out += '\n';
-  out += i18n::text<i18n::Key::CliPhaseTimings>(language);
-  out += ":\n";
-  const debug::Profiler& profiler = *envelope.trace.profiler;
-  for (const PhaseTotal& total : phase_totals(envelope)) {
-    fmt::format_to(std::back_inserter(out), "  {:<14} {:>8.3} ms  {}\n",
-                   resolve_name(profiler, total.name),
-                   static_cast<double>(total.ns) / 1.0e6,
-                   resolve_name(profiler, total.category));
-  }
 }
 
 // The verb each outcome reports itself as. Owned here so the wording
