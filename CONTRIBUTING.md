@@ -25,7 +25,7 @@ uv run ./tools/verify_static_linkage.py
 # The grammar needs no toolchain but the tree-sitter CLI and Node:
 uv run ./tools/check_treesitter.py --grammar
 
-# Or run all of the above commands at once:
+# Or run all of the above commands at once, which is what CI runs:
 ./tools/check.sh
 
 # Faster iteration (skips gn gen, gn check, and compdb; never for CI):
@@ -46,7 +46,9 @@ grammar means changing the grammar there too. `tools/check_treesitter.py
 not match, runs the corpus, and checks the queries; adding
 `--differential` compares every `.al` file against the compiler's own
 verdict, which is the half of the check that can notice the specification,
-the parser, and the grammar disagreeing.
+the parser, and the grammar disagreeing. `check.sh` runs both and
+`measure_gates.py` times both. See
+[docs/adr/0041-alcy-treesitter-grammar.md](docs/adr/0041-alcy-treesitter-grammar.md).
 
 To automatically fix code style and lint issues:
 

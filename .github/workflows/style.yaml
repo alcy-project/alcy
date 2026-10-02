@@ -102,6 +102,10 @@ jobs:
         shell: bash
         run: uv run ./tools/check_spec.py
 
+  # The grammar's corpus is the specification read back as syntax, so it is
+  # checked the way the specification is: no build, no toolchain, no
+  # submodule. What it needs on top of that is the CLI, since the parser is
+  # generated from grammar.js rather than written by hand.
   grammar:
     name: Grammar
     needs: [load-config]
@@ -113,19 +117,23 @@ jobs:
           submodules: false
           fetch-depth: 1
 
-      # The CLI generates the parser from grammar.js, and the version that
-      # does it is the one config.toml records, since grammar.json is
-      # formatted by whichever version wrote it.
+      # grammar.json is formatted by whichever CLI wrote it, so the version
+      # that generates the parser is the one config.toml records rather than
+      # the one the runner happens to carry.
       - name: Install the tree-sitter CLI
         run: npm install --global "tree-sitter-cli@${{ needs.load-config.outputs.tree_sitter_cli_version }}"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           enable-cache: true
 
-      # The grammar's corpus is the specification read back as syntax, so it
-      # needs the same treatment as the specification itself: read and
-      # checked without a compiler build.
+      - name: Setup Python Virtual Environment
+        run: |
+          uv python install
+          uv sync --frozen
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+
       - name: Check the Grammar
+        shell: bash
         run: uv run ./tools/check_treesitter.py --grammar

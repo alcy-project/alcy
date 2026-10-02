@@ -58,6 +58,7 @@ GATES = [
     ("typos", ["typos"]),
     ("format", ["uv", "run", "./tools/format.py", "--dry-run"]),
     ("check_spec", ["uv", "run", "./tools/check_spec.py"]),
+    ("grammar", ["uv", "run", "./tools/check_treesitter.py", "--grammar"]),
     ("lint", ["uv", "run", "./tools/lint.py"]),
     ("tests", ["uv", "run", "./tools/run.py", "--target=tests",
                "--build-subdir=build"]),
@@ -71,6 +72,8 @@ GATES = [
                        "--build-subdir=build", "--sanitize"]),
     ("static_linkage", ["uv", "run", "./tools/verify_static_linkage.py",
                         "--build-dir=out/build"]),
+    ("grammar vs compiler", ["uv", "run", "./tools/check_treesitter.py",
+                             "--differential", "--build-subdir=build"]),
     ("coverage", ["uv", "run", "./tools/check_coverage.py"]),
     ("benchmark smoke", ["uv", "run", "./tools/run_benchmarks.py", "smoke",
                          "--build-subdir=build"]),
@@ -99,6 +102,14 @@ NEEDS_TOOL = {
     "exe sanitized": (
         "clang",
         "clang is not on PATH, and the sanitized run refuses without it",
+    ),
+    "grammar": (
+        "tree-sitter",
+        "tree-sitter is not on PATH, and the grammar check refuses without it",
+    ),
+    "grammar vs compiler": (
+        "tree-sitter",
+        "tree-sitter is not on PATH, and the grammar check refuses without it",
     ),
 }
 

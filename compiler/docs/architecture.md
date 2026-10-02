@@ -133,7 +133,7 @@ what implements it lives in `compiler/`.
   `docs/spec/` for editors. It is not a GN target and shares no build with
   the compiler; `tools/check_treesitter.py` checks it against the
   specification's corpus and against the compiler itself. See
-  `docs/adr/0038-alcy-treesitter-grammar.md`.
+  `docs/adr/0041-alcy-treesitter-grammar.md`.
 
 ## Compiler modules
 

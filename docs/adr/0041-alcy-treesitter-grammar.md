@@ -1,4 +1,4 @@
-# ADR-0038: The tree-sitter Grammar
+# ADR-0041: The tree-sitter Grammar
 
 - Subject: the compiler
 - Status: Accepted
@@ -48,6 +48,16 @@ and `clang-tidy` for a toolchain it does not use. It gets its own check
 script, which needs no toolchain but the CLI. `src/scanner.c` is
 hand-written and hand-formatted to `.clang-format`; nothing in the
 repository formats it automatically.
+
+**Its two halves sit where ADR-0040 puts them.** The corpus needs no build,
+so it runs in the Style workflow beside the specification check, which is
+also a reading of the language. The comparison against the compiler needs a
+binary, so it is one job in the CI workflow rather than a step in each of
+the ten matrix entries: it asks whether the grammar and the compiler agree,
+and ten answers to one question is the cost ADR-0040 removed the benchmark
+smoke for. Both halves are in `check.sh`, which CI runs as `local-gate`,
+because a gate the project tells you to run and a gate CI runs are two
+gates.
 
 **Generated sources are committed.** `src/` is what a consumer links
 without running Node. The drift check is what keeps it honest:
