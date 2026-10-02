@@ -586,7 +586,7 @@ fn f(c: bool) -> i32 {
     (integer)))
 
 ================================================================================
-A bare range operator names no end, so an endpoint after it is an error
+A bare range operator names no end, and the next operand starts a statement
 ================================================================================
 
 fn f() {

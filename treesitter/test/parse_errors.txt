@@ -1,0 +1,21 @@
+# alcy sources this grammar must reject.
+#
+# Each line names a case under e2e/cases/ whose failure to compile is a
+# failure to parse, so the rejection belongs in the grammar rather than in a
+# later pass. A case the compiler rejects for a reason the grammar has no
+# opinion about is not listed: a parse-only front end is allowed to read
+# code that a type checker refuses.
+#
+# tools/check_treesitter.py checks both directions. Every source the
+# compiler accepts must parse here without an ERROR or MISSING node, and
+# every case listed here must not.
+#
+# Nothing is listed today. The grammar reads every file in this repository
+# that the compiler rejects, which is a superset and is allowed to be one:
+# it has no pass that could reach the diagnostics those files are about.
+#
+# err-range-end-unspelled is the case a reader expects here, and it is
+# deliberately absent. `1..3` reads as an open-ended range followed by a
+# statement holding `3`, which is a legal reading of the two lines; only
+# the diagnostic knows the first range was meant to have an end. A grammar
+# cannot see that, so the grammar accepts it and the compiler reports it.
