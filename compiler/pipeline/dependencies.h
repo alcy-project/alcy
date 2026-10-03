@@ -41,16 +41,17 @@ inline std::string package_identity(std::string_view name) {
   return identity;
 }
 
-// Resolves the path dependencies of the package at `root`: each
-// dependency's manifest is read from the directory its `path` names,
-// its own path dependencies load the same way, and a directory
-// already being resolved is a cycle. Every dependency declares a
-// target the way the package it belongs to does, and its name must
-// be one module path segment, because it becomes the package root a
-// `use` spells. Standard-library members are not loaded here: they
-// stage from the embedded suite, and a dependency that names one
-// adds it to the selection the caller merges from every manifest the
-// closure holds.
+// Resolves the path dependencies of the package at `root`:
+// each dependency's manifest is read from the directory its
+// `path` names - a package manifest straight into the loader,
+// a suite manifest through its member list - and a directory
+// already being resolved is a cycle. Every dependency declares
+// a target the way the package it belongs to does, and its name
+// must be one module path segment, because it becomes the
+// package root a `use` spells. Standard-library members are not
+// loaded here: they stage from the embedded suite, and a
+// dependency that names one adds it to the selection the caller
+// merges from every manifest the closure holds.
 base::Result<std::vector<LoadedDependency>, diag::Reported>
 resolve_dependencies(PipelineContext& ctx,
                      const path::Path& root,

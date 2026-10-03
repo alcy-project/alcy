@@ -1,0 +1,4 @@
+# Only the named member loads: `fmt` stays out of the closure.
+exit = 0
+contains = ["Checked   2 files, 3 modules, 2 functions"]
+not_contains = ["error"]

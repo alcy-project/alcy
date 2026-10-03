@@ -1,0 +1,4 @@
+# A three-segment specifier names a member of a suite, so a
+# package directory is the wrong kind.
+exit = 4
+contains = ["is a package manifest, not a suite manifest"]

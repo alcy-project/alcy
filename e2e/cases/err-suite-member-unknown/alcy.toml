@@ -1,0 +1,10 @@
+[package]
+name = "app"
+version = "0.1.0"
+
+[[bin]]
+name = "app"
+path = "main.al"
+
+[dependencies]
+"acme/tools/nope" = { path = "vendor/tools" }

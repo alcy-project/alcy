@@ -478,4 +478,295 @@ TEST_CASE("Dependencies report a directory without a manifest") {
                              "'; add alcy.toml"));
 }
 
+constexpr std::string_view TOOLS_SUITE_MANIFEST =
+    "[suite]\nowner = \"acme\"\nname = \"tools\"\n"
+    "packages = [\"cli\", \"fmt\"]\n";
+
+constexpr std::string_view CLI_MANIFEST =
+    "[package]\nname = \"acme-cli\"\nversion = \"0.1.0\"\n\n"
+    "[modules]\ninclude = [\"run\"]\nexport = [\"run\"]\n\n"
+    "[[bin]]\nname = \"acme-cli\"\npath = \"run.al\"\n";
+
+constexpr std::string_view FMT_MANIFEST =
+    "[package]\nname = \"acme-fmt\"\nversion = \"0.1.0\"\n\n"
+    "[modules]\ninclude = [\"show\"]\nexport = [\"show\"]\n\n"
+    "[[bin]]\nname = \"acme-fmt\"\npath = \"show.al\"\n";
+
+// Writes the two-member suite every suite case below resolves
+// through: the `cli` and `fmt` packages under vendor/tools.
+bool write_tools_suite(io::TempDir& dir) {
+  return write_package(dir, "proj/vendor/tools", TOOLS_SUITE_MANIFEST, {}) &&
+         write_package(dir, "proj/vendor/tools/cli", CLI_MANIFEST,
+                       {{"run.al", "pub fn go() -> i32 {\n  ret 20\n}\n"}}) &&
+         write_package(
+             dir, "proj/vendor/tools/fmt", FMT_MANIFEST,
+             {{"show.al", "pub fn shout(x: i32) -> i32 {\n  ret x * 2\n}\n"}});
+}
+
+TEST_CASE("Suites load every member a glob selects") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_dep_test_");
+  const bool setup = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+      "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
+      "[dependencies]\n\"acme/tools/*\" = { path = \"vendor/tools\" }\n",
+      {{"main.al",
+        "use acme_cli::run::go;\nuse acme_fmt::show::shout;\n\nfn main() "
+        "-> i32 {\n  ret go() + shout(1)\n}\n"}});
+  const bool suite_setup = write_tools_suite(dir);
+  CHECK(setup);
+  CHECK(suite_setup);
+  if (!setup || !suite_setup) {
+    return;
+  }
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<CheckOutcome, diag::Reported> outcome = check_proj(ctx, dir);
+  CHECK(outcome.is_ok());
+  CHECK(!ctx.bag.has_errors());
+  if (outcome.is_err()) {
+    return;
+  }
+  // The package's file and one file per member.
+  CHECK(std::move(outcome).unwrap().file_count == 3);
+}
+
+TEST_CASE("Suites load one member a specifier names") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_dep_test_");
+  const bool setup = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+      "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
+      "[dependencies]\n\"acme/tools/cli\" = { path = \"vendor/tools\" }\n",
+      {{"main.al",
+        "use acme_cli::run::go;\n\nfn main() -> i32 {\n  ret go()\n}\n"}});
+  const bool suite_setup = write_tools_suite(dir);
+  CHECK(setup);
+  CHECK(suite_setup);
+  if (!setup || !suite_setup) {
+    return;
+  }
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<CheckOutcome, diag::Reported> outcome = check_proj(ctx, dir);
+  CHECK(outcome.is_ok());
+  CHECK(!ctx.bag.has_errors());
+  if (outcome.is_err()) {
+    return;
+  }
+  // Only the named member loads: `fmt` stays out of the closure.
+  CHECK(std::move(outcome).unwrap().file_count == 2);
+}
+
+TEST_CASE("Suites share members two specifiers name") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_dep_test_");
+  const bool setup = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+      "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
+      "[dependencies]\n\"acme/tools/*\" = { path = \"vendor/tools\" }\n"
+      "\"acme/tools/cli\" = { path = \"vendor/tools\" }\n",
+      {{"main.al",
+        "use acme_cli::run::go;\nuse acme_fmt::show::shout;\n\nfn main() "
+        "-> i32 {\n  ret go() + shout(1)\n}\n"}});
+  const bool suite_setup = write_tools_suite(dir);
+  CHECK(setup);
+  CHECK(suite_setup);
+  if (!setup || !suite_setup) {
+    return;
+  }
+
+  // The suite reads twice, but each member stages once: naming
+  // `cli` beside the glob is not two packages behind one
+  // identity.
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<CheckOutcome, diag::Reported> outcome = check_proj(ctx, dir);
+  CHECK(outcome.is_ok());
+  CHECK(!ctx.bag.has_errors());
+  if (outcome.is_err()) {
+    return;
+  }
+  CHECK(std::move(outcome).unwrap().file_count == 3);
+}
+
+TEST_CASE("Suites reject a member the suite does not list") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_dep_test_");
+  const bool setup = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+      "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
+      "[dependencies]\n\"acme/tools/nope\" = { path = \"vendor/tools\" }\n",
+      {{"main.al", "fn main() -> i32 {\n  ret 0\n}\n"}});
+  const bool suite_setup = write_tools_suite(dir);
+  CHECK(setup);
+  CHECK(suite_setup);
+  if (!setup || !suite_setup) {
+    return;
+  }
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  CHECK(check_proj(ctx, dir).is_err());
+  CHECK(ctx.bag.has_errors());
+  CHECK(reports(ctx.bag,
+                "Dependency 'acme/tools/nope' is not a member of "
+                "suite 'acme/tools'"));
+}
+
+TEST_CASE("Suites reject a specifier the manifest does not name") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_dep_test_");
+  const bool setup = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+      "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
+      "[dependencies]\n\"other/stuff/cli\" = { path = \"vendor/tools\" }\n",
+      {{"main.al", "fn main() -> i32 {\n  ret 0\n}\n"}});
+  const bool suite_setup = write_tools_suite(dir);
+  CHECK(setup);
+  CHECK(suite_setup);
+  if (!setup || !suite_setup) {
+    return;
+  }
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  CHECK(check_proj(ctx, dir).is_err());
+  CHECK(ctx.bag.has_errors());
+  CHECK(reports(ctx.bag,
+                "Dependency 'other/stuff/cli' names suite "
+                "'other/stuff', but '" +
+                    dir.join("proj/vendor/tools") +
+                    "' holds suite 'acme/tools'"));
+}
+
+TEST_CASE("Suites read a package manifest as the wrong kind") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_dep_test_");
+  const bool setup = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+      "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
+      "[dependencies]\n\"acme/tools/cli\" = { path = \"vendor/solo\" }\n",
+      {{"main.al", "fn main() -> i32 {\n  ret 0\n}\n"}});
+  const bool dep_setup =
+      write_package(dir, "proj/vendor/solo",
+                    "[package]\nname = \"solo\"\nversion = \"0.1.0\"\n\n"
+                    "[modules]\ninclude = [\"x\"]\nexport = [\"x\"]\n\n"
+                    "[[bin]]\nname = \"solo\"\npath = \"x.al\"\n",
+                    {{"x.al", "pub fn x() -> i32 {\n  ret 1\n}\n"}});
+  CHECK(setup);
+  CHECK(dep_setup);
+  if (!setup || !dep_setup) {
+    return;
+  }
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  CHECK(check_proj(ctx, dir).is_err());
+  CHECK(ctx.bag.has_errors());
+  CHECK(reports(ctx.bag, "Manifest '" + dir.join("proj/vendor/solo/alcy.toml") +
+                             "': is a package manifest, not a suite "
+                             "manifest"));
+}
+
+TEST_CASE("Suites read a suite manifest as the wrong kind") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_dep_test_");
+  const bool setup = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+      "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
+      "[dependencies]\n\"acme/tools\" = { path = \"vendor/tools\" }\n",
+      {{"main.al", "fn main() -> i32 {\n  ret 0\n}\n"}});
+  const bool suite_setup = write_tools_suite(dir);
+  CHECK(setup);
+  CHECK(suite_setup);
+  if (!setup || !suite_setup) {
+    return;
+  }
+
+  // A two-segment specifier names a package, so a suite
+  // directory is the wrong kind rather than a member lookup.
+  PipelineContext ctx{i18n::Language::EnUs};
+  CHECK(check_proj(ctx, dir).is_err());
+  CHECK(ctx.bag.has_errors());
+  CHECK(reports(ctx.bag, "Manifest '" +
+                             dir.join("proj/vendor/tools/alcy.toml") +
+                             "': is a suite manifest, not a package "
+                             "manifest"));
+}
+
+TEST_CASE("Suites resolve a member's own dependencies") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_dep_test_");
+  const bool setup = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+      "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
+      "[dependencies]\n\"acme/tools/cli\" = { path = \"vendor/tools\" }\n",
+      {{"main.al",
+        "use acme_cli::run::go;\n\nfn main() -> i32 {\n  ret go()\n}\n"}});
+  const bool suite_setup =
+      write_package(dir, "proj/vendor/tools", TOOLS_SUITE_MANIFEST, {}) &&
+      write_package(
+          dir, "proj/vendor/tools/cli",
+          "[package]\nname = \"acme-cli\"\nversion = \"0.1.0\"\n\n"
+          "[modules]\ninclude = [\"run\"]\nexport = [\"run\"]\n\n"
+          "[dependencies]\n\"acme/solo\" = { path = \"../../solo\" }\n\n"
+          "[[bin]]\nname = \"acme-cli\"\npath = \"run.al\"\n",
+          {{"run.al",
+            "use solo::x::x;\n\npub fn go() -> i32 {\n  ret x() + 1\n}\n"}}) &&
+      write_package(
+          dir, "proj/vendor/tools/fmt", FMT_MANIFEST,
+          {{"show.al", "pub fn shout(x: i32) -> i32 {\n  ret x * 2\n}\n"}});
+  const bool solo_setup =
+      write_package(dir, "proj/vendor/solo",
+                    "[package]\nname = \"solo\"\nversion = \"0.1.0\"\n\n"
+                    "[modules]\ninclude = [\"x\"]\nexport = [\"x\"]\n\n"
+                    "[[bin]]\nname = \"solo\"\npath = \"x.al\"\n",
+                    {{"x.al", "pub fn x() -> i32 {\n  ret 1\n}\n"}});
+  CHECK(setup);
+  CHECK(suite_setup);
+  CHECK(solo_setup);
+  if (!setup || !suite_setup || !solo_setup) {
+    return;
+  }
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<CheckOutcome, diag::Reported> outcome = check_proj(ctx, dir);
+  CHECK(outcome.is_ok());
+  CHECK(!ctx.bag.has_errors());
+  if (outcome.is_err()) {
+    return;
+  }
+  CHECK(std::move(outcome).unwrap().file_count == 3);
+}
+
+TEST_CASE("Suites reject a member resolving back into its suite") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_dep_test_");
+  const bool setup = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+      "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
+      "[dependencies]\n\"acme/tools/*\" = { path = \"vendor/tools\" }\n",
+      {{"main.al",
+        "use acme_cli::run::go;\n\nfn main() -> i32 {\n  ret go()\n}\n"}});
+  const bool suite_setup =
+      write_package(dir, "proj/vendor/tools", TOOLS_SUITE_MANIFEST, {}) &&
+      write_package(dir, "proj/vendor/tools/cli",
+                    "[package]\nname = \"acme-cli\"\nversion = \"0.1.0\"\n\n"
+                    "[modules]\ninclude = [\"run\"]\nexport = [\"run\"]\n\n"
+                    "[dependencies]\n\"acme/tools/*\" = { path = \"../\" }\n\n"
+                    "[[bin]]\nname = \"acme-cli\"\npath = \"run.al\"\n",
+                    {{"run.al", "pub fn go() -> i32 {\n  ret 1\n}\n"}}) &&
+      write_package(
+          dir, "proj/vendor/tools/fmt", FMT_MANIFEST,
+          {{"show.al", "pub fn shout(x: i32) -> i32 {\n  ret x * 2\n}\n"}});
+  CHECK(setup);
+  CHECK(suite_setup);
+  if (!setup || !suite_setup) {
+    return;
+  }
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  CHECK(check_proj(ctx, dir).is_err());
+  CHECK(ctx.bag.has_errors());
+  CHECK(reports(ctx.bag, "Dependency cycle through '" +
+                             dir.join("proj/vendor/tools") + "'"));
+}
+
 }  // namespace pipeline

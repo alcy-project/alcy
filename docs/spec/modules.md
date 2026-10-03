@@ -45,6 +45,13 @@ path is always a package. A whole suite is `<owner>/<suite>/*`; the bare
 one character apart. Globbing the suite and naming a member of it is
 also an error: the selection would name the same package twice.
 
+A suite specifier with `path` reads the suite manifest at that
+directory instead of the embedded suite: a glob loads every member
+the manifest lists, and a three-segment specifier loads the one
+member it names, each through its own manifest. The manifest must
+name the suite the specifier names, and a member the manifest does
+not list is an error rather than an empty selection.
+
 **Every package is opt-in, `core` included.** A program that wants
 `Option` asks for `alcy/std/core`. A name in scope then always traces
 to a line in a manifest. A selected package that needs another names it

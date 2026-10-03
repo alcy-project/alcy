@@ -1,0 +1,11 @@
+[package]
+name = "acme-fmt"
+version = "0.1.0"
+
+[modules]
+include = ["show"]
+export = ["show"]
+
+[[bin]]
+name = "acme-fmt"
+path = "show.al"

@@ -1,0 +1,11 @@
+[package]
+name = "acme-cli"
+version = "0.1.0"
+
+[modules]
+include = ["run"]
+export = ["run"]
+
+[[bin]]
+name = "acme-cli"
+path = "run.al"

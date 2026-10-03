@@ -7,15 +7,15 @@ peripheral work lives in `backlog.md`. The language record lives in
 
 ## Next
 
-- [ ] Lib packages and suite manifests.
+- [x] Lib packages and suite manifests.
 
-  The suite's other half next to `[[bin]]`: `[lib]` targets with
-  summary-carrying artifacts and cross-package compilation, and
-  compiler-side suite resolution so a suite manifest means more than
-  the embed-time member check. Path dependencies already load from
-  source with cross-package `use` and export trimming; what remains
-  is the suite resolution this unblocks the package ecosystem with,
-  which the `unsafe` implementation waits for.
+  The suite's other half next to `[[bin]]`: `[lib]` targets, path
+  dependencies with cross-package `use` and export trimming, and
+  compiler-side suite resolution, so a suite manifest means more
+  than the embed-time member check. Summary-carrying artifacts
+  stay with IR serialization; until then a lib artifact is an
+  object file, linkable but opaque. This unblocks the package
+  ecosystem, which the `unsafe` implementation waits for.
 - [ ] Function types and closures.
 
   Design first, then build: the syntax against `||`, what a closure

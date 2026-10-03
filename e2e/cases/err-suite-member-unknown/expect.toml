@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Dependency 'acme/tools/nope' is not a member of suite 'acme/tools'"]

@@ -57,6 +57,10 @@ enum class DiagCode : u8 {
   // the package that loads it, or one named like a staged
   // standard-library member.
   DependencyIdentityClash = 15,
+  // A suite specifier does not match the suite manifest it
+  // points at: the owner or name differs, or the member it
+  // names is not one the suite lists.
+  DependencySuiteMismatch = 16,
 };
 
 }  // namespace pipeline

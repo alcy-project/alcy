@@ -1,0 +1,4 @@
+[suite]
+owner = "acme"
+name = "tools"
+packages = ["cli", "fmt"]

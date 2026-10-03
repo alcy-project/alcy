@@ -1,0 +1,2 @@
+exit = 4
+contains = ["names suite 'other/stuff'", "holds suite 'acme/tools'"]

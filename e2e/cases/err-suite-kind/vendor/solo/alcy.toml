@@ -1,0 +1,11 @@
+[package]
+name = "solo"
+version = "0.1.0"
+
+[modules]
+include = ["x"]
+export = ["x"]
+
+[[bin]]
+name = "solo"
+path = "x.al"

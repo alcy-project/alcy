@@ -279,7 +279,9 @@
   F(PipelineDependencyNamesNoSource, "Dependency '{}' names no source; give one of path, version, git") \
   F(PipelineDependencyNeedsFetcher, "Dependency '{}' needs a fetcher the resolver does not have yet") \
   F(PipelineDependencyNotAStdMember, "Dependency '{}' is not a member of alcy/std") \
+  F(PipelineDependencyNotASuiteMember, "Dependency '{}' is not a member of suite '{}/{}'") \
   F(PipelineDependencyOverlaps, "Dependency '{}' overlaps '{}'; name every member or glob the suite, not both") \
+  F(PipelineDependencySuiteMismatch, "Dependency '{}' names suite '{}/{}', but '{}' holds suite '{}/{}'") \
   F(PipelineInvalidOutputPath, "Invalid output path '{}'") \
   F(PipelineInvalidPackageName, "Invalid package name '{}'; use [A-Za-z0-9_-] only") \
   F(PipelineInvalidSourceDirectory, "Invalid source directory '{}'") \
