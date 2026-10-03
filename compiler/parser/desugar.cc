@@ -563,6 +563,24 @@ class Desugarer {
         visit_expr(node.payload.get<ast::ExprRange>().end);
         break;
       }
+      case ast::ExprKind::Closure: {
+        // Parameters bind like `fn` parameters; captures need no
+        // declaration since they resolve through outer scopes. A
+        // wildcard binds nothing, so two of them never collide.
+        push_scope();
+        for (const ast::ClosureParam& param :
+             node.payload.get<ast::ExprClosure>().params) {
+          if (param.is_wildcard) {
+            continue;
+          }
+          ast::Ident name = param.name;
+          name.name = declare_named(param.name);
+          const_cast<ast::ClosureParam&>(param).name = name;
+        }
+        visit_expr(node.payload.get<ast::ExprClosure>().body);
+        pop_scope();
+        break;
+      }
       case ast::ExprKind::Break:
       case ast::ExprKind::Continue: break;
     }

@@ -74,6 +74,27 @@ const ast::ExprReturn as_return(const ast::ExprIdx expr_idx, Fixture& f) {
   return expr.payload.get<ast::ExprReturn>();
 }
 
+const ast::ExprClosure as_closure(const ast::ExprIdx expr_idx, Fixture& f) {
+  const ast::ExprNode& expr = f.ast.exprs[expr_idx];
+  CHECK(expr.kind == ast::ExprKind::Closure);
+  return expr.payload.get<ast::ExprClosure>();
+}
+
+// The trailing expression of a one-expression function body.
+ast::ExprIdx body_value(std::string_view bytes, Fixture& f) {
+  const ParseResult result = parse(bytes, f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return ast::ExprIdx::invalid();
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  const ast::Block& body = f.ast.blocks[fn.body];
+  if (!body.value.is_valid()) {
+    return ast::ExprIdx::invalid();
+  }
+  return body.value;
+}
+
 const ast::ItemStruct as_struct(const ast::ItemIdx item_idx, Fixture& f) {
   const ast::ItemNode& item = f.ast.items[item_idx];
   CHECK(item.kind == ast::ItemKind::Struct);
@@ -1014,6 +1035,198 @@ TEST_CASE("Parser rejects spec method bodies") {
       "  fn f(self: &Self) -> i32 { ret 0 }\n"
       "}\n",
       f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Parser reads a closure with captures and typed params") {
+  Fixture f;
+  const ast::ExprIdx value =
+      body_value("fn f() { [t] (a: i32, mut b, _) -> { a } }", f);
+  CHECK(value.is_valid());
+  if (!value.is_valid()) {
+    return;
+  }
+  const ast::ExprClosure& closure = as_closure(value, f);
+  CHECK(closure.captures.size() == 1);
+  if (closure.captures.size() == 1) {
+    CHECK(closure.captures[0].name == "t");
+  }
+  CHECK(closure.params.size() == 3);
+  if (closure.params.size() != 3) {
+    return;
+  }
+  CHECK(closure.params[0].name.name == "a");
+  CHECK(!closure.params[0].is_mut);
+  CHECK(!closure.params[0].is_wildcard);
+  CHECK(closure.params[0].type.is_valid());
+  CHECK(closure.params[1].name.name == "b");
+  CHECK(closure.params[1].is_mut);
+  CHECK(!closure.params[1].type.is_valid());
+  CHECK(closure.params[2].is_wildcard);
+  CHECK(f.ast.exprs[closure.body].kind == ast::ExprKind::Block);
+}
+
+TEST_CASE("Parser reads a bare closure body as one expression") {
+  Fixture f;
+  const ast::ExprIdx value = body_value("fn f() { (a) -> a + 1 }", f);
+  CHECK(value.is_valid());
+  if (!value.is_valid()) {
+    return;
+  }
+  const ast::ExprClosure& closure = as_closure(value, f);
+  CHECK(closure.captures.empty());
+  CHECK(closure.params.size() == 1);
+  const ast::ExprNode& body = f.ast.exprs[closure.body];
+  CHECK(body.kind == ast::ExprKind::Binary);
+}
+
+TEST_CASE("Parser reads empty captures and empty params") {
+  Fixture f;
+  const ast::ExprIdx value = body_value("fn f() { [] () -> 42 }", f);
+  CHECK(value.is_valid());
+  if (!value.is_valid()) {
+    return;
+  }
+  const ast::ExprClosure& closure = as_closure(value, f);
+  CHECK(closure.captures.empty());
+  CHECK(closure.params.empty());
+}
+
+TEST_CASE("Parser reads function types without disturbing parens") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn apply(f: (i32) -> i32, g: (i32, i32) -> i32, h: &(i32) -> i32) {}",
+      f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  CHECK(fn.params.size() == 3);
+  if (fn.params.size() != 3) {
+    return;
+  }
+  const ast::TypeNode& one = f.ast.types[fn.params[0].type];
+  CHECK(one.kind == ast::TypeKind::Func);
+  if (one.kind == ast::TypeKind::Func) {
+    const ast::TypeFunc& func = one.payload.get<ast::TypeFunc>();
+    CHECK(func.params.size() == 1);
+  }
+  const ast::TypeNode& two = f.ast.types[fn.params[1].type];
+  CHECK(two.kind == ast::TypeKind::Func);
+  if (two.kind == ast::TypeKind::Func) {
+    CHECK(two.payload.get<ast::TypeFunc>().params.size() == 2);
+  }
+  const ast::TypeNode& behind_ref = f.ast.types[fn.params[2].type];
+  CHECK(behind_ref.kind == ast::TypeKind::Ref);
+  if (behind_ref.kind == ast::TypeKind::Ref) {
+    const ast::TypeNode& inner =
+        f.ast.types[behind_ref.payload.get<ast::TypeRef>().inner];
+    CHECK(inner.kind == ast::TypeKind::Func);
+  }
+}
+
+TEST_CASE("Parser keeps a parenthesized type a type") {
+  Fixture f;
+  const ParseResult result = parse("fn f(x: (i32)) {}", f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  const ast::TypeNode& type = f.ast.types[fn.params[0].type];
+  CHECK(type.kind == ast::TypeKind::Primitive);
+}
+
+TEST_CASE("Parser keeps parens arrays unit and tuples") {
+  Fixture f;
+  const ast::ExprIdx paren = body_value("fn f() { (1) + 2 }", f);
+  CHECK(paren.is_valid());
+  if (paren.is_valid()) {
+    CHECK(f.ast.exprs[paren].kind == ast::ExprKind::Binary);
+  }
+  Fixture g;
+  const ast::ExprIdx array = body_value("fn f() { [1, 2] }", g);
+  CHECK(array.is_valid());
+  if (array.is_valid()) {
+    CHECK(g.ast.exprs[array].kind == ast::ExprKind::Array);
+  }
+  Fixture h;
+  const ast::ExprIdx unit = body_value("fn f() { () }", h);
+  CHECK(unit.is_valid());
+  if (unit.is_valid()) {
+    CHECK(h.ast.exprs[unit].kind == ast::ExprKind::Tuple);
+  }
+  Fixture i;
+  const ast::ExprIdx tuple = body_value("fn f() { (1, 2) }", i);
+  CHECK(tuple.is_valid());
+  if (tuple.is_valid()) {
+    CHECK(i.ast.exprs[tuple].kind == ast::ExprKind::Tuple);
+  }
+}
+
+TEST_CASE("Parser reads a closure as a call argument") {
+  Fixture f;
+  const ast::ExprIdx value = body_value("fn f() { g((a) -> a, b) }", f);
+  CHECK(value.is_valid());
+  if (!value.is_valid()) {
+    return;
+  }
+  const ast::ExprNode& call = f.ast.exprs[value];
+  CHECK(call.kind == ast::ExprKind::Call);
+  if (call.kind != ast::ExprKind::Call) {
+    return;
+  }
+  const auto args = call.payload.get<ast::ExprCall>().args;
+  CHECK(args.size() == 2);
+  if (args.size() != 2) {
+    return;
+  }
+  CHECK(f.ast.exprs[args[0]].kind == ast::ExprKind::Closure);
+  CHECK(f.ast.exprs[args[1]].kind == ast::ExprKind::Path);
+}
+
+TEST_CASE("Parser reads a struct literal as a closure body") {
+  Fixture f;
+  const ParseResult result =
+      parse("struct P { x: i32 }\nfn f() { (p) -> P { x: p } }", f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+  if (!result.ok || result.items.size() != 2) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[1], f);
+  const ast::Block& body = f.ast.blocks[fn.body];
+  CHECK(body.value.is_valid());
+  if (!body.value.is_valid()) {
+    return;
+  }
+  const ast::ExprClosure& closure = as_closure(body.value, f);
+  CHECK(f.ast.exprs[closure.body].kind == ast::ExprKind::Struct);
+}
+
+TEST_CASE("Parser reads a parenthesized closure as a callee") {
+  Fixture f;
+  const ast::ExprIdx value = body_value("fn f() { ((a) -> a)(1) }", f);
+  CHECK(value.is_valid());
+  if (!value.is_valid()) {
+    return;
+  }
+  const ast::ExprNode& call = f.ast.exprs[value];
+  CHECK(call.kind == ast::ExprKind::Call);
+  if (call.kind != ast::ExprKind::Call) {
+    return;
+  }
+  const ast::ExprIdx callee = call.payload.get<ast::ExprCall>().callee;
+  CHECK(f.ast.exprs[callee].kind == ast::ExprKind::Closure);
+}
+
+TEST_CASE("Parser requires an arrow after closure params") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { (x: i32) }", f);
   CHECK(!result.ok);
   CHECK(f.bag.has_errors());
 }

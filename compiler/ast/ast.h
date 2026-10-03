@@ -18,7 +18,8 @@
 //   pattern     -> PatternNode     static     -> ItemStatic
 //   literal     -> Literal         const/use  -> ItemConst, ItemUse
 //   expressions -> ExprNode        statements -> StmtNode, Block
-//   fn          -> ItemFn
+//   fn          -> ItemFn           closure     -> ExprClosure
+//   func type   -> TypeFunc
 
 #include <memory>
 #include <span>
@@ -124,6 +125,7 @@ enum class TypeKind : u8 {
   Slice,
   Path,
   Ref,
+  Func,
 };
 
 struct Type {
@@ -158,14 +160,26 @@ struct TypeRef {
   TypeIdx inner = TypeIdx::invalid();
 };
 
+// A function type `(A, B) -> R`: structural, with captures erased.
+// The parameter list is empty for `() -> R`.
+struct TypeFunc {
+  std::span<const TypeIdx> params;
+  TypeIdx ret = TypeIdx::invalid();
+};
+
 struct TypeNode {
   TypeKind kind;
   diag::Span span;
 
   // Leaves members uninitialized; parsers set the active member
   // before pushing the node.
-  using TypePayload = base::
-      Union<TypePrimitive, TypeTuple, TypeArray, TypeSlice, TypePath, TypeRef>;
+  using TypePayload = base::Union<TypePrimitive,
+                                  TypeTuple,
+                                  TypeArray,
+                                  TypeSlice,
+                                  TypePath,
+                                  TypeRef,
+                                  TypeFunc>;
   TypePayload payload;
 };
 
@@ -377,6 +391,7 @@ enum class ExprKind : u8 {
   Break,
   Continue,
   Range,
+  Closure,
 };
 
 struct Expr {
@@ -516,6 +531,24 @@ struct ExprRange {
   bool inclusive;
 };
 
+// One closure parameter: a name or `_`, `mut` as in declaration
+// patterns, and an optional type. Destructuring waits.
+struct ClosureParam {
+  Ident name;
+  bool is_mut = false;
+  bool is_wildcard = false;
+  TypeIdx type = TypeIdx::invalid();
+};
+
+// A closure `(params) -> body` with an optional capture list.
+// `captures` names locals only; an empty list and no list both
+// mean the closure sees nothing outside its parameters.
+struct ExprClosure {
+  std::span<const Ident> captures;
+  std::span<const ClosureParam> params;
+  ExprIdx body = ExprIdx::invalid();
+};
+
 struct ExprNode {
   ExprKind kind;
   diag::Span span;
@@ -543,7 +576,8 @@ struct ExprNode {
                                   ExprWhile,
                                   ExprBlock,
                                   ExprReturn,
-                                  ExprRange>;
+                                  ExprRange,
+                                  ExprClosure>;
   ExprPayload payload;
 };
 

@@ -1252,7 +1252,8 @@ bool Lowerer::comp_eval_expr(u32 mod,
     case ast::ExprKind::Break:
     case ast::ExprKind::Continue:
     case ast::ExprKind::Return:
-    case ast::ExprKind::Range: break;
+    case ast::ExprKind::Range:
+    case ast::ExprKind::Closure: break;
     case ast::ExprKind::Tuple: {
       out.type = expr_type_in(mod, expr);
       out.value.tag = CompValue::Tag::Tuple;

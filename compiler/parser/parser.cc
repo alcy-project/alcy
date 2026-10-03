@@ -257,6 +257,75 @@ Parser::StmtLead Parser::scan_lead() const {
   return StmtLead::None;
 }
 
+bool Parser::scan_closure() const {
+  using K = lexer::TokenKind;
+  usize i = pos_;
+  if (i < tokens_.size() && tokens_[i].kind == K::LBracket) {
+    // A capture list: match the brackets, then a parameter list
+    // must follow.
+    i32 depth = 1;
+    ++i;
+    while (i < tokens_.size()) {
+      const lexer::TokenKind kind = tokens_[i].kind;
+      if (kind == K::Error || kind == K::DocComment || is_reserved(kind)) {
+        ++i;
+        continue;
+      }
+      if (kind == K::Semicolon || kind == K::RBrace || kind == K::Eof) {
+        return false;
+      }
+      if (kind == K::LBracket || kind == K::LBrace || kind == K::LParen) {
+        ++depth;
+      } else if (kind == K::RBracket || kind == K::RBrace ||
+                 kind == K::RParen) {
+        --depth;
+        if (depth == 0) {
+          ++i;
+          break;
+        }
+      }
+      ++i;
+    }
+    if (i >= tokens_.size() || tokens_[i].kind != K::LParen) {
+      return false;
+    }
+  }
+  if (i >= tokens_.size() || tokens_[i].kind != K::LParen) {
+    return false;
+  }
+  // The parameter list: a `:` at depth zero can only ascribe a
+  // closure parameter, and an `->` after the matching `)` can
+  // only open a closure body.
+  i32 depth = 1;
+  ++i;
+  while (i < tokens_.size()) {
+    const lexer::TokenKind kind = tokens_[i].kind;
+    if (kind == K::Error || kind == K::DocComment || is_reserved(kind)) {
+      ++i;
+      continue;
+    }
+    if (kind == K::Semicolon || kind == K::RBrace || kind == K::Eof) {
+      return false;
+    }
+    if (depth == 0) {
+      return kind == K::Arrow;
+    }
+    // A `:` at the group's own depth can only ascribe a closure
+    // parameter: struct fields nest a level deeper, and `::` is
+    // its own token.
+    if (kind == K::Colon && depth == 1) {
+      return true;
+    }
+    if (kind == K::LBracket || kind == K::LBrace || kind == K::LParen) {
+      ++depth;
+    } else if (kind == K::RBracket || kind == K::RBrace || kind == K::RParen) {
+      --depth;
+    }
+    ++i;
+  }
+  return false;
+}
+
 base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
   if (base::Result<void, lexer::TokenStreamError> verified =
           lexer::verify_token_stream(tokens_, file_, bytes_);

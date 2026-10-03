@@ -1151,6 +1151,13 @@ ir::TypeIdx Checker::resolve_type(u32 module,
       return builder.reference_type(pointee,
                                     node.payload.get<ast::TypeRef>().is_mut);
     }
+    case ast::TypeKind::Func: {
+      const u32 index = bag.emit<i18n::Key::AnalyzerClosuresNotImplemented>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::ClosuresNotImplemented, node.span);
+      (void)index;
+      return error_type();
+    }
     case ast::TypeKind::Slice: {
       const ast::TypeSlice& slice = node.payload.get<ast::TypeSlice>();
       const ir::TypeIdx element = resolve_type(module, slice.element, self);

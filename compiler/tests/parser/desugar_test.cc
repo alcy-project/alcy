@@ -340,6 +340,16 @@ struct NameCollector {
         visit_expr(range.end);
         break;
       }
+      case ast::ExprKind::Closure: {
+        const ast::ExprClosure& closure = expr.payload.get<ast::ExprClosure>();
+        for (const ast::ClosureParam& param : closure.params) {
+          if (!param.is_wildcard) {
+            names.emplace_back(param.name.name);
+          }
+        }
+        visit_expr(closure.body);
+        break;
+      }
       case ast::ExprKind::Borrow: {
         const ast::ExprBorrow& borrow = expr.payload.get<ast::ExprBorrow>();
         visit_expr(borrow.inner);
@@ -429,6 +439,28 @@ TEST_CASE("Desugar leaves keywords and module paths alone") {
       check_names("fn get(self: Self) -> i32 { ret self.x }\n"
                   "fn useit() -> i32 { ret package::other + 1 }\n",
                   f, {"self", "self", "package::other"}));
+}
+
+TEST_CASE("Desugar binds closure params and resolves captures outward") {
+  Fixture f;
+  CHECK(check_names("fn f(x: i32) { g := [x] (y) -> x + y; }", f,
+                    {"x", "g", "y", "x", "y"}));
+}
+
+TEST_CASE("Desugar freshens a closure param shadowing a capture") {
+  Fixture f;
+  CHECK(check_names("fn f(x: i32) { g := [x] (x) -> x; }", f,
+                    {"x", "g", "x$0", "x$0"}));
+}
+
+TEST_CASE("Desugar binds no wildcards") {
+  Fixture f;
+  CHECK(check_names("fn f() { g := (_, _) -> 1; }", f, {"g"}));
+}
+
+TEST_CASE("Desugar rejects duplicate closure params") {
+  Fixture f;
+  CHECK(check_desugar_fails("fn f() { g := (x, x) -> x; }", f));
 }
 
 }  // namespace parser

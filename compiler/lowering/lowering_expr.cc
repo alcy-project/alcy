@@ -3266,6 +3266,12 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       return materialize(addr);
     }
     case ast::ExprKind::Range: return lower_range(expr);
+    case ast::ExprKind::Closure: {
+      // Checking rejects closures before lowering runs, so reaching
+      // one means a caller lowered an unchecked tree.
+      internal(node.span, "closure without checking");
+      return Val{size_one, error_type(), false, false};
+    }
     case ast::ExprKind::Block: {
       const ast::ExprBlock& block = node.payload.get<ast::ExprBlock>();
       if (!block.is_comp) {

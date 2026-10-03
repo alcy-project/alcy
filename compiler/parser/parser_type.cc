@@ -31,6 +31,21 @@ ast::TypeIdx Parser::parse_type() {
     case T::LParen: {
       advance();
       if (match(T::RParen)) {
+        if (match(T::Arrow)) {
+          // `() -> R`: a function type with no parameters.
+          ast::TypeIdx ret = parse_type();
+          if (!ret.is_valid()) {
+            return ast::TypeIdx::invalid();
+          }
+          ast::TypeNode node;
+          node.kind = ast::TypeKind::Func;
+          node.span = span_from(mark);
+          node.payload.set(ast::TypeFunc{
+              .params = {},
+              .ret = ret,
+          });
+          return ast_.types.push_back(node);
+        }
         ast::TypeNode node;
         node.kind = ast::TypeKind::Unit;
         node.span = span_from(mark);
@@ -40,26 +55,42 @@ ast::TypeIdx Parser::parse_type() {
       if (!first.is_valid()) {
         return ast::TypeIdx::invalid();
       }
-      if (!match(T::Comma)) {
-        if (!expect(T::RParen, "`)`")) {
-          return ast::TypeIdx::invalid();
-        }
-        return first;
-      }
       std::vector<ast::TypeIdx> elements;
       elements.push_back(first);
-      while (!check(T::RParen) && !at_end()) {
-        ast::TypeIdx element = parse_type();
-        if (!element.is_valid()) {
-          return ast::TypeIdx::invalid();
-        }
-        elements.push_back(element);
-        if (!match(T::Comma)) {
-          break;
+      if (match(T::Comma)) {
+        while (!check(T::RParen) && !at_end()) {
+          ast::TypeIdx element = parse_type();
+          if (!element.is_valid()) {
+            return ast::TypeIdx::invalid();
+          }
+          elements.push_back(element);
+          if (!match(T::Comma)) {
+            break;
+          }
         }
       }
       if (!expect(T::RParen, "`)`")) {
         return ast::TypeIdx::invalid();
+      }
+      if (match(T::Arrow)) {
+        // `(A, B) -> R`: a structural function type. A single
+        // type in parens reads as one parameter, so `(A) -> R`
+        // is a function type while a bare `(A)` stays `A`.
+        ast::TypeIdx ret = parse_type();
+        if (!ret.is_valid()) {
+          return ast::TypeIdx::invalid();
+        }
+        ast::TypeNode node;
+        node.kind = ast::TypeKind::Func;
+        node.span = span_from(mark);
+        node.payload.set(ast::TypeFunc{
+            .params = ast::copy_to_arena(ast_.spans, elements),
+            .ret = ret,
+        });
+        return ast_.types.push_back(node);
+      }
+      if (elements.size() == 1) {
+        return first;
       }
       ast::TypeNode node;
       node.kind = ast::TypeKind::Tuple;

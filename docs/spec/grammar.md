@@ -93,7 +93,18 @@ Declaration left-hand sides use this grammar with `:=`
   without one, the parameters bind from the argument types.
 - Array indexing is builtin with panic-on-out-of-bounds semantics.
 - Calls to `panic(...)` diverge with type `!`.
-- Closures do not exist; `||` is logical-or only.
+- A closure is an anonymous function: `[captures] (params) -> body`,
+  where each parameter is `[mut] (name|_) [: type]` and the body is
+  one expression, or a block whose value is its last expression.
+  Captures name locals only; a bare parameter list captures nothing.
+  `ret` inside a closure returns from the closure.
+- `(` opens a closure when the parens hold a `:` at depth zero or
+  the matching `)` is followed by `->`; `[` opens one when a
+  bracketed name list is followed by such a group. Both are errors
+  anywhere else, so no valid program reads differently. `)` and
+  `->` share a line, as with `fn` return types; the body may start
+  on the next line, and a `{` body on the next line continues the
+  closure since `->` never ends a statement.
 - In statement position `Path {` opens a struct expression. After
   `if`/`while`/`match` conditions, `for` heads, and `else`, `{` always
   opens a block: parenthesize expressions containing struct literals.

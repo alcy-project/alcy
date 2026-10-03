@@ -107,4 +107,26 @@ TEST_CASE("Check reports one warning for a problem both trees share") {
   CHECK(ctx.bag.warning_count() == 1);
 }
 
+TEST_CASE("Check reports closures as not implemented yet") {
+  // Parsing accepts closures and function types; checking stops
+  // with an explicit diagnostic until later slices implement them.
+  base::Result<io::TempDir, diag::Reported> made =
+      make_package("fn main() -> i32 {\n  f := [t] (a: i32) -> a\n  ret 0\n}\n",
+                   "pub fn double(x: i32) -> i32 {\n  ret x + x\n}\n");
+  CHECK(made.is_ok());
+  if (made.is_err()) {
+    return;
+  }
+  const io::TempDir dir = std::move(made).unwrap();
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  CHECK(check_dir(ctx, dir).is_err());
+  CHECK(ctx.bag.has_errors());
+  bool named = false;
+  ctx.bag.for_each([&](const diag::Diagnostic& diagnostic) {
+    named = named || diagnostic.message == "Closures are not implemented yet";
+  });
+  CHECK(named);
+}
+
 }  // namespace pipeline

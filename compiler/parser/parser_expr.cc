@@ -617,6 +617,9 @@ ast::ExprIdx Parser::parse_primary() {
       return ast_.exprs.push_back(lit_node);
     }
     case lexer::TokenKind::LParen: {
+      if (scan_closure()) {
+        return parse_closure();
+      }
       advance();
       // Parentheses lift the struct-literal ban a surrounding condition
       // imposes: the matching `)` still ends any literal before the
@@ -635,6 +638,9 @@ ast::ExprIdx Parser::parse_primary() {
       return parse_block_expr();
     }
     case lexer::TokenKind::LBracket: {
+      if (scan_closure()) {
+        return parse_closure();
+      }
       return parse_array_literal();
     }
     case lexer::TokenKind::Comp: {
@@ -861,6 +867,88 @@ ast::ExprIdx Parser::parse_paren_expr(usize mark) {
       .elements = ast::copy_to_arena(ast_.spans, elements),
   });
   return ast_.exprs.push_back(tuple_node);
+}
+
+// A closure literal after the scan established the shape:
+// `[captures] (params) -> body`. The body is one expression, so
+// statements and assignment need braces; a `{` body reuses the
+// block parser through the expression parser, and a `Path {`
+// body is a struct literal wherever one is allowed.
+ast::ExprIdx Parser::parse_closure() {
+  const usize mark = pos_;
+  if (nesting_exhausted(peek().span)) {
+    return ast::ExprIdx::invalid();
+  }
+  const base::NestingScope scope(nesting_);
+  std::vector<ast::Ident> captures;
+  if (match(lexer::TokenKind::LBracket)) {
+    while (!check(lexer::TokenKind::RBracket) && !at_end()) {
+      base::Result<ast::Ident, diag::Reported> capture =
+          parse_ident("capture name");
+      if (capture.is_err()) {
+        return ast::ExprIdx::invalid();
+      }
+      captures.push_back(std::move(capture).unwrap());
+      if (!match(lexer::TokenKind::Comma)) {
+        break;
+      }
+    }
+    if (!expect(lexer::TokenKind::RBracket, "`]`")) {
+      return ast::ExprIdx::invalid();
+    }
+  }
+  if (!expect(lexer::TokenKind::LParen, "`(`")) {
+    return ast::ExprIdx::invalid();
+  }
+  std::vector<ast::ClosureParam> params;
+  while (!check(lexer::TokenKind::RParen) && !at_end()) {
+    ast::ClosureParam param;
+    param.is_mut = match(lexer::TokenKind::Mut);
+    if (match(lexer::TokenKind::Underscore)) {
+      param.is_wildcard = true;
+      const lexer::Token wildcard = previous();
+      param.name = ast::Ident{
+          bytes_.substr(wildcard.span.offset, wildcard.span.length),
+          wildcard.span,
+      };
+    } else {
+      base::Result<ast::Ident, diag::Reported> name =
+          parse_ident("parameter name");
+      if (name.is_err()) {
+        return ast::ExprIdx::invalid();
+      }
+      param.name = std::move(name).unwrap();
+    }
+    if (match(lexer::TokenKind::Colon)) {
+      param.type = parse_type();
+      if (!param.type.is_valid()) {
+        return ast::ExprIdx::invalid();
+      }
+    }
+    params.push_back(param);
+    if (!match(lexer::TokenKind::Comma)) {
+      break;
+    }
+  }
+  if (!expect(lexer::TokenKind::RParen, "`)`")) {
+    return ast::ExprIdx::invalid();
+  }
+  if (!expect(lexer::TokenKind::Arrow, "`->`")) {
+    return ast::ExprIdx::invalid();
+  }
+  const ast::ExprIdx body = parse_expr();
+  if (!body.is_valid()) {
+    return ast::ExprIdx::invalid();
+  }
+  ast::ExprNode closure_node;
+  closure_node.kind = ast::ExprKind::Closure;
+  closure_node.span = span_from(mark);
+  closure_node.payload.set(ast::ExprClosure{
+      .captures = ast::copy_to_arena(ast_.spans, captures),
+      .params = ast::copy_to_arena(ast_.spans, params),
+      .body = body,
+  });
+  return ast_.exprs.push_back(closure_node);
 }
 
 ast::ExprIdx Parser::parse_if() {

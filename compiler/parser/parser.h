@@ -90,6 +90,13 @@ class Parser {
   enum class StmtLead : u8 { None, Decl, Reassign };
   StmtLead scan_lead() const;
 
+  // Closure disambiguation: scans for a capture list and parameter
+  // list closed by `->` without consuming. A `:` at bracket depth
+  // zero inside the parens, or an `->` right after the matching
+  // `)`, means a closure; both are errors anywhere else, so no
+  // valid program reads differently.
+  bool scan_closure() const;
+
   // Items.
   ast::ItemIdx parse_item();
   ast::ItemIdx parse_fn(bool is_pub);
@@ -145,6 +152,11 @@ class Parser {
 
   // Statements (recover at boundaries).
   ast::StmtIdx parse_stmt();
+
+  // A closure literal: an optional capture list, parameter list,
+  // `->`, and body. The caller scanned the shape, so the brackets
+  // are known to match.
+  ast::ExprIdx parse_closure();
 
   // Small pieces.
   base::Result<ast::Ident, diag::Reported> parse_ident(std::string_view what);

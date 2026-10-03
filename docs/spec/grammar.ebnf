@@ -11,9 +11,10 @@
  * UPPER names are lexical and only sketched at the end.
  *
  * What EBNF cannot say lives in trailing comments: longest-match
- * lexing, significant newlines, the nesting budget, and the two
- * disambiguations (struct literal vs block, `..` after a literal).
- * See docs/spec/grammar.md for those rules.
+ * lexing, significant newlines, the nesting budget, and the three
+ * disambiguations (struct literal vs block, `..` after a literal,
+ * closure against parenthesized expressions). See
+ * docs/spec/grammar.md for those rules.
  *)
 
 file        = { item } ;
@@ -59,9 +60,16 @@ use_item    = [ "pub" ] , "use" , path , [ "as" , IDENT ] , ";" ;
 (* Types *)
 
 type        = primitive | "()" | "!" | "str"
-            | tuple_type | array_type | slice_type | ref_type | path_type ;
+            | tuple_type | array_type | slice_type | ref_type | path_type
+            | func_type ;
 primitive   = integer_type | float_type | "bool" ;
 tuple_type  = "(" , type , "," , type , { "," , type } , [ "," ] , ")" ;
+func_type   = "(" , [ type , { "," , type } , [ "," ] ] , ")" ,
+              "->" , type ;
+              (* Structural: two closures over one signature share the
+                 type, and captures are erased. A single type in
+                 parens is one parameter, so `(A) -> R` is a function
+                 type while a bare `(A)` stays `A`. *)
 array_type  = "[" , type , ";" , INTEGER , "]" ;
 slice_type  = "[" , type , "]" ;
 ref_type    = "&" , [ "mut" ] , type ;
@@ -107,11 +115,18 @@ field         = "." , ( IDENT | INTEGER ) ;
 method        = "." , IDENT , "(" , [ expr , { "," , expr } ] , ")" ;
 index         = "[" , expr , "]" ;
 primary       = literal | path | struct_expr | tuple_expr | array_expr
-              | paren_expr | block_like | comp_block
+              | paren_expr | block_like | comp_block | closure_expr
               | ret_expr | break_expr | continue_expr ;
               (* `?` is a postfix operator, so it may be followed by a
                  field or method access: `f()?.x` reads as `(f()?).x`.
                  See docs/spec/grammar.md, "Expressions". *)
+closure_expr  = [ captures ] , "(" , [ closure_param ,
+                  { "," , closure_param } , [ "," ] ] , ")" ,
+                  "->" , expr ;
+closure_param = [ "mut" ] , ( IDENT | "_" ) , [ ":" , type ] ;
+captures      = "[" , [ IDENT , { "," , IDENT } , [ "," ] ] , "]" ;
+              (* A bare parameter list captures nothing; `[]` says the
+                 same thing explicitly. Captures name locals only. *)
 ret_expr      = "ret" , [ expr ] ;
 break_expr    = "break" ;
 continue_expr = "continue" ;

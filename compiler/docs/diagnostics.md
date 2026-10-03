@@ -38,7 +38,7 @@ partly because UTF-8 validation is coming and it should not have to move.
 | --- | --- | --- | --- |
 | `A` | lexer | `compiler/lexer` | 6 |
 | `B` | parser | `compiler/parser` | 8 |
-| `C` | analyzer | `compiler/analyzer` | 33 |
+| `C` | analyzer | `compiler/analyzer` | 34 |
 | `D` | lowering | `compiler/lowering` | 6 |
 | `F` | borrow | `compiler/borrow` | 4 |
 | `G` | ir | `compiler/ir` | one per `VerificationErrorKind` |

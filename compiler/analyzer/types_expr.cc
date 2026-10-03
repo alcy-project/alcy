@@ -469,7 +469,8 @@ bool Checker::expr_comp_known(u32 module, ast::ExprIdx expr) const {
     case ast::ExprKind::Break:
     case ast::ExprKind::Continue: return true;
     case ast::ExprKind::Return:
-    case ast::ExprKind::Range: return false;
+    case ast::ExprKind::Range:
+    case ast::ExprKind::Closure: return false;
   }
 }
 
@@ -2450,6 +2451,13 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
     }
     case ast::ExprKind::Range: {
       return check_range(module, expr, expected);
+    }
+    case ast::ExprKind::Closure: {
+      const u32 index = bag.emit<i18n::Key::AnalyzerClosuresNotImplemented>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::ClosuresNotImplemented, ast.exprs[expr].span);
+      (void)index;
+      return error_type();
     }
   }
 }

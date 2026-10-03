@@ -75,6 +75,15 @@ bool verify_type_children(const TypeNode& node, const AstArena& arena) {
       const TypeRef ref = node.payload.get<TypeRef>();
       return bound(ref.inner, arena.types.size());
     }
+    case TypeKind::Func: {
+      const TypeFunc func = node.payload.get<TypeFunc>();
+      for (const TypeIdx param : func.params) {
+        if (!bound(param, arena.types.size())) {
+          return false;
+        }
+      }
+      return bound(func.ret, arena.types.size());
+    }
   }
   return false;
 }
@@ -287,6 +296,15 @@ bool verify_expr_children(const ExprNode& node, const AstArena& arena) {
       const ExprRange range = node.payload.get<ExprRange>();
       return bound(range.start, arena.exprs.size()) &&
              bound(range.end, arena.exprs.size());
+    }
+    case ExprKind::Closure: {
+      const ExprClosure closure = node.payload.get<ExprClosure>();
+      for (const ClosureParam& param : closure.params) {
+        if (!bound(param.type, arena.types.size())) {
+          return false;
+        }
+      }
+      return bound(closure.body, arena.exprs.size());
     }
   }
   return false;
