@@ -195,8 +195,8 @@ std::string HelpFormatter::operator()(const arg::Command& command,
                    command.name(), reset, bright_magenta, bold,
                    i18n::text<Key::ArgOptions>(language), reset, bright_magenta,
                    bold, i18n::text<Key::ArgCommand>(language), reset);
-    fmt::format_to(out, "\n{}{}{}:\n", bold, underline,
-                   i18n::text<Key::ArgCommands>(language));
+    fmt::format_to(out, "\n{}{}{}{}:\n", bold, underline,
+                   i18n::text<Key::ArgCommands>(language), reset);
 
     usize widest_command = MIN_DESCRIPTION_MARGIN;
     for (const arg::Command& sub : command.subcommands()) {
@@ -213,8 +213,8 @@ std::string HelpFormatter::operator()(const arg::Command& command,
                    i18n::text<Key::ArgOptions>(language), reset);
   }
 
-  fmt::format_to(out, "\n{}{}{}:\n", bold, underline,
-                 i18n::text<Key::ArgOptions>(language));
+  fmt::format_to(out, "\n{}{}{}{}:\n", bold, underline,
+                 i18n::text<Key::ArgOptions>(language), reset);
 
   usize widest_option = MIN_DESCRIPTION_MARGIN;
   std::vector<std::string> specs;

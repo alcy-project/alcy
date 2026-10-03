@@ -12,8 +12,10 @@
 #include "cli/logger.h"
 #include "cli/parse_args.h"
 #include "cli/result_code.h"
+#include "cli/usage.h"
 #include "doctest/doctest.h"
 #include "fpag/arg/parser.h"
+#include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
 #include "fpag/term/color_style.h"
 #include "i18n/language.h"
@@ -30,6 +32,37 @@ ParseOutcome parse(std::span<const std::string_view> args) {
 Interruption render(ParseOutcome&& outcome) {
   arg::Parser parser = build_parser();
   return render_outcome(parser, outcome, term::ColorMode::Never);
+}
+
+// Whether every style a line opens is closed before the line ends. A
+// style that survives its line paints whatever comes after it, which is
+// how a reset the formatter forgot turns up in the output.
+bool styles_balanced(std::string_view text) {
+  isize open = 0;
+  usize i = 0;
+  while (i < text.size()) {
+    if (text[i] == '\n') {
+      if (open != 0) {
+        return false;
+      }
+      ++i;
+      continue;
+    }
+    if (text[i] == '\x1b' && i + 1 < text.size() && text[i + 1] == '[') {
+      const usize end = text.find('m', i + 2);
+      if (end == std::string_view::npos) {
+        return false;
+      }
+      const std::string_view parameters = text.substr(i + 2, end - i - 2);
+      // One `0` closes every attribute, so it clears the count rather than
+      // closing one of them.
+      open = parameters == "0" ? 0 : open + 1;
+      i = end + 1;
+      continue;
+    }
+    ++i;
+  }
+  return open == 0;
 }
 
 // The answer and the errors as one string, for the cases that assert on a
@@ -55,6 +88,17 @@ TEST_CASE("Render help for explicit and bare invocations") {
   const Interruption none = render(parse(bare));
   CHECK(none.text.find("build") != std::string::npos);
   CHECK(none.errors.empty());
+}
+
+// Every style a coloured line opens is closed before the line ends. A
+// `Commands:` that forgot its reset underlined the list under it, which
+// is what this pins down.
+TEST_CASE("Coloured help closes every style it opens") {
+  const HelpFormatter help{i18n::Language::EnUs};
+  const std::string text =
+      help(build_parser().root_command(), term::ColorStyle::Ansi16);
+  CHECK(text.find("\x1b[") != std::string::npos);
+  CHECK(styles_balanced(text));
 }
 
 TEST_CASE("Render version") {
