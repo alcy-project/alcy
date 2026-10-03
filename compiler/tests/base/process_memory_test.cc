@@ -15,11 +15,13 @@ namespace {
 
 // Touched, so every page is resident and the high-water mark has to
 // include them: an untouched allocation commits nothing on most hosts.
+#if !BUILD_FLAG(IS_OS_ASMJS)
 void hold(usize bytes) {
   std::vector<char> memory(bytes, 1);
   volatile char sink = memory[bytes / 2];
   (void)sink;
 }
+#endif
 
 }  // namespace
 
