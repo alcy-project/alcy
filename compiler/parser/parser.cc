@@ -275,6 +275,9 @@ base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
     }
     ast::ItemIdx item = parse_item();
     if (!item.is_valid()) {
+      if (ast_.exhausted()) {
+        break;
+      }
       synchronize();
       continue;
     }
@@ -299,6 +302,11 @@ base::Result<void, diag::Reported> verify_trees(ast::AstArena& ast,
 }
 
 ast::ItemIdx Parser::parse_item() {
+  // A spent arena builds nothing further: what it refused would leave a
+  // node half made and a diagnostic about the wrong thing.
+  if (ast_.exhausted()) {
+    return ast::ItemIdx::invalid();
+  }
   const bool is_pub = match(lexer::TokenKind::Pub);
   switch (peek_kind()) {
     case lexer::TokenKind::Fn: return parse_fn(is_pub);
@@ -996,6 +1004,9 @@ bool Parser::nesting_exhausted(diag::Span span) {
 }
 
 ast::BlockIdx Parser::parse_block() {
+  if (ast_.exhausted()) {
+    return ast::BlockIdx::invalid();
+  }
   if (nesting_exhausted(peek().span)) {
     return ast::BlockIdx::invalid();
   }
@@ -1012,6 +1023,9 @@ ast::BlockIdx Parser::parse_block() {
     }
     ast::StmtIdx stmt = parse_stmt();
     if (!stmt.is_valid()) {
+      if (ast_.exhausted()) {
+        break;
+      }
       synchronize();
       continue;
     }
@@ -1041,6 +1055,9 @@ ast::BlockIdx Parser::parse_block() {
 }
 
 ast::StmtIdx Parser::parse_stmt() {
+  if (ast_.exhausted()) {
+    return ast::StmtIdx::invalid();
+  }
   const usize mark = pos_;
   // Control-flow heads own their `:=` (if-let/while-let conditions);
   // scanning for a declaration lead would misread them as patterns.

@@ -46,8 +46,17 @@ TEST_CASE("A parse stops at the first file the arena cannot hold") {
   for (u32 jobs : {1u, 8u}) {
     PipelineContext ctx{i18n::Language::EnUs, capacity};
     ctx.jobs = jobs;
-    // Past the headroom, which is what the check asks about.
-    CHECK(ctx.ast.spans.alloc(capacity - 1) != nullptr);
+    // Past the headroom, which is what the check asks about. Each append
+    // is admitted only with room for the next, so the bites stay small
+    // enough that the headroom is what the fill reaches, not the rule.
+    const usize bite = capacity / 64;
+    while (!ctx.ast.nearly_full()) {
+      void* const got = ctx.ast.spans.alloc(bite);
+      CHECK(got != nullptr);
+      if (got == nullptr) {
+        return;
+      }
+    }
     CHECK(ctx.ast.nearly_full());
 
     std::vector<source::FileId> files;
@@ -65,6 +74,38 @@ TEST_CASE("A parse stops at the first file the arena cannot hold") {
     if (only != nullptr) {
       // The refusal is the pipeline's span-arena code, which is what
       // says the input was too large rather than wrong.
+      CHECK(only->code ==
+            diag::Code{diag::Stage::Pipeline,
+                       static_cast<u8>(DiagCode::SpanArenaExhausted)});
+    }
+  }
+}
+
+// A file admitted while the arena was still empty can spend more than it
+// holds, and the refusal has to arrive as a diagnostic: the file is
+// refused, the diagnostics from a tree that was never finished are
+// dropped, and the run says the one thing that happened.
+TEST_CASE("A parse refuses a file the arena cannot hold mid-file") {
+  const usize capacity = mem::page_size();
+  std::string source = "fn main() {\n  x := ";
+  for (u32 i = 0; i < 200; ++i) {
+    source += "a + ";
+  }
+  source += "a\n}\n";
+
+  for (u32 jobs : {1u, 8u}) {
+    INFO("jobs: " << jobs);
+    PipelineContext ctx{i18n::Language::EnUs, capacity};
+    ctx.jobs = jobs;
+    const source::FileId file = ctx.sources.add_virtual("main.al", source);
+    const source::FileId files[] = {file};
+    base::Result<ParsedFiles, diag::Reported> result = parse_files(ctx, files);
+    CHECK(result.is_err());
+    CHECK(ctx.ast.exhausted());
+    CHECK(ctx.bag.size() == 1);
+    const diag::Diagnostic* const only = ctx.bag.at(0);
+    CHECK(only != nullptr);
+    if (only != nullptr) {
       CHECK(only->code ==
             diag::Code{diag::Stage::Pipeline,
                        static_cast<u8>(DiagCode::SpanArenaExhausted)});

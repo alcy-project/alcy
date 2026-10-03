@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "ast/node_vec.h"
+#include "ast/span_arena.h"
 #include "diag/span.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
@@ -63,7 +64,9 @@ using StmtIdx = details::Idx<StmtNode>;
 using ItemIdx = details::Idx<ItemNode>;
 
 // Copies a scratch list into the arena; the returned span borrows arena
-// storage for the arena's lifetime.
+// storage for the arena's lifetime. A spent arena answers with an empty
+// span and marks itself, which is what the parser stops on: the empty
+// span is not read as a list of no items.
 template <typename T, typename Arena>
 std::span<T> copy_to_arena(Arena& arena, const std::vector<T>& items) {
   if (items.empty()) {
@@ -71,6 +74,9 @@ std::span<T> copy_to_arena(Arena& arena, const std::vector<T>& items) {
   }
   T* const out =
       static_cast<T*>(arena.alloc(sizeof(T) * items.size(), alignof(T)));
+  if (out == nullptr) [[unlikely]] {
+    return {};
+  }
   std::uninitialized_copy(items.begin(), items.end(), out);
   return std::span<T>(out, items.size());
 }
@@ -949,6 +955,11 @@ struct UseItem : Item {
 // index types above. Edges between nodes are indices, so passes
 // never downcast. Span arrays and identifier spellings live in
 // `spans`, reserved upfront; node tables own the nodes themselves.
+//
+// Every table and the span area refuse an append they cannot hold, so a
+// package larger than the reservation is a diagnostic rather than a
+// crash: `exhausted` says the tree being built is incomplete, and the
+// parser stops.
 struct AstArena {
   // What `spans` is reserved. On identifier-dense code it costs about
   // four bytes per source byte, so the previous mebibyte stopped an input
@@ -990,11 +1001,37 @@ struct AstArena {
            literals.nearly_full() || conds.nearly_full();
   }
 
+  // True once any append found its reservation short. What is in the arena
+  // is not a tree that passes after it, so a caller refuses the file rather
+  // than reading further.
+  [[nodiscard]] bool exhausted() const {
+    return spans.exhausted() || literals.exhausted() || paths.exhausted() ||
+           conds.exhausted() || blocks.exhausted() || types.exhausted() ||
+           patterns.exhausted() || exprs.exhausted() || stmts.exhausted() ||
+           items.exhausted();
+  }
+
+  // How many parsers may append at once, set once before parsing begins.
+  // One is exact; more leaves each append room for the appends that may
+  // race with it, since the check and the append are not one step.
+  void set_parallel_slots(u32 jobs) {
+    spans.set_parallel_slots(jobs);
+    literals.set_parallel_slots(jobs);
+    paths.set_parallel_slots(jobs);
+    conds.set_parallel_slots(jobs);
+    blocks.set_parallel_slots(jobs);
+    types.set_parallel_slots(jobs);
+    patterns.set_parallel_slots(jobs);
+    exprs.set_parallel_slots(jobs);
+    stmts.set_parallel_slots(jobs);
+    items.set_parallel_slots(jobs);
+  }
+
   // Both reservations are taken here, and an append into either is atomic, so
   // several parsers can fill one arena at once - which is what reading a
   // package on several threads means. `mem::Arena` would answer the second
   // half of that with corruption rather than with a wrong answer.
-  mem::ConcurrentArena spans;
+  SpanArena spans;
 
   // Each table's share of the node reservation, in parts per thousand,
   // measured on generated modules: expressions 7.4 bytes per source byte,

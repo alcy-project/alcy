@@ -189,6 +189,22 @@ u64 hash_diagnostic(const Diagnostic& d) {
 
 }  // namespace
 
+void DiagBag::truncate(u32 size) {
+  if (size >= size_) {
+    return;
+  }
+  size_ = size;
+  error_count_ = 0;
+  warning_count_ = 0;
+  for (u32 i = 0; i < size_; ++i) {
+    if (entries_[i].severity == Severity::Error) {
+      ++error_count_;
+    } else if (entries_[i].severity == Severity::Warning) {
+      ++warning_count_;
+    }
+  }
+}
+
 void DiagBag::dedup() {
   if (size_ < 2) {
     return;

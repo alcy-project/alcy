@@ -182,6 +182,12 @@ class DiagBag {
   // handed out before are renumbered by the compaction.
   void dedup();
 
+  // Drops every diagnostic at or after `size`. What a phase reported
+  // before it was abandoned described a structure that was never
+  // finished, so a caller that refuses the input wholesale removes them
+  // and says the one thing that happened.
+  void truncate(u32 size);
+
  private:
   // Appends a diagnostic with an already-composed message. Copies the
   // message into the arena; grows the entries array as needed. Returns the

@@ -76,6 +76,58 @@ TEST_CASE("A node table addresses each node by its own index") {
   CHECK(table.end() == table.data() + table.size());
 }
 
+// An append the reservation cannot hold is refused and recorded, which is
+// what lets a parser stop where the arena underneath would trap.
+TEST_CASE("A node table refuses an append it cannot hold") {
+  NodeVec<u64, base::Idx<u64, u32>> table{mem::page_size()};
+  const usize room = mem::page_size() / sizeof(u64);
+  for (usize i = 0; i < room; ++i) {
+    CHECK(table.emplace_back(i).is_valid());
+  }
+  CHECK(!table.exhausted());
+  CHECK(!table.emplace_back(room).is_valid());
+  CHECK(table.exhausted());
+  // Everything written before the refusal is still there.
+  CHECK(table.size() == room);
+  CHECK(table[0] == 0);
+  CHECK(table[room - 1] == room - 1);
+}
+
+// With appends in flight, each admitted append keeps the whole batch's
+// room in hand, so the table stops short of its end rather than past it.
+TEST_CASE("A node table leaves room for the appends that race with it") {
+  NodeVec<u64, base::Idx<u64, u32>> table{mem::page_size()};
+  table.set_parallel_slots(4);
+  const usize room = mem::page_size() / sizeof(u64);
+  usize accepted = 0;
+  while (table.emplace_back(accepted).is_valid()) {
+    ++accepted;
+  }
+  CHECK(table.exhausted());
+  CHECK(accepted + 4 <= room);
+  CHECK(accepted > room - 8);
+}
+
+// The same rule under real threads: every append that was taken fits, and
+// the count is the number of accepted appends - no claim lost, none
+// granted twice.
+TEST_CASE("A node table does not overrun under a racing batch") {
+  NodeVec<u64, base::Idx<u64, u32>> table{REGION_BYTES};
+  table.set_parallel_slots(4);
+  std::atomic<usize> accepted{0};
+  base::for_each(0, 4, 4, [&](usize t) {
+    for (;;) {
+      if (!table.emplace_back(static_cast<u64>(t)).is_valid()) {
+        break;
+      }
+      accepted.fetch_add(1, std::memory_order_relaxed);
+    }
+  });
+  CHECK(table.exhausted());
+  CHECK(table.size() == accepted.load());
+  CHECK(table.size() <= REGION_BYTES / sizeof(u64));
+}
+
 // The answer a caller asks before reading another file turns on what is
 // left of the reservation rather than on how much input it has read.
 TEST_CASE("A node table reports its reservation nearly spent") {

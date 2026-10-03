@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <utility>
 
 #include "fpag/base/idx.h"
@@ -61,17 +62,33 @@ class NodeVec {
   NodeVec(NodeVec&&) noexcept = default;
   NodeVec& operator=(NodeVec&&) noexcept = default;
 
-  // Appends a node, answering the index that addresses it.
-  //
-  // A full reservation is reported by returning nothing, which is a property
-  // of the input rather than an internal failure: the check that catches it
-  // first is the one in `nearly_full`, and what is returned here is only what
-  // an unreachable caller could act on. Nothing is written in that case, so
-  // the count still says how many nodes the table holds.
+  // How many appends may be in flight at once. More than one keeps this
+  // table's share of the reservation in hand for the batch: the check and
+  // the append are not one step, so what the check admits must cover every
+  // append that can follow it before the arena has moved.
+  void set_parallel_slots(u32 jobs) {
+    reserved_ = (jobs > 1 ? static_cast<usize>(jobs) : 0) * sizeof(T);
+  }
+
+  // Appends a node, answering the index that addresses it, or nothing when
+  // the reservation cannot hold it. Exhaustion is a property of the input:
+  // a caller that sees an invalid index and `exhausted` set refuses the
+  // file rather than reading a tree that was never finished. Nothing is
+  // written in that case, so the count still says how many nodes the table
+  // holds.
   template <typename... Args>
   Idx emplace_back(Args&&... args) {
+    // The arena traps when asked for more than it reserved, so the room is
+    // checked here, before the request: one append's size plus whatever the
+    // concurrent appends may still need.
+    const usize used = arena_.size();
+    if (used + sizeof(T) + reserved_ > arena_.capacity()) {
+      exhausted_.store(true, std::memory_order_relaxed);
+      return Idx::invalid();
+    }
     void* const mem = arena_.alloc(sizeof(T), alignof(T));
-    if (mem == nullptr) {
+    if (mem == nullptr) [[unlikely]] {
+      exhausted_.store(true, std::memory_order_relaxed);
       return Idx::invalid();
     }
     new (mem) T(std::forward<Args>(args)...);
@@ -125,6 +142,12 @@ class NodeVec {
     return reservation_nearly_full(arena_.capacity(), arena_.size());
   }
 
+  // True once an append found the reservation short. The tree built so far
+  // is incomplete, so a caller stops rather than reading it.
+  [[nodiscard]] bool exhausted() const {
+    return exhausted_.load(std::memory_order_relaxed);
+  }
+
  private:
   [[nodiscard]] char* base() const noexcept {
     return const_cast<char*>(arena_.base_ptr());
@@ -135,6 +158,10 @@ class NodeVec {
   }
 
   mem::ConcurrentArena arena_;
+  // Bytes held back for appends that are in flight while this one is
+  // checked; zero when one parser appends at a time.
+  usize reserved_ = 0;
+  std::atomic<bool> exhausted_{false};
 };
 
 }  // namespace ast

@@ -18,6 +18,9 @@
 namespace parser {
 
 ast::TypeIdx Parser::parse_type() {
+  if (ast_.exhausted()) {
+    return ast::TypeIdx::invalid();
+  }
   if (nesting_exhausted(peek().span)) {
     return ast::TypeIdx::invalid();
   }
@@ -241,6 +244,9 @@ ast::TypeIdx Parser::parse_closed_type() {
 }
 
 ast::PatternIdx Parser::parse_pattern() {
+  if (ast_.exhausted()) {
+    return ast::PatternIdx::invalid();
+  }
   return parse_or_pattern();
 }
 

@@ -6,6 +6,7 @@ source_set("ast") {
     "ast.cc",
     "ast.h",
     "node_vec.h",
+    "span_arena.h",
     "verify.cc",
     "verify.h",
   ]

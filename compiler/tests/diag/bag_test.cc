@@ -136,6 +136,24 @@ TEST_CASE("DiagBag merge carries dropped diagnostics") {
   CHECK(into.bag.has_errors());
 }
 
+TEST_CASE("DiagBag truncate drops the tail and its counts") {
+  BagFixture f;
+  const u32 first =
+      f.bag.emit_untranslated(Severity::Error, Stage::Lexer, 1, "first");
+  f.bag.emit_untranslated(Severity::Warning, Stage::Lexer, 2, "second");
+  f.bag.emit_untranslated(Severity::Error, Stage::Lexer, 3, "third");
+  CHECK(f.bag.size() == 3);
+  f.bag.truncate(first + 1);
+  CHECK(f.bag.size() == 1);
+  CHECK(f.bag.error_count() == 1);
+  CHECK(f.bag.warning_count() == 0);
+  CHECK(f.bag.at(0)->message == "first");
+  // A size the bag never reached changes nothing.
+  f.bag.truncate(99);
+  CHECK(f.bag.size() == 1);
+  CHECK(f.bag.error_count() == 1);
+}
+
 TEST_CASE("DiagBag dedup keeps the first of each") {
   BagFixture f;
   const Span span{.file = 1, .offset = 2, .length = 3};

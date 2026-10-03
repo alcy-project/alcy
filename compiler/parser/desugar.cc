@@ -101,6 +101,11 @@ class Desugarer {
     std::string spelled = std::string(orig) + "$" + std::to_string(counter);
     ++counter;
     char* const owned = static_cast<char*>(ast.spans.alloc(spelled.size(), 1));
+    if (owned == nullptr) {
+      // The arena is spent, so the file is refused and no name it mints
+      // is read; keeping the original spelling says what the name was.
+      return orig;
+    }
     spelled.copy(owned, spelled.size());
     return std::string_view(owned, spelled.size());
   }
@@ -153,6 +158,12 @@ class Desugarer {
   }
 
   void visit_item(ast::ItemIdx item) {
+    // An index the parser never built names no node, and a spent arena
+    // means what it built is not a tree; either way there is nothing here
+    // to walk.
+    if (!item.is_valid() || ast.exhausted()) {
+      return;
+    }
     const ast::ItemNode& node = ast.items[item];
     switch (node.kind) {
       case ast::ItemKind::Fn: {
@@ -214,6 +225,9 @@ class Desugarer {
   }
 
   void visit_block(ast::BlockIdx block) {
+    if (!block.is_valid() || ast.exhausted()) {
+      return;
+    }
     if (nesting_exhausted(ast.blocks[block].span)) {
       return;
     }
@@ -230,6 +244,9 @@ class Desugarer {
   }
 
   void visit_stmt(ast::StmtIdx stmt) {
+    if (!stmt.is_valid() || ast.exhausted()) {
+      return;
+    }
     const ast::StmtNode& node = ast.stmts[stmt];
     switch (node.kind) {
       case ast::StmtKind::Decl: {
@@ -271,6 +288,9 @@ class Desugarer {
   }
 
   void visit_pattern(ast::PatternIdx pattern) {
+    if (!pattern.is_valid() || ast.exhausted()) {
+      return;
+    }
     if (nesting_exhausted(ast.patterns[pattern].span)) {
       return;
     }
@@ -312,6 +332,9 @@ class Desugarer {
   }
 
   void visit_or(ast::PatternIdx or_pattern) {
+    if (!or_pattern.is_valid() || ast.exhausted()) {
+      return;
+    }
     const ast::PatternNode& node = ast.patterns[or_pattern];
     // The first alternative establishes the scope; the rest reuse its
     // mapping and must bind the identical set. Afterwards the mapping
@@ -366,6 +389,9 @@ class Desugarer {
   }
 
   void visit_cond(ast::CondIdx cond, bool* pushed) {
+    if (!cond.is_valid() || ast.exhausted()) {
+      return;
+    }
     const ast::Cond& node = ast.conds[cond];
     // Initializers evaluate outside the bindings they introduce.
     if (node.is_pattern) {
@@ -380,7 +406,7 @@ class Desugarer {
   }
 
   void visit_expr(ast::ExprIdx expr) {
-    if (!expr.is_valid()) {
+    if (!expr.is_valid() || ast.exhausted()) {
       return;
     }
     if (nesting_exhausted(ast.exprs[expr].span)) {

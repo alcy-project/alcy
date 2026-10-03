@@ -73,10 +73,11 @@ struct PerFileDiagnostics {
 
 // Parses and desugars one admitted file, reporting whether it did.
 //
-// The arena reports running out by trapping, naming neither the file nor
-// the input, so a file it cannot hold is refused here instead - and it is
-// what the arena has spent that is checked rather than how large the file
-// is, since what a file costs is the identifiers it names.
+// The arena answers an append it cannot hold with nothing rather than by
+// trapping, naming neither the file nor the input, so a file it cannot
+// hold is refused here instead - and it is what the arena has spent that
+// is checked rather than how large the file is, since what a file costs
+// is the identifiers it names.
 //
 // `bag` is the caller's: the run's own when one thread reads the input, and
 // this file's when several do. `profiler` is where the phases are recorded,
@@ -86,13 +87,21 @@ bool parse_one(PipelineContext& ctx,
                std::string_view bytes,
                diag::DiagBag& bag,
                debug::Profiler* profiler) {
-  if (ctx.ast.nearly_full()) {
+  const u32 mark = bag.size();
+  // What the file reports on its way out of a tree it could not finish
+  // belongs to a shape that was never built, so those diagnostics are
+  // dropped and the refusal is the one thing said about it.
+  const auto refuse = [&] {
+    bag.truncate(mark);
     const u32 index = bag.emit<i18n::Key::PipelineSpanArenaExhausted>(
         diag::Severity::Error, diag::Stage::Pipeline,
         DiagCode::SpanArenaExhausted, diag::Span{file.id, 0, 0},
         ctx.ast.spans.capacity());
     (void)index;
     return false;
+  };
+  if (ctx.ast.nearly_full() || ctx.ast.exhausted()) {
+    return refuse();
   }
   lexer::Lexer lexer(bytes, file.id, bag);
   std::vector<lexer::Token> tokens;
@@ -107,6 +116,9 @@ bool parse_one(PipelineContext& ctx,
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "parse", "frontend");
     return parser.parse();
   }();
+  if (ctx.ast.exhausted()) {
+    return refuse();
+  }
   if (parsed.is_err()) {
     return false;
   }
@@ -114,6 +126,9 @@ bool parse_one(PipelineContext& ctx,
   {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "desugar", "frontend");
     parser::desugar_shadowing(file.items, ctx.ast, bag);
+  }
+  if (ctx.ast.exhausted()) {
+    return refuse();
   }
   return true;
 }
@@ -157,6 +172,10 @@ base::Result<ParsedFiles, diag::Reported> parse_files(
     parsed.files.push_back({id, std::move(canonical).unwrap(), {}});
     bytes.push_back(*content);
   }
+
+  // Every append leaves room for the appends that may race with it, so
+  // the slot count is what the arena is told before parsing begins.
+  ctx.ast.set_parallel_slots(ctx.parse_jobs());
 
   // Several threads need a bag per file; one thread writes into the run's
   // own bag in the same order, so both paths report the same thing.

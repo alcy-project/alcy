@@ -585,6 +585,9 @@ ast::ExprIdx Parser::parse_postfix() {
 }
 
 ast::ExprIdx Parser::parse_primary() {
+  if (ast_.exhausted()) {
+    return ast::ExprIdx::invalid();
+  }
   const usize mark = pos_;
   switch (peek_kind()) {
     case lexer::TokenKind::Integer:

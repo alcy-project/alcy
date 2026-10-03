@@ -70,12 +70,31 @@ class Resolver {
   std::vector<std::vector<u32>> module_children;
   // Export resolution state per module: 0 fresh, 1 in progress, 2 done.
   std::vector<u8> exports_state;
+  // Set when a node could not be placed, so the tree was left unfinished.
+  bool out_of_arena = false;
+
+  // The one refusal resolve raises on its own: the syntax arena could not
+  // hold the tree's own nodes, so there is no tree to hand back.
+  void fail_out_of_arena() {
+    if (out_of_arena) {
+      return;
+    }
+    out_of_arena = true;
+    const u32 index = bag.emit<i18n::Key::AnalyzerArenaExhausted>(
+        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArenaExhausted,
+        diag::Span{}, ast.spans.capacity());
+    (void)index;
+  }
 
   u32 add_module(std::string path,
                  source::FileId file,
                  std::span<const ast::ItemIdx> items,
                  u32 parent) {
     ModuleNode* node = ast.spans.create<ModuleNode>();
+    if (node == nullptr) {
+      fail_out_of_arena();
+      return NO_MODULE;
+    }
     node->path = std::move(path);
     node->file = file;
     node->items = items;
@@ -136,6 +155,9 @@ class Resolver {
     }
     const u32 root_module =
         add_module("", root, file_data[root_file].items, NO_MODULE);
+    if (out_of_arena) {
+      return;
+    }
     file_data[root_file].module = root_module;
 
     for (u32 i = 0; i < static_cast<u32>(file_data.size()); ++i) {
@@ -143,6 +165,9 @@ class Resolver {
         continue;
       }
       attach_module(root_module, file_data[i].name, i);
+      if (out_of_arena) {
+        return;
+      }
     }
 
     for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
@@ -210,6 +235,9 @@ class Resolver {
             child_path, leaf ? file_data[file].id : source::UNKNOWN_FILE,
             leaf ? file_data[file].items : std::span<const ast::ItemIdx>{},
             parent);
+        if (out_of_arena) {
+          return;
+        }
         module_children[parent].push_back(child);
       } else if (leaf) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateModule>(
@@ -539,6 +567,9 @@ class Resolver {
                               input.input.is_facade});
     }
     build_tree();
+    if (out_of_arena) {
+      return ModuleTree{};
+    }
     // A prelude package is a tree: slash-separated names nest, so
     // `core/prelude.al` and `core/mem.al` share a fileless `core` root
     // and can reach each other. Only a facade is a prelude, so only its
@@ -564,6 +595,9 @@ class Resolver {
           child = add_module(
               child_path, leaf ? file.id : source::UNKNOWN_FILE,
               leaf ? file.items : std::span<const ast::ItemIdx>{}, parent);
+          if (out_of_arena) {
+            return ModuleTree{};
+          }
           // The whole staged tree is toolchain sources, facades and
           // siblings alike; only facades are preludes.
           modules[child]->is_staged = true;
@@ -611,6 +645,10 @@ class Resolver {
     ModuleTree tree;
     tree.modules = ast::copy_to_arena(
         ast.spans, std::vector<ModuleNode*>(modules.begin(), modules.end()));
+    if (ast.exhausted()) {
+      fail_out_of_arena();
+      return ModuleTree{};
+    }
     tree.root = root_index;
     tree.prelude_modules = static_cast<u32>(prelude_modules.size());
     tree.staged_modules = static_cast<u32>(modules.size()) - modules_before;

@@ -72,6 +72,7 @@
   /* analyzer */ \
   F(AnalyzerAmbiguousMethod, "Ambiguous method '{}'") \
   F(AnalyzerAmbiguousVariant, "Ambiguous variant '{}'") \
+  F(AnalyzerArenaExhausted, "The {} bytes of arena the compiler reserves for the syntax tree cannot hold this package") \
   F(AnalyzerArgumentsNotTuple, "Arguments must be a tuple") \
   F(AnalyzerArityMismatch, "The call to '{}' expects {} argument{}") \
   F(AnalyzerArrayArity, "Array expects {} elements, found {}") \

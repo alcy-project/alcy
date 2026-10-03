@@ -54,6 +54,7 @@ enum class DiagCode : u8 {
   BadDropSignature = 29,
   DropOnCopy = 30,
   TooDeep = 31,
+  ArenaExhausted = 32,
 };
 
 }  // namespace analyzer
