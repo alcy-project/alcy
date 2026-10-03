@@ -274,31 +274,11 @@ class StorageBuilder {
     return state_.types.emplace_back(node);
   }
 
-  // Structural interning: one signature is one index, so a function
-  // type doubles as the identity two closures share.
+  // Appends a function shape over `params` and `ret`. A signature does
+  // not intern here: callers pass copies so the shape's ranges outlive
+  // their resolution, and two signatures over one shape are compared
+  // structurally by the analyzer, not by this index.
   TypeIdx func_type(TypeIdxRange params, TypeIdx ret) {
-    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
-         ++idx) {
-      const TypeNode& node = state_.types[idx];
-      if (node.tag != TypeTag::Func) {
-        continue;
-      }
-      const FuncTypeIdx fidx = node.data.get<FuncTypeIdx>();
-      if (fidx.idx >= state_.func_types.size()) {
-        continue;
-      }
-      const FuncType& func = state_.func_types[fidx];
-      if (func.params.size() != params.size() || func.ret.idx != ret.idx) {
-        continue;
-      }
-      bool match = true;
-      for (u32 i = 0; match && i < params.size(); ++i) {
-        match = func.params[i].idx == params[i].idx;
-      }
-      if (match) {
-        return idx;
-      }
-    }
     TypeNode node{};
     node.tag = TypeTag::Func;
     FuncType func;

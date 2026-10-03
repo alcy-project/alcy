@@ -912,6 +912,20 @@ const GenericInstance* Checker::infer_from_payload_args(
 ir::TypeIdx Checker::instantiate_generic(u32 nominal,
                                          const std::vector<ir::TypeIdx>& args,
                                          diag::Span span) {
+  // A function type in a type argument has no symbol encoding yet, so two
+  // instantiations that differ only there would share a mangled name.
+  // Refusing is the whole rule until the encoding lands.
+  for (const ir::TypeIdx arg : args) {
+    if (is_error(arg) || tag_of(arg) != ir::TypeTag::Func) {
+      continue;
+    }
+    const u32 index =
+        bag.emit<i18n::Key::AnalyzerFunctionTypeAsGenericArgument>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::UnsupportedType, span);
+    (void)index;
+    return error_type();
+  }
   for (const GenericInstance& instance : generic_instances) {
     if (instance.nominal == nominal && instance.args == args) {
       return instance.type;
@@ -2059,6 +2073,21 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
         }
       }
       return true;
+    }
+    case ir::TypeTag::Func: {
+      const ir::FuncType& fa =
+          builder.func_types()[builder.types()[a].as_func()];
+      const ir::FuncType& fb =
+          builder.func_types()[builder.types()[b].as_func()];
+      if (fa.params.size() != fb.params.size()) {
+        return false;
+      }
+      for (u32 i = 0; i < fa.params.size(); ++i) {
+        if (!types_equal_inner(fa.params[i], fb.params[i], seen)) {
+          return false;
+        }
+      }
+      return types_equal_inner(fa.ret, fb.ret, seen);
     }
     case ir::TypeTag::Struct:
     case ir::TypeTag::Enum: return false;

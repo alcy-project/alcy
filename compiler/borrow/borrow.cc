@@ -319,7 +319,7 @@ class Checker {
             is_reborrow || loaded == ir::TypeTag::Struct ||
             loaded == ir::TypeTag::Tuple || loaded == ir::TypeTag::Array ||
             loaded == ir::TypeTag::Enum || loaded == ir::TypeTag::Str ||
-            loaded == ir::TypeTag::Slice;
+            loaded == ir::TypeTag::Slice || loaded == ir::TypeTag::Func;
         if (carries_reference) {
           flow[instr.dst.idx] = flow[addr];
         } else {

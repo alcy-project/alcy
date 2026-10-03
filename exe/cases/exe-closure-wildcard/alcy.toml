@@ -1,0 +1,10 @@
+[package]
+name = "closurewild"
+version = "0.1.0"
+
+[modules]
+include = ["main"]
+
+[[bin]]
+name = "closurewild"
+path = "main.al"

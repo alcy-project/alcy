@@ -136,6 +136,10 @@ struct CheckedModule {
     std::string_view name;
     ir::TypeIdx type;
     bool is_mut = false;
+    // Where the parameter sits in the closure's signature. Wildcards
+    // take a slot without a name, so a named parameter's position in
+    // `params` is not its position in the entry block.
+    u32 slot = 0;
   };
   struct ClosureLit {
     ast::ExprIdx expr;

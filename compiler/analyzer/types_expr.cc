@@ -1049,7 +1049,8 @@ ir::TypeIdx Checker::check_closure(u32 module,
     if (param.is_wildcard) {
       continue;
     }
-    lit.params.push_back({param.name.name, param_types[i], param.is_mut});
+    lit.params.push_back(
+        {param.name.name, param_types[i], param.is_mut, static_cast<u32>(i)});
   }
   modules[module].closures.push_back(std::move(lit));
   if (expected != nullptr) {
@@ -2508,6 +2509,16 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
       switch (node.payload.get<ast::ExprBinary>().op) {
         case ast::BinaryOp::Eq:
         case ast::BinaryOp::NotEq: {
+          // What the backend can compare: integers (bool included),
+          // floats, and addresses. A function value or an aggregate has
+          // no comparison, and the emitter would have no case for it.
+          const bool comparable =
+              is_integer_tag(tag) || is_float_tag(tag) ||
+              tag == ir::TypeTag::I1 || tag == ir::TypeTag::Ptr ||
+              tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef;
+          if (!comparable) {
+            break;
+          }
           const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
           if (expected != nullptr) {
             return unify(*expected, boolean, node.span, "comparison");

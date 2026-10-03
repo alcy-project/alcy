@@ -2676,4 +2676,84 @@ TEST_CASE("Check rejects a function type as a generic argument") {
   CHECK(f.bag.has_errors());
 }
 
+// A generic argument is refused in a type position too, not only when a
+// generic call infers one: the mangle has no encoding for the signature,
+// so two instantiations that differ there would share a symbol.
+TEST_CASE("Check rejects a function type as a nominal type argument") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Box<T> {\n"
+                                      "  value: T,\n"
+                                      "}\n"
+                                      "fn f(x: i32) -> i32 {\n"
+                                      "  ret x\n"
+                                      "}\n"
+                                      "fn take(b: Box<(i32) -> i32>) -> i32 {\n"
+                                      "  ret 0\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  ret take(Box { value: f })\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+// Two function types differ in their signature, not merely in where they
+// were written; a value of one is not a value of the other.
+TEST_CASE("Check rejects a function value with a different signature") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn apply(f: (i32) -> i32, x: i32) -> i32 {\n"
+                       "  ret f(x)\n"
+                       "}\n"
+                       "fn inc64(x: i64) -> i64 {\n"
+                       "  ret x + 1\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  ret apply(inc64, 1)\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+// The backend compares integers, floats and addresses; a function value
+// is none of those, and reaching the emitter with one used to abort.
+TEST_CASE("Check rejects a comparison of function values") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn f(x: i32) -> i32 {\n"
+                                      "  ret x\n"
+                                      "}\n"
+                                      "fn g(x: i32) -> i32 {\n"
+                                      "  ret x\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  if f == g {\n"
+                                      "    ret 1\n"
+                                      "  }\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 }  // namespace analyzer

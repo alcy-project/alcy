@@ -828,7 +828,10 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
     // The environment slot stays unbound: nothing references it
     // until captures land.
     for (usize i = 0; i < lit->params.size() && !failed; ++i) {
-      const ir::TypeIdx ptype = entry.params[i + 1];
+      // The entry block holds every parameter, wildcards included, so
+      // the slot is where the value arrives, not the index in `params`.
+      const usize slot = lit->params[i].slot + 1;
+      const ir::TypeIdx ptype = entry.params[slot];
       const std::string_view name = lit->params[i].name;
       if (tag_of(ptype) == ir::TypeTag::Void) {
         locals.push_back({name, ir::RegisterIdx(base::INVALID_IDX), ptype});
@@ -836,7 +839,7 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
       }
       const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, ptype, {size_one});
       emit_void(ir::Opcode::Store,
-                {to_operand(pregs[i + 1], ptype), to_operand(addr, ptype)});
+                {to_operand(pregs[slot], ptype), to_operand(addr, ptype)});
       locals.push_back({name, addr, ptype, runs_destructor(ptype), false});
       addr_names_.push_back({addr, name, binding_param_});
     }
