@@ -352,6 +352,7 @@
   F(CliLangHelp, "Language for every message this run prints. Taken from this flag alone: the locale the shell exports is not consulted, so the same command line reports the same text on every machine.") \
   F(CliLinkArgsOverrideHelp, "Argument for the link driver, after the objects. Repeatable, one argument each; overrides .alcy/toolchain.toml.") \
   F(CliLinkerOverrideHelp, "System linker driver for executable builds. Overrides .alcy/toolchain.toml.") \
+  F(CliMemoryPeak, "{} peak") \
   F(CliModulePlural, "modules") \
   F(CliModuleSingular, "module") \
   F(CliNewAbout, "Create a new package") \

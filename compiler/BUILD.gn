@@ -67,6 +67,9 @@ config("win_sys_libs") {
       "dbghelp",
       "onecore",
       "ntdll",
+
+      # GetProcessMemoryInfo, for the peak memory on a result line.
+      "psapi",
     ]
   }
 }

@@ -89,6 +89,12 @@ struct Envelope {
   // monotonic clock. The profiler's clock is wall-clock derived and is
   // not used for it.
   u64 wall_ns = 0;
+  // Peak resident set size of this process in bytes, measured once at
+  // the end of the invocation. Zero when the platform offers no way to
+  // measure it, which the text note reads as absence; the JSON document
+  // always carries the field, so a consumer reads the same shape on
+  // every platform.
+  u64 peak_memory_bytes = 0;
   // Diagnostics in emission order, borrowed from the invocation's
   // context. Both are null until a command has one, which is also the
   // case for a failure raised before any context exists.

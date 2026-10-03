@@ -6,9 +6,12 @@ source_set("base") {
     "for_each.h",
     "nesting.cc",
     "nesting.h",
+    "process_memory.cc",
+    "process_memory.h",
   ]
   configs += [ "//compiler:alcy_config" ]
   deps = [
+    "//compiler/config",
     "//compiler/debug",
     "//third_party/fpag",
   ]

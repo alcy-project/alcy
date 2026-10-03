@@ -171,6 +171,24 @@ TEST_CASE("A size is counted below a kibibyte and scaled above it") {
         std::string::npos);
 }
 
+// The peak memory is an invocation measurement like the wall time, so it
+// rides on the same note; a platform that cannot measure it leaves the
+// field out of the text rather than printing a zero, and the JSON keeps
+// the field so a consumer sees one shape everywhere.
+TEST_CASE("A result notes the peak memory when the platform measured it") {
+  Envelope measured = built("out/demo", 2048, 2000000);
+  measured.peak_memory_bytes = 2 * static_cast<u64>(1024) * 1024;
+  CHECK(text(measured).find("(2.0 KiB, 2.00 ms, 2.0 MiB peak)") !=
+        std::string::npos);
+  CHECK(render_json(measured, i18n::Language::EnUs)
+            .find("\"peak_memory_bytes\":2097152") != std::string::npos);
+
+  const Envelope unmeasured = built("out/demo", 2048, 2000000);
+  CHECK(text(unmeasured).find("peak") == std::string::npos);
+  CHECK(render_json(unmeasured, i18n::Language::EnUs)
+            .find("\"peak_memory_bytes\":0") != std::string::npos);
+}
+
 // A failure the envelope carries is a diagnostic like any other: the
 // marker is the renderer's, and the message is the only thing the
 // producer supplied.

@@ -10,6 +10,7 @@
 #include <string_view>
 #include <utility>
 
+#include "base/process_memory.h"
 #include "cli/build_command.h"
 #include "cli/check_command.h"
 #include "cli/cli_config.h"
@@ -138,6 +139,7 @@ i32 cli_main(i32 argc, char** argv) {
       envelope.status = Status::Error;
       envelope.failure = diag::message(diag::Severity::Error, failure);
       envelope.wall_ns = elapsed_ns_since(started);
+      envelope.peak_memory_bytes = base::peak_memory_bytes();
       report(out, err, envelope, config.color_mode, config.language, json);
       exit_code = result_code(ResultCode::ArgParseError);
     } else {
@@ -150,6 +152,7 @@ i32 cli_main(i32 argc, char** argv) {
       envelope.command = command_name(config.subcommand);
       exit_code = dispatch(config, ctx, envelope);
       envelope.wall_ns = elapsed_ns_since(started);
+      envelope.peak_memory_bytes = base::peak_memory_bytes();
       report(out, err, envelope, config.color_mode, config.language, json);
     }
   }

@@ -377,7 +377,10 @@ std::string result_subject(const Envelope& envelope, i18n::Language language) {
   return {};
 }
 
-// The note after the subject: what was written, and how long it took.
+// The note after the subject: what was written, how long it took, and
+// how much memory the run held at its peak. The peak is left out when
+// the platform cannot measure it, which reads as "not measured" rather
+// than as zero.
 std::string result_note(const Envelope& envelope, i18n::Language language) {
   std::string note = "(";
   if (note_has_size(envelope) && envelope.output_bytes > 0) {
@@ -385,6 +388,12 @@ std::string result_note(const Envelope& envelope, i18n::Language language) {
     note += ", ";
   }
   note += format_duration(envelope.wall_ns);
+  if (note_has_duration(envelope) && envelope.peak_memory_bytes > 0) {
+    std::string peak;
+    append_size(peak, envelope.peak_memory_bytes, language);
+    note += ", ";
+    note += i18n::format<i18n::Key::CliMemoryPeak>(language, peak);
+  }
   note += ')';
   return note;
 }
@@ -614,6 +623,8 @@ std::string render_json(const Envelope& envelope, i18n::Language language) {
   append_json_number(out, envelope.output_bytes);
   out += R"(,"wall_ns":)";
   append_json_number(out, envelope.wall_ns);
+  out += R"(,"peak_memory_bytes":)";
+  append_json_number(out, envelope.peak_memory_bytes);
   out += '}';
   out += R"(,"diagnostics":[)";
   {
