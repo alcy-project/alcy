@@ -126,6 +126,9 @@ class StorageBuilder {
   const StorageState::TupleTypes& tuple_types() const {
     return state_.tuple_types;
   }
+  const StorageState::FuncTypes& func_types() const {
+    return state_.func_types;
+  }
   // Raw state for passes that query (never mutate) pre-build tables.
   const StorageState& state() const { return state_; }
   ExternalFunctionIdx external_function(ExternalFunction external_function) {
@@ -268,6 +271,40 @@ class StorageBuilder {
     TupleType tuple;
     tuple.elements = elements;
     node.data.set(state_.tuple_types.emplace_back(tuple));
+    return state_.types.emplace_back(node);
+  }
+
+  // Structural interning: one signature is one index, so a function
+  // type doubles as the identity two closures share.
+  TypeIdx func_type(TypeIdxRange params, TypeIdx ret) {
+    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
+         ++idx) {
+      const TypeNode& node = state_.types[idx];
+      if (node.tag != TypeTag::Func) {
+        continue;
+      }
+      const FuncTypeIdx fidx = node.data.get<FuncTypeIdx>();
+      if (fidx.idx >= state_.func_types.size()) {
+        continue;
+      }
+      const FuncType& func = state_.func_types[fidx];
+      if (func.params.size() != params.size() || func.ret.idx != ret.idx) {
+        continue;
+      }
+      bool match = true;
+      for (u32 i = 0; match && i < params.size(); ++i) {
+        match = func.params[i].idx == params[i].idx;
+      }
+      if (match) {
+        return idx;
+      }
+    }
+    TypeNode node{};
+    node.tag = TypeTag::Func;
+    FuncType func;
+    func.params = params;
+    func.ret = ret;
+    node.data.set(state_.func_types.emplace_back(func));
     return state_.types.emplace_back(node);
   }
 

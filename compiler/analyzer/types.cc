@@ -1153,11 +1153,13 @@ ir::TypeIdx Checker::resolve_type(u32 module,
                                     node.payload.get<ast::TypeRef>().is_mut);
     }
     case ast::TypeKind::Func: {
-      const u32 index = bag.emit<i18n::Key::AnalyzerClosuresNotImplemented>(
-          diag::Severity::Error, diag::Stage::Analyzer,
-          DiagCode::ClosuresNotImplemented, node.span);
-      (void)index;
-      return error_type();
+      const ast::TypeFunc& func = node.payload.get<ast::TypeFunc>();
+      ir::TypeSeq seq;
+      for (ast::TypeIdx param : func.params) {
+        seq.push(storage_copy(resolve_type(module, param, self)));
+      }
+      return builder.func_type(
+          seq.finish(), storage_copy(resolve_type(module, func.ret, self)));
     }
     case ast::TypeKind::Slice: {
       const ast::TypeSlice& slice = node.payload.get<ast::TypeSlice>();
@@ -2165,6 +2167,17 @@ const Checker::Local* Checker::lookup_local(std::string_view name) const {
   return nullptr;
 }
 
+usize Checker::scope_of(std::string_view name) const {
+  for (usize i = scopes.size(); i-- > 0;) {
+    for (const Local& local : scopes[i]) {
+      if (local.name == name) {
+        return i;
+      }
+    }
+  }
+  return scopes.size();
+}
+
 // True for a recognized suffix (tag set), false when absent (tag
 // untouched). Suffixes mix letters and digits (`i32`, `usize`), so
 // matching runs over known spellings from the end instead of scanning
@@ -3006,6 +3019,19 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
       return nullptr;
     }
   }
+  // Calling through a type parameter needs a callable bound, which
+  // waits on specs: a function type bound to one has no signature
+  // its instantiations could mangle distinctly.
+  for (const ir::TypeIdx arg : bound) {
+    if (!is_error(arg) && builder.types()[arg.idx].tag == ir::TypeTag::Func) {
+      const u32 index =
+          bag.emit<i18n::Key::AnalyzerFunctionTypeAsGenericArgument>(
+              diag::Severity::Error, diag::Stage::Analyzer,
+              DiagCode::UnsupportedType, span);
+      (void)index;
+      return nullptr;
+    }
+  }
   return instantiate_fn(module, item, bound);
 }
 
@@ -3254,6 +3280,29 @@ bool Checker::resolve_value_path(u32 module,
   if (node.segments.size() == 1) {
     const std::string_view name = node.segments[0].name;
     if (const Local* local = lookup_local(name)) {
+      // A use resolving below the innermost closure boundary
+      // crosses into a closure from outside it: a capture. Until
+      // captures land, every crossing is refused; a non-empty
+      // list already reported, so its listed names stay quiet.
+      if (!closure_bounds.empty()) {
+        const ClosureBound& bound = closure_bounds.back();
+        if (scope_of(name) < bound.scope) {
+          bool listed = false;
+          for (const ast::Ident& capture : bound.captures) {
+            if (capture.name == name) {
+              listed = true;
+              break;
+            }
+          }
+          if (!listed || !bound.suppress_uses) {
+            const u32 index =
+                bag.emit<i18n::Key::AnalyzerCapturesNotImplemented>(
+                    diag::Severity::Error, diag::Stage::Analyzer,
+                    DiagCode::CapturesNotImplemented, node.segments[0].span);
+            (void)index;
+          }
+        }
+      }
       out.kind = PathValue::Kind::Local;
       out.type = local->type;
       return true;

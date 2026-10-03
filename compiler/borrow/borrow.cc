@@ -54,6 +54,58 @@ struct Place {
   std::vector<u32> path;
 };
 
+// Whether a value of the type can carry a loan: references and
+// views directly, aggregates through their fields, and function
+// values through the environments they close over. Anything else
+// is loan-free, so tracking it would only constrain dead air.
+// Runs on cycle-free storage like is_copy_type: value cycles never
+// reach here, and references short-circuit instead of recursing.
+bool value_may_carry(const ir::Storage& storage, ir::TypeIdx type) {
+  const ir::TypeNode& node = storage.types()[type.idx];
+  switch (node.tag) {
+    case ir::TypeTag::Ref:
+    case ir::TypeTag::MutRef:
+    case ir::TypeTag::Str:
+    case ir::TypeTag::Slice:
+    case ir::TypeTag::Func: return true;
+    case ir::TypeTag::Struct: {
+      const ir::StructType& shape = storage.struct_types()[node.as_struct()];
+      for (ir::TypeIdx field : shape.fields) {
+        if (value_may_carry(storage, field)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    case ir::TypeTag::Tuple: {
+      const ir::TupleType& shape = storage.tuple_types()[node.as_tuple()];
+      for (ir::TypeIdx element : shape.elements) {
+        if (value_may_carry(storage, element)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    case ir::TypeTag::Array:
+      return value_may_carry(storage,
+                             storage.array_types()[node.as_array()].element);
+    case ir::TypeTag::Enum: {
+      const ir::EnumType& shape = storage.enum_types()[node.as_enum()];
+      for (ir::EnumVariantTypeIdx vidx = shape.variants.head();
+           vidx.idx < shape.variants.head().idx + shape.variants.size();
+           vidx = ir::EnumVariantTypeIdx(vidx.idx + 1)) {
+        for (ir::TypeIdx field : storage.enum_variant_types()[vidx].fields) {
+          if (value_may_carry(storage, field)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+    default: return false;
+  }
+}
+
 bool steps_match(u32 a, u32 b) {
   // An element step stands for whichever element a runtime index named,
   // so it matches any index and any other element step. Comparing two
@@ -483,9 +535,62 @@ class Checker {
           break;
         }
         const ir::Operand& callee = storage.operands()[instr.operands.head()];
+        if (!instr.dst.is_valid()) {
+          break;
+        }
+        if (!callee.is<ir::FunctionIdx>() &&
+            !callee.is<ir::ExternalFunctionIdx>()) {
+          // A call through a function value has no summary to
+          // reify: the callee is unknown, so the result
+          // conservatively carries the loans of every argument
+          // and of the value itself. A result that cannot carry
+          // loans tracks nothing, the way a call without a
+          // destination does.
+          if (callee.is<ir::RegisterIdx>()) {
+            const ir::TypeIdx dst_type =
+                storage.registers()[instr.dst.idx].type;
+            if (value_may_carry(storage, dst_type)) {
+              const bool result_exclusive =
+                  storage.types()[dst_type.idx].tag == ir::TypeTag::MutRef;
+              bool placed = false;
+              // Fresh loans never repeat, so no dedup scan: each
+              // source loan makes exactly one.
+              const auto carry = [&](u32 reg) {
+                if (reg >= flow.size()) {
+                  return;
+                }
+                for (u32 loan : flow[reg]) {
+                  if (loan >= loans.size()) {
+                    continue;
+                  }
+                  loans.push_back({instr.dst.idx, loans[loan].place,
+                                   loans[loan].exclusive || result_exclusive,
+                                   pos});
+                  flow[instr.dst.idx].push_back(
+                      static_cast<u32>(loans.size() - 1));
+                  if (!placed) {
+                    home[instr.dst.idx] = loans[loan].place.root;
+                    path[instr.dst.idx] = loans[loan].place.path;
+                    placed = true;
+                  }
+                }
+              };
+              for (u32 offset = 1; offset < instr.operands.size(); ++offset) {
+                const ir::Operand& arg =
+                    storage.operands()[instr.operands.head() + offset];
+                if (!arg.is<ir::RegisterIdx>()) {
+                  continue;
+                }
+                carry(arg.as_register().idx);
+              }
+              carry(callee.as_register().idx);
+            }
+          }
+          break;
+        }
         // External calls have no summary, so their results carry no
         // caller loans.
-        if (!callee.is<ir::FunctionIdx>() || !instr.dst.is_valid()) {
+        if (!callee.is<ir::FunctionIdx>()) {
           break;
         }
         const ir::FunctionIdx target = callee.as_function();

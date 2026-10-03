@@ -42,6 +42,7 @@ enum class VerificationErrorKind : u8 {
   InvalidTypeQuery,
   EnumFieldsOutOfRange,
   TupleFieldsOutOfRange,
+  FuncFieldsOutOfRange,
 };
 
 struct VerificationError {
@@ -81,6 +82,7 @@ constexpr std::string_view format_as(const VerificationErrorKind kind) {
     case K::InvalidTypeQuery: return "InvalidTypeQuery";
     case K::EnumFieldsOutOfRange: return "EnumFieldsOutOfRange";
     case K::TupleFieldsOutOfRange: return "TupleFieldsOutOfRange";
+    case K::FuncFieldsOutOfRange: return "FuncFieldsOutOfRange";
   }
 }
 

@@ -361,6 +361,26 @@ const analyzer::CheckedModule::CallTarget* Lowerer::call_target(
   return nullptr;
 }
 
+const analyzer::CheckedModule::IndirectCall* Lowerer::indirect_call(
+    ast::ExprIdx callee) const {
+  for (const auto& entry : pkg.modules[module].indirect_calls) {
+    if (entry.callee == callee && entry.inst == cur_inst_) {
+      return &entry;
+    }
+  }
+  return nullptr;
+}
+
+const analyzer::CheckedModule::ClosureFn* Lowerer::closure_fn(
+    ast::ExprIdx expr) const {
+  for (const auto& entry : pkg.modules[module].closure_fns) {
+    if (entry.expr == expr && entry.inst == cur_inst_) {
+      return &entry;
+    }
+  }
+  return nullptr;
+}
+
 std::vector<u32> Lowerer::comp_positions(ast::ItemIdx item) const {
   std::vector<u32> positions;
   if (!item.is_valid()) {
@@ -480,6 +500,56 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   return idx;
 }
 
+// Reserves (or finds) the function a closure body compiles to.
+// The environment arrives first, then the closure's parameters,
+// so every closure value calls the same way whether its code came
+// from a literal or a coerced plain function. Deduplication covers
+// the module, the expression, the signature, and the instantiation
+// a generic context checked it under: the same closure over
+// different type arguments still compiles apart.
+ir::FunctionIdx Lowerer::closure_fn_index(
+    u32 mod,
+    ast::ExprIdx key,
+    const std::vector<ir::TypeIdx>& params,
+    ir::TypeIdx ret,
+    u32 inst) {
+  for (const FnEntry& entry : fns) {
+    if (!entry.closure.is_valid() || entry.mod != mod || entry.closure != key ||
+        entry.inst != inst || entry.ret.idx != ret.idx ||
+        entry.params.size() != params.size() + 1) {
+      continue;
+    }
+    bool match = true;
+    for (usize i = 0; match && i < params.size(); ++i) {
+      match = entry.params[i + 1].idx == params[i].idx;
+    }
+    if (match) {
+      return entry.idx;
+    }
+  }
+  static constexpr usize MAX_FN_ENTRIES = 8192;
+  if (fns.size() >= MAX_FN_ENTRIES) {
+    internal(diag::Span{}, "function specialization budget exhausted");
+    return ir::FunctionIdx(base::INVALID_IDX);
+  }
+  const ir::FunctionIdx idx(static_cast<u32>(fns.size()));
+  FnEntry entry;
+  entry.closure = key;
+  entry.idx = idx;
+  entry.mod = mod;
+  entry.name = "closure$" + std::to_string(idx.idx);
+  entry.params.push_back(builder.primitive(ir::TypeTag::Ptr));
+  for (ir::TypeIdx param : params) {
+    entry.params.push_back(param);
+  }
+  entry.ret = ret;
+  entry.inst = inst;
+  entry.kind = ir::SymbolKind::Free;
+  fns.push_back(std::move(entry));
+  worklist_.push_back(fns.size() - 1);
+  return idx;
+}
+
 std::vector<ir::TypeIdx> Lowerer::nominal_arguments(ir::TypeIdx type) const {
   const ir::TypeNode& node = builder.state().types[type.idx];
   ir::TypeIdxRange params{};
@@ -562,6 +632,10 @@ const analyzer::CheckedModule::StructInfo* Lowerer::struct_info(
 }
 
 void Lowerer::lower_fn(const FnEntry& entry) {
+  if (entry.closure.is_valid()) {
+    lower_closure_fn(entry);
+    return;
+  }
   const u32 mod = entry.mod;
   module = mod;
   cur_inst_ = entry.inst;
@@ -687,6 +761,155 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   emit_drops(0, fn.name.span);
   scope_marks.clear();
   emit_void(ir::Opcode::Ret, {result});
+}
+
+void Lowerer::lower_closure_fn(const FnEntry& entry) {
+  // Same reset as lower_fn: one body owns the whole state.
+  const u32 mod = entry.mod;
+  module = mod;
+  cur_inst_ = entry.inst;
+  comp_inst_ = entry.inst;
+  locals.clear();
+  comp_scope_.clear();
+  fn_blocks_.clear();
+  streams_.clear();
+  stream_last_.clear();
+  fn_block_base_ = block_next_;
+  break_targets_.clear();
+  continue_targets_.clear();
+  pending_params_.clear();
+
+  const analyzer::CheckedModule::ClosureLit* lit = nullptr;
+  // A literal is checked and lowered in the module that owns the
+  // body, so its side table is this one; the same expression
+  // checked elsewhere keys apart by instantiation below.
+  for (const auto& candidate : pkg.modules[mod].closures) {
+    if (candidate.expr == entry.closure && candidate.inst == entry.inst) {
+      lit = &candidate;
+      break;
+    }
+  }
+  const analyzer::CheckedModule::ClosureFn* fn = nullptr;
+  if (lit == nullptr) {
+    for (const auto& candidate : pkg.modules[mod].closure_fns) {
+      if (candidate.expr == entry.closure && candidate.inst == entry.inst) {
+        fn = &candidate;
+        break;
+      }
+    }
+  }
+  if (lit == nullptr && fn == nullptr) {
+    internal(ast.exprs[entry.closure].span, "closure without checking");
+    return;
+  }
+  switch_to(reserve_block());
+  cur_span_ = ast.exprs[entry.closure].span;
+  // Entry block parameters arrive in declaration order: the
+  // environment first, then the closure's parameters. Checking
+  // bound every name already, so this only wires registers.
+  ir::BlockParamSeq param_seq;
+  std::vector<ir::RegisterIdx> pregs;
+  for (ir::TypeIdx ptype : entry.params) {
+    const ir::RegisterIdx reg = claim_reg();
+    builder.reg(
+        {.type = ptype, .def_idx = ir::InstructionIdx(base::INVALID_IDX)});
+    param_seq.push(builder.block_param({.type = ptype, .reg = reg}));
+    pregs.push_back(reg);
+  }
+  pending_block_params_ = param_seq.finish();
+  if (failed) {
+    return;
+  }
+  scope_marks.clear();
+  scope_marks.push_back(0);
+  reported_too_deep_ = false;
+  binding_param_ = true;
+  if (lit != nullptr) {
+    // The environment slot stays unbound: nothing references it
+    // until captures land.
+    for (usize i = 0; i < lit->params.size() && !failed; ++i) {
+      const ir::TypeIdx ptype = entry.params[i + 1];
+      const std::string_view name = lit->params[i].name;
+      if (tag_of(ptype) == ir::TypeTag::Void) {
+        locals.push_back({name, ir::RegisterIdx(base::INVALID_IDX), ptype});
+        continue;
+      }
+      const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, ptype, {size_one});
+      emit_void(ir::Opcode::Store,
+                {to_operand(pregs[i + 1], ptype), to_operand(addr, ptype)});
+      locals.push_back({name, addr, ptype, runs_destructor(ptype), false});
+      addr_names_.push_back({addr, name, binding_param_});
+    }
+  }
+  binding_param_ = false;
+  if (failed) {
+    return;
+  }
+  if (lit != nullptr) {
+    const ast::ExprNode& body = ast.exprs[lit->body];
+    Val lowered =
+        body.kind == ast::ExprKind::Block
+            ? lower_block(body.payload.get<ast::ExprBlock>().block, nullptr)
+            : lower_expr(lit->body, nullptr);
+    if (failed) {
+      return;
+    }
+    if (terminated_cur()) {
+      scope_marks.clear();
+      return;
+    }
+    const ir::TypeTag body_tag = tag_of(lowered.type);
+    if (body_tag == ir::TypeTag::Never) {
+      scope_marks.clear();
+      emit_void(ir::Opcode::Unreachable, {});
+      return;
+    }
+    if (body_tag == ir::TypeTag::Void) {
+      emit_drops(0, cur_span_);
+      scope_marks.clear();
+      emit_void(ir::Opcode::Ret, {});
+      return;
+    }
+    const ir::OperandIdx result = use_value(lowered);
+    emit_drops(0, cur_span_);
+    scope_marks.clear();
+    emit_void(ir::Opcode::Ret, {result});
+    return;
+  }
+  // A coerced plain function: forward the parameters, dropping the
+  // environment the closure value carries.
+  const analyzer::CheckedModule& def = pkg.modules[fn->module];
+  const analyzer::CheckedModule::FnSig& sig = def.functions[fn->index];
+  const ir::FunctionIdx target =
+      fn_index(fn->module, sig.item, sig.name, sig.params, sig.ret,
+               analyzer::NO_INST, {}, ir::SymbolKind::Free);
+  if (!target.is_valid()) {
+    internal(cur_span_, "closure without function");
+    return;
+  }
+  std::vector<ir::OperandIdx> ops;
+  ops.push_back(builder.operand(ir::Operand::from_function(
+      target, builder.primitive(ir::TypeTag::Function))));
+  for (usize i = 1; i < entry.params.size(); ++i) {
+    Val arg{to_operand(pregs[i], entry.params[i]), entry.params[i], false,
+            true};
+    ops.push_back(arg_for(arg, entry.params[i]));
+    if (failed) {
+      return;
+    }
+  }
+  if (tag_of(sig.ret) == ir::TypeTag::Never) {
+    emit_void(ir::Opcode::Call, ops);
+    emit_void(ir::Opcode::Unreachable, {});
+    return;
+  }
+  if (tag_of(sig.ret) == ir::TypeTag::Void) {
+    emit_void(ir::Opcode::Call, ops);
+    emit_void(ir::Opcode::Ret, {});
+    return;
+  }
+  const ir::RegisterIdx dst = emit(ir::Opcode::Call, sig.ret, ops);
+  emit_void(ir::Opcode::Ret, {to_operand(dst, sig.ret)});
 }
 
 void Lowerer::run() {

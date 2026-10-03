@@ -122,6 +122,10 @@ class Lowerer {
     std::vector<ir::TypeIdx> generics;
     // Comp argument values in formal-parameter order.
     std::vector<CompVal> comp_args;
+    // A closure body to compile instead of an item: the literal or
+    // coercion expression that reserved this entry. Invalid for
+    // declared functions.
+    ast::ExprIdx closure = ast::ExprIdx::invalid();
   };
   std::vector<FnEntry> fns;
   // Reservation order matches lowering order (FIFO worklist), so
@@ -228,6 +232,9 @@ class Lowerer {
   ir::TypeIdx expr_type(ast::ExprIdx expr);
   const analyzer::CheckedModule::CallTarget* call_target(
       ast::ExprIdx callee) const;
+  const analyzer::CheckedModule::IndirectCall* indirect_call(
+      ast::ExprIdx callee) const;
+  const analyzer::CheckedModule::ClosureFn* closure_fn(ast::ExprIdx expr) const;
   std::vector<u32> comp_positions(ast::ItemIdx item) const;
   static void comp_key_into(std::string& key, const CompValue& value);
   // Reserves (or finds) the IR function for one instantiation. `kind`
@@ -293,6 +300,21 @@ class Lowerer {
   ir::TypeIdx field_type_of(ir::TypeIdx base, u32 index, diag::Span span);
   void bind_pattern(ast::PatternIdx pattern, Val init);
   Val lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected);
+  // A closure literal or coercion as a value: the code with a null
+  // environment, packed as the function type lays out.
+  Val lower_closure(ast::ExprIdx expr);
+  // Reserves (or finds) the function a closure body compiles to.
+  // The environment arrives first, then the closure's parameters;
+  // plain functions coerce through a wrapper that drops it.
+  ir::FunctionIdx closure_fn_index(u32 mod,
+                                   ast::ExprIdx key,
+                                   const std::vector<ir::TypeIdx>& params,
+                                   ir::TypeIdx ret,
+                                   u32 inst);
+  // A call through a function value: the callee operand carries the
+  // value, and the signature comes from its function type.
+  Val lower_indirect_call(ast::ExprIdx expr);
+  void lower_closure_fn(const FnEntry& entry);
   ir::ExternalFunctionIdx declare_external(
       std::string_view name,
       ir::TypeIdx ret,

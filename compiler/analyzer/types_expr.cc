@@ -626,6 +626,7 @@ bool Checker::is_literal_const(u32 module, ast::PathIdx path) const {
 }
 
 ir::TypeIdx Checker::check_path_expr(u32 module,
+                                     ast::ExprIdx expr,
                                      std::span<const ast::TypeIdx> type_args,
                                      ast::PathIdx path,
                                      const ir::TypeIdx* expected,
@@ -675,7 +676,46 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
       }
       return resolved.type;
     }
-    case PathValue::Kind::Function:
+    case PathValue::Kind::Function: {
+      // A named function in value position coerces to a closure
+      // value: its code with a null environment. Intrinsics lower
+      // through their own path and comp parameters ride
+      // specializations, so both stay arguments-only here, as do
+      // generic and associated functions until callable type
+      // parameters land.
+      const CheckedModule::FnSig* fn = resolved.function;
+      bool plain = fn->item.is_valid() &&
+                   ast.items[fn->item].kind != ast::ItemKind::Intrinsic;
+      for (bool flag : comp_param_flags(fn->item)) {
+        plain = plain && !flag;
+      }
+      if (!plain) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerCalleeNeedsArguments>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::InvalidOperation, span);
+        (void)index;
+        return error_type();
+      }
+      ir::TypeSeq seq;
+      for (ir::TypeIdx param : fn->params) {
+        seq.push(storage_copy(param));
+      }
+      const ir::TypeIdx closure_type =
+          builder.func_type(seq.finish(), storage_copy(fn->ret));
+      for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+        for (u32 i = 0; i < static_cast<u32>(modules[m].functions.size());
+             ++i) {
+          if (&modules[m].functions[i] == fn) {
+            modules[module].closure_fns.push_back({expr, m, i, cur_inst});
+            break;
+          }
+        }
+      }
+      if (expected != nullptr) {
+        return unify(*expected, closure_type, span, "path");
+      }
+      return closure_type;
+    }
     case PathValue::Kind::GenericFn:
     case PathValue::Kind::AssocFunction:
     case PathValue::Kind::TupleVariant: {
@@ -904,6 +944,161 @@ ir::TypeIdx Checker::check_fmt_format(u32 module,
   return result;
 }
 
+// A closure literal: parameters bind from annotations or the
+// expected function type, a non-empty capture list is refused
+// until captures land, and the body checks as a function body
+// with its own scope and return slot. The value's type is the
+// signature they make.
+ir::TypeIdx Checker::check_closure(u32 module,
+                                   ast::ExprIdx expr,
+                                   const ir::TypeIdx* expected) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprClosure& closure = node.payload.get<ast::ExprClosure>();
+  // Captures wait: any list at all is refused, and the uses its
+  // names would resolve stay quiet behind it.
+  const bool suppress_uses = !closure.captures.empty();
+  if (suppress_uses) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerCapturesNotImplemented>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::CapturesNotImplemented, node.span);
+    (void)index;
+  }
+  // The expectation's signature, copied out before resolving
+  // anything: interning below may move the tables it borrows.
+  std::vector<ir::TypeIdx> expected_params;
+  ir::TypeIdx expected_ret = error_type();
+  bool has_expected_sig = false;
+  if (expected != nullptr && !is_error(*expected) &&
+      tag_of(*expected) == ir::TypeTag::Func) {
+    const ir::FuncType& sig =
+        builder.func_types()[builder.types()[*expected].as_func()];
+    for (ir::TypeIdx param : sig.params) {
+      expected_params.push_back(param);
+    }
+    expected_ret = sig.ret;
+    has_expected_sig = true;
+  }
+  // Parameter types: annotations first, expectation second, and
+  // an annotation request when neither names one.
+  std::vector<ir::TypeIdx> param_types;
+  param_types.reserve(closure.params.size());
+  bool params_ok = true;
+  if (has_expected_sig && expected_params.size() != closure.params.size()) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerClosureArityMismatch>(
+        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityMismatch,
+        node.span, expected_params.size(), closure.params.size());
+    (void)index;
+    params_ok = false;
+  }
+  for (usize i = 0; i < closure.params.size(); ++i) {
+    const ast::ClosureParam& param = closure.params[i];
+    if (param.type.is_valid()) {
+      param_types.push_back(resolve_type(module, param.type, nullptr));
+    } else if (params_ok && has_expected_sig) {
+      param_types.push_back(expected_params[i]);
+    } else {
+      const u32 index =
+          bag.emit<i18n::Key::AnalyzerClosureParamNeedsAnnotation>(
+              diag::Severity::Error, diag::Stage::Analyzer,
+              DiagCode::InvalidOperation, param.name.span, param.name.name);
+      (void)index;
+      param_types.push_back(error_type());
+    }
+  }
+  // The body checks as a function body: its own scope and return
+  // slot, with loops reset so `break` cannot cross the boundary.
+  // `ret` targets the closure, which is why the slot is saved. An
+  // erroneous slot takes the first return it sees, so returns meet
+  // the trailing value below; a named expectation anchors both.
+  const bool saved_in_fn = in_fn;
+  const u32 saved_loop = loop_depth;
+  const ir::TypeIdx saved_ret = fn_ret;
+  in_fn = true;
+  loop_depth = 0;
+  fn_ret = has_expected_sig ? expected_ret : error_type();
+  scopes.emplace_back();
+  for (usize i = 0; i < closure.params.size(); ++i) {
+    const ast::ClosureParam& param = closure.params[i];
+    if (param.is_wildcard) {
+      continue;
+    }
+    scopes.back().push_back(
+        {param.name.name, param_types[i], param.is_mut, false});
+  }
+  closure_bounds.push_back(
+      {scopes.size() - 1, closure.captures, suppress_uses});
+  const ir::TypeIdx* body_expected = has_expected_sig ? &expected_ret : nullptr;
+  const ir::TypeIdx body_type = check_expr(module, closure.body, body_expected);
+  const ir::TypeIdx ret = has_expected_sig
+                              ? expected_ret
+                              : unify(fn_ret, body_type, node.span, "closure");
+  closure_bounds.pop_back();
+  scopes.pop_back();
+  in_fn = saved_in_fn;
+  loop_depth = saved_loop;
+  fn_ret = saved_ret;
+  ir::TypeSeq seq;
+  for (ir::TypeIdx param : param_types) {
+    seq.push(storage_copy(param));
+  }
+  const ir::TypeIdx closure_type =
+      builder.func_type(seq.finish(), storage_copy(ret));
+  CheckedModule::ClosureLit lit{expr, {}, ret, closure.body, cur_inst};
+  for (usize i = 0; i < closure.params.size(); ++i) {
+    const ast::ClosureParam& param = closure.params[i];
+    if (param.is_wildcard) {
+      continue;
+    }
+    lit.params.push_back({param.name.name, param_types[i], param.is_mut});
+  }
+  modules[module].closures.push_back(std::move(lit));
+  if (expected != nullptr) {
+    return unify(*expected, closure_type, node.span, "closure");
+  }
+  return closure_type;
+}
+
+// A call through a function value: arity and argument types unify
+// against the signature, and the call records for lowering, which
+// emits it indirectly.
+ir::TypeIdx Checker::check_indirect_call(u32 module,
+                                         ast::ExprIdx expr,
+                                         ast::ExprIdx callee,
+                                         const ir::FuncType& sig,
+                                         const ir::TypeIdx* expected) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const std::span<const ast::ExprIdx> args =
+      node.payload.get<ast::ExprCall>().args;
+  const diag::Span span = node.span;
+  // Copied out before checking anything: argument checking
+  // interns types and may move the tables the signature borrows.
+  std::vector<ir::TypeIdx> params;
+  params.reserve(sig.params.size());
+  for (ir::TypeIdx param : sig.params) {
+    params.push_back(param);
+  }
+  const ir::TypeIdx ret = sig.ret;
+  // The diagnostics name the callee when it is a plain local, and
+  // the shape otherwise.
+  std::string_view what = "closure";
+  if (ast.exprs[callee].kind == ast::ExprKind::Path) {
+    const ast::Path& path =
+        ast.paths[ast.exprs[callee].payload.get<ast::ExprPath>().idx];
+    if (path.segments.size() == 1) {
+      what = path.segments[0].name;
+    }
+  }
+  check_call_args(module, args, params, {}, span, what, false);
+  if (args.size() != params.size()) {
+    return error_type();
+  }
+  modules[module].indirect_calls.push_back({callee, cur_inst});
+  if (expected != nullptr) {
+    return unify(*expected, ret, span, "call");
+  }
+  return ret;
+}
+
 // Calls through a resolved callee path: free and associated
 // functions, tuple variant constructors, and the `print` intrinsic.
 ir::TypeIdx Checker::check_call(u32 module,
@@ -915,6 +1110,14 @@ ir::TypeIdx Checker::check_call(u32 module,
       node.payload.get<ast::ExprCall>().args;
   const diag::Span span = node.span;
   if (ast.exprs[callee].kind != ast::ExprKind::Path) {
+    // A closure literal in callee position calls through its value;
+    // anything else is not callable.
+    const ir::TypeIdx callee_type = check_expr(module, callee, nullptr);
+    if (!is_error(callee_type) && tag_of(callee_type) == ir::TypeTag::Func) {
+      const ir::FuncType& sig =
+          builder.func_types()[builder.types()[callee_type].as_func()];
+      return check_indirect_call(module, expr, callee, sig, expected);
+    }
     const u32 index = bag.emit<i18n::Key::AnalyzerCallNonPath>(
         diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::InvalidOperation, ast.exprs[callee].span);
@@ -1041,6 +1244,15 @@ ir::TypeIdx Checker::check_call(u32 module,
       return unify(*expected, enum_type, span, "call");
     }
     return enum_type;
+  }
+  // A local or static holding a function value calls through it;
+  // anything else of non-function type is not callable.
+  if ((resolved.kind == PathValue::Kind::Local ||
+       resolved.kind == PathValue::Kind::Static) &&
+      !is_error(resolved.type) && tag_of(resolved.type) == ir::TypeTag::Func) {
+    const ir::FuncType& sig =
+        builder.func_types()[builder.types()[resolved.type].as_func()];
+    return check_indirect_call(module, expr, callee, sig, expected);
   }
   const u32 index = bag.emit<i18n::Key::AnalyzerNotCallable>(
       diag::Severity::Error, diag::Stage::Analyzer, DiagCode::InvalidOperation,
@@ -2137,7 +2349,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
     }
     case ast::ExprKind::Path: {
       return check_path_expr(
-          module, node.payload.get<ast::ExprPath>().type_args,
+          module, expr, node.payload.get<ast::ExprPath>().type_args,
           node.payload.get<ast::ExprPath>().idx, expected, node.span);
     }
     case ast::ExprKind::Struct: {
@@ -2421,14 +2633,26 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
         return error_type();
       }
       if (!node.payload.get<ast::ExprReturn>().value.is_valid()) {
-        unify(fn_ret, builder.primitive(ir::TypeTag::Void), node.span,
-              "return");
+        fn_ret = unify(fn_ret, builder.primitive(ir::TypeTag::Void), node.span,
+                       "return");
       } else {
         const ir::TypeIdx value = check_expr(
             module, node.payload.get<ast::ExprReturn>().value, &fn_ret);
-        unify(fn_ret, value,
-              ast.exprs[node.payload.get<ast::ExprReturn>().value].span,
-              "return");
+        // The anchor sticks once named: a declared return type never
+        // drifts, while an error slot takes the first return it sees
+        // so later returns and the trailing value have something to
+        // meet. Only broken declarations start erroneous, where the
+        // bag already holds errors.
+        if (is_error(fn_ret)) {
+          fn_ret =
+              unify(fn_ret, value,
+                    ast.exprs[node.payload.get<ast::ExprReturn>().value].span,
+                    "return");
+        } else {
+          unify(fn_ret, value,
+                ast.exprs[node.payload.get<ast::ExprReturn>().value].span,
+                "return");
+        }
       }
       return builder.never_type();
     }
@@ -2454,11 +2678,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
       return check_range(module, expr, expected);
     }
     case ast::ExprKind::Closure: {
-      const u32 index = bag.emit<i18n::Key::AnalyzerClosuresNotImplemented>(
-          diag::Severity::Error, diag::Stage::Analyzer,
-          DiagCode::ClosuresNotImplemented, ast.exprs[expr].span);
-      (void)index;
-      return error_type();
+      return check_closure(module, expr, expected);
     }
   }
 }

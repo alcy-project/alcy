@@ -1,0 +1,10 @@
+[package]
+name = "coercecase"
+version = "0.1.0"
+
+[modules]
+include = ["main"]
+
+[[bin]]
+name = "coercecase"
+path = "main.al"

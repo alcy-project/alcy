@@ -135,6 +135,17 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
       }
       return llvm::StructType::get(module_->getContext(), element_types);
     }
+    case T::Func: {
+      // Code plus environment, whatever the signature says: two
+      // words, matching the layout ir::type_layout publishes.
+      return llvm::StructType::get(
+          module_->getContext(), {builder_->getPtrTy(), builder_->getPtrTy()});
+    }
+    case T::Function: {
+      // A bare code pointer: signatures live on function values
+      // and call sites, never here.
+      return builder_->getPtrTy();
+    }
     case T::Enum: {
       // A discriminant, then the payload in the slot itself. Keeping the
       // payload here rather than behind a pointer is what lets an enum
@@ -445,6 +456,42 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
       DCHECK(ops.size() >= 1);
 
       const ir::Operand& callee_op = storage_->operands()[ops.head()];
+      if (!callee_op.is<ir::FunctionIdx>() &&
+          !callee_op.is<ir::ExternalFunctionIdx>()) {
+        // A call through a function value: destructure code and
+        // environment, then call with the environment first, the
+        // way synthetic closure functions declare it.
+        DCHECK(callee_op.is<ir::RegisterIdx>());
+        llvm::Value* closure = resolve_operand_value(callee_op);
+        const ir::TypeIdx closure_type =
+            storage_->registers()[callee_op.as_register()].type;
+        DCHECK(storage_->types()[closure_type.idx].tag == ir::TypeTag::Func);
+        const ir::FuncType& sig =
+            storage_
+                ->func_types()[storage_->types()[closure_type.idx].as_func()];
+        llvm::Value* code = builder_->CreateExtractValue(closure, {0u});
+        llvm::Value* env = builder_->CreateExtractValue(closure, {1u});
+        llvm::SmallVector<llvm::Type*, FUNCTION_ARGS_SOO_SIZE> param_types;
+        param_types.reserve(sig.params.size() + 1);
+        param_types.push_back(builder_->getPtrTy());
+        for (ir::TypeIdx param : sig.params) {
+          param_types.push_back(type(param));
+        }
+        llvm::FunctionType* fn_type =
+            llvm::FunctionType::get(type(sig.ret), param_types, false);
+        llvm::SmallVector<llvm::Value*, FUNCTION_ARGS_SOO_SIZE> args;
+        args.reserve(ops.size());
+        args.push_back(env);
+        for (u32 idx = 1; idx < ops.size(); ++idx) {
+          const ir::Operand& arg_op = storage_->operands()[ops.head() + idx];
+          args.push_back(resolve_operand_value(arg_op));
+        }
+        llvm::CallInst* call_inst = builder_->CreateCall(fn_type, code, args);
+        if (i.dst.is_valid()) {
+          values_.add_register(i.dst, call_inst);
+        }
+        break;
+      }
       llvm::Function* callee_func = resolve_operand_function(callee_op);
 
       llvm::SmallVector<llvm::Value*, FUNCTION_ARGS_SOO_SIZE> args;
@@ -545,6 +592,8 @@ llvm::Value* LlvmIrEmitter::resolve_operand_value(const ir::Operand& op) const {
     case Payload::TagOf<ir::BlockIdx>: return values_.block(op.as_block());
     case Payload::TagOf<ir::ImmutableIdx>:
       return values_.immutable(op.as_immutable());
+    case Payload::TagOf<ir::FunctionIdx>:
+      return values_.function(op.as_function());
 
     default:
       DLOG("Unknown operand tag found while resolving operand value.");

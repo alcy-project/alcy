@@ -75,4 +75,7 @@ using RefTypeIdx = details::Idx<RefType>;
 struct TupleType;
 using TupleTypeIdx = details::Idx<TupleType>;
 
+struct FuncType;
+using FuncTypeIdx = details::Idx<FuncType>;
+
 }  // namespace ir

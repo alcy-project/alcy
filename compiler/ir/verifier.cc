@@ -103,6 +103,19 @@ VerificationResult verify_storage(const Storage& storage) {
                            storage.types().size())) {
         return err(VerificationErrorKind::TupleFieldsOutOfRange, tuple_idx.idx);
       }
+    } else if (node.tag == TypeTag::Func) {
+      const FuncTypeIdx func_idx = node.as_func();
+      if (func_idx.idx >= storage.func_types().size()) {
+        return err(VerificationErrorKind::TypeMetadataOutOfRange, tidx.idx);
+      }
+      const FuncType& func = storage.func_types()[func_idx];
+      if (!range_in_bounds(func.params.head(), func.params.size(),
+                           storage.types().size())) {
+        return err(VerificationErrorKind::FuncFieldsOutOfRange, func_idx.idx);
+      }
+      if (func.ret.idx >= storage.types().size()) {
+        return err(VerificationErrorKind::TypeIdxOutOfRange, tidx.idx);
+      }
     }
   }
 
@@ -239,7 +252,22 @@ VerificationResult verify_storage(const Storage& storage) {
         }
         const Operand& head = storage.operands()[instr.operands.head()];
         if (!head.is<FunctionIdx>() && !head.is<ExternalFunctionIdx>()) {
-          return err(VerificationErrorKind::InvalidCallee, iidx.idx);
+          // A call through a function value carries the value: the
+          // callee is a register of function type, and the operands
+          // after it are the arguments.
+          if (!head.is<RegisterIdx>()) {
+            return err(VerificationErrorKind::InvalidCallee, iidx.idx);
+          }
+          const TypeNode& callee_type =
+              storage.types()[storage.registers()[head.as_register()].type.idx];
+          if (callee_type.tag != TypeTag::Func) {
+            return err(VerificationErrorKind::InvalidCallee, iidx.idx);
+          }
+          const FuncType& sig = storage.func_types()[callee_type.as_func()];
+          if (instr.operands.size() - 1 != sig.params.size()) {
+            return err(VerificationErrorKind::InvalidCallee, iidx.idx);
+          }
+          break;
         }
         const FunctionMeta& meta =
             head.is<FunctionIdx>()

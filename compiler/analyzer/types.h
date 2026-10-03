@@ -128,6 +128,39 @@ struct CheckedModule {
     u32 inst = NO_INST;
   };
   std::vector<CallTarget> call_targets;
+  // One closure literal: the signature lowering compiles the body
+  // against, with the parameters it binds. Keyed by the closure
+  // expression; the body stays in the AST. `inst` keys entries
+  // checked under a generic instantiation (NO_INST otherwise).
+  struct ClosureParam {
+    std::string_view name;
+    ir::TypeIdx type;
+    bool is_mut = false;
+  };
+  struct ClosureLit {
+    ast::ExprIdx expr;
+    std::vector<ClosureParam> params;
+    ir::TypeIdx ret;
+    ast::ExprIdx body;
+    u32 inst = NO_INST;
+  };
+  std::vector<ClosureLit> closures;
+  // One call through a function value: the callee expression holds
+  // the value, and the signature comes from its function type.
+  struct IndirectCall {
+    ast::ExprIdx callee;
+    u32 inst = NO_INST;
+  };
+  std::vector<IndirectCall> indirect_calls;
+  // One named function coerced to a closure value: its code with a
+  // null environment. Keyed by the path expression.
+  struct ClosureFn {
+    ast::ExprIdx expr;
+    u32 module;
+    u32 index;
+    u32 inst = NO_INST;
+  };
+  std::vector<ClosureFn> closure_fns;
   // Variant resolution for lowering: every checked variant use records
   // its meaning so lowering never re-resolves paths. `variant` is the
   // declaration-order index and doubles as the enum discriminant.

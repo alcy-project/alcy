@@ -46,6 +46,10 @@ enum class TypeTag : u8 {
   // produce this so checking can continue without cascades. Must never
   // reach codegen; the cli aborts on any recorded error first.
   Error,
+  // A function value's signature: parameters with a return type. The
+  // value itself is always code plus environment, so one layout fits
+  // every signature.
+  Func,
 };
 
 // Target pointer width: selects the mapping of isize/usize. Passed
@@ -119,15 +123,23 @@ struct TupleType {
   TypeIdxRange elements;
 };
 
+struct FuncType {
+  // Parameter types in order.
+  TypeIdxRange params;
+  TypeIdx ret = TypeIdx::invalid();
+};
+
 struct TypeNode {
   TypeTag tag;
-  // Meaningful only for Struct/Array/Slice/Enum/Ref/MutRef/Tuple tags.
+  // Meaningful only for Struct/Array/Slice/Enum/Ref/MutRef/Tuple/Func
+  // tags.
   base::Union<StructTypeIdx,
               ArrayTypeIdx,
               SliceTypeIdx,
               EnumTypeIdx,
               RefTypeIdx,
-              TupleTypeIdx>
+              TupleTypeIdx,
+              FuncTypeIdx>
       data;
 
   inline StructTypeIdx as_struct() const {
@@ -160,6 +172,11 @@ struct TypeNode {
     DCHECK_MSG(tag == TypeTag::Tuple, "type node is not a tuple");
     return data.get<TupleTypeIdx>();
   }
+
+  inline FuncTypeIdx as_func() const {
+    DCHECK_MSG(tag == TypeTag::Func, "type node is not a function type");
+    return data.get<FuncTypeIdx>();
+  }
 };
 
 constexpr const char* type_to_str(TypeTag tag) {
@@ -190,6 +207,7 @@ constexpr const char* type_to_str(TypeTag tag) {
     case T::Array: return "array";
     case T::Slice: return "slice";
     case T::Function: return "function";
+    case T::Func: return "closure";
     case T::Enum: return "enum";
     case T::Never: return "never";
     case T::Tuple: return "tuple";

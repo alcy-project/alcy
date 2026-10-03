@@ -2536,4 +2536,144 @@ TEST_CASE("Check rejects a remainder or bitwise operator on a float") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Check calls closures and coerced functions") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "fn inc(x: i32) -> i32 {\n"
+             "  ret x + 1\n"
+             "}\n"
+             "fn apply(f: (i32) -> i32, x: i32) -> i32 {\n"
+             "  ret f(x) + 1\n"
+             "}\n"
+             "fn main() -> i32 {\n"
+             "  g := (a: i32) -> a + 1\n"
+             "  h := ((v: i32) -> v * 2)(3)\n"
+             "  ret apply(g, 1) + apply(inc, 2) + apply((n) -> n, h)\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check infers closure parameters from the expected type") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn apply(f: (i32) -> i32, x: i32) -> i32 {\n"
+                       "  ret f(x)\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  ret apply((a) -> a + 1, 1)\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a closure arity mismatch") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn apply(f: (i32) -> i32, x: i32) -> i32 {\n"
+                       "  ret f(x)\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  ret apply((a: i32, b: i32) -> a, 1)\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects an unannotated parameter without context") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  g := (a) -> a + 1\n"
+                                      "  ret g(1)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects captures until they land") {
+  VirtualDir listed;
+  const bool listed_setup = write_all(listed, {{"main.al",
+                                                "fn main() -> i32 {\n"
+                                                "  t := 5\n"
+                                                "  f := [t] (a: i32) -> a + t\n"
+                                                "  ret f(1)\n"
+                                                "}\n"}});
+  CHECK(listed_setup);
+  if (!listed_setup) {
+    return;
+  }
+  Fixture listed_fixture;
+  const CheckOutcome listed_result =
+      check_case(listed, "main.al", {"main.al"}, listed_fixture);
+  CHECK(!listed_result.package.has_value());
+  CHECK(listed_fixture.bag.has_errors());
+
+  // A bare closure using an outer local names no list, so the use
+  // itself reports.
+  VirtualDir bare;
+  const bool bare_setup = write_all(bare, {{"main.al",
+                                            "fn main() -> i32 {\n"
+                                            "  t := 5\n"
+                                            "  f := (a: i32) -> a + t\n"
+                                            "  ret f(1)\n"
+                                            "}\n"}});
+  CHECK(bare_setup);
+  if (!bare_setup) {
+    return;
+  }
+  Fixture bare_fixture;
+  const CheckOutcome bare_result =
+      check_case(bare, "main.al", {"main.al"}, bare_fixture);
+  CHECK(!bare_result.package.has_value());
+  CHECK(bare_fixture.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a function type as a generic argument") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn id<T>(x: T) -> T {\n"
+                                      "  ret x\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  f := id((a: i32) -> a)\n"
+                                      "  ret f(1)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 }  // namespace analyzer

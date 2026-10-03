@@ -683,6 +683,11 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       return Val{size_one, error_type(), false, false};
     }
   }
+  // A named function coerced to a closure value packs its code
+  // with a null environment, like any closure literal.
+  if (closure_fn(expr) != nullptr) {
+    return lower_closure(expr);
+  }
   if (const auto* use = variant_use(path)) {
     // Unit values stand alone; payload constructors need call syntax
     // (checking enforced this).
@@ -913,6 +918,100 @@ ir::OperandIdx Lowerer::disc_operand(u32 discriminant) {
   return to_operand(builder.immutable(imm), i32_ty);
 }
 
+Val Lowerer::lower_closure(ast::ExprIdx expr) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ir::TypeIdx type = expr_type(expr);
+  if (tag_of(type) != ir::TypeTag::Func) {
+    internal(node.span, "closure without type");
+    return Val{size_one, error_type(), false, false};
+  }
+  // Copied out before emitting anything: interning below may move
+  // the tables the shape borrows.
+  std::vector<ir::TypeIdx> params;
+  const ir::FuncType& shape =
+      builder.state().func_types[builder.state().types[type].as_func()];
+  params.reserve(shape.params.size());
+  for (ir::TypeIdx param : shape.params) {
+    params.push_back(param);
+  }
+  const ir::TypeIdx ret = shape.ret;
+  const ir::FunctionIdx fn =
+      closure_fn_index(module, expr, params, ret, cur_inst_);
+  if (!fn.is_valid()) {
+    return Val{size_one, error_type(), false, false};
+  }
+  // The value packs code with a null environment, the way the
+  // function type lays out: captures fill the slot later.
+  const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, type, {size_one});
+  const ir::TypeIdx code_ty = builder.primitive(ir::TypeTag::Function);
+  const ir::RegisterIdx code =
+      emit(ir::Opcode::GetElementPtr, code_ty,
+           {to_operand(addr, type), zero_i32, index_operand(0)});
+  emit_void(ir::Opcode::Store,
+            {builder.operand(ir::Operand::from_function(fn, code_ty)),
+             to_operand(code, code_ty)});
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+  const ir::RegisterIdx env =
+      emit(ir::Opcode::GetElementPtr, ptr_ty,
+           {to_operand(addr, type), zero_i32, index_operand(1)});
+  const ir::RegisterIdx null =
+      emit(ir::Opcode::TypeCast, ptr_ty, {const_usize(0)});
+  emit_void(ir::Opcode::Store,
+            {to_operand(null, ptr_ty), to_operand(env, ptr_ty)});
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(addr, type), type, true, false};
+}
+
+Val Lowerer::lower_indirect_call(ast::ExprIdx expr) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  Val callee = lower_expr(call.callee, nullptr);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  if (tag_of(callee.type) != ir::TypeTag::Func) {
+    internal(node.span, "call without type");
+    return Val{size_one, error_type(), false, false};
+  }
+  std::vector<ir::TypeIdx> params;
+  const ir::FuncType& shape =
+      builder.state().func_types[builder.state().types[callee.type].as_func()];
+  params.reserve(shape.params.size());
+  for (ir::TypeIdx param : shape.params) {
+    params.push_back(param);
+  }
+  const ir::TypeIdx ret = shape.ret;
+  if (call.args.size() != params.size()) {
+    internal(node.span, "call arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  std::vector<ir::OperandIdx> ops;
+  ops.push_back(use_value(callee));
+  for (usize i = 0; i < call.args.size(); ++i) {
+    Val arg = lower_expr(call.args[i], &params[i]);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    ops.push_back(arg_for(arg, params[i]));
+  }
+  if (tag_of(ret) == ir::TypeTag::Never) {
+    emit_void(ir::Opcode::Call, ops);
+    emit_void(ir::Opcode::Unreachable, {});
+    return Val{size_one, ret, false, false};
+  }
+  if (tag_of(ret) == ir::TypeTag::Void) {
+    emit_void(ir::Opcode::Call, ops);
+    return Val{size_one, ret, false, false};
+  }
+  const ir::RegisterIdx dst = emit(ir::Opcode::Call, ret, ops);
+  return Val{to_operand(dst, ret), ret, false, false};
+}
+
 Val Lowerer::lower_call(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
@@ -946,6 +1045,11 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
   }
   const analyzer::CheckedModule::CallTarget* target = call_target(call.callee);
   if (target == nullptr) {
+    // A call through a function value carries the value as its
+    // callee; the signature comes from the value's type.
+    if (indirect_call(call.callee) != nullptr) {
+      return lower_indirect_call(expr);
+    }
     // Checking records free, associated, and method callees; the
     // remainder is variant construction.
     if (ast.exprs[call.callee].kind == ast::ExprKind::Path) {
@@ -3266,12 +3370,7 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       return materialize(addr);
     }
     case ast::ExprKind::Range: return lower_range(expr);
-    case ast::ExprKind::Closure: {
-      // Checking rejects closures before lowering runs, so reaching
-      // one means a caller lowered an unchecked tree.
-      internal(node.span, "closure without checking");
-      return Val{size_one, error_type(), false, false};
-    }
+    case ast::ExprKind::Closure: return lower_closure(expr);
     case ast::ExprKind::Block: {
       const ast::ExprBlock& block = node.payload.get<ast::ExprBlock>();
       if (!block.is_comp) {

@@ -145,6 +145,18 @@ class Checker {
   bool in_fn = false;
 
   std::vector<std::vector<Local>> scopes;
+  // One entry per closure body being checked: the scope index its
+  // parameters live at, with the capture list it declares. A bare
+  // name resolving below the innermost boundary crosses into a
+  // closure from outside it. `suppress_uses` holds when a
+  // non-empty list already reported, so uses of listed names stay
+  // quiet while unlisted ones still report.
+  struct ClosureBound {
+    usize scope = 0;
+    std::span<const ast::Ident> captures;
+    bool suppress_uses = false;
+  };
+  std::vector<ClosureBound> closure_bounds;
   u32 loop_depth = 0;
   // Nonzero while checking comp evaluation contexts (comp block
   // contents and comp declaration initializers).
@@ -311,6 +323,10 @@ class Checker {
                     diag::Span span,
                     std::string_view what);
   const Local* lookup_local(std::string_view name) const;
+  // The scope level binding `name`, or one past the last scope when
+  // none does. Locals shadow outward, so this is the level a use
+  // resolves at.
+  usize scope_of(std::string_view name) const;
   bool classify_suffix(std::string_view spelling,
                        ir::TypeTag& tag,
                        bool& is_float,
@@ -449,6 +465,7 @@ class Checker {
   bool reported_too_deep_ = false;
   void report_too_deep(diag::Span span);
   ir::TypeIdx check_path_expr(u32 module,
+                              ast::ExprIdx expr,
                               std::span<const ast::TypeIdx> type_args,
                               ast::PathIdx path,
                               const ir::TypeIdx* expected,
@@ -468,6 +485,20 @@ class Checker {
   ir::TypeIdx check_call(u32 module,
                          ast::ExprIdx expr,
                          const ir::TypeIdx* expected);
+  // A closure literal: parameters bind from annotations or the
+  // expected function type, the body checks as a function body,
+  // and the value's type is the signature they make.
+  ir::TypeIdx check_closure(u32 module,
+                            ast::ExprIdx expr,
+                            const ir::TypeIdx* expected);
+  // A call through a function value: arity and argument types
+  // unify against the signature, and the call records for
+  // lowering, which emits it indirectly.
+  ir::TypeIdx check_indirect_call(u32 module,
+                                  ast::ExprIdx expr,
+                                  ast::ExprIdx callee,
+                                  const ir::FuncType& sig,
+                                  const ir::TypeIdx* expected);
   ir::TypeIdx check_method_call(u32 module,
                                 ast::ExprIdx expr,
                                 const ir::TypeIdx* expected);

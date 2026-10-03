@@ -48,6 +48,7 @@ struct StorageState {
       base::Vec<EnumVariantType, EnumVariantTypeIdx, Alloc<EnumVariantType>>;
   using RefTypes = base::Vec<RefType, RefTypeIdx, Alloc<RefType>>;
   using TupleTypes = base::Vec<TupleType, TupleTypeIdx, Alloc<TupleType>>;
+  using FuncTypes = base::Vec<FuncType, FuncTypeIdx, Alloc<FuncType>>;
 
   Functions functions;
   Blocks blocks;
@@ -65,6 +66,7 @@ struct StorageState {
   EnumVariantTypes enum_variant_types;
   RefTypes ref_types;
   TupleTypes tuple_types;
+  FuncTypes func_types;
 };
 
 // Size and alignment of a type on a target, in bytes.
@@ -183,6 +185,11 @@ inline TypeLayout type_layout(const StorageState& state,
     case TypeTag::Slice: return {2 * word, word};
     case TypeTag::Ptr:
     case TypeTag::Function: return {word, word};
+    case TypeTag::Func: {
+      // Code plus environment, whatever the signature says: every
+      // function value fits two words.
+      return {word, word};
+    }
     case TypeTag::Ref:
     case TypeTag::MutRef: {
       // A reference to a slice is the fat pointer itself, passed by
@@ -289,6 +296,13 @@ inline bool is_copy_type(const StorageState& state, TypeIdx idx) {
       }
       return true;
     }
+    case TypeTag::Func: {
+      // The environment is null until captures land, so every
+      // function value copies trivially today. Captures revisit
+      // this: a moved non-copyable capture makes its closure
+      // move-only.
+      return true;
+    }
     default: UNREACHABLE();
   }
 }
@@ -343,6 +357,9 @@ class Storage {
   const StorageState::RefTypes& ref_types() const { return state_.ref_types; }
   const StorageState::TupleTypes& tuple_types() const {
     return state_.tuple_types;
+  }
+  const StorageState::FuncTypes& func_types() const {
+    return state_.func_types;
   }
 
   // Copy-ability of a fully interned type. Must only run on cycle-free

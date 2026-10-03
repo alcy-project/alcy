@@ -1,0 +1,4 @@
+# A bare closure using an outer local names no list, so the use
+# itself reports.
+exit = 4
+contains = ["Captures are not implemented yet"]

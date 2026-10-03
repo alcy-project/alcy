@@ -36,7 +36,7 @@ checkable contracts here.
 
 ## Non-goals for MVP
 
-- Spec objects, closures, async, compile-time evaluation beyond
+- Spec objects, async, compile-time evaluation beyond
   constant items.
 - Unsafe code, raw pointers, FFI (reserved; see `ffi.md`). The typed
   heap intrinsics are the one place pointers exist: they are checked

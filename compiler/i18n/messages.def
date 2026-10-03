@@ -92,6 +92,7 @@
   F(AnalyzerCallArityMismatch, "The call to '{}' expects {} arguments, found {}") \
   F(AnalyzerCallNonPath, "Cannot call a non-path expression") \
   F(AnalyzerCalleeNeedsArguments, "Callee needs arguments") \
+  F(AnalyzerCapturesNotImplemented, "Captures are not implemented yet") \
   F(AnalyzerCannotAssignToRun, "Cannot assign to a run; a run is a view, not a place") \
   F(AnalyzerCannotDereference, "Cannot dereference '{}'") \
   F(AnalyzerCannotIndex, "Cannot index '{}'") \
@@ -100,7 +101,8 @@
   F(AnalyzerCannotInferTypeArguments, "Cannot infer the type arguments of '{}'; add them with '{}::<T>(...)'") \
   F(AnalyzerCharacterLiteralDeferred, "Character literals need the core Char type (deferred)") \
   F(AnalyzerCheckedTypesFailedVerification, "Internal error: checked types failed verification ({} at index {})") \
-  F(AnalyzerClosuresNotImplemented, "Closures are not implemented yet") \
+  F(AnalyzerClosureArityMismatch, "Closure expects {} parameters, found {}") \
+  F(AnalyzerClosureParamNeedsAnnotation, "Cannot infer the type of parameter '{}'; add an annotation") \
   F(AnalyzerCompArgument, "Comp evaluation argument must be comp-known") \
   F(AnalyzerCompAssignPlace, "Comp assignment place is not comp-known") \
   F(AnalyzerCompAssignValue, "Comp assignment value is not comp-known") \
@@ -129,6 +131,7 @@
   F(AnalyzerFormatInCompEvaluation, "Intrinsic 'format' is not allowed in comp evaluation") \
   F(AnalyzerFormatPlaceholderArity, "Format string has {} placeholders for {} arguments") \
   F(AnalyzerFormatStringNotCompKnown, "Format string must be comp-known") \
+  F(AnalyzerFunctionTypeAsGenericArgument, "Function types cannot be generic arguments yet") \
   F(AnalyzerGenericArgumentsUnsupported, "Generic arguments are not supported") \
   F(AnalyzerGenericImplUnsupported, "Generic impl blocks are not supported") \
   F(AnalyzerIfWithoutElse, "If without else yields '()'") \

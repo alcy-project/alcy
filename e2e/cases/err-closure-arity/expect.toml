@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Closure expects 1 parameters, found 2"]

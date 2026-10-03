@@ -59,9 +59,10 @@ enum class DiagCode : u8 {
   // `[modules] export` list does not name, so the boundary keeps it
   // to the package that declares it.
   ExportWithheld = 33,
-  // A closure literal or function type reached checking, which
-  // stops at parsing until closures are implemented.
-  ClosuresNotImplemented = 34,
+  // A capture list, or a bare use of an outer local inside a
+  // closure, reached checking, which refuses captures until they
+  // land.
+  CapturesNotImplemented = 34,
 };
 
 }  // namespace analyzer

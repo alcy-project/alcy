@@ -117,17 +117,38 @@ the loan. Monomorphized and inline environments are follow-ups.
 ## Consequences
 
 What this buys, in slices: S1 parses closures and function types
-(AST, grammar files, parser tests; checking, borrow, and
-lowering report explicit not-implemented). S2 checks them
-(function types, closure checking, capture validation, calls
-through values), testable through `alcy check`. S3 borrows them
-(captures as loans). S4 runs them (closure values, indirect
-calls), testable through executable tests.
+(AST, grammar files, parser tests). S2 runs non-capturing
+closures end to end: function types resolve to a signature in
+the type table, closure literals check and lower to synthetic
+functions, named functions coerce to values, and calls through
+values lower to indirect calls with a result whose loans track
+its arguments. S3 adds captures: the environment value, capture
+checking, mode inference, and loans through captured state.
 
 What it costs is one allocation per closure creation, indirect
 call overhead everywhere a value is called, and an explicit
 list on every closure that sees outer scope. Deferred on
-purpose: generic closures, destructuring parameters, `comp`
-closures, `Fn`-style specs, monomorphized representations,
-explicit capture modes, and recursion, which needs a self-name
-the syntax does not give.
+purpose: generic closures (and function types as generic
+arguments, which cannot mangle apart yet), destructuring
+parameters, `comp` closures, `Fn`-style specs, monomorphized
+representations, explicit capture modes, and recursion, which
+needs a self-name the syntax does not give.
+
+## Staged landing
+
+**Landed:** S1 and S2. Closures parse with optional capture
+lists; function types resolve to a structural signature; a
+non-capturing closure checks against an annotated or expected
+signature, lowers to a synthetic function whose environment
+slot is null, and runs through `alcy run`. A named function
+coerces to the same value shape through a wrapper that drops
+the environment. Calls through values lower indirectly, and
+borrow treats their results conservatively: a result that can
+carry loans carries its arguments' and callee's loans, so a
+returned reference keeps what it borrows from live.
+
+**Follow-up:** S3, captures. Until then a non-empty capture
+list and a bare use of an outer local both report
+not-implemented, and a function type bound as a generic
+argument is rejected because its symbol cannot be mangled
+apart yet.

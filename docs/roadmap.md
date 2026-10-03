@@ -18,10 +18,13 @@ peripheral work lives in `backlog.md`. The language record lives in
   ecosystem, which the `unsafe` implementation waits for.
 - [ ] Function types and closures.
 
-  Design first, then build: the syntax against `||`, what a closure
-  captures and how, and how the environment lowers — then the
-  implementation. This completes the iteration story the range work
-  started.
+  The design is `docs/adr/0044-function-types-and-closures.md`:
+  `(params) -> body` with optional explicit `[captures]`, `ret`
+  returning from the closure, and function types in type position.
+  Landed: parsing, checking, and running for non-capturing
+  closures, including coercion of named functions and calls
+  through values. Remaining: captures, which complete the
+  iteration story the range work started.
 - [ ] C FFI and freestanding.
 
   In slices: the `unsafe` design, then `extern "C"` declarations
