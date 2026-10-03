@@ -82,8 +82,18 @@ member list and the dependency graph.
   never required, and entry synthesis wraps one for binaries only.
   Summary-carrying artifacts arrive later; until then a lib artifact
   is an object file, linkable but opaque.
-- MVP compiles single-package programs only. Cross-package
-  compilation follows the whole-program-analysis,
+- Path dependencies load from source into the same closed world:
+  the pipeline reads each dependency's manifest, stages its modules
+  behind a fileless package root named by the manifest name, and
+  checks everything together. A dependency addresses as
+  `<package>::<path>`, where `<package>` is its manifest name with
+  `-` normalized to `_`; a `use` or a qualified path that crosses
+  the boundary reaches only the dependency's `[modules] export`
+  list, and anything else across it is unresolved.
+- MVP keeps emission per package: each build emits its root package
+  only, with dependency code compiled in the way staged standard
+  library sources already are. Summary-carrying artifacts and
+  cross-package compilation follow the whole-program-analysis,
   per-package-emission model (see `deferred.md`).
 - Symbol mangling for the alcy convention follows
   `alcy_<package>_<module path>_<name>`; `extern "C"` names are

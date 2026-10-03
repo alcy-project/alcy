@@ -55,6 +55,10 @@ enum class DiagCode : u8 {
   DropOnCopy = 30,
   TooDeep = 31,
   ArenaExhausted = 32,
+  // A `use` or a qualified path reached a module a dependency's
+  // `[modules] export` list does not name, so the boundary keeps it
+  // to the package that declares it.
+  ExportWithheld = 33,
 };
 
 }  // namespace analyzer

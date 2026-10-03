@@ -70,6 +70,12 @@ class Resolver {
   std::vector<std::vector<u32>> module_children;
   // Export resolution state per module: 0 fresh, 1 in progress, 2 done.
   std::vector<u8> exports_state;
+  // The package roots this tree carries besides its own, and the
+  // root each module belongs to. Both grow with the modules they
+  // name, and both index the same spaces ModuleTree::package_roots
+  // and ModuleTree::module_roots describe.
+  std::vector<PackageRoot> package_roots_;
+  std::vector<u32> module_roots_;
   // Set when a node could not be placed, so the tree was left unfinished.
   bool out_of_arena = false;
 
@@ -106,6 +112,7 @@ class Resolver {
     module_imports.emplace_back();
     module_children.emplace_back();
     exports_state.push_back(0);
+    module_roots_.push_back(NO_PACKAGE_ROOT);
     return static_cast<u32>(modules.size() - 1);
   }
 
@@ -168,15 +175,6 @@ class Resolver {
       if (out_of_arena) {
         return;
       }
-    }
-
-    for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
-      std::vector<ModuleNode*> children;
-      children.reserve(module_children[m].size());
-      for (u32 child : module_children[m]) {
-        children.push_back(modules[child]);
-      }
-      modules[m]->children = ast::copy_to_arena(ast.spans, children);
     }
 
     for (const FileData& file : file_data) {
@@ -251,6 +249,95 @@ class Resolver {
       start = slash + 1;
     }
     file_data[file].module = parent;
+  }
+
+  // Attaches one module of a dependency under the fileless root the
+  // package opens, nesting slash-separated names the way attach_module
+  // nests a package's own files under the entry module. The module
+  // belongs to the dependency, so a `use` from inside the package
+  // stays inside it and the export list does not trim it.
+  void attach_dependency_module(u32 root_module,
+                                u32 dependency,
+                                std::string_view slash_name,
+                                const ParsedModule& input) {
+    u32 parent = root_module;
+    std::string prefix(std::string(modules[root_module]->path));
+    usize start = 0;
+    while (start <= slash_name.size()) {
+      usize slash = slash_name.find('/', start);
+      if (slash == std::string_view::npos) {
+        slash = slash_name.size();
+      }
+      const std::string_view segment = slash_name.substr(start, slash - start);
+      const std::string child_path = prefix + "::" + std::string(segment);
+      const bool leaf = slash == slash_name.size();
+      u32 child = find_child_module(parent, segment);
+      if (child == NO_MODULE) {
+        child = add_module(
+            child_path, leaf ? input.input.id : source::UNKNOWN_FILE,
+            leaf ? input.items : std::span<const ast::ItemIdx>{}, parent);
+        if (out_of_arena) {
+          return;
+        }
+        module_children[parent].push_back(child);
+        module_roots_[child] = dependency;
+      } else if (leaf) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateModule>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::DuplicateModule, diag::Span{}, slash_name);
+        (void)index;
+        return;
+      }
+      parent = child;
+      prefix = child_path;
+      start = slash + 1;
+    }
+  }
+
+  // Stages the path dependencies behind their fileless package roots,
+  // the way the staged standard library sits behind its suite roots,
+  // but as ordinary modules: a dependency's surface is its `[modules]
+  // export` list, reached by `use`, never an implicit prelude, and
+  // nothing reserves its names the way the standard library's do.
+  bool stage_dependencies(std::span<const DependencyPackage> dependencies) {
+    for (const DependencyPackage& dependency : dependencies) {
+      u32 root_module = NO_MODULE;
+      for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+        if (modules[m]->path == dependency.identity &&
+            parents[m] == NO_MODULE) {
+          root_module = m;
+          break;
+        }
+      }
+      // The pipeline names a package that would share a root before
+      // resolution, so reaching this means a tree was assembled by
+      // hand: two packages behind one spelling cannot both be right.
+      if (root_module != NO_MODULE) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateModule>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::DuplicateModule, diag::Span{}, dependency.identity);
+        (void)index;
+        return false;
+      }
+      root_module =
+          add_module(std::string(dependency.identity), source::UNKNOWN_FILE,
+                     std::span<const ast::ItemIdx>{}, NO_MODULE);
+      if (out_of_arena) {
+        return false;
+      }
+      const u32 root_index = static_cast<u32>(package_roots_.size());
+      package_roots_.push_back(PackageRoot{dependency.identity, root_module,
+                                           true, dependency.exports});
+      module_roots_[root_module] = root_index;
+      for (const ParsedModule& input : dependency.modules) {
+        attach_dependency_module(root_module, root_index, input.input.name,
+                                 input);
+        if (out_of_arena) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   void collect_locals() {
@@ -476,6 +563,12 @@ class Resolver {
     }
     u32 current = NO_MODULE;
     const std::string_view head = segments[0];
+    // The head opens a package when it spells one of the tree's
+    // package roots: the staged standard library's members and the
+    // path dependencies. A package root wins over a module of the
+    // same name, so a dependency is reached by its identity and a
+    // same-named module by `package::` or `self::`.
+    u32 opened_root = NO_PACKAGE_ROOT;
     if (head == "package" || head == package_name) {
       current = 0;
       for (u32 i = 0; i < static_cast<u32>(modules.size()); ++i) {
@@ -496,7 +589,16 @@ class Resolver {
       }
       current = parents[module];
     } else {
-      current = find_child_module(module, head);
+      for (u32 i = 0; i < static_cast<u32>(package_roots_.size()); ++i) {
+        if (package_roots_[i].identity == head) {
+          current = package_roots_[i].module;
+          opened_root = i;
+          break;
+        }
+      }
+      if (opened_root == NO_PACKAGE_ROOT) {
+        current = find_child_module(module, head);
+      }
       if (current == NO_MODULE) {
         emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnresolvedImport,
                         node.span, std_hints_, "import", head);
@@ -512,6 +614,34 @@ class Resolver {
       }
     }
     const std::string_view member = segments.back();
+    // A use that crosses into a dependency reaches only that
+    // package's `[modules] export` list. The module the member
+    // lives in is the walk's result; a member that is itself a
+    // module is imported by its own path, so the list names the
+    // module the use imports rather than the one it names it from.
+    // A use from inside the dependency stays inside it.
+    if (opened_root != NO_PACKAGE_ROOT) {
+      std::string module_path;
+      for (usize i = 1; i + 1 < segments.size(); ++i) {
+        if (!module_path.empty()) {
+          module_path.push_back('/');
+        }
+        module_path.append(segments[i]);
+      }
+      if (lookup_local(current, member, Namespace::Module)) {
+        if (module_path.empty()) {
+          module_path = std::string(member);
+        } else {
+          module_path.push_back('/');
+          module_path.append(member);
+        }
+      }
+      if (!module_path.empty() &&
+          emit_withheld_module(package_roots_, module_roots_, module,
+                               opened_root, module_path, node.span, bag)) {
+        return;
+      }
+    }
     const std::string_view name =
         node.payload.get<ast::ItemUse>().has_alias
             ? node.payload.get<ast::ItemUse>().alias.name
@@ -551,7 +681,8 @@ class Resolver {
                  std::span<const ParsedModule> inputs,
                  std::string_view package_name_in,
                  std::span<const ParsedModule> prelude,
-                 std::span<const StdHint> std_hints) {
+                 std::span<const StdHint> std_hints,
+                 std::span<const DependencyPackage> dependencies) {
     package_name = package_name_in;
     root = root_id;
     std_hints_ = std_hints;
@@ -627,6 +758,31 @@ class Resolver {
         prelude_modules.push_back(parent);
       }
     }
+    // The staged count stops at the standard library: a path
+    // dependency's modules are the program's own, counted like any
+    // other module rather than read as toolchain sources.
+    const u32 staged_modules =
+        static_cast<u32>(modules.size()) - modules_before;
+    if (!stage_dependencies(dependencies)) {
+      return ModuleTree{};
+    }
+    // Every module now exists and every edge is in place, so the
+    // children spans are taken here rather than in build_tree: the
+    // prelude and the dependencies stage their modules behind
+    // fileless roots the package's own files never name, and the
+    // checker walks these spans the way resolution walks the edges.
+    for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+      std::vector<ModuleNode*> children;
+      children.reserve(module_children[m].size());
+      for (u32 child : module_children[m]) {
+        children.push_back(modules[child]);
+      }
+      modules[m]->children = ast::copy_to_arena(ast.spans, children);
+      if (ast.exhausted()) {
+        fail_out_of_arena();
+        return ModuleTree{};
+      }
+    }
     collect_locals();
     inject_prelude();
     for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
@@ -645,13 +801,15 @@ class Resolver {
     ModuleTree tree;
     tree.modules = ast::copy_to_arena(
         ast.spans, std::vector<ModuleNode*>(modules.begin(), modules.end()));
+    tree.package_roots = ast::copy_to_arena(ast.spans, package_roots_);
+    tree.module_roots = ast::copy_to_arena(ast.spans, module_roots_);
     if (ast.exhausted()) {
       fail_out_of_arena();
       return ModuleTree{};
     }
     tree.root = root_index;
     tree.prelude_modules = static_cast<u32>(prelude_modules.size());
-    tree.staged_modules = static_cast<u32>(modules.size()) - modules_before;
+    tree.staged_modules = staged_modules;
     return tree;
   }
 };
@@ -680,14 +838,43 @@ base::Result<ModuleTree, diag::Reported> resolve_modules(
     ast::AstArena& ast,
     diag::DiagBag& bag,
     std::span<const ParsedModule> prelude,
-    std::span<const StdHint> std_hints) {
+    std::span<const StdHint> std_hints,
+    std::span<const DependencyPackage> dependencies) {
   Resolver resolver{ast, bag};
-  ModuleTree tree =
-      resolver.run(root, modules, package_name, prelude, std_hints);
+  ModuleTree tree = resolver.run(root, modules, package_name, prelude,
+                                 std_hints, dependencies);
   if (bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
   return base::make_ok(tree);
+}
+
+bool emit_withheld_module(std::span<const PackageRoot> roots,
+                          std::span<const u32> module_roots,
+                          u32 from_module,
+                          u32 root,
+                          std::string_view module_path,
+                          diag::Span span,
+                          diag::DiagBag& bag) {
+  const PackageRoot& package = roots[root];
+  if (!package.trimmed) {
+    return false;
+  }
+  // A path from inside the package stays inside it, where the
+  // package's own modules are all visible.
+  if (!module_roots.empty() && module_roots[from_module] == root) {
+    return false;
+  }
+  for (std::string_view exported : package.exports) {
+    if (exported == module_path) {
+      return false;
+    }
+  }
+  const u32 index = bag.emit<i18n::Key::AnalyzerExportWithheld>(
+      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ExportWithheld,
+      span, package.identity, module_path);
+  (void)index;
+  return true;
 }
 
 base::Result<void, ModuleTreeError> verify_module_tree(const ModuleTree& tree) {
@@ -706,6 +893,15 @@ base::Result<void, ModuleTreeError> verify_module_tree(const ModuleTree& tree) {
   if (tree.prelude_modules > tree.modules.size()) {
     return base::make_err(ModuleTreeError::BadPreludeCount);
   }
+  if (!tree.module_roots.empty() &&
+      tree.module_roots.size() != tree.modules.size()) {
+    return base::make_err(ModuleTreeError::BadModuleRootCount);
+  }
+  for (const PackageRoot& package_root : tree.package_roots) {
+    if (package_root.module >= tree.modules.size()) {
+      return base::make_err(ModuleTreeError::RootOutOfRange);
+    }
+  }
   return base::make_ok();
 }
 
@@ -717,6 +913,8 @@ std::string_view describe_module_tree_error(ModuleTreeError error) {
     case ModuleTreeError::NullModule: return "module tree holds a null module";
     case ModuleTreeError::BadPreludeCount:
       return "module tree prelude count exceeds the module count";
+    case ModuleTreeError::BadModuleRootCount:
+      return "module tree module roots do not cover the module count";
   }
   return "invalid module tree";
 }

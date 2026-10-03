@@ -3,6 +3,7 @@
 
 #include "pipeline/target.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <optional>
 #include <span>
@@ -21,6 +22,7 @@
 #include "fpag/debug/profiler/profile_scope.h"
 #include "i18n/messages.h"
 #include "path/path.h"
+#include "pipeline/dependencies.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/embedded_std.h"
 #include "pipeline/modules.h"
@@ -29,6 +31,7 @@
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
 #include "pipeline/std_stage.h"
+#include "pkg/arena_copy.h"
 #include "pkg/manifest.h"
 #include "pkg/toolchain.h"
 #include "source/source.h"
@@ -97,14 +100,33 @@ struct PackageSources {
   ParsedFiles parsed;
   std::vector<analyzer::ParsedModule> prelude;
   std::vector<analyzer::ModuleInput> selection;
+  // The path dependencies' modules, appended in resolution order.
+  // `dependencies` holds spans into this vector, so nothing resizes
+  // it once the last module is in: the targets borrow the spans for
+  // as long as they resolve.
+  std::vector<analyzer::ParsedModule> dependency_modules;
+  std::vector<analyzer::DependencyPackage> dependencies;
   usize file_count = 0;
 };
 
-// Discovers, stages, parses, and selects the whole package.
+// Discovers, stages, parses, and selects the whole package, with
+// every path dependency it declares loaded from source into the
+// same closed world.
 base::Result<PackageSources, diag::Reported> collect_package_sources(
     PipelineContext& ctx,
     const path::Path& root,
     const pkg::PackageManifest& manifest) {
+  // Path dependencies load first: a dependency's own manifest names
+  // standard-library members, and the selection below covers the
+  // whole closure rather than this manifest alone.
+  base::Result<std::vector<LoadedDependency>, diag::Reported> resolved =
+      resolve_dependencies(ctx, root, manifest);
+  if (resolved.is_err() || ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  const std::vector<LoadedDependency> dependencies =
+      std::move(resolved).unwrap();
+
   base::Result<pipeline::DiscoveredSources, diag::Reported> discovered =
       pipeline::discover_sources(root.as_view(), ctx.sources, ctx.bag);
   if (discovered.is_err()) {
@@ -112,21 +134,93 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
   }
   const pipeline::DiscoveredSources found = std::move(discovered).unwrap();
 
-  // The manifest's dependencies select the staged members; anything
+  // Every manifest the closure holds selects the staged members:
+  // this package's and each dependency's, merged, so a package
+  // that needs another names it and the selection holds the edge.
+  std::vector<pkg::Dependency> closure_deps;
+  closure_deps.reserve(manifest.dependency_count);
+  for (u32 i = 0; i < manifest.dependency_count; ++i) {
+    closure_deps.push_back(manifest.dependencies[i]);
+  }
+  for (const LoadedDependency& dependency : dependencies) {
+    for (u32 i = 0; i < dependency.manifest.dependency_count; ++i) {
+      closure_deps.push_back(dependency.manifest.dependencies[i]);
+    }
+  }
+  // The closure's dependencies select the staged members; anything
   // unselected is absent, not merely out of scope.
-  base::Result<StdSelection, diag::Reported> selected = resolve_std_selection(
-      {manifest.dependencies, manifest.dependency_count}, ctx.bag);
+  base::Result<StdSelection, diag::Reported> selected =
+      resolve_std_selection(closure_deps, ctx.bag);
   if (selected.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
+  }
+  const StdSelection selection = std::move(selected).unwrap();
+
+  // A package root is one name in the tree: two dependencies behind
+  // one identity, a dependency named like the package that loads it,
+  // or one named like a staged member would open two roots under a
+  // single spelling. The loader names the collision here, where the
+  // fix - renaming one of them - is obvious.
+  std::vector<std::string_view> identities;
+  identities.reserve(dependencies.size());
+  for (const LoadedDependency& dependency : dependencies) {
+    identities.push_back(
+        pkg::copy_str(ctx.arena, package_identity(dependency.manifest.name)));
+  }
+  for (usize i = 0; i < identities.size(); ++i) {
+    if (identities[i] == manifest.name) {
+      const u32 index =
+          ctx.bag.emit<i18n::Key::PipelineDependencyClashesWithPackage>(
+              diag::Severity::Error, diag::Stage::Pipeline,
+              DiagCode::DependencyIdentityClash, identities[i]);
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
+    for (usize j = 0; j < i; ++j) {
+      if (identities[i] == identities[j]) {
+        const u32 index =
+            ctx.bag.emit<i18n::Key::PipelineDependencyClashesWithDependency>(
+                diag::Severity::Error, diag::Stage::Pipeline,
+                DiagCode::DependencyIdentityClash, identities[i]);
+        (void)index;
+        return base::make_err(diag::Reported{});
+      }
+    }
+    for (std::string_view member : selection.members) {
+      if (identities[i] == member) {
+        const u32 index =
+            ctx.bag.emit<i18n::Key::PipelineDependencyClashesWithStdMember>(
+                diag::Severity::Error, diag::Stage::Pipeline,
+                DiagCode::DependencyIdentityClash, identities[i],
+                identities[i]);
+        (void)index;
+        return base::make_err(diag::Reported{});
+      }
+    }
   }
   const std::span<const analyzer::ModuleInput> prelude = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "prelude",
                                              "frontend");
-    return std_prelude(ctx, std::move(selected).unwrap());
+    return std_prelude(ctx, selection);
   }();
-  std::vector<source::FileId> parse_ids;
-  parse_ids.reserve(found.files.size() + prelude.size());
-  parse_ids.insert(parse_ids.end(), found.files.begin(), found.files.end());
+  // Every file the closure checks is counted once: the package's
+  // own and each dependency's, and the source manager hands one id
+  // to a file two of them share.
+  std::vector<source::FileId> closure_ids;
+  closure_ids.reserve(found.files.size());
+  closure_ids.insert(closure_ids.end(), found.files.begin(), found.files.end());
+  for (const LoadedDependency& dependency : dependencies) {
+    closure_ids.insert(closure_ids.end(), dependency.files.begin(),
+                       dependency.files.end());
+  }
+  std::sort(closure_ids.begin(), closure_ids.end());
+  closure_ids.erase(std::unique(closure_ids.begin(), closure_ids.end()),
+                    closure_ids.end());
+  // Parsing admits the closure's files and the staged prelude, and
+  // the prelude's ids follow the loaded files', so the order is the
+  // one discovery loaded in.
+  std::vector<source::FileId> parse_ids = closure_ids;
+  parse_ids.reserve(parse_ids.size() + prelude.size());
   for (const analyzer::ModuleInput& input : prelude) {
     parse_ids.push_back(input.id);
   }
@@ -137,17 +231,44 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
   }
   PackageSources sources;
   sources.parsed = std::move(parse_result).unwrap();
-  sources.file_count = found.files.size();
+  sources.file_count = closure_ids.size();
   sources.prelude.reserve(prelude.size());
   for (const analyzer::ModuleInput& input : prelude) {
     sources.prelude.push_back(parsed_module(sources.parsed, input));
   }
-  base::Result<std::vector<analyzer::ModuleInput>, diag::Reported> selection =
-      select_modules(ctx, manifest, root, found.files);
-  if (selection.is_err() || ctx.bag.has_errors()) {
+  base::Result<std::vector<analyzer::ModuleInput>, diag::Reported>
+      selection_inputs = select_modules(ctx, manifest, root, found.files);
+  if (selection_inputs.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  sources.selection = std::move(selection).unwrap();
+  sources.selection = std::move(selection_inputs).unwrap();
+
+  // A dependency's modules pair with the files they came from the
+  // way the package's own do, and the identity the resolver stages
+  // them behind is the arena-copied name the clash checks above
+  // already hold.
+  for (const LoadedDependency& dependency : dependencies) {
+    for (const analyzer::ModuleInput& input : dependency.modules) {
+      sources.dependency_modules.push_back(
+          parsed_module(sources.parsed, input));
+    }
+  }
+  // The spans hold into `dependency_modules`, which holds every
+  // module by now, so the views stay valid for every target.
+  sources.dependencies.reserve(dependencies.size());
+  usize begin = 0;
+  for (usize i = 0; i < dependencies.size(); ++i) {
+    const LoadedDependency& dependency = dependencies[i];
+    const usize end = begin + dependency.modules.size();
+    sources.dependencies.push_back(analyzer::DependencyPackage{
+        identities[i],
+        std::span<const std::string_view>(
+            dependency.manifest.modules.exports,
+            dependency.manifest.modules.export_count),
+        std::span<const analyzer::ParsedModule>(
+            sources.dependency_modules.data() + begin, end - begin)});
+    begin = end;
+  }
   return base::make_ok(std::move(sources));
 }
 
@@ -245,7 +366,8 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve",
                                              "frontend");
     return analyzer::resolve_modules(root_file, modules, manifest.name, ctx.ast,
-                                     ctx.bag, sources.prelude, std_hints());
+                                     ctx.bag, sources.prelude, std_hints(),
+                                     sources.dependencies);
   }();
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});

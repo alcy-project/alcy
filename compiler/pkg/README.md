@@ -20,11 +20,14 @@ testable without a filesystem:
 - loading a manifest or a toolchain file is `pipeline`
   (`require_package_manifest`, `load_toolchain`).
 
-Path dependencies and lockfiles are not implemented: a build loads the
-package it was pointed at and nothing else, which is
-`docs/adr/0038-library-packages-loaded-by-source.md`. The models for
-them were written and removed rather than left tested-but-unreachable;
-they come back with the fetcher that uses them.
+Path dependencies load from source (`pipeline/dependencies`):
+a build resolves the package it was pointed at and every path
+dependency its manifest names, each read through its own manifest
+and staged behind its own package root, which is
+`docs/adr/0038-library-packages-loaded-by-source.md`. Lockfiles
+are not implemented: the models for them were written and removed
+rather than left tested-but-unreachable; they come back with the
+fetcher that uses them.
 
 ## Entry points
 

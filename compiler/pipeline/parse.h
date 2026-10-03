@@ -78,12 +78,15 @@ analyzer::ParsedModule parsed_module(const ParsedFiles& parsed,
 // resolves once. A caller that resolves the same files more than once -
 // a package's every target does - parses with `parse_files` and calls
 // `analyzer::resolve_modules` per target, so the files are read once.
+// `dependencies` are the path dependencies the package loads from
+// source, whose files parse alongside the inputs'.
 base::Result<analyzer::ModuleTree, diag::Reported> resolve_inputs(
     PipelineContext& ctx,
     source::FileId root,
     std::span<const analyzer::ModuleInput> modules,
     std::string_view package_name,
     std::span<const analyzer::ModuleInput> prelude = {},
-    std::span<const analyzer::StdHint> std_hints = {});
+    std::span<const analyzer::StdHint> std_hints = {},
+    std::span<const analyzer::DependencyPackage> dependencies = {});
 
 }  // namespace pipeline

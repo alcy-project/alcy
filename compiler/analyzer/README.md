@@ -17,13 +17,15 @@ translation units) carries the checking state; it is not public API.
 ## Entry points
 
 - `resolve_modules(root, parsed_modules, package_name, ast, bag,
-  prelude)` -> `base::Result<ModuleTree, diag::Reported>`. The caller
-  owns the items, the paths, and the arena, and keeps all three alive
+  prelude, std_hints, dependencies)` ->
+  `base::Result<ModuleTree, diag::Reported>`. The caller owns the
+  items, the paths, and the arena, and keeps all three alive
   for the call; failures leave the tree unusable and the bag holds the
   diagnostics.
 - `verify_module_tree(tree)` ->
   `base::Result<void, ModuleTreeError>`: non-empty, root in range,
-  no null modules, prelude count within range. Pure.
+  no null modules, prelude count within range, module roots covering
+  the modules, package roots naming modules the tree holds. Pure.
 - `check_package(tree, width, ast, bag)` ->
   `base::Result<CheckedPackage, diag::Reported>`. Validates the tree
   (`ANALYZER_INVALID_MODULE_TREE`) and the arena before any pass runs,

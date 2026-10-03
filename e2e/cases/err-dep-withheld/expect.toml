@@ -1,0 +1,4 @@
+# `detail` is staged but not exported: a use that crosses the
+# boundary reaches only the package's `[modules] export` list.
+exit = 4
+contains = ["Package 'acme_hash' does not export module 'detail'"]

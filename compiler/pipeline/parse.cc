@@ -246,7 +246,8 @@ base::Result<analyzer::ModuleTree, diag::Reported> resolve_inputs(
     std::span<const analyzer::ModuleInput> modules,
     std::string_view package_name,
     std::span<const analyzer::ModuleInput> prelude,
-    std::span<const analyzer::StdHint> std_hints) {
+    std::span<const analyzer::StdHint> std_hints,
+    std::span<const analyzer::DependencyPackage> dependencies) {
   std::vector<source::FileId> files;
   files.reserve(modules.size() + prelude.size());
   for (const analyzer::ModuleInput& input : modules) {
@@ -254,6 +255,11 @@ base::Result<analyzer::ModuleTree, diag::Reported> resolve_inputs(
   }
   for (const analyzer::ModuleInput& input : prelude) {
     files.push_back(input.id);
+  }
+  for (const analyzer::DependencyPackage& dependency : dependencies) {
+    for (const analyzer::ParsedModule& input : dependency.modules) {
+      files.push_back(input.input.id);
+    }
   }
   base::Result<ParsedFiles, diag::Reported> parsed = parse_files(ctx, files);
   if (parsed.is_err()) {
@@ -270,8 +276,20 @@ base::Result<analyzer::ModuleTree, diag::Reported> resolve_inputs(
   };
   std::vector<analyzer::ParsedModule> parsed_modules = pair(modules);
   std::vector<analyzer::ParsedModule> parsed_prelude = pair(prelude);
+  std::vector<analyzer::DependencyPackage> parsed_dependencies;
+  parsed_dependencies.reserve(dependencies.size());
+  for (const analyzer::DependencyPackage& dependency : dependencies) {
+    std::vector<analyzer::ParsedModule> parsed;
+    parsed.reserve(dependency.modules.size());
+    for (const analyzer::ParsedModule& input : dependency.modules) {
+      parsed.push_back(parsed_module(sources, input.input));
+    }
+    parsed_dependencies.push_back(analyzer::DependencyPackage{
+        dependency.identity, dependency.exports, parsed});
+  }
   return analyzer::resolve_modules(root, parsed_modules, package_name, ctx.ast,
-                                   ctx.bag, parsed_prelude, std_hints);
+                                   ctx.bag, parsed_prelude, std_hints,
+                                   parsed_dependencies);
 }
 
 }  // namespace pipeline

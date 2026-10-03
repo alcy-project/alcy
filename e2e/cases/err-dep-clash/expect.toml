@@ -1,0 +1,4 @@
+# Both directories declare the same manifest name, so they would
+# open two package roots under one spelling.
+exit = 4
+contains = ["Two dependencies are named 'acme_hash'"]

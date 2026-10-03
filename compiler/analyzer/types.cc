@@ -1022,6 +1022,11 @@ bool Checker::walk_module_prefix(u32 module,
     return true;
   }
   u32 current = NO_MODULE;
+  // The head opens a package when it spells one of the tree's
+  // package roots, which wins over a module of the same name: a
+  // dependency is reached by its identity, and a same-named
+  // module by `package::` or `self::`.
+  u32 opened_root = analyzer::NO_PACKAGE_ROOT;
   if (head == "package") {
     current = tree.root;
   } else if (head == "self") {
@@ -1036,13 +1041,22 @@ bool Checker::walk_module_prefix(u32 module,
     }
     current = parents[module];
   } else {
-    current = find_child_module(module, head);
-    if (current == NO_MODULE) {
-      const u32 index = bag.emit<i18n::Key::AnalyzerUnresolved>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
-          ast.paths[path].span, what, head);
-      (void)index;
-      return false;
+    for (u32 i = 0; i < static_cast<u32>(tree.package_roots.size()); ++i) {
+      if (tree.package_roots[i].identity == head) {
+        current = tree.package_roots[i].module;
+        opened_root = i;
+        break;
+      }
+    }
+    if (opened_root == analyzer::NO_PACKAGE_ROOT) {
+      current = find_child_module(module, head);
+      if (current == NO_MODULE) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerUnresolved>(
+            diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
+            ast.paths[path].span, what, head);
+        (void)index;
+        return false;
+      }
     }
   }
   for (usize i = 1; i + 1 < segments.size(); ++i) {
@@ -1052,6 +1066,25 @@ bool Checker::walk_module_prefix(u32 module,
           diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
           ast.paths[path].span, what, segments[i].name);
       (void)index;
+      return false;
+    }
+  }
+  // A path that crosses into a dependency reaches only that
+  // package's `[modules] export` list, and the module the path
+  // walked to is the surface the boundary trims. A path from
+  // inside the dependency stays inside it.
+  if (opened_root != analyzer::NO_PACKAGE_ROOT) {
+    std::string module_path;
+    for (usize i = 1; i + 1 < segments.size(); ++i) {
+      if (!module_path.empty()) {
+        module_path.push_back('/');
+      }
+      module_path.append(segments[i].name);
+    }
+    if (!module_path.empty() &&
+        emit_withheld_module(tree.package_roots, tree.module_roots, module,
+                             opened_root, module_path, ast.paths[path].span,
+                             bag)) {
       return false;
     }
   }

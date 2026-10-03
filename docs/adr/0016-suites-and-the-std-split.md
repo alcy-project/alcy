@@ -122,10 +122,12 @@ directory and mapped: nothing reaches the filesystem, two compilations
 cannot read each other's prelude, and a diagnostic about a standard
 library source names `core/prelude.al` instead of a temporary path.
 
-**Follow-up:** enforcement of `export`, cross-package `use` between
-members, and the fetchers every other owner and suite needs. Until those
-land the compiler is more permissive than this ADR describes: an
-unselected member is absent, but a selected one is not yet trimmed to its
+**Follow-up:** enforcement of `export` for standard-library members,
+cross-package `use` between members, and the fetchers every other
+owner and suite needs. Path dependencies already trim to their export
+lists; until the standard library's lists trim too the compiler is more
+permissive than this ADR describes for its own members: an unselected
+member is absent, but a selected one is not yet trimmed to its
 `export` list.
 
 ## Alternatives considered

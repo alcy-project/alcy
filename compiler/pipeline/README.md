@@ -21,7 +21,9 @@ parse stage owns the threads and the diagnostic merge order.
 - `select_modules` -> the module inputs a manifest declares, from the
   files discovery loaded; `require_package_manifest` -> the package a raw
   cli target names.
-- `std_prelude` -> `std::span<const analyzer::ModuleInput>`;
+- `resolve_dependencies` -> the path dependencies a package declares,
+  each read through its own manifest and selected the way the package
+  is; `std_prelude` -> `std::span<const analyzer::ModuleInput>`;
   `link_executable` -> `base::Result<void, diag::Reported>`.
 
 ## Input requirements

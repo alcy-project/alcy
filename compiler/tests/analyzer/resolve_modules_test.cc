@@ -564,6 +564,81 @@ ResolveCase resolve_case_with_prelude(
   return {tree, !f.bag.has_errors()};
 }
 
+// Resolves a package and one path dependency the way the
+// pipeline stages them: every source parses once, the
+// package's own modules root at `root_rel`, and the
+// dependency's modules sit behind a fileless root named by
+// `identity`, trimmed to `exports`. `dependency_modules` and
+// `export_storage` are the storage the tree's package root
+// borrows, so a caller keeps both as long as it reads the
+// tree.
+base::Result<ModuleTree, diag::Reported> resolve_dep_case(
+    VirtualDir& dir,
+    std::string_view root_rel,
+    std::initializer_list<std::string_view> rels,
+    VirtualDir& dep_dir,
+    std::string_view identity,
+    std::initializer_list<std::string_view> exports,
+    std::initializer_list<std::string_view> dep_rels,
+    Fixture& f,
+    std::vector<ParsedModule>& dependency_modules,
+    std::vector<std::string_view>& export_storage,
+    std::string_view package_name = "testpkg") {
+  std::deque<std::string> name_storage;
+  std::vector<ModuleInput> inputs;
+  std::vector<ModuleInput> dep_inputs;
+  source::FileId root = source::UNKNOWN_FILE;
+  for (std::string_view rel : rels) {
+    std::optional<ModuleInput> input = tests::register_source(
+        f.sources, dir, rel, rel == root_rel, name_storage);
+    if (!input.has_value()) {
+      continue;
+    }
+    if (rel == root_rel) {
+      root = input->id;
+    }
+    inputs.push_back(*input);
+  }
+  std::vector<source::FileId> parse_ids;
+  parse_ids.reserve(rels.size() + dep_rels.size());
+  for (const ModuleInput& input : inputs) {
+    parse_ids.push_back(input.id);
+  }
+  for (std::string_view rel : dep_rels) {
+    std::optional<ModuleInput> input =
+        tests::register_source(f.sources, dep_dir, rel, false, name_storage);
+    if (!input.has_value()) {
+      continue;
+    }
+    parse_ids.push_back(input->id);
+    dep_inputs.push_back(*input);
+  }
+  base::Result<pipeline::ParsedFiles, diag::Reported> parsed =
+      pipeline::parse_files(f.ctx, parse_ids);
+  if (parsed.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  pipeline::ParsedFiles files = std::move(parsed).unwrap();
+  std::vector<ParsedModule> modules;
+  modules.reserve(inputs.size());
+  for (const ModuleInput& input : inputs) {
+    modules.push_back(pipeline::parsed_module(files, input));
+  }
+  dependency_modules.reserve(dep_inputs.size());
+  for (const ModuleInput& input : dep_inputs) {
+    dependency_modules.push_back(pipeline::parsed_module(files, input));
+  }
+  export_storage.reserve(exports.size());
+  for (std::string_view exported : exports) {
+    export_storage.push_back(exported);
+  }
+  const DependencyPackage dependency{
+      identity, std::span<const std::string_view>(export_storage),
+      std::span<const ParsedModule>(dependency_modules)};
+  return resolve_modules(root, modules, package_name, f.ctx.ast, f.bag, {}, {},
+                         std::span<const DependencyPackage>{&dependency, 1});
+}
+
 TEST_CASE("Resolve nests a facade beside its sibling modules") {
   VirtualDir dir;
   const bool setup =
@@ -694,6 +769,191 @@ TEST_CASE("Resolve prefers locals over prelude imports") {
   }
 }
 
+TEST_CASE("Resolve stages a dependency behind its fileless root") {
+  VirtualDir dir;
+  VirtualDir dep_dir;
+  const bool setup = write_all(
+      dir, {{"main.al", "use acme_hash::sha2::digest;\nfn main() {}\n"}});
+  CHECK(setup);
+  const bool dep_setup = write_all(dep_dir, {
+                                                {"sha2.al",
+                                                 "pub fn digest(x: i32) -> "
+                                                 "i32 {\n  ret x + 1\n}\n"},
+                                                {"detail.al",
+                                                 "pub fn helper() -> i32 {\n "
+                                                 " ret 0\n}\n"},
+                                            });
+  CHECK(dep_setup);
+  if (!setup || !dep_setup) {
+    return;
+  }
+
+  Fixture f;
+  std::vector<ParsedModule> dependency_modules;
+  std::vector<std::string_view> export_storage;
+  base::Result<ModuleTree, diag::Reported> result = resolve_dep_case(
+      dir, "main.al", {"main.al"}, dep_dir, "acme_hash", {"sha2"},
+      {"sha2.al", "detail.al"}, f, dependency_modules, export_storage);
+  CHECK(result.is_ok());
+  CHECK(!f.bag.has_errors());
+  if (result.is_err() || f.bag.has_errors()) {
+    return;
+  }
+  ModuleTree tree = std::move(result).unwrap();
+  CHECK(tree.package_roots.size() == 1);
+  if (tree.package_roots.size() != 1) {
+    return;
+  }
+  CHECK(tree.package_roots[0].identity == "acme_hash");
+  CHECK(tree.package_roots[0].trimmed);
+  const ModuleNode* sha2 = find_module(tree, "acme_hash::sha2");
+  const ModuleNode* detail = find_module(tree, "acme_hash::detail");
+  const ModuleNode* root = find_module(tree, "");
+  CHECK(sha2 != nullptr);
+  CHECK(detail != nullptr);
+  CHECK(root != nullptr);
+  if (sha2 == nullptr || detail == nullptr || root == nullptr) {
+    return;
+  }
+  u32 sha2_index = 0;
+  for (u32 i = 0; i < static_cast<u32>(tree.modules.size()); ++i) {
+    if (tree.modules[i] == sha2) {
+      sha2_index = i;
+    }
+    if (tree.modules[i] == root) {
+      CHECK(tree.module_root(i) == NO_PACKAGE_ROOT);
+    } else {
+      CHECK(tree.module_root(i) == 0);
+    }
+  }
+  // The staged modules are ordinary: the resolver still reports the
+  // toolchain's staged sources apart, so nothing here is staged.
+  CHECK(tree.staged_modules == 0);
+  bool found = false;
+  for (const Import& import : root->imports) {
+    if (import.ns == Namespace::Value && import.name == "digest" &&
+        import.target_module == sha2_index && import.member == "digest") {
+      found = true;
+    }
+  }
+  CHECK(found);
+}
+
+TEST_CASE("Resolve trims a dependency to its export list") {
+  VirtualDir dir;
+  VirtualDir dep_dir;
+  const bool setup = write_all(
+      dir, {{"main.al", "use acme_hash::detail::helper;\nfn main() {}\n"}});
+  CHECK(setup);
+  const bool dep_setup = write_all(dep_dir, {
+                                                {"sha2.al",
+                                                 "pub fn digest(x: i32) -> "
+                                                 "i32 {\n  ret x + 1\n}\n"},
+                                                {"detail.al",
+                                                 "pub fn helper() -> i32 {\n "
+                                                 " ret 0\n}\n"},
+                                            });
+  CHECK(dep_setup);
+  if (!setup || !dep_setup) {
+    return;
+  }
+
+  Fixture f;
+  std::vector<ParsedModule> dependency_modules;
+  std::vector<std::string_view> export_storage;
+  base::Result<ModuleTree, diag::Reported> result = resolve_dep_case(
+      dir, "main.al", {"main.al"}, dep_dir, "acme_hash", {"sha2"},
+      {"sha2.al", "detail.al"}, f, dependency_modules, export_storage);
+  CHECK(result.is_err());
+  CHECK(f.bag.has_errors());
+  bool named = false;
+  f.bag.for_each([&](const diag::Diagnostic& diagnostic) {
+    named = named || diagnostic.message ==
+                         "Package 'acme_hash' does not export module "
+                         "'detail'";
+  });
+  CHECK(named);
+}
+
+TEST_CASE("Resolve keeps a dependency's own uses untrimmed") {
+  VirtualDir dir;
+  VirtualDir dep_dir;
+  const bool setup =
+      write_all(dir, {{"main.al", "use acme_hash::api::go;\nfn main() {}\n"}});
+  CHECK(setup);
+  const bool dep_setup = write_all(
+      dep_dir, {{"api.al",
+                 "use acme_hash::detail::helper;\npub fn go() -> i32 {\n  ret "
+                 "helper()\n}\n"},
+                {"detail.al", "pub fn helper() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(dep_setup);
+  if (!setup || !dep_setup) {
+    return;
+  }
+
+  Fixture f;
+  std::vector<ParsedModule> dependency_modules;
+  std::vector<std::string_view> export_storage;
+  base::Result<ModuleTree, diag::Reported> result = resolve_dep_case(
+      dir, "main.al", {"main.al"}, dep_dir, "acme_hash", {"api"},
+      {"api.al", "detail.al"}, f, dependency_modules, export_storage);
+  CHECK(result.is_ok());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Resolve prefers a package root over a same-named module") {
+  VirtualDir dir;
+  VirtualDir dep_dir;
+  const bool setup =
+      write_all(dir, {{"main.al", "use hash::sha2::digest;\nfn main() {}\n"},
+                      {"hash.al", "pub fn local() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  const bool dep_setup = write_all(
+      dep_dir,
+      {{"sha2.al", "pub fn digest(x: i32) -> i32 {\n  ret x + 1\n}\n"}});
+  CHECK(dep_setup);
+  if (!setup || !dep_setup) {
+    return;
+  }
+
+  Fixture f;
+  std::vector<ParsedModule> dependency_modules;
+  std::vector<std::string_view> export_storage;
+  base::Result<ModuleTree, diag::Reported> result = resolve_dep_case(
+      dir, "main.al", {"main.al", "hash.al"}, dep_dir, "hash", {"sha2"},
+      {"sha2.al"}, f, dependency_modules, export_storage);
+  CHECK(result.is_ok());
+  CHECK(!f.bag.has_errors());
+  if (result.is_err() || f.bag.has_errors()) {
+    return;
+  }
+  ModuleTree tree = std::move(result).unwrap();
+  // Both the package's own module and the dependency's root read
+  // "hash": the import still reaches the dependency, while the
+  // package's module answers to `package::` or `self::`.
+  const ModuleNode* sha2 = find_module(tree, "hash::sha2");
+  const ModuleNode* root = find_module(tree, "");
+  CHECK(sha2 != nullptr);
+  CHECK(root != nullptr);
+  if (sha2 == nullptr || root == nullptr) {
+    return;
+  }
+  u32 sha2_index = 0;
+  for (u32 i = 0; i < static_cast<u32>(tree.modules.size()); ++i) {
+    if (tree.modules[i] == sha2) {
+      sha2_index = i;
+    }
+  }
+  bool found = false;
+  for (const Import& import : root->imports) {
+    if (import.ns == Namespace::Value && import.name == "digest" &&
+        import.target_module == sha2_index) {
+      found = true;
+    }
+  }
+  CHECK(found);
+}
+
 TEST_CASE("Module tree verification rejects malformed trees") {
   const ModuleTree empty{.modules = {}, .root = 0};
   CHECK(verify_module_tree(empty).is_err());
@@ -713,7 +973,14 @@ TEST_CASE("Module tree verification rejects malformed trees") {
       .modules = {one, 1}, .root = 0, .prelude_modules = 2};
   CHECK(verify_module_tree(bad_prelude).is_err());
 
-  const ModuleTree valid{.modules = {one, 1}, .root = 0};
+  const u32 one_root[] = {NO_PACKAGE_ROOT, NO_PACKAGE_ROOT};
+  const ModuleTree bad_module_roots{
+      .modules = {one, 1}, .root = 0, .module_roots = {one_root, 2}};
+  CHECK(verify_module_tree(bad_module_roots).is_err());
+
+  const u32 covered[] = {NO_PACKAGE_ROOT};
+  const ModuleTree valid{
+      .modules = {one, 1}, .root = 0, .module_roots = {covered, 1}};
   CHECK(verify_module_tree(valid).is_ok());
 }
 

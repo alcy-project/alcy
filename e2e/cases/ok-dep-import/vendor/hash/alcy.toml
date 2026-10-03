@@ -1,0 +1,11 @@
+[package]
+name = "acme-hash"
+version = "0.1.0"
+
+[modules]
+include = ["sha2", "detail"]
+export = ["sha2"]
+
+[[bin]]
+name = "acme-hash"
+path = "sha2.al"

@@ -43,6 +43,26 @@ struct Import {
 // sentinel has to sit outside the index space.
 constexpr u32 NO_MODULE = std::numeric_limits<u32>::max();
 
+// The package-root index that names no package root. Module roots sit in
+// their own index space, so this sentinel is distinct from NO_MODULE's
+// role even though the two share a value.
+constexpr u32 NO_PACKAGE_ROOT = std::numeric_limits<u32>::max();
+
+// One package root the tree carries besides its own: a staged
+// standard-library member or a path dependency, staged behind a
+// fileless root module. `identity` is the name a `use` or a
+// qualified path spells; `module` is the fileless root it opens.
+// A path dependency is trimmed to its `[modules] export` list, so
+// `exports` names the modules it makes public; a staged
+// standard-library member opens through its facade, so nothing
+// trims it. Views borrow the caller's storage.
+struct PackageRoot {
+  std::string_view identity;
+  u32 module = NO_MODULE;
+  bool trimmed = false;
+  std::span<const std::string_view> exports;
+};
+
 struct ModuleNode {
   // Dotted path from the root ("foo::bar"); "" for the root itself.
   std::string path;
@@ -70,8 +90,29 @@ struct ModuleTree {
   u32 prelude_modules = 0;
   // Every module the staged prelude added, facades and the fileless
   // package roots between them. Reported counts exclude these, since
-  // they are toolchain sources rather than the program's own.
+  // they are toolchain sources rather than the program's own. Path
+  // dependencies are not staged, so their modules are counted like the
+  // package's own.
   u32 staged_modules = 0;
+  // The package roots besides the package's own: staged
+  // standard-library members and path dependencies, each behind a
+  // fileless root a `use` or a qualified path spells the identity of.
+  // NOLINTNEXTLINE(readability-redundant-member-init)
+  std::span<const PackageRoot> package_roots = {};
+  // The package root each module belongs to, or NO_PACKAGE_ROOT for
+  // the package's own modules and the staged standard library's. A
+  // `use` from inside a package stays inside it, so the export list
+  // does not trim it. Empty in a hand-built tree, which reads as no
+  // module belonging to a package root.
+  // NOLINTNEXTLINE(readability-redundant-member-init)
+  std::span<const u32> module_roots = {};
+
+  // The package root `module` belongs to, or NO_PACKAGE_ROOT. Trees
+  // built by resolve_modules carry one entry per module; a hand-built
+  // tree carries none, which reads as no dependency.
+  [[nodiscard]] u32 module_root(u32 module) const {
+    return module_roots.empty() ? NO_PACKAGE_ROOT : module_roots[module];
+  }
 
   // Whether `item` is declared by the staged package `package`. Only the
   // embedded standard library is staged, so the staged flag plus a path
@@ -103,13 +144,16 @@ enum class ModuleTreeError : u8 {
   NullModule,
   // `prelude_modules` exceeds the module count.
   BadPreludeCount,
+  // `module_roots` is neither empty nor one per module.
+  BadModuleRootCount,
 };
 
 // Pure structural verification of a module tree: non-empty, a root in
-// range, no null modules, and a prelude count within range. Trees
-// built by resolve_modules satisfy this by construction; hand-built
-// trees must pass before crossing into check_package. No I/O, no
-// logging, no bag writes.
+// range, no null modules, a prelude count within range, and package
+// roots that name modules the tree holds. Trees built by
+// resolve_modules satisfy this by construction; hand-built trees must
+// pass before crossing into check_package. No I/O, no logging, no bag
+// writes.
 base::Result<void, ModuleTreeError> verify_module_tree(const ModuleTree& tree);
 
 // The `core` package of the staged standard library: the `core` root
@@ -154,6 +198,23 @@ struct ParsedModule {
 struct StdHint {
   std::string_view package;
   std::string_view name;
+};
+
+// One path dependency's modules, staged behind the package root its
+// manifest name gives. `identity` is the name a `use` spells: the
+// manifest name with `-` normalized to `_`. `exports` is the
+// dependency's `[modules] export` list, the only surface a `use`
+// from outside the package reaches. `modules` are the dependency's
+// selected modules, named by their paths within the package, and the
+// resolver stages them behind a fileless root named by the identity,
+// the way staged standard-library sources sit behind their suite
+// roots - but as ordinary modules, since a dependency's surface is
+// its export list, never an implicit prelude. Views borrow the
+// caller's storage.
+struct DependencyPackage {
+  std::string_view identity;
+  std::span<const std::string_view> exports;
+  std::span<const ParsedModule> modules;
 };
 
 // Names the embedded member carrying `name` - a public item of it,
@@ -204,6 +265,11 @@ inline void emit_unresolved(diag::DiagBag& bag,
 // implicitly imported by every other module (locals and explicit uses
 // win silently), which is where the toolchain's core sources attach.
 //
+// `dependencies` lists the path dependencies the package loads from
+// source, each staged behind a fileless package root of its own. A
+// `use` or a qualified path spells a dependency by its identity, and
+// reaches only its `[modules] export` list.
+//
 // The caller owns the items, the paths, and the arena they live in,
 // and keeps all three alive for the call. `pipeline::parse_files`
 // produces exactly this input.
@@ -214,6 +280,21 @@ base::Result<ModuleTree, diag::Reported> resolve_modules(
     ast::AstArena& ast,
     diag::DiagBag& bag,
     std::span<const ParsedModule> prelude = {},
-    std::span<const StdHint> std_hints = {});
+    std::span<const StdHint> std_hints = {},
+    std::span<const DependencyPackage> dependencies = {});
+
+// A `use` or a qualified path that reaches `module_path` in the
+// package the root `root` opens, seen from `from_module`. A path
+// from inside the package stays inside it, so only one from outside
+// is trimmed to the export list, and this reports the module the
+// package keeps to itself. Returns whether the boundary withheld the
+// module.
+bool emit_withheld_module(std::span<const PackageRoot> roots,
+                          std::span<const u32> module_roots,
+                          u32 from_module,
+                          u32 root,
+                          std::string_view module_path,
+                          diag::Span span,
+                          diag::DiagBag& bag);
 
 }  // namespace analyzer

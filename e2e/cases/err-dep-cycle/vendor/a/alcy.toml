@@ -1,0 +1,13 @@
+[package]
+name = "cy-a"
+version = "0.1.0"
+
+[modules]
+include = ["x"]
+
+[dependencies]
+"cy/b" = { path = "../b" }
+
+[[bin]]
+name = "cy-a"
+path = "x.al"

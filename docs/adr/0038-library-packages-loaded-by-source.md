@@ -94,3 +94,16 @@ What is explicitly out of scope: summaries and the archive format;
 registry and git fetchers; lockfile consumption by builds; mixing
 two bins in one package, which stays rejected; and `alcy new`
 scaffolding a lib, which follows the shape once it settles.
+
+## Staged landing
+
+**Landed:** `[lib]` builds; path dependencies load from source with
+cross-package `use` and export trimming. A package root answers a
+`use` or a qualified path by its identity, and both spellings trim
+to the export list at the boundary. A use from inside the
+dependency stays inside it, and the standard library keeps its
+facade model: its members are addressable by identity, but their
+export lists do not trim yet.
+
+**Follow-up:** suite roots (slice 3), where a path dependency
+pointing at a suite manifest resolves to its member packages.

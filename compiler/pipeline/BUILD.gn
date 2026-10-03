@@ -58,6 +58,8 @@ source_set("pipeline") {
     "build.h",
     "check.cc",
     "check.h",
+    "dependencies.cc",
+    "dependencies.h",
     "diag_code.h",
     "embedded_std.h",
     "emit_mode.cc",

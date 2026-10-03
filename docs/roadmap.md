@@ -12,7 +12,9 @@ peripheral work lives in `backlog.md`. The language record lives in
   The suite's other half next to `[[bin]]`: `[lib]` targets with
   summary-carrying artifacts and cross-package compilation, and
   compiler-side suite resolution so a suite manifest means more than
-  the embed-time member check. This unblocks the package ecosystem,
+  the embed-time member check. Path dependencies already load from
+  source with cross-package `use` and export trimming; what remains
+  is the suite resolution this unblocks the package ecosystem with,
   which the `unsafe` implementation waits for.
 - [ ] Function types and closures.
 

@@ -121,6 +121,7 @@
   F(AnalyzerDuplicateImport, "Module `{}` is imported more than once") \
   F(AnalyzerDuplicateModule, "Module '{}' is declared more than once") \
   F(AnalyzerDuplicatePreludeModule, "Prelude module '{}' is declared more than once") \
+  F(AnalyzerExportWithheld, "Package '{}' does not export module '{}'") \
   F(AnalyzerFloatSuffixOnInteger, "Float suffix on an integer literal") \
   F(AnalyzerForRequiresIterator, "A 'for' loop requires an 'Iterator' implementation in scope for this type") \
   F(AnalyzerFormatArity, "Intrinsic 'format' expects 2 arguments, found {}") \
@@ -268,6 +269,11 @@
   F(PipelineCannotReadStandardInput, "Cannot read standard input") \
   F(PipelineCannotRunSystemCompiler, "Cannot run the system compiler") \
   F(PipelineCannotWrite, "Cannot write {} '{}'") \
+  F(PipelineDependencyBadName, "Dependency '{}' is named '{}', which is not one module path") \
+  F(PipelineDependencyClashesWithDependency, "Two dependencies are named '{}'; rename one of them") \
+  F(PipelineDependencyClashesWithPackage, "Dependency '{}' is named like the package that depends on it; rename one of them") \
+  F(PipelineDependencyClashesWithStdMember, "Dependency '{}' is named like the standard library package alcy/std/{}; rename one of them") \
+  F(PipelineDependencyCycle, "Dependency cycle through '{}'") \
   F(PipelineDependencyIsAStdMember, "Dependency '{}' is a member of alcy/std; write \"alcy/std/{}\"") \
   F(PipelineDependencyIsEmbeddedStd, "Dependency '{}' is part of the embedded standard library, which takes no source") \
   F(PipelineDependencyNamesNoSource, "Dependency '{}' names no source; give one of path, version, git") \

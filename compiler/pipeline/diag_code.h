@@ -45,6 +45,18 @@ enum class DiagCode : u8 {
   // The triple names a backend this build of the compiler does not
   // contain, so there is no layout to emit against.
   UnknownTarget = 12,
+  // A path dependency resolves into a directory already being
+  // resolved, so the closure would never end.
+  DependencyCycle = 13,
+  // A dependency's manifest name is not one module path
+  // segment, so it cannot name the package root a `use`
+  // spells.
+  DependencyBadName = 14,
+  // Two package roots would open under one spelling: two
+  // dependencies behind one identity, a dependency named like
+  // the package that loads it, or one named like a staged
+  // standard-library member.
+  DependencyIdentityClash = 15,
 };
 
 }  // namespace pipeline

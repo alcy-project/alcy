@@ -36,6 +36,7 @@ executable("tests") {
     "path/path_test.cc",
     "pipeline/api_test.cc",
     "pipeline/check_test.cc",
+    "pipeline/dependencies_test.cc",
     "pipeline/emit_mode_test.cc",
     "pipeline/hostile_input_test.cc",
     "pipeline/modules_test.cc",

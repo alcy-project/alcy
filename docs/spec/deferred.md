@@ -64,7 +64,8 @@ relied upon by MVP programs or by the MVP compiler implementation.
   (`docs/adr/0016-suites-and-the-std-split.md`): `[dependencies]` names members or the whole suite, the
   closure is required rather than pulled in, and only the selected
   members become prelude facades. What remains is `[modules] export`
-  enforcement, cross-package `use` between members, and the registry or
+  enforcement for standard-library members, cross-package `use`
+  between members, and the registry or
   git fetchers that every other owner and suite needs — a specifier
   naming a source the compiler cannot fetch is an explicit error, not a
   silent skip.

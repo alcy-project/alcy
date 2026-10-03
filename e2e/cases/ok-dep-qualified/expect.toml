@@ -1,0 +1,5 @@
+# The same import as ok-dep-import, spelled as a qualified path
+# rather than a `use`: the boundary trims both spellings.
+exit = 0
+contains = ["Checked   3 files, 4 modules, 3 functions"]
+not_contains = ["error"]
