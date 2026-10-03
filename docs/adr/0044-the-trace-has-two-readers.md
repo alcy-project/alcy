@@ -27,12 +27,34 @@ use.
 
 **Text is a tree.** Events nest by interval containment and order by
 start time, so the output is the call tree as it ran, indented. Each row
-carries its own duration and its share of the run's wall clock - the
-share is of the wall, never of the parent, because two children that ran
-on two threads together exceed their parent and the report is still
+carries its own duration and its share of the invocation's wall clock -
+the share is of the wall, never of the parent, because two children that
+ran on two threads together exceed their parent and the report is still
 right. Equal intervals read as siblings: nothing in the events says which
 wrapped which, and a tie broken by record order would make a threaded
 region's shape depend on the schedule.
+
+**The rows are a fixed table.** The name column is forty bytes wide,
+with the two-space section margin and two per depth inside it, so the
+duration starts at the same byte on every row and going deeper moves the
+name without moving the figures. A duration keeps three significant
+digits in whichever unit holds them - `4.62 us`, `337 us`, `57.9 ms` -
+and a share below a tenth of a percent reads `<0.1%`, which is a
+statement about the measurement rather than a rounded zero. A collapsed
+row uses the same columns, carries the sum of what it stands for, and
+says how many events that was. The header names the event count the
+rows were pruned from, so a reader can tell a quiet run from a pruned
+one.
+
+**The trace text is not localized, and is ASCII.** It speaks to a reader
+who knows the compiler's internals - a reader of the source rather than
+a user of the command - so it stays out of the message catalog, which
+covers the help text that names the flag. Units are spelt `us`/`ms`/`s`
+and the truncation marker is `...`: the output prints on a terminal that
+is not UTF-8, and the source stays ASCII, which is what the lint
+requires. Colour is applied when the stream takes it - shares and
+categories dim, a collapsed row dims whole, and the durations a reader
+scans stay plain.
 
 **Text is pruned, and pruning collapses rather than cuts.** A child below
 half a percent of the wall is not shown on its own; among the rest, the
@@ -74,9 +96,12 @@ recorder takes a mutex, so the profile would cost more than it explains.
 - A release build's text trace reads as `emit-object` -> `optimize` ->
   the pass pipelines that mattered, with the remainder on one line. The
   individual passes are one JSON query away.
-- The wall clock a share answers against is the run's earliest start to
-  its latest end, not the envelope's `wall_ns`: the envelope covers the
-  whole invocation and the trace only the phases inside it.
+- Every share answers against the invocation's `wall_ns`, which is the
+  duration the result line prints, so the note and the percentages agree
+  instead of referring to two nearly equal totals. The trace's own span -
+  earliest start to latest end - is the fallback for a caller with no
+  envelope, and the pruning floor is measured against the same wall the
+  shares use.
 - `debug::ProfileSection` and the LLVM pass timer must read the same
   clock, or the pass events nest under nothing and read as roots. That is
   `debug::current_timestamp_ns` for both, and the ADR records it because

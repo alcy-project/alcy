@@ -762,7 +762,7 @@ TEST_CASE("Time trace embeds its phases in the json result") {
   CHECK(!io::is_file(out + ".trace.json"));
 }
 
-TEST_CASE("Time trace alone summarizes the phases as text") {
+TEST_CASE("Time trace alone renders the phases as a tree") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_trace_text_test_");
   const bool setup =
       write_all(dir, "main.al", "fn main() -> i32 {\n  ret 0\n}\n");

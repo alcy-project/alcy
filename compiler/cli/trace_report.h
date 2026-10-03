@@ -47,6 +47,9 @@ struct TraceReport {
   // in the report are shares of this, which is what makes a child's
   // figure comparable to its sibling's however the two overlapped.
   u64 wall_ns = 0;
+  // How many events the trace held. The rows show what survived
+  // pruning, so the header says what the pruning read through.
+  usize event_count = 0;
 };
 
 // Builds the tree from the events the trace captured and the profiler
@@ -55,12 +58,28 @@ struct TraceReport {
 // which is the honest shape of what was recorded.
 TraceReport build_trace_report(const TraceCapture& trace);
 
-// The report as text: roots in start-time order, children under them in
-// the same order, one row per node with its inclusive time and its share
-// of the wall clock. Children past the reader's share collapse into one
-// row, so a release build's hundreds of LLVM passes read as the pass
-// pipeline and the passes that mattered rather than as a full listing.
+// The report as text: a header with the event count, then roots in
+// start-time order with their children under them, one row per node.
+// Every row puts its name at a fixed column, then its duration and its
+// share of the wall; the columns start at the same byte whatever the
+// depth, so the figures scan as a table. A share below a tenth of a
+// percent reads `<0.1%`, a statement about the measurement rather than a
+// rounded zero.
+//
+// Children past the reader's share collapse into one row - `... 48 more`
+// - carrying their count and their total, so the tree stays a summary
+// without silently dropping time. A category is printed only where it
+// differs from the parent's. With `color`, shares and categories dim,
+// and a collapsed row dims whole: they annotate the data, they are not
+// it.
+//
+// `wall_ns` is what every share and every pruning floor answers against;
+// zero falls back to the report's own span. The caller passes the
+// envelope's wall, so the percentages agree with the duration printed on
+// the result line above them.
 std::string render_trace_text(const TraceReport& report,
-                              const debug::Profiler& profiler);
+                              const debug::Profiler& profiler,
+                              u64 wall_ns,
+                              bool color);
 
 }  // namespace cli

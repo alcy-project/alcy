@@ -37,6 +37,8 @@ source_set("cli") {
     "compile_command.h",
     "converters.cc",
     "converters.h",
+    "duration.cc",
+    "duration.h",
     "init_command.cc",
     "init_command.h",
     "init_handler.cc",

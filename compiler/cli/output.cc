@@ -11,6 +11,7 @@
 #include <string_view>
 #include <vector>
 
+#include "cli/duration.h"
 #include "cli/logger.h"
 #include "cli/trace_report.h"
 #include "debug/dcheck.h"
@@ -182,20 +183,17 @@ std::string_view resolve_name(const debug::Profiler& profiler,
                                            : profiler.name(id);
 }
 
-void append_trace_text(std::string& out,
-                       const Envelope& envelope,
-                       i18n::Language language) {
+void append_trace_text(std::string& out, const Envelope& envelope, bool color) {
   if (envelope.trace.events.empty() || envelope.trace.profiler == nullptr) {
     return;
   }
-  // The wall clock every share answers against is the run's own, from
-  // its earliest start to its latest end. Times are inclusive and
-  // children can overlap, so the rows are not expected to add up.
+  // Every share answers against the invocation's wall - the number the
+  // result line prints just above the trace - so the percentages in the
+  // two blocks agree instead of referring to two nearly equal totals.
   const TraceReport report = build_trace_report(envelope.trace);
   out += '\n';
-  out += i18n::text<i18n::Key::CliPhaseTimings>(language);
-  out += '\n';
-  out += render_trace_text(report, *envelope.trace.profiler);
+  out += render_trace_text(report, *envelope.trace.profiler, envelope.wall_ns,
+                           color);
 }
 
 void append_trace_json(std::string& out, const Envelope& envelope) {
@@ -330,18 +328,6 @@ void append_size(std::string& out, u64 bytes, i18n::Language language) {
   }
 }
 
-void append_duration(std::string& out, u64 ns) {
-  constexpr f64 MICRO = 1000.0;
-  const f64 us = static_cast<f64>(ns) / MICRO;
-  if (us < 1000.0) {
-    fmt::format_to(std::back_inserter(out), "{:.0f} us", us);
-  } else if (us < 1000000.0) {
-    fmt::format_to(std::back_inserter(out), "{:.1f} ms", us / 1000.0);
-  } else {
-    fmt::format_to(std::back_inserter(out), "{:.2f} s", us / 1000000.0);
-  }
-}
-
 // A run's wall time covers the program's own execution, so a duration
 // beside it would be reporting the program as the build. Every other
 // outcome measures the compiler alone, and says so.
@@ -398,7 +384,7 @@ std::string result_note(const Envelope& envelope, i18n::Language language) {
     append_size(note, envelope.output_bytes, language);
     note += ", ";
   }
-  append_duration(note, envelope.wall_ns);
+  note += format_duration(envelope.wall_ns);
   note += ')';
   return note;
 }
@@ -551,7 +537,7 @@ std::string render_result(const Envelope& envelope,
       render_result_line(out, envelope, options.color, true, options.language);
     }
   }
-  append_trace_text(out, envelope, options.language);
+  append_trace_text(out, envelope, options.color);
   return out;
 }
 

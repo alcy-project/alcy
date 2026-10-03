@@ -358,7 +358,6 @@
   F(CliNoStdHelp, "Start with no standard library instead of the default suite. Add back with --deps.") \
   F(CliNoSubcommand, "No subcommand given") \
   F(CliPackageCreatedAt, "'{}' in {}") \
-  F(CliPhaseTimings, "time trace (wall clock, nested)") \
   F(CliProgramArgsOnlyForRun, "Program arguments are only accepted by `run`") \
   F(CliReleaseHelp, "Build with optimizations.") \
   F(CliRunAbout, "Build and run a package directory") \
@@ -366,7 +365,7 @@
   F(CliStdinHelp, "Read the program from standard input instead of a file, and report against the name <stdin>. For an editor buffer that has never been saved.") \
   F(CliStdinNeedsOutput, "Compiling from standard input needs `-o` to name the output") \
   F(CliStdinTakesNoTarget, "The `--stdin` flag takes no target") \
-  F(CliTimeTraceHelp, "Time the compilation phases and report where the run went. With --json the phases are embedded in the document; on their own they are a summary table.") \
+  F(CliTimeTraceHelp, "Time the compilation phases and report where the run went. With --json the phases are embedded in the document; on their own they are a pruned call tree.") \
   F(CliUnknownSubcommand, "Unknown subcommand '{}'; see '{} --help'") \
   F(CliVcsHelp, "Version control to prepare the package for: git (default) writes .gitignore, none writes no ignore file. No repository is created either way.") \
   F(CliVerbBuilt, "Built") \

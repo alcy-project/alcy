@@ -131,7 +131,7 @@ TEST_CASE("A scaffold reports its own shape, not a padded column") {
   envelope.wall_ns = 1000;
 
   const std::string line = text(envelope);
-  CHECK(line == "Created package 'demo' in demo  (1 us)\n");
+  CHECK(line == "Created package 'demo' in demo  (1.00 us)\n");
 }
 
 TEST_CASE("A check pluralizes its counts") {
@@ -159,15 +159,15 @@ TEST_CASE("A size is counted below a kibibyte and scaled above it") {
   // Whole microseconds make the expected strings readable; the scaling
   // is what is under test, not the precision.
   constexpr u64 US = 1000;
-  CHECK(text(built("out/a", 0, US)).find("(1 us)") != std::string::npos);
-  CHECK(text(built("out/a", 1, US)).find("(1 byte, 1 us)") !=
+  CHECK(text(built("out/a", 0, US)).find("(1.00 us)") != std::string::npos);
+  CHECK(text(built("out/a", 1, US)).find("(1 byte, 1.00 us)") !=
         std::string::npos);
-  CHECK(text(built("out/a", 1023, US)).find("(1023 bytes, 1 us)") !=
+  CHECK(text(built("out/a", 1023, US)).find("(1023 bytes, 1.00 us)") !=
         std::string::npos);
-  CHECK(text(built("out/a", 1024, US)).find("(1.0 KiB, 1 us)") !=
+  CHECK(text(built("out/a", 1024, US)).find("(1.0 KiB, 1.00 us)") !=
         std::string::npos);
   constexpr u64 MIB = static_cast<u64>(1024) * 1024;
-  CHECK(text(built("out/a", MIB, US)).find("(1.0 MiB, 1 us)") !=
+  CHECK(text(built("out/a", MIB, US)).find("(1.0 MiB, 1.00 us)") !=
         std::string::npos);
 }
 
@@ -343,12 +343,12 @@ TEST_CASE("Colour reaches the verb, the subject, and nothing else") {
   CHECK(colored ==
         "\x1b[1m\x1b[92mBuilt\x1b[0m     "
         "\x1b[4mout/demo\x1b[0m  "
-        "\x1b[2m(2.0 KiB, 2.0 ms)\x1b[0m\n");
+        "\x1b[2m(2.0 KiB, 2.00 ms)\x1b[0m\n");
   // The JSON carries the sentence, not the layout: a consumer wants the
   // text, and a line of escape codes is not text.
   const std::string json =
       render_json(built("out/demo", 2048, 2000000), i18n::Language::EnUs);
-  CHECK(json.find("\"summary\":\"Built     out/demo  (2.0 KiB, 2.0 ms)\"") !=
+  CHECK(json.find("\"summary\":\"Built     out/demo  (2.0 KiB, 2.00 ms)\"") !=
         std::string::npos);
   CHECK(json.find("\"outcome\":\"built\"") != std::string::npos);
   CHECK(json.find("\x1b[") == std::string::npos);

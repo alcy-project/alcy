@@ -11,12 +11,14 @@
 #include <utility>
 #include <vector>
 
+#include "cli/duration.h"
 #include "cli/trace.h"
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/debug/profiler/profile_event.h"
 #include "fpag/debug/profiler/profiler.h"
 #include "fpag/str/string_pool_id.h"
+#include "fpag/term/style.h"
 
 namespace cli {
 
@@ -56,16 +58,6 @@ std::string_view node_category(const debug::Profiler& profiler,
              ? std::string_view()
              : profiler.name(node.event.category);
 }
-
-struct RenderedRow {
-  std::string text;
-  // Children past the reader's share collapse into one row, so a flat
-  // count of what collapsed rides along: a collapsed row that says how
-  // many events it stands for is a summary, and one that does not is a
-  // cut.
-  u64 collapsed = 0;
-  u64 collapsed_ns = 0;
-};
 
 // A child worth showing on its own: the reader's share of the wall
 // clock, at or above the floor. The root's share of the wall is what
@@ -132,63 +124,136 @@ void split_children(const TraceReport::Node& node,
             });
 }
 
-void append_row(std::string& out,
-                const debug::Profiler& profiler,
-                const TraceReport::Node& node,
-                u64 wall_ns,
-                usize depth) {
-  // LLVM pass names carry their template signature -
-  // `PassManager<LazyCallGraph::SCC, ...>` - and an unbounded column
-  // would push every time and share off the line a reader is scanning.
-  // The head of the name is the part worth reading, so the tail goes.
-  std::string name{node_name(profiler, node)};
-  if (name.size() > 34) {
-    name = name.substr(0, 33) + "\u2026";
+// The row layout, shared by every row whether it names a phase or a
+// collapsed remainder: a 40-column name field (the two-space section
+// margin and the per-depth indent are inside it, so depth never moves
+// the figures), then the duration right-aligned in 8, two spaces, and
+// the share in 6. A category follows where a row has one to print. The
+// widths are written where the rows are built; the two must move
+// together.
+constexpr usize NAME_COLUMN = 40;
+constexpr usize MARGIN = 2;
+constexpr usize INDENT = 2;
+
+// A name in its column. LLVM pass names carry their template signature -
+// `PassManager<LazyCallGraph::SCC, ...>` - and an unbounded column would
+// push every time and share off the line a reader is scanning. The head
+// of the name is the part worth reading, so the tail goes, and the dots
+// say that happened.
+std::string name_field(std::string_view name, usize depth) {
+  const usize start = MARGIN + depth * INDENT;
+  std::string field(start, ' ');
+  const usize room = start < NAME_COLUMN ? NAME_COLUMN - start : 0;
+  if (name.size() <= room) {
+    field.append(name);
+    field.append(room - name.size(), ' ');
+    return field;
   }
-  const std::string category{node_category(profiler, node)};
-  const double ms = static_cast<double>(node.event.duration_ns) / 1.0e6;
-  const double share = wall_ns == 0
-                           ? 0.0
-                           : static_cast<double>(node.event.duration_ns) *
-                                 100.0 / static_cast<double>(wall_ns);
-  std::string indent(depth * 2, ' ');
-  fmt::format_to(std::back_inserter(out),
-                 "{}{:<34} {:>8.3} ms  {:>5.1f}%  {}\n", indent, name, ms,
-                 share, category);
+  if (room > 3) {
+    field.append(name.substr(0, room - 3));
+    field.append("...");
+    return field;
+  }
+  field.append(name.substr(0, room));
+  return field;
 }
 
-void append_collapsed(std::string& out,
-                      const std::vector<const TraceReport::Node*>& collapsed,
-                      usize depth) {
-  u64 ns = 0;
-  for (const TraceReport::Node* node : collapsed) {
-    ns += node->event.duration_ns;
+// A share of the wall as a column. Below a tenth of a percent it says so
+// rather than rounding to zero: a phase that cost something did not cost
+// nothing.
+std::string format_share(u64 ns, u64 wall_ns) {
+  if (wall_ns == 0) {
+    return "<0.1%";
   }
-  const double ms = static_cast<double>(ns) / 1.0e6;
-  std::string indent(depth * 2, ' ');
-  fmt::format_to(std::back_inserter(out), "{}\u2026 {} more, {:>8.3} ms\n",
-                 indent, collapsed.size(), ms);
+  const f64 share = static_cast<f64>(ns) * 100.0 / static_cast<f64>(wall_ns);
+  if (share < 0.1) {
+    return "<0.1%";
+  }
+  return fmt::format("{:.1f}%", share);
+}
+
+// The figures a collapsed row carries: the sum of what collapsed, and
+// its share, in the same columns a phase row uses.
+void append_collapsed_figures(std::string& row, u64 ns, u64 wall_ns) {
+  fmt::format_to(std::back_inserter(row), " {:>8}  {:>6}", format_duration(ns),
+                 format_share(ns, wall_ns));
+}
+
+void append_phase_row(std::string& out,
+                      const debug::Profiler& profiler,
+                      const TraceReport::Node& node,
+                      u64 wall_ns,
+                      usize depth,
+                      std::string_view parent_category,
+                      bool color) {
+  out += name_field(node_name(profiler, node), depth);
+  fmt::format_to(std::back_inserter(out), " {:>8}  ",
+                 format_duration(node.event.duration_ns));
+  // The share and the category annotate the phase; the name and the
+  // duration are the phase. Only the annotation dims.
+  const std::string_view category = node_category(profiler, node);
+  const bool annotate = !category.empty() && category != parent_category;
+  if (color) {
+    out.append(term::DIM);
+  }
+  fmt::format_to(std::back_inserter(out), "{:>6}",
+                 format_share(node.event.duration_ns, wall_ns));
+  if (annotate) {
+    out += "  ";
+    out.append(category);
+  }
+  if (color) {
+    out.append(term::RESET);
+  }
+  out += '\n';
+}
+
+void append_collapsed_row(
+    std::string& out,
+    const std::vector<const TraceReport::Node*>& collapsed,
+    u64 wall_ns,
+    usize depth,
+    bool color) {
+  u64 total_ns = 0;
+  for (const TraceReport::Node* node : collapsed) {
+    total_ns += node->event.duration_ns;
+  }
+  std::string row =
+      name_field(fmt::format("... {} more", collapsed.size()), depth);
+  append_collapsed_figures(row, total_ns, wall_ns);
+  if (color) {
+    out.append(term::DIM);
+  }
+  out += row;
+  if (color) {
+    out.append(term::RESET);
+  }
+  out += '\n';
 }
 
 void append_node(std::string& out,
                  const debug::Profiler& profiler,
                  const TraceReport::Node& node,
                  u64 wall_ns,
-                 usize depth);
+                 usize depth,
+                 std::string_view parent_category,
+                 bool color);
 
 void append_children(std::string& out,
                      const debug::Profiler& profiler,
                      const TraceReport::Node& node,
                      u64 wall_ns,
-                     usize depth) {
+                     usize depth,
+                     bool color) {
   std::vector<const TraceReport::Node*> shown;
   std::vector<const TraceReport::Node*> collapsed;
   split_children(node, wall_ns, shown, collapsed);
+  const std::string_view category = node_category(profiler, node);
   for (const TraceReport::Node* child : shown) {
-    append_node(out, profiler, *child, wall_ns, depth + 1);
+    append_node(out, profiler, *child, wall_ns, depth + 1, category, color);
   }
   if (!collapsed.empty()) {
-    append_collapsed(out, collapsed, depth + 1);
+    append_collapsed_row(out, collapsed, wall_ns, depth + 1, color);
   }
 }
 
@@ -196,9 +261,11 @@ void append_node(std::string& out,
                  const debug::Profiler& profiler,
                  const TraceReport::Node& node,
                  u64 wall_ns,
-                 usize depth) {
-  append_row(out, profiler, node, wall_ns, depth);
-  append_children(out, profiler, node, wall_ns, depth);
+                 usize depth,
+                 std::string_view parent_category,
+                 bool color) {
+  append_phase_row(out, profiler, node, wall_ns, depth, parent_category, color);
+  append_children(out, profiler, node, wall_ns, depth, color);
 }
 
 }  // namespace
@@ -285,23 +352,30 @@ TraceReport build_trace_report(const TraceCapture& trace) {
       report.roots.push_back(std::move(root));
     }
   }
-  // The wall clock is the run from its earliest start to its latest end,
-  // which is what every share answers against - including two regions
-  // that held the same wall time on two threads.
+  // The report's own span: the run from its earliest start to its latest
+  // end. It is the fallback a renderer divides by; the caller that has
+  // the invocation's wall passes that instead, so the shares agree with
+  // the duration on the result line.
   u64 first = ordered.front()->start_time_ns;
   u64 last = first;
   for (const debug::ProfileEvent* event : ordered) {
     last = std::max(last, end_ns(*event));
   }
   report.wall_ns = last - first;
+  report.event_count = ordered.size();
   return report;
 }
 
 std::string render_trace_text(const TraceReport& report,
-                              const debug::Profiler& profiler) {
+                              const debug::Profiler& profiler,
+                              u64 wall_ns,
+                              bool color) {
+  const u64 wall = wall_ns != 0 ? wall_ns : report.wall_ns;
   std::string out;
+  fmt::format_to(std::back_inserter(out), "time trace ({} event{})\n",
+                 report.event_count, report.event_count == 1 ? "" : "s");
   for (const TraceReport::Node& root : report.roots) {
-    append_node(out, profiler, root, report.wall_ns, 0);
+    append_node(out, profiler, root, wall, 0, {}, color);
   }
   return out;
 }
