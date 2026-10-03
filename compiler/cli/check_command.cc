@@ -11,7 +11,6 @@
 #include "cli/result_code.h"
 #include "cli/trace.h"
 #include "diag/bag.h"
-#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "pipeline/check.h"
 #include "pipeline/pipeline_context.h"

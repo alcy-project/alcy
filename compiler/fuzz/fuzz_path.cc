@@ -22,6 +22,7 @@
 #include <string_view>
 #include <utility>
 
+#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "path/path.h"
 

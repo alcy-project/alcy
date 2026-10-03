@@ -33,6 +33,7 @@
 #include "ir/verifier.h"
 
 namespace analyzer {
+
 Checker::Checker(const ModuleTree& tree,
                  ir::PointerWidth width,
                  ast::AstArena& ast,

@@ -18,7 +18,7 @@
 //   pattern     -> PatternNode     static     -> ItemStatic
 //   literal     -> Literal         const/use  -> ItemConst, ItemUse
 //   expressions -> ExprNode        statements -> StmtNode, Block
-//   fn          -> ItemFn           closure     -> ExprClosure
+//   fn          -> ItemFn          closure    -> ExprClosure
 //   func type   -> TypeFunc
 
 #include <memory>
@@ -32,8 +32,7 @@
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/union.h"
-#include "fpag/base/vec.h"
-#include "fpag/mem/arena.h"
+#include "fpag/build/build_flag.h"
 
 namespace ast {
 

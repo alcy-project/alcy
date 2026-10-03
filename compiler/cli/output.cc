@@ -25,6 +25,7 @@
 #include "fpag/debug/profiler/profiler.h"
 #include "fpag/io/io_util.h"
 #include "fpag/str/string_pool_id.h"
+#include "fpag/term/color_mode.h"
 #include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
 #include "fpag/term/style.h"

@@ -3,6 +3,7 @@
 
 #include <span>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "analyzer/checker.h"
@@ -2705,4 +2706,5 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
     }
   }
 }
+
 }  // namespace analyzer

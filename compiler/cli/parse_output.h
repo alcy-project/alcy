@@ -12,7 +12,6 @@
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
-#include "fpag/term/color_style.h"
 #include "i18n/language.h"
 
 namespace cli {

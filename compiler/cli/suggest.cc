@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include "fpag/arg/arg.h"
 #include "fpag/arg/command.h"
 #include "fpag/base/numeric.h"
 

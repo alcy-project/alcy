@@ -7,14 +7,12 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include "cli/logger.h"
 #include "cli/trace.h"
 #include "diag/diagnostic.h"
 #include "diag/render.h"
 #include "fpag/base/numeric.h"
-#include "fpag/debug/profiler/profile_event.h"
 #include "fpag/term/color_mode.h"
 #include "i18n/language.h"
 

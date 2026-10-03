@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "cli/suggest.h"
-#include "fpag/arg/arg.h"
 #include "fpag/arg/command.h"
 #include "fpag/arg/parse_error.h"
 #include "fpag/base/numeric.h"

@@ -8,6 +8,7 @@
 
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
+#include "fpag/debug/check.h"
 #include "fpag/mem/concurrent_arena.h"
 #include "fpag/mem/page_allocator.h"
 

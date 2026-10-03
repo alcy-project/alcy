@@ -8,7 +8,9 @@
 #include "codegen_llvm/common.h"
 #include "codegen_llvm/target.h"
 #include "debug/dcheck.h"
+#include "fpag/base/numeric.h"
 #include "ir/type.h"
+#include "llvm/IR/ConstantFolder.h"
 
 namespace codegen_llvm {
 namespace {

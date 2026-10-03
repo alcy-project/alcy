@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "diag/bag.h"
+#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
 #include "i18n/language.h"

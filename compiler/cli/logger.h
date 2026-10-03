@@ -6,7 +6,6 @@
 #include <string_view>
 
 #include "fpag/base/numeric.h"
-#include "fpag/io/io_util.h"
 
 namespace cli {
 

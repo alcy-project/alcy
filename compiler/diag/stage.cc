@@ -4,6 +4,7 @@
 #include "diag/stage.h"
 
 #include "debug/fatal.h"
+#include "fpag/base/numeric.h"
 
 namespace diag {
 

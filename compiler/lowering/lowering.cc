@@ -23,6 +23,7 @@
 #include "diag/stage.h"
 #include "fmt/format.h"
 #include "fpag/base/idx.h"
+#include "fpag/base/limits.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"

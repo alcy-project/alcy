@@ -24,6 +24,7 @@
 #include "fpag/arg/parse_status.h"
 #include "fpag/arg/parser.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "fpag/term/color_mode.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"

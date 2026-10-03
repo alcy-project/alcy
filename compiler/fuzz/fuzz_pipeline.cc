@@ -17,14 +17,12 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <string>
 #include <string_view>
-#include <vector>
 
 #include "diag/bag.h"
+#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
-#include "fpag/mem/arena.h"
 #include "i18n/language.h"
 #include "pipeline/check.h"
 #include "pipeline/pipeline_context.h"
