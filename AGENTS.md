@@ -15,7 +15,7 @@ Prior to generating, refactoring, or reviewing code, strictly follow the specifi
   - Enforce explicit ownership using value semantics, `std::unique_ptr`, or `std::shared_ptr`. Avoid manual memory management (`new`/`delete`).
   - Keep functions pure and side-effect-free where possible. Prefer `const` by default for variables, members, and methods.
 - **Mechanical & Structural Refactoring**:
-  - Prefer `ast-grep` (`sg`) over manual edits for repetitive, structural, or mechanical code transformations.
+  - Prefer `ast-grep`  over manual edits for repetitive, structural, or mechanical code transformations.
 - **Error Handling & Constraints**:
   - The project builds with `-fno-exceptions` and `-fno-rtti`. **Do not use `try`, `catch`, `throw`, `dynamic_cast`, or RTTI.**
   - Use explicit, zero-overhead error reporting abstractions (e.g., `std::optional`, custom `Result`/`AutoTaggedUnion` types, or diagnostic handlers) instead of exceptions.
@@ -25,6 +25,21 @@ Prior to generating, refactoring, or reviewing code, strictly follow the specifi
   - **No Over-Explanation or Justifications**: Do not write multi-line defenses or excuses for obvious code choices.
   - **Avoid Redundant Comments**: Do not restate what the C++ code clearly expresses (e.g., `// constructor`, `// push to vector`, `// return status`).
 - **Self-Documenting Code**: Prefer expressive namespaces, functions, type aliases, and strong types over heavy block comments.
+
+# Token & Tool Execution Directives
+
+To optimize token efficiency and execution speed:
+
+- **Silent Success & Isolated Output**:
+  - Direct output to a temporary unique file using `mktemp`. Only print log tails on failure using `||`.
+    (example: `LOG=$(mktemp) && uv run tools/lint.py > $LOG 2>&1 || tail -n 20 $LOG`)
+  - Inspect the generated `$LOG` file via `grep` or `cat` only when troubleshooting failures.
+- **Precision Search & Diffing**:
+  - Use `-l` with `rg` to list matching files first: `rg "pattern" compiler/ -l`.
+  - Cap search results using pipe limiters: `rg "pattern" compiler/ | head -n 30`.
+  - Check change volume with `git diff --stat` before fetching detailed file diffs.
+- **Batch Refactoring via `ast-grep`**:
+  - Use `ast-grep` one-liners for structural, repetitive transformations instead of making multiple iterative manual edits.
 
 # Code Generation Directives
 
