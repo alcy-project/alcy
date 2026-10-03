@@ -21,7 +21,10 @@ namespace ast {
 // the reservation can also hold the appends that may race with it.
 // A request admitted with room for `slots + 1` of its own size cannot be
 // overrun by any set of at most `slots` racing requests, because each of
-// them leaves the same room for the others.
+// them leaves the same room for the others. The price is that one request
+// larger than its share of the reservation is refused even with the arena
+// empty: admitting it would spend the room the racing appends were
+// promised. The refusal is the diagnostic, not a trap.
 //
 // Exhaustion is reported by returning nothing and setting `exhausted`:
 // the input asked for more than the compiler reserves for syntax, which
