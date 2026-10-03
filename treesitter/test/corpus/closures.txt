@@ -358,3 +358,48 @@ fn main() -> i32 {
                     (identifier)))
                 (integer)))
             (integer)))))))
+
+================================================================================
+A capture list may name the receiver
+================================================================================
+
+impl Point {
+  fn offset(self: Self) -> i32 {
+    f := [self] () -> 0
+    ret f()
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (impl_item
+    (path_type
+      (path
+        (identifier)))
+    (function_item
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (self))
+          (path_type
+            (path
+              (self_type)))))
+      (return_type
+        (primitive_type))
+      (block
+        (declaration_statement
+          (identifier_pattern
+            (identifier))
+          (closure_expression
+            (capture_list
+              (self))
+            (closure_parameters)
+            (integer)))
+        (return_expression
+          (call_expression
+            (path_expression
+              (path
+                (identifier)))
+            (arguments)))))))

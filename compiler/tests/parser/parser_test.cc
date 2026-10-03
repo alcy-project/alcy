@@ -1067,6 +1067,42 @@ TEST_CASE("Parser reads a closure with captures and typed params") {
   CHECK(f.ast.exprs[closure.body].kind == ast::ExprKind::Block);
 }
 
+// `self` is a keyword and a local like any other, so a capture list may
+// name the receiver.
+TEST_CASE("Parser takes self in a capture list") {
+  Fixture f;
+  const ast::ExprIdx value =
+      body_value("fn f() -> i32 {\n  [self] () -> 0\n}\n", f);
+  CHECK(value.is_valid());
+  if (!value.is_valid()) {
+    return;
+  }
+  const ast::ExprClosure& closure = as_closure(value, f);
+  CHECK(closure.captures.size() == 1);
+  if (closure.captures.size() == 1) {
+    CHECK(closure.captures[0].name == "self");
+  }
+}
+
+// The token cursor skips doc comments, so the scan that decides whether
+// a `[` opens a capture list has to skip them too.
+TEST_CASE("Parser reads a closure across a doc comment") {
+  Fixture f;
+  const ast::ExprIdx value = body_value(
+      "fn f() -> i32 {\n"
+      "  [t] /// capture note\n"
+      "  (a: i32) -> a\n"
+      "}\n",
+      f);
+  CHECK(value.is_valid());
+  if (!value.is_valid()) {
+    return;
+  }
+  const ast::ExprClosure& closure = as_closure(value, f);
+  CHECK(closure.captures.size() == 1);
+  CHECK(closure.params.size() == 1);
+}
+
 TEST_CASE("Parser reads a bare closure body as one expression") {
   Fixture f;
   const ast::ExprIdx value = body_value("fn f() { (a) -> a + 1 }", f);
@@ -1139,6 +1175,25 @@ TEST_CASE("Parser keeps a parenthesized type a type") {
   const ast::ItemFn& fn = as_fn(result.items[0], f);
   const ast::TypeNode& type = f.ast.types[fn.params[0].type];
   CHECK(type.kind == ast::TypeKind::Primitive);
+}
+
+// The comma is what makes the parens a type of their own, so the
+// one-element tuple a value can spell (`(1,)`) is spellable in a
+// signature too.
+TEST_CASE("Parser keeps a one-element tuple type a tuple") {
+  Fixture f;
+  const ParseResult result = parse("fn f(x: (i32,)) {}", f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  const ast::TypeNode& type = f.ast.types[fn.params[0].type];
+  CHECK(type.kind == ast::TypeKind::Tuple);
+  if (type.kind == ast::TypeKind::Tuple) {
+    CHECK(type.payload.get<ast::TypeTuple>().elements.size() == 1);
+  }
 }
 
 TEST_CASE("Parser keeps parens arrays unit and tuples") {

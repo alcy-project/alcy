@@ -2756,4 +2756,23 @@ TEST_CASE("Check rejects a comparison of function values") {
   CHECK(f.bag.has_errors());
 }
 
+// A one-element tuple value can be annotated: the comma in the type is
+// what says tuple, so the type is spellable.
+TEST_CASE("Check spells a one-element tuple type") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  t: (i32,) := (1,)\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
 }  // namespace analyzer

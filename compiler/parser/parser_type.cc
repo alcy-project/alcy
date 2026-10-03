@@ -57,7 +57,11 @@ ast::TypeIdx Parser::parse_type() {
       }
       std::vector<ast::TypeIdx> elements;
       elements.push_back(first);
-      if (match(T::Comma)) {
+      // The comma is what makes the parens a type of their own: `(A)`
+      // is `A`, and `(A,)` is the one-element tuple the value syntax
+      // can spell.
+      const bool saw_comma = match(T::Comma);
+      if (saw_comma) {
         while (!check(T::RParen) && !at_end()) {
           ast::TypeIdx element = parse_type();
           if (!element.is_valid()) {
@@ -89,7 +93,7 @@ ast::TypeIdx Parser::parse_type() {
         });
         return ast_.types.push_back(node);
       }
-      if (elements.size() == 1) {
+      if (!saw_comma) {
         return first;
       }
       ast::TypeNode node;

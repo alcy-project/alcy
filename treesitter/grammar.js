@@ -308,18 +308,20 @@ module.exports = grammar({
       '(',
       $._type,
       ',',
-      $._type,
-      // Right-associative: a comma binds to the type that follows it, so
-      // this prefix is shared with a function's parameters and a variant's
-      // fields until the `)` (or the `->`) says which one it is.
-      repeat(prec.right(seq(',', $._type))),
-      optional(','),
+      // The comma is what makes the parens a tuple, so `(A,)` is a
+      // one-element tuple while `(A)` is `A`; the types after the first
+      // comma are optional. Right-associative: a further comma binds to
+      // the type that follows it, so this prefix is shared with a
+      // function's parameters and a variant's fields until the `)` (or
+      // the `->`) says which one it is.
+      optional(seq($._type, repeat(prec.right(seq(',', $._type))),
+                  optional(','))),
       ')',
     ),
 
     // A single type in parens is that type; the arrow after the `)` is
     // what makes it a function type instead (grammar.ebnf, "Types").
-    paren_type: $ => seq('(', $._type, optional(','), ')'),
+    paren_type: $ => seq('(', $._type, ')'),
 
     // `(A, B) -> R`; `()` and `(A)` are the no- and one-parameter
     // spellings (grammar.ebnf, "Types").
@@ -699,7 +701,7 @@ module.exports = grammar({
 
     capture_list: $ => seq(
       '[',
-      optional(sepByTrailing($.identifier, ',')),
+      optional(sepByTrailing(choice($.identifier, alias('self', $.self)), ',')),
       ']',
     ),
 

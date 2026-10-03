@@ -1029,6 +1029,10 @@
         {
           "type": "identifier",
           "named": true
+        },
+        {
+          "type": "self",
+          "named": true
         }
       ]
     }

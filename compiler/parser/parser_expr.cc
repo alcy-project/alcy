@@ -883,12 +883,20 @@ ast::ExprIdx Parser::parse_closure() {
   std::vector<ast::Ident> captures;
   if (match(lexer::TokenKind::LBracket)) {
     while (!check(lexer::TokenKind::RBracket) && !at_end()) {
-      base::Result<ast::Ident, diag::Reported> capture =
-          parse_ident("capture name");
-      if (capture.is_err()) {
-        return ast::ExprIdx::invalid();
+      // `self` is a keyword, and it is a local like any other: a
+      // capture list may name the receiver.
+      if (check(lexer::TokenKind::Self)) {
+        const diag::Span span = peek().span;
+        advance();
+        captures.push_back(ast::Ident{"self", span});
+      } else {
+        base::Result<ast::Ident, diag::Reported> capture =
+            parse_ident("capture name");
+        if (capture.is_err()) {
+          return ast::ExprIdx::invalid();
+        }
+        captures.push_back(std::move(capture).unwrap());
       }
-      captures.push_back(std::move(capture).unwrap());
       if (!match(lexer::TokenKind::Comma)) {
         break;
       }

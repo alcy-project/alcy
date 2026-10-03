@@ -373,7 +373,7 @@ struct Pair<A, B> {
           (identifier))))))
 
 ================================================================================
-A parenthesized type is the type it wraps
+A parenthesized type wraps, and the comma makes a one-element tuple
 ================================================================================
 
 fn f(x: (i32), y: (i32,)) {}
@@ -392,6 +392,6 @@ fn f(x: (i32), y: (i32,)) {}
       (parameter
         (identifier_pattern
           (identifier))
-        (paren_type
+        (tuple_type
           (primitive_type))))
     (block)))

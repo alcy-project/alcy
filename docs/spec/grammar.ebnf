@@ -63,8 +63,10 @@ type        = primitive | "()" | "!" | "str"
             | tuple_type | paren_type | array_type | slice_type
             | ref_type | path_type | func_type ;
 primitive   = integer_type | float_type | "bool" ;
-tuple_type  = "(" , type , "," , type , { "," , type } , [ "," ] , ")" ;
-paren_type  = "(" , type , [ "," ] , ")" ;
+tuple_type  = "(" , type , "," , [ type , { "," , type } ] , [ "," ] , ")" ;
+              (* The comma is what makes the parens a type of their own:
+                 `(A)` is `A`, and `(A,)` is the one-element tuple. *)
+paren_type  = "(" , type , ")" ;
 func_type   = "(" , [ type , { "," , type } , [ "," ] ] , ")" ,
               "->" , type ;
               (* Structural: two closures over one signature share the
@@ -125,7 +127,8 @@ closure_expr  = [ captures ] , "(" , [ closure_param ,
                   { "," , closure_param } , [ "," ] ] , ")" ,
                   "->" , expr ;
 closure_param = [ "mut" ] , ( IDENT | "_" ) , [ ":" , type ] ;
-captures      = "[" , [ IDENT , { "," , IDENT } , [ "," ] ] , "]" ;
+captures      = "[" , [ capture_name , { "," , capture_name } , [ "," ] ] , "]" ;
+capture_name  = IDENT | "self" ;
               (* A bare parameter list captures nothing; `[]` says the
                  same thing explicitly. Captures name locals only. *)
 ret_expr      = "ret" , [ expr ] ;

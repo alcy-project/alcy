@@ -99,7 +99,8 @@ Declaration left-hand sides use this grammar with `:=`
 - A closure is an anonymous function: `[captures] (params) -> body`,
   where each parameter is `[mut] (name|_) [: type]` and the body is
   one expression, or a block whose value is its last expression.
-  Captures name locals only; a bare parameter list captures nothing.
+  Captures name locals - `let` bindings, enclosing parameters, and
+  `self`; a bare parameter list captures nothing.
   `ret` inside a closure returns from the closure.
 - `(` opens a closure when the parens hold a `:` at depth zero or
   the matching `)` is followed by `->`; `[` opens one when a

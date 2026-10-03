@@ -286,9 +286,17 @@ bool Parser::scan_closure() const {
       }
       ++i;
     }
-    if (i >= tokens_.size() || tokens_[i].kind != K::LParen) {
-      return false;
+  }
+  // The token cursor skips lexer errors, doc comments, and reserved
+  // words, so the scan has to as well: a doc comment between the
+  // capture list and the parameters is not a boundary.
+  while (i < tokens_.size()) {
+    const lexer::TokenKind kind = tokens_[i].kind;
+    if (kind == K::Error || kind == K::DocComment || is_reserved(kind)) {
+      ++i;
+      continue;
     }
+    break;
   }
   if (i >= tokens_.size() || tokens_[i].kind != K::LParen) {
     return false;
