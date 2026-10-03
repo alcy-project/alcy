@@ -204,14 +204,23 @@ class DiagBag {
   // caller has checked that they fit.
   std::string_view intern(std::string_view bytes) const;
 
+  // Counts a diagnostic the arena could not hold and answers the index
+  // the caller would have received. Severity still decides the run's
+  // fate, so a dropped error cannot pass unnoticed.
+  u32 drop(Severity severity);
+
   // The capacity the entries array grows to next, saturating rather than
   // wrapping.
   [[nodiscard]] u32 grown_capacity() const;
 
-  // Whether `bytes` more arena room is free. Every allocation is decided
-  // here first, because the arena reports exhaustion by failing and its
-  // callers may not be in a position to unwind.
-  [[nodiscard]] bool has_room_for(usize bytes) const;
+  // Whether an allocation of `bytes` at `align` is free, padding
+  // included: the arena rounds its cursor up to the alignment before it
+  // bumps, so a check that skips the padding can admit a diagnostic
+  // whose message then does not fit. Every allocation is decided here
+  // first, because the arena reports exhaustion by trapping in debug and
+  // failing in release, and its callers may not be in a position to
+  // unwind.
+  [[nodiscard]] bool has_room_for(usize bytes, usize align) const;
 
   mem::Arena* arena_;
   i18n::Language language_;

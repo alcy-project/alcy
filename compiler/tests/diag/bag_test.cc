@@ -228,4 +228,57 @@ TEST_CASE("DiagBag merge keeps every entry whole") {
   CHECK(merged->labels[0].message == "here");
 }
 
+// The arena rounds its cursor up to an allocation's alignment before it
+// bumps, so the room check has to count that padding as part of the
+// request. This case lands in the sliver where the old check passed and
+// the message then did not fit: the entries table had grown twice, and
+// the next push asks for the following table plus a one-byte message
+// with exactly enough room for the two but not for the byte of padding
+// in front of the table.
+TEST_CASE("A message that misses the alignment padding is dropped") {
+  mem::Arena arena;
+  arena.reserve(mem::page_size());
+  DiagBag bag{arena, i18n::Language::EnUs};
+  constexpr usize MESSAGE_CAP = 1u << 10;
+  const usize entry_bytes = sizeof(Diagnostic);
+  // N messages fit before the push that grows the table to 2N entries,
+  // leaving a message for each. The tables before that push are the
+  // grown 8, 16, ... up to N, which sum to 2N - 8 entries; the push
+  // itself asks for 2N more. One byte is left for the message that
+  // trips the padding.
+  usize messages = 16;
+  usize fill = 0;
+  while (messages <= 64) {
+    const usize tables = (4 * messages - 8) * entry_bytes + 1;
+    if (arena.capacity() > tables) {
+      fill = arena.capacity() - tables;
+      if (fill <= messages * MESSAGE_CAP) {
+        break;
+      }
+    }
+    messages *= 2;
+  }
+  // A page large enough to need more than sixty-four messages has not
+  // been calibrated; no host this compiler builds for has one.
+  if (messages > 64) {
+    return;
+  }
+  for (usize i = 0; i < messages; ++i) {
+    const usize bytes = i + 1 == messages
+                            ? fill - (messages - 1) * (fill / messages)
+                            : fill / messages;
+    bag.emit_untranslated(Severity::Error, Stage::Lexer, 7, "{}",
+                          std::string(bytes, 'x'));
+  }
+  CHECK(bag.size() == messages);
+  bag.emit_untranslated(Severity::Error, Stage::Lexer, 7, "{}",
+                        std::string(1, 'y'));
+  CHECK(bag.size() == messages);
+  CHECK(bag.dropped_count() == 1);
+  CHECK(bag.has_errors());
+  // Nothing stored can have lost its message to the padding.
+  bag.for_each(
+      [](const Diagnostic& stored) { CHECK(!stored.message.empty()); });
+}
+
 }  // namespace diag

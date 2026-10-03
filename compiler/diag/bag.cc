@@ -26,8 +26,19 @@ u32 DiagBag::grown_capacity() const {
                                : capacity_ * 2;
 }
 
-bool DiagBag::has_room_for(usize bytes) const {
-  return arena_->capacity() - arena_->size() >= bytes;
+bool DiagBag::has_room_for(usize bytes, usize align) const {
+  const usize at = arena_->size();
+  const usize misaligned = at % align;
+  const usize padding = misaligned == 0 ? 0 : align - misaligned;
+  return arena_->capacity() - at >= padding + bytes;
+}
+
+u32 DiagBag::drop(Severity severity) {
+  ++dropped_count_;
+  if (severity == Severity::Error) {
+    ++dropped_errors_;
+  }
+  return size_;
 }
 
 u32 DiagBag::push(Severity severity,
@@ -46,19 +57,21 @@ u32 DiagBag::push(Severity severity,
   }
   const usize growth =
       size_ == capacity_ ? sizeof(Diagnostic) * grown_capacity() : 0;
-  if (!has_room_for(growth + message.size())) {
+  const usize align = growth == 0 ? 1 : alignof(Diagnostic);
+  if (!has_room_for(growth + message.size(), align)) {
     // The arena is spent. The diagnostic is counted but not stored, and
     // the caller is told by `dropped_count` at the end of the run.
-    ++dropped_count_;
-    if (severity == Severity::Error) {
-      ++dropped_errors_;
-    }
-    return size_;
+    return drop(severity);
   }
   if (growth != 0) {
     DCHECK(grown_capacity() > capacity_);
     Diagnostic* const mem = static_cast<Diagnostic*>(arena_->alloc(
         sizeof(Diagnostic) * grown_capacity(), alignof(Diagnostic)));
+    if (mem == nullptr) {
+      // The room check says this cannot fail; a host that disagrees
+      // drops the diagnostic rather than writing through nothing.
+      return drop(severity);
+    }
     for (u32 i = 0; i < size_; ++i) {
       mem[i] = entries_[i];
     }
@@ -111,13 +124,16 @@ base::Result<void, BagError> DiagBag::label(
   for (const Label& label : labels) {
     needed += label.message.size();
   }
-  if (!has_room_for(needed)) {
+  if (!has_room_for(needed, alignof(Label))) {
     // A label points at a second span; unlike the diagnostic it belongs
     // to, dropping it leaves a whole rendering rather than a hole.
     return base::make_ok();
   }
   Label* const mem = static_cast<Label*>(
       arena_->alloc(sizeof(Label) * labels.size(), alignof(Label)));
+  if (mem == nullptr) {
+    return base::make_ok();
+  }
   Label* dst = mem;
   for (const Label& label : labels) {
     *dst++ = label;
@@ -267,11 +283,14 @@ void DiagBag::merge(const DiagBag& other) {
     for (u32 l = 0; l < from.label_count; ++l) {
       needed += from.labels[l].message.size();
     }
-    if (!has_room_for(needed)) {
+    if (!has_room_for(needed, alignof(Label))) {
       continue;
     }
     Label* const labels = static_cast<Label*>(
         arena_->alloc(sizeof(Label) * from.label_count, alignof(Label)));
+    if (labels == nullptr) {
+      continue;
+    }
     for (u32 l = 0; l < from.label_count; ++l) {
       labels[l] = from.labels[l];
       // The message is a view into the other bag's arena, which this bag
