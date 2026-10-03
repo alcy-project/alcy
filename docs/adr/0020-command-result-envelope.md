@@ -51,7 +51,7 @@ a result.
 
 `--time-trace` composes with it rather than replacing it. On its own it
 prints the phases as a pruned call tree, one row per phase with its share
-of the run (see `docs/adr/0044-the-trace-has-two-readers.md`); with
+of the run (see `docs/adr/0045-the-trace-has-two-readers.md`); with
 `--json` the events are embedded in the envelope and no file is written. The
 `traceEvents` array sits at the top level of the document, which is what
 Perfetto and the Chrome tracing viewer read, so the captured output can

@@ -1,4 +1,4 @@
-# ADR-0044: The trace has two readers, and the text one is pruned
+# ADR-0045: The trace has two readers, and the text one is pruned
 
 - Subject: the compiler
 - Status: Accepted
