@@ -7,7 +7,6 @@
 
 #include "config/build_config.h"
 #include "fpag/debug/logger.h"
-#include "fpag/logging/sink/stdout_sink.h"
 #include "fpag/term/console.h"
 
 namespace tests {
