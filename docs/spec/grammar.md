@@ -68,7 +68,10 @@ the prelude).
 `()` is the unit type. `!` is the never type and coerces to any type.
 Tuple types are structural and concrete (no polymorphism in MVP).
 A path takes type arguments for generic enums and structs only, and a
-closing `>>` splits into two `>` (dangling halves error).
+closing `>>` splits into two `>` (dangling halves error). A function
+type is structural: `(A, B) -> R`, with `()` and `(A)` as its no- and
+one-parameter spellings; a bare `(A)` outside the arrow position is
+the type it wraps.
 
 ## Patterns (shared by declarations and `match`)
 

@@ -95,6 +95,17 @@ module.exports = grammar({
     // An `if` reads a newline before its `else` as part of itself rather
     // than as the end of the statement it is in.
     [$.if_expression],
+    // `(` opens a pattern and a closure parameter alike, and `mut` does
+    // not settle it: the `->` after the `)` is what tells them apart.
+    [$._primary_pattern, $.closure_parameter],
+    [$.mut_identifier_pattern, $.closure_parameter],
+    [$.closure_parameter, $._path_segment],
+    // `[a, b]` is an array and the capture list of `[a, b] (p) -> body`;
+    // the `(` after the `]` is what tells them apart.
+    [$.capture_list, $._path_segment],
+    // `(A, B)` is a tuple type and the parameter list of `(A, B) -> R`;
+    // the `->` after the `)` is what tells them apart.
+    [$.tuple_type, $.function_parameters],
   ],
 
   supertypes: $ => [
@@ -273,6 +284,8 @@ module.exports = grammar({
       $.never_type,
       $.str_type,
       $.tuple_type,
+      $.paren_type,
+      $.function_type,
       $.array_type,
       $.slice_type,
       $.reference_type,
@@ -296,8 +309,29 @@ module.exports = grammar({
       $._type,
       ',',
       $._type,
-      repeat(seq(',', $._type)),
+      // Right-associative: a comma binds to the type that follows it, so
+      // this prefix is shared with a function's parameters and a variant's
+      // fields until the `)` (or the `->`) says which one it is.
+      repeat(prec.right(seq(',', $._type))),
       optional(','),
+      ')',
+    ),
+
+    // A single type in parens is that type; the arrow after the `)` is
+    // what makes it a function type instead (grammar.ebnf, "Types").
+    paren_type: $ => seq('(', $._type, optional(','), ')'),
+
+    // `(A, B) -> R`; `()` and `(A)` are the no- and one-parameter
+    // spellings (grammar.ebnf, "Types").
+    function_type: $ => seq(
+      field('parameters', $.function_parameters),
+      '->',
+      field('return', $._type),
+    ),
+
+    function_parameters: $ => seq(
+      '(',
+      optional(sepByTrailing($._type, ',')),
       ')',
     ),
 
@@ -587,6 +621,7 @@ module.exports = grammar({
       $.array_expression,
       $.repeat_expression,
       $.parenthesized_expression,
+      $.closure_expression,
       $.block_expression,
       $.comp_block,
       $.if_expression,
@@ -649,6 +684,36 @@ module.exports = grammar({
     // Parentheses lift the ban a condition or a range end places on a
     // struct literal (grammar.md, "Expressions").
     parenthesized_expression: $ => seq('(', $._expression, ')'),
+
+    // A closure is an anonymous function: `(params) -> body`, with an
+    // optional capture list naming the locals it sees. A bare parameter
+    // list captures nothing, and `[]` says the same thing explicitly
+    // (grammar.ebnf, "Expressions"). `mut` and `_` mirror declaration
+    // patterns, and a parameter's type is optional.
+    closure_expression: $ => seq(
+      optional($.capture_list),
+      field('parameters', $.closure_parameters),
+      '->',
+      field('body', $._expression),
+    ),
+
+    capture_list: $ => seq(
+      '[',
+      optional(sepByTrailing($.identifier, ',')),
+      ']',
+    ),
+
+    closure_parameters: $ => seq(
+      '(',
+      optional(sepByTrailing($.closure_parameter, ',')),
+      ')',
+    ),
+
+    closure_parameter: $ => seq(
+      optional(field('mut', 'mut')),
+      field('name', choice($.identifier, $.wildcard_pattern)),
+      optional(seq(':', field('type', $._type))),
+    ),
 
     // A block that is an expression in its own right has no header to stay
     // on, so its brace is an ordinary one: `{ ... }` on a line of its own is

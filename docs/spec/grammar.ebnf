@@ -60,16 +60,17 @@ use_item    = [ "pub" ] , "use" , path , [ "as" , IDENT ] , ";" ;
 (* Types *)
 
 type        = primitive | "()" | "!" | "str"
-            | tuple_type | array_type | slice_type | ref_type | path_type
-            | func_type ;
+            | tuple_type | paren_type | array_type | slice_type
+            | ref_type | path_type | func_type ;
 primitive   = integer_type | float_type | "bool" ;
 tuple_type  = "(" , type , "," , type , { "," , type } , [ "," ] , ")" ;
+paren_type  = "(" , type , [ "," ] , ")" ;
 func_type   = "(" , [ type , { "," , type } , [ "," ] ] , ")" ,
               "->" , type ;
               (* Structural: two closures over one signature share the
                  type, and captures are erased. A single type in
                  parens is one parameter, so `(A) -> R` is a function
-                 type while a bare `(A)` stays `A`. *)
+                 type while a bare `(A)` is `A`. *)
 array_type  = "[" , type , ";" , INTEGER , "]" ;
 slice_type  = "[" , type , "]" ;
 ref_type    = "&" , [ "mut" ] , type ;

@@ -371,3 +371,27 @@ struct Pair<A, B> {
       (path_type
         (path
           (identifier))))))
+
+================================================================================
+A parenthesized type is the type it wraps
+================================================================================
+
+fn f(x: (i32), y: (i32,)) {}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (paren_type
+          (primitive_type)))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (paren_type
+          (primitive_type))))
+    (block)))

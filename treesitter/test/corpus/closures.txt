@@ -1,0 +1,360 @@
+================================================================================
+A closure with a typed parameter
+================================================================================
+
+fn main() -> i32 {
+  f := (a: i32) -> a + 1
+  ret f(1)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (closure_expression
+          (closure_parameters
+            (closure_parameter
+              (identifier)
+              (primitive_type)))
+          (binary_expression
+            (path_expression
+              (path
+                (identifier)))
+            (integer))))
+      (return_expression
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments
+            (integer)))))))
+
+================================================================================
+A closure takes no parameters and no captures
+================================================================================
+
+fn main() -> i32 {
+  f := () -> 1
+  ret f()
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (closure_expression
+          (closure_parameters)
+          (integer)))
+      (return_expression
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments))))))
+
+================================================================================
+A capture list names the locals the closure sees
+================================================================================
+
+fn main() -> i32 {
+  x := 1
+  f := [x] (a: i32) -> a + x
+  ret f(1)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (closure_expression
+          (capture_list
+            (identifier))
+          (closure_parameters
+            (closure_parameter
+              (identifier)
+              (primitive_type)))
+          (binary_expression
+            (path_expression
+              (path
+                (identifier)))
+            (path_expression
+              (path
+                (identifier))))))
+      (return_expression
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments
+            (integer)))))))
+
+================================================================================
+An empty capture list captures nothing, like a bare parameter list
+================================================================================
+
+fn main() -> i32 {
+  f := [] () -> 0
+  ret f()
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (closure_expression
+          (capture_list)
+          (closure_parameters)
+          (integer)))
+      (return_expression
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments))))))
+
+================================================================================
+A closure parameter may be mutable or a wildcard, and its type is optional
+================================================================================
+
+fn main() -> i32 {
+  f := (mut a, _: i32) -> a
+  ret f(1, 2)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (closure_expression
+          (closure_parameters
+            (closure_parameter
+              (identifier))
+            (closure_parameter
+              (wildcard_pattern)
+              (primitive_type)))
+          (path_expression
+            (path
+              (identifier)))))
+      (return_expression
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments
+            (integer)
+            (integer)))))))
+
+================================================================================
+A function type names a callback parameter
+================================================================================
+
+fn apply(f: (i32, i32) -> i32, x: i32) -> i32 {
+  ret f(x, x)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (function_type
+          (function_parameters
+            (primitive_type)
+            (primitive_type))
+          (primitive_type)))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments
+            (path_expression
+              (path
+                (identifier)))
+            (path_expression
+              (path
+                (identifier)))))))))
+
+================================================================================
+A function type nests to the right
+================================================================================
+
+fn curried(f: (i32) -> (i32) -> i32) -> i32 {
+  ret f(1)(2)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (function_type
+          (function_parameters
+            (primitive_type))
+          (function_type
+            (function_parameters
+              (primitive_type))
+            (primitive_type)))))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (call_expression
+          (call_expression
+            (path_expression
+              (path
+                (identifier)))
+            (arguments
+              (integer)))
+          (arguments
+            (integer)))))))
+
+================================================================================
+A function type may take nothing and return nothing
+================================================================================
+
+fn run(f: () -> ()) {
+  f()
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (function_type
+          (function_parameters)
+          (unit_type))))
+    (block
+      (call_expression
+        (path_expression
+          (path
+            (identifier)))
+        (arguments)))))
+
+================================================================================
+A closure is an argument like any other expression
+================================================================================
+
+fn apply(f: (i32) -> i32, x: i32) -> i32 {
+  ret f(x)
+}
+
+fn main() -> i32 {
+  ret apply((n) -> n * 2, 3)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (function_type
+          (function_parameters
+            (primitive_type))
+          (primitive_type)))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments
+            (path_expression
+              (path
+                (identifier))))))))
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments
+            (closure_expression
+              (closure_parameters
+                (closure_parameter
+                  (identifier)))
+              (binary_expression
+                (path_expression
+                  (path
+                    (identifier)))
+                (integer)))
+            (integer)))))))
