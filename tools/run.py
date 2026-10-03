@@ -63,6 +63,11 @@ def main():
         help="Arguments to pass to the executable (use '--' before run_args if passing flags)",
     )
     args = parser.parse_args()
+    # argparse's REMAINDER keeps the `--` separator as its first element. It
+    # told the parser where run.py's own options end; the executable must not
+    # see it, and a second `--` inside the remainder is the caller's to pass.
+    if args.run_args[:1] == ["--"]:
+        del args.run_args[0]
 
     ret = build(
         args.target,
