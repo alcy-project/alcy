@@ -99,12 +99,10 @@ SnippetWindow snippet_window(std::string_view line, usize caret) {
   // the left edge steps over continuation bytes. The right edge is
   // exclusive and may cut after a character's first byte, which keeps it
   // whole rather than dropping it.
-  while (begin > 0 &&
-         (static_cast<u8>(line[begin]) & 0xC0) == 0x80) {
+  while (begin > 0 && (static_cast<u8>(line[begin]) & 0xC0) == 0x80) {
     ++begin;
   }
-  while (end < line.size() &&
-         (static_cast<u8>(line[end]) & 0xC0) == 0x80) {
+  while (end < line.size() && (static_cast<u8>(line[end]) & 0xC0) == 0x80) {
     ++end;
   }
   return {begin, end, begin > 0, end < line.size()};
