@@ -176,10 +176,35 @@ a run reads a thousand-module package in 0.26 s of user time on eight threads
 where it was 0.31 s, executing the same number of instructions as one thread.
 `--jobs` goes from 17.2% slower than one thread to 3.9% slower.
 
-**C is next, in the lane shape above**, and it is worth doing because the
-measurement is now unambiguous: the same instructions, the same page faults,
-no context switches, and 1.7x from eight threads. That is a line, and a lane
-is what removes it.
+**C is next, in the lane shape above, and the lane needs an overflow pool.**
+What is built of it so far is in fpag: an arena divides its reservation into
+lanes cut on a stride, each with a cursor one thread bumps with no atomic
+operation, and a lane that reaches its end answers nullptr.
+
+What is not built is what happens then. A lane owns a slice of the table and
+cannot borrow, so the room a table has is divided by the lane count before any
+work starts and the appends are not divided that way: a thousand-module
+package whose six hundred thousand nodes fit one table with room to spare
+refuses a file at eight lanes. That is a valid package reported as too large,
+which is worse than the cost it saves.
+
+So a lane is the fast path and the tail of the reservation is a pool the
+shared cursor hands out, which is what the table has today. The valid room of
+a table then becomes a set of runs -- one per lane plus the pool -- and
+everything that reads a table by index has to see that set rather than one
+range:
+
+* `bound`, which `verify.cc` asks 82 times to decide whether an index names a
+  node, and which must answer exactly: a conservative bound would admit a
+  byte no node was written to and the walk that follows would read it.
+* `for_each_node`, the seven dense walks in `verify.cc` that would otherwise
+  visit the room between lanes.
+* `size()`, which stops being a count and becomes the reach of the last lane.
+  Every other reader of it has to be asked what it meant.
+
+The lane count is also the arena's for its whole life rather than a per-call
+setting: a package is read once to resolve its targets and once for its front
+end, and a lane that has handed out nodes cannot be re-cut.
 
 **A** stays the answer for every stage that is not the file reader. The
 frontend's cost is proportional to the package, so nothing else is waiting on
@@ -198,3 +223,11 @@ not the order they were made independent in.
 `--jobs` is kept. It is within a percent of neutral on the corpus measured
 here, its memory is bounded, and it is the switch the next stage will be
 measured against.
+
+The lane work stopped at the overflow pool and its two costs were paid first:
+two bugs in fpag that only a real caller would have found, one of them
+silent. A slice cut on the alignment rather than the stride gives every node
+after the first an index that reads the one before it, and a move that took
+the reservation and left the lanes made an arena hand out cursors into pages
+it no longer owned. Both are fixed and both have the test that would have
+caught them.
