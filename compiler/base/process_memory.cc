@@ -9,9 +9,10 @@
 #if BUILD_FLAG(IS_OS_WIN)
 // windows.h first, before the SDK headers that lean on its types.
 #define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <psapi.h>
+// clang-format off
 #include <windows.h>
+#include <psapi.h>
+// clang-format on
 #elif !BUILD_FLAG(IS_OS_ASMJS)
 #include <sys/resource.h>
 #endif
