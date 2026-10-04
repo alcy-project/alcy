@@ -1318,12 +1318,18 @@ class Checker {
   // by-reference parameter. Summaries only grow across sweeps.
   bool update_summary(ir::FunctionIdx fidx) {
     const ir::Function& fn = storage.functions()[fidx];
-    std::vector<u32> param_of_alloca(storage.registers().size(), NO_ROOT);
-    for (const auto& [alloca, index] : param_homes) {
-      if (alloca < param_of_alloca.size()) {
-        param_of_alloca[alloca] = index;
+    // Which parameter a root holds. Only the parameter allocas answer this,
+    // so the table is the size of a parameter list rather than of the
+    // register file, which is what the checker used to build once per
+    // function per sweep.
+    const auto param_of = [this](u32 root) -> u32 {
+      for (const auto& [alloca, index] : param_homes) {
+        if (alloca == root) {
+          return index;
+        }
       }
-    }
+      return NO_ROOT;
+    };
     std::vector<ir::TypeIdx> param_types;
     for (ir::TypeIdx tidx : fn.meta.param_types) {
       param_types.push_back(tidx);
@@ -1352,11 +1358,10 @@ class Checker {
         u32 param = entry.param;
         std::vector<u32> relpath;
         if (param == NO_ROOT) {
-          if (entry.place.root >= param_of_alloca.size() ||
-              param_of_alloca[entry.place.root] == NO_ROOT) {
+          param = param_of(entry.place.root);
+          if (param == NO_ROOT) {
             continue;
           }
-          param = param_of_alloca[entry.place.root];
           relpath = entry.place.path;
           if (param < param_types.size()) {
             const ir::TypeTag ptag = tag_of(param_types[param]);
