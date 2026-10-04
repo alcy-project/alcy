@@ -59,11 +59,11 @@ fixable where it is.
 `ConcurrentArena` hands out bytes, and both of alcy's arena users turn those
 bytes into an index by dividing the offset:
 
-* `NodeVec<T>::emplace_back` returns `(mem - base_ptr()) / sizeof(T)`, and
+- `NodeVec<T>::emplace_back` returns `(mem - base_ptr()) / sizeof(T)`, and
   every allocation takes exactly `sizeof(T)` -- a whole number of the node's
   own alignment -- so the bump never rounds and the index is the offset in
   nodes. It says so in a comment, and the ten AST tables depend on it.
-* `SpanArena` is the same shape over bytes.
+- `SpanArena` is the same shape over bytes.
 
 And `ast::verify_file` walks every table densely:
 
@@ -136,12 +136,12 @@ this would take.
 
 Two things have to exist first, and neither is about the arena:
 
-* **The arena has to expose a lane.** Reserve, commit, the capacity check and
+- **The arena has to expose a lane.** Reserve, commit, the capacity check and
   the `nullptr`-when-full answer are its business today; a caller bumping a
   lane itself would have to reproduce all four, including the chunked commit
   above and the rule that a refusal does not move the count. A lane is a
   cursor the arena hands out, not a pointer a caller derives.
-* **A unit of work has to know which worker it is.** `base::for_each` hands
+- **A unit of work has to know which worker it is.** `base::for_each` hands
   out index ranges through one counter so that a slow unit cannot strand a
   worker, which is what makes the balance good and what makes the worker
   unknowable in advance. A lane needs the second. Either the primitive hands

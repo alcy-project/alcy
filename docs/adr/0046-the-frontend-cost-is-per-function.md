@@ -58,14 +58,14 @@ is the whole change, and it is the same in all twelve.
 
 Three needed more than that:
 
-* the borrow checker's block-indexed rows are reached by walking the CFG from
+- the borrow checker's block-indexed rows are reached by walking the CFG from
   the entry block, not by reading the function's declared block range, so the
   set to clear is the closure of the walk. The walk marks blocks with a stamp
   that changes per call rather than clearing its marks.
-* `type_origin` and the nominal lookups answer from tables. The lists they
+- `type_origin` and the nominal lookups answer from tables. The lists they
   replaced are still what is handed to the next stage; the tables are
   answers, not storage.
-* the tables that index methods are filled where methods register, which is
+- the tables that index methods are filled where methods register, which is
   also where a generic instantiation adds one, so they cannot fall behind the
   list they index.
 
