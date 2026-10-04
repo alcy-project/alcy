@@ -57,6 +57,18 @@ void LlvmIrEmitter::check_state() {
 }
 
 llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
+  if (type_cache_.size() <= idx.idx) {
+    type_cache_.resize(storage_->types().size(), nullptr);
+  }
+  if (llvm::Type* cached = type_cache_[idx.idx]) {
+    return cached;
+  }
+  llvm::Type* built = build_type(idx);
+  type_cache_[idx.idx] = built;
+  return built;
+}
+
+llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
   const ir::TypeNode& node = storage_->types()[idx];
   const ir::TypeTag tag = node.tag;
   using T = ir::TypeTag;
@@ -419,6 +431,10 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
       builder_->CreateBr(target_llvm_block);
 
       const ir::Block& target_block = storage_->blocks()[target_block_idx];
+      DCHECK(ops.size() == 1 + target_block.block_params.size());
+      // Branch arguments fill the target's parameters positionally:
+      // operands[1..N] are the incoming values in parameter order.
+      u32 position = 0;
       for (const ir::BlockParamIdx param_idx : target_block.block_params) {
         const ir::BlockParam& param = storage_->block_params()[param_idx];
 
@@ -426,7 +442,8 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
             llvm::cast<llvm::PHINode>(values_.register_value(param.reg));
 
         const ir::Operand& arg_op =
-            storage_->operands()[ops.head() + 1 + param_idx.idx];
+            storage_->operands()[ops.head() + 1 + position];
+        ++position;
         llvm::Value* arg_val = resolve_operand_value(arg_op);
 
         phi->addIncoming(arg_val, current_llvm_block);

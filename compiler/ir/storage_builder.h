@@ -143,7 +143,8 @@ class StorageBuilder {
   TypeIdx primitive(TypeTag tag) const {
     DCHECK(tag != TypeTag::Struct && tag != TypeTag::Array &&
            tag != TypeTag::Enum && tag != TypeTag::Never &&
-           tag != TypeTag::Tuple && tag != TypeTag::Error);
+           tag != TypeTag::Tuple && tag != TypeTag::Error &&
+           tag != TypeTag::Slice && tag != TypeTag::Func);
     return primitive_idx(tag);
   }
 

@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "codegen_llvm/declaration.h"
 #include "codegen_llvm/llvm_ir_storage.h"
@@ -48,6 +49,7 @@ class LlvmIrEmitter {
   void check_state();
 
   llvm::Type* type(ir::TypeIdx idx) const;
+  llvm::Type* build_type(ir::TypeIdx idx) const;
   llvm::Type* enum_payload_area_type(ir::TypeIdx idx) const;
 
   void emit_function(llvm::Function* llvm_function, const ir::Function& func);
@@ -88,6 +90,10 @@ class LlvmIrEmitter {
   // ordinary item, wrapped in nothing.
   bool emit_entry_;
   LlvmIrStorage values_;
+  // LLVM types are immutable once built, and one shape is requested for
+  // every register, operand, and signature that names it, so each is
+  // constructed once and shared.
+  mutable std::vector<llvm::Type*> type_cache_;
 
   static constexpr usize FUNCTION_ARGS_SOO_SIZE = 8;
 };

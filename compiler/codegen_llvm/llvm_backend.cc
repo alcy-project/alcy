@@ -233,13 +233,15 @@ base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
       // allocation per optimize is noise against the pipeline itself.
       std::vector<Pending> stack;
     };
-    thread_local PassTimer timer{profiler};
+    // The passes below run inside this call, so the timer can be a
+    // local; a thread-local kept the first profiler it saw and reported
+    // a later run's passes through a stale pointer.
+    PassTimer timer{profiler};
     pic.registerBeforeNonSkippedPassCallback(
-        [](llvm::StringRef name, const llvm::Any&) { timer.push(name); });
+        [&timer](llvm::StringRef name, const llvm::Any&) { timer.push(name); });
     pic.registerAfterPassCallback(
-        [](llvm::StringRef, const llvm::Any&, const llvm::PreservedAnalyses&) {
-          timer.pop();
-        });
+        [&timer](llvm::StringRef, const llvm::Any&,
+                 const llvm::PreservedAnalyses&) { timer.pop(); });
   }
   // The machine outlives the builder: unwrap() moves into a temporary,
   // so taking .get() off it would dangle past this statement.

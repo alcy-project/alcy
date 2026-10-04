@@ -282,7 +282,13 @@ VerificationResult verify_storage(const Storage& storage) {
         if (instr.operands.empty()) {
           return err(VerificationErrorKind::InvalidBranchTarget, iidx.idx);
         }
-        if (!storage.operands()[instr.operands.head()].is<BlockIdx>()) {
+        const Operand& target = storage.operands()[instr.operands.head()];
+        if (!target.is<BlockIdx>()) {
+          return err(VerificationErrorKind::InvalidBranchTarget, iidx.idx);
+        }
+        // operands[1..] are the target's parameters, positionally.
+        if (instr.operands.size() !=
+            1 + storage.blocks()[target.as_block()].block_params.size()) {
           return err(VerificationErrorKind::InvalidBranchTarget, iidx.idx);
         }
       }
@@ -369,7 +375,8 @@ VerificationResult verify_storage(const Storage& storage) {
       }
       if (instr.op == Opcode::TypeSizeOf || instr.op == Opcode::TypeAlignOf) {
         if (!instr.operands.empty() || !instr.measure.is_valid() ||
-            !instr.dst.is_valid()) {
+            !instr.dst.is_valid() ||
+            instr.measure.idx >= storage.types().size()) {
           return err(VerificationErrorKind::InvalidTypeQuery, iidx.idx);
         }
       }

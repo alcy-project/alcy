@@ -915,4 +915,86 @@ TEST_CASE("VerificationError converts to diagnostic") {
   CHECK(other_diag.code->id != diag.code->id);
 }
 
+// A branch fills the target's parameters positionally, so its operand
+// count is one target plus one value per parameter.
+TEST_CASE("Verify Br argument count") {
+  StorageBuilder builder;
+  const TypeIdx i32 = builder.primitive(TypeTag::I32);
+  builder.reg({.type = i32, .def_idx = InstructionIdx(base::INVALID_IDX)});
+  const BlockParamIdx param =
+      builder.block_param({.type = i32, .reg = RegisterIdx(0)});
+
+  const BlockIdx entry = builder.block({{}, {}});
+  const BlockIdx target = builder.block({{}, {}});
+  BlockParamSeq target_params;
+  target_params.push(param);
+  builder.set_block_params(target, target_params.finish());
+
+  const InstructionIdx ret =
+      builder.instr({.op = Opcode::Ret,
+                     .flags = {},
+                     .dst = RegisterIdx(base::INVALID_IDX),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = {}});
+  InstrSeq target_instrs;
+  target_instrs.push(ret);
+  builder.set_block_instrs(target, target_instrs.finish());
+
+  // The target takes one parameter, but the Br names no argument.
+  OperandSeq args;
+  args.push(builder.operand(Operand::from_block(target, i32)));
+  const InstructionIdx br =
+      builder.instr({.op = Opcode::Br,
+                     .flags = {},
+                     .dst = RegisterIdx(base::INVALID_IDX),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = args.finish()});
+  InstrSeq instrs;
+  instrs.push(br);
+  builder.set_block_instrs(entry, instrs.finish());
+
+  BlockSeq blocks;
+  blocks.push(entry);
+  blocks.push(target);
+  builder.function({
+      .meta = void_meta(),
+      .blocks = blocks.finish(),
+  });
+  check_invalid(std::move(builder).build(),
+                VerificationErrorKind::InvalidBranchTarget);
+}
+
+// A type query names the measured type, so a stray index is a shape
+// error rather than an out-of-bounds read in the emitter.
+TEST_CASE("Verify a type query's measured index") {
+  StorageBuilder builder;
+  const TypeIdx i32 = builder.primitive(TypeTag::I32);
+  const InstructionIdx query =
+      builder.instr({.op = Opcode::TypeSizeOf,
+                     .flags = {},
+                     .dst = RegisterIdx(0),
+                     .measure = TypeIdx(99999),
+                     .operands = {}});
+  builder.reg({.type = i32, .def_idx = query});
+  const InstructionIdx ret =
+      builder.instr({.op = Opcode::Ret,
+                     .flags = {},
+                     .dst = RegisterIdx(base::INVALID_IDX),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = {}});
+  InstrSeq instrs;
+  instrs.push(query);
+  instrs.push(ret);
+  const BlockIdx block = builder.block({
+      .instrs = instrs.finish(),
+      .block_params = {},
+  });
+  builder.function({
+      .meta = void_meta(),
+      .blocks = {block, 1},
+  });
+  check_invalid(std::move(builder).build(),
+                VerificationErrorKind::InvalidTypeQuery);
+}
+
 }  // namespace ir
