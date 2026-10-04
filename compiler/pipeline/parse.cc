@@ -25,6 +25,7 @@
 #include "fpag/debug/profiler/profile_scope.h"
 #include "fpag/debug/profiler/profiler.h"
 #include "fpag/mem/arena.h"
+#include "fpag/mem/page_allocator.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"
 #include "lexer/lexer.h"
@@ -58,7 +59,11 @@ constexpr usize FILE_DIAGNOSTIC_CAPACITY = 32ull << 10;
 
 struct PerFileDiagnostics {
   explicit PerFileDiagnostics(i18n::Language language) : bag(arena, language) {
-    arena.reserve(FILE_DIAGNOSTIC_CAPACITY);
+    // The arena takes whole pages, and a page is not always the 4 KiB the
+    // constant assumes: a wasm page is 64 KiB, so the reservation rounds
+    // up to the host's.
+    const usize page = mem::page_size();
+    arena.reserve((FILE_DIAGNOSTIC_CAPACITY + page - 1) & ~(page - 1));
   }
 
   PerFileDiagnostics(const PerFileDiagnostics&) = delete;

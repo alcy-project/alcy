@@ -88,7 +88,11 @@ TEST_CASE("A parse stops at the first file the arena cannot hold") {
 TEST_CASE("A parse refuses a file the arena cannot hold mid-file") {
   const usize capacity = mem::page_size();
   std::string source = "fn main() {\n  x := ";
-  for (u32 i = 0; i < 200; ++i) {
+  // Sized against the reservation rather than a fixed count: a parse
+  // spends a few bytes of the syntax arena per source byte, so the same
+  // source that exhausts a 4 KiB page fits a 64 KiB one.
+  const usize terms = capacity / 16;
+  for (usize i = 0; i < terms; ++i) {
     source += "a + ";
   }
   source += "a\n}\n";
