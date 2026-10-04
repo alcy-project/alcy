@@ -176,35 +176,49 @@ a run reads a thousand-module package in 0.26 s of user time on eight threads
 where it was 0.31 s, executing the same number of instructions as one thread.
 `--jobs` goes from 17.2% slower than one thread to 3.9% slower.
 
-**C is next, in the lane shape above, and the lane needs an overflow pool.**
-What is built of it so far is in fpag: an arena divides its reservation into
-lanes cut on a stride, each with a cursor one thread bumps with no atomic
-operation, and a lane that reaches its end answers nullptr.
+**C is built.** A lane is a run of the reservation that one thread bumps with
+no atomic operation, cut on the node's stride so that the index -- which is the
+offset divided by the stride -- still reads what it wrote. Four fifths of a
+table is lanes and the rest is a pool the shared cursor hands out, which is
+what the table had before: a lane cannot borrow, and the appends of a package
+are not spread the way its room is, so lanes alone refuse a package that fits
+with room to spare. Six hundred thousand nodes over a thousand modules is
+enough to do it at eight lanes.
 
-What is not built is what happens then. A lane owns a slice of the table and
-cannot borrow, so the room a table has is divided by the lane count before any
-work starts and the appends are not divided that way: a thousand-module
-package whose six hundred thousand nodes fit one table with room to spare
-refuses a file at eight lanes. That is a valid package reported as too large,
-which is worse than the cost it saves.
-
-So a lane is the fast path and the tail of the reservation is a pool the
-shared cursor hands out, which is what the table has today. The valid room of
-a table then becomes a set of runs -- one per lane plus the pool -- and
-everything that reads a table by index has to see that set rather than one
-range:
+The room a table has filled is therefore a set of runs and not one range, and
+three things read it that way:
 
 * `bound`, which `verify.cc` asks 82 times to decide whether an index names a
-  node, and which must answer exactly: a conservative bound would admit a
-  byte no node was written to and the walk that follows would read it.
-* `for_each_node`, the seven dense walks in `verify.cc` that would otherwise
-  visit the room between lanes.
-* `size()`, which stops being a count and becomes the reach of the last lane.
-  Every other reader of it has to be asked what it meant.
+  node. It has to answer exactly: a bound that admitted the room between two
+  runs would let the walk that follows read a byte no node was written to.
+* `for_each_node`, the seven dense walks over the tables, which visit the nodes
+  and not the room between them.
+* `nearly_full`, which asks the pool rather than any lane. A lane that is
+  nearly full is not a table that is nearly full, because what the lane cannot
+  hold the pool can; a table is nearly full when its pool nearly is. Reading it
+  per lane is what made the first attempt refuse the package above.
 
-The lane count is also the arena's for its whole life rather than a per-call
-setting: a package is read once to resolve its targets and once for its front
-end, and a lane that has handed out nodes cannot be re-cut.
+`size()` stopped being a count and became the reach of the last run, which is
+an upper bound on the nodes a table holds. Everything else that reads a table
+by index goes through `bound` now.
+
+What it bought, measured on the thousand-module package with both binaries
+built from the same tree, minimum of five interleaved:
+
+| | parse at `-j 8` | speedup | whole run |
+| --- | --- | --- | --- |
+| before | 14.5 ms | 1.90x | 177 ms at one job, 185 at eight |
+| after | 12.3 ms | **2.10x** | 166 ms at one job, 174 at eight |
+
+Peak memory is flat across the job counts, 248 to 250 MiB, and the diagnostics
+are byte for byte the same at one, two, four and eight jobs.
+
+**So `--jobs` still does not pay**, and what is left of its cost is not the
+cursor. The parse is a seventh of the run and eight threads take it from 26 ms
+to 12, which is 14 ms saved against the 21 ms the stage costs when it is spread
+at all: a bag and a reserved arena per file, a thousand of each, and the
+threads. That reservation is the next thing to look at, and it is a smaller
+change than this one was.
 
 **A** stays the answer for every stage that is not the file reader. The
 frontend's cost is proportional to the package, so nothing else is waiting on
@@ -224,10 +238,17 @@ not the order they were made independent in.
 here, its memory is bounded, and it is the switch the next stage will be
 measured against.
 
-The lane work stopped at the overflow pool and its two costs were paid first:
-two bugs in fpag that only a real caller would have found, one of them
-silent. A slice cut on the alignment rather than the stride gives every node
-after the first an index that reads the one before it, and a move that took
-the reservation and left the lanes made an arena hand out cursors into pages
-it no longer owned. Both are fixed and both have the test that would have
-caught them.
+Two bugs in fpag were paid for first, and only a real caller found either. A
+slice cut on the alignment rather than the stride gives every node after the
+first an index that reads the one before it, and the failure surfaces as a
+garbage span in the parser rather than as anything about an arena. A move that
+took the reservation and left the lanes behind handed out cursors into pages
+the moved-to arena did not own. Both are fixed, and both are the kind of thing
+that a test of the primitive alone does not reach: what found them was putting
+the primitive under a caller that reads back what it wrote.
+
+The lesson for the plan in ADR-0046 is the one this note already had, made
+sharper: a stage's speedup is capped by what the stage writes through, and
+changing that is a change to what an index means rather than to how work is
+handed out. The cursor was twenty lines; the meaning was eighty-two call
+sites.
