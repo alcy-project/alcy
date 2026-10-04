@@ -30,6 +30,9 @@ constexpr std::string_view TABBED_SRC = "fn f() {\n\tx := @\n}\n";
 // A tab after text: it starts at column 3 and the `@` follows at the
 // next stop, column 5.
 constexpr std::string_view MIDTAB_SRC = "ab\t@\n";
+// A tab after a multibyte character: that character is one column, so
+// the tab starts at column 11 and the `@` follows at column 13.
+constexpr std::string_view WIDE_TAB_SRC = "  s := \"\xC3\xA9\"\t@\n";
 // A line long enough that printing it whole would bury the message it
 // belongs to; the `@` sits four hundred characters from either end. A
 // function-local static keeps the view it is rendered through valid.
@@ -54,6 +57,9 @@ std::optional<SourceText> fetch_source(u32 file, const void*) {
   }
   if (file == 7) {
     return SourceText{"midtab.al", MIDTAB_SRC};
+  }
+  if (file == 8) {
+    return SourceText{"widetab.al", WIDE_TAB_SRC};
   }
   return std::nullopt;
 }
@@ -269,6 +275,23 @@ TEST_CASE("Render expands a mid-line tab by the distance to its stop") {
         "  |\n"
         "1 | ab  @\n"
         "  |     ^\n");
+}
+
+TEST_CASE("Render expands a tab after a multibyte character") {
+  // The multibyte character occupies one column, so the tab at column 11
+  // advances to column 13 and the `@` lands there. Counting its
+  // continuation byte too made the tab emit one space instead of two,
+  // leaving the caret one column past the character.
+  BagFixture f;
+  const u32 i = f.bag.emit_untranslated(
+      Severity::Error, Stage::Lexer, 1,
+      Span{.file = 8, .offset = 12, .length = 1}, "bad");
+  CHECK(render_str(*f.bag.at(i)) ==
+        "error[EA001]: bad\n"
+        " --> widetab.al:1:13\n"
+        "  |\n"
+        "1 |   s := \"\xC3\xA9\"  @\n"
+        "  |             ^\n");
 }
 
 TEST_CASE("Render windows a line too long to print whole") {

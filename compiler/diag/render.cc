@@ -161,7 +161,13 @@ void append_expanded(fmt::memory_buffer& out, std::string_view text) {
   for (const char c : text) {
     if (c != '\t') {
       out.push_back(c);
-      ++col;
+      // A UTF-8 continuation byte continues the character before it, so
+      // it occupies no column of its own; display_column counts the same
+      // way, and a tab after a multibyte character would otherwise
+      // advance from a column one too far right.
+      if ((static_cast<unsigned char>(c) & 0xC0) != 0x80) {
+        ++col;
+      }
       continue;
     }
     // The tab advances to the next stop from the column it starts at:
