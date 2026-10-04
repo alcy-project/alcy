@@ -105,15 +105,64 @@ including the `nullptr`-when-full answer, and needs no caller changes beyond
 choosing the entry point. Expected: a fraction of the 0.13 s of extra user
 time, which is single-digit milliseconds of wall.
 
-**C. One arena per worker.** This removes the shared cursor rather than
-cheapening it: threads writing to different arenas write to different lines.
-It is the only option that scales, and it is a change to what a node index
-means, because an index is currently an offset into one arena. It needs the
-identity of a node to say which arena holds it -- an extra field, or a
-per-arena dense walk everywhere a table is walked today, which means every
-consumer of node indices including `verify_file`, the desugarer, and the
-analyzer. It also needs each arena's reservation, or one reservation
-partitioned up front, and the partition has to be sized from the input.
+**C. One cursor per worker.** This removes the shared cursor rather than
+cheapening it: threads bumping different cursors write to different lines. It
+is the only option that scales, and the shape it has to take is constrained by
+what an index means, so it is written out below.
+
+### C, in the shape the index space allows
+
+An index is an offset into one arena, and every table is walked over
+`[0, size())`. Those two facts rule out a cursor per worker *unless* the
+cursors are lanes of one reservation in a fixed order, because anything else
+makes the used offsets sparse and a dense walk reads holes.
+
+So a lane is a contiguous slice of the one reservation, worker `w` owns slice
+`w`, and the node index stays `offset / sizeof(T)` with the same base pointer
+and the same `operator[]`. What changes is that a lane has its own cursor and
+its own end, so `size()` is no longer one number, and the walks become walks
+over lanes.
+
+**The bump itself becomes a plain pointer.** A lane has one writer, so
+aligning and bumping need no atomic operation at all, and the primitive for
+that already exists: `mem::Arena` is exactly a plain bump with a watermark.
+It cannot be used as it stands, because it owns its reservation -- `reserve()`
+maps its own pages and the base pointer is private -- and a lane is part of a
+reservation that is already mapped. It is the behaviour to have, not the type
+to use: either `Arena` grows a way to be built over a region, or the lane
+keeps being `ConcurrentArena`'s business, which is where the commit and the
+exhaustion answer already are. The second is the smaller change and the one
+this would take.
+
+Two things have to exist first, and neither is about the arena:
+
+* **The arena has to expose a lane.** Reserve, commit, the capacity check and
+  the `nullptr`-when-full answer are its business today; a caller bumping a
+  lane itself would have to reproduce all four, including the chunked commit
+  above and the rule that a refusal does not move the count. A lane is a
+  cursor the arena hands out, not a pointer a caller derives.
+* **A unit of work has to know which worker it is.** `base::for_each` hands
+  out index ranges through one counter so that a slow unit cannot strand a
+  worker, which is what makes the balance good and what makes the worker
+  unknowable in advance. A lane needs the second. Either the primitive hands
+  out a worker as well -- one claim per thread, which is one atomic per thread
+  and free -- or the parser reads a thread-local lane, which needs no plumbing
+  through `parse_one` and the parser and does not share anything.
+
+**What it costs.** A lane that a thread does not fill leaves a hole, so a
+table pays up to one lane's worth of unused room per worker, and the room a
+table has is the room it had: the reservation is not larger, the usable part
+of it is smaller. A lane that fills while other lanes have room is the case to
+answer -- the fallback is the shared cursor, which is what the table has now,
+so the worst case is today's behaviour and not a refusal.
+
+**What it is worth.** The parse is 39.6 ms of work on one thread and 25.3 ms
+of wall on eight, and the two runs execute the same number of instructions
+with the same number of page faults and no context switches at all. That is a
+shared line and not a shared lock: each thread spends wall clock waiting for a
+line it must take to itself before it can hand out the next node. Scaling the
+parse from 1.7x to the 5x an eight-thread read of forty milliseconds of work
+can reach is 20 ms of a 200 ms run.
 
 **D. Fewer allocations.** The parser makes a node per expression, type, pattern
 and statement. Node reads dominate a run, so the tables cannot grow a level of
@@ -122,14 +171,18 @@ less. That is a language-design question, not a scheduling one.
 
 ## Decision
 
-Measure **B**, because it is small, it preserves the contract both callers
-already rely on, and it is the last thing that can be done to the cursor
-without changing what an index means. Do **C** only if a stage that costs real
-time needs it, and treat it as a redesign of the AST's addressing rather than
-as a change to fpag.
+**B is done.** It removes the retry, which is what the contention was made of:
+a run reads a thousand-module package in 0.26 s of user time on eight threads
+where it was 0.31 s, executing the same number of instructions as one thread.
+`--jobs` goes from 17.2% slower than one thread to 3.9% slower.
 
-**A is the answer for now**, and it is a better answer than it looks: the
-frontend's cost is proportional to the package again, so nothing is waiting on
+**C is next, in the lane shape above**, and it is worth doing because the
+measurement is now unambiguous: the same instructions, the same page faults,
+no context switches, and 1.7x from eight threads. That is a line, and a lane
+is what removes it.
+
+**A** stays the answer for every stage that is not the file reader. The
+frontend's cost is proportional to the package, so nothing else is waiting on
 this.
 
 ## Consequences
