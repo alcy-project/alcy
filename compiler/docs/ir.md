@@ -54,8 +54,9 @@ Call `verify_storage(storage)` before consuming IR. It returns
 `base::Result<void, VerificationError>` covering index bounds, single-definition
 of registers (block parameters count as definitions), terminator placement
 (last instruction only), callee/branch shapes, call arity, and the
-control/memory shapes below. `LlvmIrEmitter::emit()` runs it in debug
-builds ahead of LLVM's own verification.
+control/memory shapes below. `StorageBuilder::build()` runs it before
+returning the `VerifiedStorage` the emitter consumes; the emitter runs
+LLVM's own verification on the module it produces.
 
 ## Discarded values
 
@@ -75,7 +76,7 @@ skips value binding for any producer with an invalid `dst`.
 | `Alloca` | The allocated element type comes from the destination register's type; the operand is the array size. |
 | `Load` / `Store` | `[ptr]` / `[value, ptr]`; the loaded type comes from the destination register. |
 | `Memcopy` | `[dst_ptr, src_ptr, len(integer)]`, discarded value; bytewise copy. |
-| `GetElementPtr` | `[base_ptr(register), integer index...]`. The element type is recovered from the base pointer's `Alloca` site, tracked by the emitter; pointers from elsewhere are unsupported in MVP. |
+| `GetElementPtr` | `[base_ptr(register), integer index...]`. The element type is recovered from the base pointer's `Alloca` site when there is one, and otherwise from the base pointer's register type. |
 | `ElemOffset` | `[base_ptr(register), integer index]`. The destination register carries the element reference, so the borrow checker extends the buffer's place with one element step. |
 | `ExtractValue` / `InsertValue` | Aggregate first, then integer-immediate indexes (`InsertValue` takes the field value second). |
 | `TypeCast` | Determined by source/destination tags: integer resizing by width and signedness, int<->float, float resizing, int<->pointer. |

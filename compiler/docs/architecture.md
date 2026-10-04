@@ -182,9 +182,9 @@ flowchart TD
         lexer --> parser
         parser --> ast
         ast --> analyzer
-        analyzer --> ir
-        ir --> lowering
-        lowering --> borrow
+        analyzer --> lowering
+        lowering --> ir
+        ir --> borrow
     end
 
     subgraph Backend
@@ -346,7 +346,13 @@ Source bytes
 [ Parser ]         -> AST
    │
    ▼
-[ Analyzer ]       -> validated, ownership-checked IR
+[ Analyzer ]       -> checked AST
+   │
+   ▼
+[ Lowering ]       -> verified IR
+   │
+   ▼
+[ Borrow ]         -> ownership-checked IR
    │
    ▼
 [ codegen_llvm ]   -> LLVM IR / object code

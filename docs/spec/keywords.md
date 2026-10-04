@@ -24,10 +24,11 @@ Primitive types: `i8`, `i16`, `i32`, `i64`, `isize`, `u8`,
 
 A reserved word is read past rather than refused: the diagnostic names it
 and parsing continues, so a program using one is a program with an error
-in it rather than one that fails to read. `i128`, `u128`, and `f16` are
-reserved the same way; the lexer knows them so that naming one produces a
+in it rather than one that fails to read. `i128` and `u128` are reserved
+the same way; the lexer knows them so that naming one produces a
 diagnostic about the type rather than about the token, and `types.md`
-records them as deferred.
+records them as deferred. `f16` is not reserved yet: it lexes as an
+identifier and reports an unknown name.
 
 ## Contextual
 

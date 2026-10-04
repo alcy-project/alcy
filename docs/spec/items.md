@@ -26,9 +26,6 @@
   methods first, then the in-scope spec impls. Coherence is global
   (one impl per spec and type), and every method the spec declares
   must be implemented with a matching signature. See `grammar.md`.
-- The compiler provides a `print(msg: str)` intrinsic, lowered
-  directly to a write syscall. It migrates to an ordinary core
-  function once FFI lands.
 - `static` items have storage and MUST NOT contain `&mut`.
   `const X: T = ...` items are inline constants restricted to literal
   expressions in MVP (full const evaluation arrives with `comp fn`,
@@ -121,8 +118,9 @@
 
 - Structs have named fields only and no constructors.
   Construction initializes every field; `..base` move-update is
-  allowed. Destructors do not exist in MVP: values end at scope exit
-  without running user code (panic path included).
+  allowed. A type may declare `fn drop(self: Self)`; scope exit and
+  `return` run it, and a type without one ends its destructible fields.
+  See `values.md`.
 - Enums have unit and tuple variants only (`Ok(T)`/`Err(E)` and
   `Some(T)`/`None` are the canonical examples). Struct variants,
   explicit discriminants, and layout guarantees are deferred; default

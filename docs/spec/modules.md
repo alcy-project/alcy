@@ -30,8 +30,8 @@
   `priv` keyword. Restricted visibility (`pub(...)`) is deferred.
 - Three namespaces exist: types, values, and modules. A struct name
   may denote both its type and its constructor expressions.
-- Resolution order is lexical scope, then module, then (in future)
-  the core prelude. Ambiguity is a compile-time error.
+- Resolution order is lexical scope, then module, then the core
+  prelude. Ambiguity is a compile-time error.
 
 ## Suites
 
@@ -102,6 +102,6 @@ member list and the dependency graph.
   library sources already are. Summary-carrying artifacts and
   cross-package compilation follow the whole-program-analysis,
   per-package-emission model (see `deferred.md`).
-- Symbol mangling for the alcy convention follows
-  `alcy_<package>_<module path>_<name>`; `extern "C"` names are
-  unmangled. Details finalize with package artifacts.
+- Symbol mangling for the alcy convention is per-signature and starts
+  `_A`; the encoding is `docs/adr/0011-symbol-mangling.md`. `extern "C"`
+  names are unmangled.

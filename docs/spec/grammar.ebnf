@@ -43,7 +43,7 @@ enum_item   = "enum" , IDENT , [ type_params ] , "{"
             , variant , { "," , variant } , [ "," ] , "}" ;
 variant     = IDENT | IDENT , "(" , [ type , { "," , type } ] , ")" ;
 impl_item   = "impl" , [ type_params ] , type , [ "for" , type ] , "{"
-            , { fn_item } , "}" ;
+            , { [ "pub" ] , fn_item } , "}" ;
               (* Without "for" the block is inherent. With it the first
                  type is the implemented spec as a path, optionally with
                  arguments, and the second is the target. *)
@@ -55,7 +55,7 @@ spec_method = "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
                  implementation supplies each declared method. *)
 static_item = "static" , IDENT , ":" , type , "=" , expr ;
 const_item  = "const" , IDENT , ":" , type , "=" , literal ;
-use_item    = [ "pub" ] , "use" , path , [ "as" , IDENT ] , ";" ;
+use_item    = "use" , path , [ "as" , IDENT ] , ";" ;
 
 (* Types *)
 
@@ -140,7 +140,7 @@ struct_expr   = path , "{" , field_init , { "," , field_init } ,
 field_init    = IDENT , ":" , expr ;
 tuple_expr    = "(" , expr , "," , expr , { "," , expr } , [ "," ] , ")"
               | "(" , ")" ;
-array_expr    = "[" , [ expr , { "," , expr } , [ "," ] ] , "]"
+array_expr    = "[" , expr , { "," , expr } , [ "," ] , "]"
               | "[" , expr , ";" , INTEGER , "]" ;
 block_like    = block | if_expr | match_expr | loop_expr | while_expr
               | for_expr ;
@@ -162,11 +162,11 @@ assign_op     = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "**=" | "&="
                  error. See docs/spec/grammar.md, "Statements". *)
 expr_stmt   = expr ;
 if_expr     = "if" , ( expr | pattern , ":=" , expr ) , block ,
-              [ "else" , block ] ;
+              [ "else" , ( if_expr | block ) ] ;
 while_expr  = "while" , ( expr | pattern , ":=" , expr ) , block ;
 loop_expr   = "loop" , block ;
 for_expr    = "for" , pattern , "in" , expr , block ;
-match_expr  = "match" , expr , "{" , { match_arm , ( "," | ";" ) } , "}" ;
+match_expr  = "match" , expr , "{" , { match_arm , [ ( "," | ";" ) ] } , "}" ;
 match_arm   = pattern , "=>" , expr ;
 
 (* Modules and paths *)
@@ -196,7 +196,7 @@ DOC_COMMENT   = "///" , { ANY_BUT_NEWLINE } ;
  *   package self super Self as
  *   i8 i16 i32 i64 isize u8 u16 u32 u64 usize f32 f64 bool str
  * Reserved: async await union register extern unsafe where dyn
- *   i128 u128 f16
+ *   i128 u128
  * Contextual, and a keyword rather than a reserved word because it only
  *   has a meaning in one position: `comp` in signatures, declarations, and
  *   blocks; `intrinsic` in item position; `spec` in item position; `for`

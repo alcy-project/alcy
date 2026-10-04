@@ -14,12 +14,14 @@ grammar never observes them.
 
 - `Parser::parse()` ->
   `base::Result<std::span<const ast::ItemIdx>, diag::Reported>`. The
-  token stream is verified on entry (`PARSER_INVALID_TOKEN_STREAM`)
-  and the arena on exit (`PARSER_INVALID_AST`); grammar errors still
-  accumulate in the bag with the valid items returned.
-- `desugar_shadowing(items, ast, bag)` ->
-  `base::Result<void, diag::Reported>`. Freshens shadowed bindings;
-  verifies the arena on exit like `parse()`.
+  token stream is verified on entry (`PARSER_INVALID_TOKEN_STREAM`);
+  grammar errors accumulate in the bag with the valid items returned,
+  and the arena is not verified here.
+- `desugar_shadowing(items, ast, bag)` -> `void`. Freshens shadowed
+  bindings; name errors accumulate in the bag.
+- `verify_trees(ast, bag)` checks the whole arena once per run. The
+  pipeline calls it after the last file is parsed and desugared, before
+  anything walks the tree.
 
 ## Input requirements
 

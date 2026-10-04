@@ -1,7 +1,7 @@
 # ADR-0003: Deferred Generics with Blessed Result and Option
 
 - Subject: the language
-- Status: Superseded by `docs/adr/0009-result-option-library-enums.md`
+- Status: Superseded by ADR-0009
 - Date: 2026-09-18
 
 ## Context

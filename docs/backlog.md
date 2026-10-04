@@ -20,6 +20,22 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] Embedded lld, and the system driver with it. The driver picks
   crt files, system libraries, and search paths per platform, so this
   follows the item above and stands as its own project.
+- [ ] Diagnose a binary with no free `main` while checking. Today the
+  program reaches the linker and reports `Linking failed`, which names
+  the tool rather than the missing entry.
+- [ ] Drop elaboration as a pass over IR. Lowering places destructors
+  while walking the AST with one per-declaration "moved" flag, which
+  approximates per-path ownership; a pass that consumes the `Move`
+  markers and solves drops on the CFG would make `break`, `continue`,
+  `?`, and `match` joins one rule instead of four special cases.
+- [ ] Index the analyzer's and lowerer's side tables by their keys
+  (expression types, type origins, generic instances, function
+  specializations). Each lookup is a linear scan today, so checking and
+  lowering grow quadratically with the package.
+- [ ] Split `Lowerer`: comp evaluation, format expansion, and AST-to-IR
+  lowering share one class with a large public surface.
+- [ ] Size borrow-pass scratch by the function, not the package: each
+  function's reset clears arrays as large as the whole program today.
 
 ## Shipped
 

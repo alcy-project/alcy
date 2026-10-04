@@ -9,10 +9,10 @@ text of every message it can print.
   the shell, and a compiler whose output language depends on them is a
   different compiler on every machine.
 - `Key` is one identity per message, named by the message rather than by
-  the diagnostic code it is reported under, because 24 of the 45
-  registered codes carry more than one wording. The ordinal is an index
-  into every catalog and means nothing outside this module, so the enum
-  is as wide as the catalog needs it to be.
+  the diagnostic code it is reported under, because several registered
+  codes carry more than one wording. The ordinal is an index into every
+  catalog and means nothing outside this module, so the enum is as wide
+  as the catalog needs it to be.
 - `messages.def` holds the texts. It is a list, not a table: the key
   enum, every language's table, and the completeness check are all
   generated from it, so they cannot disagree.

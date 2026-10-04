@@ -133,10 +133,10 @@ Declaration left-hand sides use this grammar with `:=`
   which is what lets the diagnostic point at the expression that cannot be
   assigned to.
 - A block's value is its last expression; `{}` evaluates to `()`.
-- `if cond block (else block)?` and `if pattern := expr block
-  (else block)?`; `while` mirrors `if` (both accept
+- `if cond block (else (if | block))?` and `if pattern := expr block
+  (else (if | block))?`; `while` mirrors `if` (both accept
   pattern-declarations).
-- `match scrutinee "{" (pattern "=>" expr ",")* "}"`
+- `match scrutinee "{" (pattern "=>" expr ("," | ";")?)* "}"`
 - `loop block`, `while cond block`, `for pattern "in" expr block`;
   `break`, `continue` (unlabeled); loops evaluate to `()`. The `for`
   rule lives in `control.md`.

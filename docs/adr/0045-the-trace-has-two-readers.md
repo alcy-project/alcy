@@ -80,8 +80,7 @@ pipeline phase moving:
 - `lower-fn`, `borrow-fn`, and `emit-fn`, one region per function,
   named for the source spelling - two instantiations of one generic read
   as repeat reports of one name;
-- `runtime` and `configure`, which were inside `emit-object` with no
-  name of their own;
+- `runtime`, which was inside `emit-object` with no name of its own;
 - every LLVM pass run, as `llvm-pass`, through the pass instrumentation
   callbacks `optimize_module` already registers for LLVM's own
   statistics. An O3 build records thousands of these; they are exactly

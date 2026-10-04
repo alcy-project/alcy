@@ -5,8 +5,9 @@
 - Every value has a single owner. Assignment, argument passing, and
   `return` move ownership. Accessing a moved-from variable is a
   compile-time error (use-after-move MUST be rejected).
-- Values are affine (use at most once): unused values end at scope
-  exit with no user code running. There is no must-consume checking.
+- Values are affine (use at most once): a value without a destructor
+  ends at scope exit with no user code running. There is no
+  must-consume checking.
 - `Copy` is structural and opt-out-free: a type is `Copy` if and only
   if all of its fields are `Copy`. Primitive machine types and
   shared references (`&T`) are `Copy`; exclusive references (`&mut T`)

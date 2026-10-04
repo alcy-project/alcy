@@ -1,10 +1,9 @@
-# ADR 0006: LLVM dependency managed via config.toml
+# ADR-0006: LLVM dependency managed via config.toml
 
 - Subject: the compiler
 - Status: Accepted
 - Date: 2026-09-20
-- Supersedes: `docs/adr/0001-gn-build-system.md`,
-  `docs/adr/0002-llvm-fork-prebuilt.md`
+- Supersedes: ADR-0001, ADR-0002
 
 ## Context
 

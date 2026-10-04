@@ -5,8 +5,9 @@ Diagnostics: spans, the diagnostic bag, and rendering.
 - `Span` is a half-open byte range `[offset, offset + length)` within
   one source file. Spans never own bytes; they locate views into
   storage owned elsewhere (usually `SourceManager`).
-- `DiagBag` accumulates diagnostics. Bag indices are append-only and
-  stay valid for the bag's lifetime.
+- `DiagBag` accumulates diagnostics. Indices are append-only, except
+  that `dedup()` renumbers and `truncate()` drops them, so an index is
+  stable until either runs.
 - Rendering turns a diagnostic plus a `SourceFetch` callback into
   human-readable text.
 

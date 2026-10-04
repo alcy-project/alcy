@@ -125,8 +125,8 @@ void init_linked_targets() {
 
 namespace {
 
-// The machine `target` names, with the module's triple already set. Both
-// entry points below need one, and both fail the same way.
+// The machine `target` names. Both entry points below need one, and both
+// fail the same way.
 base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError>
 target_machine(const Target& target) {
   init_linked_targets();

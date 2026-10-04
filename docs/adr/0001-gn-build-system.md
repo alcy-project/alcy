@@ -1,7 +1,7 @@
-# ADR 0001: GN as the build system
+# ADR-0001: GN as the build system
 
 - Subject: the compiler
-- Status: Superseded by `docs/adr/0006-llvm-dependency-config-root.md`
+- Status: Superseded by ADR-0006
 - Date: 2026-09-16
 
 ## Context
