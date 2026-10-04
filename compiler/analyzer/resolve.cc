@@ -3,7 +3,6 @@
 
 #include "analyzer/resolve.h"
 
-#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -20,6 +19,7 @@
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
 #include "i18n/messages.h"
+#include "path/path.h"
 #include "source/source.h"
 
 namespace analyzer {
@@ -199,8 +199,8 @@ class Resolver {
         slash = name.size();
       }
       std::string_view segment = name.substr(start, slash - start);
-      if (segment.ends_with(".al")) {
-        segment.remove_suffix(3);
+      if (segment.ends_with(path::SOURCE_EXTENSION)) {
+        segment.remove_suffix(path::SOURCE_EXTENSION.size());
       }
       if (!segment.empty()) {
         segments.push_back(segment);

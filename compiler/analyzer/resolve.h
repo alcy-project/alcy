@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -13,6 +12,7 @@
 #include "diag/diagnostic.h"
 #include "diag/span.h"
 #include "diag/stage.h"
+#include "fpag/base/limits.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
@@ -41,12 +41,12 @@ struct Import {
 
 // The module index that names no module. Zero is the entry module, so the
 // sentinel has to sit outside the index space.
-constexpr u32 NO_MODULE = std::numeric_limits<u32>::max();
+constexpr u32 NO_MODULE = U32_MAX;
 
 // The package-root index that names no package root. Module roots sit in
 // their own index space, so this sentinel is distinct from NO_MODULE's
 // role even though the two share a value.
-constexpr u32 NO_PACKAGE_ROOT = std::numeric_limits<u32>::max();
+constexpr u32 NO_PACKAGE_ROOT = U32_MAX;
 
 // One package root the tree carries besides its own: a staged
 // standard-library member or a path dependency, staged behind a

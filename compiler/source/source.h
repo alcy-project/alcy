@@ -4,11 +4,11 @@
 #pragma once
 
 #include <deque>
-#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
 
+#include "fpag/base/limits.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/memory_mapped_file.h"
@@ -19,7 +19,7 @@ namespace source {
 // module treats it as an opaque key (notably diag::Span, which locates
 // views into the files owned here).
 using FileId = u32;
-constexpr FileId UNKNOWN_FILE = std::numeric_limits<FileId>::max();
+constexpr FileId UNKNOWN_FILE = U32_MAX;
 
 enum class SourceError : u8 {
   OpenFailed,
@@ -73,7 +73,7 @@ class SourceManager {
     u32 virtual_index = NO_VIRTUAL;
   };
 
-  static constexpr u32 NO_VIRTUAL = std::numeric_limits<u32>::max();
+  static constexpr u32 NO_VIRTUAL = U32_MAX;
 
   // A deque, not a vector: a view into a `std::string` the manager hands
   // out has to survive the next load, and adding an entry would otherwise
