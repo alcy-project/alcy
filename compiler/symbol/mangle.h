@@ -51,6 +51,8 @@ struct DecodedType {
     // A primitive, carried by its source spelling ("i32", "bool").
     Prim,
     Str,
+    // A slice: `parts[0]` is the element.
+    Slice,
     Ref,
     MutRef,
     Ptr,

@@ -23,8 +23,8 @@ fn f() {
           (identifier))
         (integer))
       (declaration_statement
-        (literal_pattern
-          (integer))
+        (identifier_pattern
+          (identifier))
         (integer)))))
 
 ================================================================================
@@ -388,3 +388,32 @@ impl S {
               (path
                 (self_type))))))
       (block))))
+
+================================================================================
+A leading underscore starts an identifier; alone it is the wildcard
+================================================================================
+
+fn f(_x: i32, _: i32) -> i32 {
+  ret _x
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (wildcard_pattern)
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (path_expression
+          (path
+            (identifier)))))))

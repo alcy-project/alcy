@@ -28,6 +28,7 @@ namespace {
 //   name     = DIGITS name
 //   generics = { type }
 //   type     = prim | "z" | "p"
+//            | "v" type
 //            | "r" type | "w" type
 //            | "y" DIGITS type
 //            | "u" DIGITS { type }
@@ -337,6 +338,11 @@ class Decoder {
     }
     switch (tag) {
       case TAG_STR: out.kind = DecodedType::Kind::Str; return true;
+      case TAG_SLICE: {
+        out.kind = DecodedType::Kind::Slice;
+        out.parts.resize(1);
+        return decode_type(out.parts[0]);
+      }
       case TAG_PTR: out.kind = DecodedType::Kind::Ptr; return true;
       case TAG_REF:
       case TAG_MUT_REF: {
@@ -461,6 +467,7 @@ std::string display(const DecodedType& type) {
   switch (type.kind) {
     case DecodedType::Kind::Prim: return type.spelling;
     case DecodedType::Kind::Str: return "str";
+    case DecodedType::Kind::Slice: return "[" + display(type.parts.at(0)) + "]";
     case DecodedType::Kind::Ptr: return "ptr";
     case DecodedType::Kind::Ref: return "&" + display(type.parts.at(0));
     case DecodedType::Kind::MutRef: return "&mut " + display(type.parts.at(0));

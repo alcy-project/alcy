@@ -21,6 +21,7 @@
 #include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"
 #include "ir/common.h"
+#include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
@@ -143,20 +144,63 @@ TEST_CASE("Property: mangling is injective over paths and names") {
   }
 }
 
+// A signature whose type arguments exercise every structural tag the
+// encoder writes; the round trip through the independent decoder is the
+// oracle.
+TEST_CASE("Property: mangled type arguments decode back") {
+  Fixture f;
+  const TypeIdx slice = f.builder.slice_type(f.u8);
+  const TypeIdx array = f.builder.array_type(f.i32, 3);
+  const TypeIdx ref = f.builder.reference_type(f.str, false);
+  // A tuple's elements are a range, so they have to be adjacent: copies
+  // of the two primitives give two consecutive entries.
+  ir::TypeSeq tuple_seq;
+  tuple_seq.push(f.builder.ref_type(f.i32));
+  tuple_seq.push(f.builder.ref_type(f.u8));
+  const TypeIdx tuple = f.builder.tuple_type(tuple_seq.finish());
+  symbol::Signature signature =
+      sig("m::n", "get", symbol::Signature::Kind::Free);
+  signature.generics = {slice, array, ref, tuple};
+  const ir::Storage types = f.build();
+
+  const std::string encoded = symbol::mangle(signature, types, f.strings);
+  base::Result<symbol::Demangled, symbol::DemangleError> decoded =
+      symbol::demangle(encoded);
+  CHECK(decoded.is_ok());
+  if (decoded.is_err()) {
+    return;
+  }
+  const symbol::Demangled back = std::move(decoded).unwrap();
+  CHECK(back.generics.size() == 4);
+  if (back.generics.size() == 4) {
+    CHECK(back.generics[0].kind == symbol::DecodedType::Kind::Slice);
+    CHECK(back.generics[1].kind == symbol::DecodedType::Kind::Array);
+    CHECK(back.generics[1].count == 3);
+    CHECK(back.generics[2].kind == symbol::DecodedType::Kind::Ref);
+    CHECK(back.generics[3].kind == symbol::DecodedType::Kind::Tuple);
+    CHECK(back.generics[3].parts.size() == 2);
+  }
+}
+
 TEST_CASE("Property: mangling does not depend on the order items were built") {
   // Lowering order varies with the module graph, so a symbol must be a
-  // function of the signature alone.
+  // function of the signature alone. The type arguments are built from
+  // each fixture's own storage, so their indices differ.
   Fixture a;
+  const TypeIdx a_array = a.builder.array_type(a.u8, 3);
+  symbol::Signature sa = sig("m::n", "get", symbol::Signature::Kind::Method);
+  sa.generics = {a.i32, a_array};
   const ir::Storage types_a = a.build();
-  const std::string first = symbol::mangle(
-      sig("m::n", "get", symbol::Signature::Kind::Method), types_a, a.strings);
+  const std::string first = symbol::mangle(sa, types_a, a.strings);
 
   Fixture b;
   // A differently-shaped storage, so the index tables differ.
   (void)b.builder.array_type(b.i32, 7);
   (void)b.builder.reference_type(b.str, true);
+  const TypeIdx b_array = b.builder.array_type(b.u8, 3);
+  symbol::Signature sb = sig("m::n", "get", symbol::Signature::Kind::Method);
+  sb.generics = {b.i32, b_array};
   const ir::Storage types_b = b.build();
-  const std::string second = symbol::mangle(
-      sig("m::n", "get", symbol::Signature::Kind::Method), types_b, b.strings);
+  const std::string second = symbol::mangle(sb, types_b, b.strings);
   CHECK(first == second);
 }

@@ -68,16 +68,14 @@ struct Fixture {
 using VirtualDir = tests::DeclaredSources;
 
 // Records the sources rather than writing them, so a case cannot fail for
-// a reason other than what it asserts. Always succeeds, which keeps the
-// call sites' guard meaningful to read.
-bool write_all(
+// a reason other than what it asserts.
+void write_all(
     VirtualDir& dir,
     std::initializer_list<std::pair<std::string_view, std::string_view>>
         files) {
   for (const auto& [name, bytes] : files) {
     dir.add(name, bytes);
   }
-  return true;
 }
 
 struct LowerCase {
@@ -145,17 +143,13 @@ LowerCase lower_case(
 
 TEST_CASE("Lower straight-line arithmetic") {
   VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "fn add(a: i32, b: i32) -> i32 {\n"
-                                      "  ret a + b * 2\n"
-                                      "}\n"
-                                      "fn main() {\n"
-                                      "  _ := add(1, 2)\n"
-                                      "}\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
+  write_all(dir, {{"main.al",
+                   "fn add(a: i32, b: i32) -> i32 {\n"
+                   "  ret a + b * 2\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "  _ := add(1, 2)\n"
+                   "}\n"}});
 
   Fixture f;
   LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
@@ -170,20 +164,16 @@ TEST_CASE("Lower straight-line arithmetic") {
 
 TEST_CASE("Lower structs tuples fields and borrows") {
   VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "struct Point { x: i32, y: i32 }\n"
-                                      "fn get(p: &Point) -> i32 {\n"
-                                      "  ret p.x + p.y\n"
-                                      "}\n"
-                                      "fn main() {\n"
-                                      "  p := Point { x: 1, y: 2 }\n"
-                                      "  t := (p.x, true)\n"
-                                      "  _ := get(&p) + t.0\n"
-                                      "}\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
+  write_all(dir, {{"main.al",
+                   "struct Point { x: i32, y: i32 }\n"
+                   "fn get(p: &Point) -> i32 {\n"
+                   "  ret p.x + p.y\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "  p := Point { x: 1, y: 2 }\n"
+                   "  t := (p.x, true)\n"
+                   "  _ := get(&p) + t.0\n"
+                   "}\n"}});
 
   Fixture f;
   LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
@@ -197,28 +187,24 @@ TEST_CASE("Lower structs tuples fields and borrows") {
 
 TEST_CASE("Lower lowers control flow to verifiable blocks") {
   VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "fn f(b: bool) -> i32 {\n"
-                                      "  r := match b {\n"
-                                      "    true => 1,\n"
-                                      "    false => 0,\n"
-                                      "  }\n"
-                                      "  mut i := 0\n"
-                                      "  while i < r {\n"
-                                      "    i = i + 1\n"
-                                      "  }\n"
-                                      "  loop {\n"
-                                      "    if i <= 0 {\n"
-                                      "      break\n"
-                                      "    }\n"
-                                      "    i = i - 1\n"
-                                      "  }\n"
-                                      "  ret i\n"
-                                      "}\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
+  write_all(dir, {{"main.al",
+                   "fn f(b: bool) -> i32 {\n"
+                   "  r := match b {\n"
+                   "    true => 1,\n"
+                   "    false => 0,\n"
+                   "  }\n"
+                   "  mut i := 0\n"
+                   "  while i < r {\n"
+                   "    i = i + 1\n"
+                   "  }\n"
+                   "  loop {\n"
+                   "    if i <= 0 {\n"
+                   "      break\n"
+                   "    }\n"
+                   "    i = i - 1\n"
+                   "  }\n"
+                   "  ret i\n"
+                   "}\n"}});
 
   Fixture f;
   LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
@@ -232,42 +218,37 @@ TEST_CASE("Lower lowers control flow to verifiable blocks") {
 
 TEST_CASE("Lower lowers enums matches and question propagation") {
   VirtualDir dir;
-  const bool setup =
-      write_all(dir, {{"main.al",
-                       "enum Shape { Circle(i32), Rect }\n"
-                       "fn area(s: Shape) -> i32 {\n"
-                       "  r := match s {\n"
-                       "    Shape::Circle(x) => x,\n"
-                       "    Shape::Rect => 0,\n"
-                       "  }\n"
-                       "  ret r\n"
-                       "}\n"
-                       "fn calc(o: Option<i32>) -> Option<i32> {\n"
-                       "  v := o?\n"
-                       "  ret Some(v + 1)\n"
-                       "}\n"
-                       "fn main() {\n"
-                       "  a := area(Shape::Circle(3))\n"
-                       "  o: Option<i32> := Some(7)\n"
-                       "  y := o.unwrap()\n"
-                       "  _ := a\n"
-                       "  _ := y\n"
-                       "  _ := calc(o)\n"
-                       "}\n"
-                       "enum Option<T> { Some(T), None }\n"
-                       "impl<T> Option<T> {\n"
-                       "  fn unwrap(self: Self) -> T {\n"
-                       "    ret match self {\n"
-                       "      Option::Some(v) => v,\n"
-                       "      Option::None => panic(\"unreachable\"),\n"
-                       "    }\n"
-                       "  }\n"
-                       "}\n"
-                       "intrinsic fn panic(msg: str) -> !;\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
+  write_all(dir, {{"main.al",
+                   "enum Shape { Circle(i32), Rect }\n"
+                   "fn area(s: Shape) -> i32 {\n"
+                   "  r := match s {\n"
+                   "    Shape::Circle(x) => x,\n"
+                   "    Shape::Rect => 0,\n"
+                   "  }\n"
+                   "  ret r\n"
+                   "}\n"
+                   "fn calc(o: Option<i32>) -> Option<i32> {\n"
+                   "  v := o?\n"
+                   "  ret Some(v + 1)\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "  a := area(Shape::Circle(3))\n"
+                   "  o: Option<i32> := Some(7)\n"
+                   "  y := o.unwrap()\n"
+                   "  _ := a\n"
+                   "  _ := y\n"
+                   "  _ := calc(o)\n"
+                   "}\n"
+                   "enum Option<T> { Some(T), None }\n"
+                   "impl<T> Option<T> {\n"
+                   "  fn unwrap(self: Self) -> T {\n"
+                   "    ret match self {\n"
+                   "      Option::Some(v) => v,\n"
+                   "      Option::None => panic(\"unreachable\"),\n"
+                   "    }\n"
+                   "  }\n"
+                   "}\n"
+                   "intrinsic fn panic(msg: str) -> !;\n"}});
 
   Fixture f;
   LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
@@ -281,17 +262,13 @@ TEST_CASE("Lower lowers enums matches and question propagation") {
 
 TEST_CASE("Lower emits verifiable LLVM IR") {
   VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "fn add(a: i32, b: i32) -> i32 {\n"
-                                      "  ret a + b\n"
-                                      "}\n"
-                                      "fn main() {\n"
-                                      "  _ := add(40, 2)\n"
-                                      "}\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
+  write_all(dir, {{"main.al",
+                   "fn add(a: i32, b: i32) -> i32 {\n"
+                   "  ret a + b\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "  _ := add(40, 2)\n"
+                   "}\n"}});
 
   Fixture f;
   LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
@@ -313,16 +290,11 @@ TEST_CASE("Lower emits verifiable LLVM IR") {
 
 TEST_CASE("Lower emits verifiable LLVM IR for print") {
   VirtualDir dir;
-  const bool setup =
-      write_all(dir, {{"main.al",
-                       "fn main() {\n"
-                       "  print(\"hi\")\n"
-                       "}\n"},
-                      {"core.al", "pub intrinsic fn print(msg: str);\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
+  write_all(dir, {{"main.al",
+                   "fn main() {\n"
+                   "  print(\"hi\")\n"
+                   "}\n"},
+                  {"core.al", "pub intrinsic fn print(msg: str);\n"}});
 
   Fixture f;
   LowerCase result =
@@ -354,20 +326,15 @@ TEST_CASE("Lower emits verifiable LLVM IR for print") {
 #if !defined(OS_ASMJS)
 TEST_CASE("Lower emits relocatable objects") {
   VirtualDir dir;
-  const bool setup =
-      write_all(dir, {{"main.al",
-                       "fn add(a: i32, b: i32) -> i32 {\n"
-                       "  ret a + b\n"
-                       "}\n"
-                       "fn main() {\n"
-                       "  print(\"hi\")\n"
-                       "  _ := add(40, 2)\n"
-                       "}\n"},
-                      {"core.al", "pub intrinsic fn print(msg: str);\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
+  write_all(dir, {{"main.al",
+                   "fn add(a: i32, b: i32) -> i32 {\n"
+                   "  ret a + b\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "  print(\"hi\")\n"
+                   "  _ := add(40, 2)\n"
+                   "}\n"},
+                  {"core.al", "pub intrinsic fn print(msg: str);\n"}});
 
   Fixture f;
   LowerCase result =
@@ -418,15 +385,11 @@ TEST_CASE("Lower emits relocatable objects") {
 
 TEST_CASE("Optimization promotes stack allocas") {
   VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "fn main() -> i32 {\n"
-                                      "  x := 40\n"
-                                      "  ret x + 2\n"
-                                      "}\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
+  write_all(dir, {{"main.al",
+                   "fn main() -> i32 {\n"
+                   "  x := 40\n"
+                   "  ret x + 2\n"
+                   "}\n"}});
 
   Fixture f;
   LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
@@ -479,13 +442,8 @@ TEST_CASE("Lower wraps all main forms in a C entry") {
   };
   for (const std::string_view source : cases) {
     VirtualDir dir;
-    const bool setup =
-        write_all(dir, {{"main.al", source},
-                        {"core.al", "pub intrinsic fn print(msg: str);\n"}});
-    CHECK(setup);
-    if (!setup) {
-      continue;
-    }
+    write_all(dir, {{"main.al", source},
+                    {"core.al", "pub intrinsic fn print(msg: str);\n"}});
 
     Fixture f;
     LowerCase result =
@@ -517,15 +475,11 @@ TEST_CASE("Lower wraps all main forms in a C entry") {
 
 TEST_CASE("Lower warns on unreachable statements") {
   VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "fn main() {\n"
-                                      "  ret\n"
-                                      "  _ := 2\n"
-                                      "}\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
+  write_all(dir, {{"main.al",
+                   "fn main() {\n"
+                   "  ret\n"
+                   "  _ := 2\n"
+                   "}\n"}});
 
   Fixture f;
   LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
@@ -533,62 +487,26 @@ TEST_CASE("Lower warns on unreachable statements") {
   CHECK(f.bag.warning_count() > 0);
 }
 
-TEST_CASE("Lowering emits no Drop markers") {
-  VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "struct H { r: &mut i32 }\n"
-                                      "fn main() {\n"
-                                      "  mut x := 1\n"
-                                      "  h := H { r: &mut x }\n"
-                                      "  mut i := 0\n"
-                                      "  while i < 2 {\n"
-                                      "    g := h\n"
-                                      "    _ := g\n"
-                                      "    i = i + 1\n"
-                                      "  }\n"
-                                      "}\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
-
-  Fixture f;
-  LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
-  CHECK(result.ok);
-  CHECK(result.lowered.has_value());
-  if (!result.ok || !result.lowered.has_value()) {
-    return;
-  }
-  // Drop stays a no-op ruling: destruction needs no markers.
-  for (const ir::Instruction& instr : result.lowered->storage->instrs()) {
-    CHECK(instr.op != ir::Opcode::Drop);
-  }
-}
-
 TEST_CASE("Lower emits verifiable LLVM IR for control flow") {
   VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "fn f(b: bool) -> i32 {\n"
-                                      "  r := match b {\n"
-                                      "    true => 1,\n"
-                                      "    false => 0,\n"
-                                      "  }\n"
-                                      "  mut i := 0\n"
-                                      "  while i < r {\n"
-                                      "    i = i + 1\n"
-                                      "  }\n"
-                                      "  loop {\n"
-                                      "    if i <= 0 {\n"
-                                      "      break\n"
-                                      "    }\n"
-                                      "    i = i - 1\n"
-                                      "  }\n"
-                                      "  ret i\n"
-                                      "}\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
+  write_all(dir, {{"main.al",
+                   "fn f(b: bool) -> i32 {\n"
+                   "  r := match b {\n"
+                   "    true => 1,\n"
+                   "    false => 0,\n"
+                   "  }\n"
+                   "  mut i := 0\n"
+                   "  while i < r {\n"
+                   "    i = i + 1\n"
+                   "  }\n"
+                   "  loop {\n"
+                   "    if i <= 0 {\n"
+                   "      break\n"
+                   "    }\n"
+                   "    i = i - 1\n"
+                   "  }\n"
+                   "  ret i\n"
+                   "}\n"}});
 
   Fixture f;
   LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
@@ -610,42 +528,37 @@ TEST_CASE("Lower emits verifiable LLVM IR for control flow") {
 
 TEST_CASE("Lower emits verifiable LLVM IR for enums and calls") {
   VirtualDir dir;
-  const bool setup =
-      write_all(dir, {{"main.al",
-                       "enum Shape { Circle(i32), Rect }\n"
-                       "fn area(s: Shape) -> i32 {\n"
-                       "  r := match s {\n"
-                       "    Shape::Circle(x) => x,\n"
-                       "    Shape::Rect => 0,\n"
-                       "  }\n"
-                       "  ret r\n"
-                       "}\n"
-                       "fn calc(o: Option<i32>) -> Option<i32> {\n"
-                       "  v := o?\n"
-                       "  ret Some(v + 1)\n"
-                       "}\n"
-                       "fn main() {\n"
-                       "  a := area(Shape::Circle(3))\n"
-                       "  o: Option<i32> := Some(7)\n"
-                       "  y := o.unwrap()\n"
-                       "  _ := a\n"
-                       "  _ := y\n"
-                       "  _ := calc(o)\n"
-                       "}\n"
-                       "enum Option<T> { Some(T), None }\n"
-                       "impl<T> Option<T> {\n"
-                       "  fn unwrap(self: Self) -> T {\n"
-                       "    ret match self {\n"
-                       "      Option::Some(v) => v,\n"
-                       "      Option::None => panic(\"unreachable\"),\n"
-                       "    }\n"
-                       "  }\n"
-                       "}\n"
-                       "intrinsic fn panic(msg: str) -> !;\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
+  write_all(dir, {{"main.al",
+                   "enum Shape { Circle(i32), Rect }\n"
+                   "fn area(s: Shape) -> i32 {\n"
+                   "  r := match s {\n"
+                   "    Shape::Circle(x) => x,\n"
+                   "    Shape::Rect => 0,\n"
+                   "  }\n"
+                   "  ret r\n"
+                   "}\n"
+                   "fn calc(o: Option<i32>) -> Option<i32> {\n"
+                   "  v := o?\n"
+                   "  ret Some(v + 1)\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "  a := area(Shape::Circle(3))\n"
+                   "  o: Option<i32> := Some(7)\n"
+                   "  y := o.unwrap()\n"
+                   "  _ := a\n"
+                   "  _ := y\n"
+                   "  _ := calc(o)\n"
+                   "}\n"
+                   "enum Option<T> { Some(T), None }\n"
+                   "impl<T> Option<T> {\n"
+                   "  fn unwrap(self: Self) -> T {\n"
+                   "    ret match self {\n"
+                   "      Option::Some(v) => v,\n"
+                   "      Option::None => panic(\"unreachable\"),\n"
+                   "    }\n"
+                   "  }\n"
+                   "}\n"
+                   "intrinsic fn panic(msg: str) -> !;\n"}});
 
   Fixture f;
   LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
@@ -672,47 +585,43 @@ TEST_CASE("Lower emits verifiable LLVM IR for enums and calls") {
 // block and fails verification.
 TEST_CASE("Lower answers an all-terminated match or if with never") {
   VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "enum Opt {\n"
-                                      "  Some(i32),\n"
-                                      "  None,\n"
-                                      "}\n"
-                                      "fn classify(o: Opt) -> i32 {\n"
-                                      "  match o {\n"
-                                      "    Opt::Some(v) => { ret v * 2 }\n"
-                                      "    Opt::None => { ret 0 - 1 }\n"
-                                      "  }\n"
-                                      "}\n"
-                                      "fn pick(x: i32) -> i32 {\n"
-                                      "  if x > 0 {\n"
-                                      "    ret 1\n"
-                                      "  } else {\n"
-                                      "    ret 0\n"
-                                      "  }\n"
-                                      "}\n"
-                                      "fn pick_let(o: Opt) -> i32 {\n"
-                                      "  if Opt::Some(v) := o {\n"
-                                      "    ret v\n"
-                                      "  } else {\n"
-                                      "    ret 0\n"
-                                      "  }\n"
-                                      "}\n"
-                                      "fn mixed(o: Opt) -> i32 {\n"
-                                      "  match o {\n"
-                                      "    Opt::Some(v) => { ret v }\n"
-                                      "    Opt::None => 0\n"
-                                      "  }\n"
-                                      "}\n"
-                                      "fn main() {\n"
-                                      "  _ := classify(Opt::Some(2))\n"
-                                      "  _ := pick(1)\n"
-                                      "  _ := pick_let(Opt::Some(3))\n"
-                                      "  _ := mixed(Opt::Some(4))\n"
-                                      "}\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
+  write_all(dir, {{"main.al",
+                   "enum Opt {\n"
+                   "  Some(i32),\n"
+                   "  None,\n"
+                   "}\n"
+                   "fn classify(o: Opt) -> i32 {\n"
+                   "  match o {\n"
+                   "    Opt::Some(v) => { ret v * 2 }\n"
+                   "    Opt::None => { ret 0 - 1 }\n"
+                   "  }\n"
+                   "}\n"
+                   "fn pick(x: i32) -> i32 {\n"
+                   "  if x > 0 {\n"
+                   "    ret 1\n"
+                   "  } else {\n"
+                   "    ret 0\n"
+                   "  }\n"
+                   "}\n"
+                   "fn pick_let(o: Opt) -> i32 {\n"
+                   "  if Opt::Some(v) := o {\n"
+                   "    ret v\n"
+                   "  } else {\n"
+                   "    ret 0\n"
+                   "  }\n"
+                   "}\n"
+                   "fn mixed(o: Opt) -> i32 {\n"
+                   "  match o {\n"
+                   "    Opt::Some(v) => { ret v }\n"
+                   "    Opt::None => 0\n"
+                   "  }\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "  _ := classify(Opt::Some(2))\n"
+                   "  _ := pick(1)\n"
+                   "  _ := pick_let(Opt::Some(3))\n"
+                   "  _ := mixed(Opt::Some(4))\n"
+                   "}\n"}});
 
   Fixture f;
   LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);

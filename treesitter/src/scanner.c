@@ -30,6 +30,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 enum TokenType {
   BLOCK_LBRACE,
@@ -177,12 +178,15 @@ static bool scan_newline(TSLexer *lexer) {
   return true;
 }
 
+// One scanner per parser instance: a function-local static would carry
+// its pending newline from one parsed file into the next.
 void *tree_sitter_alcy_external_scanner_create(void) {
-  static Scanner scanner = {false};
-  return &scanner;
+  return calloc(1, sizeof(Scanner));
 }
 
-void tree_sitter_alcy_external_scanner_destroy(void *payload) { (void)payload; }
+void tree_sitter_alcy_external_scanner_destroy(void *payload) {
+  free(payload);
+}
 
 unsigned tree_sitter_alcy_external_scanner_serialize(void *payload,
                                                       char *buffer) {

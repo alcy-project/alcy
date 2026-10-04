@@ -873,9 +873,10 @@ module.exports = grammar({
 
     // Literals -------------------------------------------------------------
 
-    // An identifier starts with a letter. `_` alone is a wildcard and `_foo`
-    // is an identifier, which is the same split the lexer makes.
-    identifier: _ => /[A-Za-z][A-Za-z0-9_]*/,
+    // `_` alone is the wildcard token and `_foo` is an identifier, which
+    // is the same split the lexer makes: a leading underscore starts an
+    // identifier unless nothing follows it.
+    identifier: _ => /[A-Za-z][A-Za-z0-9_]*|_[A-Za-z0-9_]+/,
 
     _literal: $ => choice(
       $.integer,

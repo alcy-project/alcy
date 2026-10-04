@@ -1,5 +1,5 @@
 # The warning is the existing unreachable-expression lint firing
 # through a closure body, which is the point.
 exit = 0
-contains = ["Checked   1 file, 1 module, 2 functions"]
+contains = ["warning[WD003]: Unreachable expression", "Checked   1 file, 1 module, 2 functions"]
 not_contains = ["error"]

@@ -216,6 +216,11 @@ TEST_CASE("Lexer separates keywords identifiers and reserved words") {
   CHECK(check_kinds("fnx iffy _", f.bag,
                     {TokenKind::Ident, TokenKind::Ident, TokenKind::Underscore,
                      TokenKind::Eof}));
+  // A leading underscore starts an identifier; only a lone `_` is the
+  // wildcard.
+  CHECK(check_kinds("_foo __ _", f.bag,
+                    {TokenKind::Ident, TokenKind::Ident, TokenKind::Underscore,
+                     TokenKind::Eof}));
   CHECK(check_kinds("for Self package::foo", f.bag,
                     {TokenKind::For, TokenKind::SelfType, TokenKind::Package,
                      TokenKind::ColonColon, TokenKind::Ident, TokenKind::Eof}));

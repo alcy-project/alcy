@@ -175,7 +175,8 @@ path = ( "package" | "self" | "super" | DEP | IDENT ) , { "::" , IDENT } ;
 
 (* Lexical appendix (sketch only) *)
 
-IDENT     = ALPHA , { ALPHA | DIGIT | "_" } ;
+IDENT     = ( ALPHA | "_" ) , { ALPHA | DIGIT | "_" } ;
+              (* A lone `_` is the wildcard token, never an identifier. *)
 INTEGER   = DIGIT , { DIGIT | "_" } , [ TYPE_SUFFIX ]
           | ( "0b" | "0o" | "0x" ) , DIGIT , { DIGIT | "_" } ,
             [ TYPE_SUFFIX ] ;
