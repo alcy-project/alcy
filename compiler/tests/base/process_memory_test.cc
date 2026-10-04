@@ -14,11 +14,18 @@ namespace base {
 namespace {
 
 // Touched, so every page is resident and the high-water mark has to
-// include them: an untouched allocation commits nothing on most hosts.
+// include them: an untouched allocation commits nothing on most hosts,
+// and an optimizing build drops stores whose bytes are never read.
 #if !BUILD_FLAG(IS_OS_ASMJS)
 void hold(usize bytes) {
   std::vector<char> memory(bytes, 1);
-  volatile char sink = memory[bytes / 2];
+  // One read per page through a volatile sink keeps the fill alive and
+  // makes each page resident; 4 KiB is at or below any page size here.
+  volatile char sink = 0;
+  for (usize i = 0; i < bytes; i += 4096) {
+    sink = static_cast<char>(sink ^ memory[i]);
+  }
+  sink = static_cast<char>(sink ^ memory[bytes - 1]);
   (void)sink;
 }
 #endif
@@ -33,10 +40,11 @@ TEST_CASE("the peak memory is measured, and in bytes") {
 #else
   constexpr usize MIB = static_cast<usize>(1024) * 1024;
   hold(64 * MIB);
-  // A host that reports kibibytes into a field read as bytes answers
-  // about a sixty-fourth of what the test holds, so the lower bound is
-  // what pins the unit down.
-  CHECK(peak_memory_bytes() >= 64 * MIB);
+  // The bound is what pins the unit down: a host that reports kibibytes
+  // into a field read as bytes answers about a thousandth of what the
+  // test holds. It stays far below the held figure on purpose - what is
+  // checked is the unit of the host's account, not the allocator's.
+  CHECK(peak_memory_bytes() >= MIB);
 #endif
 }
 

@@ -46,7 +46,14 @@ bool is_object_bytes(std::string_view bytes) {
 }
 
 bool is_bitcode_bytes(std::string_view bytes) {
-  return bytes.size() >= 4 && bytes.compare(0, 4, "BC\xC0\xDE") == 0;
+  if (bytes.size() < 4) {
+    return false;
+  }
+  // LLVM accepts two forms, and writes the second when the module's
+  // triple is Darwin: a wrapper header, whose magic is 0x0B17C0DE
+  // (little-endian on disk), in front of the raw stream.
+  return bytes.compare(0, 4, "BC\xC0\xDE") == 0 ||
+         bytes.compare(0, 4, "\xDE\xC0\x17\x0B") == 0;
 }
 
 }  // namespace tests

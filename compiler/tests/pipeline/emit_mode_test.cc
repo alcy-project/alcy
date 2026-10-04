@@ -166,7 +166,10 @@ TEST_CASE("A source without an extension still gets an output name") {
   }
   CHECK(io::is_file(dir.join("noext.o")));
 
-  {
+  // The executable mode has no suffix to append on POSIX, so a target
+  // without an extension cannot be named and the build refuses it; where
+  // the mode does have one (Windows' `.exe`), there is nothing to refuse.
+  if (exe_suffix().empty()) {
     PipelineContext ctx{i18n::Language::EnUs};
     base::Result<std::string, diag::Reported> refused =
         build_single_file(ctx, dir.join("noext"), "", false, LinkOptions{},
@@ -317,7 +320,7 @@ TEST_CASE("A package build refuses targets sharing one output") {
                       "", false, LinkOptions{}, EmitMode::Executable);
     CHECK(built.is_ok());
     CHECK(!ctx.bag.has_errors());
-    CHECK(io::is_file(dir.join("proj/out/app")));
+    CHECK(io::is_file(dir.join("proj/out/app" + std::string(exe_suffix()))));
     CHECK(io::is_file(dir.join("proj/out/app.o")));
   }
 #endif  // !BUILD_FLAG(IS_OS_ASMJS
