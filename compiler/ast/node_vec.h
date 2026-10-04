@@ -6,6 +6,7 @@
 #include <atomic>
 #include <utility>
 
+#include "ast/lane.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
 #include "fpag/debug/check.h"
@@ -63,14 +64,76 @@ class NodeVec {
   NodeVec(NodeVec&&) noexcept = default;
   NodeVec& operator=(NodeVec&&) noexcept = default;
 
-  // How many appends may be in flight at once. More than one keeps this
-  // table's share of the reservation in hand for the batch: the check and
+  // How many appends may be in flight at once.
+  //
+  // More than one gives each appending thread a lane, so an append moves a
+  // cursor no other thread can move and needs no atomic operation. A lane
+  // cannot borrow, and the appends of a package are not spread the way its
+  // room is, so the lanes hold four fifths of the reservation and the rest is
+  // a pool any lane that fills reaches for: a table whose appends turned out
+  // uneven fills its pool rather than refusing a file it has room for.
+  //
+  // One keeps this table's share in hand for the batch instead: the check and
   // the append are not one step, so what the check admits must cover every
-  // append that can follow it before the arena has moved. The arena takes the
-  // room in one operation and checks it against the end, so this reserve is
-  // what keeps a batch of appends inside the reservation.
+  // append that can follow it before the arena has moved.
   void set_parallel_slots(u32 jobs) {
-    reserved_ = (jobs > 1 ? static_cast<usize>(jobs) : 0) * sizeof(T);
+    if (jobs > 1) {
+      lanes_ = jobs;
+      const usize pool = arena_.capacity() / 5;
+      reserved_ = static_cast<usize>(jobs) * sizeof(T);
+      // The lane is cut on the stride and not on the alignment. A node's index
+      // is its offset divided by its size, so a slice that begins part-way
+      // into a node would give every node after it an index that reads the one
+      // before: the division would truncate. The pool is cut the same way, and
+      // it is the room several lanes may reach for at once, which is what its
+      // reserve covers.
+      arena_.set_lanes(jobs, sizeof(T), pool);
+      return;
+    }
+    lanes_ = 0;
+    reserved_ = 0;
+  }
+
+  // Whether `idx` addresses a node this table holds, treating an index that
+  // names nothing as one that does (a child that is absent is not a fault).
+  //
+  // The room a table has filled is a set of runs and not one range: a lane is
+  // a run, the lanes are not adjacent, and a lane that filled its slice went
+  // on in the pool. Comparing against `size()` would admit the room between
+  // them, which no node was written to and which the walk that follows would
+  // read.
+  [[nodiscard]] bool bound(const Idx idx) const noexcept {
+    if (!idx.is_valid()) {
+      return true;
+    }
+    const usize at = static_cast<usize>(idx.idx) * sizeof(T);
+    for (u32 lane = 0; lane < lanes_; ++lane) {
+      const usize begin = arena_.lane_begin(lane);
+      if (at >= begin && at < begin + arena_.lane_size(lane)) {
+        return true;
+      }
+    }
+    return at >= arena_.pool_begin() &&
+           at < arena_.pool_begin() + arena_.pool_size();
+  }
+
+  // Calls `body(Idx)` for every node the table holds, in index order within
+  // each run, and for no other. This is what a walk over a table is: the room
+  // between two lanes is not a node, and `size()` counts it.
+  template <typename F>
+  void for_each_node(F&& body) const {
+    for (u32 lane = 0; lane < lanes_; ++lane) {
+      const usize first = arena_.lane_begin(lane) / sizeof(T);
+      const usize count = first + arena_.lane_size(lane) / sizeof(T);
+      for (usize i = first; i < count; ++i) {
+        body(Idx(static_cast<IdxType>(i)));
+      }
+    }
+    const usize first = arena_.pool_begin() / sizeof(T);
+    const usize count = first + arena_.pool_size() / sizeof(T);
+    for (usize i = first; i < count; ++i) {
+      body(Idx(static_cast<IdxType>(i)));
+    }
   }
 
   // Appends a node, answering the index that addresses it, or nothing when
@@ -81,15 +144,24 @@ class NodeVec {
   // holds.
   template <typename... Args>
   Idx emplace_back(Args&&... args) {
-    // The arena traps when asked for more than it reserved, so the room is
-    // checked here, before the request: one append's size plus whatever the
-    // concurrent appends may still need.
-    const usize used = arena_.size();
-    if (used + sizeof(T) + reserved_ > arena_.capacity()) {
-      exhausted_.store(true, std::memory_order_relaxed);
-      return Idx::invalid();
+    void* mem = nullptr;
+    if (lanes_ > 0) {
+      const u32 lane = ast::current_lane();
+      FPAG_DCHECK_LT(lane, lanes_);
+      mem = arena_.alloc_from(lane, sizeof(T), alignof(T));
     }
-    void* const mem = arena_.alloc_exact(sizeof(T), alignof(T));
+    if (mem == nullptr) {
+      // The room a table has for the case its lanes are uneven, and the room a
+      // table with no lanes has for the batch. The arena traps when asked for
+      // more than it reserved, so this is checked before the request: one
+      // append's size plus whatever the concurrent appends still need.
+      const usize used = arena_.size();
+      if (used + sizeof(T) + reserved_ > arena_.capacity()) {
+        exhausted_.store(true, std::memory_order_relaxed);
+        return Idx::invalid();
+      }
+      mem = arena_.alloc_exact(sizeof(T), alignof(T));
+    }
     if (mem == nullptr) [[unlikely]] {
       exhausted_.store(true, std::memory_order_relaxed);
       return Idx::invalid();
@@ -135,14 +207,31 @@ class NodeVec {
     return reinterpret_cast<const T*>(base());
   }
 
+  // How far the table's nodes reach, as an index. Between two lanes there is
+  // room no node was written to, so this is an upper bound on the nodes the
+  // table holds and not a count of them: a walk goes through for_each_node and
+  // a validity check through bound.
   [[nodiscard]] usize size() const noexcept {
-    return arena_.size() / sizeof(T);
+    usize end = arena_.pool_begin() + arena_.pool_size();
+    for (u32 lane = 0; lane < lanes_; ++lane) {
+      const usize reach = arena_.lane_begin(lane) + arena_.lane_size(lane);
+      end = reach > end ? reach : end;
+    }
+    return end / sizeof(T);
   }
 
   // How much of the reservation is left, against how much must stay in hand
   // for the input a caller is about to read.
   [[nodiscard]] bool nearly_full() const {
-    return reservation_nearly_full(arena_.capacity(), arena_.size());
+    if (lanes_ == 0) {
+      return reservation_nearly_full(arena_.capacity(), arena_.size());
+    }
+    // A lane that is nearly full is not a table that is nearly full: what the
+    // lane cannot hold the pool holds, and an append that finds its lane short
+    // goes there. So the room left for the next file is the pool's, and a
+    // nearly full pool is the whole answer.
+    return reservation_nearly_full(arena_.capacity(),
+                                   arena_.pool_begin() + arena_.pool_size());
   }
 
   // True once an append found the reservation short. The tree built so far
@@ -164,6 +253,7 @@ class NodeVec {
   // Bytes held back for appends that are in flight while this one is
   // checked; zero when one parser appends at a time.
   usize reserved_ = 0;
+  u32 lanes_ = 0;
   std::atomic<bool> exhausted_{false};
 };
 

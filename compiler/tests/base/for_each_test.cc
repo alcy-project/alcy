@@ -20,7 +20,7 @@ namespace {
 // threads, and an unsynchronised increment would lose counts.
 void check_each_index_runs_once(usize begin, usize end, u32 jobs) {
   std::vector<u32> visits(end - begin, 0);
-  for_each(begin, end, jobs, [&](usize i) { ++visits[i - begin]; });
+  for_each(begin, end, jobs, [&](usize i, usize) { ++visits[i - begin]; });
   for (usize i = begin; i < end; ++i) {
     CHECK(visits[i - begin] == 1);
   }
@@ -60,7 +60,7 @@ TEST_CASE("for_each spreads work over more than one thread") {
   std::atomic<u64> waiting_on{0};
   std::atomic<u64> released_by{0};
 
-  for_each(0, COUNT, 4, [&](usize) {
+  for_each(0, COUNT, 4, [&](usize, usize) {
     if (arrived.fetch_add(1, std::memory_order_acq_rel) == 0) {
       waiting_on.store(debug::current_thread_id(), std::memory_order_relaxed);
       const auto until = std::chrono::steady_clock::now() + BOUND;

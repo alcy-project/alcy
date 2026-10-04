@@ -23,16 +23,23 @@ namespace detail {
 template <typename F>
 void for_each_serial(usize begin, usize end, F&& body) {
   for (usize i = begin; i < end; ++i) {
-    body(i);
+    body(i, 0);
   }
 }
 
 }  // namespace detail
 
-// Runs `body(i)` for every index in [begin, end), spread over `jobs`
+// Runs `body(i, worker)` for every index in [begin, end), spread over `jobs`
 // threads. Fewer than two jobs, or a range of one index, runs the whole
 // range where it was called from: a phase too small to split pays for no
 // thread, and the serial path is the one a run compares against.
+//
+// `worker` is below the thread count and belongs to the thread that ran that
+// index, so state a worker keeps from one unit to the next -- a lane of an
+// arena, a scratch buffer -- is indexed by it rather than shared, and a worker
+// that only its own thread reads needs no atomic operation at all. Which
+// worker an index lands on cannot be known in advance: the counter below hands
+// slices to whichever thread is free.
 //
 // Indices are handed out in slices through one counter rather than divided
 // into contiguous blocks up front. A block division leaves a worker holding
@@ -46,7 +53,9 @@ void for_each_serial(usize begin, usize end, F&& body) {
 // decision where the work is rather than behind a return value here.
 //
 // Every unit of work needs to be independent. Anything two units share is
-// a race, and the counter above is the only synchronisation here.
+// a race, and the counters above are the only synchronisation here. What a
+// unit reports goes to storage indexed by `i` and not by `worker`, read back in
+// index order: the order work finished in is not the order to report in.
 template <typename F>
 void for_each(usize begin, usize end, u32 jobs, F&& body) {
 #if FPAG_BUILD_FLAG(IS_OS_ASMJS)
@@ -65,7 +74,11 @@ void for_each(usize begin, usize end, u32 jobs, F&& body) {
   const usize slice =
       std::max<usize>(1, count / (workers * FOR_EACH_SLICES_PER_WORKER));
   std::atomic<usize> next{begin};
+  // One claim per thread rather than per unit: a worker is a thread, and there
+  // are exactly as many threads as there are workers.
+  std::atomic<usize> claimed{0};
   const auto drain = [&] {
+    const usize worker = claimed.fetch_add(1, std::memory_order_relaxed);
     while (true) {
       const usize first = next.fetch_add(slice, std::memory_order_relaxed);
       if (first >= end) {
@@ -73,7 +86,7 @@ void for_each(usize begin, usize end, u32 jobs, F&& body) {
       }
       const usize last = std::min(first + slice, end);
       for (usize i = first; i < last; ++i) {
-        body(i);
+        body(i, worker);
       }
     }
   };

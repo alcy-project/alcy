@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ast/ast.h"
+#include "ast/lane.h"
 #include "base/for_each.h"
 #include "doctest/doctest.h"
 #include "fpag/mem/page_allocator.h"
@@ -33,7 +34,10 @@ TEST_CASE("A node table takes one index per node under concurrent appends") {
   constexpr u32 THREADS = 8;
   NodeVec<u64, base::Idx<u64, u32>> table{REGION_BYTES};
 
-  base::for_each(0, THREADS, THREADS, [&](usize t) {
+  base::for_each(0, THREADS, THREADS, [&](usize t, usize worker) {
+    // The table gave each worker a lane, and an append goes to the lane its
+    // thread was named, which is what makes the cursor a bump and not a race.
+    ast::set_current_lane(static_cast<u32>(worker));
     for (usize i = t; i < COUNT; i += THREADS) {
       (void)table.emplace_back(i);
     }
@@ -93,19 +97,23 @@ TEST_CASE("A node table refuses an append it cannot hold") {
   CHECK(table[room - 1] == room - 1);
 }
 
-// With appends in flight, each admitted append keeps the whole batch's
-// room in hand, so the table stops short of its end rather than past it.
-TEST_CASE("A node table leaves room for the appends that race with it") {
+// A table told to expect four appenders gives each of them a lane and keeps a
+// pool for the one that turns out to need more. An appender that takes one
+// lane fills it and then the pool, and stops inside the reservation: what it
+// does not get is the room the other three lanes were given.
+TEST_CASE("A node table gives a lane and keeps a pool") {
   NodeVec<u64, base::Idx<u64, u32>> table{mem::page_size()};
   table.set_parallel_slots(4);
   const usize room = mem::page_size() / sizeof(u64);
   usize accepted = 0;
+  ast::set_current_lane(0);
   while (table.emplace_back(accepted).is_valid()) {
     ++accepted;
   }
   CHECK(table.exhausted());
-  CHECK(accepted + 4 <= room);
-  CHECK(accepted > room - 8);
+  CHECK(accepted <= room);
+  CHECK(accepted > room / 5);
+  CHECK(accepted < room);
 }
 
 // The same rule under real threads: every append that was taken fits, and
@@ -115,7 +123,8 @@ TEST_CASE("A node table does not overrun under a racing batch") {
   NodeVec<u64, base::Idx<u64, u32>> table{REGION_BYTES};
   table.set_parallel_slots(4);
   std::atomic<usize> accepted{0};
-  base::for_each(0, 4, 4, [&](usize t) {
+  base::for_each(0, 4, 4, [&](usize t, usize worker) {
+    ast::set_current_lane(static_cast<u32>(worker));
     for (;;) {
       if (!table.emplace_back(static_cast<u64>(t)).is_valid()) {
         break;
@@ -124,7 +133,11 @@ TEST_CASE("A node table does not overrun under a racing batch") {
     }
   });
   CHECK(table.exhausted());
-  CHECK(table.size() == accepted.load());
+  // size() reaches as far as the last run, which counts the room between the
+  // runs that no node was written to; the walk visits the nodes themselves.
+  usize held = 0;
+  table.for_each_node([&](base::Idx<u64, u32>) { ++held; });
+  CHECK(held == accepted.load());
   CHECK(table.size() <= REGION_BYTES / sizeof(u64));
 }
 

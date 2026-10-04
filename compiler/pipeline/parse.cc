@@ -13,6 +13,7 @@
 
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
+#include "ast/lane.h"
 #include "base/for_each.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
@@ -183,10 +184,15 @@ base::Result<ParsedFiles, diag::Reported> parse_files(
   ctx.ast.set_parallel_slots(ctx.parse_jobs());
 
   // Several threads need a bag per file; one thread writes into the run's
-  // own bag in the same order, so both paths report the same thing.
+  // own bag in the same order, so both paths report the same thing. The syntax
+  // arena needs the same said about it: each thread appends to a lane of its
+  // own, and which lane that is comes from the loop below rather than from a
+  // count, because which file a thread takes is not knowable until it takes
+  // one.
   if (ctx.parse_jobs() < 2) {
     // The phases are named when one thread does the work: a region over
     // the whole parse would say nothing the phases do not.
+    ast::set_current_lane(0);
     for (usize i = 0; i < parsed.files.size(); ++i) {
       if (!parse_one(ctx, parsed.files[i], bytes[i], ctx.bag, ctx.profiler)) {
         return base::make_err(diag::Reported{});
@@ -207,11 +213,14 @@ base::Result<ParsedFiles, diag::Reported> parse_files(
       // as though one file took as many threads as there are.
       PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "parse-files",
                                                "frontend");
-      base::for_each(0, parsed.files.size(), ctx.parse_jobs(), [&](usize at) {
-        const bool ok = parse_one(ctx, parsed.files[at], bytes[at],
-                                  per_file[at].bag, nullptr);
-        per_file[at].ok.store(ok, std::memory_order_relaxed);
-      });
+      base::for_each(0, parsed.files.size(), ctx.parse_jobs(),
+                     [&](usize at, usize worker) {
+                       ast::set_current_lane(static_cast<u32>(worker));
+                       const bool ok =
+                           parse_one(ctx, parsed.files[at], bytes[at],
+                                     per_file[at].bag, nullptr);
+                       per_file[at].ok.store(ok, std::memory_order_relaxed);
+                     });
     }
 
     // The lowest failing file ends the run; the header says why the
