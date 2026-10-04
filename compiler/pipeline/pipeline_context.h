@@ -52,9 +52,13 @@ struct PipelineContext {
 
   // `span_capacity` is the syntax arena's reservation. A case that has
   // to spend it can ask for less, the way `ast::AstArena` allows.
+  // `name_capacity` is the name table's; zero takes its default, and a
+  // case that has to spend it asks for less the same way. The table is
+  // sized once, before the first name is interned.
   explicit PipelineContext(
       i18n::Language language,
-      usize span_capacity = ast::AstArena::DEFAULT_SPAN_CAPACITY);
+      usize span_capacity = ast::AstArena::DEFAULT_SPAN_CAPACITY,
+      usize name_capacity = 0);
 
   // The thread count `parse_files` reads with, which is one unless the
   // command line asked for more. Reading files is the only work spread

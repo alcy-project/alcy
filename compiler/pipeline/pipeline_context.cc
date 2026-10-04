@@ -13,7 +13,6 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
-#include "fpag/mem/page_allocator.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"
 #include "path/path.h"
@@ -72,8 +71,10 @@ constexpr usize DIAGNOSTIC_CAPACITY = 16ull << 20;
 constexpr usize DIAGNOSTIC_CAPACITY = 2ull << 20;
 #endif
 
-PipelineContext::PipelineContext(i18n::Language language, usize span_capacity)
-    : ast(span_capacity), bag(arena, language), strings(mem::page_size()) {
+PipelineContext::PipelineContext(i18n::Language language,
+                                 usize span_capacity,
+                                 usize name_capacity)
+    : ast(span_capacity), bag(arena, language), strings(name_capacity) {
   arena.reserve(DIAGNOSTIC_CAPACITY);
 }
 

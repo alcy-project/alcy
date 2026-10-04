@@ -62,6 +62,9 @@ class Lowerer {
   str::StringInterner& strings;
   diag::DiagBag& bag;
   bool failed = false;
+  // Set once the shared table has no room for another name; the loop
+  // that saw it stops and `lower_package` refuses the package.
+  bool name_table_exhausted_ = false;
   // Where the trace events go, or nothing. Set where the lowerer is
   // constructed - `lower_package` - and read by the function loop here.
   debug::Profiler* profiler = nullptr;
@@ -269,6 +272,9 @@ class Lowerer {
   ir::TypeIdx type_origin(ir::TypeIdx type) const;
   u64 parse_numeric_value(std::string_view spelling);
   ir::TypeTag literal_tag(ast::LiteralIdx value, const ir::TypeIdx* expected);
+  // Interns a name, or reports the shared table as spent once and marks
+  // the run failed. A caller that gets an invalid id stops.
+  str::StringPoolId intern_name(std::string_view name);
   Val lower_literal(ast::LiteralIdx lit_idx, const ir::TypeIdx* expected);
   ir::OperandIdx imm_from_u64(ir::TypeTag tag, ir::TypeIdx type, u64 value);
   Val place_addr(ast::ExprIdx expr);

@@ -63,6 +63,9 @@ enum class DiagCode : u8 {
   // closure, reached checking, which refuses captures until they
   // land.
   CapturesNotImplemented = 34,
+  // The shared name table a checker and a lowerer intern into was
+  // sized for fewer names than this package declares.
+  NameTableExhausted = 35,
 };
 
 }  // namespace analyzer

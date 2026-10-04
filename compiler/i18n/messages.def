@@ -156,6 +156,7 @@
   F(AnalyzerMaybeUninitArity, "Type 'MaybeUninit' takes one type argument") \
   F(AnalyzerMissingField, "Missing field '{}'") \
   F(AnalyzerMissingSpecMethod, "Missing method '{}' in implementation of '{}'") \
+  F(AnalyzerNameTableExhausted, "The compiler's name table cannot hold the names this package declares") \
   F(AnalyzerNoFields, "No fields on '{}'") \
   F(AnalyzerNotAnAssignablePlace, "Cannot assign to this place") \
   F(AnalyzerNotCallable, "Not callable") \
@@ -227,6 +228,7 @@
   F(LowerDiscardedDestructor, "Discarded value holds something with a destructor, so ending it here is needed") \
   F(LowerInternalError, "Internal lowering error: {}") \
   F(LowerIrVerificationFailed, "Lowered IR failed verification") \
+  F(LowerNameTableExhausted, "The compiler's name table cannot hold the names this package interns") \
   F(LowerUnreachableExpression, "Unreachable expression") \
   F(LowerUnreachableStatement, "Unreachable statement") \
   F(LowerUnsupportedConstruct, "Construct '{}' is not supported in this lowering slice") \

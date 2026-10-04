@@ -4,6 +4,7 @@
 #include "lowering/lowering.h"
 
 #include <cstdlib>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <string>
@@ -342,6 +343,26 @@ ir::OperandIdx Lowerer::use_value(Val v) {
   const ir::OperandIdx value = materialize(v).op;
   mark_move(v);
   return value;
+}
+
+// Interns a name, or reports the shared table as spent once and marks the
+// run failed. The table is shared with checking and codegen, so one report
+// covers the run; a caller that gets an invalid id stops rather than
+// storing it.
+str::StringPoolId Lowerer::intern_name(std::string_view name) {
+  if (const std::optional<str::StringPoolId> id = strings.try_intern(name);
+      id.has_value()) {
+    return *id;
+  }
+  if (!name_table_exhausted_) {
+    name_table_exhausted_ = true;
+    const u32 index = bag.emit<i18n::Key::LowerNameTableExhausted>(
+        diag::Severity::Error, diag::Stage::Lowering,
+        DiagCode::NameTableExhausted, cur_span_);
+    (void)index;
+  }
+  failed = true;
+  return str::INVALID_STRING_POOL_ID;
 }
 
 const Local* Lowerer::lookup_local(std::string_view name) const {
@@ -1062,11 +1083,17 @@ void Lowerer::run() {
     for (const ir::TypeIdx arg : entry.entry.generics) {
       generics.push(builder.ref_type(arg));
     }
+    const str::StringPoolId name = intern_name(entry.entry.name);
+    const str::StringPoolId path =
+        intern_name(pkg.tree.modules[entry.entry.mod]->path);
+    if (name == str::INVALID_STRING_POOL_ID ||
+        path == str::INVALID_STRING_POOL_ID) {
+      return;
+    }
     builder.function({.meta = {.return_type = entry.entry.ret,
                                .param_types = params.finish(),
-                               .name = strings.intern(entry.entry.name),
-                               .path = strings.intern(
-                                   pkg.tree.modules[entry.entry.mod]->path),
+                               .name = name,
+                               .path = path,
                                .kind = entry.entry.kind,
                                .generics = generics.finish()},
                       .blocks = range});

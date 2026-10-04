@@ -3,6 +3,7 @@
 
 #include "analyzer/types.h"
 
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -710,19 +711,52 @@ ir::TypeIdx Checker::uninit_payload(ir::TypeIdx type) const {
 
 // Interns a registered nominal, reserving its index first so recursive
 // references resolve to it. A post-pass rejects uninhabited cycles.
+// Interns a name, or reports the shared table as spent once and returns an
+// invalid id. The table is shared with lowering and codegen, so one report
+// covers the run; the sweep that saw it stops rather than interning more
+// names into a table it knows is full.
+str::StringPoolId Checker::intern_name(std::string_view name) {
+  if (const std::optional<str::StringPoolId> id = interner.try_intern(name);
+      id.has_value()) {
+    return *id;
+  }
+  if (!name_table_exhausted_) {
+    name_table_exhausted_ = true;
+    const u32 index = bag.emit<i18n::Key::AnalyzerNameTableExhausted>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::NameTableExhausted, diag::Span{});
+    (void)index;
+  }
+  return str::INVALID_STRING_POOL_ID;
+}
+
 ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
   if (entry.complete || entry.started) {
     return entry.type;
   }
-  const str::StringPoolId name = interner.intern(entry.name);
-  const ast::ItemNode& node = ast.items[entry.item];
-  if (node.kind == ast::ItemKind::Struct) {
-    entry.type = builder.reserve_struct(name);
-  } else {
-    entry.type = builder.reserve_enum(name);
+  const str::StringPoolId name = intern_name(entry.name);
+  if (name == str::INVALID_STRING_POOL_ID) {
+    return error_type();
   }
+  const ast::ItemNode& node = ast.items[entry.item];
+  const bool is_struct = node.kind == ast::ItemKind::Struct;
+  // Every variant name is interned before the node is reserved, so a spent
+  // table leaves nothing half-built.
+  std::vector<str::StringPoolId> variant_names;
+  if (!is_struct) {
+    for (const ast::ItemEnumVariant& variant :
+         node.payload.get<ast::ItemEnum>().variants) {
+      const str::StringPoolId variant_name = intern_name(variant.name.name);
+      if (variant_name == str::INVALID_STRING_POOL_ID) {
+        return error_type();
+      }
+      variant_names.push_back(variant_name);
+    }
+  }
+  entry.type =
+      is_struct ? builder.reserve_struct(name) : builder.reserve_enum(name);
   entry.started = true;
-  if (node.kind == ast::ItemKind::Struct) {
+  if (is_struct) {
     std::vector<ir::TypeIdx> fields;
     fields.reserve(node.payload.get<ast::ItemStruct>().fields.size());
     for (const ast::ItemStructField& field :
@@ -750,16 +784,12 @@ ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
       payloads.push_back(std::move(fields));
     }
     ir::EnumVariantTypeSeq variants;
-    u32 index = 0;
-    for (const ast::ItemEnumVariant& variant :
-         node.payload.get<ast::ItemEnum>().variants) {
+    for (usize i = 0; i < variant_names.size(); ++i) {
       ir::TypeSeq seq;
-      for (ir::TypeIdx field : payloads[index]) {
+      for (ir::TypeIdx field : payloads[i]) {
         seq.push(storage_copy(field));
       }
-      ++index;
-      variants.push(builder.enum_variant(interner.intern(variant.name.name),
-                                         seq.finish()));
+      variants.push(builder.enum_variant(variant_names[i], seq.finish()));
     }
     builder.fill_enum(entry.type, variants.finish(), ir::TypeIdxRange{});
   }
@@ -960,8 +990,24 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   }
   const NominalEntry& entry = nominals[nominal];
   const ast::ItemNode& node = ast.items[entry.item];
-  const str::StringPoolId name = interner.intern(entry.name);
+  const str::StringPoolId name = intern_name(entry.name);
+  if (name == str::INVALID_STRING_POOL_ID) {
+    return error_type();
+  }
   const bool is_struct = node.kind == ast::ItemKind::Struct;
+  // Every variant name is interned before the instance is recorded, so a
+  // spent table leaves no half-built instantiation behind.
+  std::vector<str::StringPoolId> variant_names;
+  if (!is_struct) {
+    for (const ast::ItemEnumVariant& variant :
+         node.payload.get<ast::ItemEnum>().variants) {
+      const str::StringPoolId variant_name = intern_name(variant.name.name);
+      if (variant_name == str::INVALID_STRING_POOL_ID) {
+        return error_type();
+      }
+      variant_names.push_back(variant_name);
+    }
+  }
   const ir::TypeIdx reserved =
       is_struct ? builder.reserve_struct(name) : builder.reserve_enum(name);
   generic_instances.push_back(GenericInstance{nominal, args, reserved});
@@ -1010,15 +1056,12 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
       payloads.push_back(std::move(fields));
     }
     ir::EnumVariantTypeSeq variants;
-    u32 index = 0;
-    for (const ast::ItemEnumVariant& variant : decl.variants) {
+    for (usize i = 0; i < variant_names.size(); ++i) {
       ir::TypeSeq seq;
-      for (ir::TypeIdx field : payloads[index]) {
+      for (ir::TypeIdx field : payloads[i]) {
         seq.push(storage_copy(field));
       }
-      ++index;
-      variants.push(builder.enum_variant(interner.intern(variant.name.name),
-                                         seq.finish()));
+      variants.push(builder.enum_variant(variant_names[i], seq.finish()));
     }
     builder.fill_enum(reserved, variants.finish(), args_seq.finish());
   }
@@ -3917,7 +3960,10 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     return base::make_err(diag::Reported{});
   }
   Checker checker{tree, width, ast, bag, strings, std_hints, profiler};
-  checker.uninit_name_id = checker.interner.intern("MaybeUninit");
+  checker.uninit_name_id = checker.intern_name("MaybeUninit");
+  if (checker.uninit_name_id == str::INVALID_STRING_POOL_ID) {
+    return base::make_err(diag::Reported{});
+  }
   // The type passes run module by module: nominals, then imports and
   // signatures, then bodies and drop glue, each in one sweep. A run
   // whose cost concentrates in one phase shows as the sweep that grew,
@@ -3927,6 +3973,9 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "nominals",
                                              "analyze");
     checker.register_nominals();
+  }
+  if (checker.name_table_exhausted_) {
+    return base::make_err(diag::Reported{});
   }
   checker.parents.assign(tree.modules.size(), NO_MODULE);
   for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
@@ -3948,10 +3997,16 @@ base::Result<CheckedPackage, diag::Reported> check_package(
       checker.process_module(m);
     }
   }
+  if (checker.name_table_exhausted_) {
+    return base::make_err(diag::Reported{});
+  }
   {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "bodies",
                                              "analyze");
     checker.check_bodies();
+  }
+  if (checker.name_table_exhausted_) {
+    return base::make_err(diag::Reported{});
   }
   // Resolving a generic destructor instantiates it, so this has to run
   // while the type builder is still live and before the type table is
@@ -3960,6 +4015,9 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "drops",
                                              "analyze");
     checker.resolve_drops();
+  }
+  if (checker.name_table_exhausted_) {
+    return base::make_err(diag::Reported{});
   }
   base::Result<ir::VerifiedStorage, ir::VerificationError> built =
       std::move(checker.builder).build();

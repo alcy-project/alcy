@@ -248,7 +248,10 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
   const ir::TypeIdx type = builder.primitive(tag);
   if (tag == ir::TypeTag::Str) {
     const std::string bytes = text::unescape_string(lit.spelling);
-    const str::StringPoolId id = strings.intern(bytes);
+    const str::StringPoolId id = intern_name(bytes);
+    if (id == str::INVALID_STRING_POOL_ID) {
+      return Val{size_one, error_type(), false, false};
+    }
     const ir::ImmutableIdx imm =
         builder.immutable({.type = type, .data = {.str_id_value = id}});
     return Val{to_operand(imm, type), type, false, false};
@@ -724,10 +727,14 @@ ir::ExternalFunctionIdx Lowerer::declare_external(
     seq.push(builder.ref_type(param));
   }
   // A C entry point keeps its own name: it is not ours to encode.
+  const str::StringPoolId interned = intern_name(name);
+  if (interned == str::INVALID_STRING_POOL_ID) {
+    return ir::ExternalFunctionIdx(base::INVALID_IDX);
+  }
   const ir::ExternalFunctionIdx idx =
       builder.external_function({.meta = {.return_type = ret,
                                           .param_types = seq.finish(),
-                                          .name = strings.intern(name),
+                                          .name = interned,
                                           .path = str::EMPTY_STRING_ID,
                                           .kind = ir::SymbolKind::Foreign,
                                           .generics = ir::TypeIdxRange{}},
@@ -2241,7 +2248,7 @@ void Lowerer::emit_panic(ir::OperandIdx message) {
 ir::OperandIdx Lowerer::str_operand(std::string_view message) {
   const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
   const ir::ImmutableIdx imm = builder.immutable(
-      {.type = str, .data = {.str_id_value = strings.intern(message)}});
+      {.type = str, .data = {.str_id_value = intern_name(message)}});
   return to_operand(imm, str);
 }
 

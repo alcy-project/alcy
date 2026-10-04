@@ -850,7 +850,10 @@ Val Lowerer::materialize_comp_value(const CompVal& value, diag::Span span) {
       return Val{imm_from_u64(tag, value.type, bits), value.type, false, false};
     }
     case CompValue::Tag::Str: {
-      const str::StringPoolId id = strings.intern(value.value.str_value);
+      const str::StringPoolId id = intern_name(value.value.str_value);
+      if (id == str::INVALID_STRING_POOL_ID) {
+        return Val{size_one, error_type(), false, false};
+      }
       const ir::ImmutableIdx imm =
           builder.immutable({.type = value.type, .data = {.str_id_value = id}});
       return Val{to_operand(imm, value.type), value.type, false, false};
@@ -1553,7 +1556,10 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
   };
   auto const_str = [&](const std::string& bytes, ir::OperandIdx& ptr_out,
                        ir::OperandIdx& len_out) {
-    const str::StringPoolId id = strings.intern(bytes);
+    const str::StringPoolId id = intern_name(bytes);
+    if (id == str::INVALID_STRING_POOL_ID) {
+      return false;
+    }
     const ir::ImmutableIdx imm =
         builder.immutable({.type = builder.primitive(ir::TypeTag::Str),
                            .data = {.str_id_value = id}});

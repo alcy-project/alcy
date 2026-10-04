@@ -20,6 +20,8 @@
 #include "codegen_llvm/llvm_ir_emitter.h"
 #include "codegen_llvm/target.h"
 #include "diag/bag.h"
+#include "diag/diagnostic.h"
+#include "diag/stage.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -28,6 +30,7 @@
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/verifier.h"
+#include "lowering/diag_code.h"
 #include "pipeline/parse.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
@@ -52,8 +55,13 @@ namespace {
 struct Fixture {
   // Resolution runs through the pipeline's parse, which is where the
   // items come from, so the context owns the arena, the bag, and the
-  // interner the cases inspect.
-  pipeline::PipelineContext ctx{i18n::Language::EnUs};
+  // interner the cases inspect. `name_capacity` sizes the shared name
+  // table; zero takes its default, and a case that has to spend it asks
+  // for less.
+  explicit Fixture(usize name_capacity = 0)
+      : ctx{i18n::Language::EnUs, ast::AstArena::DEFAULT_SPAN_CAPACITY,
+            name_capacity} {}
+  pipeline::PipelineContext ctx;
   ast::AstArena& ast = ctx.ast;
   diag::DiagBag& bag = ctx.bag;
   source::SourceManager& sources = ctx.sources;
@@ -629,6 +637,36 @@ TEST_CASE("Lower answers an all-terminated match or if with never") {
     return;
   }
   CHECK(ir::verify_storage(*result.lowered->storage).is_ok());
+}
+
+// A package whose names outgrow the shared table is refused with a
+// diagnostic: the interner answers with nothing so a caller that can
+// report exhaustion does, rather than aborting.
+TEST_CASE("Lowering reports a spent name table") {
+  VirtualDir dir;
+  std::string source = "fn sink(s: str) {}\nfn main() {\n";
+  for (u32 i = 0; i < 64; ++i) {
+    source += "  sink(\"m" + std::to_string(i) + "\")\n";
+  }
+  source += "}\n";
+  write_all(dir, {{"main.al", source}});
+
+  Fixture f{16};
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.ok);
+  CHECK(!result.lowered.has_value());
+  CHECK(f.bag.has_errors());
+  bool reported = false;
+  for (u32 i = 0; i < f.bag.size(); ++i) {
+    const diag::Diagnostic* const diag = f.bag.at(i);
+    if (diag != nullptr &&
+        diag->code ==
+            diag::Code{diag::Stage::Lowering,
+                       static_cast<u8>(DiagCode::NameTableExhausted)}) {
+      reported = true;
+    }
+  }
+  CHECK(reported);
 }
 
 }  // namespace lowering

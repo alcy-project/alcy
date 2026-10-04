@@ -12,9 +12,12 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/diag_code.h"
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
 #include "diag/bag.h"
+#include "diag/diagnostic.h"
+#include "diag/stage.h"
 #include "doctest/doctest.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/result.h"
@@ -35,8 +38,13 @@ namespace {
 struct Fixture {
   // Resolution runs through the pipeline's parse, which is where the
   // items come from, so the context owns the arena, the bag, and the
-  // interner the cases inspect.
-  pipeline::PipelineContext ctx{i18n::Language::EnUs};
+  // interner the cases inspect. `name_capacity` sizes the shared name
+  // table; zero takes its default, and a case that has to spend it asks
+  // for less.
+  explicit Fixture(usize name_capacity = 0)
+      : ctx{i18n::Language::EnUs, ast::AstArena::DEFAULT_SPAN_CAPACITY,
+            name_capacity} {}
+  pipeline::PipelineContext ctx;
   ast::AstArena& ast = ctx.ast;
   diag::DiagBag& bag = ctx.bag;
   source::SourceManager& sources = ctx.sources;
@@ -114,12 +122,12 @@ CheckOutcome check_case(
     return {std::nullopt};
   }
   ModuleTree tree = std::move(tree_result).unwrap();
-  CheckedPackage checked =
-      check_package(tree, width, f.ast, f.bag, f.strings).unwrap();
-  if (f.bag.has_errors()) {
+  base::Result<CheckedPackage, diag::Reported> checked_result =
+      check_package(tree, width, f.ast, f.bag, f.strings);
+  if (checked_result.is_err() || f.bag.has_errors()) {
     return {std::nullopt};
   }
-  return {std::move(checked)};
+  return {std::move(checked_result).unwrap()};
 }
 
 const CheckedModule* find_checked(const CheckedPackage& package,
@@ -2937,6 +2945,36 @@ TEST_CASE("Check keeps one name apart per module") {
       check_case(dir, "main.al", {"main.al", "a.al", "b.al"}, f);
   CHECK(result.package.has_value());
   CHECK(!f.bag.has_errors());
+}
+
+// A package that declares more names than the shared table can hold is
+// refused with a diagnostic rather than aborting in the interner.
+TEST_CASE("Check reports a spent name table") {
+  std::string source;
+  for (u32 i = 0; i < 64; ++i) {
+    source += "struct S" + std::to_string(i) + " {}\n";
+  }
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al", source}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f{16};
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  bool reported = false;
+  for (u32 i = 0; i < f.bag.size(); ++i) {
+    const diag::Diagnostic* const diag = f.bag.at(i);
+    if (diag != nullptr &&
+        diag->code ==
+            diag::Code{diag::Stage::Analyzer,
+                       static_cast<u8>(DiagCode::NameTableExhausted)}) {
+      reported = true;
+    }
+  }
+  CHECK(reported);
 }
 
 }  // namespace analyzer

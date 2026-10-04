@@ -142,6 +142,9 @@ class Checker {
   std::vector<bool> needs_drop_;
   // Interned name every `MaybeUninit` wrapper carries.
   str::StringPoolId uninit_name_id = str::INVALID_STRING_POOL_ID;
+  // Set once the shared table has no room for another name; the sweep
+  // that saw it stops, and `check_package` refuses the package.
+  bool name_table_exhausted_ = false;
   // Active type-parameter scope: innermost last. Pushed while
   // instantiating a generic enum or checking its members.
   std::vector<std::pair<std::string_view, ir::TypeIdx>> type_params;
@@ -241,6 +244,10 @@ class Checker {
   ir::TypeIdx error_type();
   CheckedModule::ReceiverKind classify_receiver(ir::TypeIdx first,
                                                 ir::TypeIdx self);
+  // Interns a name, or reports the shared table as spent once and returns
+  // an invalid id. A caller that gets one returns the error type; no id
+  // from a spent table reaches storage.
+  str::StringPoolId intern_name(std::string_view name);
   ir::TypeIdx intern_nominal(NominalEntry& entry);
   // `MaybeUninit<T>` wrapper for `payload`, interned per payload.
   ir::TypeIdx intern_uninit(ir::TypeIdx payload);

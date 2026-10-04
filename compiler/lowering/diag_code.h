@@ -29,6 +29,9 @@ enum class DiagCode : u8 {
   DropUnplaced = 4,
   DiscardedDestructor = 5,
   TooDeep = 6,
+  // The shared name table the checker interns into was sized for fewer
+  // names than this package uses.
+  NameTableExhausted = 7,
 };
 
 }  // namespace lowering
