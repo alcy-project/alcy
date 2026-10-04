@@ -37,6 +37,7 @@ import tempfile
 
 from pathlib import Path
 
+from utils.env import run_environment
 from utils.paths import project_root_dir
 
 BOX = "struct Box { n: i32 }\nfn get(b: &Box) -> &i32 { ret &b.n }\n"
@@ -826,6 +827,7 @@ def run_case(alcy, workdir, case):
         capture_output=True,
         text=True,
         encoding="utf-8",
+        env=run_environment(),
     )
     got = "reject" if proc.returncode != 0 else "accept"
     out = proc.stdout + proc.stderr

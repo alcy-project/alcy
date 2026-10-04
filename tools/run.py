@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 from build import build
+from utils.env import run_environment
 from utils.paths import project_root_dir
 
 
@@ -102,12 +103,7 @@ def main():
 
         if target_bin is not None:
             print(f"Running '{target_bin.name}'")
-            env = dict(os.environ)
-            # LLVM's target initialization trips a known
-            # libc++ container-overflow false positive under ASan;
-            # user overrides win.
-            if "ASAN_OPTIONS" not in env:
-                env["ASAN_OPTIONS"] = "detect_container_overflow=0"
+            env = run_environment()
             if target_bin.suffix == ".js":
                 # Prefer bun over node for faster startup and TypeScript support
                 bun_path = shutil.which("bun")

@@ -32,6 +32,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
+from utils.env import run_environment
 from utils.paths import project_root_dir
 
 
@@ -79,7 +80,12 @@ def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path):
     argv = [str(alcy), command, "." if is_package else "main.al",
             "--emit=llvm-ir", "-o", str(ir)]
     proc = subprocess.run(
-        argv, capture_output=True, text=True, encoding="utf-8", cwd=work
+        argv,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=work,
+        env=run_environment(),
     )
     if proc.returncode != 0 or not ir.is_file():
         return proc, "alcy --emit=llvm-ir did not produce a module"
@@ -137,6 +143,7 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
                 text=True,
                 encoding="utf-8",
                 cwd=work,
+                env=run_environment(),
             )
         if proc.returncode != 0:
             return False, (

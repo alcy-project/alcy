@@ -23,13 +23,13 @@ which keeps the compiler's own placement.
 """
 
 import argparse
-import os
 import subprocess
 import sys
 import tempfile
 import tomllib
 from pathlib import Path
 
+from utils.env import run_environment
 from utils.paths import project_root_dir
 
 
@@ -98,7 +98,7 @@ def run_case(alcy: Path, case_dir: Path):
     ) = parse_expect(expect_path)
     # An unset variable in the table is the case's business, so the run
     # starts from the environment it inherits with the table applied.
-    process_env = {**os.environ, **env} if env else None
+    process_env = run_environment(env)
     if (case_dir / "alcy.toml").is_file():
         argv = [str(alcy), *extra_args, subcommand, "."]
         cwd = case_dir
