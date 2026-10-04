@@ -52,6 +52,8 @@ Checker::Checker(const ModuleTree& tree,
 // Pass 1: registers every nominal definition, diagnosing duplicates
 // and reserved names. No interning happens here.
 void Checker::register_nominals() {
+  nominals_of_module.assign(tree.modules.size(), {});
+  specs_of_module.assign(tree.modules.size(), {});
   for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
     for (ast::ItemIdx item : tree.modules[m]->items) {
       const ast::ItemNode& node = ast.items[item];
@@ -73,13 +75,7 @@ void Checker::register_nominals() {
         name = node.payload.get<ast::ItemEnum>().name.name;
         span = node.payload.get<ast::ItemEnum>().name.span;
       }
-      bool duplicate = false;
-      for (const NominalEntry& entry : nominals) {
-        if (entry.module == m && entry.name == name) {
-          duplicate = true;
-          break;
-        }
-      }
+      bool duplicate = find_nominal(m, name) != nullptr;
       if (!duplicate && name == "MaybeUninit") {
         // The wrapper is compiler-owned; a declaration under the same
         // name would make the spelling resolve two ways.
@@ -109,13 +105,18 @@ void Checker::register_nominals() {
         continue;
       }
       nominals.push_back(NominalEntry{m, name, item, span, ir::TypeIdx(0)});
+      nominals_of_module[m].push_back(static_cast<u32>(nominals.size() - 1));
     }
   }
 }
 
 NominalEntry* Checker::find_nominal(u32 module, std::string_view name) {
-  for (NominalEntry& entry : nominals) {
-    if (entry.module == module && entry.name == name) {
+  if (module >= nominals_of_module.size()) {
+    return nullptr;
+  }
+  for (u32 pos : nominals_of_module[module]) {
+    NominalEntry& entry = nominals[pos];
+    if (entry.name == name) {
       return &entry;
     }
   }
@@ -123,8 +124,12 @@ NominalEntry* Checker::find_nominal(u32 module, std::string_view name) {
 }
 
 SpecEntry* Checker::find_spec(u32 module, std::string_view name) {
-  for (SpecEntry& entry : specs) {
-    if (entry.module == module && entry.name == name) {
+  if (module >= specs_of_module.size()) {
+    return nullptr;
+  }
+  for (u32 pos : specs_of_module[module]) {
+    SpecEntry& entry = specs[pos];
+    if (entry.name == name) {
       return &entry;
     }
   }
@@ -173,23 +178,19 @@ bool Checker::spec_in_scope(u32 module, const SpecEntry& spec) {
 void Checker::register_spec(u32 module, ast::ItemIdx item) {
   const ast::ItemNode& node = ast.items[item];
   const ast::ItemSpec& spec = node.payload.get<ast::ItemSpec>();
-  for (const NominalEntry& entry : nominals) {
-    if (entry.module == module && entry.name == spec.name.name) {
-      const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
-          diag::Severity::Error, diag::Stage::Analyzer,
-          DiagCode::DuplicateDefinition, spec.name.span, spec.name.name);
-      (void)index;
-      return;
-    }
+  if (find_nominal(module, spec.name.name) != nullptr) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::DuplicateDefinition, spec.name.span, spec.name.name);
+    (void)index;
+    return;
   }
-  for (const SpecEntry& entry : specs) {
-    if (entry.module == module && entry.name == spec.name.name) {
-      const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
-          diag::Severity::Error, diag::Stage::Analyzer,
-          DiagCode::DuplicateDefinition, spec.name.span, spec.name.name);
-      (void)index;
-      return;
-    }
+  if (find_spec(module, spec.name.name) != nullptr) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::DuplicateDefinition, spec.name.span, spec.name.name);
+    (void)index;
+    return;
   }
   for (usize i = 0; i < spec.methods.size(); ++i) {
     for (usize j = 0; j < i; ++j) {
@@ -212,6 +213,7 @@ void Checker::register_spec(u32 module, ast::ItemIdx item) {
     }
   }
   specs.push_back(SpecEntry{module, spec.name.name, item, node.span});
+  specs_of_module[module].push_back(static_cast<u32>(specs.size() - 1));
 }
 
 bool Checker::spec_method_sig(u32 spec,
@@ -790,6 +792,7 @@ const GenericInstance* Checker::generic_instance_for(u32 nominal,
 ir::TypeIdx Checker::storage_copy(ir::TypeIdx type) {
   const ir::TypeIdx copy = builder.ref_type(type);
   type_origins_.emplace_back(copy, type);
+  type_origins_by_index_[copy.idx] = type.idx;
   return copy;
 }
 
@@ -807,17 +810,11 @@ u32 Checker::inst_index(ir::TypeIdx type) const {
 ir::TypeIdx Checker::type_origin(ir::TypeIdx type) const {
   ir::TypeIdx current = type;
   for (u32 depth = 0; depth <= type_origins_.size(); ++depth) {
-    const std::pair<ir::TypeIdx, ir::TypeIdx>* found = nullptr;
-    for (usize i = type_origins_.size(); i > 0; --i) {
-      if (type_origins_[i - 1].first.idx == current.idx) {
-        found = &type_origins_[i - 1];
-        break;
-      }
-    }
-    if (found == nullptr) {
+    const auto found = type_origins_by_index_.find(current.idx);
+    if (found == type_origins_by_index_.end()) {
       return current;
     }
-    current = found->second;
+    current = ir::TypeIdx(found->second);
   }
   return current;
 }

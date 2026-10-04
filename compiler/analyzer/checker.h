@@ -5,6 +5,7 @@
 
 #include <span>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -108,6 +109,12 @@ class Checker {
   str::StringInterner& interner;
   std::vector<NominalEntry> nominals;
   std::vector<SpecEntry> specs;
+  // Where a module's entries sit in those two tables. Both tables span the
+  // whole package, so a lookup that walked one charged a module for every
+  // type in it; these narrow the walk to the module that asked. Positions,
+  // not pointers, because the tables grow while they are being filled.
+  std::vector<std::vector<u32>> nominals_of_module;
+  std::vector<std::vector<u32>> specs_of_module;
   // Every spec implementation in the tree, in registration order.
   // Coherence is checked against this as each impl registers.
   std::vector<SpecImplEntry> spec_impls;
@@ -122,6 +129,12 @@ class Checker {
   // range stays contiguous. This maps each copy back to the type it
   // was copied from, so owner lookups accept both indexes.
   std::vector<std::pair<ir::TypeIdx, ir::TypeIdx>> type_origins_;
+  // type_origin resolves a chain of those, and the type checker asks for one
+  // at the head of every structural comparison, so a lookup that walked the
+  // list charged the checker its types times its copies. This answers the
+  // same question: a later entry for a copy wins, as walking from the back
+  // did.
+  std::unordered_map<u32, u32> type_origins_by_index_;
   // `MaybeUninit<T>` wrappers interned so far, as (wrapper, payload).
   std::vector<std::pair<ir::TypeIdx, ir::TypeIdx>> uninit_types_;
   // Destructor resolution, aligned with the type table by index.
