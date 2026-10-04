@@ -131,6 +131,9 @@ void Lowerer::index_structs() {
       structs_.emplace(info.type.idx, &info);
     }
   }
+  for (u32 i = 0; i < static_cast<u32>(pkg.generic_insts.size()); ++i) {
+    generic_insts_.emplace(pkg.generic_insts[i].idx, i);
+  }
 }
 
 ir::RegisterIdx Lowerer::claim_reg() {
@@ -514,10 +517,9 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   for (const CompVal& arg : comp_args) {
     comp_key_into(key, arg.value);
   }
-  for (const FnEntry& entry : fns) {
-    if (entry.item == item && entry.comp_key == key) {
-      return entry.idx;
-    }
+  const auto found = fn_by_key_.find(key);
+  if (found != fn_by_key_.end()) {
+    return ir::FunctionIdx(found->second);
   }
   static constexpr usize MAX_FN_ENTRIES = 8192;
   if (fns.size() >= MAX_FN_ENTRIES) {
@@ -525,6 +527,7 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
     return ir::FunctionIdx(base::INVALID_IDX);
   }
   const ir::FunctionIdx idx(static_cast<u32>(fns.size()));
+  fn_by_key_.emplace(key, idx.idx);
   FnEntry entry;
   entry.item = item;
   entry.comp_key = std::move(key);
@@ -640,12 +643,8 @@ std::vector<ir::TypeIdx> Lowerer::fn_args_for(ast::ItemIdx item,
 
 // NO_INST when the type is not a generic instantiation.
 u32 Lowerer::generic_inst_index(ir::TypeIdx type) const {
-  for (u32 i = 0; i < static_cast<u32>(pkg.generic_insts.size()); ++i) {
-    if (pkg.generic_insts[i].idx == type.idx) {
-      return i;
-    }
-  }
-  return analyzer::NO_INST;
+  const auto found = generic_insts_.find(type.idx);
+  return found == generic_insts_.end() ? analyzer::NO_INST : found->second;
 }
 
 // Lowering context of a call target: the instantiation its body was

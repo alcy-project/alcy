@@ -563,6 +563,11 @@ class Lowerer {
   // recorded, both answered by table.
   std::unordered_map<u32, u32> type_origins_;
   std::unordered_map<u32, const analyzer::CheckedModule::StructInfo*> structs_;
+  std::unordered_map<u32, u32> generic_insts_;
+  // Where a specialization key already has an entry. Lowering asks this of
+  // every call site, and walking the entries so far to compare keys charged
+  // one call site for every function lowered before it.
+  std::unordered_map<std::string, u32> fn_by_key_;
   void index_origins();
   void index_structs();
   void lower_fn(const FnEntry& entry);
