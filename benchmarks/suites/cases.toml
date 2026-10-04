@@ -34,6 +34,18 @@ expected_exit = 0
 repetitions = 10
 warmup = 2
 
+# A hundred and twenty modules of a shape a real one has: a struct, an
+# impl, an enum, a match, a loop. This is the case that says whether the
+# frontend's cost still grows with the size of the package, because a
+# table it walks per module rather than per function is what makes it.
+[[case]]
+id = "check/wide-package"
+fixture = "check-wide-package"
+argv = ["check", "."]
+expected_exit = 0
+repetitions = 10
+warmup = 2
+
 [[case]]
 id = "compile/object"
 fixture = "check-small"
