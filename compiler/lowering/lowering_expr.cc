@@ -1029,7 +1029,8 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
     const ast::PathIdx path_idx = path.idx;
     if (ast.paths[path_idx].segments.size() == 1) {
       const std::string_view name = ast.paths[path_idx].segments[0].name;
-      if (lookup_local(name) == nullptr &&
+      if ((name == "print" || name == "println" || name == "panic") &&
+          lookup_local(name) == nullptr &&
           lookup_static(module, name) == nullptr) {
         bool shadowed = false;
         for (const auto& checked : pkg.modules) {
@@ -1043,8 +1044,7 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
             break;
           }
         }
-        if (!shadowed &&
-            (name == "print" || name == "println" || name == "panic")) {
+        if (!shadowed) {
           return lower_intrinsic(expr, name);
         }
       }
