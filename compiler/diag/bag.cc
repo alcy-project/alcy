@@ -180,7 +180,7 @@ u64 hash_diagnostic(const Diagnostic& d) {
   };
   const auto mix_text = [&mix](std::string_view text) {
     for (const char c : text) {
-      mix(static_cast<u64>(static_cast<unsigned char>(c)));
+      mix(static_cast<u64>(static_cast<u8>(c)));
     }
   };
   mix(static_cast<u64>(d.severity));

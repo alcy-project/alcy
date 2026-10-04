@@ -77,7 +77,7 @@ std::string generate_source(SourceSpec spec) {
 std::string source_digest(std::string_view source) {
   u64 hash = FNV_OFFSET;
   for (const char c : source) {
-    hash ^= static_cast<u64>(static_cast<unsigned char>(c));
+    hash ^= static_cast<u64>(static_cast<u8>(c));
     hash *= FNV_PRIME;
   }
   return hex16(hash);

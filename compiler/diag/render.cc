@@ -100,11 +100,11 @@ SnippetWindow snippet_window(std::string_view line, usize caret) {
   // exclusive and may cut after a character's first byte, which keeps it
   // whole rather than dropping it.
   while (begin > 0 &&
-         (static_cast<unsigned char>(line[begin]) & 0xC0) == 0x80) {
+         (static_cast<u8>(line[begin]) & 0xC0) == 0x80) {
     ++begin;
   }
   while (end < line.size() &&
-         (static_cast<unsigned char>(line[end]) & 0xC0) == 0x80) {
+         (static_cast<u8>(line[end]) & 0xC0) == 0x80) {
     ++end;
   }
   return {begin, end, begin > 0, end < line.size()};
@@ -116,7 +116,7 @@ u32 display_column(std::string_view bytes, u32 line_start, u32 offset) {
   for (u32 i = line_start; i < offset && i < bytes.size(); ++i) {
     // A UTF-8 continuation byte continues the character before it, so
     // it occupies no column of its own.
-    if ((static_cast<unsigned char>(bytes[i]) & 0xC0) == 0x80) {
+    if ((static_cast<u8>(bytes[i]) & 0xC0) == 0x80) {
       continue;
     }
     col = bytes[i] == '\t' ? ((col - 1) / TAB_WIDTH + 1) * TAB_WIDTH + 1
@@ -165,7 +165,7 @@ void append_expanded(fmt::memory_buffer& out, std::string_view text) {
       // it occupies no column of its own; display_column counts the same
       // way, and a tab after a multibyte character would otherwise
       // advance from a column one too far right.
-      if ((static_cast<unsigned char>(c) & 0xC0) != 0x80) {
+      if ((static_cast<u8>(c) & 0xC0) != 0x80) {
         ++col;
       }
       continue;

@@ -24,9 +24,9 @@ void append_json_string(std::string& out, std::string_view value) {
       case '\b': out += "\\b"; break;
       case '\f': out += "\\f"; break;
       default:
-        if (static_cast<unsigned char>(c) < 0x20) {
+        if (static_cast<u8>(c) < 0x20) {
           fmt::format_to(std::back_inserter(out), "\\u{:04x}",
-                         static_cast<unsigned>(static_cast<unsigned char>(c)));
+                         static_cast<unsigned>(static_cast<u8>(c)));
         } else {
           // Bytes pass through as they are: the source they came from is
           // UTF-8, and re-encoding would only risk disagreeing with it.

@@ -17,7 +17,7 @@ namespace pipeline {
 // is touched. The table is generated; see tools/embed_std.py.
 struct StagedSource {
   const char* path;
-  const unsigned char* data;
+  const u8* data;
   u64 len;
 };
 

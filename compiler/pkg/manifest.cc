@@ -60,7 +60,7 @@ u32 line_col_to_offset(std::string_view bytes, u32 line, u32 column) {
   // a span past the last character still points inside the file.
   for (u32 remaining = column - 1; remaining > 0; --remaining) {
     while (offset < line_end &&
-           (static_cast<unsigned char>(bytes[offset]) & 0xC0) == 0x80) {
+           (static_cast<u8>(bytes[offset]) & 0xC0) == 0x80) {
       ++offset;
     }
     if (offset >= line_end) {

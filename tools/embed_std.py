@@ -18,7 +18,7 @@ from pathlib import Path
 
 
 def emit_array(out, symbol, data: bytes):
-    out.write(f"const unsigned char {symbol}[] = {{\n")
+    out.write(f"const u8 {symbol}[] = {{\n")
     for offset in range(0, len(data), 12):
         chunk = data[offset : offset + 12]
         out.write("    " + ", ".join(f"0x{b:02x}" for b in chunk) + ",\n")

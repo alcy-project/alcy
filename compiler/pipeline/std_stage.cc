@@ -36,7 +36,7 @@ bool ends_with(std::string_view text, std::string_view suffix) {
          text.compare(text.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
-std::string_view as_view(const unsigned char* data, u64 len) {
+std::string_view as_view(const u8* data, u64 len) {
   return std::string_view(reinterpret_cast<const char*>(data), len);
 }
 

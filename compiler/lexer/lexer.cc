@@ -736,7 +736,7 @@ void Lexer::lex_symbol(std::vector<Token>& out) {
     // bytes, and control characters): identifiers stay ASCII-only in
     // MVP, and every other stray scalar is diagnosed here.
     usize scalar = 1;
-    const unsigned char lead = static_cast<unsigned char>(c);
+    const u8 lead = static_cast<u8>(c);
     if ((lead & 0xE0) == 0xC0) {
       scalar = 2;
     } else if ((lead & 0xF0) == 0xE0) {
