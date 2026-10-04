@@ -290,27 +290,37 @@ class StorageBuilder {
   }
 
   TypeIdx never_type() {
+    if (never_.is_valid()) {
+      return never_;
+    }
     for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
          ++idx) {
       if (state_.types[idx].tag == TypeTag::Never) {
+        never_ = idx;
         return idx;
       }
     }
     TypeNode node{};
     node.tag = TypeTag::Never;
-    return state_.types.emplace_back(node);
+    never_ = state_.types.emplace_back(node);
+    return never_;
   }
 
   TypeIdx error_type() {
+    if (error_.is_valid()) {
+      return error_;
+    }
     for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
          ++idx) {
       if (state_.types[idx].tag == TypeTag::Error) {
+        error_ = idx;
         return idx;
       }
     }
     TypeNode node{};
     node.tag = TypeTag::Error;
-    return state_.types.emplace_back(node);
+    error_ = state_.types.emplace_back(node);
+    return error_;
   }
 
   EnumVariantTypeIdx enum_variant(str::StringPoolId name, TypeIdxRange fields) {
@@ -384,6 +394,13 @@ class StorageBuilder {
   }
 
   StorageState state_;
+
+  // The two tags that carry no payload, found by looking for a tag they do
+  // not have. Both are asked for on paths the type checker takes often, so
+  // each remembers where it landed; a type is never retagged, so the first
+  // answer stays the answer.
+  TypeIdx never_ = TypeIdx::invalid();
+  TypeIdx error_ = TypeIdx::invalid();
 };
 
 }  // namespace ir
