@@ -3,6 +3,7 @@
 
 #include "borrow/borrow.h"
 
+#include <algorithm>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -207,6 +208,16 @@ class Checker {
   std::vector<std::vector<u32>> live_in;
   std::vector<std::vector<u32>> live_out;
   std::vector<std::vector<u32>> loan_last_use;
+  // CFG shape for the two fixpoints, and the first and last instruction of
+  // each block. Indexed by global block like the rows above, and filled by
+  // build_preds and compute_liveness for one function at a time.
+  std::vector<std::vector<ir::BlockIdx>> preds;
+  std::vector<u32> block_first;
+  std::vector<u32> block_last;
+  // Visit marks for the block walk, stamped per call so the table is sized
+  // once and never cleared.
+  std::vector<u32> walk_mark;
+  u32 walk_stamp = 0;
 
   const ir::Instruction& instr_at(ir::InstructionIdx idx) const {
     return storage.instrs()[idx];
@@ -747,12 +758,6 @@ class Checker {
   // end the borrowed value without reporting a conflict.
   void compute_liveness(const ir::Function& fn,
                         const std::vector<ir::BlockIdx>& order) {
-    loan_last_use.assign(storage.blocks().size(), {});
-    live_in.assign(storage.blocks().size(), {});
-    live_out.assign(storage.blocks().size(), {});
-    for (std::vector<u32>& row : loan_last_use) {
-      row.assign(loans.size(), 0);
-    }
     // A loan is last read at the last instruction that reads any
     // register carrying it, in the block that instruction is in.
     for (ir::BlockIdx bidx : fn.blocks) {
@@ -778,16 +783,8 @@ class Checker {
         }
       }
     }
-    std::vector<std::vector<ir::BlockIdx>> preds(storage.blocks().size());
+    build_preds(fn, order);
     std::vector<ir::BlockIdx> succs;
-    for (ir::BlockIdx bidx : fn.blocks) {
-      successors(bidx, succs);
-      for (ir::BlockIdx succ : succs) {
-        if (succ.idx < preds.size()) {
-          preds[succ.idx].push_back(bidx);
-        }
-      }
-    }
     auto add_loan = [](std::vector<u32>& set, u32 loan) {
       for (u32 prior : set) {
         if (prior == loan) {
@@ -799,8 +796,6 @@ class Checker {
     // Backward to a fixed point: a block is live out wherever any
     // successor is live in, and live in wherever it is read on a path
     // that reaches one of them.
-    std::vector<u32> block_first(storage.blocks().size(), 0);
-    std::vector<u32> block_last(storage.blocks().size(), 0);
     for (ir::BlockIdx bidx : fn.blocks) {
       const ir::Block& block = storage.blocks()[bidx];
       if (block.instrs.empty()) {
@@ -971,11 +966,18 @@ class Checker {
   // append in layout order so every block still gets a state.
   void reverse_post_order(const ir::Function& fn,
                           std::vector<ir::BlockIdx>& order) {
-    std::vector<bool> seen(storage.blocks().size(), false);
+    // The walk marks blocks with this call's stamp rather than clearing a
+    // table sized to the whole program, which would charge every function
+    // for every block.
+    if (++walk_stamp == 0) {
+      std::fill(walk_mark.begin(), walk_mark.end(), 0);
+      walk_stamp = 1;
+    }
+    const u32 stamp = walk_stamp;
     std::vector<ir::BlockIdx> stack;
     std::vector<ir::BlockIdx> post;
     stack.push_back(fn.blocks.head());
-    seen[fn.blocks.head().idx] = true;
+    walk_mark[fn.blocks.head().idx] = stamp;
     std::vector<ir::BlockIdx> succs;
     while (!stack.empty()) {
       const ir::BlockIdx top = stack.back();
@@ -983,8 +985,8 @@ class Checker {
       successors(top, succs);
       bool descended = false;
       for (ir::BlockIdx succ : succs) {
-        if (succ.idx < seen.size() && !seen[succ.idx]) {
-          seen[succ.idx] = true;
+        if (succ.idx < walk_mark.size() && walk_mark[succ.idx] != stamp) {
+          walk_mark[succ.idx] = stamp;
           stack.push_back(succ);
           descended = true;
         }
@@ -998,7 +1000,7 @@ class Checker {
       order.push_back(post[i]);
     }
     for (ir::BlockIdx bidx : fn.blocks) {
-      if (bidx.idx < seen.size() && !seen[bidx.idx]) {
+      if (bidx.idx < walk_mark.size() && walk_mark[bidx.idx] != stamp) {
         order.push_back(bidx);
       }
     }
@@ -1030,19 +1032,8 @@ class Checker {
   // iteration (bounded; the place universe is finite).
   void compute_moved(const ir::Function& fn,
                      const std::vector<ir::BlockIdx>& order) {
-    moved_in.assign(storage.blocks().size(), {});
-    moved_out.assign(storage.blocks().size(), {});
-    std::vector<std::vector<ir::BlockIdx>> preds(storage.blocks().size());
+    build_preds(fn, order);
     std::vector<ir::BlockIdx> succs;
-    for (ir::BlockIdx bidx : fn.blocks) {
-      succs.clear();
-      successors(bidx, succs);
-      for (ir::BlockIdx succ : succs) {
-        if (succ.idx < preds.size()) {
-          preds[succ.idx].push_back(bidx);
-        }
-      }
-    }
     std::vector<Place> in;
     std::vector<Place> out;
     const usize cap = order.size() * 10 + 10;
@@ -1075,6 +1066,7 @@ class Checker {
     forward(fn);
     std::vector<ir::BlockIdx> order;
     reverse_post_order(fn, order);
+    reset_blocks(order);
     compute_moved(fn, order);
     compute_liveness(fn, order);
     std::vector<Place> state;
@@ -1452,6 +1444,56 @@ class Checker {
     home.assign(registers, NO_ROOT);
     path.assign(registers, {});
     flow.assign(registers, {});
+    const usize blocks = storage.blocks().size();
+    live_in.assign(blocks, {});
+    live_out.assign(blocks, {});
+    loan_last_use.assign(blocks, {});
+    moved_in.assign(blocks, {});
+    moved_out.assign(blocks, {});
+    preds.assign(blocks, {});
+    block_first.assign(blocks, 0);
+    block_last.assign(blocks, 0);
+    walk_mark.assign(blocks, 0);
+  }
+
+  // Clears the rows indexed by block that a function reaches, the
+  // counterpart of clear_register for the CFG-shaped scratch. The list is
+  // the function's block closure rather than its declared blocks, because
+  // that is what the fixpoints walk. The last-use row is sized to the loans
+  // the function has, which is why this waits until forward has run.
+  void reset_blocks(const std::vector<ir::BlockIdx>& blocks) {
+    for (ir::BlockIdx bidx : blocks) {
+      live_in[bidx.idx].clear();
+      live_out[bidx.idx].clear();
+      moved_in[bidx.idx].clear();
+      moved_out[bidx.idx].clear();
+      preds[bidx.idx].clear();
+      block_first[bidx.idx] = 0;
+      block_last[bidx.idx] = 0;
+      loan_last_use[bidx.idx].assign(loans.size(), 0);
+    }
+  }
+
+  // Predecessors of the blocks the fixpoints read. The walk covers the
+  // function's own blocks as before, and the clearing covers every block the
+  // fixpoints reach, which leaves no row another function filled where one
+  // is read.
+  void build_preds(const ir::Function& fn,
+                   const std::vector<ir::BlockIdx>& order) {
+    for (ir::BlockIdx bidx : order) {
+      preds[bidx.idx].clear();
+    }
+    std::vector<ir::BlockIdx> succs;
+    for (ir::BlockIdx bidx : fn.blocks) {
+      // successors appends, so the list belongs to one block.
+      succs.clear();
+      successors(bidx, succs);
+      for (ir::BlockIdx succ : succs) {
+        if (succ.idx < preds.size()) {
+          preds[succ.idx].push_back(bidx);
+        }
+      }
+    }
   }
 
   void clear_register(u32 reg) {
@@ -1487,8 +1529,6 @@ class Checker {
       }
     }
     loans.clear();
-    moved_in.clear();
-    moved_out.clear();
     param_homes.clear();
   }
 
