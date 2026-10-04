@@ -25,8 +25,6 @@
 #include "fpag/base/result.h"
 #include "fpag/str/string_interner.h"
 #include "i18n/language.h"
-#include "ir/instruction.h"
-#include "ir/opcode.h"
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/verifier.h"
