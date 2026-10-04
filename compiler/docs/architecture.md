@@ -400,6 +400,24 @@ that happens to read them.
 Each stage should expose the minimum data needed by the next stage. A stage
 must not reach backward into another stage's private state as a shortcut.
 
+A stage's scratch is sized once for the run, and the unit of work clears the
+part of it that unit owns. Tables a stage indexes by a global index - by
+register, by block, by module - are sized for the whole package, so a table a
+function rebuilds or rewalks before looking at its own work makes the cost of
+one function grow with the size of the package, which is the shape that turns
+a large package from slow into unusable. When a stage needs a per-function
+answer to a question about the package, it gathers the answers once and reads
+them from a table. The stages that hold such a table say so where they
+declare it, and the trace is what says whether it is still being walked.
+
+The frontend's stages are the unit of work for parallelism, one function per
+thread, in the order that makes each one independent of the one before it:
+[`docs/adr/0046-the-frontend-cost-is-per-function.md`](../../docs/adr/0046-the-frontend-cost-is-per-function.md)
+records the measurements that put the stages in that order and the one whose
+blocker is a data structure rather than scratch. A target without threads
+runs each of those units inline, which is why none of them needs a second
+path.
+
 ## LLVM integration
 
 The compiler links against a private LLVM fork
