@@ -583,9 +583,8 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     }
     modules[module].functions.push_back({name, params, ret, method_item});
     const CheckedModule::FnSig& sig = modules[module].functions.back();
-    modules[module].methods.push_back({self_type, name, sig.params, sig.ret,
-                                       receiver, method_item, false,
-                                       spec_index});
+    add_method(module, {self_type, name, sig.params, sig.ret, receiver,
+                        method_item, false, spec_index});
   }
   std::vector<SpecTarget::Arg> shapes;
   shapes.reserve(spec_args.size());
@@ -1766,12 +1765,12 @@ void Checker::process_module(u32 module) {
           if (self_ok && !sig.params.empty()) {
             receiver = classify_receiver(sig.params[0], self_type);
           }
-          modules[module].methods.push_back(
-              {self_ok ? self_type : error_type(),
-               method_node.payload.get<ast::ItemFn>().name.name, sig.params,
-               sig.ret, receiver, method,
-               self_ok && check_drop_signature(module, self_type, sig, receiver,
-                                               method)});
+          add_method(module,
+                     {self_ok ? self_type : error_type(),
+                      method_node.payload.get<ast::ItemFn>().name.name,
+                      sig.params, sig.ret, receiver, method,
+                      self_ok && check_drop_signature(module, self_type, sig,
+                                                      receiver, method)});
         }
         break;
       }
@@ -1880,14 +1879,31 @@ bool Checker::drop_scan(ir::TypeIdx type, std::vector<u32>& stack) {
   return result;
 }
 
+CheckedModule::MethodInfo& Checker::add_method(u32 module,
+                                               CheckedModule::MethodInfo info) {
+  CheckedModule& target = modules[module];
+  target.methods.push_back(std::move(info));
+  const CheckedModule::MethodInfo& method = target.methods.back();
+  const u32 position = static_cast<u32>(target.methods.size() - 1);
+  methods_by_self_[method.self_type.idx].emplace_back(module, position);
+  if (!method.is_drop) {
+    return target.methods.back();
+  }
+  const CheckedModule::DropGlue glue{module, position};
+  const u32 key = method.self_type.idx;
+  const auto found = drop_glue_by_type_.find(key);
+  if (found == drop_glue_by_type_.end() || found->second.module > glue.module ||
+      (found->second.module == glue.module &&
+       found->second.index > glue.index)) {
+    drop_glue_by_type_[key] = glue;
+  }
+  return target.methods.back();
+}
+
 CheckedModule::DropGlue Checker::find_drop_glue(ir::TypeIdx type) {
-  for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
-    for (u32 k = 0; k < static_cast<u32>(modules[m].methods.size()); ++k) {
-      const CheckedModule::MethodInfo& method = modules[m].methods[k];
-      if (method.is_drop && method.self_type.idx == type.idx) {
-        return {m, k};
-      }
-    }
+  const auto found = drop_glue_by_type_.find(type.idx);
+  if (found != drop_glue_by_type_.end()) {
+    return found->second;
   }
   // A generic type reaches its destructor through `impl<T> Name<T>`,
   // which only exists once instantiated.
@@ -2639,12 +2655,15 @@ NominalEntry* Checker::find_nominal_in_scope(u32 module,
 const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
     ir::TypeIdx self,
     std::string_view name) {
-  for (const CheckedModule& checked : modules) {
-    for (const CheckedModule::MethodInfo& method : checked.methods) {
+  const auto own = methods_by_self_.find(self.idx);
+  if (own != methods_by_self_.end()) {
+    for (const auto& [owner, position] : own->second) {
+      const CheckedModule::MethodInfo& method =
+          modules[owner].methods[position];
       if (method.spec != NO_SPEC) {
         continue;
       }
-      if (method.self_type.idx == self.idx && method.name == name) {
+      if (method.name == name) {
         return &method;
       }
     }
@@ -2794,16 +2813,15 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
         continue;
       }
     } else {
-      for (const CheckedModule& checked : modules) {
-        for (const CheckedModule::MethodInfo& method : checked.methods) {
-          if (method.spec == entry.spec && method.self_type.idx == self.idx &&
-              method.name == name) {
+      const auto own = methods_by_self_.find(self.idx);
+      if (own != methods_by_self_.end()) {
+        for (const auto& [owner, position] : own->second) {
+          const CheckedModule::MethodInfo& method =
+              modules[owner].methods[position];
+          if (method.spec == entry.spec && method.name == name) {
             candidate = &method;
             break;
           }
-        }
-        if (candidate != nullptr) {
-          break;
         }
       }
       if (candidate == nullptr) {
@@ -3174,12 +3192,12 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     modules[impl_module].functions.push_back(
         {method_node.payload.get<ast::ItemFn>().name.name, params, ret,
          method_item});
-    modules[impl_module].methods.push_back(
-        {self_type, method_node.payload.get<ast::ItemFn>().name.name, params,
-         ret, receiver, method_item,
-         check_drop_signature(impl_module, self_type,
-                              modules[impl_module].functions.back(), receiver,
-                              method_item)});
+    add_method(impl_module,
+               {self_type, method_node.payload.get<ast::ItemFn>().name.name,
+                params, ret, receiver, method_item,
+                check_drop_signature(impl_module, self_type,
+                                     modules[impl_module].functions.back(),
+                                     receiver, method_item)});
     // Nested instantiations append during the body check; keep the
     // entry this call owns.
     CheckedModule::MethodInfo* entry = &modules[impl_module].methods.back();
@@ -3276,10 +3294,10 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     modules[impl_module].functions.push_back(
         {method_node.payload.get<ast::ItemFn>().name.name, params, ret,
          method_item});
-    modules[impl_module].methods.push_back(
+    CheckedModule::MethodInfo* entry = &add_method(
+        impl_module,
         {self_type, method_node.payload.get<ast::ItemFn>().name.name, params,
          ret, receiver, method_item, false, spec});
-    CheckedModule::MethodInfo* entry = &modules[impl_module].methods.back();
     const u32 inst = inst_index(self_type);
     spec_scope.push_back(spec);
     const ir::TypeIdx saved_ret = fn_ret;

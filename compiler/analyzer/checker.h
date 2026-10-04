@@ -417,6 +417,21 @@ class Checker {
   bool drop_scan(ir::TypeIdx type, std::vector<u32>& stack);
   bool holds_destructible(ir::TypeIdx type, std::vector<u32>& stack);
   CheckedModule::DropGlue find_drop_glue(ir::TypeIdx type);
+  // Destructors by the type they drop. Resolving a drop asks this of every
+  // type the package holds, and answering by walking every method in the
+  // package charged a type for the whole package. Filled as methods register,
+  // which is also when a generic instantiation adds one, so it cannot fall
+  // behind the table it indexes.
+  std::unordered_map<u32, CheckedModule::DropGlue> drop_glue_by_type_;
+  // Methods by the type they are declared on, as (module, position). A call
+  // is resolved by walking the methods of the type it names, not every
+  // method in the package.
+  std::unordered_map<u32, std::vector<std::pair<u32, u32>>> methods_by_self_;
+  // Registers a method and returns it. Where two modules declare a
+  // destructor for one type, the earlier module's is kept, which is what a
+  // walk in module order would have found.
+  CheckedModule::MethodInfo& add_method(u32 module,
+                                        CheckedModule::MethodInfo info);
 
   struct PathValue {
     enum class Kind : u8 {
