@@ -67,8 +67,13 @@ class NodeVec {
   // table's share of the reservation in hand for the batch: the check and
   // the append are not one step, so what the check admits must cover every
   // append that can follow it before the arena has moved.
+  //
+  // The arena is told the same number for the same reason: it takes the room
+  // for an append in one operation, so the room it may hand out stops short of
+  // the end by a slot for each append in flight.
   void set_parallel_slots(u32 jobs) {
     reserved_ = (jobs > 1 ? static_cast<usize>(jobs) : 0) * sizeof(T);
+    arena_.set_claim_slack(reserved_);
   }
 
   // Appends a node, answering the index that addresses it, or nothing when
@@ -87,7 +92,7 @@ class NodeVec {
       exhausted_.store(true, std::memory_order_relaxed);
       return Idx::invalid();
     }
-    void* const mem = arena_.alloc(sizeof(T), alignof(T));
+    void* const mem = arena_.alloc_exact(sizeof(T), alignof(T));
     if (mem == nullptr) [[unlikely]] {
       exhausted_.store(true, std::memory_order_relaxed);
       return Idx::invalid();
