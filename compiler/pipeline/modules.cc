@@ -7,6 +7,8 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -91,38 +93,47 @@ base::Result<std::vector<analyzer::ModuleInput>, diag::Reported> select_modules(
   std::vector<analyzer::ModuleInput> selected;
   // Dedup by file id, not by name: two spellings of one path resolve to
   // one file, and a name collision between two files is a manifest error
-  // rather than a silent drop.
+  // rather than a silent drop. Both questions are asked of every module
+  // already selected, so what has been selected is kept as tables.
+  std::unordered_set<source::FileId> selected_ids;
+  std::unordered_set<std::string_view> selected_names;
   const auto add_module = [&](std::string_view name,
                               source::FileId id) -> bool {
-    for (const analyzer::ModuleInput& prior : selected) {
-      if (prior.id == id) {
-        return true;
-      }
+    if (selected_ids.contains(id)) {
+      return true;
     }
-    for (const analyzer::ModuleInput& prior : selected) {
-      if (prior.name == name) {
-        const u32 index = ctx.bag.emit<i18n::Key::PipelineModuleSelectedTwice>(
-            diag::Severity::Error, diag::Stage::Pipeline,
-            DiagCode::InvalidModuleSelection, diag::Span{}, name);
-        (void)index;
-        return false;
-      }
+    if (selected_names.contains(name)) {
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineModuleSelectedTwice>(
+          diag::Severity::Error, diag::Stage::Pipeline,
+          DiagCode::InvalidModuleSelection, diag::Span{}, name);
+      (void)index;
+      return false;
     }
     selected.push_back({name, id});
+    selected_ids.insert(id);
+    selected_names.insert(name);
     return true;
   };
+
+  // A manifest entry is resolved by searching the files, which is a walk of
+  // every file for every entry. The names are a table, and where two files
+  // answer to one name the first is the answer a walk would have stopped at.
+  std::unordered_map<std::string_view, source::FileId> file_by_name;
+  for (source::FileId id : files) {
+    const std::optional<std::string_view> name = ctx.sources.name(id);
+    if (name.has_value()) {
+      file_by_name.emplace(*name, id);
+    }
+  }
 
   for (u32 i = 0; i < manifest.modules.include_count; ++i) {
     const std::string_view entry = manifest.modules.include[i];
     const path::Path candidate =
         root.join(std::string(entry) + std::string(path::SOURCE_EXTENSION));
     source::FileId found = source::UNKNOWN_FILE;
-    for (source::FileId id : files) {
-      const std::optional<std::string_view> name = ctx.sources.name(id);
-      if (name.has_value() && *name == candidate.as_view()) {
-        found = id;
-        break;
-      }
+    const auto hit = file_by_name.find(candidate.as_view());
+    if (hit != file_by_name.end()) {
+      found = hit->second;
     }
     if (found == source::UNKNOWN_FILE) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineModuleIncludeHasNoFile>(
