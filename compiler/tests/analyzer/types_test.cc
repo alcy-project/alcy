@@ -2775,4 +2775,138 @@ TEST_CASE("Check spells a one-element tuple type") {
   CHECK(!f.bag.has_errors());
 }
 
+// A turbofish on a value path has no arity check of its own, so the
+// instantiation is where an argument list that does not match the
+// declaration must be refused rather than indexed.
+TEST_CASE("Check rejects a turbofish with the wrong arity") {
+  for (const std::string_view call :
+       {"Pair::<i32>::empty()", "Pair::<i32, i64, u8>::empty()"}) {
+    VirtualDir dir;
+    const std::string source =
+        "struct Pair<A, B> { a: A, b: B }\n"
+        "impl<A, B> Pair<A, B> {\n"
+        "  fn empty() -> i32 { ret 7 }\n"
+        "}\n"
+        "fn main() -> i32 {\n"
+        "  ret " +
+        std::string(call) + "\n}\n";
+    const bool setup = write_all(dir, {{"main.al", source}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+    CHECK(f.bag.has_errors());
+  }
+}
+
+// The field check owns the "no fields" diagnostic, so a write through a
+// scalar place is reported instead of reaching an internal lowering
+// error.
+TEST_CASE("Check rejects a field assignment on a scalar") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  mut x := 5\n"
+                                      "  x.y = 1\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+// A comp block inside a comp block is checked in the inner scope; the
+// outer re-walk must not report the inner binding as unknown.
+TEST_CASE("Check accepts a nested comp block") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  _ := comp { comp { k := 1\n"
+                                      "    k } }\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+// Initializing one field twice is a typo that silently kept the last
+// store.
+TEST_CASE("Check rejects a duplicated struct field initializer") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct P { x: i32, y: i32 }\n"
+                       "fn main() -> i32 {\n"
+                       "  p := P { x: 1, x: 2, y: 3 }\n"
+                       "  ret p.x\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+// The backend has no power operation; refusing it at checking keeps the
+// unsupported construct out of lowering.
+TEST_CASE("Check rejects the power operator") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  x := 2\n"
+                                      "  ret x ** 3\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+// A generic struct literal nested in another generic literal takes its
+// instantiation from a field's storage copy, so the expectation is
+// followed back to the instantiation it was copied from.
+TEST_CASE("Check infers a nested generic struct literal") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct Inner<T> { v: T }\n"
+                       "struct Outer<T> { i: Inner<T> }\n"
+                       "fn f(x: Outer<i32>) -> Outer<i32> {\n"
+                       "  ret Outer { i: Inner { v: 1i32 } }\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  o := f(Outer { i: Inner { v: 2i32 } })\n"
+                       "  ret o.i.v\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
 }  // namespace analyzer

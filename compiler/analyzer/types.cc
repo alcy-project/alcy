@@ -914,6 +914,17 @@ const GenericInstance* Checker::infer_from_payload_args(
 ir::TypeIdx Checker::instantiate_generic(u32 nominal,
                                          const std::vector<ir::TypeIdx>& args,
                                          diag::Span span) {
+  // The declaration's parameters are indexed below; a bad turbofish
+  // reaches here from a value path, which has no arity check of its own.
+  const std::span<const ast::Ident> params = nominal_params(nominals[nominal]);
+  if (args.size() != params.size()) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
+        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityMismatch,
+        span, nominals[nominal].name, params.size(),
+        params.size() == 1 ? "" : "s");
+    (void)index;
+    return error_type();
+  }
   // A function type in a type argument has no symbol encoding yet, so two
   // instantiations that differ only there would share a mangled name.
   // Refusing is the whole rule until the encoding lands.
@@ -2903,8 +2914,16 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
     ast::ItemIdx item,
     const std::vector<ir::TypeIdx>& args) {
   for (const FnInstance& instance : fn_instances) {
-    if (instance.module == module && instance.item == item &&
-        instance.args == args) {
+    if (instance.module != module || instance.item != item ||
+        instance.args.size() != args.size()) {
+      continue;
+    }
+    bool same = true;
+    for (usize i = 0; same && i < args.size(); ++i) {
+      same = instance.args[i].idx == args[i].idx ||
+             types_equal(instance.args[i], args[i]);
+    }
+    if (same) {
       return &modules[module].functions[instance.sig_index];
     }
   }

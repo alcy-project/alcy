@@ -121,6 +121,7 @@
   F(AnalyzerContinueOutsideLoop, "Continue outside of a loop") \
   F(AnalyzerCopyTypeCannotHaveDestructor, "Type is Copy because all of its fields are, so it cannot have a destructor") \
   F(AnalyzerDuplicateDefinition, "Duplicate definition of '{}'") \
+  F(AnalyzerDuplicateField, "Field '{}' is initialized more than once") \
   F(AnalyzerDuplicateImport, "Module `{}` is imported more than once") \
   F(AnalyzerDuplicateModule, "Module '{}' is declared more than once") \
   F(AnalyzerDuplicatePreludeModule, "Prelude module '{}' is declared more than once") \
@@ -159,6 +160,7 @@
   F(AnalyzerNotCallable, "Not callable") \
   F(AnalyzerNotTupleVariant, "Not a tuple variant") \
   F(AnalyzerOrPatternBindsDifferentNames, "Or-pattern alternatives must bind the same names") \
+  F(AnalyzerPowerNotImplemented, "The '**' operator is not implemented yet") \
   F(AnalyzerRangeEndpointNotInteger, "A range index must have an integer endpoint type") \
   F(AnalyzerRangeEndpointTypeMismatch, "Type mismatch in range endpoints: '{}' vs '{}'") \
   F(AnalyzerRangeExpressionsDeferred, "range expressions arrive post-MVP") \

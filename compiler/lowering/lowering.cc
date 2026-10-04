@@ -496,7 +496,7 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
     }
   }
   if (entry.generics.empty()) {
-    entry.generics = fn_args_for(item);
+    entry.generics = fn_args_for(item, inst);
   }
   entry.comp_args = std::move(comp_args);
   fns.push_back(std::move(entry));
@@ -572,7 +572,15 @@ std::vector<ir::TypeIdx> Lowerer::nominal_arguments(ir::TypeIdx type) const {
   return args;
 }
 
-std::vector<ir::TypeIdx> Lowerer::fn_args_for(ast::ItemIdx item) const {
+std::vector<ir::TypeIdx> Lowerer::fn_args_for(ast::ItemIdx item,
+                                              u32 inst) const {
+  // The key is what separates two instantiations of one function; the
+  // first-instance fallback only serves an entry that carries none.
+  for (const analyzer::FnInstance& instance : pkg.fn_insts) {
+    if (instance.item == item && instance.inst == inst) {
+      return instance.args;
+    }
+  }
   for (const analyzer::FnInstance& instance : pkg.fn_insts) {
     if (instance.item == item) {
       return instance.args;

@@ -262,7 +262,7 @@ class Lowerer {
   // Type arguments of a nominal type, empty for a plain declaration.
   std::vector<ir::TypeIdx> nominal_arguments(ir::TypeIdx type) const;
   // Type arguments a generic free function or intrinsic bound.
-  std::vector<ir::TypeIdx> fn_args_for(ast::ItemIdx item) const;
+  std::vector<ir::TypeIdx> fn_args_for(ast::ItemIdx item, u32 inst) const;
   u32 generic_inst_index(ir::TypeIdx type) const;
   const analyzer::CheckedModule::StructInfo* struct_info(ir::TypeIdx type);
   // Follows a field storage copy back to the type it was copied from.

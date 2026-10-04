@@ -653,7 +653,8 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
         if (is_error(owner)) {
           // Generic enum: the expectation selects the instantiation.
           const GenericInstance* instance =
-              expected != nullptr ? generic_find(*expected) : nullptr;
+              expected != nullptr ? generic_find(type_origin(*expected))
+                                 : nullptr;
           if (instance == nullptr ||
               instance->nominal != nominal_index(resolved.enom)) {
             const u32 index = bag.emit<i18n::Key::AnalyzerCannotInferType>(
@@ -1114,7 +1115,10 @@ ir::TypeIdx Checker::check_call(u32 module,
     // A closure literal in callee position calls through its value;
     // anything else is not callable.
     const ir::TypeIdx callee_type = check_expr(module, callee, nullptr);
-    if (!is_error(callee_type) && tag_of(callee_type) == ir::TypeTag::Func) {
+    if (is_error(callee_type)) {
+      return error_type();
+    }
+    if (tag_of(callee_type) == ir::TypeTag::Func) {
       const ir::FuncType& sig =
           builder.func_types()[builder.types()[callee_type].as_func()];
       return check_indirect_call(module, expr, callee, sig, expected);
@@ -1199,7 +1203,7 @@ ir::TypeIdx Checker::check_call(u32 module,
       // parameter binds that parameter to the argument's type.
       const u32 nominal = nominal_index(resolved.enom);
       const GenericInstance* instance =
-          expected != nullptr ? generic_find(*expected) : nullptr;
+          expected != nullptr ? generic_find(type_origin(*expected)) : nullptr;
       if (instance == nullptr || instance->nominal != nominal) {
         instance = infer_from_payload_args(module, nominal, resolved, args);
       }
@@ -1517,8 +1521,10 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
     struct_type = intern_nominal(*nominal);
   } else {
     // A generic struct takes its instantiation from the expectation;
-    // there is no path-level type argument to carry it.
-    instance = expected != nullptr ? generic_find(*expected) : nullptr;
+    // there is no path-level type argument to carry it. The expectation
+    // may be a field storage copy, so it is followed to its origin.
+    instance =
+        expected != nullptr ? generic_find(type_origin(*expected)) : nullptr;
     if (instance == nullptr || instance->nominal != nominal_index(nominal)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerCannotInferType>(
           diag::Severity::Error, diag::Stage::Analyzer,
@@ -1555,6 +1561,14 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
       const u32 diag = bag.emit<i18n::Key::AnalyzerUnknownField>(
           diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownValue,
           field.name.span, field.name.name);
+      (void)diag;
+      check_expr(module, field.value, nullptr);
+      continue;
+    }
+    if (seen[index]) {
+      const u32 diag = bag.emit<i18n::Key::AnalyzerDuplicateField>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::DuplicateDefinition, field.name.span, field.name.name);
       (void)diag;
       check_expr(module, field.value, nullptr);
       continue;
@@ -1600,6 +1614,9 @@ ir::TypeIdx Checker::check_question(u32 module,
   const ast::ExprNode& node = ast.exprs[expr];
   const ir::TypeIdx inner =
       check_expr(module, node.payload.get<ast::ExprQuestion>().inner, nullptr);
+  if (is_error(inner)) {
+    return error_type();
+  }
   if (tag_of(inner) != ir::TypeTag::Enum) {
     const u32 index = bag.emit<i18n::Key::AnalyzerTryNeedsEnumOperand>(
         diag::Severity::Error, diag::Stage::Analyzer, DiagCode::BadQuestion,
@@ -2548,10 +2565,18 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
             return operands;
           }
           break;
+        case ast::BinaryOp::Pow: {
+          // The backend has no power operation yet; refuse it here
+          // rather than let it reach lowering's unsupported path.
+          const u32 index = bag.emit<i18n::Key::AnalyzerPowerNotImplemented>(
+              diag::Severity::Error, diag::Stage::Analyzer,
+              DiagCode::InvalidOperation, node.span);
+          (void)index;
+          return error_type();
+        }
         default:
           // Remainder and the bitwise and shift operators are
-          // integer-only. Letting a float reach here would fall through
-          // the lowerer's float switch to a division.
+          // integer-only.
           if (is_integer_tag(tag)) {
             if (expected != nullptr) {
               return unify(*expected, operands, node.span, "arithmetic");
@@ -2713,7 +2738,8 @@ ir::TypeIdx Checker::check_block(u32 module,
     if (expected != nullptr) {
       result = unify(*expected, result, ast.exprs[node.value].span, "block");
     }
-    if (verify_comp_known && !expr_comp_known(module, node.value)) {
+    if (verify_comp_known && !comp_checked_in_scope(node.value) &&
+        !expr_comp_known(module, node.value)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerCompBlockValue>(
           diag::Severity::Error, diag::Stage::Analyzer, DiagCode::NotCompKnown,
           ast.exprs[node.value].span);
@@ -2770,9 +2796,9 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
       if (is_error(receiver)) {
         return error_type();
       }
-      if (tag_of(receiver) != ir::TypeTag::Struct) {
-        return error_type();
-      }
+      // The field check diagnoses a receiver that is neither a struct
+      // nor a tuple; returning early here let the assignment through
+      // silently and reached an internal lowering error instead.
       return check_field(module, place, nullptr);
     }
     case ast::ExprKind::Index: {
@@ -2895,8 +2921,14 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
         }
       }
       const ir::TypeIdx place = check_place(module, reassign.place);
+      // A failed place is already reported; checking the value against
+      // it would silently accept any type through the error slot.
       const ir::TypeIdx value = check_expr(
-          module, node.payload.get<ast::StmtReassign>().value, &place);
+          module, node.payload.get<ast::StmtReassign>().value,
+          is_error(place) ? nullptr : &place);
+      if (is_error(place)) {
+        return;
+      }
       if (verify_comp_known &&
           !comp_checked_in_scope(node.payload.get<ast::StmtReassign>().value) &&
           !expr_comp_known(module,
