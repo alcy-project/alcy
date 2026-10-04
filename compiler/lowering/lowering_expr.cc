@@ -3050,8 +3050,9 @@ Val Lowerer::lower_loop(ast::ExprIdx expr) {
   ir::BlockIdx exit = reserve_block();
   emit_br(header);
   switch_to(header);
-  break_targets_.push_back(exit);
-  continue_targets_.push_back(header);
+  const u32 drops = static_cast<u32>(locals.size());
+  break_targets_.push_back({exit, drops});
+  continue_targets_.push_back({header, drops});
   lower_block(loop_expr.body, nullptr);
   if (failed) {
     return Val{size_one, error_type(), false, false};
@@ -3099,8 +3100,9 @@ Val Lowerer::lower_while(ast::ExprIdx expr) {
     // payload, and before the body, so neither is use-after-move.
     mark_move(addr);
   }
-  break_targets_.push_back(exit);
-  continue_targets_.push_back(header);
+  const u32 drops = static_cast<u32>(locals.size());
+  break_targets_.push_back({exit, drops});
+  continue_targets_.push_back({header, drops});
   lower_block(while_expr.body, nullptr);
   if (failed) {
     return Val{size_one, error_type(), false, false};
@@ -3140,13 +3142,24 @@ Val Lowerer::lower_question(ast::ExprIdx expr) {
       emit(ir::Opcode::Eq, boolean, {tag.op, disc_operand(0)});
   emit_cond_br(to_operand(test, boolean), ok_block, err_block);
   // Propagating keeps the original value, so the payload slot still
-  // holds a valid scrutinee to return by value. This `return` leaves
-  // the function, so it ends every live value first.
+  // holds a valid scrutinee to return by value. The copy is what the
+  // caller owns now, so the move is marked before the exit ends the
+  // other live values.
   switch_to(err_block);
-  const ir::RegisterIdx propagate =
-      emit(ir::Opcode::Load, scrut_type, {addr.op});
+  const ir::OperandIdx propagate = use_value(addr);
+  // Leaving the function ends every live value, but only on this path:
+  // the success path still runs, so the per-local flags the sweep
+  // commits are put back before it lowers.
+  std::vector<bool> inherited;
+  inherited.reserve(locals.size());
+  for (const Local& local : locals) {
+    inherited.push_back(local.moved);
+  }
   emit_drops(0, node.span);
-  emit_void(ir::Opcode::Ret, {to_operand(propagate, scrut_type)});
+  emit_void(ir::Opcode::Ret, {propagate});
+  for (usize i = 0; i < inherited.size(); ++i) {
+    locals[i].moved = inherited[i];
+  }
   switch_to(ok_block);
   const Val payload =
       load_payload_field(addr, variant_fields(scrut_type, 0), 0);
@@ -3316,12 +3329,12 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
         internal(node.span, "break without loop");
         return Val{size_one, error_type(), false, false};
       }
-      // Same reasoning as continue: the body's own drop point is
-      // skipped by the branch out of it.
-      if (!scope_marks.empty()) {
-        emit_drops(scope_marks.back(), node.span);
-      }
-      emit_br(break_targets_.back());
+      // The body's own drop point is skipped by the branch out of it,
+      // so everything the body declared ends here. The branch usually
+      // sits in a nested block, so the innermost block's mark would
+      // miss the body's own values.
+      emit_drops(break_targets_.back().drops, node.span);
+      emit_br(break_targets_.back().block);
       return Val{size_one, builder.never_type(), false, false};
     }
     case ast::ExprKind::Continue: {
@@ -3330,13 +3343,10 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
         return Val{size_one, error_type(), false, false};
       }
       // Leaving the body early skips its normal drop point, so the
-      // values the body declared are ended here instead. Without this
-      // a destructor runs at the enclosing scope's exit, after the loop
-      // has finished.
-      if (!scope_marks.empty()) {
-        emit_drops(scope_marks.back(), node.span);
-      }
-      emit_br(continue_targets_.back());
+      // values the body declared are ended here instead; the mark is
+      // the body's, not the nested block's the branch sits in.
+      emit_drops(continue_targets_.back().drops, node.span);
+      emit_br(continue_targets_.back().block);
       return Val{size_one, builder.never_type(), false, false};
     }
     case ast::ExprKind::Index: {
@@ -3547,12 +3557,10 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
   for (u32 i = 0; i < mark; ++i) {
     inherited.push_back(locals[i].moved);
   }
-  scope_marks.push_back(mark);
   // Comp bindings declared in this block leave with it, so a name from
   // an inner block is not visible after the block ends.
   const usize comp_mark = comp_scope_.size();
   auto leave = [&] {
-    scope_marks.pop_back();
     comp_scope_.resize(comp_mark);
     for (u32 i = 0; i < inherited.size(); ++i) {
       locals[i].moved = inherited[i];

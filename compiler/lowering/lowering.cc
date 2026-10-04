@@ -686,8 +686,6 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   // Bind parameters (patterns may destructure) after allocas exist.
   // They are locals from here on, so they are the function's own scope
   // and a return ends them along with everything declared inside.
-  scope_marks.clear();
-  scope_marks.push_back(0);
   // One report per function: the budget is per function, and every
   // frame past it would otherwise repeat the same diagnostic.
   reported_too_deep_ = false;
@@ -743,12 +741,10 @@ void Lowerer::lower_fn(const FnEntry& entry) {
     return;
   }
   if (terminated_cur()) {
-    scope_marks.clear();
     return;
   }
   const ir::TypeTag body_tag = tag_of(body.type);
   if (body_tag == ir::TypeTag::Never) {
-    scope_marks.clear();
     emit_void(ir::Opcode::Unreachable, {});
     return;
   }
@@ -757,13 +753,11 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   // exit does not end it again.
   if (body_tag == ir::TypeTag::Void) {
     emit_drops(0, fn.name.span);
-    scope_marks.clear();
     emit_void(ir::Opcode::Ret, {});
     return;
   }
   const ir::OperandIdx result = use_value(body);
   emit_drops(0, fn.name.span);
-  scope_marks.clear();
   emit_void(ir::Opcode::Ret, {result});
 }
 
@@ -824,8 +818,6 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
   if (failed) {
     return;
   }
-  scope_marks.clear();
-  scope_marks.push_back(0);
   reported_too_deep_ = false;
   binding_param_ = true;
   if (lit != nullptr) {
@@ -862,24 +854,20 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
       return;
     }
     if (terminated_cur()) {
-      scope_marks.clear();
       return;
     }
     const ir::TypeTag body_tag = tag_of(lowered.type);
     if (body_tag == ir::TypeTag::Never) {
-      scope_marks.clear();
       emit_void(ir::Opcode::Unreachable, {});
       return;
     }
     if (body_tag == ir::TypeTag::Void) {
       emit_drops(0, cur_span_);
-      scope_marks.clear();
       emit_void(ir::Opcode::Ret, {});
       return;
     }
     const ir::OperandIdx result = use_value(lowered);
     emit_drops(0, cur_span_);
-    scope_marks.clear();
     emit_void(ir::Opcode::Ret, {result});
     return;
   }

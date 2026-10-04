@@ -157,10 +157,6 @@ class Lowerer {
   // Per-function state.
   u32 module = 0;
   std::vector<Local> locals;
-  // One entry per open block, holding the `locals` size on entry. A
-  // value declared inside a block ends with it, so a scope exit ends
-  // everything from its mark onward.
-  std::vector<u32> scope_marks;
   // Bounds the recursive tree walk; see base::MAX_NESTING. The analyzer
   // rejects a tree this deep before lowering sees it, so tripping this
   // means the budget is the only thing between a hostile input and the
@@ -180,8 +176,16 @@ class Lowerer {
   u32 block_next_ = 0;
   u32 fn_block_base_ = 0;
   bool binding_param_ = false;
-  std::vector<ir::BlockIdx> break_targets_;
-  std::vector<ir::BlockIdx> continue_targets_;
+  // A loop's branch target and where its body's locals begin. A branch
+  // out of the body skips the body's own drop point, so break and
+  // continue end those locals from this mark. The innermost block's mark
+  // is not enough: the branch usually sits in a nested block.
+  struct LoopTarget {
+    ir::BlockIdx block;
+    u32 drops = 0;
+  };
+  std::vector<LoopTarget> break_targets_;
+  std::vector<LoopTarget> continue_targets_;
   static bool is_block_terminator(ir::Opcode op);
   usize at(ir::BlockIdx block) const;
   ir::BlockIdx reserve_block();

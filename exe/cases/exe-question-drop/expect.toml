@@ -1,0 +1,5 @@
+# The first `drop-res` is f's local on the success return; the second is
+# f's local on the propagation path, which still ends its other values;
+# one `drop-E` per returned value, never two for one.
+exit = 0
+stdout = "drop-res\nmid\ndrop-res\nend\ndrop-E\ndrop-E\n"
