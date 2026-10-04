@@ -1303,16 +1303,16 @@ TEST_CASE("Parser rejects a token stream without Eof") {
 // scan must treat braces as nesting rather than a statement boundary.
 TEST_CASE("Parser reads a struct pattern in a declaration and condition") {
   Fixture f;
-  const ParseResult result =
-      parse("struct Foo { x: i32 }\n"
-            "fn f(o: Foo) -> i32 {\n"
-            "  Foo { x } := o\n"
-            "  if Foo { y } := o {\n"
-            "    ret y\n"
-            "  }\n"
-            "  ret x\n"
-            "}\n",
-            f);
+  const ParseResult result = parse(
+      "struct Foo { x: i32 }\n"
+      "fn f(o: Foo) -> i32 {\n"
+      "  Foo { x } := o\n"
+      "  if Foo { y } := o {\n"
+      "    ret y\n"
+      "  }\n"
+      "  ret x\n"
+      "}\n",
+      f);
   CHECK(result.ok);
   CHECK(!f.bag.has_errors());
 }

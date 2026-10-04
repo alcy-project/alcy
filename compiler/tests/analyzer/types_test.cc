@@ -2847,13 +2847,12 @@ TEST_CASE("Check accepts a nested comp block") {
 // store.
 TEST_CASE("Check rejects a duplicated struct field initializer") {
   VirtualDir dir;
-  const bool setup =
-      write_all(dir, {{"main.al",
-                       "struct P { x: i32, y: i32 }\n"
-                       "fn main() -> i32 {\n"
-                       "  p := P { x: 1, x: 2, y: 3 }\n"
-                       "  ret p.x\n"
-                       "}\n"}});
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct P { x: i32, y: i32 }\n"
+                                      "fn main() -> i32 {\n"
+                                      "  p := P { x: 1, x: 2, y: 3 }\n"
+                                      "  ret p.x\n"
+                                      "}\n"}});
   CHECK(setup);
   if (!setup) {
     return;

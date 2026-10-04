@@ -969,12 +969,11 @@ TEST_CASE("Verify Br argument count") {
 TEST_CASE("Verify a type query's measured index") {
   StorageBuilder builder;
   const TypeIdx i32 = builder.primitive(TypeTag::I32);
-  const InstructionIdx query =
-      builder.instr({.op = Opcode::TypeSizeOf,
-                     .flags = {},
-                     .dst = RegisterIdx(0),
-                     .measure = TypeIdx(99999),
-                     .operands = {}});
+  const InstructionIdx query = builder.instr({.op = Opcode::TypeSizeOf,
+                                              .flags = {},
+                                              .dst = RegisterIdx(0),
+                                              .measure = TypeIdx(99999),
+                                              .operands = {}});
   builder.reg({.type = i32, .def_idx = query});
   const InstructionIdx ret =
       builder.instr({.op = Opcode::Ret,

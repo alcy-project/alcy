@@ -654,7 +654,7 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
           // Generic enum: the expectation selects the instantiation.
           const GenericInstance* instance =
               expected != nullptr ? generic_find(type_origin(*expected))
-                                 : nullptr;
+                                  : nullptr;
           if (instance == nullptr ||
               instance->nominal != nominal_index(resolved.enom)) {
             const u32 index = bag.emit<i18n::Key::AnalyzerCannotInferType>(
@@ -2923,9 +2923,9 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
       const ir::TypeIdx place = check_place(module, reassign.place);
       // A failed place is already reported; checking the value against
       // it would silently accept any type through the error slot.
-      const ir::TypeIdx value = check_expr(
-          module, node.payload.get<ast::StmtReassign>().value,
-          is_error(place) ? nullptr : &place);
+      const ir::TypeIdx value =
+          check_expr(module, node.payload.get<ast::StmtReassign>().value,
+                     is_error(place) ? nullptr : &place);
       if (is_error(place)) {
         return;
       }
