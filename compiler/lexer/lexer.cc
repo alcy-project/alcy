@@ -234,7 +234,9 @@ void Lexer::skip_trivia(std::vector<Token>& out) {
         while (!at_end() && peek() != '\n') {
           advance();
         }
-        last_significant_ = TokenKind::DocComment;
+        // A comment is trivia: it does not become the token a newline
+        // tests for semi insertion, or a `///` would swallow the
+        // statement boundary a `//` leaves.
         out.push_back(Token{.kind = TokenKind::DocComment,
                             .span = span_at(start, pos_ - start)});
       } else {

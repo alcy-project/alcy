@@ -230,6 +230,14 @@ TEST_CASE("Lexer handles block comments and doc comments") {
                     {TokenKind::DocComment, TokenKind::Ident, TokenKind::Eof}));
   CHECK(check_kinds("//// not doc\nx", f.bag,
                     {TokenKind::Ident, TokenKind::Eof}));
+  // A doc comment is trivia, so the newline after it still terminates
+  // the statement the token before it ended.
+  CHECK(check_kinds("a /// d\nb", f.bag,
+                    {TokenKind::Ident, TokenKind::DocComment,
+                     TokenKind::Semicolon, TokenKind::Ident, TokenKind::Eof}));
+  CHECK(check_kinds("a // d\nb", f.bag,
+                    {TokenKind::Ident, TokenKind::Semicolon, TokenKind::Ident,
+                     TokenKind::Eof}));
   CHECK(!f.bag.has_errors());
 
   CHECK(check_kinds("/* oops", f.bag, {TokenKind::Error, TokenKind::Eof}));

@@ -67,6 +67,7 @@
   F(ParserInvalidTokenStream, "Internal error: invalid token stream: {}") \
   F(ParserNameAlreadyBound, "Name `{}` is already bound in this scope") \
   F(ParserNestingTooDeep, "Nesting is deeper than the limit of {}") \
+  F(ParserRangeBoundRequired, "`..<` and `..=` describe an endpoint, so one must follow") \
   F(ParserRangeEndNeedsBound, "A range end must be spelled `..<` or `..=`, bare `..` names no end") \
   F(ParserReservedName, "Name `{}` is reserved for future use") \
   /* analyzer */ \

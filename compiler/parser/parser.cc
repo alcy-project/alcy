@@ -236,9 +236,11 @@ Parser::StmtLead Parser::scan_lead() const {
       if (kind == lexer::TokenKind::Eq || is_compound_assign(kind)) {
         return StmtLead::Reassign;
       }
+      // A `{` is not a boundary by itself: a struct pattern in a
+      // declaration or a condition carries one before the `:=`, so
+      // braces count as nesting here like parens and brackets.
       if (kind == lexer::TokenKind::Semicolon ||
-          kind == lexer::TokenKind::RBrace ||
-          kind == lexer::TokenKind::LBrace || kind == lexer::TokenKind::Eof) {
+          kind == lexer::TokenKind::RBrace || kind == lexer::TokenKind::Eof) {
         return StmtLead::None;
       }
     }

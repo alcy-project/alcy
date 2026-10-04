@@ -89,6 +89,14 @@ ast::ExprIdx Parser::parse_range() {
       (void)index;
       return ast::ExprIdx::invalid();
     }
+  } else if (kind != lexer::TokenKind::DotDot) {
+    // `..<` and `..=` promise an endpoint; without one the range
+    // would silently read as the unbounded `..`.
+    const u32 index = bag_.emit<i18n::Key::ParserRangeBoundRequired>(
+        diag::Severity::Error, diag::Stage::Parser,
+        DiagCode::RangeEndUnspelled, op);
+    (void)index;
+    return ast::ExprIdx::invalid();
   }
   ast::ExprNode node;
   node.kind = ast::ExprKind::Range;

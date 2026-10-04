@@ -511,7 +511,8 @@ TEST_CASE("Parser reads range expressions") {
 TEST_CASE("Parser requires a spelled range end") {
   for (const std::string_view source :
        {"fn f() { 1..3 }", "fn f() { ..3 }", "fn f() { a[1..2] }",
-        "fn f() { 1..2.5 }"}) {
+        "fn f() { 1..2.5 }", "fn f() { 1..= }", "fn f() { 1..< }",
+        "fn f() { ..= }", "fn f() { ..< }"}) {
     Fixture f;
     const ParseResult result = parse(source, f);
     CHECK_MESSAGE(!result.ok, source);
@@ -1084,14 +1085,13 @@ TEST_CASE("Parser takes self in a capture list") {
   }
 }
 
-// The token cursor skips doc comments, so the scan that decides whether
-// a `[` opens a capture list has to skip them too.
-TEST_CASE("Parser reads a closure across a doc comment") {
+// The cursor advances past doc comments; one after a closure's body
+// must not disturb the trailing value.
+TEST_CASE("Parser reads a closure with a trailing doc comment") {
   Fixture f;
   const ast::ExprIdx value = body_value(
       "fn f() -> i32 {\n"
-      "  [t] /// capture note\n"
-      "  (a: i32) -> a\n"
+      "  [t] (a: i32) -> a /// trailing note\n"
       "}\n",
       f);
   CHECK(value.is_valid());
@@ -1297,6 +1297,24 @@ TEST_CASE("Parser rejects a token stream without Eof") {
                 bytes, source::UNKNOWN_FILE, f.ast, f.bag);
   CHECK(parser.parse().is_err());
   CHECK(f.bag.has_errors());
+}
+
+// A struct pattern carries a `{` before its `:=`, so the declaration
+// scan must treat braces as nesting rather than a statement boundary.
+TEST_CASE("Parser reads a struct pattern in a declaration and condition") {
+  Fixture f;
+  const ParseResult result =
+      parse("struct Foo { x: i32 }\n"
+            "fn f(o: Foo) -> i32 {\n"
+            "  Foo { x } := o\n"
+            "  if Foo { y } := o {\n"
+            "    ret y\n"
+            "  }\n"
+            "  ret x\n"
+            "}\n",
+            f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
 }
 
 }  // namespace parser
