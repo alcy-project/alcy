@@ -548,6 +548,17 @@ class Lowerer {
   bool emit_drop_at(ir::OperandIdx place, ir::TypeIdx type, diag::Span span);
   bool runs_destructor(ir::TypeIdx type) const;
   bool is_destructor(ast::ItemIdx item) const;
+  // Which items are a destructor, gathered once from the checked package.
+  // Lowering asks this of every function it lowers, and answering by walking
+  // every method in the package charged each function for the whole package.
+  std::vector<bool> drop_items_;
+  void mark_drops();
+  // Where each type copy came from, and where each struct's shape is
+  // recorded, both answered by table.
+  std::unordered_map<u32, u32> type_origins_;
+  std::unordered_map<u32, const analyzer::CheckedModule::StructInfo*> structs_;
+  void index_origins();
+  void index_structs();
   void lower_fn(const FnEntry& entry);
 
   // Registers backing the current entry-block parameter list, consumed

@@ -95,7 +95,42 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
       ast(ast),
       strings(strings),
       bag(bag),
-      profiler(profiler) {}
+      profiler(profiler) {
+  mark_drops();
+  index_origins();
+  index_structs();
+}
+
+void Lowerer::mark_drops() {
+  drop_items_.assign(ast.items.size(), false);
+  for (const analyzer::CheckedModule& checked : pkg.modules) {
+    for (const analyzer::CheckedModule::MethodInfo& method : checked.methods) {
+      if (method.is_drop && method.item.idx < drop_items_.size()) {
+        drop_items_[method.item.idx] = true;
+      }
+    }
+  }
+}
+
+// The tables below answer a question the lowerer asks of nearly every
+// instruction. Each was a walk over the whole checked package, so the cost of
+// one function grew with the size of the package it belonged to.
+void Lowerer::index_origins() {
+  type_origins_.reserve(pkg.type_origins.size());
+  // Walking from the back meant the last entry for a copy won.
+  for (usize i = pkg.type_origins.size(); i > 0; --i) {
+    type_origins_.emplace(pkg.type_origins[i - 1].first.idx,
+                          pkg.type_origins[i - 1].second.idx);
+  }
+}
+
+void Lowerer::index_structs() {
+  for (const analyzer::CheckedModule& checked : pkg.modules) {
+    for (const analyzer::CheckedModule::StructInfo& info : checked.structs) {
+      structs_.emplace(info.type.idx, &info);
+    }
+  }
+}
 
 ir::RegisterIdx Lowerer::claim_reg() {
   return ir::RegisterIdx(static_cast<u32>(builder.state().registers.size()));
@@ -226,14 +261,7 @@ void Lowerer::mark_move(Val v) {
 }
 
 bool Lowerer::is_destructor(ast::ItemIdx item) const {
-  for (const analyzer::CheckedModule& checked : pkg.modules) {
-    for (const analyzer::CheckedModule::MethodInfo& method : checked.methods) {
-      if (method.is_drop && method.item == item) {
-        return true;
-      }
-    }
-  }
-  return false;
+  return item.idx < drop_items_.size() && drop_items_[item.idx];
 }
 
 bool Lowerer::runs_destructor(ir::TypeIdx type) const {
@@ -622,25 +650,15 @@ u32 Lowerer::callee_inst(
 }
 
 ir::TypeIdx Lowerer::type_origin(ir::TypeIdx type) const {
-  for (usize i = pkg.type_origins.size(); i > 0; --i) {
-    if (pkg.type_origins[i - 1].first.idx == type.idx) {
-      return pkg.type_origins[i - 1].second;
-    }
-  }
-  return type;
+  const auto found = type_origins_.find(type.idx);
+  return found == type_origins_.end() ? type : ir::TypeIdx(found->second);
 }
 
 const analyzer::CheckedModule::StructInfo* Lowerer::struct_info(
     ir::TypeIdx type) {
   const ir::TypeIdx origin = type_origin(type);
-  for (const auto& checked : pkg.modules) {
-    for (const auto& info : checked.structs) {
-      if (info.type.idx == origin.idx) {
-        return &info;
-      }
-    }
-  }
-  return nullptr;
+  const auto found = structs_.find(origin.idx);
+  return found == structs_.end() ? nullptr : found->second;
 }
 
 void Lowerer::lower_fn(const FnEntry& entry) {
