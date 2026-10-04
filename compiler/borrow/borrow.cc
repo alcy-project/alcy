@@ -1444,11 +1444,48 @@ class Checker {
     return true;
   }
 
-  void reset_function() {
-    // Per-function scratch shares global register indexes.
-    home.assign(storage.registers().size(), NO_ROOT);
-    path.assign(storage.registers().size(), {});
-    flow.assign(storage.registers().size(), {});
+  // Sizes the scratch for the whole program, once. Its entries are indexed
+  // by global register, so all of them have to exist, but a function clears
+  // only the entries it names rather than every entry.
+  void size_scratch() {
+    const usize registers = storage.registers().size();
+    home.assign(registers, NO_ROOT);
+    path.assign(registers, {});
+    flow.assign(registers, {});
+  }
+
+  void clear_register(u32 reg) {
+    // A register an instruction names can sit past the table, which is why
+    // every read bounds-checks it first.
+    if (reg >= flow.size()) {
+      return;
+    }
+    home[reg] = NO_ROOT;
+    path[reg].clear();
+    flow[reg].clear();
+  }
+
+  // Clears the scratch for one function. Every register a function reads or
+  // writes is named by one of its instructions, as a destination or as a
+  // register operand, and the places a register stands for are reached
+  // through those, so what it does not name cannot be observed through it.
+  // Clearing the whole program instead charged every function for every
+  // register, which made a package quadratic in its own size.
+  void reset_function(const ir::Function& fn) {
+    for (ir::BlockIdx bidx : fn.blocks) {
+      for (ir::InstructionIdx iidx : storage.blocks()[bidx].instrs) {
+        const ir::Instruction& instr = instr_at(iidx);
+        if (instr.dst.is_valid()) {
+          clear_register(instr.dst.idx);
+        }
+        for (ir::OperandIdx oidx : instr.operands) {
+          const ir::Operand& operand = storage.operands()[oidx];
+          if (operand.is<ir::RegisterIdx>()) {
+            clear_register(operand.as_register().idx);
+          }
+        }
+      }
+    }
     loans.clear();
     moved_in.clear();
     moved_out.clear();
@@ -1456,6 +1493,7 @@ class Checker {
   }
 
   void run() {
+    size_scratch();
     summaries.assign(storage.functions().size(), {});
     // Bounded summary fixed-point over the call graph: one call edge
     // propagates per sweep, so a chain cannot exceed the function count
@@ -1466,8 +1504,8 @@ class Checker {
       stable = true;
       for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
            ++fidx) {
-        reset_function();
         const ir::Function& fn = storage.functions()[fidx];
+        reset_function(fn);
         {
           PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, fn_name(fn),
                                                    "borrow-fn");
@@ -1483,8 +1521,8 @@ class Checker {
     }
     for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
          ++fidx) {
-      reset_function();
       const ir::Function& fn = storage.functions()[fidx];
+      reset_function(fn);
       {
         PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, fn_name(fn),
                                                  "borrow-fn");
