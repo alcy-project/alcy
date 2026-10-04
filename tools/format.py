@@ -41,7 +41,9 @@ def create_commands(target_dirs: list[Path], dry_run: bool) -> list[list[str]]:
             "-i",
         ]
         if dry_run:
-            base_command.append("--dry-run")
+            # `--dry-run` alone reports style drift but exits 0; only
+            # `--Werror` makes the report a failure.
+            base_command += ["--dry-run", "--Werror"]
         commands.append(base_command + files)
     if len(gn_files) > 0:
         # print("target gn files:", *gn_files, sep="\n  ")
@@ -52,8 +54,8 @@ def create_commands(target_dirs: list[Path], dry_run: bool) -> list[list[str]]:
     return commands
 
 
-def format_files(dry_run: bool):
-    header_license.apply_to_files(dry_run)
+def format_files(dry_run: bool) -> int:
+    ok = header_license.apply_to_files(dry_run)
     target_dirs = []
     for d in project_source_dirs:
         if not d.is_dir():
@@ -63,23 +65,30 @@ def format_files(dry_run: bool):
         target_dirs.append(d)
 
     commands = create_commands(target_dirs, dry_run)
-    [subprocess.run(cmd, cwd=project_root_dir) for cmd in commands]
+    # Every command's exit code is the gate; a discarded one lets both
+    # clang-format drift and a license that would be applied pass.
+    for cmd in commands:
+        if subprocess.run(cmd, cwd=project_root_dir).returncode != 0:
+            ok = False
 
     if len(commands) == 0:
         print("None of the files were formatted")
+        ok = False
+    return 0 if ok else 1
 
 
 def main():
-    import sys
-
     dry_run = False
-    if len(sys.argv) >= 2 and sys.argv[1] == "--dry-run":
+    if sys.argv[1:] == ["--dry-run"]:
         import os
 
         print(f"{os.path.basename(__file__)}: dry run enabled")
         dry_run = True
+    elif sys.argv[1:]:
+        print(f"usage: {sys.argv[0]} [--dry-run]", file=sys.stderr)
+        return 2
 
-    format_files(dry_run)
+    return format_files(dry_run)
 
 
 if __name__ == "__main__":

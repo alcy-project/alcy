@@ -52,7 +52,7 @@ TARGETS = {
 }
 
 
-def build(verbose: bool = False) -> int:
+def build() -> int:
     """Builds every target into its own out/ subdirectory.
 
     Fuzz targets carry -fsanitize=fuzzer, which nothing else in the tree
@@ -68,8 +68,6 @@ def build(verbose: bool = False) -> int:
         f"--build-subdir={BUILD_SUBDIR}",
         "--gn-arg=is_fuzz=true",
     ]
-    if verbose:
-        command.append("--verbose")
     return subprocess.run(command, cwd=project_root_dir).returncode
 
 
@@ -283,9 +281,9 @@ def main() -> int:
         sys.exit(f"unknown target(s): {', '.join(unknown)}")
 
     if args.build:
-        return build(args.verbose)
+        return build()
 
-    if not args.no_build and build(args.verbose) != 0:
+    if not args.no_build and build() != 0:
         sys.exit("build failed")
 
     if args.replay:

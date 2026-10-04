@@ -360,7 +360,7 @@ template("gcc_toolchain") {
     }
     nm_bin = "nm"
     if (defined(invoker.nm)) {
-      nm_bin = "nm"
+      nm_bin = invoker.nm
     }
     objcopy_bin = "objcopy"
     if (defined(invoker.objcopy)) {
@@ -415,7 +415,7 @@ template("clang_toolchain") {
     }
     nm_bin = "llvm-nm"
     if (defined(invoker.nm)) {
-      nm_bin = "llvm-nm"
+      nm_bin = invoker.nm
     }
     objcopy_bin = "llvm-objcopy"
     if (defined(invoker.objcopy)) {

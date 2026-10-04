@@ -59,7 +59,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: out/build
-          key: ${{ runner.os }}-wasm-wasm32-${{ inputs.build_type }}-${{ inputs.role }}-false-build-dir
+          # A constant key never refreshes: the first snapshot would be
+          # restored forever, however far the compiler moved on.
+          key: ${{ runner.os }}-wasm-wasm32-${{ inputs.build_type }}-${{ inputs.role }}-false-build-dir-${{ hashFiles('config.toml', '**/*.gn', 'compiler/**') }}
 
       - name: Build All
         shell: bash

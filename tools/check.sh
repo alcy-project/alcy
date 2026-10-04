@@ -143,7 +143,9 @@ if [[ $run_sanitize == true ]]; then
 fi
 
 "${py_runner[@]}" "$tools_dir/format.py" --dry-run
-"${py_runner[@]}" "$tools_dir/lint.py"
+# Lint reuses the debug build's compile database: a dedicated GN tree
+# would install its own copy of LLVM for the same bytes.
+"${py_runner[@]}" "$tools_dir/lint.py" --build-subdir="$debug_subdir"
 
 # The coverage ratchet rebuilds instrumented binaries, so it runs after
 # the format and lint gates and reuses its own output directory. Skip it

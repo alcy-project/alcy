@@ -31,7 +31,11 @@ def check_sources(
                 ignore = True
 
             if not ignore:
-                gn_sources.add(os.path.abspath(normalized))
+                # `gn desc` emits repo-relative paths; the disk side is
+                # absolute, so the comparison has to be too, anchored at
+                # the repository rather than at the caller's directory.
+                repository = Path(__file__).resolve().parent.parent
+                gn_sources.add(str((repository / normalized).resolve()))
 
     # Walk source directory to find unlisted source files
     disk_sources = set()

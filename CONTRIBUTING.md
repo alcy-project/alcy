@@ -20,7 +20,7 @@ uv run ./tools/check_e2e.py
 uv run ./tools/check_exe.py
 uv run ./tools/lint.py
 uv run ./tools/format.py --dry-run
-uv run ./tools/verify_static_linkage.py
+uv run ./tools/verify_static_linkage.py --build-dir=out/build
 
 # The grammar needs no toolchain but the tree-sitter CLI and Node:
 uv run ./tools/check_treesitter.py --grammar

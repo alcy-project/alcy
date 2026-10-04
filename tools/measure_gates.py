@@ -53,7 +53,9 @@ BASELINE = "lint"
 BUDGET = 1.2
 
 # (label, argv) in the order `check.sh` runs them, so the report reads as
-# the gate's own ordering rather than as a sorted table.
+# the gate's own ordering rather than as a sorted table. `fuzz` is not
+# here: it is a development tool (ADR-0017), corpus-dependent, and would
+# neither compare nor finish in a gate's time.
 GATES = [
     ("typos", ["typos"]),
     ("format", ["uv", "run", "./tools/format.py", "--dry-run"]),
@@ -77,7 +79,6 @@ GATES = [
     ("coverage", ["uv", "run", "./tools/check_coverage.py"]),
     ("benchmark smoke", ["uv", "run", "./tools/run_benchmarks.py", "smoke",
                          "--build-subdir=build"]),
-    ("fuzz", ["uv", "run", "./tools/run_fuzz.py"]),
 ]
 
 def machine() -> dict:

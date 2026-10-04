@@ -135,13 +135,13 @@ def create_commands(
     for f in comp_files + header_files:
         commands.append(base_clang_tidy_cmd + [f])
 
-    # cpplint
-    base_cpplint_cmd = ["uv", "run", "cpplint"]
-    if not verbose:
-        base_cpplint_cmd.append("--quiet")
-
-    for f in files:
-        commands.append(base_cpplint_cmd + [f])
+    # cpplint takes many files per run; spawning `uv run` once per file
+    # costs more in interpreter startup than the check itself.
+    if files:
+        base_cpplint_cmd = ["uv", "run", "cpplint"]
+        if not verbose:
+            base_cpplint_cmd.append("--quiet")
+        commands.append(base_cpplint_cmd + files)
 
     return commands
 

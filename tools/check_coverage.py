@@ -70,7 +70,7 @@ IGNORED = ("third_party/", "/out/", "/lib/", "/usr/")
 TOLERANCE = 0.05
 
 
-def build(verbose: bool = False) -> int:
+def build() -> int:
     """Builds instrumented copies of the tests and the compiler.
 
     The flags are clang-only and slow the build down, so the instrumented
@@ -85,8 +85,6 @@ def build(verbose: bool = False) -> int:
         f"--build-subdir={BUILD_SUBDIR}",
         "--gn-arg=is_coverage=true",
     ]
-    if verbose:
-        command.append("--verbose")
     # Both targets, in the order they are measured: the default target is
     # the compiler alone, so asking for it does not build the tests and a
     # stale test binary would silently report the old numbers.
@@ -327,7 +325,7 @@ def main() -> int:
     if shutil.which("llvm-profdata") is None or shutil.which("llvm-cov") is None:
         sys.exit("llvm-cov and llvm-profdata must be on PATH")
 
-    if not args.no_build and build(args.verbose) != 0:
+    if not args.no_build and build() != 0:
         sys.exit("build failed")
 
     current = measure(args.verbose)

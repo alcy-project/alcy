@@ -143,6 +143,11 @@ def unread(paths: list[Path]) -> set[Path]:
     if not paths:
         return set()
     result = run(["tree-sitter", "parse", "--quiet", *map(str, paths)], cwd=GRAMMAR_DIR)
+    if result.returncode != 0 and not result.stdout.strip():
+        # A crashed or missing parser prints nothing, which would read as
+        # "every file parsed"; name them all so the caller fails loudly.
+        print(f"tree-sitter parse failed: {result.stderr.strip()}", file=sys.stderr)
+        return set(paths)
     # The names are printed relative to where the parser runs, which is the
     # grammar directory, and padded into a column, so the name has to be
     # trimmed before it is a path.
@@ -218,7 +223,8 @@ def check_differential(alcy: Path) -> bool:
     problems += [
         f"{path.relative_to(project_root_dir)} is listed as a parse error "
         "and parsed cleanly"
-        for path in unread(listed)
+        for path in listed
+        if path not in unread(listed)
     ]
     for name in sorted(must_fail):
         case = cases / name
