@@ -3,6 +3,14 @@
 
 config("toml_config") {
   include_dirs = [ "src/include" ]
+  # The same directory as a system include, for the reason the LLVM
+  # install does it: warnings inside vendored headers do not fail the
+  # build, while `gn check` still reads the include dir above. The
+  # compiler treats a directory named both ways as a system one.
+  cflags = [
+    "-isystem",
+    rebase_path("src/include", root_build_dir),
+  ]
 }
 
 # toml++ is header-only by default (TOML_HEADER_ONLY=1); no sources needed.

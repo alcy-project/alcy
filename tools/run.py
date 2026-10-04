@@ -58,6 +58,12 @@ def main():
         "(iteration only, never for CI)",
     )
     parser.add_argument(
+        "--llvm-dir",
+        default="",
+        help="Use a preinstalled LLVM prefix (with include/ and lib/) "
+        "instead of downloading the fork's tag artifact",
+    )
+    parser.add_argument(
         "run_args",
         nargs=argparse.REMAINDER,
         help="Arguments to pass to the executable (use '--' before run_args if passing flags)",
@@ -79,6 +85,8 @@ def main():
         args.target_cpu,
         False,
         args.fast,
+        "",
+        args.llvm_dir,
     )
     if ret != 0:
         return ret

@@ -15,9 +15,6 @@
 #include "pkg/arena_copy.h"
 #include "source/source.h"
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-literal-operator"
-#pragma clang diagnostic ignored "-Wswitch"
 // clang-format off
 // Umbrella header provides the .inl implementations; keep it whole.
 #include "toml++/toml.hpp"  // IWYU pragma: keep
@@ -28,15 +25,11 @@
 #include "toml++/impl/parser.hpp"
 #include "toml++/impl/table.hpp"
 #include "pkg/diag_code.h"
-
-#pragma clang diagnostic pop
+// clang-format on
 
 namespace pkg {
 
-namespace {
-
-
-}  // namespace
+namespace {}  // namespace
 
 base::Result<Toolchain, diag::Reported> parse_toolchain(
     std::string_view bytes,
@@ -50,8 +43,8 @@ base::Result<Toolchain, diag::Reported> parse_toolchain(
     // message names the file rather than pointing into it.
     const toml::parse_error& error = result.error();
     const u32 index = bag.emit<i18n::Key::PkgToolchainTomlSyntaxError>(
-        diag::Severity::Error, diag::Stage::Pkg,
-        DiagCode::ToolchainSyntaxError, filename, error.description());
+        diag::Severity::Error, diag::Stage::Pkg, DiagCode::ToolchainSyntaxError,
+        filename, error.description());
     (void)index;
     return base::make_err(diag::Reported{});
   }

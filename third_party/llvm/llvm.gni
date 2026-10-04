@@ -3,6 +3,24 @@
 
 declare_args() {
   cache_llvm = true
+
+  # A preinstalled LLVM prefix to use instead of the fork's tag artifact.
+  # The directory needs include/ and lib/ like an install; setup_llvm is
+  # skipped when it is set, so nothing is downloaded.
+  llvm_install_dir = ""
+}
+
+declare_args() {
+  # Link the lld the install carries into the compiler, so a program
+  # links in-process by default. Native Linux targets only for now: the
+  # embedded linker is a linker and not a driver, so the compiler has to
+  # find the host's startup inputs itself, and that discovery exists for
+  # Linux; another target CPU would need an install built for it, which
+  # the tag download does not stage. Other targets keep spawning their
+  # driver until their own discovery lands. A `linker` in
+  # .alcy/toolchain.toml or `--linker` on the command line replaces the
+  # default either way.
+  alcy_embedded_lld = is_linux && target_cpu == host_cpu
 }
 
 if (is_debug) {
@@ -15,8 +33,12 @@ if (is_debug) {
 }
 
 llvm_root_out_dir = "$root_build_dir/third_party/llvm"
-install_dir = "$llvm_root_out_dir/install/$build_type_lower"
 download_dir = "$llvm_root_out_dir/download/$build_type_lower"
+if (llvm_install_dir != "") {
+  install_dir = llvm_install_dir
+} else {
+  install_dir = "$llvm_root_out_dir/install/$build_type_lower"
+}
 
 # setup_llvm.py detects the host triple at runtime; only override it when
 # cross-compiling (wasm builds run on a native host but link wasm LLVM).
@@ -144,3 +166,50 @@ llvm_components = llvm_backend_components + [
                     "LLVMSandboxIR",
                     "LLVMHipStdPar",
                   ]
+
+# Every LLVM component the embedded lld ELF driver references, taken from
+# the install's lib/cmake/lld/LLDTargets.cmake. The drivers initialize
+# every target backend, so this is the full set rather than the targets
+# this compiler emits for. Only read when alcy_embedded_lld is set.
+llvm_lld_components = [
+  "LLVMAArch64CodeGen", "LLVMAArch64AsmParser", "LLVMAArch64Disassembler", "LLVMAArch64Desc",
+  "LLVMAArch64Info", "LLVMAArch64Utils", "LLVMAMDGPUCodeGen", "LLVMAMDGPUAsmParser",
+  "LLVMAMDGPUDisassembler", "LLVMAMDGPUDesc", "LLVMAMDGPUInfo", "LLVMAMDGPUUtils",
+  "LLVMARMCodeGen", "LLVMARMAsmParser", "LLVMARMDisassembler", "LLVMARMDesc",
+  "LLVMARMInfo", "LLVMARMUtils", "LLVMAVRCodeGen", "LLVMAVRAsmParser",
+  "LLVMAVRDesc", "LLVMAVRDisassembler", "LLVMAVRInfo", "LLVMBPFCodeGen",
+  "LLVMBPFAsmParser", "LLVMBPFDesc", "LLVMBPFDisassembler", "LLVMBPFInfo",
+  "LLVMHexagonCodeGen", "LLVMMIRParser", "LLVMHexagonAsmParser", "LLVMHexagonDisassembler",
+  "LLVMHexagonDesc", "LLVMHexagonInfo", "LLVMLanaiCodeGen", "LLVMLanaiAsmParser",
+  "LLVMLanaiDisassembler", "LLVMLanaiDesc", "LLVMLanaiInfo", "LLVMLoongArchCodeGen",
+  "LLVMLoongArchAsmParser", "LLVMLoongArchDisassembler", "LLVMLoongArchDesc", "LLVMLoongArchInfo",
+  "LLVMMipsCodeGen", "LLVMMipsAsmParser", "LLVMMipsDesc", "LLVMMipsDisassembler",
+  "LLVMMipsInfo", "LLVMMSP430CodeGen", "LLVMMSP430AsmParser", "LLVMMSP430Desc",
+  "LLVMMSP430Disassembler", "LLVMMSP430Info", "LLVMNVPTXCodeGen", "LLVMNVPTXDesc",
+  "LLVMNVPTXInfo", "LLVMPowerPCCodeGen", "LLVMPowerPCAsmParser", "LLVMPowerPCDesc",
+  "LLVMPowerPCDisassembler", "LLVMPowerPCInfo", "LLVMRISCVCodeGen", "LLVMRISCVAsmParser",
+  "LLVMRISCVDisassembler", "LLVMRISCVDesc", "LLVMRISCVInfo", "LLVMSparcCodeGen",
+  "LLVMSparcAsmParser", "LLVMSparcDesc", "LLVMSparcDisassembler", "LLVMSparcInfo",
+  "LLVMSPIRVCodeGen", "LLVMSPIRVAnalysis", "LLVMSPIRVDesc", "LLVMSPIRVInfo",
+  "LLVMSystemZCodeGen", "LLVMSystemZAsmParser", "LLVMSystemZDisassembler", "LLVMSystemZDesc",
+  "LLVMSystemZInfo", "LLVMVECodeGen", "LLVMVEAsmParser", "LLVMVEDesc",
+  "LLVMVEDisassembler", "LLVMVEInfo", "LLVMWebAssemblyCodeGen", "LLVMWebAssemblyAsmParser",
+  "LLVMWebAssemblyDisassembler", "LLVMWebAssemblyUtils", "LLVMWebAssemblyDesc", "LLVMWebAssemblyInfo",
+  "LLVMX86CodeGen", "LLVMX86AsmParser", "LLVMX86Desc", "LLVMX86Disassembler",
+  "LLVMX86Info", "LLVMXCoreCodeGen", "LLVMAsmPrinter", "LLVMXCoreDesc",
+  "LLVMXCoreDisassembler", "LLVMMCDisassembler", "LLVMXCoreInfo", "LLVMDTLTO",
+  "LLVMLTO", "LLVMExtensions", "LLVMPlugins", "LLVMOption",
+  "LLVMPasses", "LLVMCFGuard", "LLVMGlobalISel", "LLVMSelectionDAG",
+  "LLVMCodeGen", "LLVMCGData", "LLVMTarget", "LLVMCodeGenTypes",
+  "LLVMHipStdPar", "LLVMIRPrinter", "LLVMObjCARCOpts", "LLVMCoroutines",
+  "LLVMipo", "LLVMBitWriter", "LLVMVectorize", "LLVMSandboxIR",
+  "LLVMInstrumentation", "LLVMLinker", "LLVMFrontendOpenMP", "LLVMScalarOpts",
+  "LLVMAggressiveInstCombine", "LLVMInstCombine", "LLVMFrontendOffloading", "LLVMObjectYAML",
+  "LLVMFrontendAtomic", "LLVMFrontendDirective", "LLVMTransformUtils", "LLVMAnalysis",
+  "LLVMProfileData", "LLVMSymbolize", "LLVMDebugInfoGSYM", "LLVMDebugInfoDWARF",
+  "LLVMDebugInfoPDB", "LLVMObject", "LLVMMCParser", "LLVMMC",
+  "LLVMDebugInfoDWARFLowLevel", "LLVMIRReader", "LLVMBitReader", "LLVMAsmParser",
+  "LLVMTextAPI", "LLVMDebugInfoCodeView", "LLVMDebugInfoMSF", "LLVMDebugInfoBTF",
+  "LLVMFrontendHLSL", "LLVMCore", "LLVMBinaryFormat", "LLVMTargetParser",
+  "LLVMRemarks", "LLVMBitstreamReader", "LLVMSupport", "LLVMDemangle",
+]

@@ -3,9 +3,6 @@
 
 #pragma once
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-parameter"
-#pragma clang diagnostic ignored "-Wlanguage-extension-token"
 // IWYU pragma: begin_exports
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/BasicBlock.h"
@@ -34,4 +31,3 @@
 #include "llvm/TargetParser/Host.h"
 #include "llvm/TargetParser/Triple.h"
 // IWYU pragma: end_exports
-#pragma clang diagnostic pop

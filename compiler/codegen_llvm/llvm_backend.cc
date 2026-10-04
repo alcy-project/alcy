@@ -18,18 +18,13 @@
 #include "fpag/debug/profiler/profile_event.h"
 #include "fpag/debug/thread_id.h"
 #include "fpag/debug/time_util.h"
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-parameter"
-// New pass manager pieces name parameters -Wall flags under -Werror;
-// same treatment as other third-party headers in this codebase.
 #include "llvm/Analysis/CGSCCPassManager.h"
 #include "llvm/Analysis/LoopAnalysisManager.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Passes/OptimizationLevel.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/StandardInstrumentations.h"
-#pragma clang diagnostic pop
-#include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace codegen_llvm {

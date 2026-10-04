@@ -51,6 +51,7 @@ def build(
     gen_only: bool = False,
     fast: bool = False,
     gn_args_extra: str = "",
+    llvm_dir: str = "",
 ) -> int:
     out_dir = project_root_dir / "out"
     build_dir = out_dir / build_subdir
@@ -58,6 +59,10 @@ def build(
     is_debug = "true" if mode == "debug" else "false"
 
     gn_args = f"is_debug={is_debug} is_clang={is_clang} use_lld={use_lld}"
+    if llvm_dir:
+        # A preinstalled LLVM prefix instead of the tag artifact.
+        # Absolute, because gn resolves it from the build directory.
+        gn_args += f' llvm_install_dir="{os.path.abspath(llvm_dir)}"'
     if target_os:
         gn_args += f' target_os="{target_os}"'
     if target_cpu:
@@ -154,6 +159,12 @@ def main():
         help='GN target_cpu override (e.g. "wasm32"; defaults per target_os)',
     )
     parser.add_argument(
+        "--llvm-dir",
+        default="",
+        help="Use a preinstalled LLVM prefix (with include/ and lib/) "
+        "instead of downloading the fork's tag artifact",
+    )
+    parser.add_argument(
         "--gn-arg",
         dest="gn_args_extra",
         default="",
@@ -184,6 +195,7 @@ def main():
         args.gen_only,
         args.fast,
         args.gn_args_extra,
+        args.llvm_dir,
     )
 
 

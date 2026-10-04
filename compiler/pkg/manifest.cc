@@ -19,9 +19,6 @@
 #include "pkg/arena_copy.h"
 #include "source/source.h"
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-literal-operator"
-#pragma clang diagnostic ignored "-Wswitch"
 // clang-format off
 // Umbrella header provides the .inl implementations; keep it whole.
 #include "toml++/toml.hpp"  // IWYU pragma: keep
@@ -35,7 +32,6 @@
 #include "toml++/impl/table.hpp"
 #include "pkg/diag_code.h"
 // clang-format on
-#pragma clang diagnostic pop
 
 namespace pkg {
 

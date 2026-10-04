@@ -3,39 +3,69 @@
 
 import("llvm.gni")
 
-action("setup_llvm") {
-  script = "//tools/llvm/setup_llvm.py"
-  tag_cache_file = "$install_dir/.llvm_tag_cache"
+if (llvm_install_dir == "") {
+  action("setup_llvm") {
+    script = "//tools/llvm/setup_llvm.py"
+    tag_cache_file = "$install_dir/.llvm_tag_cache"
 
-  args = [
-           "--type=$llvm_build_type",
-           "--download-dir=" + rebase_path(download_dir),
-           "--install-dir=" + rebase_path(install_dir),
-           "--tag-cache-file=" + rebase_path(tag_cache_file),
-         ] + llvm_triple_args
+    args = [
+             "--type=$llvm_build_type",
+             "--download-dir=" + rebase_path(download_dir),
+             "--install-dir=" + rebase_path(install_dir),
+             "--tag-cache-file=" + rebase_path(tag_cache_file),
+           ] + llvm_triple_args
 
-  if (!cache_llvm) {
-    args += [ "--disable-cache-llvm" ]
+    if (!cache_llvm) {
+      args += [ "--disable-cache-llvm" ]
+    }
+
+    inputs = [
+      script,
+      "//config.toml",
+      "//tools/llvm/download_llvm.py",
+      "//tools/utils/config.py",
+      "//tools/utils/paths.py",
+    ]
+
+    outputs = [ "$install_dir/" ]
   }
-
-  inputs = [
-    script,
-    "//config.toml",
-    "//tools/llvm/download_llvm.py",
-    "//tools/utils/config.py",
-    "//tools/utils/paths.py",
-  ]
-
-  outputs = [ "$install_dir/" ]
 }
 
 config("llvm_config") {
   include_dirs = [ "$install_dir/include" ]
+  # The same directory as a system include: warnings inside vendored
+  # headers do not fail the build (a release one trips an assert-only
+  # parameter in SmallVector), while `gn check` still reads the include
+  # dir above. The compiler treats a directory named both ways as a
+  # system one.
+  cflags = [
+    "-isystem",
+    rebase_path("$install_dir/include", root_build_dir),
+  ]
   lib_dirs = [ "$install_dir/lib" ]
+  if (alcy_embedded_lld) {
+    defines = [ "ALCY_EMBEDDED_LLD=1" ]
+  }
 }
 
 source_set("llvm") {
   public_configs = [ ":llvm_config" ]
-  libs = llvm_components
-  deps = [ ":setup_llvm" ]
+  # The ELF driver comes first: lld references the LLVM libraries and not
+  # the other way around. Only the format the compiler links through is
+  # embedded; another one would take its own driver library.
+  libs = []
+  if (alcy_embedded_lld) {
+    libs += [
+      "lldELF",
+      "lldCommon",
+    ]
+    # What the driver references beyond the compiler's own set; a
+    # duplicate name is harmless, and keeping both lists whole is what
+    # makes each one readable.
+    libs += llvm_lld_components
+  }
+  libs += llvm_components
+  if (llvm_install_dir == "") {
+    deps = [ ":setup_llvm" ]
+  }
 }

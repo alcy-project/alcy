@@ -29,6 +29,7 @@
 #include "lowering/lowering.h"
 #include "path/path.h"
 #include "pipeline/diag_code.h"
+#include "pipeline/embedded_lld.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/frontend.h"
 #include "pipeline/link_options.h"
@@ -252,6 +253,12 @@ base::Result<void, diag::Reported> link_executable(
     const std::string& object_path,
     const std::string& exe_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "link", "backend");
+  // A configured linker replaces the embedded one; the embedded one runs
+  // in-process where the build has it and the host's startup inputs are
+  // found.
+  if (link.driver.empty() && embedded_lld_ready()) {
+    return link_with_embedded_lld(ctx, link, object_path, exe_path);
+  }
   const std::string driver =
       link.driver.empty() ? "clang" : std::string(link.driver);
   // The driver's own arguments follow the object, where a library is
