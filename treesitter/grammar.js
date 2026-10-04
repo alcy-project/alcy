@@ -164,7 +164,8 @@ module.exports = grammar({
       field('name', $.identifier),
       optional(field('type_parameters', $.type_parameters)),
       $._block_lbrace,
-      sepByTrailing($.field_declaration, ','),
+      // A struct with no fields is valid, like an empty block.
+      optional(sepByTrailing($.field_declaration, ',')),
       '}',
     ),
 
@@ -180,7 +181,8 @@ module.exports = grammar({
       field('name', $.identifier),
       optional(field('type_parameters', $.type_parameters)),
       $._block_lbrace,
-      sepByTrailing($.enum_variant, ','),
+      // An enum with no variants is valid, like an empty block.
+      optional(sepByTrailing($.enum_variant, ',')),
       '}',
     ),
 

@@ -388,3 +388,24 @@ impl Counter {
           (path_expression
             (path
               (identifier))))))))
+
+================================================================================
+A struct and an enum may have empty bodies
+================================================================================
+
+struct S {}
+enum E {}
+struct T { x: i32 }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (identifier))
+  (enum_item
+    (identifier))
+  (struct_item
+    (identifier)
+    (field_declaration
+      (identifier)
+      (primitive_type))))
