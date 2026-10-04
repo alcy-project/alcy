@@ -686,6 +686,11 @@ void LlvmIrEmitter::setup_external_functions() {
 }
 
 bool LlvmIrEmitter::is_entry_candidate(const ir::Function& function) const {
+  // An associated function that happens to be named `main` is not the
+  // entry: only a free function is, matching what the analyzer checks.
+  if (function.meta.kind != ir::SymbolKind::Free) {
+    return false;
+  }
   if (interner_->get(function.meta.name) != "main") {
     return false;
   }
