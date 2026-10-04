@@ -7,41 +7,56 @@
 ## Context
 
 `--time-trace` on a thousand-module package said the frontend was one phase.
-`borrow` was 17.6 seconds of a 19.0 second run, and `analyze` was a second
+`borrow` was 20.8 seconds of a 22.5 second run, and `analyze` was a second
 beside it. That reading invited a parallelization plan, and mold's is the
 model to reach for: find the unit of work, then run one unit per thread.
 
-Measuring before parallelizing was worth more than parallelizing first. Four
-of the five stages were not spending their time on the work they name. They
-were spending it on tables whose size is the size of the whole package:
+Measuring before parallelizing was worth more than parallelizing first. The
+stages were not spending their time on the work they name. They were
+spending it on tables whose size is the size of the whole package, walked
+once per module, once per function, or once per call site:
 
-* the borrow checker's scratch is indexed by global register and by global
-  block, and a function rebuilt the whole of each before looking at a block
-  of its own;
-* `type_origin` walked the list of type copies to answer "which type was this
-  copied from", and the type checker asks it at the head of every structural
-  comparison;
-* a nominal lookup walked every type the package declared to answer a
-  question about one module;
-* lowering asked three questions of nearly every instruction, and answered
-  each by walking the whole checked package.
+| stage            | question the table answers                        | walked                        |
+| ---------------- | ------------------------------------------------- | ----------------------------- |
+| `borrow`         | the state a register holds                        | once per function, over every register |
+| `borrow`         | the state a block holds                           | once per function, over every block |
+| `borrow`         | which parameter a root holds                      | once per function, over every register |
+| `analyzer`       | which type a copy came from                       | once per structural comparison |
+| `analyzer`       | which type a name names, in one module            | once per type path, over every type |
+| `analyzer`       | which method is a type's destructor               | once per type, over every method |
+| `analyzer`       | which method a receiver declares                  | once per call site, over every method |
+| `lowering`       | whether an item is a destructor                   | once per function, over every method |
+| `lowering`       | which type a copy came from, where a struct is    | once per instruction, over the package |
+| `lowering`       | which entry a specialization key names            | once per call site, over every entry |
+| `lowering`       | whether a function shadows an intrinsic           | once per call, over every function |
+| `pipeline`       | which file a manifest entry names                 | once per entry, over every file |
 
-The cost of checking one function therefore grew with the size of the
-package, which is the definition of quadratic. A thousand-module package
-went from 19.0 seconds to 0.44.
+The cost of one function therefore grew with the size of the package, which
+is the definition of quadratic. A thousand-module package went from 22.5
+seconds to 0.22, and the cost of a module from 2.6 to 1.9 times what a
+hundred and twenty would suggest.
 
-| stage     | before  | after   |
+| phase     | before  | after   |
 | --------- | ------- | ------- |
-| `borrow`  | 17.59 s | 0.09 s  |
-| `analyze` | 1.03 s  | 0.09 s  |
-| `lower`   | 0.34 s  | 0.18 s  |
-| whole run | 19.0 s  | 0.44 s  |
+| `borrow`  | 20.8 s  | 0.031 s |
+| `analyze` | 1.22 s  | 0.056 s |
+| `lower`   | 0.39 s  | 0.065 s |
+| whole run | 22.5 s  | 0.22 s  |
+
+Three of the twelve are not tables at all. Two are a question asked in the
+wrong order: the intrinsic check ran for every call to answer a question
+about three names, and the parameter list was built to be read four times a
+function. The third is a `drop` scan that had to be told which method is a
+destructor, which is the second row's question wearing a different hat.
 
 ## Decision
 
-A stage's scratch is sized once for the run, and a function clears the part
-it owns. That is the whole change, and it is the same in all four cases. Two
-of them needed more than that:
+A stage's scratch is sized once for the run, and the unit of work clears the
+part it owns. A question about one module is answered from that module's
+entries. A question asked once per call site is answered from a table. That
+is the whole change, and it is the same in all twelve.
+
+Three needed more than that:
 
 * the borrow checker's block-indexed rows are reached by walking the CFG from
   the entry block, not by reading the function's declared block range, so the
@@ -50,6 +65,9 @@ of them needed more than that:
 * `type_origin` and the nominal lookups answer from tables. The lists they
   replaced are still what is handed to the next stage; the tables are
   answers, not storage.
+* the tables that index methods are filled where methods register, which is
+  also where a generic instantiation adds one, so they cannot fall behind the
+  list they index.
 
 **The plan for parallelism follows from this.** The stages that remain
 sequential are the ones whose unit of work is not yet independent, and the
@@ -58,7 +76,7 @@ became visible.
 
 ```mermaid
 flowchart TB
-  subgraph NOW["now: sequential, proportional"]
+  subgraph NOW["now: proportional, and flat"]
     direction TB
     R["read files<br/>threads, per-file bags"] --> N["nominals"]
     N --> S["signatures"]
@@ -83,8 +101,10 @@ flowchart TB
   style NEXT fill:#bc8cff0d,stroke:#bc8cff
 ```
 
-The unit of work is a **function**, in every stage that has one, and it is the
-right unit for the same reason it is right in mold: a function is what a
+The stages are now within a factor of two of each other, so no stage says
+where the run went on its own. That is what the parallelization is for: the
+unit of work is a **function**, in every stage that has one, and it is the
+right unit for the same reason it is right in mold. A function is what a
 person names, so its cost is knowable and its absence from a profile is
 meaningful. It is not the largest available unit, and that is deliberate. A
 package is one unit of work, and handing it to a thread hands back the
