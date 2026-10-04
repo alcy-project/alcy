@@ -2149,7 +2149,9 @@ bool Checker::coerces_array_to_slice(ir::TypeIdx expected, ir::TypeIdx actual) {
 }
 
 // Unifies actual against expected, emitting a mismatch diagnostic.
-// Never coerces to anything; Error suppresses follow-on diagnostics.
+// The coercions it accepts are the two the language has here, a shared
+// reborrow and an array-to-slice view; the result is the actual type.
+// Error suppresses follow-on diagnostics.
 ir::TypeIdx Checker::unify(ir::TypeIdx expected,
                            ir::TypeIdx actual,
                            diag::Span span,

@@ -164,10 +164,14 @@ void append_expanded(fmt::memory_buffer& out, std::string_view text) {
       ++col;
       continue;
     }
-    col = ((col - 1) / TAB_WIDTH + 1) * TAB_WIDTH + 1;
-    for (u32 i = 1; i < col; ++i) {
+    // The tab advances to the next stop from the column it starts at:
+    // the spaces appended are the distance to that stop, not the stop's
+    // absolute column.
+    const u32 next = ((col - 1) / TAB_WIDTH + 1) * TAB_WIDTH + 1;
+    for (u32 i = col; i < next; ++i) {
       out.push_back(' ');
     }
+    col = next;
   }
 }
 

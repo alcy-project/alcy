@@ -41,6 +41,9 @@ TEST_CASE("Unescape drops a code point it cannot encode") {
   // Above U+10FFFF, and the surrogate range, are not characters.
   CHECK(bytes(R"("\u{110000}")").empty());
   CHECK(bytes(R"("\u{D800}")").empty());
+  // A run wider than 32 bits must not wrap into a character; this one
+  // would be U+41 if the accumulator were 32 bits.
+  CHECK(bytes(R"("\u{100000041}")").empty());
   // A lone surrogate inside a longer string leaves the rest alone.
   CHECK(bytes(R"("x\u{D800}y")") == "xy");
 }

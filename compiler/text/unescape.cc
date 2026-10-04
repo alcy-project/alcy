@@ -27,8 +27,10 @@ int hex_value(char c) {
 
 // Appends one code point as UTF-8. Out-of-range and surrogate values
 // are dropped: the lexer already rejected a malformed escape, so this
-// only sees a well-formed run.
-void append_utf8(std::string& out, u32 code) {
+// only sees a well-formed run. The parameter is wide enough that an
+// overlong digit run is dropped here rather than wrapping into a
+// different character.
+void append_utf8(std::string& out, u64 code) {
   if (code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF)) {
     return;
   }
@@ -80,14 +82,14 @@ std::string unescape_string(std::string_view spelling) {
           break;
         }
         i += 2;
-        u32 code = 0;
+        u64 code = 0;
         bool any = false;
         while (i < body.size() && body[i] != '}') {
           const i32 digit = hex_value(body[i]);
           if (digit < 0) {
             break;
           }
-          code = code * 16 + static_cast<u32>(digit);
+          code = code * 16 + static_cast<u64>(digit);
           any = true;
           ++i;
         }

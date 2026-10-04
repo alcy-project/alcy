@@ -42,11 +42,11 @@ constexpr u32 NO_ROOT = 0xFFFFFFFFu;
 constexpr u32 DEREF_STEP = 0xFFFFFFFFu;
 
 // A path step for a buffer element. The index is a runtime value, so
-// the step names no particular element: a loan through it overlaps the
-// whole buffer, which is what makes a reallocating write conflict with a
-// loan into the old block. Two such steps never compare equal to each
-// other, so two loans into distinct elements of one buffer do not
-// conflict - the granularity a `&T` accessor can express, since nothing
+// the step names no particular element; `steps_match` treats it as
+// matching every index, which is what makes a reallocating write
+// conflict with a loan into the old block. Two loans into distinct
+// elements of one buffer therefore overlap too: the source never tied
+// them to specific elements, so it cannot claim they are disjoint.
 constexpr u32 ELEMENT_STEP = 0xFFFFFFFEu;
 
 // A place: a root register (alloca or block parameter) plus a path.
@@ -1056,8 +1056,8 @@ class Checker {
           }
         }
         transfer(bidx, in, out);
-        // IN refreshes every visit (a changed IN with an unchanged OUT
-        // still feeds successors); only OUT changes drive convergence.
+        // IN is refreshed every visit for the check pass to read;
+        // successors are fed from OUT, which alone drives convergence.
         moved_in[bidx.idx] = in;
         if (!same_state(out, moved_out[bidx.idx])) {
           moved_out[bidx.idx] = out;
