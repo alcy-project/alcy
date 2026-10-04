@@ -2908,4 +2908,35 @@ TEST_CASE("Check infers a nested generic struct literal") {
   CHECK(!f.bag.has_errors());
 }
 
+TEST_CASE("Check keeps one name apart per module") {
+  // Two modules declaring the same name is the case a lookup narrowed to a
+  // module's own entries has to get right: a bucket that held both, or the
+  // wrong one, resolves a type to the other module's declaration and then
+  // reports a field or a constructor that is not there.
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {
+                         {"main.al",
+                          "fn take(x: a::Box) -> i32 { ret x.n }\n"
+                          "fn take2(x: b::Box) -> bool { ret x.flag }\n"
+                          "fn main() {\n"
+                          "  p := a::Box { n: 1 }\n"
+                          "  q := b::Box { flag: true }\n"
+                          "  _ := take(p)\n"
+                          "  _ := take2(q)\n"
+                          "}\n"},
+                         {"a.al", "pub struct Box { n: i32 }\n"},
+                         {"b.al", "pub struct Box { flag: bool }\n"},
+                     });
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al", "a.al", "b.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
 }  // namespace analyzer
