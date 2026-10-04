@@ -65,8 +65,8 @@ impl<T> Bound<T> {
 
   // Whether the cursor is spent after yielding `current` with this
   // stride: an inclusive end hit exactly, or a next step that would
-  // pass the end. The differences are exact — a yielded value always
-  // lies on the admitted side — so nothing wraps while deciding, and
+  // pass the end. The differences are exact - a yielded value always
+  // lies on the admitted side - so nothing wraps while deciding, and
   // `0..=255u8` never computes `255 + 1` at any stride.
   fn done_after(self: Self, current: T, stride: T) -> bool {
     ret match self {
@@ -90,7 +90,7 @@ impl<T> Range<T> {
 
   // Names a cursor advancing `stride` values at a time: `(0..<10)`
   // `.step_by(2)` yields 0, 2, 4, 6, 8. A stride must be positive;
-  // zero — or, for signed ranges, a negative one — has no meaning as
+  // zero - or, for signed ranges, a negative one - has no meaning as
   // a step, so asking for one fails rather than yielding one value
   // forever or walking downward.
   pub fn step_by(self: Self, stride: T) -> RangeIter<T> {
