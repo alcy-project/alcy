@@ -146,8 +146,11 @@ jobs:
         shell: bash
         run: uv run ./tools/check_treesitter.py --grammar
 
-  toml:
-    name: TOML
+  # The tree's own linters share one setup and each costs less than a
+  # second, so they share a job: four jobs would pay for the same
+  # checkout and virtual environment four times for the same answer.
+  tree-checks:
+    name: Tree Checks
     needs: [load-config]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -158,73 +161,33 @@ jobs:
           submodules: false
           fetch-depth: 1
 
-      - name: Setup Linters
-        uses: ./.github/actions/setup-linters
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
-          taplo-version: ${{ needs.load-config.outputs.taplo_version }}
+          enable-cache: true
+
+      - name: Setup Python Virtual Environment
+        run: |
+          uv python install
+          uv sync --frozen
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+
+      - name: Install taplo
+        uses: ./.github/actions/install-taplo
+        with:
+          version: ${{ needs.load-config.outputs.taplo_version }}
 
       - name: Check TOML Formatting
         run: taplo fmt --check
 
-  markdown:
-    name: Markdown
-    needs: [load-config]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          submodules: false
-          fetch-depth: 1
-
-      - name: Setup Linters
-        uses: ./.github/actions/setup-linters
-        with:
-          taplo-version: ${{ needs.load-config.outputs.taplo_version }}
-
       - name: Check Markdown
         run: uv run rumdl check .
 
-  rules:
-    name: ast-grep Rules
-    needs: [load-config]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          submodules: false
-          fetch-depth: 1
-
-      - name: Setup Linters
-        uses: ./.github/actions/setup-linters
-        with:
-          taplo-version: ${{ needs.load-config.outputs.taplo_version }}
-
-      - name: Test the Rules
+      - name: Test the ast-grep Rules
         run: uv run ast-grep test
 
       - name: Scan the Compiler with the Rules
         run: uv run ast-grep scan --error compiler
-
-  python:
-    name: Python Tools
-    needs: [load-config]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          submodules: false
-          fetch-depth: 1
-
-      - name: Setup Linters
-        uses: ./.github/actions/setup-linters
-        with:
-          taplo-version: ${{ needs.load-config.outputs.taplo_version }}
 
       - name: Check the Python Tools
         run: |
