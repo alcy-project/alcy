@@ -1,0 +1,5 @@
+id: numeric-isize
+valid:
+  - "isize value = 0;"
+invalid:
+  - "ptrdiff_t value = 0;"

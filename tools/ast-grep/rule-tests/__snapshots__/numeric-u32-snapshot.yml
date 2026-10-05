@@ -1,0 +1,23 @@
+id: numeric-u32
+snapshots:
+  uint32_t value = 0;:
+    fixed: u32 value = 0;
+    labels:
+    - source: uint32_t
+      style: primary
+      start: 0
+      end: 8
+  unsigned int value = 0;:
+    fixed: u32 value = 0;
+    labels:
+    - source: unsigned int
+      style: primary
+      start: 0
+      end: 12
+  unsigned value = 0;:
+    fixed: u32 value = 0;
+    labels:
+    - source: unsigned
+      style: primary
+      start: 0
+      end: 8

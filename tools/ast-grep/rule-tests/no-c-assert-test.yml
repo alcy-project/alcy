@@ -1,0 +1,8 @@
+id: no-c-assert
+valid:
+  - "void f() { DCHECK(true); }"
+  - "static_assert(sizeof(i32) == 4);"
+invalid:
+  - "void f() { assert(true); }"
+  - "#include <cassert>"
+  - "#include <assert.h>"

@@ -1,0 +1,42 @@
+id: no-c-heap
+snapshots:
+  void f() { calloc(4, 1); }:
+    labels:
+    - source: calloc(4, 1)
+      style: primary
+      start: 11
+      end: 23
+    - source: calloc
+      style: secondary
+      start: 11
+      end: 17
+  void f() { std::free(bytes); }:
+    labels:
+    - source: std::free(bytes)
+      style: primary
+      start: 11
+      end: 27
+    - source: std::free
+      style: secondary
+      start: 11
+      end: 20
+  void f() { void* bytes = malloc(4); }:
+    labels:
+    - source: malloc(4)
+      style: primary
+      start: 25
+      end: 34
+    - source: malloc
+      style: secondary
+      start: 25
+      end: 31
+  void f() { void* bytes = realloc(old_bytes, 8); }:
+    labels:
+    - source: realloc(old_bytes, 8)
+      style: primary
+      start: 25
+      end: 46
+    - source: realloc
+      style: secondary
+      start: 25
+      end: 32

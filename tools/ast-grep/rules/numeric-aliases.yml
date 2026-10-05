@@ -1,0 +1,151 @@
+# Every number goes through the aliases in fpag/base/numeric.h: the width
+# is in the name, an alias cannot drift between targets the way `long`
+# can, and the alias is the same type the called API takes. Each rule
+# carries a fix, so a slip is one `ast-grep scan -U` away from the alias.
+#
+# Tree-sitter reads a bare `unsigned` or `short` as a
+# sized_type_specifier and the `int` of `unsigned int` as a primitive_type
+# child of one, so the multi-word spellings match on the specifier and
+# the single-word spellings exclude it; without the exclusion `int`
+# would fire on the `int` half of `unsigned int` and the fix would leave
+# `unsigned i32` behind.
+
+id: numeric-i8
+language: Cpp
+severity: error
+message: Use i8 from fpag/base/numeric.h instead of a raw 8-bit signed type.
+rule:
+  any:
+    - kind: sized_type_specifier
+      regex: ^signed char$
+    - kind: primitive_type
+      regex: ^int8_t$
+fix: i8
+---
+id: numeric-u8
+language: Cpp
+severity: error
+message: Use u8 from fpag/base/numeric.h instead of a raw 8-bit unsigned type.
+rule:
+  any:
+    - kind: sized_type_specifier
+      regex: ^unsigned char$
+    - kind: primitive_type
+      regex: ^uint8_t$
+fix: u8
+---
+id: numeric-i16
+language: Cpp
+severity: error
+message: Use i16 from fpag/base/numeric.h instead of a raw 16-bit signed type.
+rule:
+  any:
+    - kind: sized_type_specifier
+      regex: ^(short|short int|signed short|signed short int)$
+    - kind: primitive_type
+      regex: ^int16_t$
+fix: i16
+---
+id: numeric-u16
+language: Cpp
+severity: error
+message: Use u16 from fpag/base/numeric.h instead of a raw 16-bit unsigned type.
+rule:
+  any:
+    - kind: sized_type_specifier
+      regex: ^(unsigned short|unsigned short int)$
+    - kind: primitive_type
+      regex: ^uint16_t$
+fix: u16
+---
+id: numeric-i32
+language: Cpp
+severity: error
+message: Use i32 from fpag/base/numeric.h instead of a raw 32-bit signed type.
+rule:
+  any:
+    - kind: sized_type_specifier
+      regex: ^(signed|signed int)$
+    - kind: primitive_type
+      regex: ^int$
+      not:
+        inside:
+          kind: sized_type_specifier
+    - kind: primitive_type
+      regex: ^int32_t$
+fix: i32
+---
+id: numeric-u32
+language: Cpp
+severity: error
+message: Use u32 from fpag/base/numeric.h instead of a raw 32-bit unsigned type.
+rule:
+  any:
+    - kind: sized_type_specifier
+      regex: ^(unsigned|unsigned int)$
+    - kind: primitive_type
+      regex: ^uint32_t$
+fix: u32
+---
+id: numeric-i64
+language: Cpp
+severity: error
+message: Use i64 from fpag/base/numeric.h instead of a raw 64-bit signed type.
+rule:
+  any:
+    - kind: sized_type_specifier
+      regex: ^(long|long int|signed long|signed long int|long long|long long int|signed long long|signed long long int)$
+    - kind: primitive_type
+      regex: ^int64_t$
+fix: i64
+---
+id: numeric-u64
+language: Cpp
+severity: error
+message: Use u64 from fpag/base/numeric.h instead of a raw 64-bit unsigned type.
+rule:
+  any:
+    - kind: sized_type_specifier
+      regex: ^(unsigned long|unsigned long int|unsigned long long|unsigned long long int)$
+    - kind: primitive_type
+      regex: ^uint64_t$
+fix: u64
+---
+id: numeric-f32
+language: Cpp
+severity: error
+message: Use f32 from fpag/base/numeric.h instead of float.
+rule:
+  kind: primitive_type
+  regex: ^float$
+fix: f32
+---
+id: numeric-f64
+language: Cpp
+severity: error
+message: Use f64 from fpag/base/numeric.h instead of double.
+rule:
+  kind: primitive_type
+  regex: ^double$
+  not:
+    inside:
+      kind: sized_type_specifier
+fix: f64
+---
+id: numeric-usize
+language: Cpp
+severity: error
+message: Use usize from fpag/base/numeric.h instead of size_t.
+rule:
+  kind: primitive_type
+  regex: ^(std::)?size_t$
+fix: usize
+---
+id: numeric-isize
+language: Cpp
+severity: error
+message: Use isize from fpag/base/numeric.h instead of ptrdiff_t.
+rule:
+  kind: primitive_type
+  regex: ^(std::)?ptrdiff_t$
+fix: isize

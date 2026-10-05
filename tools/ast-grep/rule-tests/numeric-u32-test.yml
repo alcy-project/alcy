@@ -1,0 +1,7 @@
+id: numeric-u32
+valid:
+  - "u32 value = 0;"
+invalid:
+  - "unsigned value = 0;"
+  - "unsigned int value = 0;"
+  - "uint32_t value = 0;"

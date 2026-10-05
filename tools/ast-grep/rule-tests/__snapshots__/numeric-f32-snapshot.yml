@@ -1,0 +1,9 @@
+id: numeric-f32
+snapshots:
+  float value = 0;:
+    fixed: f32 value = 0;
+    labels:
+    - source: float
+      style: primary
+      start: 0
+      end: 5

@@ -1,0 +1,5 @@
+id: numeric-usize
+valid:
+  - "usize value = 0;"
+invalid:
+  - "size_t value = 0;"

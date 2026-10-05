@@ -1,0 +1,9 @@
+id: no-c-heap
+valid:
+  - "void f() { std::vector<u8> bytes(4); }"
+  - "void f() { myfree(value); }"
+invalid:
+  - "void f() { void* bytes = malloc(4); }"
+  - "void f() { std::free(bytes); }"
+  - "void f() { void* bytes = realloc(old_bytes, 8); }"
+  - "void f() { calloc(4, 1); }"

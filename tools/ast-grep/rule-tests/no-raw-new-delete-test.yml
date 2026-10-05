@@ -1,0 +1,9 @@
+id: no-raw-new-delete
+valid:
+  - "void f() { auto value = std::make_unique<i32>(0); }"
+  - "void f() { std::vector<i32> values; }"
+  - "void f() { auto* value = new (mem) T(0); }"
+invalid:
+  - "void f() { i32* value = new i32(0); }"
+  - "void f() { delete value; }"
+  - "void f() { i32* values = new i32[4]; delete[] values; }"

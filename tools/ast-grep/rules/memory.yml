@@ -1,0 +1,28 @@
+# Ownership is explicit in this tree: a resource is held by the type that
+# owns it, never by a pointer a reader has to trace. clang-tidy's
+# modernize-make-unique sees only the smart-pointer spellings, so the raw
+# forms are stated here.
+
+id: no-raw-new-delete
+language: Cpp
+severity: error
+message: Hold this through std::unique_ptr or std::make_unique, not a raw new or delete.
+rule:
+  any:
+    - kind: new_expression
+      # A placement new constructs in storage someone else owns; the
+      # grammar puts its address in a parenthesised expression right
+      # after the keyword, which is what separates it from an allocation.
+      not:
+        regex: ^(::)?new\s*\(
+    - kind: delete_expression
+---
+id: no-c-heap
+language: Cpp
+severity: error
+message: Own this through the project's containers, not the C heap.
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: "(^|::)(aligned_alloc|calloc|free|malloc|realloc|strdup|strndup)$"

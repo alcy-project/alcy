@@ -1,0 +1,16 @@
+# The conventions clang-tidy and cpplint cannot state: the fixed-width
+# type aliases the project spells every number with, and the constructs
+# whose absence is a decision rather than an accident. `ast-grep test`
+# checks the rules against tools/ast-grep/rule-tests; `ast-grep scan
+# compiler` applies them to the tree.
+ruleDirs:
+  - tools/ast-grep/rules
+testConfigs:
+  - testDir: tools/ast-grep/rule-tests
+
+# A header in this tree is C++, and the default mapping reads `.h` as C.
+# Without this the C++ rules never see a header, and a violation there
+# would pass.
+languageGlobs:
+  Cpp:
+    - "*.h"

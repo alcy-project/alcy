@@ -1,0 +1,5 @@
+id: no-const-cast
+valid:
+  - "void f(const i32* value) { (void)value; }"
+invalid:
+  - "void f(const i32* value) { (void)const_cast<i32*>(value); }"

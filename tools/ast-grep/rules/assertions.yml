@@ -1,0 +1,14 @@
+# Invariants go through DCHECK (compiler/debug/dcheck.h), which reports
+# where it fired and which build carries it; the C assert bypasses that.
+# clang-tidy's bugprone-assert-side-effect checks the macros it is told
+# about, not the header this keeps out.
+
+id: no-c-assert
+language: Cpp
+severity: error
+message: Use DCHECK from compiler/debug/dcheck.h instead of the C assert.
+rule:
+  any:
+    - pattern: assert($$$ARGS)
+    - kind: preproc_include
+      regex: "<(cassert|assert\\.h)>"

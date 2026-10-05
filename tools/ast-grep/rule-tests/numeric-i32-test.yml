@@ -1,0 +1,7 @@
+id: numeric-i32
+valid:
+  - "i32 value = 0;"
+invalid:
+  - "int value = 0;"
+  - "signed value = 0;"
+  - "int32_t value = 0;"

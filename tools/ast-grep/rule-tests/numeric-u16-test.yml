@@ -1,0 +1,6 @@
+id: numeric-u16
+valid:
+  - "u16 value = 0;"
+invalid:
+  - "unsigned short value = 0;"
+  - "uint16_t value = 0;"

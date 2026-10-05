@@ -1,0 +1,7 @@
+id: numeric-i64
+valid:
+  - "i64 value = 0;"
+invalid:
+  - "long value = 0;"
+  - "long long value = 0;"
+  - "int64_t value = 0;"

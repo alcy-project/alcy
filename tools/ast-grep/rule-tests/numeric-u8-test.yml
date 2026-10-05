@@ -1,0 +1,6 @@
+id: numeric-u8
+valid:
+  - "u8 value = 0;"
+invalid:
+  - "unsigned char value = 0;"
+  - "uint8_t value = 0;"

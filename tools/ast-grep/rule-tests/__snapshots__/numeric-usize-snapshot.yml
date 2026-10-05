@@ -1,0 +1,9 @@
+id: numeric-usize
+snapshots:
+  size_t value = 0;:
+    fixed: usize value = 0;
+    labels:
+    - source: size_t
+      style: primary
+      start: 0
+      end: 6

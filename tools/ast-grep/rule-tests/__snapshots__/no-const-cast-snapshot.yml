@@ -1,0 +1,8 @@
+id: no-const-cast
+snapshots:
+  void f(const i32* value) { (void)const_cast<i32*>(value); }:
+    labels:
+    - source: const_cast<i32*>(value)
+      style: primary
+      start: 33
+      end: 56

@@ -1,0 +1,10 @@
+# A const_cast is a claim that the const is wrong; the fix belongs at the
+# source of the const. clang-tidy has no check for it enabled, and
+# cpplint sees only the C-style spelling.
+
+id: no-const-cast
+language: Cpp
+severity: error
+message: Remove the const at its source instead of casting it away.
+rule:
+  pattern: const_cast<$TYPE>($EXPR)

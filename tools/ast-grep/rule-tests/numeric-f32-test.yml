@@ -1,0 +1,5 @@
+id: numeric-f32
+valid:
+  - "f32 value = 0;"
+invalid:
+  - "float value = 0;"

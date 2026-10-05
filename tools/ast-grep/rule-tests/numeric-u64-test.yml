@@ -1,0 +1,7 @@
+id: numeric-u64
+valid:
+  - "u64 value = 0;"
+invalid:
+  - "unsigned long value = 0;"
+  - "unsigned long long value = 0;"
+  - "uint64_t value = 0;"

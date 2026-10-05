@@ -1,0 +1,5 @@
+id: numeric-f64
+valid:
+  - "f64 value = 0;"
+invalid:
+  - "double value = 0;"

@@ -1,0 +1,6 @@
+id: numeric-i8
+valid:
+  - "i8 value = 0;"
+invalid:
+  - "signed char value = 0;"
+  - "int8_t value = 0;"

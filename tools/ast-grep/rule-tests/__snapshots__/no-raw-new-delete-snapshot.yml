@@ -1,0 +1,20 @@
+id: no-raw-new-delete
+snapshots:
+  void f() { delete value; }:
+    labels:
+    - source: delete value
+      style: primary
+      start: 11
+      end: 23
+  void f() { i32* value = new i32(0); }:
+    labels:
+    - source: new i32(0)
+      style: primary
+      start: 24
+      end: 34
+  void f() { i32* values = new i32[4]; delete[] values; }:
+    labels:
+    - source: new i32[4]
+      style: primary
+      start: 25
+      end: 35

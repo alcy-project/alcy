@@ -1,0 +1,7 @@
+id: numeric-i16
+valid:
+  - "i16 value = 0;"
+invalid:
+  - "short value = 0;"
+  - "signed short value = 0;"
+  - "int16_t value = 0;"
