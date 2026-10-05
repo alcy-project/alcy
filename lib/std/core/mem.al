@@ -3,7 +3,7 @@
 
 // `alcy/std/core`: memory, the process, and the size of a type.
 
-pub intrinsic fn memcopy(dst: &mut u8, src: &u8, n: usize);
+pub unsafe intrinsic fn memcopy(dst: &mut u8, src: &u8, n: usize);
 
 pub intrinsic fn panic(msg: str) -> !;
 

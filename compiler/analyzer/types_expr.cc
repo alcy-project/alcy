@@ -685,6 +685,15 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
       // generic and associated functions until callable type
       // parameters land.
       const CheckedModule::FnSig* fn = resolved.function;
+      // The value's type drops the gate, so an unsafe function cannot
+      // become one until unsafe function types say what they carry.
+      if (fn->is_unsafe) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerUnsafeFunctionValue>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::InvalidOperation, span, fn->name);
+        (void)index;
+        return error_type();
+      }
       bool plain = fn->item.is_valid() &&
                    ast.items[fn->item].kind != ast::ItemKind::Intrinsic;
       for (bool flag : comp_param_flags(fn->item)) {
@@ -1189,6 +1198,20 @@ ir::TypeIdx Checker::check_indirect_call(u32 module,
   return ret;
 }
 
+// Calling an unsafe function is an operation the gate covers: the call
+// site must be inside an `unsafe { ... }` block, and an unsafe
+// function's own body is not one implicitly (ADR-0050).
+void Checker::check_unsafe_call(const CheckedModule::FnSig* fn,
+                                diag::Span span) {
+  if (fn == nullptr || !fn->is_unsafe || unsafe_depth > 0) {
+    return;
+  }
+  const u32 index = bag.emit<i18n::Key::AnalyzerUnsafeCall>(
+      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnsafeCall, span,
+      fn->name);
+  (void)index;
+}
+
 // Calls through a resolved callee path: free and associated
 // functions, tuple variant constructors, and the `print` intrinsic.
 ir::TypeIdx Checker::check_call(u32 module,
@@ -1245,6 +1268,7 @@ ir::TypeIdx Checker::check_call(u32 module,
       }
       return error_type();
     }
+    check_unsafe_call(fn, span);
     record_call(module, callee, fn);
     check_call_args(module, call.args, fn->params, comp_param_flags(fn->item),
                     span, fn->name, false);
@@ -1261,6 +1285,7 @@ ir::TypeIdx Checker::check_call(u32 module,
       }
       return check_fmt_write(module, expr, expected, fn);
     }
+    check_unsafe_call(fn, span);
     record_call(module, callee, fn);
     check_call_args(module, args, fn->params, comp_param_flags(fn->item), span,
                     fn->name, false);
@@ -2723,15 +2748,25 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
     }
     case ast::ExprKind::Block: {
       const ast::ExprBlock& block = node.payload.get<ast::ExprBlock>();
-      if (!block.is_comp) {
-        return check_block(module, block.block, expected);
+      // An `unsafe { ... }` block opens the gate for its statements;
+      // the block's value and everything else is checked as usual.
+      if (block.is_unsafe) {
+        ++unsafe_depth;
       }
-      ++comp_depth;
-      const bool was_verifying = verify_comp_known;
-      verify_comp_known = true;
-      const ir::TypeIdx type = check_block(module, block.block, expected);
-      verify_comp_known = was_verifying;
-      --comp_depth;
+      ir::TypeIdx type = error_type();
+      if (!block.is_comp) {
+        type = check_block(module, block.block, expected);
+      } else {
+        ++comp_depth;
+        const bool was_verifying = verify_comp_known;
+        verify_comp_known = true;
+        type = check_block(module, block.block, expected);
+        verify_comp_known = was_verifying;
+        --comp_depth;
+      }
+      if (block.is_unsafe) {
+        --unsafe_depth;
+      }
       return type;
     }
     case ast::ExprKind::Return: {

@@ -5,8 +5,6 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
-- [ ] `unsafe` design as an ADR; implementation waits for the package
-  suite.
 - [ ] Doc-comment collection in the parser (the SSG itself waits).
 - [ ] alcy IR text format: define, serialize, deserialize; ahead of
   `--emit=ir` and any cache.
@@ -112,3 +110,10 @@ replaced. The foundations are in `roadmap.md`.
   gate in `check.sh` and it is among the cheapest, which
   `tools/measure_gates.py` now reports rather than leaves to be believed.
   Designed in `docs/adr/0040-gates-live-beside-the-builds.md`.
+- [x] `unsafe` as a gate on operations: `unsafe fn` and
+  `unsafe { ... }` blocks, always lexical, with the block's value
+  being its own. The precondition-carrying intrinsics are declared
+  `unsafe` and the checker verifies the marker against its canonical
+  set, the standard library wraps its uses, and the borrow checker's
+  block handling was fixed so a move inside a block stays moved.
+  Designed in `docs/adr/0050-unsafe-is-a-gate-on-operations.md`.

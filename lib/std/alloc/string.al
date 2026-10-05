@@ -16,13 +16,13 @@ pub struct String {
 
 impl String {
   pub fn new() -> String {
-    ret String { buf: alloc::<u8>(0), len: 0, cap: 0 }
+    ret String { buf: unsafe { alloc::<u8>(0) }, len: 0, cap: 0 }
   }
 
   // Reserves room for `n` bytes without changing the length. A zero
   // `n` still yields a distinct, freeable block.
   pub fn with_capacity(n: usize) -> String {
-    ret String { buf: alloc::<u8>(n), len: 0, cap: n }
+    ret String { buf: unsafe { alloc::<u8>(n) }, len: 0, cap: n }
   }
 
   pub fn len(self: &Self) -> usize {
@@ -42,7 +42,7 @@ impl String {
     if self.len == self.cap {
       self.grow()
     }
-    uninit_write(elem_ptr(self.buf, self.len), b)
+    unsafe { uninit_write(elem_ptr(self.buf, self.len), b) }
     self.len = self.len + 1
   }
 
@@ -61,23 +61,23 @@ impl String {
     if self.cap == 0 {
       next = 4
     }
-    fresh := alloc::<u8>(next)
+    fresh := unsafe { alloc::<u8>(next) }
     mut i := 0 as usize
     while i < self.len {
-      uninit_write(elem_ptr(fresh, i), *uninit_assume(elem_ptr(self.buf, i)))
+      unsafe { uninit_write(elem_ptr(fresh, i), *uninit_assume(elem_ptr(self.buf, i))) }
       i = i + 1
     }
-    dealloc(self.buf, self.cap)
+    unsafe { dealloc(self.buf, self.cap) }
     self.buf = fresh
     self.cap = next
   }
 
   pub fn as_str(self: &Self) -> str {
-    ret str_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len)
+    ret unsafe { str_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len) }
   }
 
   pub fn as_bytes(self: &Self) -> &[u8] {
-    ret slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len)
+    ret unsafe { slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len) }
   }
 
   // Forgets every byte, keeping the room already reserved.
@@ -86,6 +86,6 @@ impl String {
   }
 
   pub fn drop(self: String) {
-    dealloc(self.buf, self.cap)
+    unsafe { dealloc(self.buf, self.cap) }
   }
 }

@@ -205,6 +205,14 @@ void Checker::register_spec(u32 module, ast::ItemIdx item) {
         return;
       }
     }
+    if (spec.methods[i].is_unsafe) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerUnsafeMethodUnsupported>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidOperation, spec.methods[i].name.span,
+          spec.methods[i].name.name);
+      (void)index;
+      return;
+    }
     if (!spec.methods[i].generic.empty()) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecMethodTypeParameters>(
           diag::Severity::Error, diag::Stage::Analyzer,
@@ -1400,6 +1408,16 @@ bool Checker::is_known_intrinsic(std::string_view name) {
          name == "uninit_ref";
 }
 
+// The intrinsics whose preconditions the compiler cannot check
+// (ADR-0050): the declaration must carry `unsafe` and a call needs
+// the gate. Every other intrinsic is safe whatever its arguments.
+static bool intrinsic_is_unsafe(std::string_view name) {
+  return name == "alloc" || name == "dealloc" || name == "elem_ptr" ||
+         name == "elem_ref" || name == "memcopy" || name == "uninit_assume" ||
+         name == "str_from_parts" || name == "slice_from_parts" ||
+         name == "slice_from_parts_mut";
+}
+
 // Verifies a declared intrinsic signature against its canonical
 // shape; declarations are documentation-checked, never trusted.
 bool Checker::check_intrinsic_signature(u32 module,
@@ -1407,6 +1425,21 @@ bool Checker::check_intrinsic_signature(u32 module,
                                         const std::vector<ir::TypeIdx>& params,
                                         ir::TypeIdx ret) {
   const std::string_view name = intrinsic.name.name;
+  // Unsafety is part of the canonical shape: a precondition the
+  // compiler cannot check must be declared, and one it can check must
+  // not be, so the declaration and the gate cannot drift.
+  if (intrinsic_is_unsafe(name) != intrinsic.is_unsafe) {
+    const u32 index =
+        intrinsic.is_unsafe
+            ? bag.emit<i18n::Key::AnalyzerIntrinsicUnexpectedUnsafe>(
+                  diag::Severity::Error, diag::Stage::Analyzer,
+                  DiagCode::InvalidOperation, intrinsic.name.span, name)
+            : bag.emit<i18n::Key::AnalyzerIntrinsicMissingUnsafe>(
+                  diag::Severity::Error, diag::Stage::Analyzer,
+                  DiagCode::InvalidOperation, intrinsic.name.span, name);
+    (void)index;
+    return false;
+  }
   const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
   const ir::TypeIdx u8 = builder.primitive(ir::TypeTag::U8);
   const ir::TypeIdx usize_ty = builder.primitive(
@@ -1657,8 +1690,12 @@ void Checker::process_module(u32 module) {
           ret = resolve_type(
               module, node.payload.get<ast::ItemFn>().return_type, nullptr);
         }
-        add_function(module, {node.payload.get<ast::ItemFn>().name.name,
-                              std::move(params), ret, item});
+        const ast::ItemFn& fn = node.payload.get<ast::ItemFn>();
+        add_function(module, {.name = fn.name.name,
+                              .params = std::move(params),
+                              .ret = ret,
+                              .item = item,
+                              .is_unsafe = fn.is_unsafe});
         break;
       }
       case ast::ItemKind::Intrinsic: {
@@ -1720,8 +1757,11 @@ void Checker::process_module(u32 module) {
         if (!check_intrinsic_signature(module, intrinsic, params, ret)) {
           break;
         }
-        add_function(module,
-                     {intrinsic.name.name, std::move(params), ret, item});
+        add_function(module, {.name = intrinsic.name.name,
+                              .params = std::move(params),
+                              .ret = ret,
+                              .item = item,
+                              .is_unsafe = intrinsic.is_unsafe});
         break;
       }
       case ast::ItemKind::Static:
@@ -1746,6 +1786,19 @@ void Checker::process_module(u32 module) {
         break;
       }
       case ast::ItemKind::Impl: {
+        // Unsafe methods wait for their own slice; the marker parses so
+        // the refusal is about the feature, not about the syntax.
+        for (ast::ItemIdx method : node.payload.get<ast::ItemImpl>().methods) {
+          const ast::ItemFn& fn = ast.items[method].payload.get<ast::ItemFn>();
+          if (!fn.is_unsafe) {
+            continue;
+          }
+          const u32 index =
+              bag.emit<i18n::Key::AnalyzerUnsafeMethodUnsupported>(
+                  diag::Severity::Error, diag::Stage::Analyzer,
+                  DiagCode::InvalidOperation, fn.name.span, fn.name.name);
+          (void)index;
+        }
         if (node.payload.get<ast::ItemImpl>().spec.is_valid()) {
           register_spec_impl(module, item);
           break;
@@ -2959,6 +3012,17 @@ std::string_view Checker::fn_name(ast::ItemIdx item) const {
   return "<fn>";
 }
 
+bool Checker::fn_is_unsafe(ast::ItemIdx item) const {
+  const ast::ItemNode& node = ast.items[item];
+  if (node.kind == ast::ItemKind::Fn) {
+    return node.payload.get<ast::ItemFn>().is_unsafe;
+  }
+  if (node.kind == ast::ItemKind::Intrinsic) {
+    return node.payload.get<ast::ItemIntrinsic>().is_unsafe;
+  }
+  return false;
+}
+
 std::span<const ast::Ident> Checker::fn_generic_params(
     ast::ItemIdx item) const {
   const ast::ItemNode& node = ast.items[item];
@@ -3088,7 +3152,12 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
     type_params = kept_outer;
     return nullptr;
   }
-  add_function(module, {fn_name(item), sig_params, ret, item, NO_INST});
+  add_function(module, {.name = fn_name(item),
+                        .params = sig_params,
+                        .ret = ret,
+                        .item = item,
+                        .inst = NO_INST,
+                        .is_unsafe = fn_is_unsafe(item)});
   const u32 sig_index = static_cast<u32>(modules[module].functions.size()) - 1;
   // Claim a slot in the shared instantiation numbering before checking
   // the body, so recursive calls key the same context.

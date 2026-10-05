@@ -23,13 +23,13 @@ pub struct Vec<T> {
 
 impl<T> Vec<T> {
   pub fn new() -> Vec<T> {
-    ret Vec { buf: alloc::<T>(0), len: 0, cap: 0 }
+    ret Vec { buf: unsafe { alloc::<T>(0) }, len: 0, cap: 0 }
   }
 
   // Reserves room for `n` elements without changing the length. A zero
   // `n` still yields a distinct, freeable block.
   pub fn with_capacity(n: usize) -> Vec<T> {
-    ret Vec { buf: alloc::<T>(n), len: 0, cap: n }
+    ret Vec { buf: unsafe { alloc::<T>(n) }, len: 0, cap: n }
   }
 
   pub fn len(self: &Self) -> usize {
@@ -49,7 +49,7 @@ impl<T> Vec<T> {
     if self.len == self.cap {
       self.grow()
     }
-    uninit_write(elem_ptr(self.buf, self.len), value)
+    unsafe { uninit_write(elem_ptr(self.buf, self.len), value) }
     self.len = self.len + 1
   }
 
@@ -61,13 +61,13 @@ impl<T> Vec<T> {
     if self.cap == 0 {
       next = 4
     }
-    fresh := alloc::<T>(next)
+    fresh := unsafe { alloc::<T>(next) }
     mut i := 0 as usize
     while i < self.len {
-      uninit_write(elem_ptr(fresh, i), *uninit_assume(elem_ptr(self.buf, i)))
+      unsafe { uninit_write(elem_ptr(fresh, i), *uninit_assume(elem_ptr(self.buf, i))) }
       i = i + 1
     }
-    dealloc(self.buf, self.cap)
+    unsafe { dealloc(self.buf, self.cap) }
     self.buf = fresh
     self.cap = next
   }
@@ -79,26 +79,26 @@ impl<T> Vec<T> {
     if index >= self.len {
       ret Option::None
     }
-    ret Option::Some(uninit_ref(elem_ref(self.buf, index)))
+    ret Option::Some(uninit_ref(unsafe { elem_ref(self.buf, index) }))
   }
 
   // The whole buffer as a shared view. The slice borrows the
   // vector, so it stays readable while the vector is not grown.
   pub fn as_slice(self: &Self) -> &[T] {
-    ret slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len)
+    ret unsafe { slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len) }
   }
 
   // The whole buffer as an exclusive view. Growing while it is live
   // reallocates under it, so the checker reports the conflict.
   pub fn as_mut_slice(mut self: &mut Self) -> &mut [T] {
-    ret slice_from_parts_mut(uninit_assume(elem_ptr(self.buf, 0)), self.len)
+    ret unsafe { slice_from_parts_mut(uninit_assume(elem_ptr(self.buf, 0)), self.len) }
   }
 
   pub fn at_mut(mut self: &mut Self, index: usize) -> Option<&mut T> {
     if index >= self.len {
       ret Option::None
     }
-    ret Option::Some(uninit_assume(elem_ptr(self.buf, index)))
+    ret Option::Some(unsafe { uninit_assume(elem_ptr(self.buf, index)) })
   }
 
   // Removes and returns the last element, or `None` when empty.
@@ -107,7 +107,7 @@ impl<T> Vec<T> {
       ret Option::None
     }
     self.len = self.len - 1
-    ret Option::Some(*uninit_assume(elem_ptr(self.buf, self.len)))
+    ret Option::Some(unsafe { *uninit_assume(elem_ptr(self.buf, self.len)) })
   }
 
   // Forgets every element, keeping the room already reserved. A `T`
@@ -117,6 +117,6 @@ impl<T> Vec<T> {
   }
 
   pub fn drop(self: Vec<T>) {
-    dealloc(self.buf, self.cap)
+    unsafe { dealloc(self.buf, self.cap) }
   }
 }

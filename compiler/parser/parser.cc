@@ -34,7 +34,6 @@ bool is_reserved(lexer::TokenKind kind) {
     case lexer::TokenKind::Union:
     case lexer::TokenKind::Register:
     case lexer::TokenKind::Extern:
-    case lexer::TokenKind::Unsafe:
     case lexer::TokenKind::Where:
     case lexer::TokenKind::Dyn: return true;
     default: return false;
@@ -387,16 +386,34 @@ ast::ItemIdx Parser::parse_item() {
     return ast::ItemIdx::invalid();
   }
   const bool is_pub = match(lexer::TokenKind::Pub);
+  const bool is_unsafe = match(lexer::TokenKind::Unsafe);
+  // `unsafe` marks an operation, and only functions declare one, so
+  // it is refused anywhere else rather than read past.
+  const auto only_functions = [&] {
+    if (!is_unsafe) {
+      return true;
+    }
+    const u32 index = bag_.emit<i18n::Key::ParserUnsafeOnlyOnFunctions>(
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+        peek().span);
+    (void)index;
+    return false;
+  };
   switch (peek_kind()) {
-    case lexer::TokenKind::Fn: return parse_fn(is_pub);
-    case lexer::TokenKind::Intrinsic: return parse_intrinsic_fn(is_pub);
-    case lexer::TokenKind::Struct: return parse_struct(is_pub);
-    case lexer::TokenKind::Enum: return parse_enum(is_pub);
-    case lexer::TokenKind::Impl: return parse_impl(is_pub);
-    case lexer::TokenKind::Spec: return parse_spec(is_pub);
-    case lexer::TokenKind::Static: return parse_static(is_pub);
-    case lexer::TokenKind::Const: return parse_const(is_pub);
-    case lexer::TokenKind::Use: return parse_use(is_pub);
+    case lexer::TokenKind::Fn: return parse_fn(is_pub, is_unsafe);
+    case lexer::TokenKind::Intrinsic:
+      return parse_intrinsic_fn(is_pub, is_unsafe);
+    case lexer::TokenKind::Struct:
+      only_functions();
+      return parse_struct(is_pub);
+    case lexer::TokenKind::Enum: only_functions(); return parse_enum(is_pub);
+    case lexer::TokenKind::Impl: only_functions(); return parse_impl(is_pub);
+    case lexer::TokenKind::Spec: only_functions(); return parse_spec(is_pub);
+    case lexer::TokenKind::Static:
+      only_functions();
+      return parse_static(is_pub);
+    case lexer::TokenKind::Const: only_functions(); return parse_const(is_pub);
+    case lexer::TokenKind::Use: only_functions(); return parse_use(is_pub);
     default: break;
   }
   if (at_end()) {
@@ -537,7 +554,7 @@ bool Parser::parse_fn_signature(FnSignature& signature) {
   return true;
 }
 
-ast::ItemIdx Parser::parse_fn(bool is_pub) {
+ast::ItemIdx Parser::parse_fn(bool is_pub, bool is_unsafe) {
   const usize mark = pos_;
   FnSignature signature;
   if (!parse_fn_signature(signature)) {
@@ -557,6 +574,7 @@ ast::ItemIdx Parser::parse_fn(bool is_pub) {
       .params = ast::copy_to_arena(ast_.spans, signature.params),
       .return_type = signature.return_type,
       .body = body,
+      .is_unsafe = is_unsafe,
   });
   return ast_.items.push_back(node);
 }
@@ -588,7 +606,7 @@ bool Parser::parse_fn_params(std::vector<ast::ItemFnParam>& params) {
   return true;
 }
 
-ast::ItemIdx Parser::parse_intrinsic_fn(bool is_pub) {
+ast::ItemIdx Parser::parse_intrinsic_fn(bool is_pub, bool is_unsafe) {
   const usize mark = pos_;
   if (!expect(lexer::TokenKind::Intrinsic, "`intrinsic`")) {
     return ast::ItemIdx::invalid();
@@ -634,6 +652,7 @@ ast::ItemIdx Parser::parse_intrinsic_fn(bool is_pub) {
       .generic = ast::copy_to_arena(ast_.spans, generic),
       .params = ast::copy_to_arena(ast_.spans, params),
       .return_type = return_type,
+      .is_unsafe = is_unsafe,
   });
   return ast_.items.push_back(node);
 }
@@ -826,7 +845,8 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
     if (match(lexer::TokenKind::Semicolon)) {
       continue;
     }
-    ast::ItemIdx method = parse_fn(match(lexer::TokenKind::Pub));
+    ast::ItemIdx method =
+        parse_fn(match(lexer::TokenKind::Pub), match(lexer::TokenKind::Unsafe));
     if (!method.is_valid()) {
       synchronize();
       continue;
@@ -850,6 +870,7 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
 }
 
 bool Parser::parse_spec_method(ast::SpecMethod& method) {
+  const bool is_unsafe = match(lexer::TokenKind::Unsafe);
   FnSignature signature;
   if (!parse_fn_signature(signature)) {
     return false;
@@ -864,6 +885,7 @@ bool Parser::parse_spec_method(ast::SpecMethod& method) {
       .generic = ast::copy_to_arena(ast_.spans, signature.generic),
       .params = ast::copy_to_arena(ast_.spans, signature.params),
       .return_type = signature.return_type,
+      .is_unsafe = is_unsafe,
   };
   return true;
 }

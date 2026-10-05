@@ -9,4 +9,4 @@ pub intrinsic fn str_byte(s: str, i: usize) -> u8;
 
 pub intrinsic fn str_slice(s: str, start: usize, end: usize) -> str;
 
-pub intrinsic fn str_from_parts(ptr: &u8, len: usize) -> str;
+pub unsafe intrinsic fn str_from_parts(ptr: &u8, len: usize) -> str;

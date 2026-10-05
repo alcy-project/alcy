@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Unsafe function 'poke' cannot be used as a value yet"]

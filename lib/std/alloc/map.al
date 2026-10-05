@@ -63,12 +63,12 @@ impl<V> Map<V> {
   // Reserves room for `n` entries without changing the length. A zero
   // `n` still yields a distinct, freeable block, like `Vec`.
   pub fn with_capacity(n: usize) -> Map<V> {
-    keys := alloc::<String>(n)
-    values := alloc::<V>(n)
-    states := alloc::<u8>(n)
+    keys := unsafe { alloc::<String>(n) }
+    values := unsafe { alloc::<V>(n) }
+    states := unsafe { alloc::<u8>(n) }
     mut i := 0 as usize
     while i < n {
-      uninit_write(elem_ptr(states, i), 0 as u8)
+      unsafe { uninit_write(elem_ptr(states, i), 0 as u8) }
       i = i + 1
     }
     ret Map {
@@ -102,7 +102,7 @@ impl<V> Map<V> {
     mut result := slot
     mut found := false
     while !found {
-      st := *uninit_ref(elem_ref(self.states, slot))
+      st := *uninit_ref(unsafe { elem_ref(self.states, slot) })
       if st == 0 {
         if free < self.cap {
           result = free
@@ -112,7 +112,7 @@ impl<V> Map<V> {
         found = true
       } else {
         if st == 1 {
-          if key_eq(uninit_ref(elem_ref(self.keys, slot)).as_str(), key) {
+          if key_eq(uninit_ref(unsafe { elem_ref(self.keys, slot) }).as_str(), key) {
             result = slot
             found = true
           }
@@ -136,10 +136,10 @@ impl<V> Map<V> {
       ret Option::None
     }
     slot := self.locate(key)
-    if *uninit_ref(elem_ref(self.states, slot)) != 1 {
+    if *uninit_ref(unsafe { elem_ref(self.states, slot) }) != 1 {
       ret Option::None
     }
-    ret Option::Some(uninit_ref(elem_ref(self.values, slot)))
+    ret Option::Some(uninit_ref(unsafe { elem_ref(self.values, slot) }))
   }
 
   // The value under `key` as a mutable reference, or `None`.
@@ -148,10 +148,10 @@ impl<V> Map<V> {
       ret Option::None
     }
     slot := self.locate(key)
-    if *uninit_ref(elem_ref(self.states, slot)) != 1 {
+    if *uninit_ref(unsafe { elem_ref(self.states, slot) }) != 1 {
       ret Option::None
     }
-    ret Option::Some(uninit_assume(elem_ptr(self.values, slot)))
+    ret Option::Some(unsafe { uninit_assume(elem_ptr(self.values, slot)) })
   }
 
   pub fn contains(self: &Self, key: str) -> bool {
@@ -159,7 +159,7 @@ impl<V> Map<V> {
       ret false
     }
     slot := self.locate(key)
-    ret *uninit_ref(elem_ref(self.states, slot)) == 1
+    ret *uninit_ref(unsafe { elem_ref(self.states, slot) }) == 1
   }
 
   // Inserts `value` under `key`, replacing and returning the value
@@ -169,17 +169,17 @@ impl<V> Map<V> {
       self.grow()
     }
     slot := self.locate(key)
-    st := *uninit_ref(elem_ref(self.states, slot))
+    st := *uninit_ref(unsafe { elem_ref(self.states, slot) })
     if st == 1 {
-      old := *uninit_assume(elem_ptr(self.values, slot))
-      uninit_write(elem_ptr(self.values, slot), value)
+      old := unsafe { *uninit_assume(elem_ptr(self.values, slot)) }
+      unsafe { uninit_write(elem_ptr(self.values, slot), value) }
       ret Option::Some(old)
     }
     mut owned := String::with_capacity(str_len(key))
     owned.push_str(key)
-    uninit_write(elem_ptr(self.keys, slot), owned)
-    uninit_write(elem_ptr(self.values, slot), value)
-    uninit_write(elem_ptr(self.states, slot), 1 as u8)
+    unsafe { uninit_write(elem_ptr(self.keys, slot), owned) }
+    unsafe { uninit_write(elem_ptr(self.values, slot), value) }
+    unsafe { uninit_write(elem_ptr(self.states, slot), 1 as u8) }
     self.len = self.len + 1
     if st == 2 {
       self.tombs = self.tombs - 1
@@ -193,12 +193,12 @@ impl<V> Map<V> {
       ret Option::None
     }
     slot := self.locate(key)
-    if *uninit_ref(elem_ref(self.states, slot)) != 1 {
+    if *uninit_ref(unsafe { elem_ref(self.states, slot) }) != 1 {
       ret Option::None
     }
-    old := *uninit_assume(elem_ptr(self.values, slot))
-    dead := *uninit_assume(elem_ptr(self.keys, slot))
-    uninit_write(elem_ptr(self.states, slot), 2 as u8)
+    old := unsafe { *uninit_assume(elem_ptr(self.values, slot)) }
+    dead := unsafe { *uninit_assume(elem_ptr(self.keys, slot)) }
+    unsafe { uninit_write(elem_ptr(self.states, slot), 2 as u8) }
     self.len = self.len - 1
     self.tombs = self.tombs + 1
     ret Option::Some(old)
@@ -208,11 +208,11 @@ impl<V> Map<V> {
   pub fn clear(mut self: &mut Self) {
     mut i := 0 as usize
     while i < self.cap {
-      if *uninit_ref(elem_ref(self.states, i)) == 1 {
-        dead_key := *uninit_assume(elem_ptr(self.keys, i))
-        dead_value := *uninit_assume(elem_ptr(self.values, i))
+      if *uninit_ref(unsafe { elem_ref(self.states, i) }) == 1 {
+        dead_key := unsafe { *uninit_assume(elem_ptr(self.keys, i)) }
+        dead_value := unsafe { *uninit_assume(elem_ptr(self.values, i)) }
       }
-      uninit_write(elem_ptr(self.states, i), 0 as u8)
+      unsafe { uninit_write(elem_ptr(self.states, i), 0 as u8) }
       i = i + 1
     }
     self.len = 0
@@ -226,32 +226,32 @@ impl<V> Map<V> {
     if self.cap == 0 {
       next = 8
     }
-    keys := alloc::<String>(next)
-    values := alloc::<V>(next)
-    states := alloc::<u8>(next)
+    keys := unsafe { alloc::<String>(next) }
+    values := unsafe { alloc::<V>(next) }
+    states := unsafe { alloc::<u8>(next) }
     mut i := 0 as usize
     while i < next {
-      uninit_write(elem_ptr(states, i), 0 as u8)
+      unsafe { uninit_write(elem_ptr(states, i), 0 as u8) }
       i = i + 1
     }
     mut j := 0 as usize
     while j < self.cap {
-      if *uninit_ref(elem_ref(self.states, j)) == 1 {
-        k := *uninit_assume(elem_ptr(self.keys, j))
-        v := *uninit_assume(elem_ptr(self.values, j))
+      if *uninit_ref(unsafe { elem_ref(self.states, j) }) == 1 {
+        k := unsafe { *uninit_assume(elem_ptr(self.keys, j)) }
+        v := unsafe { *uninit_assume(elem_ptr(self.values, j)) }
         mut slot := (hash(k.as_str()) as usize) % next
-        while *uninit_ref(elem_ref(states, slot)) != 0 {
+        while *uninit_ref(unsafe { elem_ref(states, slot) }) != 0 {
           slot = (slot + 1) % next
         }
-        uninit_write(elem_ptr(keys, slot), k)
-        uninit_write(elem_ptr(values, slot), v)
-        uninit_write(elem_ptr(states, slot), 1 as u8)
+        unsafe { uninit_write(elem_ptr(keys, slot), k) }
+        unsafe { uninit_write(elem_ptr(values, slot), v) }
+        unsafe { uninit_write(elem_ptr(states, slot), 1 as u8) }
       }
       j = j + 1
     }
-    dealloc(self.keys, self.cap)
-    dealloc(self.values, self.cap)
-    dealloc(self.states, self.cap)
+    unsafe { dealloc(self.keys, self.cap) }
+    unsafe { dealloc(self.values, self.cap) }
+    unsafe { dealloc(self.states, self.cap) }
     self.keys = keys
     self.values = values
     self.states = states
@@ -263,14 +263,14 @@ impl<V> Map<V> {
   pub fn drop(self: Map<V>) {
     mut i := 0 as usize
     while i < self.cap {
-      if *uninit_ref(elem_ref(self.states, i)) == 1 {
-        dead_key := *uninit_assume(elem_ptr(self.keys, i))
-        dead_value := *uninit_assume(elem_ptr(self.values, i))
+      if *uninit_ref(unsafe { elem_ref(self.states, i) }) == 1 {
+        dead_key := unsafe { *uninit_assume(elem_ptr(self.keys, i)) }
+        dead_value := unsafe { *uninit_assume(elem_ptr(self.values, i)) }
       }
       i = i + 1
     }
-    dealloc(self.keys, self.cap)
-    dealloc(self.values, self.cap)
-    dealloc(self.states, self.cap)
+    unsafe { dealloc(self.keys, self.cap) }
+    unsafe { dealloc(self.values, self.cap) }
+    unsafe { dealloc(self.states, self.cap) }
   }
 }

@@ -654,6 +654,9 @@ ast::ExprIdx Parser::parse_primary() {
     case lexer::TokenKind::Comp: {
       return parse_comp_block();
     }
+    case lexer::TokenKind::Unsafe: {
+      return parse_unsafe_block();
+    }
     case lexer::TokenKind::If: return parse_if();
     case lexer::TokenKind::Match: return parse_match();
     case lexer::TokenKind::Loop: return parse_loop();
@@ -1375,6 +1378,33 @@ ast::ExprIdx Parser::parse_array_literal() {
   node.span = span_from(mark);
   node.payload.set(ast::ExprArray{
       .elements = ast::copy_to_arena(ast_.spans, elements),
+  });
+  return ast_.exprs.push_back(node);
+}
+
+ast::ExprIdx Parser::parse_unsafe_block() {
+  const usize mark = pos_;
+  if (!match(lexer::TokenKind::Unsafe)) {
+    return ast::ExprIdx::invalid();
+  }
+  if (!check(lexer::TokenKind::LBrace)) {
+    const u32 index = bag_.emit<i18n::Key::ParserUnsafeWithoutBlock>(
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+        peek().span);
+    (void)index;
+    return ast::ExprIdx::invalid();
+  }
+  const ast::BlockIdx block = parse_block();
+  if (!block.is_valid()) {
+    return ast::ExprIdx::invalid();
+  }
+  ast::ExprNode node;
+  node.kind = ast::ExprKind::Block;
+  node.span = span_from(mark);
+  node.payload.set(ast::ExprBlock{
+      .block = block,
+      .is_comp = false,
+      .is_unsafe = true,
   });
   return ast_.exprs.push_back(node);
 }

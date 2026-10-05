@@ -3038,13 +3038,13 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     Val material = materialize(cond);
     emit_cond_br(material.op, then_block, else_block);
     switch_to(then_block);
-    finish_arm(lower_block(if_expr.then_block, expected));
+    finish_arm(lower_branch(if_expr.then_block, expected));
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
     switch_to(else_block);
     if (if_expr.else_block.is_valid()) {
-      finish_arm(lower_block(if_expr.else_block, expected));
+      finish_arm(lower_branch(if_expr.else_block, expected));
     } else if (has_slot) {
       internal(node.span, "value if without else");
       return Val{size_one, error_type(), false, false};
@@ -3082,13 +3082,13 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       finish_arm(produced);
     };
     switch_to(body_block);
-    finish_pattern_arm(lower_block(if_expr.then_block, expected));
+    finish_pattern_arm(lower_branch(if_expr.then_block, expected));
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
     switch_to(else_block);
     if (if_expr.else_block.is_valid()) {
-      finish_pattern_arm(lower_block(if_expr.else_block, expected));
+      finish_pattern_arm(lower_branch(if_expr.else_block, expected));
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
@@ -3124,7 +3124,7 @@ Val Lowerer::lower_loop(ast::ExprIdx expr) {
   const u32 drops = static_cast<u32>(locals.size());
   break_targets_.push_back({exit, drops});
   continue_targets_.push_back({header, drops});
-  lower_block(loop_expr.body, nullptr);
+  lower_branch(loop_expr.body, nullptr);
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
@@ -3174,7 +3174,7 @@ Val Lowerer::lower_while(ast::ExprIdx expr) {
   const u32 drops = static_cast<u32>(locals.size());
   break_targets_.push_back({exit, drops});
   continue_targets_.push_back({header, drops});
-  lower_block(while_expr.body, nullptr);
+  lower_branch(while_expr.body, nullptr);
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
@@ -3619,24 +3619,10 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
   const base::NestingScope scope(nesting_);
   const ast::Block& node = ast.blocks[block];
   const u32 mark = static_cast<u32>(locals.size());
-  // Whether an enclosing value has already left is a property of the
-  // path, not of the function: a destructor placed inside a branch
-  // retires the value only there. The inherited flags are restored on
-  // the way out, so the code after the branch still sees it.
-  std::vector<bool> inherited;
-  inherited.reserve(mark);
-  for (u32 i = 0; i < mark; ++i) {
-    inherited.push_back(locals[i].moved);
-  }
   // Comp bindings declared in this block leave with it, so a name from
   // an inner block is not visible after the block ends.
   const usize comp_mark = comp_scope_.size();
-  auto leave = [&] {
-    comp_scope_.resize(comp_mark);
-    for (u32 i = 0; i < inherited.size(); ++i) {
-      locals[i].moved = inherited[i];
-    }
-  };
+  auto leave = [&] { comp_scope_.resize(comp_mark); };
   bool reachable = true;
   for (ast::StmtIdx stmt : node.statements) {
     if (failed) {
@@ -3675,6 +3661,19 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
   leave();
   if (bad) {
     return Val{size_one, error_type(), false, false};
+  }
+  return value;
+}
+
+Val Lowerer::lower_branch(ast::BlockIdx block, const ir::TypeIdx* expected) {
+  std::vector<bool> inherited;
+  inherited.reserve(locals.size());
+  for (const Local& local : locals) {
+    inherited.push_back(local.moved);
+  }
+  Val value = lower_block(block, expected);
+  for (usize i = 0; i < inherited.size() && i < locals.size(); ++i) {
+    locals[i].moved = inherited[i];
   }
   return value;
 }

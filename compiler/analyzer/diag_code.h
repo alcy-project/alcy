@@ -66,6 +66,10 @@ enum class DiagCode : u8 {
   // The shared name table a checker and a lowerer intern into was
   // sized for fewer names than this package declares.
   NameTableExhausted = 35,
+  // An operation that needs the gate (ADR-0050) sits in safe code: a
+  // call to an unsafe function or intrinsic with no enclosing
+  // `unsafe { ... }` block.
+  UnsafeCall = 36,
 };
 
 }  // namespace analyzer

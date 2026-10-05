@@ -69,6 +69,9 @@ struct CheckedModule {
     // lowering can name them by index, but a bare call reaches free
     // functions only, whatever order the declarations appear in.
     bool is_method = false;
+    // Calling this function is an operation that needs an unsafe
+    // block (ADR-0050).
+    bool is_unsafe = false;
   };
   // Lazily-instantiated generic methods append signatures during body
   // checking, so element addresses must stay stable: never

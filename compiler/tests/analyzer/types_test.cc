@@ -1951,9 +1951,117 @@ TEST_CASE("Check rejects print inside comp blocks") {
 
 TEST_CASE("Check accepts memcopy intrinsic declarations") {
   VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "unsafe intrinsic fn memcopy(dst: &mut u8, "
+                       "src: &u8, n: usize);\n"
+                       "fn main() {\n"
+                       "  mut a := 1u8\n"
+                       "  b := 2u8\n"
+                       "  unsafe { memcopy(&mut a, &b, 1) }\n"
+                       "  _ := a\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects an unsafe call in safe code") {
+  VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
-                                      "intrinsic fn memcopy(dst: &mut u8, "
-                                      "src: &u8, n: usize);\n"
+                                      "unsafe fn danger() {}\n"
+                                      "fn main() {\n"
+                                      "  danger()\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check accepts an unsafe call inside an unsafe block") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "unsafe fn danger() {}\n"
+                                      "fn main() {\n"
+                                      "  unsafe { danger() }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check requires the gate in an unsafe function body") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "unsafe fn danger() {}\n"
+                                      "unsafe fn wrap() {\n"
+                                      "  danger()\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check accepts the gate in an unsafe function body") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "unsafe fn danger() {}\n"
+                                      "unsafe fn wrap() {\n"
+                                      "  unsafe { danger() }\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check gates a generic unsafe call") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "unsafe fn pick<T>(x: T) -> T {\n"
+                                      "  ret x\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  ret pick::<i32>(1i32)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a gated intrinsic without the gate") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "unsafe intrinsic fn memcopy(dst: &mut "
+                                      "u8, src: &u8, n: usize);\n"
                                       "fn main() {\n"
                                       "  mut a := 1u8\n"
                                       "  b := 2u8\n"
@@ -1966,7 +2074,75 @@ TEST_CASE("Check accepts memcopy intrinsic declarations") {
   }
   Fixture f;
   const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
-  CHECK(result.package.has_value());
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects an intrinsic missing its unsafe marker") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "intrinsic fn memcopy(dst: &mut "
+                                      "u8, src: &u8, n: usize);\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects an unsafe marker on a safe intrinsic") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "unsafe intrinsic fn size_of<T>() -> "
+                                      "usize;\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects an unsafe function as a value") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "unsafe fn danger() {}\n"
+                                      "fn main() {\n"
+                                      "  _ := danger\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects unsafe methods") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct S { n: i32 }\n"
+                                      "impl S {\n"
+                                      "  unsafe fn poke(self: &Self) {}\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
 }
 
 TEST_CASE("Check rejects unknown intrinsics") {
@@ -1987,7 +2163,7 @@ TEST_CASE("Check rejects unknown intrinsics") {
 TEST_CASE("Check rejects mistyped intrinsic signatures") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
-                                      "intrinsic fn memcopy(x: i32);\n"
+                                      "unsafe intrinsic fn memcopy(x: i32);\n"
                                       "fn main() {}\n"}});
   CHECK(setup);
   if (!setup) {
@@ -2001,10 +2177,11 @@ TEST_CASE("Check rejects mistyped intrinsic signatures") {
 
 TEST_CASE("Check rejects comp parameters on intrinsics") {
   VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "intrinsic fn memcopy(dst: &mut u8, "
-                                      "src: &u8, comp n: usize);\n"
-                                      "fn main() {}\n"}});
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "unsafe intrinsic fn memcopy(dst: &mut u8, "
+                       "src: &u8, comp n: usize);\n"
+                       "fn main() {}\n"}});
   CHECK(setup);
   if (!setup) {
     return;
@@ -2224,28 +2401,28 @@ TEST_CASE("Check accepts typed heap intrinsics") {
   VirtualDir dir;
   const bool setup =
       write_all(dir, {{"main.al",
-                       "pub intrinsic fn alloc<T>(count: "
+                       "pub unsafe intrinsic fn alloc<T>(count: "
                        "usize) -> &mut MaybeUninit<T>;\n"
-                       "pub intrinsic fn dealloc<T>(ptr: &mut "
+                       "pub unsafe intrinsic fn dealloc<T>(ptr: &mut "
                        "MaybeUninit<T>, count: usize);\n"
                        "pub intrinsic fn size_of<T>() -> "
                        "usize;\n"
                        "pub intrinsic fn align_of<T>() -> "
                        "usize;\n"
-                       "pub intrinsic fn elem_ptr<T>(ptr: &mut "
+                       "pub unsafe intrinsic fn elem_ptr<T>(ptr: &mut "
                        "MaybeUninit<T>, index: usize) -> &mut "
                        "MaybeUninit<T>;\n"
                        "pub intrinsic fn uninit_write<T>(slot: "
                        "&mut MaybeUninit<T>, value: T);\n"
-                       "pub intrinsic fn uninit_assume<T>(slot: "
+                       "pub unsafe intrinsic fn uninit_assume<T>(slot: "
                        "&mut MaybeUninit<T>) -> &mut T;\n"
                        "fn main() {\n"
-                       "  data := alloc::<i32>(4)\n"
-                       "  uninit_write(elem_ptr(data, 0), 1i32)\n"
-                       "  _ := *uninit_assume(elem_ptr(data, 0))\n"
+                       "  data := unsafe { alloc::<i32>(4) }\n"
+                       "  unsafe { uninit_write(elem_ptr(data, 0), 1i32) }\n"
+                       "  _ := unsafe { *uninit_assume(elem_ptr(data, 0)) }\n"
                        "  _ := size_of::<i32>()\n"
                        "  _ := align_of::<i32>()\n"
-                       "  dealloc(data, 4)\n"
+                       "  unsafe { dealloc(data, 4) }\n"
                        "}\n"}});
   CHECK(setup);
   if (!setup) {
@@ -2258,16 +2435,17 @@ TEST_CASE("Check accepts typed heap intrinsics") {
 
 TEST_CASE("Check rejects reading an uninitialized slot") {
   VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "pub intrinsic fn alloc<T>(count: "
-                                      "usize) -> &mut MaybeUninit<T>;\n"
-                                      "pub intrinsic fn elem_ptr<T>(ptr: &mut "
-                                      "MaybeUninit<T>, index: usize) -> &mut "
-                                      "MaybeUninit<T>;\n"
-                                      "fn main() -> i32 {\n"
-                                      "  data := alloc::<i32>(1)\n"
-                                      "  ret *elem_ptr(data, 0)\n"
-                                      "}\n"}});
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "pub unsafe intrinsic fn alloc<T>(count: "
+                       "usize) -> &mut MaybeUninit<T>;\n"
+                       "pub unsafe intrinsic fn elem_ptr<T>(ptr: &mut "
+                       "MaybeUninit<T>, index: usize) -> &mut "
+                       "MaybeUninit<T>;\n"
+                       "fn main() -> i32 {\n"
+                       "  data := unsafe { alloc::<i32>(1) }\n"
+                       "  ret unsafe { *elem_ptr(data, 0) }\n"
+                       "}\n"}});
   CHECK(setup);
   if (!setup) {
     return;
@@ -2297,12 +2475,13 @@ TEST_CASE("Check rejects declaring MaybeUninit") {
 
 TEST_CASE("Check rejects an intrinsic declared with the wrong shape") {
   VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "pub intrinsic fn elem_ptr<T>(ptr: "
-                                      "&MaybeUninit<T>, index: usize) -> "
-                                      "&MaybeUninit<T>;\n"
-                                      "fn main() {\n"
-                                      "}\n"}});
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "pub unsafe intrinsic fn elem_ptr<T>(ptr: "
+                       "&MaybeUninit<T>, index: usize) -> "
+                       "&MaybeUninit<T>;\n"
+                       "fn main() {\n"
+                       "}\n"}});
   CHECK(setup);
   if (!setup) {
     return;
@@ -2416,24 +2595,25 @@ ir::TypeIdx struct_with_field(const CheckedPackage& package,
 
 TEST_CASE("Analyze marks a type with a destructor as needing one") {
   VirtualDir dir;
-  const bool setup = write_all(
-      dir,
-      {{"main.al",
-        "pub intrinsic fn alloc<T>(count: usize) -> &mut MaybeUninit<T>;\n"
-        "pub intrinsic fn dealloc<T>(ptr: &mut MaybeUninit<T>, count: usize);\n"
-        "struct R { buf: &mut MaybeUninit<u8> }\n"
-        "impl R {\n"
-        "  fn drop(self: R) {\n"
-        "    dealloc(self.buf, 1 as usize)\n"
-        "  }\n"
-        "}\n"
-        "struct P { n: i32 }\n"
-        "fn main() {\n"
-        "  r := R { buf: alloc::<u8>(4) }\n"
-        "  p := P { n: 1 }\n"
-        "  _ := r.buf\n"
-        "  _ := p.n\n"
-        "}\n"}});
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "pub unsafe intrinsic fn alloc<T>(count: usize) -> &mut "
+                       "MaybeUninit<T>;\n"
+                       "pub unsafe intrinsic fn dealloc<T>(ptr: &mut "
+                       "MaybeUninit<T>, count: usize);\n"
+                       "struct R { buf: &mut MaybeUninit<u8> }\n"
+                       "impl R {\n"
+                       "  fn drop(self: R) {\n"
+                       "    unsafe { dealloc(self.buf, 1 as usize) }\n"
+                       "  }\n"
+                       "}\n"
+                       "struct P { n: i32 }\n"
+                       "fn main() {\n"
+                       "  r := R { buf: unsafe { alloc::<u8>(4) } }\n"
+                       "  p := P { n: 1 }\n"
+                       "  _ := r.buf\n"
+                       "  _ := p.n\n"
+                       "}\n"}});
   CHECK(setup);
   if (!setup) {
     return;
@@ -2461,19 +2641,19 @@ TEST_CASE("Analyze propagates a destructor through a containing struct") {
   VirtualDir dir;
   const bool setup =
       write_all(dir, {{"main.al",
-                       "pub intrinsic fn alloc<T>(count: usize) -> &mut "
+                       "pub unsafe intrinsic fn alloc<T>(count: usize) -> &mut "
                        "MaybeUninit<T>;\n"
-                       "pub intrinsic fn dealloc<T>(ptr: &mut "
+                       "pub unsafe intrinsic fn dealloc<T>(ptr: &mut "
                        "MaybeUninit<T>, count: usize);\n"
                        "struct R { buf: &mut MaybeUninit<u8> }\n"
                        "impl R {\n"
                        "  fn drop(self: R) {\n"
-                       "    dealloc(self.buf, 1 as usize)\n"
+                       "    unsafe { dealloc(self.buf, 1 as usize) }\n"
                        "  }\n"
                        "}\n"
                        "struct H { inner: R, tag: i32 }\n"
                        "fn main() {\n"
-                       "  h := H { inner: R { buf: alloc::<u8>(4) },"
+                       "  h := H { inner: R { buf: unsafe { alloc::<u8>(4) } },"
                        " tag: 1 }\n"
                        "  _ := h.tag\n"
                        "}\n"}});
@@ -2499,26 +2679,26 @@ TEST_CASE("Analyze propagates a destructor through a containing struct") {
 
 TEST_CASE("Analyze resolves a generic type's destructor") {
   VirtualDir dir;
-  const bool setup =
-      write_all(dir, {{"main.al",
-                       "pub intrinsic fn alloc<T>(count: usize) -> &mut "
-                       "MaybeUninit<T>;\n"
-                       "pub intrinsic fn dealloc<T>(ptr: &mut "
-                       "MaybeUninit<T>, count: usize);\n"
-                       "struct Box<T> { item: T,"
-                       " raw: &mut MaybeUninit<u8> }\n"
-                       "impl<T> Box<T> {\n"
-                       "  fn wrap(v: T) -> Box<T> {\n"
-                       "    ret Box { item: v, raw: alloc::<u8>(1) }\n"
-                       "  }\n"
-                       "  fn drop(self: Box<T>) {\n"
-                       "    dealloc(self.raw, 1 as usize)\n"
-                       "  }\n"
-                       "}\n"
-                       "fn main() -> i32 {\n"
-                       "  b := Box::<i32>::wrap(1i32)\n"
-                       "  ret b.item\n"
-                       "}\n"}});
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "pub unsafe intrinsic fn alloc<T>(count: usize) -> &mut "
+             "MaybeUninit<T>;\n"
+             "pub unsafe intrinsic fn dealloc<T>(ptr: &mut "
+             "MaybeUninit<T>, count: usize);\n"
+             "struct Box<T> { item: T,"
+             " raw: &mut MaybeUninit<u8> }\n"
+             "impl<T> Box<T> {\n"
+             "  fn wrap(v: T) -> Box<T> {\n"
+             "    ret Box { item: v, raw: unsafe { alloc::<u8>(1) } }\n"
+             "  }\n"
+             "  fn drop(self: Box<T>) {\n"
+             "    unsafe { dealloc(self.raw, 1 as usize) }\n"
+             "  }\n"
+             "}\n"
+             "fn main() -> i32 {\n"
+             "  b := Box::<i32>::wrap(1i32)\n"
+             "  ret b.item\n"
+             "}\n"}});
   CHECK(setup);
   if (!setup) {
     return;

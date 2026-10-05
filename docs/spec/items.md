@@ -34,8 +34,10 @@
 ## Intrinsic declarations (Bootstrap)
 
 - `intrinsic fn name(params) (-> ret)?;` declares a compiler-provided
-  function: a signature without a body, terminated by `;`. Only free
-  functions may be intrinsic; `intrinsic` methods are rejected.
+  function: a signature without a body, terminated by `;`. An
+  `unsafe` prefix states a precondition the compiler cannot check,
+  and the checker verifies it against the set below (`ffi.md`). Only
+  free functions may be intrinsic; `intrinsic` methods are rejected.
 - The compiler knows a closed set, enumerated here. Declaring any
   other name is a compile-time error:
   - `memcopy(dst: &mut u8, src: &u8, n: usize)` copies `n` bytes.
@@ -90,6 +92,13 @@
   - `&u8` and `&mut u8` are not indexable. Element access through a
     heap pointer arrives with the growable containers, which own the
     bounds check. See `docs/adr/0010-typed-heap-primitives.md`.
+- `memcopy`, `str_from_parts`, `slice_from_parts`,
+  `slice_from_parts_mut`, `alloc`, `dealloc`, `elem_ptr`, `elem_ref`,
+  and `uninit_assume` carry a precondition the compiler cannot check,
+  so their declarations say `unsafe` and a call needs an `unsafe`
+  block (`ffi.md`). The checker verifies the marker against the set
+  the way it verifies the shape, so leaving it out, or adding it to a
+  safe intrinsic, is an error. The remaining intrinsics stay safe.
 - `print(msg: str)` and `println(msg: str)` are ordinary core
   functions over `sys_write`. They remain callable with or without
   a declaration: without the prelude, the legacy name-based path

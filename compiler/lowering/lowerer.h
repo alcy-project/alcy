@@ -556,6 +556,12 @@ class Lowerer {
   Val lower_literal_zero(ir::TypeIdx type, diag::Span span);
   void lower_stmt(ast::StmtIdx stmt);
   Val lower_block(ast::BlockIdx block, const ir::TypeIdx* expected);
+  // One arm of a branch (if/else, pattern test, loop body). The block is
+  // one path through the function, so a value it moved is put back on
+  // the way out: the path that did not take this branch still owns it,
+  // and the borrow checker's join reports what any path moved. A
+  // sequenced block keeps its moves; nothing else runs that path.
+  Val lower_branch(ast::BlockIdx block, const ir::TypeIdx* expected);
   // Ends every value from `mark` onward, innermost first. A destructor
   // consumes its value, so this runs the move the borrow checker sees
   // as ending the local.

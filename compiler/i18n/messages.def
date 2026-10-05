@@ -70,6 +70,8 @@
   F(ParserRangeBoundRequired, "`..<` and `..=` describe an endpoint, so one must follow") \
   F(ParserRangeEndNeedsBound, "A range end must be spelled `..<` or `..=`, bare `..` names no end") \
   F(ParserReservedName, "Name `{}` is reserved for future use") \
+  F(ParserUnsafeOnlyOnFunctions, "`unsafe` applies to functions") \
+  F(ParserUnsafeWithoutBlock, "`unsafe` must open a block (`unsafe {{ ... }}`)") \
   /* analyzer */ \
   F(AnalyzerAmbiguousMethod, "Ambiguous method '{}'") \
   F(AnalyzerAmbiguousVariant, "Ambiguous variant '{}'") \
@@ -145,7 +147,9 @@
   F(AnalyzerImportNotQualified, "Imports must be module-qualified (`self::foo`)") \
   F(AnalyzerInherentImplNeedsNominalType, "Inherent impl requires a nominal type") \
   F(AnalyzerIntegerSuffixOnFloat, "Integer suffix on a float literal") \
+  F(AnalyzerIntrinsicMissingUnsafe, "Intrinsic '{}' is unsafe; declare it `unsafe`") \
   F(AnalyzerIntrinsicSignature, "Intrinsic '{}' has the wrong signature") \
+  F(AnalyzerIntrinsicUnexpectedUnsafe, "Intrinsic '{}' is not unsafe; remove `unsafe`") \
   F(AnalyzerInvalidBinaryOperand, "Invalid binary operand '{}'") \
   F(AnalyzerInvalidCast, "Invalid cast from '{}' to '{}'") \
   F(AnalyzerInvalidFormatString, "Invalid format string") \
@@ -220,6 +224,9 @@
   F(AnalyzerUnresolvedInStandardLibrary, "Unresolved {} '{}'; `{}` is in the standard library (alcy/std/{}); add it to [dependencies]") \
   F(AnalyzerUnresolvedValue, "Unresolved value '{}::{}'") \
   F(AnalyzerUnresolvedValueInStandardLibrary, "Unresolved value '{}::{}'; `{}` is in the standard library (alcy/std/{}); add it to [dependencies]") \
+  F(AnalyzerUnsafeCall, "Call to unsafe function '{}' requires an `unsafe {{ ... }}` block") \
+  F(AnalyzerUnsafeFunctionValue, "Unsafe function '{}' cannot be used as a value yet") \
+  F(AnalyzerUnsafeMethodUnsupported, "Unsafe methods are not implemented yet") \
   F(AnalyzerUnsizedTypeNeedsReference, "Unsized type `[T]` must be behind a reference (`&[T]`)") \
   F(AnalyzerUnsupportedLiteralSuffix, "Unsupported literal suffix '{}'") \
   F(AnalyzerUnusedValue, "Unused non-() value; discard it explicitly with `_ := ...`") \

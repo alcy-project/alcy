@@ -25,12 +25,17 @@ item        = [ vis ] , ( fn_item | intrinsic_fn_item | struct_item
                         | enum_item | impl_item | spec_item | static_item
                         | const_item | use_item ) ;
 vis         = "pub" ;
-fn_item     = "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
+fn_item     = [ "unsafe" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
             , [ "->" , type ] , block ;
-intrinsic_fn_item = "intrinsic" , "fn" , IDENT , [ type_params ] ,
+              (* An `unsafe fn` hands its callers an operation that
+                 needs the gate; the body is not one implicitly. See
+                 docs/spec/ffi.md. *)
+intrinsic_fn_item = [ "unsafe" ] , "intrinsic" , "fn" , IDENT , [ type_params ] ,
             "(" , [ params ] , ")" , [ "->" , type ] , ";" ;
-              (* A signature with no body, terminated by `;`. See
-                 docs/spec/items.md, "Intrinsic declarations". *)
+              (* A signature with no body, terminated by `;`. The
+                 precondition-carrying intrinsics say `unsafe`, which
+                 the checker verifies. See docs/spec/items.md,
+                 "Intrinsic declarations". *)
 type_params = "<" , IDENT , { "," , IDENT } , ">" ;
 params      = [ [ "comp" ] , pattern , ":" , type ,
                 { "," , [ "comp" ] , pattern , ":" , type } , [ "," ] ] ;
@@ -49,10 +54,12 @@ impl_item   = "impl" , [ type_params ] , type , [ "for" , type ] , "{"
                  arguments, and the second is the target. *)
 spec_item   = "spec" , IDENT , [ type_params ] , "{"
             , { [ vis ] , spec_method } , "}" ;
-spec_method = "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
+spec_method = [ "unsafe" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
             , [ "->" , type ] , ";" ;
               (* Signatures only: a body here is an error, and every
-                 implementation supplies each declared method. *)
+                 implementation supplies each declared method. An
+                 `unsafe` method marker parses and is refused for
+                 now; see docs/spec/ffi.md. *)
 static_item = "static" , IDENT , ":" , type , "=" , expr ;
 const_item  = "const" , IDENT , ":" , type , "=" , literal ;
 use_item    = "use" , path , [ "as" , IDENT ] , ";" ;
@@ -118,8 +125,8 @@ field         = "." , ( IDENT | INTEGER ) ;
 method        = "." , IDENT , "(" , [ expr , { "," , expr } ] , ")" ;
 index         = "[" , expr , "]" ;
 primary       = literal | path | struct_expr | tuple_expr | array_expr
-              | paren_expr | block_like | comp_block | closure_expr
-              | ret_expr | break_expr | continue_expr ;
+              | paren_expr | block_like | comp_block | unsafe_block
+              | closure_expr | ret_expr | break_expr | continue_expr ;
               (* `?` is a postfix operator, so it may be followed by a
                  field or method access: `f()?.x` reads as `(f()?).x`.
                  See docs/spec/grammar.md, "Expressions". *)
@@ -149,6 +156,11 @@ array_expr    = "[" , expr , { "," , expr } , [ "," ] , "]"
 block_like    = block | if_expr | match_expr | loop_expr | while_expr
               | for_expr ;
 comp_block    = "comp" , block ;
+unsafe_block  = "unsafe" , block ;
+              (* Opens the gate for the operations inside; its value
+                 is the block's. The rule is lexical: an operation
+                 the gate covers may appear only inside such a block.
+                 See docs/spec/ffi.md. *)
 
 (* Statements and blocks *)
 
@@ -200,7 +212,7 @@ DOC_COMMENT   = "///" , { ANY_BUT_NEWLINE } ;
  *   if else loop while for in break continue ret match
  *   package self super Self as
  *   i8 i16 i32 i64 isize u8 u16 u32 u64 usize f32 f64 bool str
- * Reserved: async await union register extern unsafe where dyn
+ * Reserved: async await union register extern where dyn
  *   i128 u128
  * Contextual, and a keyword rather than a reserved word because it only
  *   has a meaning in one position: `comp` in signatures, declarations, and

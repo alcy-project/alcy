@@ -518,6 +518,9 @@ struct ExprWhile {
 struct ExprBlock {
   BlockIdx block = BlockIdx::invalid();
   bool is_comp = false;
+  // An `unsafe { ... }` block: operations that need the gate may
+  // appear inside it, and its value is the block's.
+  bool is_unsafe = false;
 };
 
 struct ExprReturn {
@@ -830,6 +833,8 @@ struct ItemFn {
   std::span<const ItemFnParam> params;
   TypeIdx return_type = TypeIdx::invalid();
   BlockIdx body = BlockIdx::invalid();
+  // An `unsafe fn`: calling it is an operation that needs the gate.
+  bool is_unsafe = false;
 };
 
 // A compiler-provided function: signature without a body. Calls
@@ -843,6 +848,9 @@ struct ItemIntrinsic {
   std::span<const Ident> generic;
   std::span<const ItemFnParam> params;
   TypeIdx return_type = TypeIdx::invalid();
+  // The precondition the compiler cannot check: the checker verifies
+  // this against the intrinsic set the way it verifies the shape.
+  bool is_unsafe = false;
 };
 
 struct ItemStructField {
@@ -885,6 +893,7 @@ struct SpecMethod {
   std::span<const Ident> generic;
   std::span<const ItemFnParam> params;
   TypeIdx return_type = TypeIdx::invalid();
+  bool is_unsafe = false;
 };
 
 // A named set of method signatures: `spec Iterator<T>`. Method

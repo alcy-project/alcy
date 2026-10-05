@@ -717,7 +717,50 @@ TEST_CASE("Parser reports errors without stopping at the first") {
 
 TEST_CASE("Parser rejects reserved words with guidance") {
   Fixture f;
-  const ParseResult result = parse("fn f() { unsafe x := y }", f);
+  const ParseResult result = parse("fn f() { where x := y }", f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Parser accepts an unsafe function") {
+  Fixture f;
+  const ParseResult result = parse("unsafe fn f() { }", f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+  if (result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn fn = as_fn(result.items[0], f);
+  CHECK(fn.is_unsafe);
+}
+
+TEST_CASE("Parser accepts an unsafe block") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { unsafe { } }", f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+  if (result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn fn = as_fn(result.items[0], f);
+  const ast::Block& body = f.ast.blocks[fn.body];
+  CHECK(body.value.is_valid());
+  if (!body.value.is_valid()) {
+    return;
+  }
+  const ast::ExprNode& block_expr = f.ast.exprs[body.value];
+  CHECK(block_expr.kind == ast::ExprKind::Block);
+  if (block_expr.kind != ast::ExprKind::Block) {
+    return;
+  }
+  const ast::ExprBlock& block = block_expr.payload.get<ast::ExprBlock>();
+  CHECK(block.is_unsafe);
+  CHECK(!block.is_comp);
+}
+
+TEST_CASE("Parser rejects unsafe outside functions and blocks") {
+  Fixture f;
+  const ParseResult result = parse("unsafe struct S { }", f);
   CHECK(!result.ok);
   CHECK(f.bag.has_errors());
 }

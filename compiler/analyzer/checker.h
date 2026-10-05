@@ -182,6 +182,10 @@ class Checker {
   bool in_fn = false;
 
   std::vector<std::vector<Local>> scopes;
+  // Nonzero inside an `unsafe { ... }` block: the operations the gate
+  // covers may appear there (ADR-0050). A closure literal written
+  // inside the block inherits it, because the rule is lexical.
+  u32 unsafe_depth = 0;
   // One declared capture while its closure's body is checked: the
   // name as desugared, the mode the list declared, the outer local's
   // type, and whether the body used it. A use resolving below the
@@ -285,6 +289,9 @@ class Checker {
   std::span<const ast::Ident> fn_generic_params(ast::ItemIdx item) const;
   // Item name for diagnostics.
   std::string_view fn_name(ast::ItemIdx item) const;
+  // Whether calling the function or intrinsic item is an operation
+  // that needs an unsafe block.
+  bool fn_is_unsafe(ast::ItemIdx item) const;
   // A type parameter a declared parameter type pins on its own. The
   // flags say where in the argument the bound type sits: `through_ref`
   // takes the pointee, `through_uninit` then unwraps the `MaybeUninit`
@@ -571,6 +578,9 @@ class Checker {
   ir::TypeIdx check_call(u32 module,
                          ast::ExprIdx expr,
                          const ir::TypeIdx* expected);
+  // A callee reached through a resolved signature: an unsafe one needs
+  // an `unsafe { ... }` block at the call site (ADR-0050).
+  void check_unsafe_call(const CheckedModule::FnSig* fn, diag::Span span);
   // A closure literal: parameters bind from annotations or the
   // expected function type, the body checks as a function body,
   // and the value's type is the signature they make.

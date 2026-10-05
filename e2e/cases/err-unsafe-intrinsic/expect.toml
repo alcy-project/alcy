@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Call to unsafe function 'memcopy' requires an `unsafe { ... }` block"]

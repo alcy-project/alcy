@@ -63,6 +63,12 @@ ambiguous. A method call tries inherent impls first, then spec
 impls whose spec is in scope (declared alongside, imported, or in
 the prelude).
 
+An `unsafe fn` declares that calling it is an operation that needs
+the gate. Its body is not an unsafe context implicitly, so every
+operation the gate covers names `unsafe { ... }` where it happens,
+and the gate never suspends region, move, or drop checking. See
+`ffi.md`.
+
 ## Types
 
 `()` is the unit type. `!` is the never type and coerces to any type.
@@ -96,6 +102,11 @@ Declaration left-hand sides use this grammar with `:=`
   without one, the parameters bind from the argument types.
 - Array indexing is builtin with panic-on-out-of-bounds semantics.
 - Calls to `panic(...)` diverge with type `!`.
+- `unsafe { ... }` opens the gate for the operations inside and
+  evaluates to the block's value; everything inside is checked as
+  it was outside. The rule is lexical, so an `unsafe fn` body uses
+  a block too, and using an unsafe function in value position is
+  refused until unsafe function types land. See `ffi.md`.
 - A closure is an anonymous function: `[captures] (params) -> body`,
   where each parameter is `[mut] (name|_) [: type]` and the body is
   one expression, or a block whose value is its last expression.
