@@ -16,8 +16,6 @@
 // module selection depends on, and a bare-string prefix comparison
 // silently violated it.
 
-#include <cstddef>
-#include <cstdint>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -26,7 +24,7 @@
 #include "fpag/base/result.h"
 #include "path/path.h"
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
+extern "C" i32 LLVMFuzzerTestOneInput(const u8* data, usize size) {
   // Split the input in two so both halves are attacker-chosen.
   const std::string_view bytes(reinterpret_cast<const char*>(data), size);
   const usize split = bytes.find('\n');

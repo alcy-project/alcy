@@ -14,8 +14,6 @@
 // must stay inside the line. That is checkable by parsing the renderer's
 // own output, so it needs no knowledge of the correct answer.
 
-#include <cstddef>
-#include <cstdint>
 #include <optional>
 #include <string_view>
 
@@ -90,7 +88,7 @@ usize header_column(std::string_view line) {
 
 }  // namespace
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
+extern "C" i32 LLVMFuzzerTestOneInput(const u8* data, usize size) {
   if (size < 4) {
     return 0;
   }

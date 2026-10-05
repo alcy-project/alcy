@@ -15,8 +15,6 @@
 // pipeline that answers wrongly; the property tests and the exe cases
 // cover that.
 
-#include <cstddef>
-#include <cstdint>
 #include <string_view>
 
 #include "diag/bag.h"
@@ -27,7 +25,7 @@
 #include "pipeline/check.h"
 #include "pipeline/pipeline_context.h"
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
+extern "C" i32 LLVMFuzzerTestOneInput(const u8* data, usize size) {
   // A cap keeps one input from stalling the run: the pipeline is
   // quadratic in places, and a fuzzer wants throughput more than it wants
   // the largest input.

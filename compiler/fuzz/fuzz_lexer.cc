@@ -10,8 +10,6 @@
 // parser already requires, so "every stream the lexer produces verifies"
 // is exactly the property the parser depends on.
 
-#include <cstddef>
-#include <cstdint>
 #include <string_view>
 #include <vector>
 
@@ -24,7 +22,7 @@
 #include "lexer/token.h"
 #include "source/source.h"
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
+extern "C" i32 LLVMFuzzerTestOneInput(const u8* data, usize size) {
   mem::Arena arena;
   arena.reserve(1u << 20);
   diag::DiagBag bag{arena, i18n::Language::EnUs};

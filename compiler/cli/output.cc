@@ -218,9 +218,9 @@ void append_trace_json(std::string& out, const Envelope& envelope) {
     // Microseconds, which is the unit the trace viewers assume for a
     // complete event, and the call site that recorded it.
     out += R"(,"ts":)";
-    append_json_number(out, static_cast<double>(event.start_time_ns) / 1000.0);
+    append_json_number(out, static_cast<f64>(event.start_time_ns) / 1000.0);
     out += R"(,"dur":)";
-    append_json_number(out, static_cast<double>(event.duration_ns) / 1000.0);
+    append_json_number(out, static_cast<f64>(event.duration_ns) / 1000.0);
     // The call site that recorded the phase, which is what turns a flat
     // list of names into something to navigate.
     out += R"(,"args":{)";

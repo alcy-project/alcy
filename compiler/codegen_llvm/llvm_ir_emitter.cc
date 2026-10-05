@@ -297,7 +297,7 @@ void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
   // Pre-generate phi nodes. The entry block (first in function
   // order) receives LLVM function arguments directly instead of
   // PHIs: lowering places one block parameter per declared parameter.
-  unsigned arg_no = 0;
+  u32 arg_no = 0;
   for (const ir::BlockIdx block_idx : function.blocks) {
     const ir::Block& block = storage_->blocks()[block_idx];
     llvm::BasicBlock* llvm_block = values_.block(block_idx);

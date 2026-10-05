@@ -13,8 +13,6 @@
 // than recursed into, which is the property that keeps this target
 // stack-safe: without it, a fuzzer finds a crash in seconds.
 
-#include <cstddef>
-#include <cstdint>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -31,7 +29,7 @@
 #include "parser/parser.h"
 #include "source/source.h"
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
+extern "C" i32 LLVMFuzzerTestOneInput(const u8* data, usize size) {
   mem::Arena arena;
   arena.reserve(1u << 21);
   diag::DiagBag bag{arena, i18n::Language::EnUs};

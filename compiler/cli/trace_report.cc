@@ -297,13 +297,13 @@ TraceReport build_trace_report(const TraceCapture& trace) {
   // parent, and walking outward again never unfinds it.
   std::vector<TraceReport::Node> nodes;
   nodes.reserve(ordered.size());
-  std::vector<int> parent(ordered.size(), -1);
+  std::vector<i32> parent(ordered.size(), -1);
   std::vector<u64> span(ordered.size(), 0);
   for (usize i = 0; i < ordered.size(); ++i) {
     span[i] = ordered[i]->duration_ns;
   }
   for (usize i = 0; i < ordered.size(); ++i) {
-    int best = -1;
+    i32 best = -1;
     for (usize j = 0; j < ordered.size(); ++j) {
       if (i == j || !contains(*ordered[j], *ordered[i])) {
         continue;
@@ -316,7 +316,7 @@ TraceReport build_trace_report(const TraceCapture& trace) {
         continue;
       }
       if (best < 0 || span[j] < span[best]) {
-        best = static_cast<int>(j);
+        best = static_cast<i32>(j);
       }
     }
     parent[i] = best;
@@ -328,17 +328,17 @@ TraceReport build_trace_report(const TraceCapture& trace) {
     node.process_id = event->process_id;
     nodes.push_back(std::move(node));
   }
-  std::vector<std::vector<int>> children(ordered.size());
+  std::vector<std::vector<i32>> children(ordered.size());
   for (usize i = 0; i < ordered.size(); ++i) {
     if (parent[i] >= 0) {
-      children[static_cast<usize>(parent[i])].push_back(static_cast<int>(i));
+      children[static_cast<usize>(parent[i])].push_back(static_cast<i32>(i));
     }
   }
   // The nodes vector is in start-time order, so linking children in that
   // order keeps every level a timeline without sorting anything twice.
-  std::function<void(TraceReport::Node&, int)> link =
-      [&](TraceReport::Node& node, int index) {
-        for (int child : children[static_cast<usize>(index)]) {
+  std::function<void(TraceReport::Node&, i32)> link =
+      [&](TraceReport::Node& node, i32 index) {
+        for (i32 child : children[static_cast<usize>(index)]) {
           TraceReport::Node subtree =
               std::move(nodes[static_cast<usize>(child)]);
           link(subtree, child);
@@ -348,7 +348,7 @@ TraceReport build_trace_report(const TraceCapture& trace) {
   for (usize i = 0; i < ordered.size(); ++i) {
     if (parent[i] < 0) {
       TraceReport::Node root = std::move(nodes[i]);
-      link(root, static_cast<int>(i));
+      link(root, static_cast<i32>(i));
       report.roots.push_back(std::move(root));
     }
   }

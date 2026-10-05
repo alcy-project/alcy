@@ -12,7 +12,7 @@ namespace text {
 
 namespace {
 
-int hex_value(char c) {
+i32 hex_value(char c) {
   if (c >= '0' && c <= '9') {
     return c - '0';
   }

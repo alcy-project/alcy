@@ -13,8 +13,6 @@
 // bytes toml++ meant, which is checked here by rendering the diagnostic
 // and confirming the reported line:column lands inside the buffer.
 
-#include <cstddef>
-#include <cstdint>
 #include <string_view>
 #include <utility>
 
@@ -26,7 +24,7 @@
 #include "pkg/manifest.h"
 #include "source/source.h"
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, usize size) {
+extern "C" i32 LLVMFuzzerTestOneInput(const u8* data, usize size) {
   mem::Arena arena;
   arena.reserve(1u << 20);
   diag::DiagBag bag{arena, i18n::Language::EnUs};
