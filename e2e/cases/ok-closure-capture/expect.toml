@@ -1,0 +1,5 @@
+# A moved copy, a shared borrow, and an exclusive borrow in one
+# list: f sees t as it was, u live, and writes v through.
+exit = 0
+contains = ["Checked   1 file, 1 module, 2 functions"]
+not_contains = ["error"]

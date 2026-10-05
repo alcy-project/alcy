@@ -173,20 +173,29 @@ class Checker {
     ir::TypeIdx type;
     bool is_mut;
     bool comp_known = false;
+    // Index into the innermost closure's capture list when this local
+    // is a capture binding, or NO_CAPTURE otherwise.
+    u32 capture = NO_CAPTURE;
   };
+  // The capture index that names no capture binding.
+  static constexpr u32 NO_CAPTURE = 0xFFFFFFFFu;
   bool in_fn = false;
 
   std::vector<std::vector<Local>> scopes;
-  // One entry per closure body being checked: the scope index its
-  // parameters live at, with the capture list it declares. A bare
-  // name resolving below the innermost boundary crosses into a
-  // closure from outside it. `suppress_uses` holds when a
-  // non-empty list already reported, so uses of listed names stay
-  // quiet while unlisted ones still report.
+  // One declared capture while its closure's body is checked: the
+  // name as desugared, the mode the list declared, the outer local's
+  // type, and whether the body used it. A use resolving below the
+  // innermost boundary was not captured at all.
+  struct CaptureEntry {
+    std::string_view name;
+    ast::CaptureMode mode = ast::CaptureMode::Move;
+    ir::TypeIdx type;
+    diag::Span span;
+    bool used = false;
+  };
   struct ClosureBound {
     usize scope = 0;
-    std::span<const ast::Ident> captures;
-    bool suppress_uses = false;
+    std::vector<CaptureEntry> captures;
   };
   std::vector<ClosureBound> closure_bounds;
   u32 loop_depth = 0;
@@ -636,6 +645,11 @@ class Checker {
   ir::TypeIdx check_place(u32 module, ast::ExprIdx place);
   void check_stmt(u32 module, ast::StmtIdx stmt);
   bool contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited);
+  // Whether a value of the type copies, mirroring `ir::is_copy_type`.
+  // The checker's own walk so an in-progress recursive type cannot
+  // recurse forever; a revisit answers Copy, because the cycle itself
+  // is the error the checker reports elsewhere.
+  bool capture_is_copy(ir::TypeIdx idx, std::vector<u32>& visited);
   void check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self);
   void check_main(u32 module, ast::ItemIdx fn);
   void check_bodies();

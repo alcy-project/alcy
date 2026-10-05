@@ -3474,27 +3474,20 @@ bool Checker::resolve_value_path(u32 module,
   if (node.segments.size() == 1) {
     const std::string_view name = node.segments[0].name;
     if (const Local* local = lookup_local(name)) {
-      // A use resolving below the innermost closure boundary
-      // crosses into a closure from outside it: a capture. Until
-      // captures land, every crossing is refused; a non-empty
-      // list already reported, so its listed names stay quiet.
+      // A use resolving below the innermost closure boundary was
+      // not captured: a closure sees its own bindings and the
+      // module scope, nothing else. A use of a capture binding
+      // marks its entry used, which is what the unused check reads.
       if (!closure_bounds.empty()) {
-        const ClosureBound& bound = closure_bounds.back();
+        ClosureBound& bound = closure_bounds.back();
         if (scope_of(name) < bound.scope) {
-          bool listed = false;
-          for (const ast::Ident& capture : bound.captures) {
-            if (capture.name == name) {
-              listed = true;
-              break;
-            }
-          }
-          if (!listed || !bound.suppress_uses) {
-            const u32 index =
-                bag.emit<i18n::Key::AnalyzerCapturesNotImplemented>(
-                    diag::Severity::Error, diag::Stage::Analyzer,
-                    DiagCode::CapturesNotImplemented, node.segments[0].span);
-            (void)index;
-          }
+          const u32 index = bag.emit<i18n::Key::AnalyzerNotCaptured>(
+              diag::Severity::Error, diag::Stage::Analyzer,
+              DiagCode::InvalidCapture, node.segments[0].span, name);
+          (void)index;
+        } else if (local->capture != NO_CAPTURE &&
+                   local->capture < bound.captures.size()) {
+          bound.captures[local->capture].used = true;
         }
       }
       out.kind = PathValue::Kind::Local;
@@ -3851,6 +3844,83 @@ bool Checker::contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited) {
     }
     default: return false;
   }
+}
+
+// Whether a value of the type copies, in the checker's own walk: the
+// table's `ir::is_copy_type` runs on cycle-free storage only, and a
+// type under checking is not settled yet. A revisit answers Copy,
+// because the cycle itself is the error the checker reports
+// elsewhere, and mirroring `is_copy_type` is what keeps the two
+// answers from drifting.
+bool Checker::capture_is_copy(ir::TypeIdx idx, std::vector<u32>& visited) {
+  for (u32 seen : visited) {
+    if (seen == idx.idx) {
+      return true;
+    }
+  }
+  visited.push_back(idx.idx);
+  const ir::TypeNode& node = builder.types()[idx];
+  switch (node.tag) {
+    case ir::TypeTag::MutRef: return false;
+    case ir::TypeTag::Error: return true;
+    case ir::TypeTag::Ref:
+    case ir::TypeTag::Void:
+    case ir::TypeTag::Never:
+    case ir::TypeTag::I1:
+    case ir::TypeTag::I8:
+    case ir::TypeTag::I16:
+    case ir::TypeTag::I32:
+    case ir::TypeTag::I64:
+    case ir::TypeTag::U8:
+    case ir::TypeTag::U16:
+    case ir::TypeTag::U32:
+    case ir::TypeTag::U64:
+    case ir::TypeTag::F32:
+    case ir::TypeTag::F64:
+    case ir::TypeTag::Str:
+    case ir::TypeTag::Ptr:
+    case ir::TypeTag::Function:
+    case ir::TypeTag::Func: return true;
+    case ir::TypeTag::Struct: {
+      const ir::StructType& struct_type =
+          builder.struct_types()[node.as_struct()];
+      for (ir::TypeIdx field : struct_type.fields) {
+        if (!capture_is_copy(field, visited)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case ir::TypeTag::Array:
+      return capture_is_copy(builder.array_types()[node.as_array()].element,
+                             visited);
+    case ir::TypeTag::Slice:
+      return capture_is_copy(builder.slice_types()[node.as_slice()].element,
+                             visited);
+    case ir::TypeTag::Enum: {
+      const ir::EnumType& enum_type = builder.enum_types()[node.as_enum()];
+      for (ir::EnumVariantTypeIdx vidx = enum_type.variants.head();
+           vidx.idx < enum_type.variants.head().idx + enum_type.variants.size();
+           vidx = ir::EnumVariantTypeIdx(vidx.idx + 1)) {
+        for (ir::TypeIdx field : builder.enum_variant_types()[vidx].fields) {
+          if (!capture_is_copy(field, visited)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+    case ir::TypeTag::Tuple: {
+      const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
+      for (ir::TypeIdx element : tuple.elements) {
+        if (!capture_is_copy(element, visited)) {
+          return false;
+        }
+      }
+      return true;
+    }
+  }
+  return true;
 }
 
 void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {

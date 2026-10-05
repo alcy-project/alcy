@@ -34,8 +34,10 @@ R ::= ri                    # identity
 ## Staging
 
 - **MVP**: summaries over the constructors above; bounded fixed-point
-  iteration for (mutual) recursion; no closures, no spec objects,
-  no higher-ranked region polymorphism beyond struct projection.
+  iteration for (mutual) recursion; indirect calls through closures
+  carry their arguments' and callee's loans rather than a summary;
+  no spec objects, no higher-ranked region polymorphism beyond
+  struct projection.
 - **Post-MVP**: demand-driven summary computation on the parallel
   engine, full-precision mutual recursion, two-phase borrows, and any
   precision refinements the MVP subset cannot express.

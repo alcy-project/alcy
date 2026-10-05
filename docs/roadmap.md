@@ -16,15 +16,14 @@ peripheral work lives in `backlog.md`. The language record lives in
   stay with IR serialization; until then a lib artifact is an
   object file, linkable but opaque. This unblocks the package
   ecosystem, which the `unsafe` implementation waits for.
-- [ ] Function types and closures.
+- [x] Function types and closures.
 
-  The design is `docs/adr/0044-function-types-and-closures.md`:
-  `(params) -> body` with optional explicit `[captures]`, `ret`
-  returning from the closure, and function types in type position.
-  Landed: parsing, checking, and running for non-capturing
-  closures, including coercion of named functions and calls
-  through values. Remaining: captures, which complete the
-  iteration story the range work started.
+  `(params) -> body` with explicit `[captures]` modes (`name`,
+  `&name`, `&mut name`), `ret` returning from the closure, and
+  function types in type position; named functions coerce to
+  values, and calls go through values. The owning environment —
+  non-Copy captures and closures that escape their frame — is a
+  follow-up in `deferred.md`.
 - [ ] C FFI and freestanding.
 
   In slices: the `unsafe` design, then `extern "C"` declarations

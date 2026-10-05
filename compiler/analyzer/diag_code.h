@@ -59,10 +59,10 @@ enum class DiagCode : u8 {
   // `[modules] export` list does not name, so the boundary keeps it
   // to the package that declares it.
   ExportWithheld = 33,
-  // A capture list, or a bare use of an outer local inside a
-  // closure, reached checking, which refuses captures until they
-  // land.
-  CapturesNotImplemented = 34,
+  // A capture list reached checking with an entry that cannot be
+  // captured, or the body used an outer local the list does not
+  // name, or declared one it never uses.
+  InvalidCapture = 34,
   // The shared name table a checker and a lowerer intern into was
   // sized for fewer names than this package declares.
   NameTableExhausted = 35,

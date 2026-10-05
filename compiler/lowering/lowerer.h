@@ -248,6 +248,8 @@ class Lowerer {
   const analyzer::CheckedModule::IndirectCall* indirect_call(
       ast::ExprIdx callee) const;
   const analyzer::CheckedModule::ClosureFn* closure_fn(ast::ExprIdx expr) const;
+  const analyzer::CheckedModule::ClosureLit* closure_lit(
+      ast::ExprIdx expr) const;
   std::vector<u32> comp_positions(ast::ItemIdx item) const;
   static void comp_key_into(std::string& key, const CompValue& value);
   // Reserves (or finds) the IR function for one instantiation. `kind`
@@ -316,17 +318,27 @@ class Lowerer {
   ir::TypeIdx field_type_of(ir::TypeIdx base, u32 index, diag::Span span);
   void bind_pattern(ast::PatternIdx pattern, Val init);
   Val lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected);
-  // A closure literal or coercion as a value: the code with a null
+  // A closure literal or coercion as a value: the code with its
   // environment, packed as the function type lays out.
   Val lower_closure(ast::ExprIdx expr);
   // Reserves (or finds) the function a closure body compiles to.
   // The environment arrives first, then the closure's parameters;
-  // plain functions coerce through a wrapper that drops it.
+  // plain functions coerce through a wrapper that drops it. `env`
+  // is the environment tuple's reference type, invalid when the
+  // closure captures nothing.
   ir::FunctionIdx closure_fn_index(u32 mod,
                                    ast::ExprIdx key,
                                    const std::vector<ir::TypeIdx>& params,
                                    ir::TypeIdx ret,
-                                   u32 inst);
+                                   u32 inst,
+                                   ir::TypeIdx env);
+  // The environment type of a capture list: a structural tuple with
+  // one field per capture, a reference or the copied value itself.
+  // The creation site and the synthetic function build it the same
+  // way, so structural interning gives them one type.
+  ir::TypeIdx closure_env_type(
+      const std::vector<analyzer::CheckedModule::ClosureLit::Capture>&
+          captures);
   // A call through a function value: the callee operand carries the
   // value, and the signature comes from its function type.
   Val lower_indirect_call(ast::ExprIdx expr);

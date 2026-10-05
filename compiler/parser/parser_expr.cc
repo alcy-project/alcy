@@ -888,23 +888,31 @@ ast::ExprIdx Parser::parse_closure() {
     return ast::ExprIdx::invalid();
   }
   const base::NestingScope scope(nesting_);
-  std::vector<ast::Ident> captures;
+  std::vector<ast::Capture> captures;
   if (match(lexer::TokenKind::LBracket)) {
     while (!check(lexer::TokenKind::RBracket) && !at_end()) {
+      ast::Capture capture;
+      // `&name` borrows shared and `&mut name` exclusively; a bare
+      // name takes the value (a move, or a copy for a Copy type).
+      if (match(lexer::TokenKind::Amp)) {
+        capture.mode = match(lexer::TokenKind::Mut) ? ast::CaptureMode::Mut
+                                                    : ast::CaptureMode::Shared;
+      }
       // `self` is a keyword, and it is a local like any other: a
       // capture list may name the receiver.
       if (check(lexer::TokenKind::Self)) {
         const diag::Span span = peek().span;
         advance();
-        captures.push_back(ast::Ident{"self", span});
+        capture.name = ast::Ident{"self", span};
       } else {
-        base::Result<ast::Ident, diag::Reported> capture =
+        base::Result<ast::Ident, diag::Reported> name =
             parse_ident("capture name");
-        if (capture.is_err()) {
+        if (name.is_err()) {
           return ast::ExprIdx::invalid();
         }
-        captures.push_back(std::move(capture).unwrap());
+        capture.name = std::move(name).unwrap();
       }
+      captures.push_back(capture);
       if (!match(lexer::TokenKind::Comma)) {
         break;
       }

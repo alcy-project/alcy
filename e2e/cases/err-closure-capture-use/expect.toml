@@ -1,4 +1,3 @@
-# A bare closure using an outer local names no list, so the use
-# itself reports.
+# A bare closure using an outer local names no list.
 exit = 4
-contains = ["Captures are not implemented yet"]
+contains = ["Use of 't' is not captured; add it to the capture list"]

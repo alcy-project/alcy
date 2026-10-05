@@ -27,6 +27,9 @@ enum class DiagCode : u8 {
   Conflict = 2,
   Escape = 3,
   AssignBorrowed = 4,
+  // A move consumed a place reached through a reference, which
+  // would leave the referent owned by two places at once.
+  MoveOutOfBorrow = 5,
 };
 
 }  // namespace borrow

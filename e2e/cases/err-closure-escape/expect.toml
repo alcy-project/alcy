@@ -1,0 +1,4 @@
+# The environment lives in make's frame, so the closure it carries
+# cannot leave it.
+exit = 4
+contains = ["Returns reference to local 't'"]

@@ -1,0 +1,3 @@
+# A non-Copy value cannot move into the frame environment yet.
+exit = 4
+contains = ["Capturing the non-Copy value 'r' by value is not implemented yet"]

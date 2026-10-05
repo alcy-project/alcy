@@ -5,6 +5,12 @@
 - `&T` (shared reference): freely duplicable; any number may coexist.
 - `&mut T` (exclusive reference): at most one live at a time, and no
   `&T` to the same place may be live while it is.
+- A closure's capture list declares what its environment holds: a
+  bare name by value (a move, or a copy for a Copy type), `&name` as
+  a shared borrow, and `&mut name` as an exclusive borrow. The
+  borrow lasts while any handle of the closure value is live, and a
+  value reached through a capture is borrowed content: it cannot be
+  moved out of.
 - These rules make safety checking independent of general may-alias
   analysis. Optimization-time alias analysis in backends is unaffected
   and still exists.

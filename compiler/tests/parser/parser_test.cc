@@ -1051,7 +1051,8 @@ TEST_CASE("Parser reads a closure with captures and typed params") {
   const ast::ExprClosure& closure = as_closure(value, f);
   CHECK(closure.captures.size() == 1);
   if (closure.captures.size() == 1) {
-    CHECK(closure.captures[0].name == "t");
+    CHECK(closure.captures[0].name.name == "t");
+    CHECK(closure.captures[0].mode == ast::CaptureMode::Move);
   }
   CHECK(closure.params.size() == 3);
   if (closure.params.size() != 3) {
@@ -1068,6 +1069,29 @@ TEST_CASE("Parser reads a closure with captures and typed params") {
   CHECK(f.ast.exprs[closure.body].kind == ast::ExprKind::Block);
 }
 
+TEST_CASE("Parser reads capture modes") {
+  Fixture f;
+  const ast::ExprIdx value =
+      body_value("fn f() { [a, &b, &mut c, &self] () -> 0 }", f);
+  CHECK(value.is_valid());
+  if (!value.is_valid()) {
+    return;
+  }
+  const ast::ExprClosure& closure = as_closure(value, f);
+  CHECK(closure.captures.size() == 4);
+  if (closure.captures.size() != 4) {
+    return;
+  }
+  CHECK(closure.captures[0].name.name == "a");
+  CHECK(closure.captures[0].mode == ast::CaptureMode::Move);
+  CHECK(closure.captures[1].name.name == "b");
+  CHECK(closure.captures[1].mode == ast::CaptureMode::Shared);
+  CHECK(closure.captures[2].name.name == "c");
+  CHECK(closure.captures[2].mode == ast::CaptureMode::Mut);
+  CHECK(closure.captures[3].name.name == "self");
+  CHECK(closure.captures[3].mode == ast::CaptureMode::Shared);
+}
+
 // `self` is a keyword and a local like any other, so a capture list may
 // name the receiver.
 TEST_CASE("Parser takes self in a capture list") {
@@ -1081,7 +1105,7 @@ TEST_CASE("Parser takes self in a capture list") {
   const ast::ExprClosure& closure = as_closure(value, f);
   CHECK(closure.captures.size() == 1);
   if (closure.captures.size() == 1) {
-    CHECK(closure.captures[0].name == "self");
+    CHECK(closure.captures[0].name.name == "self");
   }
 }
 

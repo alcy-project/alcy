@@ -1,0 +1,3 @@
+# The outer closure does not list t, so the inner one cannot see it.
+exit = 4
+contains = ["Capture 't' is not visible here; the enclosing closure must capture it too"]

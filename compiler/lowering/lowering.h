@@ -70,11 +70,14 @@ struct LoweredPackage {
   // Parallel to storage instrs by InstructionIdx.
   std::vector<diag::Span> instr_spans;
   // Alloca additions: address, bound name, and whether it backs a
-  // parameter (escape analysis treats parameters as external roots).
+  // parameter (escape analysis treats parameters as external roots)
+  // or a borrowed capture (which it treats as derived from outside,
+  // so a move through one is refused).
   struct AddrInfo {
     ir::RegisterIdx addr;
     std::string_view name;
     bool is_param = false;
+    bool is_capture = false;
   };
   std::vector<AddrInfo> addr_names;
   // Lowered functions from prelude modules. Reported counts exclude

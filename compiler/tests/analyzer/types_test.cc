@@ -2684,42 +2684,140 @@ TEST_CASE("Check rejects an unannotated parameter without context") {
   CHECK(f.bag.has_errors());
 }
 
-TEST_CASE("Check rejects captures until they land") {
-  VirtualDir listed;
-  const bool listed_setup = write_all(listed, {{"main.al",
-                                                "fn main() -> i32 {\n"
-                                                "  t := 5\n"
-                                                "  f := [t] (a: i32) -> a + t\n"
-                                                "  ret f(1)\n"
-                                                "}\n"}});
-  CHECK(listed_setup);
-  if (!listed_setup) {
+TEST_CASE("Check accepts declared captures") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "fn main() -> i32 {\n"
+             "  mut t := 5\n"
+             "  u := 1\n"
+             "  mut v := 2\n"
+             "  f := [t, &u, &mut v] (a: i32) -> { v = v + a; a + t + u }\n"
+             "  ret f(1) + v\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
     return;
   }
-  Fixture listed_fixture;
-  const CheckOutcome listed_result =
-      check_case(listed, "main.al", {"main.al"}, listed_fixture);
-  CHECK(!listed_result.package.has_value());
-  CHECK(listed_fixture.bag.has_errors());
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
 
-  // A bare closure using an outer local names no list, so the use
-  // itself reports.
-  VirtualDir bare;
-  const bool bare_setup = write_all(bare, {{"main.al",
-                                            "fn main() -> i32 {\n"
-                                            "  t := 5\n"
-                                            "  f := (a: i32) -> a + t\n"
-                                            "  ret f(1)\n"
-                                            "}\n"}});
-  CHECK(bare_setup);
-  if (!bare_setup) {
+TEST_CASE("Check reports a capture the body does not use") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  t := 5\n"
+                                      "  f := [&t] (a: i32) -> a\n"
+                                      "  ret f(1)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
     return;
   }
-  Fixture bare_fixture;
-  const CheckOutcome bare_result =
-      check_case(bare, "main.al", {"main.al"}, bare_fixture);
-  CHECK(!bare_result.package.has_value());
-  CHECK(bare_fixture.bag.has_errors());
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check reports a name the body uses but does not capture") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  t := 5\n"
+                                      "  f := (a: i32) -> a + t\n"
+                                      "  ret f(1)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check reports a capture no enclosing scope declares") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  f := [zz] (a: i32) -> a\n"
+                                      "  ret f(1)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check reports a mutable capture of an immutable binding") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  t := 5\n"
+                                      "  f := [&mut t] (a: i32) -> a\n"
+                                      "  ret f(1)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check reports an inner capture the outer closure hides") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  t := 5\n"
+                                      "  outer := [] (a: i32) -> {\n"
+                                      "    inner := [&t] (b: i32) -> b + t\n"
+                                      "    ret inner(a)\n"
+                                      "  }\n"
+                                      "  ret outer(1)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check reports a non-Copy move capture") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct R { x: i32, m: &mut i32 }\n"
+                                      "fn take(r: R) -> i32 {\n"
+                                      "  ret r.x\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  mut n := 0\n"
+                                      "  r := R { x: 1, m: &mut n }\n"
+                                      "  f := [r] () -> { ret take(r) }\n"
+                                      "  ret f()\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
 }
 
 TEST_CASE("Check rejects a function type as a generic argument") {

@@ -107,12 +107,12 @@ TEST_CASE("Check reports one warning for a problem both trees share") {
   CHECK(ctx.bag.warning_count() == 1);
 }
 
-TEST_CASE("Check reports captures as not implemented yet") {
-  // Non-capturing closures check; any capture list is refused until
-  // captures land.
-  base::Result<io::TempDir, diag::Reported> made =
-      make_package("fn main() -> i32 {\n  f := [t] (a: i32) -> a\n  ret 0\n}\n",
-                   "pub fn double(x: i32) -> i32 {\n  ret x + x\n}\n");
+TEST_CASE("Check reports an uncaptured use") {
+  // A capture list is checked against the declared modes; a use of
+  // an outer local that the list does not name reports.
+  base::Result<io::TempDir, diag::Reported> made = make_package(
+      "fn main() -> i32 {\n  t := 1\n  f := (a: i32) -> a + t\n  ret f(0)\n}\n",
+      "pub fn double(x: i32) -> i32 {\n  ret x + x\n}\n");
   CHECK(made.is_ok());
   if (made.is_err()) {
     return;
@@ -124,9 +124,27 @@ TEST_CASE("Check reports captures as not implemented yet") {
   CHECK(ctx.bag.has_errors());
   bool named = false;
   ctx.bag.for_each([&](const diag::Diagnostic& diagnostic) {
-    named = named || diagnostic.message == "Captures are not implemented yet";
+    named =
+        named || diagnostic.message ==
+                     "Use of 't' is not captured; add it to the capture list";
   });
   CHECK(named);
+}
+
+TEST_CASE("Check runs a closure that captures") {
+  base::Result<io::TempDir, diag::Reported> made = make_package(
+      "fn main() -> i32 {\n  t := 1\n  f := [&t] (a: i32) -> a + t\n  ret "
+      "f(0)\n}\n",
+      "pub fn double(x: i32) -> i32 {\n  ret x + x\n}\n");
+  CHECK(made.is_ok());
+  if (made.is_err()) {
+    return;
+  }
+  const io::TempDir dir = std::move(made).unwrap();
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  CHECK(check_dir(ctx, dir).is_ok());
+  CHECK(!ctx.bag.has_errors());
 }
 
 }  // namespace pipeline

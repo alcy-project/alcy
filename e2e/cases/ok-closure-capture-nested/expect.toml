@@ -1,0 +1,5 @@
+# The inner closure captures through the outer one, which lists t
+# for it.
+exit = 0
+contains = ["Checked   1 file, 1 module, 3 functions"]
+not_contains = ["error"]

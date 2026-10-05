@@ -93,7 +93,12 @@
   F(AnalyzerCallArityMismatch, "The call to '{}' expects {} arguments, found {}") \
   F(AnalyzerCallNonPath, "Cannot call a non-path expression") \
   F(AnalyzerCalleeNeedsArguments, "Callee needs arguments") \
-  F(AnalyzerCapturesNotImplemented, "Captures are not implemented yet") \
+  F(AnalyzerCaptureCompBinding, "Cannot capture '{}'; a comp binding has no runtime storage") \
+  F(AnalyzerCaptureDuplicate, "Capture '{}' is already in the list") \
+  F(AnalyzerCaptureNeedsMut, "Cannot capture '{}' mutably; declare the binding `mut`") \
+  F(AnalyzerCaptureNotVisible, "Capture '{}' is not visible here; the enclosing closure must capture it too") \
+  F(AnalyzerCaptureUnknown, "Cannot capture '{}'; it is not a local in scope") \
+  F(AnalyzerCaptureUnused, "Capture '{}' is never used") \
   F(AnalyzerCannotAssignToRun, "Cannot assign to a run; a run is a view, not a place") \
   F(AnalyzerCannotDereference, "Cannot dereference '{}'") \
   F(AnalyzerCannotIndex, "Cannot index '{}'") \
@@ -157,9 +162,11 @@
   F(AnalyzerMissingField, "Missing field '{}'") \
   F(AnalyzerMissingSpecMethod, "Missing method '{}' in implementation of '{}'") \
   F(AnalyzerNameTableExhausted, "The compiler's name table cannot hold the names this package declares") \
+  F(AnalyzerMoveCaptureUnsupported, "Capturing the non-Copy value '{}' by value is not implemented yet") \
   F(AnalyzerNoFields, "No fields on '{}'") \
   F(AnalyzerNotAnAssignablePlace, "Cannot assign to this place") \
   F(AnalyzerNotCallable, "Not callable") \
+  F(AnalyzerNotCaptured, "Use of '{}' is not captured; add it to the capture list") \
   F(AnalyzerNotTupleVariant, "Not a tuple variant") \
   F(AnalyzerOrPatternBindsDifferentNames, "Or-pattern alternatives must bind the same names") \
   F(AnalyzerPowerNotImplemented, "The '**' operator is not implemented yet") \
@@ -236,6 +243,7 @@
   F(BorrowAssignWhileBorrowed, "Cannot assign to '{}' while borrowed") \
   F(BorrowConflict, "Conflicting borrows of '{}'") \
   F(BorrowMoveInvalidatesBorrow, "Move of '{}' invalidates an outstanding borrow") \
+  F(BorrowMoveOutOfBorrow, "Cannot move out of '{}'; it is borrowed") \
   F(BorrowReturnsLocalReference, "Returns reference to local '{}'") \
   F(BorrowUseAfterMove, "Use of moved '{}' in {}") \
   /* codegen */ \

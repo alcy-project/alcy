@@ -437,6 +437,16 @@ const analyzer::CheckedModule::ClosureFn* Lowerer::closure_fn(
   return nullptr;
 }
 
+const analyzer::CheckedModule::ClosureLit* Lowerer::closure_lit(
+    ast::ExprIdx expr) const {
+  for (const auto& entry : pkg.modules[module].closures) {
+    if (entry.expr == expr && entry.inst == cur_inst_) {
+      return &entry;
+    }
+  }
+  return nullptr;
+}
+
 std::vector<u32> Lowerer::comp_positions(ast::ItemIdx item) const {
   std::vector<u32> positions;
   if (!item.is_valid()) {
@@ -568,7 +578,8 @@ ir::FunctionIdx Lowerer::closure_fn_index(
     ast::ExprIdx key,
     const std::vector<ir::TypeIdx>& params,
     ir::TypeIdx ret,
-    u32 inst) {
+    u32 inst,
+    ir::TypeIdx env) {
   for (const FnEntry& entry : fns) {
     if (!entry.closure.is_valid() || entry.mod != mod || entry.closure != key ||
         entry.inst != inst || entry.ret.idx != ret.idx ||
@@ -594,7 +605,11 @@ ir::FunctionIdx Lowerer::closure_fn_index(
   entry.idx = idx;
   entry.mod = mod;
   entry.name = "closure$" + std::to_string(idx.idx);
-  entry.params.push_back(builder.primitive(ir::TypeTag::Ptr));
+  // The environment arrives as a reference to the tuple the
+  // creation site built; a closure without captures keeps the
+  // opaque pointer the call convention always passes first.
+  entry.params.push_back(env.is_valid() ? env
+                                        : builder.primitive(ir::TypeTag::Ptr));
   for (ir::TypeIdx param : params) {
     entry.params.push_back(param);
   }
@@ -604,6 +619,28 @@ ir::FunctionIdx Lowerer::closure_fn_index(
   fns.push_back(std::move(entry));
   worklist_.push_back(fns.size() - 1);
   return idx;
+}
+
+ir::TypeIdx Lowerer::closure_env_type(
+    const std::vector<analyzer::CheckedModule::ClosureLit::Capture>& captures) {
+  // A tuple's element range must be consecutive slots, so every field
+  // type is resolved first and only then appended as a copy, the way
+  // the checker does for the tuple types it builds: interning a
+  // reference between appends would break the run.
+  std::vector<ir::TypeIdx> fields;
+  fields.reserve(captures.size());
+  for (const analyzer::CheckedModule::ClosureLit::Capture& capture : captures) {
+    fields.push_back(
+        capture.mode == ast::CaptureMode::Move
+            ? capture.type
+            : builder.reference_type(capture.type,
+                                     capture.mode == ast::CaptureMode::Mut));
+  }
+  ir::TypeSeq seq;
+  for (ir::TypeIdx field : fields) {
+    seq.push(builder.ref_type(field));
+  }
+  return builder.tuple_type(seq.finish());
 }
 
 std::vector<ir::TypeIdx> Lowerer::nominal_arguments(ir::TypeIdx type) const {
@@ -823,16 +860,7 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
   continue_targets_.clear();
   pending_params_.clear();
 
-  const analyzer::CheckedModule::ClosureLit* lit = nullptr;
-  // A literal is checked and lowered in the module that owns the
-  // body, so its side table is this one; the same expression
-  // checked elsewhere keys apart by instantiation below.
-  for (const auto& candidate : pkg.modules[mod].closures) {
-    if (candidate.expr == entry.closure && candidate.inst == entry.inst) {
-      lit = &candidate;
-      break;
-    }
-  }
+  const analyzer::CheckedModule::ClosureLit* lit = closure_lit(entry.closure);
   const analyzer::CheckedModule::ClosureFn* fn = nullptr;
   if (lit == nullptr) {
     for (const auto& candidate : pkg.modules[mod].closure_fns) {
@@ -866,9 +894,36 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
   }
   reported_too_deep_ = false;
   binding_param_ = true;
+  if (lit != nullptr && !lit->captures.empty()) {
+    // Captures come from the environment the creation site built.
+    // They bind first so a parameter of the same name shadows one,
+    // the way checking resolved it. A moved Copy value lives in the
+    // slot itself; a reference is loaded out of it and is the place
+    // the capture names.
+    const ir::TypeIdx env_ty = closure_env_type(lit->captures);
+    for (usize i = 0; i < lit->captures.size() && !failed; ++i) {
+      const analyzer::CheckedModule::ClosureLit::Capture& capture =
+          lit->captures[i];
+      const ir::TypeIdx field_ty =
+          capture.mode == ast::CaptureMode::Move
+              ? capture.type
+              : builder.reference_type(capture.type,
+                                       capture.mode == ast::CaptureMode::Mut);
+      const ir::RegisterIdx field =
+          emit(ir::Opcode::GetElementPtr, field_ty,
+               {to_operand(pregs[0], env_ty), zero_i32, index_operand(i)});
+      if (capture.mode == ast::CaptureMode::Move) {
+        locals.push_back({capture.name, field, capture.type, false, false});
+        addr_names_.push_back({field, capture.name, false, false});
+        continue;
+      }
+      const ir::RegisterIdx ref =
+          emit(ir::Opcode::Load, field_ty, {to_operand(field, field_ty)});
+      locals.push_back({capture.name, ref, capture.type, false, false});
+      addr_names_.push_back({ref, capture.name, false, true});
+    }
+  }
   if (lit != nullptr) {
-    // The environment slot stays unbound: nothing references it
-    // until captures land.
     for (usize i = 0; i < lit->params.size() && !failed; ++i) {
       // The entry block holds every parameter, wildcards included, so
       // the slot is where the value arrives, not the index in `params`.

@@ -539,11 +539,29 @@ struct ClosureParam {
   TypeIdx type = TypeIdx::invalid();
 };
 
+// How a closure takes a name from its enclosing scope: by value (a
+// move, or a copy for a Copy type), by shared reference, or by
+// exclusive reference.
+enum class CaptureMode : u8 {
+  Move,
+  Shared,
+  Mut,
+};
+
+// One entry of a capture list: the local it names, and how the
+// closure takes it.
+struct Capture {
+  Ident name;
+  CaptureMode mode = CaptureMode::Move;
+};
+
 // A closure `(params) -> body` with an optional capture list.
 // `captures` names locals only; an empty list and no list both
 // mean the closure sees nothing outside its parameters.
 struct ExprClosure {
-  std::span<const Ident> captures;
+  // Like the parameters below: the desugarer rewrites each name to
+  // its bound spelling.
+  std::span<Capture> captures;
   // The desugarer rewrites a parameter's name to its bound spelling, so
   // the span is mutable even though only the parser and that pass write
   // through it.

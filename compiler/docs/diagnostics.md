@@ -40,7 +40,7 @@ partly because UTF-8 validation is coming and it should not have to move.
 | `B` | parser | `compiler/parser` | 8 |
 | `C` | analyzer | `compiler/analyzer` | 35 |
 | `D` | lowering | `compiler/lowering` | 7 |
-| `F` | borrow | `compiler/borrow` | 4 |
+| `F` | borrow | `compiler/borrow` | 5 |
 | `G` | ir | `compiler/ir` | one per `VerificationErrorKind` |
 | `H` | pkg | `compiler/pkg` | 4 |
 | `I` | pipeline | `compiler/pipeline` | 16 |

@@ -127,10 +127,14 @@ closure_expr  = [ captures ] , "(" , [ closure_param ,
                   { "," , closure_param } , [ "," ] ] , ")" ,
                   "->" , expr ;
 closure_param = [ "mut" ] , ( IDENT | "_" ) , [ ":" , type ] ;
-captures      = "[" , [ capture_name , { "," , capture_name } , [ "," ] ] , "]" ;
+captures      = "[" , [ capture , { "," , capture } , [ "," ] ] , "]" ;
+capture       = [ "&" , [ "mut" ] ] , capture_name ;
 capture_name  = IDENT | "self" ;
-              (* A bare parameter list captures nothing; `[]` says the
-                 same thing explicitly. Captures name locals only. *)
+              (* A bare name captures by value (a move, or a copy for a
+                 Copy type); `&name` borrows shared and `&mut name`
+                 borrows exclusively. A bare parameter list captures
+                 nothing; `[]` says the same thing explicitly.
+                 Captures name locals only. *)
 ret_expr      = "ret" , [ expr ] ;
 break_expr    = "break" ;
 continue_expr = "continue" ;

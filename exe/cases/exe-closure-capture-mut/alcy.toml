@@ -1,0 +1,10 @@
+[package]
+name = "capturecase"
+version = "0.1.0"
+
+[modules]
+include = ["main"]
+
+[[bin]]
+name = "capturecase"
+path = "main.al"

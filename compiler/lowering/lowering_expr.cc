@@ -942,13 +942,31 @@ Val Lowerer::lower_closure(ast::ExprIdx expr) {
     params.push_back(param);
   }
   const ir::TypeIdx ret = shape.ret;
+  // A closure literal has a checked record with its captures; a
+  // coerced named function has none, because it captures nothing.
+  const analyzer::CheckedModule::ClosureLit* lit = closure_lit(expr);
+  if (lit == nullptr && closure_fn(expr) == nullptr) {
+    internal(node.span, "closure without checking");
+    return Val{size_one, error_type(), false, false};
+  }
+  // The environment the synthetic function receives is a reference
+  // to the tuple the creation site builds; a closure without
+  // captures receives none.
+  using Capture = analyzer::CheckedModule::ClosureLit::Capture;
+  const std::vector<Capture> no_captures;
+  const std::vector<Capture>& captures =
+      lit == nullptr ? no_captures : lit->captures;
+  const ir::TypeIdx env_ty = closure_env_type(captures);
+  const ir::TypeIdx env_ref_ty = captures.empty()
+                                     ? ir::TypeIdx::invalid()
+                                     : builder.reference_type(env_ty, false);
   const ir::FunctionIdx fn =
-      closure_fn_index(module, expr, params, ret, cur_inst_);
+      closure_fn_index(module, expr, params, ret, cur_inst_, env_ref_ty);
   if (!fn.is_valid()) {
     return Val{size_one, error_type(), false, false};
   }
-  // The value packs code with a null environment, the way the
-  // function type lays out: captures fill the slot later.
+  // The value packs code with its environment, the way the function
+  // type lays out. A closure with no captures keeps a null slot.
   const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, type, {size_one});
   const ir::TypeIdx code_ty = builder.primitive(ir::TypeTag::Function);
   const ir::RegisterIdx code =
@@ -964,6 +982,57 @@ Val Lowerer::lower_closure(ast::ExprIdx expr) {
   const ir::RegisterIdx env =
       emit(ir::Opcode::GetElementPtr, ptr_ty,
            {to_operand(addr, type), zero_i32, index_operand(1)});
+  if (!captures.empty()) {
+    // The environment: one field per capture, a reference or a copied
+    // value. The borrows and copies here are what the closure value
+    // carries, and borrowing the slot itself is what keeps the
+    // closure from outliving the frame.
+    const ir::RegisterIdx slot = emit(ir::Opcode::Alloca, env_ty, {size_one});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    for (usize i = 0; i < captures.size() && !failed; ++i) {
+      const Capture& capture = captures[i];
+      const Local* local = lookup_local(capture.name);
+      if (local == nullptr) {
+        internal(node.span, "capture without local");
+        return Val{size_one, error_type(), false, false};
+      }
+      const ir::TypeIdx field_ty =
+          capture.mode == ast::CaptureMode::Move
+              ? capture.type
+              : builder.reference_type(capture.type,
+                                       capture.mode == ast::CaptureMode::Mut);
+      const ir::RegisterIdx field =
+          emit(ir::Opcode::GetElementPtr, field_ty,
+               {to_operand(slot, env_ty), zero_i32, index_operand(i)});
+      ir::OperandIdx value(base::INVALID_IDX);
+      if (capture.mode == ast::CaptureMode::Move) {
+        // A Copy value: what the closure holds is its own.
+        Val place{to_operand(local->addr, capture.type), capture.type, true,
+                  true};
+        value = use_value(place);
+      } else {
+        const ir::RegisterIdx loan =
+            emit(ir::Opcode::Borrow, field_ty,
+                 {to_operand(local->addr, capture.type)});
+        value = to_operand(loan, field_ty);
+      }
+      emit_void(ir::Opcode::Store, {value, to_operand(field, field_ty)});
+    }
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::RegisterIdx slot_ref =
+        emit(ir::Opcode::Borrow, builder.reference_type(env_ty, false),
+             {to_operand(slot, env_ty)});
+    emit_void(ir::Opcode::Store,
+              {to_operand(slot_ref, ptr_ty), to_operand(env, ptr_ty)});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(addr, type), type, true, false};
+  }
   const ir::RegisterIdx null =
       emit(ir::Opcode::TypeCast, ptr_ty, {const_usize(0)});
   emit_void(ir::Opcode::Store,

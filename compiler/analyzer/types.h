@@ -152,6 +152,15 @@ struct CheckedModule {
     ir::TypeIdx ret;
     ast::ExprIdx body;
     u32 inst = NO_INST;
+    // The declared captures, in list order: the name lowering binds,
+    // the mode the list declared, and the outer local's type. Lowering
+    // builds the environment from these.
+    struct Capture {
+      std::string_view name;
+      ast::CaptureMode mode = ast::CaptureMode::Move;
+      ir::TypeIdx type;
+    };
+    std::vector<Capture> captures;
   };
   std::vector<ClosureLit> closures;
   // One call through a function value: the callee expression holds

@@ -58,17 +58,31 @@ statements and assignment need braces; meeting `=` there is a
 guidance diagnostic, not a silent truncation. No new keywords,
 and `||` stays logical-or.
 
-**Captures are explicit.**
+**Captures are explicit, and so are their modes.**
 
-`[x, y]` names locals: `let` bindings, enclosing parameters, and
-`self`. Module-scope names need no listing — they need no
-environment. Modes are inferred from use (read borrows, write
-borrows mutably, move moves); the list carries no mode syntax.
-A name used but unlisted is an error naming the missing capture;
-a name listed but unused is an error, since even an unread
-borrow constrains checking. Each nesting level lists from its
-immediate outer scope. A listed capture shadowed by a parameter
-is unused, and reported as such.
+`a` captures by value (a move, or a copy for a Copy type),
+`&b` captures by shared reference, and `&mut c` by exclusive
+reference; a capture names a local: `let` bindings, enclosing
+parameters, and `self`. Module-scope names need no listing —
+they need no environment. The body is checked against the
+declared modes: a `&` capture is read-only, a `&mut` capture is
+writable and requires the local to be `mut`, and a bare capture
+is the closure's own value. A name used but unlisted is an error
+naming the missing capture; a name listed but unused is an
+error, since even an unread borrow constrains checking. Each
+nesting level lists from its immediate outer scope. A listed
+capture shadowed by a parameter is unused, and reported as
+such.
+
+A closure's environment lives in the creating frame, so a value
+borrowed or moved into it keeps the closure inside that frame;
+the borrow checker rejects returning one. Copying a closure
+value copies the pointer to its environment: the copies share
+the captured state, and one `&mut` capture is one exclusive
+borrow of its place however many handles reach it. Adopting a
+non-Copy value (a real move) and moving out of a capture need
+the environment to own and end what it holds; that arrives with
+the owning environment, not here.
 
 Every outer name in a body then traces to the list line, and
 desugar-time lambda lifting becomes mechanical: the list is the
@@ -108,11 +122,13 @@ lowering gains an indirect-call path beside `call_targets`;
 borrow treats an indirect call with a conservative summary.
 
 **MVP represents every function value as code plus environment.**
-A uniform fat pointer, null environment for plain functions, the
-environment boxed at creation. No anonymous types enter the
-type system. Borrowed captures compose by region intersection
-like `&`-field structs and copy like views, whose copies keep
-the loan. Monomorphized and inline environments are follow-ups.
+A uniform fat pointer, null environment for plain functions, and
+an environment that lives in the creating frame. No anonymous
+types enter the type system: the environment is a structural
+tuple, and a capture is a reference or a copied value in it.
+Borrowed captures compose by region intersection like `&`-field
+structs and copy like views, whose copies keep the loan.
+Monomorphized, boxed, and owning environments are follow-ups.
 
 ## Consequences
 
@@ -122,21 +138,24 @@ closures end to end: function types resolve to a signature in
 the type table, closure literals check and lower to synthetic
 functions, named functions coerce to values, and calls through
 values lower to indirect calls with a result whose loans track
-its arguments. S3 adds captures: the environment value, capture
-checking, mode inference, and loans through captured state.
+its arguments. S3 adds captures: explicit modes, the frame
+environment, loans through captured state, and the move-out
+rule that keeps a borrowed capture from being consumed by
+value.
 
-What it costs is one allocation per closure creation, indirect
+What it costs is one environment per closure creation, indirect
 call overhead everywhere a value is called, and an explicit
 list on every closure that sees outer scope. Deferred on
 purpose: generic closures (and function types as generic
 arguments, which cannot mangle apart yet), destructuring
 parameters, `comp` closures, `Fn`-style specs, monomorphized
-representations, explicit capture modes, and recursion, which
+representations, non-Copy captures and closures that escape
+their frame (the owning environment), and recursion, which
 needs a self-name the syntax does not give.
 
 ## Staged landing
 
-**Landed:** S1 and S2. Closures parse with optional capture
+**Landed:** S1, S2, and S3. Closures parse with optional capture
 lists; function types resolve to a structural signature; a
 non-capturing closure checks against an annotated or expected
 signature, lowers to a synthetic function whose environment
@@ -145,10 +164,15 @@ coerces to the same value shape through a wrapper that drops
 the environment. Calls through values lower indirectly, and
 borrow treats their results conservatively: a result that can
 carry loans carries its arguments' and callee's loans, so a
-returned reference keeps what it borrows from live.
+returned reference keeps what it borrows from live. Captures
+declare their modes and are checked against them; the
+environment lives in the creating frame, a `&` capture is a
+shared borrow, a `&mut` capture one exclusive borrow of its
+place, a bare Copy capture a copied value, and a move out of a
+borrowed capture is refused. The environment slot's own borrow
+is what keeps a capturing closure inside its frame.
 
-**Follow-up:** S3, captures. Until then a non-empty capture
-list and a bare use of an outer local both report
-not-implemented, and a function type bound as a generic
-argument is rejected because its symbol cannot be mangled
-apart yet.
+**Follow-up:** the owning environment, which adopts non-Copy
+values and lets a capturing closure escape its frame. A
+function type bound as a generic argument stays rejected
+because its symbol cannot be mangled apart yet.

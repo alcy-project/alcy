@@ -564,9 +564,16 @@ class Desugarer {
         break;
       }
       case ast::ExprKind::Closure: {
-        // Parameters bind like `fn` parameters; captures need no
-        // declaration since they resolve through outer scopes. A
-        // wildcard binds nothing, so two of them never collide.
+        // Captures resolve like uses do: a shadowed binding answers to
+        // its fresh spelling, so the list is rewritten the same way,
+        // before the closure's own scope opens. A capture names a
+        // local that already exists, so nothing is declared here.
+        for (ast::Capture& capture :
+             node.payload.get<ast::ExprClosure>().captures) {
+          capture.name.name = lookup(capture.name.name);
+        }
+        // Parameters bind like `fn` parameters. A wildcard binds
+        // nothing, so two of them never collide.
         push_scope();
         for (ast::ClosureParam& param :
              node.payload.get<ast::ExprClosure>().params) {

@@ -297,10 +297,11 @@ inline bool is_copy_type(const StorageState& state, TypeIdx idx) {
       return true;
     }
     case TypeTag::Func: {
-      // The environment is null until captures land, so every
-      // function value copies trivially today. Captures revisit
-      // this: a moved non-copyable capture makes its closure
-      // move-only.
+      // Copies share the environment handle, and the environment
+      // holds shared references, one exclusive borrow however many
+      // handles reach it, or copied values. A non-Copy capture
+      // would make its closure move-only, and that mode waits for
+      // the owning environment.
       return true;
     }
     default: UNREACHABLE();

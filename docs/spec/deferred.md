@@ -38,8 +38,12 @@ relied upon by MVP programs or by the MVP compiler implementation.
   monomorphization beyond per-instantiation enum, struct, and method
   specialization. Declarations, implementations, dispatch, and
   coherence are settled (see `items.md` and `grammar.md`).
-- Closure captures; spec objects; higher-ranked region polymorphism
-  beyond struct projection; two-phase borrows.
+- The owning environment for closures: capturing a non-Copy value
+  by value, and a capturing closure escaping the frame that built
+  it. Until it lands a capture is a reference or a copied value,
+  and a closure that captures borrows its frame. Spec objects;
+  higher-ranked region polymorphism beyond struct projection;
+  two-phase borrows.
 - `match` guards, string literal patterns, slice patterns.
 - An or-pattern nested inside another pattern (`(A | B, x) => ...`),
   which needs the distributive expansion `(A, x) | (B, x)`. The

@@ -1,0 +1,4 @@
+# A shared capture is borrowed content: the body cannot consume it,
+# because the outer owner still ends it.
+exit = 4
+contains = ["Cannot move out of 'r'; it is borrowed"]

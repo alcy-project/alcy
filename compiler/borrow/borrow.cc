@@ -293,8 +293,25 @@ class Checker {
     }
   }
 
+  // Names each borrowed capture's place as the referent behind its
+  // pointer: the environment holds a reference, so the name stands
+  // for what the reference points at, with the dereference in the
+  // path. That is what lets a move through the capture be told from
+  // a move of an owned value. A moved Copy capture is owned storage
+  // and needs none of this.
+  void seed_capture_places() {
+    for (const lowering::LoweredPackage::AddrInfo& entry : lowered.addr_names) {
+      if (!entry.is_capture || entry.addr.idx >= home.size()) {
+        continue;
+      }
+      home[entry.addr.idx] = entry.addr.idx;
+      path[entry.addr.idx] = {DEREF_STEP};
+    }
+  }
+
   void forward(const ir::Function& fn) {
     seed_param_loans(fn);
+    seed_capture_places();
     for (ir::BlockIdx bidx : fn.blocks) {
       const ir::Block& block = storage.blocks()[bidx];
       for (ir::InstructionIdx iidx : block.instrs) {
@@ -1156,6 +1173,25 @@ class Checker {
       case ir::Opcode::Move: {
         Place place;
         if (!operand_place(0, place)) {
+          break;
+        }
+        // A place reached through a reference is borrowed content:
+        // moving out of it would leave the referent owned twice, by
+        // whoever put the reference in the environment and by
+        // whoever owns the place it reads. A borrowed capture names
+        // exactly such a place, through its environment.
+        bool borrowed = false;
+        for (u32 step : place.path) {
+          if (step == DEREF_STEP) {
+            borrowed = true;
+            break;
+          }
+        }
+        if (borrowed) {
+          const u32 index = bag.emit<i18n::Key::BorrowMoveOutOfBorrow>(
+              diag::Severity::Error, diag::Stage::Borrow,
+              DiagCode::MoveOutOfBorrow, span, addr_name(place.root));
+          (void)index;
           break;
         }
         check_place_use(moved, place, span, "move");

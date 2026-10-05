@@ -342,6 +342,9 @@ struct NameCollector {
       }
       case ast::ExprKind::Closure: {
         const ast::ExprClosure& closure = expr.payload.get<ast::ExprClosure>();
+        for (const ast::Capture& capture : closure.captures) {
+          names.emplace_back(capture.name.name);
+        }
         for (const ast::ClosureParam& param : closure.params) {
           if (!param.is_wildcard) {
             names.emplace_back(param.name.name);
@@ -444,13 +447,19 @@ TEST_CASE("Desugar leaves keywords and module paths alone") {
 TEST_CASE("Desugar binds closure params and resolves captures outward") {
   Fixture f;
   CHECK(check_names("fn f(x: i32) { g := [x] (y) -> x + y; }", f,
-                    {"x", "g", "y", "x", "y"}));
+                    {"x", "g", "x", "y", "x", "y"}));
 }
 
 TEST_CASE("Desugar freshens a closure param shadowing a capture") {
   Fixture f;
   CHECK(check_names("fn f(x: i32) { g := [x] (x) -> x; }", f,
-                    {"x", "g", "x$0", "x$0"}));
+                    {"x", "g", "x", "x$0", "x$0"}));
+}
+
+TEST_CASE("Desugar rewrites a capture to the binding it names") {
+  Fixture f;
+  CHECK(check_names("fn f(x: i32) { { x := 2; g := [&x] (a) -> a + x; } }", f,
+                    {"x", "x$0", "g", "x$0", "a", "a", "x$0"}));
 }
 
 TEST_CASE("Desugar binds no wildcards") {

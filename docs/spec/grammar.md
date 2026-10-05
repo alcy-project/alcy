@@ -99,16 +99,19 @@ Declaration left-hand sides use this grammar with `:=`
 - A closure is an anonymous function: `[captures] (params) -> body`,
   where each parameter is `[mut] (name|_) [: type]` and the body is
   one expression, or a block whose value is its last expression.
-  Captures name locals - `let` bindings, enclosing parameters, and
-  `self`; a bare parameter list captures nothing.
+  A capture is `name` (by value: a move, or a copy for a Copy
+  type), `&name` (shared borrow), or `&mut name` (exclusive
+  borrow, requiring a `mut` local); captures name locals - `let`
+  bindings, enclosing parameters, and `self`; a bare parameter
+  list captures nothing.
   `ret` inside a closure returns from the closure.
 - `(` opens a closure when the parens hold a `:` at depth zero or
   the matching `)` is followed by `->`; `[` opens one when a
-  bracketed name list is followed by such a group. Both are errors
-  anywhere else, so no valid program reads differently. `)` and
-  `->` share a line, as with `fn` return types; the body may start
-  on the next line, and a `{` body on the next line continues the
-  closure since `->` never ends a statement.
+  bracketed capture list is followed by such a group. Both are
+  errors anywhere else, so no valid program reads differently. `)`
+  and `->` share a line, as with `fn` return types; the body may
+  start on the next line, and a `{` body on the next line continues
+  the closure since `->` never ends a statement.
 - In statement position `Path {` opens a struct expression. After
   `if`/`while`/`match` conditions, `for` heads, and `else`, `{` always
   opens a block: parenthesize expressions containing struct literals.

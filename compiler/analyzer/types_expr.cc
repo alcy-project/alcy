@@ -955,15 +955,6 @@ ir::TypeIdx Checker::check_closure(u32 module,
                                    const ir::TypeIdx* expected) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprClosure& closure = node.payload.get<ast::ExprClosure>();
-  // Captures wait: any list at all is refused, and the uses its
-  // names would resolve stay quiet behind it.
-  const bool suppress_uses = !closure.captures.empty();
-  if (suppress_uses) {
-    const u32 index = bag.emit<i18n::Key::AnalyzerCapturesNotImplemented>(
-        diag::Severity::Error, diag::Stage::Analyzer,
-        DiagCode::CapturesNotImplemented, node.span);
-    (void)index;
-  }
   // The expectation's signature, copied out before resolving
   // anything: interning below may move the tables it borrows.
   std::vector<ir::TypeIdx> expected_params;
@@ -978,6 +969,81 @@ ir::TypeIdx Checker::check_closure(u32 module,
     }
     expected_ret = sig.ret;
     has_expected_sig = true;
+  }
+  // Captures, checked before the closure's own scope opens: a name
+  // here can only be an outer one. The list declares the modes, so
+  // there is nothing to infer; the checks are that each name exists
+  // where the closure is written, that the mode is available, and
+  // that the body leaves no declared capture unused.
+  std::vector<CaptureEntry> entries;
+  entries.reserve(closure.captures.size());
+  // The scope the closure body may see: inside an enclosing closure,
+  // only that closure's bindings, its captures, and what is visible
+  // there in turn.
+  const usize visible_from =
+      closure_bounds.empty() ? 0 : closure_bounds.back().scope;
+  for (const ast::Capture& capture : closure.captures) {
+    const std::string_view name = capture.name.name;
+    bool duplicate = false;
+    for (const CaptureEntry& prior : entries) {
+      if (prior.name == name) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (duplicate) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerCaptureDuplicate>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidCapture, capture.name.span, name);
+      (void)index;
+      continue;
+    }
+    const Local* local = lookup_local(name);
+    if (local == nullptr || scope_of(name) < visible_from) {
+      // Not a local at all, or one an enclosing closure does not
+      // capture: the env of this closure is built inside that
+      // closure, so the name must be captured level by level.
+      const bool nested = local != nullptr;
+      const u32 index =
+          nested ? bag.emit<i18n::Key::AnalyzerCaptureNotVisible>(
+                       diag::Severity::Error, diag::Stage::Analyzer,
+                       DiagCode::InvalidCapture, capture.name.span, name)
+                 : bag.emit<i18n::Key::AnalyzerCaptureUnknown>(
+                       diag::Severity::Error, diag::Stage::Analyzer,
+                       DiagCode::InvalidCapture, capture.name.span, name);
+      (void)index;
+      continue;
+    }
+    if (local->comp_known) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerCaptureCompBinding>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidCapture, capture.name.span, name);
+      (void)index;
+      continue;
+    }
+    if (capture.mode == ast::CaptureMode::Mut && !local->is_mut) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerCaptureNeedsMut>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidCapture, capture.name.span, name);
+      (void)index;
+    }
+    if (capture.mode == ast::CaptureMode::Move) {
+      std::vector<u32> visited;
+      if (!capture_is_copy(local->type, visited)) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerMoveCaptureUnsupported>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::InvalidCapture, capture.name.span, name);
+        (void)index;
+      }
+    }
+    // A name the enclosing closure binds is a use of its capture:
+    // the inner environment is built from the outer one.
+    if (!closure_bounds.empty() && local->capture != NO_CAPTURE &&
+        local->capture < closure_bounds.back().captures.size()) {
+      closure_bounds.back().captures[local->capture].used = true;
+    }
+    entries.push_back(
+        {name, capture.mode, local->type, capture.name.span, false});
   }
   // Parameter types: annotations first, expectation second, and
   // an annotation request when neither names one.
@@ -1018,6 +1084,16 @@ ir::TypeIdx Checker::check_closure(u32 module,
   loop_depth = 0;
   fn_ret = has_expected_sig ? expected_ret : error_type();
   scopes.emplace_back();
+  // Capture bindings first, so a parameter of the same name shadows
+  // them and the capture is reported unused, which is what a list
+  // entry the body cannot reach means. A `&` capture reads; the
+  // other modes own their place in the environment and may write it.
+  for (usize i = 0; i < entries.size(); ++i) {
+    const CaptureEntry& entry = entries[i];
+    scopes.back().push_back({entry.name, entry.type,
+                             entry.mode != ast::CaptureMode::Shared, false,
+                             static_cast<u32>(i)});
+  }
   for (usize i = 0; i < closure.params.size(); ++i) {
     const ast::ClosureParam& param = closure.params[i];
     if (param.is_wildcard) {
@@ -1026,25 +1102,34 @@ ir::TypeIdx Checker::check_closure(u32 module,
     scopes.back().push_back(
         {param.name.name, param_types[i], param.is_mut, false});
   }
-  closure_bounds.push_back(
-      {scopes.size() - 1, closure.captures, suppress_uses});
+  closure_bounds.push_back({scopes.size() - 1, std::move(entries)});
   const ir::TypeIdx* body_expected = has_expected_sig ? &expected_ret : nullptr;
   const ir::TypeIdx body_type = check_expr(module, closure.body, body_expected);
   const ir::TypeIdx ret = has_expected_sig
                               ? expected_ret
                               : unify(fn_ret, body_type, node.span, "closure");
+  std::vector<CaptureEntry> declared =
+      std::move(closure_bounds.back().captures);
   closure_bounds.pop_back();
   scopes.pop_back();
   in_fn = saved_in_fn;
   loop_depth = saved_loop;
   fn_ret = saved_ret;
+  for (const CaptureEntry& entry : declared) {
+    if (!entry.used) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerCaptureUnused>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidCapture, entry.span, entry.name);
+      (void)index;
+    }
+  }
   ir::TypeSeq seq;
   for (ir::TypeIdx param : param_types) {
     seq.push(storage_copy(param));
   }
   const ir::TypeIdx closure_type =
       builder.func_type(seq.finish(), storage_copy(ret));
-  CheckedModule::ClosureLit lit{expr, {}, ret, closure.body, cur_inst};
+  CheckedModule::ClosureLit lit{expr, {}, ret, closure.body, cur_inst, {}};
   for (usize i = 0; i < closure.params.size(); ++i) {
     const ast::ClosureParam& param = closure.params[i];
     if (param.is_wildcard) {
@@ -1052,6 +1137,9 @@ ir::TypeIdx Checker::check_closure(u32 module,
     }
     lit.params.push_back(
         {param.name.name, param_types[i], param.is_mut, static_cast<u32>(i)});
+  }
+  for (const CaptureEntry& entry : declared) {
+    lit.captures.push_back({entry.name, entry.mode, entry.type});
   }
   modules[module].closures.push_back(std::move(lit));
   if (expected != nullptr) {
