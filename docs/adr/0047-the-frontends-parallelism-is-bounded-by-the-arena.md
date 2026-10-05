@@ -213,12 +213,26 @@ built from the same tree, minimum of five interleaved:
 Peak memory is flat across the job counts, 248 to 250 MiB, and the diagnostics
 are byte for byte the same at one, two, four and eight jobs.
 
-**So `--jobs` still does not pay**, and what is left of its cost is not the
-cursor. The parse is a seventh of the run and eight threads take it from 26 ms
-to 12, which is 14 ms saved against the 21 ms the stage costs when it is spread
-at all: a bag and a reserved arena per file, a thousand of each, and the
-threads. That reservation is the next thing to look at, and it is a smaller
-change than this one was.
+**And the stage's own cost was a reservation per file.** Reading a package on
+several threads reported every file into a bag of its own, and a bag owns the
+arena it cuts its messages from, so a thousand files reserved a thousand
+arenas before the first was read: one mapping each, and 121 MiB of reservation
+on a package that reported nothing.
+
+What a file needs is a bag, not an arena. The arena is per worker now -- one
+mapping per thread, written by that thread alone, which is what makes sharing
+it need no synchronisation -- and a file builds its bag over the arena of the
+worker that took it. Both measurements, both builds from the same tree,
+minimum of five interleaved, on the thousand-module package:
+
+| | `-j 1` | `-j 8` | parse at eight | peak |
+| --- | --- | --- | --- | --- |
+| cursor alone | 182 ms | 192 ms (+5.5%) | 1.77x | 248 MiB |
+| with the pool | 180 ms | 183 ms | 2.23x | 149 MiB |
+| and the arena per worker | 185 ms | 183 ms (**-1.1%**) | 2.39x | 135 MiB |
+
+So `--jobs` pays, by a little, at every job count above one, and the memory
+it costs is a mapping per thread rather than per file.
 
 **A** stays the answer for every stage that is not the file reader. The
 frontend's cost is proportional to the package, so nothing else is waiting on
