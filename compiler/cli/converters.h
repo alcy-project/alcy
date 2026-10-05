@@ -6,6 +6,8 @@
 #include <optional>
 #include <string_view>
 
+#include "codegen/backend.h"
+#include "codegen/target.h"
 #include "fpag/arg/converter.h"
 #include "fpag/base/result.h"
 #include "fpag/term/color_mode.h"
@@ -59,6 +61,35 @@ struct arg::Converter<pipeline::EmitMode> {
     } else {
       return make_err(GetError::InvalidArgument);
     }
+  }
+};
+
+template <>
+struct arg::Converter<codegen::Target> {
+  static base::Result<codegen::Target, arg::GetError> from_string(
+      std::string_view v) {
+    using arg::GetError, base::make_err, base::make_ok, codegen::Target;
+    const std::optional<Target> found = codegen::target_from_name(v);
+    if (!found.has_value()) {
+      return make_err(GetError::InvalidArgument);
+    }
+    return make_ok(*found);
+  }
+};
+
+template <>
+struct arg::Converter<codegen::Backend> {
+  static base::Result<codegen::Backend, arg::GetError> from_string(
+      std::string_view v) {
+    using arg::GetError, base::make_err, base::make_ok, codegen::Backend;
+    const std::optional<Backend> found = codegen::backend_from_name(v);
+    if (!found.has_value()) {
+      return make_err(GetError::InvalidArgument);
+    }
+    // Availability is the pipeline's to report: a backend this build does
+    // not carry has no code to run, and the message says which build
+    // would.
+    return make_ok(*found);
   }
 };
 

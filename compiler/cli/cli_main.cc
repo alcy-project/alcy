@@ -25,6 +25,7 @@
 #include "cli/result_code.h"
 #include "cli/run_command.h"
 #include "cli/validate.h"
+#include "codegen/backend.h"
 #include "debug/fatal.h"
 #include "diag/diagnostic.h"
 #include "fpag/arg/parser.h"
@@ -148,6 +149,12 @@ i32 cli_main(i32 argc, char** argv) {
       // still alive when the report is rendered.
       pipeline::PipelineContext ctx{config.language};
       ctx.jobs = config.jobs;
+      ctx.target = config.target;
+      // A command that named no backend takes the first one that can
+      // write for the target it did name.
+      ctx.backend = config.backend == codegen::Backend::None
+                        ? codegen::default_backend(ctx.target)
+                        : config.backend;
       Envelope envelope;
       envelope.command = command_name(config.subcommand);
       exit_code = dispatch(config, ctx, envelope);

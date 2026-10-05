@@ -3,7 +3,10 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "ir/type.h"
 
@@ -29,11 +32,31 @@ struct Target {
   // bindings key on: `_write` and `_aligned_malloc` rather than `write`
   // and `posix_memalign`.
   [[nodiscard]] bool is_windows() const;
+
+  // Whether the target is a wasm machine. A backend whose output is a
+  // wasm module answers for these and not for the host.
+  [[nodiscard]] bool is_wasm() const;
+
+  // One value, so a caller that stores it can compare two of them.
+  [[nodiscard]] bool operator==(const Target&) const = default;
 };
 
 // The host's default triple, resolved once by whoever is deciding what to
 // build for. The width stays the caller's: this module answers what the
 // machine is called, not how wide a pointer is on it.
 [[nodiscard]] std::string host_triple();
+
+// The host as a target: its triple and the pointer width its
+// architecture gives pointers.
+[[nodiscard]] Target host_target();
+
+// The names a `--target` spelling may take, in the order help lists them.
+// `host` is always one; the rest are machines a backend in this source
+// tree can be asked for.
+[[nodiscard]] std::vector<std::string> target_names();
+
+// Resolves one of those names. Nothing for a spelling the compiler does
+// not know; the caller says why it cannot build for it.
+[[nodiscard]] std::optional<Target> target_from_name(std::string_view name);
 
 }  // namespace codegen

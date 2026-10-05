@@ -11,11 +11,8 @@
 #include <vector>
 
 #include "analyzer/resolve.h"
-#include "codegen_llvm/common.h"
-#include "codegen_llvm/llvm_backend.h"
-#include "codegen_llvm/llvm_ir_emitter.h"
-#include "codegen_llvm/runtime_ir.h"
-#include "codegen_llvm/target.h"
+#include "codegen/backend.h"
+#include "codegen/target.h"
 #include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -28,6 +25,7 @@
 #include "i18n/messages.h"
 #include "lowering/lowering.h"
 #include "path/path.h"
+#include "pipeline/backend_emit.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/embedded_lld.h"
 #include "pipeline/emit_mode.h"
@@ -58,14 +56,16 @@ namespace {
 // the file kind, because the mode is what the caller asked for: naming an
 // object `main.bin` and a module `main` are both fine, and the extension
 // is the default rather than the switch.
-std::string suffix_for(EmitMode mode) {
+std::string suffix_for(const codegen::Target& target, EmitMode mode) {
   switch (mode) {
     case EmitMode::Object: return ".o";
     case EmitMode::LlvmIr: return ".ll";
     case EmitMode::LlvmBitcode: return ".bc";
     case EmitMode::Executable: break;
   }
-  return std::string(exe_suffix());
+  // A wasm executable is the final module itself; every other target's
+  // executable suffix is the platform's.
+  return target.is_wasm() ? std::string(".wasm") : std::string(exe_suffix());
 }
 
 // The last separator in `name`, or npos. Both spellings are separators on
@@ -97,10 +97,10 @@ base::Result<std::string, diag::Reported> default_output_path(
       (separator == std::string_view::npos || dot > separator);
   std::string output(target);
   if (has_extension) {
-    output.replace(dot, std::string::npos, suffix_for(mode));
+    output.replace(dot, std::string::npos, suffix_for(ctx.target, mode));
     return base::make_ok(std::move(output));
   }
-  std::string suffix = suffix_for(mode);
+  std::string suffix = suffix_for(ctx.target, mode);
   if (suffix.empty()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotDeriveOutput>(
         diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoOutputName,
@@ -113,65 +113,59 @@ base::Result<std::string, diag::Reported> default_output_path(
 
 }  // namespace
 
-// The module a lowered package becomes, and the context it lives in.
-//
-// The two travel together because a module is invalid once its context
-// goes, and the context is neither copyable nor movable, so the caller
-// constructs this and has it filled rather than receiving one back.
-struct EmittedModule {
-  llvm::LLVMContext context;
-  std::unique_ptr<llvm::Module> module;
-
-  // Builds the module - the program and, defined in it, the runtime -
-  // and, when asked for it, optimizes it. This is the only place that
-  // decides: the optimization belongs to the module, not to whichever
-  // backend goes on to consume it, and a backend that ran the pipeline
-  // on its own left every other consumer reading unoptimized IR.
-  base::Result<void, diag::Reported> build(PipelineContext& ctx,
-                                           lowering::LoweredPackage& package,
-                                           bool optimize,
-                                           bool is_lib) {
-    module = std::make_unique<llvm::Module>("alcy_module", context);
-    // Before the emitter, not after: the emitter asks the layout for
-    // `TypeSizeOf` and `TypeAlignOf`, and a module that still carries
-    // LLVM's default layout answers those for the host rather than for
-    // the target.
-    if (codegen_llvm::configure_target(*module, ctx.target).is_err()) {
+// Maps a backend failure to the pipeline's message for it. Anything
+// finer is already in the bag; what lands here is the one line the
+// command prints and the code it carries.
+base::Result<void, diag::Reported> report_emit_failure(
+    PipelineContext& ctx,
+    codegen::EmitError error,
+    codegen::OutputKind kind,
+    const std::string& output_path) {
+  switch (error) {
+    case codegen::EmitError::UnknownTarget: {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineUnknownTarget>(
           diag::Severity::Error, diag::Stage::Pipeline, DiagCode::UnknownTarget,
           ctx.target.triple);
       (void)index;
-      return base::make_err(diag::Reported{});
+      break;
     }
-    // Entry synthesis wraps a `main` for binaries only; a library
-    // object carries its items unwrapped, even one named `main`.
-    codegen_llvm::LlvmIrEmitter emitter(
-        module.get(), std::move(package.storage), &ctx.strings, ctx.target,
-        !is_lib, ctx.profiler);
-    std::move(emitter).emit();
-    // Before the optimizer, so the runtime is inlined and folded like
-    // any other code, and after the program, so its definitions land in
-    // the declarations the program's call sites already hold.
-    {
-      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "runtime",
-                                               "backend");
-      codegen_llvm::add_runtime_definitions(*module, ctx.target);
-    }
-    if (!optimize) {
-      return base::make_ok();
-    }
-    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "optimize",
-                                             "backend");
-    if (codegen_llvm::optimize_module(*module, ctx.target, ctx.profiler)
-            .is_err()) {
+    case codegen::EmitError::CannotOptimize: {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotOptimize>(
           diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError);
       (void)index;
-      return base::make_err(diag::Reported{});
+      break;
     }
-    return base::make_ok();
+    case codegen::EmitError::NoOptimizer: {
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineBackendNoOptimizer>(
+          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoOptimizer,
+          codegen::backend_name(ctx.backend));
+      (void)index;
+      break;
+    }
+    case codegen::EmitError::Unsupported: {
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineBackendUnsupported>(
+          diag::Severity::Error, diag::Stage::Pipeline,
+          DiagCode::UnsupportedOutput, codegen::backend_name(ctx.backend));
+      (void)index;
+      break;
+    }
+    case codegen::EmitError::CannotEmit: {
+      if (kind == codegen::OutputKind::Module) {
+        const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotEmitModule>(
+            diag::Severity::Error, diag::Stage::Pipeline,
+            DiagCode::CannotEmitModule, output_path);
+        (void)index;
+      } else {
+        const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotEmitObject>(
+            diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
+            output_path);
+        (void)index;
+      }
+      break;
+    }
   }
-};
+  return base::make_err(diag::Reported{});
+}
 
 // Writes bytes to `output_path`, whose parent directory is the caller's
 // to have made: every mode writes to one path, and the path is chosen
@@ -190,6 +184,57 @@ base::Result<void, diag::Reported> write_output(PipelineContext& ctx,
   return base::make_ok();
 }
 
+// Emits one lowered package through the backend the context names. The
+// kind is what the backend is asked for; `what` is the noun a write
+// failure uses ("object", "ir", "wasm module").
+base::Result<void, diag::Reported> emit_package_output(
+    PipelineContext& ctx,
+    lowering::LoweredPackage& package,
+    bool optimize,
+    const std::string& output_path,
+    bool is_lib,
+    codegen::OutputKind kind,
+    std::string_view what) {
+  if (ctx.backend == codegen::Backend::None) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineNoBackend>(
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoBackend);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  if (!codegen::backend_available(ctx.backend)) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineBackendNotBuilt>(
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoBackend,
+        codegen::backend_name(ctx.backend));
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  if (!backend_supports(ctx.backend, kind, ctx.target)) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineBackendUnsupported>(
+        diag::Severity::Error, diag::Stage::Pipeline,
+        DiagCode::UnsupportedOutput, codegen::backend_name(ctx.backend));
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  codegen::EmitRequest request{
+      .storage = std::move(package.storage),
+      .instr_spans = package.instr_spans,
+      .strings = &ctx.strings,
+      .bag = &ctx.bag,
+      .target = ctx.target,
+      .emit_entry = !is_lib,
+      .optimize = optimize,
+      .kind = kind,
+      .profiler = ctx.profiler,
+  };
+  base::Result<std::vector<u8>, codegen::EmitError> bytes =
+      emit_with_backend(ctx.backend, std::move(request));
+  if (bytes.is_err()) {
+    return report_emit_failure(ctx, std::move(bytes).unwrap_err(), kind,
+                               output_path);
+  }
+  return write_output(ctx, what, output_path, std::move(bytes).unwrap());
+}
+
 base::Result<void, diag::Reported> emit_package_object(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
@@ -198,20 +243,8 @@ base::Result<void, diag::Reported> emit_package_object(
     bool is_lib) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-object",
                                            "backend");
-  EmittedModule emitted;
-  if (emitted.build(ctx, package, optimize, is_lib).is_err()) {
-    return base::make_err(diag::Reported{});
-  }
-  base::Result<std::vector<u8>, codegen_llvm::ObjectEmitError> object =
-      codegen_llvm::emit_object(*emitted.module, ctx.target);
-  if (object.is_err()) {
-    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotEmitObject>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        output_path);
-    (void)index;
-    return base::make_err(diag::Reported{});
-  }
-  return write_output(ctx, "object", output_path, std::move(object).unwrap());
+  return emit_package_output(ctx, package, optimize, output_path, is_lib,
+                             codegen::OutputKind::Object, "object");
 }
 
 base::Result<void, diag::Reported> emit_package_ir(
@@ -221,14 +254,8 @@ base::Result<void, diag::Reported> emit_package_ir(
     const std::string& output_path,
     bool is_lib) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-ir", "backend");
-  EmittedModule emitted;
-  if (emitted.build(ctx, package, optimize, is_lib).is_err()) {
-    return base::make_err(diag::Reported{});
-  }
-  const std::string ir = codegen_llvm::emit_ir(*emitted.module);
-  return write_output(
-      ctx, "ir", output_path,
-      std::span<const u8>(reinterpret_cast<const u8*>(ir.data()), ir.size()));
+  return emit_package_output(ctx, package, optimize, output_path, is_lib,
+                             codegen::OutputKind::Text, "ir");
 }
 
 base::Result<void, diag::Reported> emit_package_bitcode(
@@ -239,12 +266,20 @@ base::Result<void, diag::Reported> emit_package_bitcode(
     bool is_lib) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-bitcode",
                                            "backend");
-  EmittedModule emitted;
-  if (emitted.build(ctx, package, optimize, is_lib).is_err()) {
-    return base::make_err(diag::Reported{});
-  }
-  const std::vector<u8> bytes = codegen_llvm::emit_bitcode(*emitted.module);
-  return write_output(ctx, "bitcode", output_path, bytes);
+  return emit_package_output(ctx, package, optimize, output_path, is_lib,
+                             codegen::OutputKind::Bitcode, "bitcode");
+}
+
+base::Result<void, diag::Reported> emit_package_module(
+    PipelineContext& ctx,
+    lowering::LoweredPackage& package,
+    bool optimize,
+    const std::string& output_path,
+    bool is_lib) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-wasm",
+                                           "backend");
+  return emit_package_output(ctx, package, optimize, output_path, is_lib,
+                             codegen::OutputKind::Module, "module");
 }
 
 base::Result<void, diag::Reported> link_executable(
@@ -328,6 +363,12 @@ base::Result<std::string, diag::Reported> emit_output(
     }
     if (mode == EmitMode::LlvmBitcode) {
       return emit_package_bitcode(ctx, lowered, optimize, output_path, is_lib);
+    }
+    // Executable: a backend that writes objects hands them to the linker;
+    // one whose output is a final module writes that module and stops.
+    if (!backend_supports(ctx.backend, codegen::OutputKind::Object,
+                          ctx.target)) {
+      return emit_package_module(ctx, lowered, optimize, output_path, is_lib);
     }
     io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
     const std::string object_path = scratch.join("main.o");
@@ -449,9 +490,10 @@ base::Result<std::string, diag::Reported> build_package(
       // a module beside the manifest landed outside the one region the
       // compiler told git to ignore, so `git status` reported the build's
       // own output as untracked.
-      output_path =
-          out_dir.join(std::string(target.name) + suffix_for(target_mode))
-              .as_view();
+      output_path = out_dir
+                        .join(std::string(target.name) +
+                              suffix_for(ctx.target, target_mode))
+                        .as_view();
     } else {
       output_path = std::string(output);
     }

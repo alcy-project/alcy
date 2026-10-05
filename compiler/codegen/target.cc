@@ -3,14 +3,22 @@
 
 #include "codegen/target.h"
 
+#include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "fpag/build/build_config.h"
+#include "ir/type.h"
 
 namespace codegen {
 
 bool Target::is_windows() const {
   return triple.find("windows") != std::string::npos;
+}
+
+bool Target::is_wasm() const {
+  return triple.rfind("wasm", 0) == 0;
 }
 
 std::string host_triple() {
@@ -46,6 +54,29 @@ std::string host_triple() {
 #else
 #error "no host triple for this platform"
 #endif
+}
+
+Target host_target() {
+  Target target{host_triple(), ir::PointerWidth::W64};
+#if defined(__EMSCRIPTEN__)
+  // The one host this build runs on whose pointers are not 64-bit.
+  target.width = ir::PointerWidth::W32;
+#endif
+  return target;
+}
+
+std::vector<std::string> target_names() {
+  return {"host", "wasm32-unknown-emscripten"};
+}
+
+std::optional<Target> target_from_name(std::string_view name) {
+  if (name == "host") {
+    return host_target();
+  }
+  if (name == "wasm32-unknown-emscripten") {
+    return Target{std::string(name), ir::PointerWidth::W32};
+  }
+  return std::nullopt;
 }
 
 }  // namespace codegen

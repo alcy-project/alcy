@@ -8,6 +8,7 @@
 
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
+#include "codegen/backend.h"
 #include "codegen/target.h"
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
@@ -16,7 +17,6 @@
 #include "fpag/mem/arena.h"
 #include "fpag/str/string_interner.h"
 #include "i18n/language.h"
-#include "ir/type.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -33,7 +33,11 @@ struct PipelineContext {
   // pointer. One value, so the width the analyzer and lowering were
   // handed and the triple the backend writes cannot disagree, and so a
   // `--target` flag has one place to change.
-  codegen::Target target{codegen::host_triple(), ir::PointerWidth::W64};
+  codegen::Target target = codegen::host_target();
+  // Which backend writes the machine code this run produces. `--backend`
+  // overrides it; the default is the first implementation the build
+  // carries, and a build that carries none can still check.
+  codegen::Backend backend = codegen::default_backend();
   // Standard library sources, populated by std_prelude and kept alive
   // for the command: the names borrow the generated tables and the bytes
   // live in the source manager under those names. Restaged when a later

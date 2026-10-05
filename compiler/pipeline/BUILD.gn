@@ -1,6 +1,8 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import("//compiler/backends.gni")
+
 action("embed_std") {
   script = "//tools/embed_std.py"
   inputs = [
@@ -54,6 +56,8 @@ action("embed_std") {
 source_set("pipeline") {
   sources = [
     "$target_gen_dir/embedded_std.cc",
+    "backend_emit.cc",
+    "backend_emit.h",
     "build.cc",
     "build.h",
     "check.cc",
@@ -103,7 +107,6 @@ source_set("pipeline") {
     "//compiler/ast",
     "//compiler/borrow",
     "//compiler/codegen",
-    "//compiler/codegen_llvm",
     "//compiler/diag",
     "//compiler/i18n",
     "//compiler/ir",
@@ -114,5 +117,15 @@ source_set("pipeline") {
     "//compiler/pkg",
     "//compiler/source",
   ]
+
+  # The dispatch reaches the implementations; a build that carries none
+  # has nothing to reach, and not depending on them is what keeps the
+  # prebuilt LLVM out of it.
+  if (alcy_use_llvm) {
+    deps += [ "//compiler/codegen_llvm" ]
+  }
+  if (alcy_direct_wasm) {
+    deps += [ "//compiler/codegen/wasm" ]
+  }
   configs += [ "//compiler:alcy_config" ]
 }

@@ -14,6 +14,8 @@
 #include "cli/suggest.h"
 #include "cli/usage.h"
 #include "cli/version.h"
+#include "codegen/backend.h"
+#include "codegen/target.h"
 #include "debug/fatal.h"
 #include "fpag/arg/arg.h"
 #include "fpag/arg/command.h"
@@ -79,6 +81,11 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
   c.file = matches.get<std::string_view>("file").unwrap_or(c.file);
   c.emit = matches.get<pipeline::EmitMode>("emit").unwrap_or(
       pipeline::EmitMode::Executable);
+  // A command that names no backend keeps None, and the pipeline resolves
+  // it against the target; the converter already rejected a spelling this
+  // build does not know.
+  c.backend = matches.get<codegen::Backend>("backend").unwrap_or(c.backend);
+  c.target = matches.get<codegen::Target>("target").unwrap_or(c.target);
   c.output = matches.get<std::string_view>("output").unwrap_or(c.output);
   c.linker = matches.get<std::string_view>("linker").unwrap_or(c.linker);
   if (auto link_args = matches.get_all<std::string_view>("link-args");
@@ -227,6 +234,16 @@ arg::Parser build_parser(i18n::Language language) {
                        .choices({"executable", "object", "llvm-ir", "llvm-bc"})
                        .default_value("executable")
                        .build())
+          .add_arg(arg::ArgBuilder("backend")
+                       .help(usage.text(i18n::Key::CliBackendHelp))
+                       .choices({"llvm", "direct-wasm"})
+                       .value_name("NAME")
+                       .build())
+          .add_arg(arg::ArgBuilder("target")
+                       .help(usage.text(i18n::Key::CliTargetHelp))
+                       .choices(codegen::target_names())
+                       .value_name("TRIPLE")
+                       .build())
           .add_arg(arg::ArgBuilder("linker")
                        .help(usage.text(i18n::Key::CliLinkerOverrideHelp))
                        .default_value("")
@@ -252,6 +269,16 @@ arg::Parser build_parser(i18n::Language language) {
                        .help(usage.text(i18n::Key::CliEmitHelp))
                        .choices({"executable", "object", "llvm-ir", "llvm-bc"})
                        .default_value("executable")
+                       .build())
+          .add_arg(arg::ArgBuilder("backend")
+                       .help(usage.text(i18n::Key::CliBackendHelp))
+                       .choices({"llvm", "direct-wasm"})
+                       .value_name("NAME")
+                       .build())
+          .add_arg(arg::ArgBuilder("target")
+                       .help(usage.text(i18n::Key::CliTargetHelp))
+                       .choices(codegen::target_names())
+                       .value_name("TRIPLE")
                        .build())
           .add_arg(arg::ArgBuilder("linker")
                        .help(usage.text(i18n::Key::CliCompileLinkerHelp))

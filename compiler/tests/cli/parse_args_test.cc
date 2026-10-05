@@ -8,9 +8,12 @@
 #include <utility>
 
 #include "cli/cli_config.h"
+#include "codegen/backend.h"
+#include "codegen/target.h"
 #include "doctest/doctest.h"
 #include "fpag/arg/parser.h"
 #include "fpag/term/color_mode.h"
+#include "ir/type.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/vcs.h"
 
@@ -77,6 +80,24 @@ TEST_CASE("Parse build output flag") {
   CHECK(config.subcommand == Subcommand::Build);
   CHECK(config.target_dir == "main.al");
   CHECK(config.output == "main.o");
+}
+
+TEST_CASE("Parse the target and backend") {
+  const std::string_view args[] = {"alcy", "compile", "main.al",
+                                   "--target=wasm32-unknown-emscripten",
+                                   "--backend=direct-wasm"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.subcommand == Subcommand::Compile);
+  CHECK(config.target.triple == "wasm32-unknown-emscripten");
+  CHECK(config.target.width == ir::PointerWidth::W32);
+  CHECK(config.target.is_wasm());
+  CHECK(config.backend == codegen::Backend::DirectWasm);
+}
+
+TEST_CASE("Parse rejects an unknown target") {
+  const std::string_view args[] = {"alcy", "build", "--target=bogus", "dir"};
+  const ParseOutcome outcome = parse(args);
+  CHECK(!outcome.is<CliConfig>());
 }
 
 TEST_CASE("Parse build linker flag") {

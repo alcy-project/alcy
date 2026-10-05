@@ -270,6 +270,9 @@
   F(PkgToolchainNotLoaded, "Toolchain '{}' is not a loaded file") \
   F(PkgToolchainTomlSyntaxError, "Toolchain '{}': TOML syntax error: {}") \
   /* pipeline */ \
+  F(PipelineBackendNoOptimizer, "The '{}' backend does not optimize; build without --release") \
+  F(PipelineBackendNotBuilt, "The '{}' backend is not part of this build of the compiler") \
+  F(PipelineBackendUnsupported, "The '{}' backend cannot write this output") \
   F(PipelineBinTargetNotDiscovered, "Bin target '{}' was not discovered") \
   F(PipelineBinTargetNotSelected, "Bin target '{}' is not in [modules]") \
   F(PipelineCannotCreateDirectory, "Cannot create directory '{}'") \
@@ -277,6 +280,7 @@
   F(PipelineCannotCreatePackageFiles, "Cannot create package files: '{}'") \
   F(PipelineCannotDeriveOutput, "Cannot name the output for '{}'; pass -o") \
   F(PipelineCannotDerivePackageName, "Cannot derive a package name from '{}'; use [A-Za-z0-9_-] only") \
+  F(PipelineCannotEmitModule, "Cannot emit module '{}'") \
   F(PipelineCannotEmitObject, "Cannot emit object '{}'") \
   F(PipelineCannotExecute, "Cannot execute '{}'") \
   F(PipelineCannotInitPackage, "Cannot init package '{}'") \
@@ -329,10 +333,12 @@
   F(PipelineStdIsASuite, "The 'alcy/std' path is a suite, not a package; write \"alcy/std/*\" for every member or \"alcy/std/<package>\" for one") \
   F(PipelineStdPackageRequiresSuite, "Package 'alcy/std/{}' requires alcy/std/{}; add it to [dependencies]") \
   F(PipelineTargetOutputsCollide, "Bin target '{}' and lib target '{}' both write to '{}'; name one of them") \
+  F(PipelineNoBackend, "This build of the compiler has no code generation backend") \
   F(PipelineUnknownTarget, "Cannot build for target '{}'; the compiler was not built with that backend") \
   F(PipelineUnknownSourceFile, "Unknown file id for a source input") \
   /* cli */ \
   F(CliAbout, "alcy language compiler") \
+  F(CliBackendHelp, "Which code generation backend writes the machine code: llvm (the default where it was built in), or direct-wasm for alcy's own wasm emitter.") \
   F(CliBuildAbout, "Build a package directory") \
   F(CliBuildOutputHelp, "Where the output goes. Empty picks the package's out/ directory.") \
   F(CliBuildTakesDirectory, "The `build` command takes a package directory; use `compile` for a file") \
@@ -379,6 +385,7 @@
   F(CliStdinHelp, "Read the program from standard input instead of a file, and report against the name <stdin>. For an editor buffer that has never been saved.") \
   F(CliStdinNeedsOutput, "Compiling from standard input needs `-o` to name the output") \
   F(CliStdinTakesNoTarget, "The `--stdin` flag takes no target") \
+  F(CliTargetHelp, "The machine to build for: host (the default) or wasm32-unknown-emscripten. --emit chooses the artifact's kind, not this.") \
   F(CliTimeTraceHelp, "Time the compilation phases and report where the run went. With --json the phases are embedded in the document; on their own they are a pruned call tree.") \
   F(CliUnknownSubcommand, "Unknown subcommand '{}'; see '{} --help'") \
   F(CliVcsHelp, "Version control to prepare the package for: git (default) writes .gitignore, none writes no ignore file. No repository is created either way.") \

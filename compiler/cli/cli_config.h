@@ -6,6 +6,8 @@
 #include <string_view>
 #include <vector>
 
+#include "codegen/backend.h"
+#include "codegen/target.h"
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
 #include "i18n/language.h"
@@ -51,6 +53,12 @@ struct CliConfig {
   // What the build writes. Defaults to an executable, so the name says
   // which one only when it is not the default.
   pipeline::EmitMode emit = pipeline::EmitMode::Executable;
+  // Which backend writes the machine code. None means the command named
+  // none, and the pipeline picks the first backend that can write for the
+  // chosen target.
+  codegen::Backend backend = codegen::Backend::None;
+  // The machine to build for, from --target; the host when unnamed.
+  codegen::Target target = codegen::host_target();
   // Compile the program on standard input rather than a target. The name it
   // is reported under is <stdin>, since a pipe carries no file behind it.
   bool stdin_source = false;

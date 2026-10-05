@@ -1,6 +1,8 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import("//compiler/backends.gni")
+
 group("alcy") {
   deps = [
     ":libs",
@@ -10,6 +12,20 @@ group("alcy") {
 
 config("alcy_config") {
   include_dirs = [ "//compiler" ]
+
+  # Which backends this build carries, as `codegen::backend_available`
+  # reads them. A backend that was not compiled in has no code to run, so
+  # the answer has to be a build-time fact rather than a runtime one.
+  if (alcy_use_llvm) {
+    defines = [ "ALCY_BACKEND_LLVM=1" ]
+  } else {
+    defines = [ "ALCY_BACKEND_LLVM=0" ]
+  }
+  if (alcy_direct_wasm) {
+    defines += [ "ALCY_BACKEND_DIRECT_WASM=1" ]
+  } else {
+    defines += [ "ALCY_BACKEND_DIRECT_WASM=0" ]
+  }
 }
 
 group("base_modules") {
@@ -28,7 +44,6 @@ group("modules") {
     "ast",
     "borrow",
     "codegen",
-    "codegen_llvm",
     "diag",
     "i18n",
     "ir",
@@ -41,6 +56,9 @@ group("modules") {
     "symbol",
     "text",
   ]
+  if (alcy_use_llvm) {
+    public_deps += [ "codegen_llvm" ]
+  }
 }
 
 group("libs") {

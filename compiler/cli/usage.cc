@@ -116,12 +116,14 @@ void render_option_line(std::back_insert_iterator<std::string> out,
 UsageText::UsageText(Language language)
     : texts_(static_cast<usize>(i18n::KEY_COUNT)) {
   set(Key::CliAbout, i18n::format<Key::CliAbout>(language));
+  set(Key::CliBackendHelp, i18n::format<Key::CliBackendHelp>(language));
   set(Key::CliBuildAbout, i18n::format<Key::CliBuildAbout>(language));
   set(Key::CliColorHelp, i18n::format<Key::CliColorHelp>(language));
   set(Key::CliLangHelp, i18n::format<Key::CliLangHelp>(language));
   set(Key::CliTimeTraceHelp, i18n::format<Key::CliTimeTraceHelp>(language));
   set(Key::CliJsonHelp, i18n::format<Key::CliJsonHelp>(language));
   set(Key::CliReleaseHelp, i18n::format<Key::CliReleaseHelp>(language));
+  set(Key::CliTargetHelp, i18n::format<Key::CliTargetHelp>(language));
   set(Key::CliBuildOutputHelp, i18n::format<Key::CliBuildOutputHelp>(language));
   set(Key::CliEmitHelp, i18n::format<Key::CliEmitHelp>(language));
   set(Key::CliLinkerOverrideHelp,

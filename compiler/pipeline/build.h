@@ -56,6 +56,17 @@ base::Result<void, diag::Reported> emit_package_bitcode(
     const std::string& output_path,
     bool is_lib);
 
+// Writes the program as a final module that needs no link: what a
+// module-emitting backend produces where an object-emitting one would
+// write an object and link it. The unsupported message is the LLVM
+// backend's answer, since it writes objects.
+base::Result<void, diag::Reported> emit_package_module(
+    PipelineContext& ctx,
+    lowering::LoweredPackage& package,
+    bool optimize,
+    const std::string& output_path,
+    bool is_lib);
+
 // Links one object into an executable. An empty driver in `link`
 // selects the default toolchain driver, and its arguments follow the
 // object on the command line.

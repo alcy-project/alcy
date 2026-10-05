@@ -61,6 +61,18 @@ enum class DiagCode : u8 {
   // points at: the owner or name differs, or the member it
   // names is not one the suite lists.
   DependencySuiteMismatch = 16,
+  // The build's backend cannot write the requested kind of output: an
+  // object-only backend asked for a module, or the reverse.
+  UnsupportedOutput = 17,
+  // A release build asked a backend that has no optimizer for optimized
+  // code; the code would be silently unoptimized otherwise.
+  NoOptimizer = 18,
+  // The module writer failed. Objects have their own failure so the
+  // message can name what was being written.
+  CannotEmitModule = 19,
+  // No backend was compiled in at all: the command can check, and a
+  // build command says so here.
+  NoBackend = 20,
 };
 
 }  // namespace pipeline

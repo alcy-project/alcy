@@ -3,12 +3,15 @@
 
 source_set("codegen") {
   sources = [
+    "backend.cc",
+    "backend.h",
     "target.cc",
     "target.h",
     "x86_emitter.cc",
   ]
   deps = [
     "//compiler:base_modules",
+    "//compiler/diag",
     "//compiler/ir",
   ]
   configs += [ "//compiler:alcy_config" ]
