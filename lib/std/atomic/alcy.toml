@@ -7,15 +7,11 @@ name = "atomic"
 version = "0.1.0"
 
 [modules]
-include = [
-  "prelude",
-]
+include = ["prelude"]
 # The public surface, in the form `docs/adr/0007-manifest-driven-modules.md` specifies. Nothing
 # enforces it yet. Its `pub` items are also the implicit surface:
 # a program depending on this package sees them with no `use`.
-export = [
-  "prelude",
-]
+export = ["prelude"]
 
 [dependencies]
 "alcy/std/core" = {}

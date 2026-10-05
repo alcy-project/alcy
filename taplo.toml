@@ -1,3 +1,7 @@
+# The submodules and the build tree are not this project's to format;
+# without the excludes a run walks them and fails on a vendored file.
+exclude = ["third_party/**", "out/**"]
+
 [formatting]
 indent_entries = false
 indent_tables = false
