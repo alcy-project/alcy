@@ -188,12 +188,12 @@ enough to do it at eight lanes.
 The room a table has filled is therefore a set of runs and not one range, and
 three things read it that way:
 
-* `bound`, which `verify.cc` asks 82 times to decide whether an index names a
+- `bound`, which `verify.cc` asks 82 times to decide whether an index names a
   node. It has to answer exactly: a bound that admitted the room between two
   runs would let the walk that follows read a byte no node was written to.
-* `for_each_node`, the seven dense walks over the tables, which visit the nodes
+- `for_each_node`, the seven dense walks over the tables, which visit the nodes
   and not the room between them.
-* `nearly_full`, which asks the pool rather than any lane. A lane that is
+- `nearly_full`, which asks the pool rather than any lane. A lane that is
   nearly full is not a table that is nearly full, because what the lane cannot
   hold the pool can; a table is nearly full when its pool nearly is. Reading it
   per lane is what made the first attempt refuse the package above.
