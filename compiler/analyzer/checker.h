@@ -6,6 +6,7 @@
 #include <span>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -18,6 +19,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/debug/profiler/profile_scope.h"
 #include "fpag/debug/profiler/profiler.h"
+#include "fpag/hash/xxh3_hasher.h"
 #include "fpag/str/string_interner.h"
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
@@ -159,13 +161,22 @@ class Checker {
   std::vector<u32> parents;
   // Inherent methods declared so far, keyed by the nominal they attach
   // to. Spec methods are not recorded: an inherent method shadows a
-  // spec method of the same name by design.
+  // spec method of the same name by design. The set answers whether one is
+  // already recorded, which a walk over every declaration so far asked by
+  // comparing the names of all of them.
   struct InherentMethod {
     u32 target_module = NO_MODULE;
     std::string_view target_name;
     std::string_view method;
+    bool operator==(const InherentMethod&) const = default;
   };
-  std::vector<InherentMethod> inherent_methods_;
+  struct InherentMethodHash {
+    usize operator()(const InherentMethod& key) const {
+      const hash::Xxh3Hasher64 hash;
+      return hash(key.target_name) * 31u + hash(key.method) + key.target_module;
+    }
+  };
+  std::unordered_set<InherentMethod, InherentMethodHash> inherent_methods_;
 
   // Body-checking state, reset per function.
   struct Local {

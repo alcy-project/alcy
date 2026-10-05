@@ -626,14 +626,9 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
 bool Checker::record_inherent_method(u32 target_module,
                                      std::string_view target_name,
                                      std::string_view method) {
-  for (const InherentMethod& declared : inherent_methods_) {
-    if (declared.target_module == target_module &&
-        declared.target_name == target_name && declared.method == method) {
-      return false;
-    }
-  }
-  inherent_methods_.push_back({target_module, target_name, method});
-  return true;
+  return inherent_methods_
+      .insert(InherentMethod{target_module, target_name, method})
+      .second;
 }
 
 u32 Checker::find_child_module(u32 module, std::string_view name) const {
