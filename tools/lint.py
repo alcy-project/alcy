@@ -183,7 +183,8 @@ def lint_files(
 
         target_dirs.append(d)
 
-    format.format_files(dry_run=True)
+    if format.format_files(dry_run=True) != 0:
+        failed = True
 
     compdb = build_dir / "compile_commands.json"
     if not os.path.isfile(compdb):
