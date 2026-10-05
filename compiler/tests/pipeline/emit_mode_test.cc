@@ -11,6 +11,7 @@
 #include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/render.h"
 #include "diag/stage.h"
 #include "doctest/doctest.h"
 #include "fmt/format.h"
@@ -336,6 +337,86 @@ TEST_CASE("A package's module does not depend on how many jobs read it") {
       continue;
     }
     CHECK(ir == one_job);
+  }
+}
+
+TEST_CASE("A package's diagnostics do not depend on how many jobs read it") {
+  // What a run reports is read in the order the files were listed in, however
+  // many threads found it, because the bags a spread read fills are merged in
+  // that order and not in the order the work finished. A phase that forgets
+  // this is a phase whose user sees two answers to one question, and which
+  // answer they see is whatever the machine was doing.
+  constexpr u32 MODULES = 8;
+  io::TempDir dir = io::TempDir::create_unique("alcy_emit_jobs_diag_test_");
+  std::string include = "[\"main\"";
+  for (u32 i = 0; i < MODULES; ++i) {
+    include += fmt::format(", \"m{}\"", i);
+  }
+  include += ']';
+  const bool setup = dir.write_file(
+      "proj/alcy.toml", fmt::format("[package]\nname = \"app\"\nversion = "
+                                    "\"0.1.0\"\n\n[dependencies]\n"
+                                    "\"alcy/std/*\" = {{}}\n\n[[bin]]\n"
+                                    "name = \"app\"\npath = \"main.al\"\n\n"
+                                    "[modules]\ninclude = {}\n",
+                                    include));
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  std::string main_source = "fn main() -> i32 {\n  ret 0\n}\n";
+  for (u32 i = 0; i < MODULES; ++i) {
+    // Three of the eight name something that is not there, so what the run
+    // reports has an order to get wrong.
+    std::string module;
+    if (i % 2 == 0) {
+      module = fmt::format("pub fn f{0}() -> i32 {{\n  ret nope{0}\n}}\n", i);
+    } else {
+      module = fmt::format("pub fn f{0}() -> i32 {{\n  ret {0}\n}}\n", i);
+    }
+    CHECK(dir.write_file(fmt::format("proj/m{}.al", i), module));
+  }
+  CHECK(dir.write_file("proj/main.al", main_source));
+
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(dir.join("proj"));
+  CHECK(root.is_ok());
+  if (root.is_err()) {
+    return;
+  }
+  const path::Path root_path = std::move(root).unwrap();
+
+  std::string one_job;
+  for (u32 jobs : {1u, 4u, 8u}) {
+    INFO("jobs " << jobs);
+    PipelineContext ctx{i18n::Language::EnUs};
+    ctx.jobs = jobs;
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    // The build is expected to fail: the package names three things that are
+    // not there. What is compared is what it said about them.
+    (void)build_package(ctx, root_path, std::move(manifest).unwrap(),
+                        "alcy.toml", "", false, LinkOptions{},
+                        EmitMode::LlvmIr);
+    std::string said;
+    ctx.bag.for_each([&](const diag::Diagnostic& d) {
+      said += diag::render(d);
+      said += '\n';
+    });
+    CHECK(ctx.bag.has_errors());
+    // Three of the eight named something that is not there, so the order is
+    // something to get wrong rather than one line that cannot move.
+    CHECK(ctx.bag.error_count() >= 3);
+    CHECK(!said.empty());
+    if (jobs == 1) {
+      one_job = said;
+      continue;
+    }
+    CHECK(said == one_job);
   }
 }
 
