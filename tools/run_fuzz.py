@@ -31,6 +31,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from utils.env import run_environment
 from utils.paths import fuzz_dir, out_dir, project_root_dir, tools_dir
 
 BUILD_SUBDIR = "fuzz"
@@ -75,9 +76,7 @@ def binary(name: str) -> Path:
     """Path to a built target, or an error naming how to get one."""
     out = out_dir / BUILD_SUBDIR / name
     if not out.is_file():
-        sys.exit(
-            f"{out} is missing; run `uv run ./tools/run_fuzz.py --build` first"
-        )
+        sys.exit(f"{out} is missing; run `uv run ./tools/run_fuzz.py --build` first")
     return out
 
 
@@ -162,6 +161,7 @@ def run_fuzzing(
                 # directory under -jobs, so the run belongs in the
                 # scratch directory rather than the repository.
                 cwd=artifacts,
+                env=run_environment(),
                 stdout=subprocess.DEVNULL if not verbose else None,
                 stderr=subprocess.STDOUT if not verbose else None,
             )
@@ -173,9 +173,7 @@ def run_fuzzing(
                 failures += len(unexpected)
                 for artifact in unexpected:
                     print(f"    UNEXPECTED CRASH: {artifact}", file=sys.stderr)
-                    print(
-                        f"      bytes: {artifact.read_bytes()!r}", file=sys.stderr
-                    )
+                    print(f"      bytes: {artifact.read_bytes()!r}", file=sys.stderr)
                 print(
                     f"    reproduce: {binary(name)} {unexpected[0]}",
                     file=sys.stderr,
@@ -192,8 +190,7 @@ def run_fuzzing(
             # not start, or an out-of-memory kill.
             failures += 1
             print(
-                f"    target exited {completed.returncode} without an "
-                "artifact",
+                f"    target exited {completed.returncode} without an artifact",
                 file=sys.stderr,
             )
     return failures
@@ -213,14 +210,13 @@ def replay(paths: list[str]) -> int:
             completed = subprocess.run(
                 [str(binary(name)), str(target_path)],
                 cwd=project_root_dir,
+                env=run_environment(),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT,
             )
             if completed.returncode != 0:
                 failures += 1
-                print(
-                    f"    exited {completed.returncode}", file=sys.stderr
-                )
+                print(f"    exited {completed.returncode}", file=sys.stderr)
     return failures
 
 
@@ -264,9 +260,7 @@ def main() -> int:
         metavar="PATH",
         help="replay inputs or corpus directories once, then exit",
     )
-    parser.add_argument(
-        "--list", action="store_true", help="list the targets and exit"
-    )
+    parser.add_argument("--list", action="store_true", help="list the targets and exit")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -292,9 +286,7 @@ def main() -> int:
     names = args.targets or list(TARGETS)
     if os.environ.get("ALCY_FUZZ_RESET"):
         shutil.rmtree(CORPUS_DIR, ignore_errors=True)
-    failures = run_fuzzing(
-        names, args.seconds, args.rss_mb, args.jobs, args.verbose
-    )
+    failures = run_fuzzing(names, args.seconds, args.rss_mb, args.jobs, args.verbose)
     if failures:
         print(f"\n{failures} unexpected failure(s)", file=sys.stderr)
         return 1

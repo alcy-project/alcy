@@ -25,6 +25,7 @@ jobs:
   publish:
     needs: [build-release, build-wasm]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:

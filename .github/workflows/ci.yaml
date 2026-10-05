@@ -41,9 +41,11 @@ jobs:
   load-config:
     name: Load Config
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     outputs:
       llvm_toolchain_version: ${{ steps.parse.outputs.llvm_toolchain_version }}
       llvm_fork_tag: ${{ steps.parse.outputs.llvm_fork_tag }}
+      taplo_version: ${{ steps.parse.outputs.taplo_version }}
       tree_sitter_cli_version: ${{ steps.parse.outputs.tree_sitter_cli_version }}
     steps:
       - name: Checkout Repository
@@ -59,6 +61,8 @@ jobs:
           fork_tag=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["llvm_fork_tag"])')
           echo "llvm_toolchain_version=${toolchain_ver}" >> $GITHUB_OUTPUT
           echo "llvm_fork_tag=${fork_tag}" >> $GITHUB_OUTPUT
+          taplo_ver=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["taplo_version"])')
+          echo "taplo_version=${taplo_ver}" >> $GITHUB_OUTPUT
           ts_ver=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["tree_sitter_cli_version"])')
           echo "tree_sitter_cli_version=${ts_ver}" >> $GITHUB_OUTPUT
 
@@ -104,6 +108,7 @@ jobs:
     needs: [load-config]
     name: Lint
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -129,6 +134,7 @@ jobs:
     needs: [load-config]
     name: Coverage Ratchet
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -160,6 +166,7 @@ jobs:
     needs: [load-config]
     name: Generated-Code Sanitizers
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -190,6 +197,7 @@ jobs:
     needs: [load-config]
     name: Local Gate (check.sh)
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -203,6 +211,14 @@ jobs:
           nix: "false"
           os: Linux
           llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
+
+      # `check.sh` runs the TOML check through taplo, which `setup-build`
+      # does not install; the version comes from config.toml, so the
+      # check here is the one a contributor runs.
+      - name: Install taplo
+        uses: ./.github/actions/install-taplo
+        with:
+          version: ${{ needs.load-config.outputs.taplo_version }}
 
       # `typos` is not among the tools `setup-build` installs, and
       # `check.sh` reports a skip rather than passing one silently, so
@@ -234,6 +250,7 @@ jobs:
     needs: [load-config]
     name: Grammar Against the Compiler
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -268,6 +285,7 @@ jobs:
     needs: [load-config]
     name: Benchmark Harness
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -289,6 +307,33 @@ jobs:
       - name: Check Benchmark Harness
         shell: bash
         run: uv run ./tools/run_benchmarks.py smoke --build-subdir=build
+
+  # The fuzz targets are built and run for a short budget. The corpus
+  # and the known-failure manifest are what discriminate: a run whose
+  # artifacts are all recognised is the pass, and a fresh crash fails
+  # the job with the bytes libFuzzer minimised it to.
+  fuzz:
+    needs: [load-config]
+    name: Fuzz Smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build
+        with:
+          nix: "false"
+          os: Linux
+          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
+
+      - name: Build and Run the Fuzz Targets
+        shell: bash
+        run: uv run ./tools/run_fuzz.py
 
   summary:
     needs: [debug, release, wasm-debug, wasm-release]

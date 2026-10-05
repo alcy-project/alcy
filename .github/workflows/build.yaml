@@ -18,10 +18,14 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build & Test (${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ inputs.role }}${{ matrix.nix && '-nix' || '' }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
