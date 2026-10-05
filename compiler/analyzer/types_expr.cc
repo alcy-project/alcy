@@ -1518,8 +1518,8 @@ ir::TypeIdx Checker::check_field(u32 module,
     // A field's type is a storage copy of the declared type, so owner
     // lookup follows the copy back to its origin.
     const ir::TypeIdx origin = type_origin(receiver);
-    const auto declaring = struct_by_type_.find(origin.idx);
-    if (declaring != struct_by_type_.end()) {
+    const auto declaring = nominal_by_type_.find(origin.idx);
+    if (declaring != nominal_by_type_.end()) {
       NominalEntry& entry = nominals[declaring->second];
       const ast::ItemNode& owner_node = ast.items[entry.item];
       u32 i = 0;
@@ -2188,16 +2188,13 @@ void Checker::check_exhaustive(u32 module,
         builder.enum_types()[builder.types()[scrutinee].as_enum()];
     // Find the declaring nominal for variant names.
     const ast::ItemNode* decl = nullptr;
-    for (NominalEntry& entry : nominals) {
-      if (!entry.complete || entry.type.idx != scrutinee.idx) {
-        continue;
+    const auto declaring = nominal_by_type_.find(scrutinee.idx);
+    if (declaring != nominal_by_type_.end()) {
+      const ast::ItemNode& candidate =
+          ast.items[nominals[declaring->second].item];
+      if (candidate.kind == ast::ItemKind::Enum) {
+        decl = &candidate;
       }
-      const ast::ItemNode& candidate = ast.items[entry.item];
-      if (candidate.kind != ast::ItemKind::Enum) {
-        continue;
-      }
-      decl = &candidate;
-      break;
     }
     if (decl == nullptr) {
       // Generic instantiations share their nominal's declaration.

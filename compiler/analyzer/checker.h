@@ -461,11 +461,12 @@ class Checker {
   // is resolved by walking the methods of the type it names, not every
   // method in the package.
   std::unordered_map<u32, std::vector<std::pair<u32, u32>>> methods_by_self_;
-  // The nominal that declares a structure, by the structure type it built. A
-  // field access knows the type it reaches into and needs the declaration that
-  // names the field; it asked by walking every nominal in the package, so one
-  // access cost the package and a package has an access per field read.
-  std::unordered_map<u32, u32> struct_by_type_;
+  // The nominal that declares a type, by the type it built. A field access
+  // needs the declaration that names a field, a match on an enumeration needs
+  // the one that names its variants, a method call needs the one its receiver
+  // belongs to, and a diagnostic needs the one to call the type by. Each asked
+  // by walking every nominal in the package, so one question cost the package.
+  std::unordered_map<u32, u32> nominal_by_type_;
   // Where a module's children are, by the name a path calls them, and the
   // module each package root opens, by the identity a path spells. A path of
   // two segments or more walked every module in the package to find the one

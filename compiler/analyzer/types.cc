@@ -825,12 +825,11 @@ ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
     builder.fill_enum(entry.type, variants.finish(), ir::TypeIdxRange{});
   }
   entry.complete = true;
-  if (is_struct) {
-    // A field access reaches into a structure and needs the declaration that
-    // names its fields, which is this one.
-    struct_by_type_.emplace(entry.type.idx,
-                            static_cast<u32>(&entry - nominals.data()));
-  }
+  // Whatever kind it is: a structure whose fields are being read, an
+  // enumeration whose variants are being matched, a type a method is looked up
+  // on, or one a diagnostic has to name.
+  nominal_by_type_.emplace(entry.type.idx,
+                           static_cast<u32>(&entry - nominals.data()));
   return entry.type;
 }
 
@@ -2250,10 +2249,9 @@ bool Checker::has_value_cycle(ir::TypeIdx root,
 }
 
 std::string_view Checker::nominal_name(ir::TypeIdx idx) const {
-  for (const NominalEntry& entry : nominals) {
-    if (entry.complete && entry.type.idx == idx.idx) {
-      return entry.name;
-    }
+  const auto declaring = nominal_by_type_.find(idx.idx);
+  if (declaring != nominal_by_type_.end()) {
+    return nominals[declaring->second].name;
   }
   for (const GenericInstance& instance : generic_instances) {
     if (instance.type.idx == idx.idx) {
@@ -2822,10 +2820,13 @@ const CheckedModule::FnSig* Checker::lookup_function(
 bool Checker::find_variant_in(u32 module,
                               std::string_view name,
                               std::vector<VariantMatch>& out) {
-  for (NominalEntry& entry : nominals) {
-    if (entry.module != module) {
-      continue;
-    }
+  if (module >= nominals_of_module.size()) {
+    return false;
+  }
+  // A variant is declared by an enumeration of this module, so the walk the
+  // table replaced asked the package what the module could answer.
+  for (u32 pos : nominals_of_module[module]) {
+    NominalEntry& entry = nominals[pos];
     const ast::ItemNode& node = ast.items[entry.item];
     if (node.kind != ast::ItemKind::Enum) {
       continue;
@@ -3012,17 +3013,11 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
     target_nominal = instance->nominal;
     target_args = instance->args;
   } else {
-    bool plain = false;
-    for (u32 i = 0; i < static_cast<u32>(nominals.size()); ++i) {
-      if (nominals[i].complete && nominals[i].type.idx == self.idx) {
-        target_nominal = i;
-        plain = true;
-        break;
-      }
-    }
-    if (!plain) {
+    const auto declaring = nominal_by_type_.find(self.idx);
+    if (declaring == nominal_by_type_.end()) {
       return nullptr;
     }
+    target_nominal = declaring->second;
   }
   const CheckedModule::MethodInfo* match = nullptr;
   for (const SpecImplEntry& entry : spec_impls) {
