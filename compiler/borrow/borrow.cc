@@ -199,6 +199,14 @@ class Checker {
   };
   std::unordered_map<u32, NamedAddr> addr_by_register_;
   std::vector<u32> captures_;
+  // Scratch for the sweeps: the sets a block's liveness is built in, the
+  // successors of a block, and the walks' stacks. Each is cleared where it is
+  // used, so the capacity one sweep needed is the capacity the next reuses.
+  std::vector<u32> live_in_scratch_;
+  std::vector<u32> live_out_scratch_;
+  std::vector<ir::BlockIdx> succs_scratch_;
+  std::vector<ir::BlockIdx> stack_scratch_;
+  std::vector<ir::BlockIdx> post_scratch_;
   // Entry-block allocas holding a block parameter, paired with that
   // parameter's position. Filled by param_allocas per function and read
   // by is_param_root, so both see the same homes.
@@ -814,7 +822,6 @@ class Checker {
       }
     }
     build_preds(fn, order);
-    std::vector<ir::BlockIdx> succs;
     auto add_loan = [](std::vector<u32>& set, u32 loan) {
       for (u32 prior : set) {
         if (prior == loan) {
@@ -835,19 +842,22 @@ class Checker {
       block_last[bidx.idx] = block.instrs.head().idx + block.instrs.size() - 1;
     }
     const usize cap = order.size() * 10 + 10;
+    // The two sets are built in scratch that each iteration reuses, and
+    // assigned into the rows rather than moved out of a fresh vector: a
+    // row keeps its capacity and the sweep allocates nothing.
     for (usize iter = 0; iter < cap; ++iter) {
       bool changed = false;
       for (ir::BlockIdx bidx : order) {
-        std::vector<u32> out;
-        succs.clear();
-        successors(bidx, succs);
-        for (ir::BlockIdx succ : succs) {
+        live_out_scratch_.clear();
+        succs_scratch_.clear();
+        successors(bidx, succs_scratch_);
+        for (ir::BlockIdx succ : succs_scratch_) {
           for (u32 loan : live_in[succ.idx]) {
-            add_loan(out, loan);
+            add_loan(live_out_scratch_, loan);
           }
         }
-        if (out != live_out[bidx.idx]) {
-          live_out[bidx.idx] = std::move(out);
+        if (live_out_scratch_ != live_out[bidx.idx]) {
+          live_out[bidx.idx] = live_out_scratch_;
           changed = true;
         }
         // A loan is live on entry when it is read in this block or live
@@ -856,7 +866,7 @@ class Checker {
         // exclusion is what stops a loan made in a loop body from
         // wrapping around the back edge and being live on the next
         // entry, where it would outlive the iteration that made it.
-        std::vector<u32> in;
+        live_in_scratch_.clear();
         for (u32 loan = 0; loan < loans.size(); ++loan) {
           const u32 birth = loans[loan].birth;
           if (birth >= block_first[bidx.idx] && birth <= block_last[bidx.idx]) {
@@ -870,11 +880,11 @@ class Checker {
             }
           }
           if (live_here) {
-            add_loan(in, loan);
+            add_loan(live_in_scratch_, loan);
           }
         }
-        if (in != live_in[bidx.idx]) {
-          live_in[bidx.idx] = std::move(in);
+        if (live_in_scratch_ != live_in[bidx.idx]) {
+          live_in[bidx.idx] = live_in_scratch_;
           changed = true;
         }
       }
@@ -1004,11 +1014,13 @@ class Checker {
       walk_stamp = 1;
     }
     const u32 stamp = walk_stamp;
-    std::vector<ir::BlockIdx> stack;
-    std::vector<ir::BlockIdx> post;
+    std::vector<ir::BlockIdx>& stack = stack_scratch_;
+    std::vector<ir::BlockIdx>& post = post_scratch_;
+    std::vector<ir::BlockIdx>& succs = succs_scratch_;
+    stack.clear();
+    post.clear();
     stack.push_back(fn.blocks.head());
     walk_mark[fn.blocks.head().idx] = stamp;
-    std::vector<ir::BlockIdx> succs;
     while (!stack.empty()) {
       const ir::BlockIdx top = stack.back();
       succs.clear();
@@ -1555,7 +1567,7 @@ class Checker {
     for (ir::BlockIdx bidx : order) {
       preds[bidx.idx].clear();
     }
-    std::vector<ir::BlockIdx> succs;
+    std::vector<ir::BlockIdx>& succs = succs_scratch_;
     for (ir::BlockIdx bidx : fn.blocks) {
       // successors appends, so the list belongs to one block.
       succs.clear();
