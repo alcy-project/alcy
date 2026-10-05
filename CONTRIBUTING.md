@@ -22,6 +22,15 @@ uv run ./tools/lint.py
 uv run ./tools/format.py --dry-run
 uv run ./tools/verify_static_linkage.py --build-dir=out/build
 
+# The tree's TOML, Markdown, rule, and Python checks. taplo is in the
+# Nix shell; the rest run through uv, which pins them in uv.lock:
+taplo fmt --check
+uv run rumdl check .
+uv run ast-grep test
+uv run ast-grep scan --error compiler
+uv run ruff check tools
+uv run ruff format --check tools
+
 # The grammar needs no toolchain but the tree-sitter CLI and Node:
 uv run ./tools/check_treesitter.py --grammar
 
@@ -61,6 +70,12 @@ uv run ./tools/lint.py --fix
 
 # Also apply fixes that may require manual verification
 uv run ./tools/lint.py --fix-errors
+
+# The tree's other formatters and rule fixes:
+taplo fmt
+uv run rumdl check --fix .
+uv run ast-grep scan -U compiler
+uv run ruff format tools
 
 ```
 
@@ -127,9 +142,12 @@ Notes:
   until the generator is renamed.
 - **Comments:** English only. Write comments sparingly-only for design rationale, invariants or
   safety explanations, non-obvious code, or `TODO`s. Do not restate code that is already clear.
-- **Tooling is authoritative:** `.clang-format`, `.clang-tidy`, `CPPLINT.cfg`, and `typos.toml`
-  enforce repository style. Use `format.py` and `lint.py --fix` to fix most issues automatically.
-  New source files must carry the license header.
+- **Tooling is authoritative:** `.clang-format`, `.clang-tidy`, `CPPLINT.cfg`, `taplo.toml`,
+  `.rumdl.toml`, `sgconfig.yml`, and `pyproject.toml` (ruff) enforce repository style. Use
+  `format.py` and `lint.py --fix`, then the fixes listed above, to correct most issues
+  automatically. The ast-grep rules under `tools/ast-grep/rules/` state the conventions the
+  other linters cannot: fixed-width type aliases, owned memory, and the constructs the project
+  does without. New source files must carry the license header.
 - **Module naming:** Module names stay abbreviated (`pkg`, `diag`). Directory, GN module,
   and namespace names must always match; full forms live in `compiler/docs/architecture.md`.
 - **Wording:** The private LLVM fork is `llvm-alcy-fork` on first mention per document,
@@ -154,7 +172,7 @@ Keep changes focused; avoid mixing refactors with behavior changes unless they a
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/): a type,
 optionally a scope, then a subject, then a body.
 
-```
+```text
 <type>(<scope>): <subject>
 
 <body>

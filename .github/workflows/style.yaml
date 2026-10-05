@@ -18,8 +18,10 @@ jobs:
   load-config:
     name: Load Config
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     outputs:
       llvm_toolchain_version: ${{ steps.parse.outputs.llvm_toolchain_version }}
+      taplo_version: ${{ steps.parse.outputs.taplo_version }}
       tree_sitter_cli_version: ${{ steps.parse.outputs.tree_sitter_cli_version }}
     steps:
       - name: Checkout Repository
@@ -33,6 +35,8 @@ jobs:
         run: |
           TOOLCHAIN_VER=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["llvm_toolchain_version"])')
           echo "llvm_toolchain_version=${TOOLCHAIN_VER}" >> $GITHUB_OUTPUT
+          TAPLO_VER=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["taplo_version"])')
+          echo "taplo_version=${TAPLO_VER}" >> $GITHUB_OUTPUT
           TS_VER=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["tree_sitter_cli_version"])')
           echo "tree_sitter_cli_version=${TS_VER}" >> $GITHUB_OUTPUT
 
@@ -40,6 +44,7 @@ jobs:
     name: Spell Check
     needs: [load-config]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -54,6 +59,7 @@ jobs:
     name: Format
     needs: [load-config]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -75,6 +81,7 @@ jobs:
     name: Specification
     needs: [load-config]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -110,6 +117,7 @@ jobs:
     name: Grammar
     needs: [load-config]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -137,3 +145,88 @@ jobs:
       - name: Check the Grammar
         shell: bash
         run: uv run ./tools/check_treesitter.py --grammar
+
+  toml:
+    name: TOML
+    needs: [load-config]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Setup Linters
+        uses: ./.github/actions/setup-linters
+        with:
+          taplo-version: ${{ needs.load-config.outputs.taplo_version }}
+
+      - name: Check TOML Formatting
+        run: taplo fmt --check
+
+  markdown:
+    name: Markdown
+    needs: [load-config]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Setup Linters
+        uses: ./.github/actions/setup-linters
+        with:
+          taplo-version: ${{ needs.load-config.outputs.taplo_version }}
+
+      - name: Check Markdown
+        run: uv run rumdl check .
+
+  rules:
+    name: ast-grep Rules
+    needs: [load-config]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Setup Linters
+        uses: ./.github/actions/setup-linters
+        with:
+          taplo-version: ${{ needs.load-config.outputs.taplo_version }}
+
+      - name: Test the Rules
+        run: uv run ast-grep test
+
+      - name: Scan the Compiler with the Rules
+        run: uv run ast-grep scan --error compiler
+
+  python:
+    name: Python Tools
+    needs: [load-config]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Setup Linters
+        uses: ./.github/actions/setup-linters
+        with:
+          taplo-version: ${{ needs.load-config.outputs.taplo_version }}
+
+      - name: Check the Python Tools
+        run: |
+          uv run ruff check tools
+          uv run ruff format --check tools

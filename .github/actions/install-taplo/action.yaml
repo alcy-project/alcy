@@ -1,0 +1,23 @@
+name: install-taplo
+description: Install the pinned taplo CLI that checks the tree's TOML.
+
+inputs:
+  version:
+    description: "taplo version from config.toml."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install taplo
+      shell: bash
+      env:
+        TAPLO_VERSION: ${{ inputs.version }}
+      run: |
+        bin="$RUNNER_TEMP/taplo-bin"
+        mkdir -p "$bin"
+        curl -fsSL \
+          "https://github.com/tamasfe/taplo/releases/download/${TAPLO_VERSION}/taplo-linux-x86_64.gz" \
+          | gunzip > "$bin/taplo"
+        chmod +x "$bin/taplo"
+        echo "$bin" >> "$GITHUB_PATH"

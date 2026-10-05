@@ -27,6 +27,7 @@
             pkgs.pkg-config
             pkgs.uv
             pkgs.ast-grep
+            pkgs.taplo
             llvmPkgs.lld
             llvmPkgs.llvm
             # The grammar is checked against the compiler, so the CLI that

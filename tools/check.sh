@@ -99,6 +99,25 @@ fi
 # in is the kind of thing nobody notices until the thing it names moves.
 "${py_runner[@]}" "$tools_dir/check_spec.py"
 
+# The checks below read the tree rather than build it. Each names the
+# tool it could not find: a check that does not run must not read as one
+# that passed.
+if command -v taplo >/dev/null 2>&1; then
+  taplo fmt --check
+else
+  echo "note: taplo not on PATH, so the TOML check did not run" >&2
+fi
+
+if [ "${py_runner[0]}" = "uv" ]; then
+  "${py_runner[@]}" ast-grep test
+  "${py_runner[@]}" ast-grep scan --error compiler
+  "${py_runner[@]}" rumdl check .
+  "${py_runner[@]}" ruff check tools
+  "${py_runner[@]}" ruff format --check tools
+else
+  echo "note: uv not found, so the rule, Markdown and Python checks did not run" >&2
+fi
+
 # The tree-sitter grammar is a second reading of the language, so it is
 # checked against the first: its own corpus here, and every .al file in the
 # repository against the binary the checks above just built. It needs no
