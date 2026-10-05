@@ -32,9 +32,7 @@ def _git(args: list[str]) -> subprocess.CompletedProcess:
     )
 
 
-def format_version(
-    base: str, commit: str | None, on_tag: bool, dirty: bool
-) -> str:
+def format_version(base: str, commit: str | None, on_tag: bool, dirty: bool) -> str:
     """The version string for one build state.
 
     `commit` is None when the source carries no git metadata, which is the
@@ -57,13 +55,12 @@ def resolve_version(base: str) -> str:
         return format_version(base, None, False, False)
     commit = head.stdout.strip()
     on_tag = (
-        _git(["describe", "--exact-match", "--tags", "--match", "v*", "HEAD"])
-        .returncode
+        _git(
+            ["describe", "--exact-match", "--tags", "--match", "v*", "HEAD"]
+        ).returncode
         == 0
     )
-    dirty = bool(
-        _git(["status", "--porcelain", "--untracked-files=no"]).stdout.strip()
-    )
+    dirty = bool(_git(["status", "--porcelain", "--untracked-files=no"]).stdout.strip())
     return format_version(base, commit, on_tag, dirty)
 
 

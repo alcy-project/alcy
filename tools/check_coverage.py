@@ -55,10 +55,14 @@ ALCY_BINARY = OUT_DIR / "alcy"
 # The suites that run the compiler, in the order they are reported.
 SUITES = (
     ("unit tests", [str(TEST_BINARY)]),
-    ("e2e cases", ["uv", "run", str(TOOLS / "check_e2e.py"),
-                   f"--build-subdir={BUILD_SUBDIR}"]),
-    ("exe cases", ["uv", "run", str(TOOLS / "check_exe.py"),
-                   f"--build-subdir={BUILD_SUBDIR}"]),
+    (
+        "e2e cases",
+        ["uv", "run", str(TOOLS / "check_e2e.py"), f"--build-subdir={BUILD_SUBDIR}"],
+    ),
+    (
+        "exe cases",
+        ["uv", "run", str(TOOLS / "check_exe.py"), f"--build-subdir={BUILD_SUBDIR}"],
+    ),
 )
 
 # Third-party headers and the build tree are compiled into the binary but
@@ -134,9 +138,7 @@ def measure(verbose: bool = False) -> dict:
 
         raw = sorted(Path(scratch).glob("*.profraw"))
         if not raw:
-            sys.exit(
-                "the suites produced no profile; was the build instrumented?"
-            )
+            sys.exit("the suites produced no profile; was the build instrumented?")
         if verbose:
             print(f"merged {len(raw)} profile(s)")
 
@@ -239,9 +241,7 @@ def report(current: dict, limit: int) -> None:
         f"{current['lines']['count']} "
         f"({current['lines']['percent']:.2f}%)"
     )
-    modules = sorted(
-        current["modules"].items(), key=lambda kv: percent(kv[1])
-    )
+    modules = sorted(current["modules"].items(), key=lambda kv: percent(kv[1]))
     width = max(len(name) for name, _ in modules)
     print("\nleast covered modules:")
     for name, counts in modules[:limit]:
@@ -254,10 +254,7 @@ def report(current: dict, limit: int) -> None:
 def gate(current: dict) -> int:
     """Fails when coverage lands below the recorded baseline."""
     if not BASELINE.is_file():
-        sys.exit(
-            f"{BASELINE} is missing. Record the current numbers with "
-            "--update."
-        )
+        sys.exit(f"{BASELINE} is missing. Record the current numbers with --update.")
     baseline = json.loads(BASELINE.read_text())
     was = baseline["lines"]["percent"]
     now = current["lines"]["percent"]

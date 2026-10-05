@@ -77,8 +77,14 @@ def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path):
     """
     ir = work / "main.ll"
     command = "build" if is_package else "compile"
-    argv = [str(alcy), command, "." if is_package else "main.al",
-            "--emit=llvm-ir", "-o", str(ir)]
+    argv = [
+        str(alcy),
+        command,
+        "." if is_package else "main.al",
+        "--emit=llvm-ir",
+        "-o",
+        str(ir),
+    ]
     proc = subprocess.run(
         argv,
         capture_output=True,
@@ -182,9 +188,7 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
             problems.append(f"exit: got {proc.returncode}, want {expected_exit}")
 
         if expected_stdout is not None and proc.stdout != expected_stdout:
-            problems.append(
-                f"stdout: got {proc.stdout!r}, want {expected_stdout!r}"
-            )
+            problems.append(f"stdout: got {proc.stdout!r}, want {expected_stdout!r}")
         for needle in stdout_contains:
             if needle not in proc.stdout:
                 problems.append(f"missing stdout: {needle!r}")

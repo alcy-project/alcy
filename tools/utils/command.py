@@ -5,13 +5,13 @@
 
 import os
 import subprocess
-
-from utils.paths import (
-    project_root_dir,
-)
 from concurrent.futures import (
     ThreadPoolExecutor,
     as_completed,
+)
+
+from utils.paths import (
+    project_root_dir,
 )
 
 

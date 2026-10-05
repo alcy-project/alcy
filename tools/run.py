@@ -8,9 +8,11 @@ import os
 import shutil
 import subprocess
 import sys
-from build import build
+
 from utils.env import run_environment
 from utils.paths import project_root_dir
+
+from build import build
 
 
 def main():
@@ -67,7 +69,10 @@ def main():
     parser.add_argument(
         "run_args",
         nargs=argparse.REMAINDER,
-        help="Arguments to pass to the executable (use '--' before run_args if passing flags)",
+        help=(
+            "Arguments to pass to the executable "
+            "(use '--' before run_args if passing flags)"
+        ),
     )
     args = parser.parse_args()
     # argparse's REMAINDER keeps the `--` separator as its first element. It

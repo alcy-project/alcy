@@ -20,8 +20,6 @@ behind a rule, and the deferred list points at the plan for the rest.
 import re
 import sys
 
-from pathlib import Path
-
 from utils.paths import project_root_dir
 
 SPEC_DIR = project_root_dir / "docs" / "spec"
@@ -57,9 +55,7 @@ def main() -> int:
                 match = pattern.search(line)
                 if match is None:
                     continue
-                print(
-                    f"{relative}:{number}: {description}: {match.group(0)}"
-                )
+                print(f"{relative}:{number}: {description}: {match.group(0)}")
                 findings += 1
     if findings:
         print(
@@ -67,7 +63,10 @@ def main() -> int:
             "state the rule, and let the compiler's own docs carry the detail"
         )
         return 1
-    print(f"the specification names no implementation ({SPEC_DIR.relative_to(project_root_dir)})")
+    print(
+        "the specification names no implementation "
+        f"({SPEC_DIR.relative_to(project_root_dir)})"
+    )
     return 0
 
 

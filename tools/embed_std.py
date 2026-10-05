@@ -13,7 +13,9 @@ per-architecture handling.
 """
 
 import argparse
+import re
 import sys
+import tomllib
 from pathlib import Path
 
 
@@ -33,9 +35,6 @@ def main():
     args = parser.parse_args()
 
     std_dir = Path(args.std_dir)
-    if sys.version_info < (3, 11):
-        raise SystemExit("embed_std.py needs tomllib (python 3.11+)")
-    import tomllib
 
     # The suite manifest names the members in order; each package
     # manifest names its staged modules and its dependencies on other
@@ -46,9 +45,7 @@ def main():
     if suite["owner"] != "alcy" or suite["name"] != "std":
         raise SystemExit("lib/std/alcy.toml is not the alcy/std suite")
     members = suite["packages"]
-    if sorted(members) != sorted(
-        [q.name for q in std_dir.iterdir() if q.is_dir()]
-    ):
+    if sorted(members) != sorted([q.name for q in std_dir.iterdir() if q.is_dir()]):
         raise SystemExit("suite members and lib/std directories disagree")
     pkg_modules = {}
     pkg_deps = {}
@@ -103,7 +100,7 @@ def main():
     files = {}
     for name in members:
         for mod in pkg_modules[name]:
-            symbol = "STD_%s_%s" % (name.upper(), mod.upper())
+            symbol = f"STD_{name.upper()}_{mod.upper()}"
             files[symbol] = std_dir / name / (mod + ".al")
 
     with open(args.output, "w", encoding="utf-8") as out:
@@ -126,9 +123,7 @@ def main():
         out.write("const StagedSource STAGED_SOURCES[] = {\n")
         for symbol, path in entries:
             rel = path.relative_to(std_dir).as_posix()
-            out.write(
-                '  {"%s", %s, %s_LEN},\n' % (rel, symbol, symbol)
-            )
+            out.write(f'  {{"{rel}", {symbol}, {symbol}_LEN}},\n')
         out.write("};\n\n")
         out.write(
             "const usize STAGED_SOURCE_COUNT = "
@@ -140,24 +135,15 @@ def main():
         for name in members:
             deps = pkg_deps[name]
             if deps:
+                listed = ", ".join(f'"{d}"' for d in deps)
                 out.write(
-                    "const char* const STD_DEPS_%s[] = {%s};\n\n"
-                    % (
-                        name.upper(),
-                        ", ".join('"%s"' % d for d in deps),
-                    )
+                    f"const char* const STD_DEPS_{name.upper()}[] = {{{listed}}};\n\n"
                 )
         out.write("const StdPackageDeps STD_PACKAGE_DEPS[] = {\n")
         for name in members:
             deps = pkg_deps[name]
-            out.write(
-                '  {"%s", %s, %d},\n'
-                % (
-                    name,
-                    ("STD_DEPS_%s" % name.upper()) if deps else "nullptr",
-                    len(deps),
-                )
-            )
+            table = f"STD_DEPS_{name.upper()}" if deps else "nullptr"
+            out.write(f'  {{"{name}", {table}, {len(deps)}}},\n')
         out.write("};\n\n")
         out.write(
             "const usize STD_PACKAGE_COUNT = "
@@ -167,8 +153,6 @@ def main():
         # dependency hint: an unresolved name found here names the
         # package to add. Top-level `pub` items only; methods are
         # indented and never match the anchor.
-        import re
-
         item_re = re.compile(
             r"^pub\s+(?:intrinsic\s+)?(?:fn|struct|enum)\s+([A-Za-z_][A-Za-z0-9_]*)"
         )
@@ -177,9 +161,7 @@ def main():
         seen = set()
         for name in members:
             for mod in pkg_modules[name]:
-                text = (std_dir / name / (mod + ".al")).read_text(
-                    encoding="utf-8"
-                )
+                text = (std_dir / name / (mod + ".al")).read_text(encoding="utf-8")
                 for line in text.split("\n"):
                     m = item_re.match(line) or use_re.match(line)
                     if m is not None and (name, m.group(1)) not in seen:
@@ -190,11 +172,10 @@ def main():
         # table with no consumer and two things to keep in step.
         out.write("const analyzer::StdHint STD_HINTS[] = {\n")
         for package, item in symbols:
-            out.write('  {"%s", "%s"},\n' % (package, item))
+            out.write(f'  {{"{package}", "{item}"}},\n')
         out.write("};\n\n")
         out.write(
-            "const usize STD_HINT_COUNT = "
-            "sizeof(STD_HINTS) / sizeof(STD_HINTS[0]);\n\n"
+            "const usize STD_HINT_COUNT = sizeof(STD_HINTS) / sizeof(STD_HINTS[0]);\n\n"
         )
         out.write("}  // namespace pipeline\n")
     return 0

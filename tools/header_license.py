@@ -8,13 +8,14 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from re import Pattern
+
 from utils.paths import (
     project_source_dirs,
     tools_dir,
 )
 from utils.source import (
-    source_extensions,
     script_extensions,
+    source_extensions,
 )
 
 holder = "The Alcy Project Authors"

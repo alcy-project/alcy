@@ -10,6 +10,7 @@ import sys
 import tarfile
 import zipfile
 from pathlib import Path
+
 import zstandard as zstd
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

@@ -62,24 +62,51 @@ GATES = [
     ("check_spec", ["uv", "run", "./tools/check_spec.py"]),
     ("grammar", ["uv", "run", "./tools/check_treesitter.py", "--grammar"]),
     ("lint", ["uv", "run", "./tools/lint.py"]),
-    ("tests", ["uv", "run", "./tools/run.py", "--target=tests",
-               "--build-subdir=build"]),
+    (
+        "tests",
+        ["uv", "run", "./tools/run.py", "--target=tests", "--build-subdir=build"],
+    ),
     ("e2e", ["uv", "run", "./tools/check_e2e.py", "--build-subdir=build"]),
-    ("borrow_rules", ["uv", "run", "./tools/check_borrow_rules.py",
-                      "--build-subdir=build"]),
+    (
+        "borrow_rules",
+        ["uv", "run", "./tools/check_borrow_rules.py", "--build-subdir=build"],
+    ),
     ("exe", ["uv", "run", "./tools/check_exe.py", "--build-subdir=build"]),
-    ("exe samples", ["uv", "run", "./tools/check_exe.py", "--build-subdir=build",
-                     "--cases-root=samples"]),
-    ("exe sanitized", ["uv", "run", "./tools/check_exe.py",
-                       "--build-subdir=build", "--sanitize"]),
-    ("static_linkage", ["uv", "run", "./tools/verify_static_linkage.py",
-                        "--build-dir=out/build"]),
-    ("grammar vs compiler", ["uv", "run", "./tools/check_treesitter.py",
-                             "--differential", "--build-subdir=build"]),
+    (
+        "exe samples",
+        [
+            "uv",
+            "run",
+            "./tools/check_exe.py",
+            "--build-subdir=build",
+            "--cases-root=samples",
+        ],
+    ),
+    (
+        "exe sanitized",
+        ["uv", "run", "./tools/check_exe.py", "--build-subdir=build", "--sanitize"],
+    ),
+    (
+        "static_linkage",
+        ["uv", "run", "./tools/verify_static_linkage.py", "--build-dir=out/build"],
+    ),
+    (
+        "grammar vs compiler",
+        [
+            "uv",
+            "run",
+            "./tools/check_treesitter.py",
+            "--differential",
+            "--build-subdir=build",
+        ],
+    ),
     ("coverage", ["uv", "run", "./tools/check_coverage.py"]),
-    ("benchmark smoke", ["uv", "run", "./tools/run_benchmarks.py", "smoke",
-                         "--build-subdir=build"]),
+    (
+        "benchmark smoke",
+        ["uv", "run", "./tools/run_benchmarks.py", "smoke", "--build-subdir=build"],
+    ),
 ]
+
 
 def machine() -> dict:
     return {
@@ -153,7 +180,7 @@ def parse_args() -> argparse.Namespace:
         "--build",
         action="store_true",
         help="build first, so the figures include a cold tree rather than "
-             "the last one's warmth",
+        "the last one's warmth",
     )
     return parser.parse_args()
 
@@ -167,9 +194,18 @@ def main() -> int:
         return 1
 
     if args.build:
-        subprocess.run(["uv", "run", "./tools/build.py", "--target=all",
-                        "--mode=debug", "--build-subdir=build"],
-                       cwd=REPO_ROOT, check=True)
+        subprocess.run(
+            [
+                "uv",
+                "run",
+                "./tools/build.py",
+                "--target=all",
+                "--mode=debug",
+                "--build-subdir=build",
+            ],
+            cwd=REPO_ROOT,
+            check=True,
+        )
 
     results = []
     for label, argv in gates:
@@ -183,20 +219,33 @@ def main() -> int:
     # divide by, so the table prints figures without ratios rather than
     # inventing one.
     baseline = next(
-        (r["seconds"] for r in results
-         if r.get("label") == BASELINE and "seconds" in r),
+        (
+            r["seconds"]
+            for r in results
+            if r.get("label") == BASELINE and "seconds" in r
+        ),
         None,
     )
 
     if args.json:
-        print(json.dumps({"machine": machine(), "budget": BUDGET,
-                          "reference": BASELINE, "gates": results},
-                         indent=2))
+        print(
+            json.dumps(
+                {
+                    "machine": machine(),
+                    "budget": BUDGET,
+                    "reference": BASELINE,
+                    "gates": results,
+                },
+                indent=2,
+            )
+        )
         return 0
 
     info = machine()
-    print(f"{info['os']} {info['machine']}, {info['cpus']} cpus. "
-          f"Figures are this machine's; the ratios are the portable part.\n")
+    print(
+        f"{info['os']} {info['machine']}, {info['cpus']} cpus. "
+        f"Figures are this machine's; the ratios are the portable part.\n"
+    )
     width = max(len(r["label"]) for r in results)
     print(f"{'gate'.ljust(width)}  {'seconds':>9}  {'x lint':>7}  verdict")
     for r in results:
@@ -215,8 +264,10 @@ def main() -> int:
         print(f"{label}  {r['seconds']:>9.1f}  {ratio:>7.2f}  {verdict}{note}")
 
     if baseline is not None:
-        print(f"\nThe reference is {BASELINE} at {baseline:.1f}s, so the "
-              f"budget is {BUDGET * baseline:.0f}s.")
+        print(
+            f"\nThe reference is {BASELINE} at {baseline:.1f}s, so the "
+            f"budget is {BUDGET * baseline:.0f}s."
+        )
     print(
         "Nothing here is a gate. A timing that fails is a machine's opinion, "
         "and docs/adr/0021-benchmark-measurement.md is why a machine's "

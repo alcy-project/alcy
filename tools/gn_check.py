@@ -3,18 +3,19 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-import subprocess
 import json
 import os
+import subprocess
 import sys
-
 from pathlib import Path
+
 from utils.source import source_extensions
 
 
 def check_sources(
-    out_dir: Path, source_root_dir: Path, excluded_dirs: list[str] = []
+    out_dir: Path, source_root_dir: Path, excluded_dirs: list[str] | None = None
 ):
+    excluded = frozenset(excluded_dirs or ())
     # Get list of all tracked source files from GN description
     cmd = ["gn", "desc", out_dir, "*", "sources", "--format=json"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -41,7 +42,7 @@ def check_sources(
     disk_sources = set()
     exts = tuple(source_extensions)
     for root, dirs, files in os.walk(source_root_dir):
-        dirs[:] = [d for d in dirs if d not in excluded_dirs]
+        dirs[:] = [d for d in dirs if d not in excluded]
         for file in files:
             if file.endswith(exts):
                 disk_sources.add(os.path.abspath(os.path.join(root, file)))
@@ -58,8 +59,8 @@ def check_sources(
 
 def main():
     from utils.paths import (
-        default_out_dir,
         compiler_dir,
+        default_out_dir,
         excluded_source_dirs,
     )
 

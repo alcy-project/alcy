@@ -30,7 +30,6 @@ import shutil
 import subprocess
 import sys
 import tomllib
-
 from pathlib import Path
 
 from utils.paths import project_root_dir
@@ -201,8 +200,7 @@ def check_differential(alcy: Path) -> bool:
     accepted = sorted(path for path, ok in verdicts.items() if ok)
     rejected = sorted(path for path, ok in verdicts.items() if not ok)
     print(
-        f"differential: the compiler accepts {len(accepted)} of "
-        f"{len(verdicts)} sources"
+        f"differential: the compiler accepts {len(accepted)} of {len(verdicts)} sources"
     )
 
     problems = [

@@ -5,11 +5,11 @@
 
 """Check the borrow checker against the rules it is supposed to enforce.
 
-docs/spec/ownership.md and `docs/adr/0012-reborrow-on-reference-read.md` state the rules as propositions
-about a loan, so a program's verdict is derivable rather than a matter
-of taste. Every case below declares the verdict its loan demands, and
-the checker either agrees or does not. A disagreement is a defect in
-the checker, and this fails.
+docs/spec/ownership.md and `docs/adr/0012-reborrow-on-reference-read.md` state the
+rules as propositions about a loan, so a program's verdict is derivable
+rather than a matter of taste. Every case below declares the verdict its
+loan demands, and the checker either agrees or does not. A disagreement
+is a defect in the checker, and this fails.
 
 Two disciplines keep the cases honest, because a case that does not
 test borrowing cannot be evidence about borrowing:
@@ -34,7 +34,6 @@ import re
 import subprocess
 import sys
 import tempfile
-
 from pathlib import Path
 
 from utils.env import run_environment
@@ -57,55 +56,77 @@ def case(group, name, expect, body, prelude="", known=False):
 
 # --- the four loan kinds against one place ----------------------------
 case(
-    "kind-pair", "shared-then-shared", "accept",
+    "kind-pair",
+    "shared-then-shared",
+    "accept",
     """fn main() -> i32 {
   x := 1i32
   r := &x
   s := &x
   ret *r + *s
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "kind-pair", "shared-then-mut", "reject",
+    "kind-pair",
+    "shared-then-mut",
+    "reject",
     """fn main() -> i32 {
   mut x := 1i32
   r := &x
   m := &mut x
   ret *r + *m
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "kind-pair", "mut-then-shared", "reject",
+    "kind-pair",
+    "mut-then-shared",
+    "reject",
     """fn main() -> i32 {
   mut x := 1i32
   m := &mut x
   r := &x
   ret *r + *m
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "kind-pair", "mut-then-mut", "reject",
+    "kind-pair",
+    "mut-then-mut",
+    "reject",
     """fn main() -> i32 {
   mut x := 1i32
   m := &mut x
   n := &mut x
   ret *m + *n
-}""", BOX)
+}""",
+    BOX,
+)
 
 # --- exclusivity through a reference: a shared loan cannot yield an
 # --- exclusive one, and two derived exclusives may not alias.
 case(
-    "aliasing", "mut-derived-from-shared", "reject",
+    "aliasing",
+    "mut-derived-from-shared",
+    "reject",
     """fn main() -> i32 {
   x := 1i32
   s := &x
   mut m := &mut *s
   *m = 5
   ret *s
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "aliasing", "mut-through-two-shared-refs", "reject",
+    "aliasing",
+    "mut-through-two-shared-refs",
+    "reject",
     """fn main() -> i32 {
   x := 1i32
   s1 := &x
@@ -115,31 +136,43 @@ case(
   *a = 1
   *b = 2
   ret x
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "aliasing", "exclusive-from-shared-then-read", "reject",
+    "aliasing",
+    "exclusive-from-shared-then-read",
+    "reject",
     """fn main() -> i32 {
   mut x := 1i32
   s := &x
   mut m := &mut *s
   *m = 5
   ret *s
-}""", BOX)
+}""",
+    BOX,
+)
 
 # Reading the parent while an exclusive reborrow of it is live is the
 # same rule seen from the other side: the child freezes the parent.
 case(
-    "aliasing", "parent-read-while-child-live", "reject",
+    "aliasing",
+    "parent-read-while-child-live",
+    "reject",
     """fn main() -> i32 {
   mut x := 1i32
   mut m := &mut x
   mut n := &mut *m
   ret *m + *n
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "aliasing", "mut-through-two-mut-refs", "reject",
+    "aliasing",
+    "mut-through-two-mut-refs",
+    "reject",
     """fn main() -> i32 {
   mut x := 1i32
   mut s1 := &mut x
@@ -147,103 +180,147 @@ case(
   *s1 = 1
   *s2 = 2
   ret x
-}""", BOX)
+}""",
+    BOX,
+)
 
 # --- overlap on one aggregate -----------------------------------------
 case(
-    "overlap", "distinct-fields-shared", "accept",
+    "overlap",
+    "distinct-fields-shared",
+    "accept",
     """fn main() -> i32 {
   p := P { a: 1, b: 2 }
   r := &p.a
   s := &p.b
   ret *r + *s
-}""", PAIR)
+}""",
+    PAIR,
+)
 
 case(
-    "overlap", "whole-mut-then-field-shared", "reject",
+    "overlap",
+    "whole-mut-then-field-shared",
+    "reject",
     """fn main() -> i32 {
   mut p := P { a: 1, b: 2 }
   m := &mut p
   r := &p.a
   ret *r + m.a
-}""", PAIR)
+}""",
+    PAIR,
+)
 
 case(
-    "overlap", "whole-shared-then-field-mut", "reject",
+    "overlap",
+    "whole-shared-then-field-mut",
+    "reject",
     """fn main() -> i32 {
   mut p := P { a: 1, b: 2 }
   r := &p
   m := &mut p.a
   ret r.a + *m
-}""", PAIR)
+}""",
+    PAIR,
+)
 
 case(
-    "overlap", "whole-shared-then-field-shared", "accept",
+    "overlap",
+    "whole-shared-then-field-shared",
+    "accept",
     """fn main() -> i32 {
   p := P { a: 1, b: 2 }
   r := &p
   s := &p.a
   ret r.a + *s
-}""", PAIR)
+}""",
+    PAIR,
+)
 
 case(
-    "overlap", "field-then-whole-mut", "reject",
+    "overlap",
+    "field-then-whole-mut",
+    "reject",
     """fn main() -> i32 {
   mut p := P { a: 1, b: 2 }
   r := &p.a
   m := &mut p
   ret *r + m.a
-}""", PAIR)
+}""",
+    PAIR,
+)
 
 case(
-    "overlap", "store-to-other-field", "accept",
+    "overlap",
+    "store-to-other-field",
+    "accept",
     """fn main() -> i32 {
   mut p := P { a: 1, b: 2 }
   r := &p.a
   p.b = 9
   ret *r + p.b
-}""", PAIR)
+}""",
+    PAIR,
+)
 
 case(
-    "overlap", "store-to-borrowed-field", "reject",
+    "overlap",
+    "store-to-borrowed-field",
+    "reject",
     """fn main() -> i32 {
   mut p := P { a: 1, b: 2 }
   r := &p.a
   p.a = 9
   ret *r + p.a
-}""", PAIR)
+}""",
+    PAIR,
+)
 
 # --- reborrow, with the extent cases under their own group -------------
 case(
-    "reborrow", "shared-reborrow-of-shared", "accept",
+    "reborrow",
+    "shared-reborrow-of-shared",
+    "accept",
     """fn main() -> i32 {
   x := 1i32
   s := &x
   r := &*s
   ret *r + *s
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "reborrow", "shared-reborrow-of-mut", "accept",
+    "reborrow",
+    "shared-reborrow-of-mut",
+    "accept",
     """fn main() -> i32 {
   mut x := 1i32
   m := &mut x
   r := &*m
   ret *r + *m
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "reborrow", "mut-reborrow-of-mut", "accept",
+    "reborrow",
+    "mut-reborrow-of-mut",
+    "accept",
     """fn main() -> i32 {
   mut x := 1i32
   mut m := &mut x
   mut r := &mut *m
   *r = 5
   ret *r
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "reborrow", "two-sequential-reborrows", "accept",
+    "reborrow",
+    "two-sequential-reborrows",
+    "accept",
     """fn main() -> i32 {
   mut x := 1i32
   mut m := &mut x
@@ -252,20 +329,28 @@ case(
   mut b := &mut *m
   *b = 3
   ret x
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "reborrow", "parent-used-while-child-live", "reject",
+    "reborrow",
+    "parent-used-while-child-live",
+    "reject",
     """fn main() -> i32 {
   mut x := 1i32
   mut m := &mut x
   mut n := &mut *m
   *m = 7
   ret *n
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "reborrow", "parent-used-after-child-dead", "accept",
+    "reborrow",
+    "parent-used-after-child-dead",
+    "accept",
     """fn main() -> i32 {
   mut x := 1i32
   mut m := &mut x
@@ -273,58 +358,82 @@ case(
   *n = 7
   *m = 9
   ret x
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "reborrow", "base-stored-while-child-live", "reject",
+    "reborrow",
+    "base-stored-while-child-live",
+    "reject",
     """fn main() -> i32 {
   mut x := 1i32
   mut m := &mut x
   mut n := &mut *m
   x = 7
   ret *n
-}""", BOX)
+}""",
+    BOX,
+)
 
 # --- a loan that came back from a call --------------------------------
 case(
-    "returned", "store-while-return-live", "reject",
+    "returned",
+    "store-while-return-live",
+    "reject",
     """fn main() -> i32 {
   mut x := Box { n: 1 }
   r := get(&x)
   x.n = 9
   ret *r
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "returned", "shared-while-return-live", "accept",
+    "returned",
+    "shared-while-return-live",
+    "accept",
     """fn main() -> i32 {
   x := Box { n: 1 }
   r := get(&x)
   s := &x
   ret *r + s.n
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "returned", "mut-while-return-live", "reject",
+    "returned",
+    "mut-while-return-live",
+    "reject",
     """fn main() -> i32 {
   mut x := Box { n: 1 }
   r := get(&x)
   m := &mut x
   ret *r + m.n
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "returned", "store-while-return-dead", "accept",
+    "returned",
+    "store-while-return-dead",
+    "accept",
     """fn main() -> i32 {
   mut x := Box { n: 1 }
   r := get(&x)
   x.n = 9
   ret x.n
-}""", BOX)
+}""",
+    BOX,
+)
 
 # --- extent across control flow ---------------------------------------
 case(
-    "extent", "dead-on-taken-branch", "accept",
+    "extent",
+    "dead-on-taken-branch",
+    "accept",
     """fn main() -> i32 {
   x := Box { n: 1 }
   r := get(&x)
@@ -332,10 +441,14 @@ case(
     ret 1
   }
   ret *r
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "extent", "live-on-untaken-branch", "reject",
+    "extent",
+    "live-on-untaken-branch",
+    "reject",
     """fn main() -> i32 {
   mut x := Box { n: 1 }
   r := get(&x)
@@ -343,28 +456,40 @@ case(
     x.n = 9
   }
   ret *r
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "extent", "live-then-store-then-use", "reject",
+    "extent",
+    "live-then-store-then-use",
+    "reject",
     """fn main() -> i32 {
   mut x := Box { n: 1 }
   r := get(&x)
   x.n = 9
   ret *r
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "extent", "store-then-borrow-then-use", "accept",
+    "extent",
+    "store-then-borrow-then-use",
+    "accept",
     """fn main() -> i32 {
   mut x := Box { n: 1 }
   x.n = 9
   r := get(&x)
   ret *r
-}""", BOX)
+}""",
+    BOX,
+)
 
 case(
-    "extent", "live-in-loop-across-iteration", "reject",
+    "extent",
+    "live-in-loop-across-iteration",
+    "reject",
     """fn main() -> i32 {
   mut x := Box { n: 1 }
   r := get(&x)
@@ -374,18 +499,32 @@ case(
     i = i + 1
   }
   ret *r
-}""", BOX)
+}""",
+    BOX,
+)
 
 # --- buffer elements --------------------------------------------------
-case("element", "at-then-push", "reject", VEC + """  r := v.at(0)
+case(
+    "element",
+    "at-then-push",
+    "reject",
+    VEC
+    + """  r := v.at(0)
   v.push(3i32)
   ret *r.unwrap()
-}""")
+}""",
+)
 
-case("element", "at-dead-then-push", "accept", VEC + """  r := v.at(0)
+case(
+    "element",
+    "at-dead-then-push",
+    "accept",
+    VEC
+    + """  r := v.at(0)
   v.push(3i32)
   ret v.len() as i32
-}""")
+}""",
+)
 
 case(
     "element",
@@ -395,12 +534,19 @@ case(
     + """  mut r := v.at_mut(0).unwrap()
   v.push(3i32)
   ret *r
-}""")
+}""",
+)
 
-case("element", "two-at-same-index", "accept", VEC + """  a := v.at(0).unwrap()
+case(
+    "element",
+    "two-at-same-index",
+    "accept",
+    VEC
+    + """  a := v.at(0).unwrap()
   b := v.at(0).unwrap()
   ret *a + *b
-}""")
+}""",
+)
 
 case(
     "element",
@@ -410,7 +556,8 @@ case(
     + """  mut a := v.at_mut(0).unwrap()
   mut b := v.at_mut(0).unwrap()
   ret *a + *b
-}""")
+}""",
+)
 
 case(
     "element",
@@ -420,7 +567,8 @@ case(
     + """  a := v.at(0).unwrap()
   b := v.at(1).unwrap()
   ret *a + *b
-}""")
+}""",
+)
 
 # `at_mut` takes `&mut Self`, so the receiver is what governs two calls,
 # not the index. Holding one result across a second call is two
@@ -437,7 +585,8 @@ case(
   *a = 10
   *b = 20
   ret *a + *b
-}""")
+}""",
+)
 
 case(
     "element",
@@ -449,7 +598,8 @@ case(
   mut b := v.at_mut(1).unwrap()
   *b = 20
   ret 0
-}""")
+}""",
+)
 
 case(
     "element",
@@ -461,44 +611,56 @@ case(
   i = 1
   mut b := v.at_mut(i).unwrap()
   ret *a + *b
-}""")
+}""",
+)
 
 # --- map entries: a view from `get` is a loan of the map, and a call
 # --- that mutates the map conflicts with it ---------------------------
 case(
-    "map", "view-then-insert", "reject",
+    "map",
+    "view-then-insert",
+    "reject",
     """fn main() -> i32 {
   mut m := Map::<i32>::new()
   _ := m.insert("a", 1i32)
   view := m.get("a")
   _ := m.insert("b", 2i32)
   ret *view.unwrap()
-}""")
+}""",
+)
 
 case(
-    "map", "view-then-len", "accept",
+    "map",
+    "view-then-len",
+    "accept",
     """fn main() -> i32 {
   mut m := Map::<i32>::new()
   _ := m.insert("a", 1i32)
   view := m.get("a")
   n := m.len()
   ret *view.unwrap() + n as i32 - 1
-}""")
+}""",
+)
 
 case(
-    "map", "view-then-remove", "reject",
+    "map",
+    "view-then-remove",
+    "reject",
     """fn main() -> i32 {
   mut m := Map::<i32>::new()
   _ := m.insert("a", 1i32)
   view := m.get("a")
   _ := m.remove("a")
   ret *view.unwrap()
-}""")
+}""",
+)
 
 # A method receiver names a field, and the loan covers that field; a
 # view into one field leaves another field free to mutate.
 case(
-    "map", "view-then-other-field", "accept",
+    "map",
+    "view-then-other-field",
+    "accept",
     """struct Both { a: Map<i32>, b: Map<i32> }
 fn main() -> i32 {
   mut x := Both { a: Map::<i32>::new(), b: Map::<i32>::new() }
@@ -506,10 +668,13 @@ fn main() -> i32 {
   view := x.a.get("k")
   _ := x.b.insert("j", 7i32)
   ret *view.unwrap() - 5
-}""")
+}""",
+)
 
 case(
-    "map", "field-view-then-mutate", "reject",
+    "map",
+    "field-view-then-mutate",
+    "reject",
     """struct Both { a: Map<i32>, b: Map<i32> }
 fn main() -> i32 {
   mut x := Both { a: Map::<i32>::new(), b: Map::<i32>::new() }
@@ -517,42 +682,57 @@ fn main() -> i32 {
   view := x.a.get("k")
   _ := x.a.insert("j", 7i32)
   ret *view.unwrap() - 5
-}""")
+}""",
+)
 
 # --- projection through a call: the summary names the field, so a loan
 # --- into one field does not cover the whole argument ------------------
 case(
-    "projection", "mut-field-then-other-field", "accept",
+    "projection",
+    "mut-field-then-other-field",
+    "accept",
     """fn main() -> i32 {
   mut q := P { a: 1, b: 2 }
   mut r := mget_a(&mut q)
   *r = 5
   q.b = 9
   ret *r + q.b
-}""", PAIR + "fn mget_a(p: &mut P) -> &mut i32 {\n  ret &mut p.a\n}\n")
+}""",
+    PAIR + "fn mget_a(p: &mut P) -> &mut i32 {\n  ret &mut p.a\n}\n",
+)
 
 case(
-    "projection", "mut-field-then-same-field", "reject",
+    "projection",
+    "mut-field-then-same-field",
+    "reject",
     """fn main() -> i32 {
   mut q := P { a: 1, b: 2 }
   mut r := mget_a(&mut q)
   *r = 5
   q.a = 9
   ret *r
-}""", PAIR + "fn mget_a(p: &mut P) -> &mut i32 {\n  ret &mut p.a\n}\n")
+}""",
+    PAIR + "fn mget_a(p: &mut P) -> &mut i32 {\n  ret &mut p.a\n}\n",
+)
 
 case(
-    "projection", "shared-field-then-other-field", "accept",
+    "projection",
+    "shared-field-then-other-field",
+    "accept",
     """fn main() -> i32 {
   mut q := P { a: 1, b: 2 }
   r := get_a(&q)
   q.b = 9
   ret *r + q.b
-}""", PAIR + "fn get_a(p: &P) -> &i32 {\n  ret &p.a\n}\n")
+}""",
+    PAIR + "fn get_a(p: &P) -> &i32 {\n  ret &p.a\n}\n",
+)
 
 # --- a str view into a string is a loan of the string -----------------
 case(
-    "view", "as_str-then-push", "reject",
+    "view",
+    "as_str-then-push",
+    "reject",
     """fn main() -> i32 {
   mut s := String::new()
   s.push(104u8)
@@ -560,10 +740,13 @@ case(
   s.push(105u8)
   print(r)
   ret 0
-}""")
+}""",
+)
 
 case(
-    "view", "as_str-copy-then-push", "reject",
+    "view",
+    "as_str-copy-then-push",
+    "reject",
     """fn main() -> i32 {
   mut s := String::new()
   s.push(104u8)
@@ -572,42 +755,54 @@ case(
   s.push(105u8)
   print(t)
   ret 0
-}""")
+}""",
+)
 
 case(
-    "view", "as_str-dead-then-push", "accept",
+    "view",
+    "as_str-dead-then-push",
+    "accept",
     """fn main() -> i32 {
   mut s := String::new()
   s.push(104u8)
   r := s.as_str()
   s.push(105u8)
   ret s.len() as i32
-}""")
+}""",
+)
 
 case(
-    "view", "push-then-view", "accept",
+    "view",
+    "push-then-view",
+    "accept",
     """fn main() -> i32 {
   mut s := String::new()
   s.push(104u8)
   s.push(105u8)
   print(s.as_str())
   ret 0
-}""")
+}""",
+)
 
 # --- a slice is a str in the shape of any element: a view that
 # --- carries the buffer's loan, with the length half owning nothing.
 case(
-    "view", "as_slice-then-push", "reject",
+    "view",
+    "as_slice-then-push",
+    "reject",
     """fn main() -> i32 {
   mut v := Vec::<i32>::new()
   v.push(1i32)
   s := v.as_slice()
   v.push(2i32)
   ret slice_len(s) as i32
-}""")
+}""",
+)
 
 case(
-    "view", "as_slice-copy-then-push", "reject",
+    "view",
+    "as_slice-copy-then-push",
+    "reject",
     """fn main() -> i32 {
   mut v := Vec::<i32>::new()
   v.push(1i32)
@@ -615,10 +810,13 @@ case(
   t := s
   v.push(2i32)
   ret slice_len(t) as i32
-}""")
+}""",
+)
 
 case(
-    "view", "as_slice-last-use-then-push", "accept",
+    "view",
+    "as_slice-last-use-then-push",
+    "accept",
     """fn main() -> i32 {
   mut v := Vec::<i32>::new()
   v.push(1i32)
@@ -626,10 +824,13 @@ case(
   n := slice_len(s)
   v.push(2i32)
   ret n as i32
-}""")
+}""",
+)
 
 case(
-    "view", "as_mut_slice-write-then-push", "reject",
+    "view",
+    "as_mut_slice-write-then-push",
+    "reject",
     """fn main() -> i32 {
   mut v := Vec::<i32>::new()
   v.push(1i32)
@@ -637,10 +838,13 @@ case(
   s[0] = 9
   v.push(2i32)
   ret slice_len(s) as i32
-}""")
+}""",
+)
 
 case(
-    "view", "as_mut_slice-last-use-then-push", "accept",
+    "view",
+    "as_mut_slice-last-use-then-push",
+    "accept",
     """fn main() -> i32 {
   mut v := Vec::<i32>::new()
   v.push(1i32)
@@ -649,20 +853,26 @@ case(
   n := slice_len(s)
   v.push(2i32)
   ret *v.at(0).unwrap() + n as i32 - 10
-}""")
+}""",
+)
 
 case(
-    "view", "shared-slice-then-mut-slice", "reject",
+    "view",
+    "shared-slice-then-mut-slice",
+    "reject",
     """fn main() -> i32 {
   mut v := Vec::<i32>::new()
   v.push(1i32)
   s := v.as_slice()
   m := v.as_mut_slice()
   ret slice_len(s) + slice_len(m)
-}""")
+}""",
+)
 
 case(
-    "view", "mut-slice-element-write", "accept",
+    "view",
+    "mut-slice-element-write",
+    "accept",
     """fn touch(mut v: &mut [i32]) {
   v[1] = 9
 }
@@ -670,10 +880,13 @@ fn main() -> i32 {
   mut a := [1i32, 2i32]
   touch(&mut a)
   ret a[1] - 9
-}""")
+}""",
+)
 
 case(
-    "view", "slice-element-then-push", "reject",
+    "view",
+    "slice-element-then-push",
+    "reject",
     """fn main() -> i32 {
   mut v := Vec::<i32>::new()
   v.push(1i32)
@@ -682,10 +895,13 @@ case(
   r := &s[1]
   v.push(3i32)
   ret *r
-}""")
+}""",
+)
 
 case(
-    "view", "slice-element-copy-then-push", "accept",
+    "view",
+    "slice-element-copy-then-push",
+    "accept",
     """fn main() -> i32 {
   mut v := Vec::<i32>::new()
   v.push(1i32)
@@ -695,23 +911,29 @@ case(
   n := *r
   v.push(3i32)
   ret n - 2
-}""")
+}""",
+)
 
 # --- a run borrows the whole container: the view carries the loan
 # --- the borrow took, so writing the container behind a live run
 # --- conflicts, and re-slicing extends the loan rather than cutting it.
 case(
-    "subslice", "mut-run-write-then-array-write", "reject",
+    "subslice",
+    "mut-run-write-then-array-write",
+    "reject",
     """fn main() -> i32 {
   mut a := [1i32, 2i32, 3i32]
   mut m := &mut a[0..<2]
   m[0] = 9
   a[2] = 8
   ret m[0] + a[2] - 17
-}""")
+}""",
+)
 
 case(
-    "subslice", "mut-run-last-use-then-array-write", "accept",
+    "subslice",
+    "mut-run-last-use-then-array-write",
+    "accept",
     """fn main() -> i32 {
   mut a := [1i32, 2i32, 3i32]
   mut m := &mut a[0..<2]
@@ -719,29 +941,38 @@ case(
   n := m[0]
   a[2] = 8
   ret n + a[2] - 17
-}""")
+}""",
+)
 
 case(
-    "subslice", "shared-run-then-mut-run", "reject",
+    "subslice",
+    "shared-run-then-mut-run",
+    "reject",
     """fn main() -> i32 {
   mut a := [1i32, 2i32, 3i32]
   s := &a[0..<2]
   mut m := &mut a[1..<3]
   ret s[0] + m[0] - 3
-}""")
+}""",
+)
 
 case(
-    "subslice", "reslice-then-array-write", "reject",
+    "subslice",
+    "reslice-then-array-write",
+    "reject",
     """fn main() -> i32 {
   mut a := [1i32, 2i32, 3i32]
   s := &a[..]
   t := s[0..<2]
   a[0] = 9
   ret t[0] + a[0] - 10
-}""")
+}""",
+)
 
 case(
-    "subslice", "reslice-last-use-then-array-write", "accept",
+    "subslice",
+    "reslice-last-use-then-array-write",
+    "accept",
     """fn main() -> i32 {
   mut a := [1i32, 2i32, 3i32]
   s := &a[..]
@@ -749,14 +980,17 @@ case(
   n := t[0]
   a[0] = 9
   ret n + a[0] - 10
-}""")
+}""",
+)
 
 # A `str` run should carry the buffer's loan like a slice run does,
 # but views derived through `ExtractValue` on a `str` drop it: the
 # `str_slice` intrinsic has the same hole today, so this is a known
 # gap in the checker rather than in the run itself.
 case(
-    "subslice", "str-run-then-buffer-write", "reject",
+    "subslice",
+    "str-run-then-buffer-write",
+    "reject",
     """fn main() -> i32 {
   mut s := String::new()
   s.push(104u8)
@@ -765,47 +999,64 @@ case(
   s.push(106u8)
   ret str_len(t) as i32
 }""",
-    known=True)
+    known=True,
+)
 
 # --- a struct holding a reference composes by intersection ------------
 case(
-    "struct", "reference-field-kept-live", "accept",
+    "struct",
+    "reference-field-kept-live",
+    "accept",
     """fn main() -> i32 {
   x := 1i32
   h := Holder { r: &x }
   mut y := 2i32
   y = 3
   ret *h.r + y
-}""", HOLDER)
+}""",
+    HOLDER,
+)
 
 case(
-    "struct", "struct-with-ref-arg", "accept",
+    "struct",
+    "struct-with-ref-arg",
+    "accept",
     """fn main() -> i32 {
   x := 1i32
   h := Holder { r: &x }
   mut y := 2i32
   y = 3
   ret read(&h) + y
-}""", HOLDER)
+}""",
+    HOLDER,
+)
 
 case(
-    "struct", "base-mutated-while-ref-field-live", "reject",
+    "struct",
+    "base-mutated-while-ref-field-live",
+    "reject",
     """fn main() -> i32 {
   mut x := 1i32
   h := Holder { r: &x }
   x = 9
   ret *h.r
-}""", HOLDER)
+}""",
+    HOLDER,
+)
 
 # --- a Copy type copies, so the source stays whole --------------------
 case(
-    "move", "copy-of-copy-type", "accept",
+    "move",
+    "copy-of-copy-type",
+    "accept",
     """fn main() -> i32 {
   x := Box { n: 1 }
   r := get(&x)
   y := x
   ret *r + y.n
-}""", BOX)
+}""",
+    BOX,
+)
 
 
 def is_borrow_diagnostic(reason):
@@ -872,9 +1123,7 @@ def main():
             group, name, expect, known, _ = case
             got, reason = run_case(alcy, workdir, case)
             agrees = got == expect
-            if not agrees and got == "reject" and not is_borrow_diagnostic(
-                reason
-            ):
+            if not agrees and got == "reject" and not is_borrow_diagnostic(reason):
                 broken.append((group, name, expect, got, reason))
             elif not agrees and not known:
                 unexpected.append((group, name, expect, got, reason))
@@ -883,14 +1132,11 @@ def main():
             if args.verbose or not agrees or (known and agrees):
                 mark = "ok  " if agrees else ("gap " if known else "FAIL")
                 note = f"  [{reason}]" if reason else ""
-                print(
-                    f"{mark} {group}/{name}: "
-                    f"want={expect} got={got}{note}"
-                )
+                print(f"{mark} {group}/{name}: want={expect} got={got}{note}")
 
     if broken:
         print("\nCases that failed for a reason other than borrowing:")
-        for group, name, expect, got, reason in broken:
+        for group, name, _expect, _got, reason in broken:
             print(f"  - {group}/{name}: {reason}")
         print("These cases are broken, so they say nothing about the rules.")
 

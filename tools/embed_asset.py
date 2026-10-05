@@ -11,7 +11,8 @@ import sys
 
 
 def sanitize_symbol_name(name: str) -> str:
-    """Replaces non-alphanumeric characters with underscores, matching llvm-objcopy's behavior."""
+    """Replaces non-alphanumeric characters with underscores, matching
+    llvm-objcopy's behavior."""
     return re.sub(r"[^a-zA-Z0-9]", "_", name)
 
 

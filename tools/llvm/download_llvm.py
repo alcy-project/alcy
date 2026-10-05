@@ -4,10 +4,11 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import os
-import urllib.request
-import urllib.error
 import tarfile
+import urllib.error
+import urllib.request
 import zipfile
+
 import zstandard
 
 

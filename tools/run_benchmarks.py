@@ -125,7 +125,10 @@ def summarize(samples_ns: list[int]) -> dict:
 
 
 def measure(
-    case: dict, binary: Path, fixtures_dir: Path, build_subdir: str,
+    case: dict,
+    binary: Path,
+    fixtures_dir: Path,
+    build_subdir: str,
     build_mode: str,
 ) -> dict:
     argv = [str(binary), *case["argv"]]
@@ -283,8 +286,7 @@ def print_micro(record: dict) -> None:
     )
 
 
-def run_micro(build_subdir: str, build_mode: str, output: str,
-              cases: str) -> int:
+def run_micro(build_subdir: str, build_mode: str, output: str, cases: str) -> int:
     """Runs the engine over the cases it was compiled with.
 
     There is no suite file to read: a case is added to the driver, not to
@@ -300,8 +302,7 @@ def run_micro(build_subdir: str, build_mode: str, output: str,
     target = Path(output) if output else None
     if target is not None:
         target.parent.mkdir(parents=True, exist_ok=True)
-    argv = [str(driver), "--build-subdir", build_subdir,
-            "--build-mode", build_mode]
+    argv = [str(driver), "--build-subdir", build_subdir, "--build-mode", build_mode]
     if cases:
         argv += ["--cases", cases]
     # The source is written out so a `check` run can be pointed at the
@@ -309,9 +310,7 @@ def run_micro(build_subdir: str, build_mode: str, output: str,
     # step needs on both sides.
     if target is not None:
         argv += ["--emit-source", str(target.with_suffix(".al"))]
-    proc = subprocess.run(
-        argv, capture_output=True, text=True, encoding="utf-8"
-    )
+    proc = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8")
     if proc.returncode != 0:
         print(proc.stdout)
         print(proc.stderr, file=sys.stderr)
@@ -361,19 +360,32 @@ def phase_totals(trace_path: Path) -> dict[str, float]:
     return totals
 
 
-def engine_run(driver: Path, build_subdir: str, build_mode: str, width: int,
-               record_path: Path, source_path: Path) -> dict[str, dict]:
+def engine_run(
+    driver: Path,
+    build_subdir: str,
+    build_mode: str,
+    width: int,
+    record_path: Path,
+    source_path: Path,
+) -> dict[str, dict]:
     """Runs the engine once and returns its cases by name."""
     done = subprocess.run(
         [
             str(driver),
-            "--build-subdir", build_subdir,
-            "--build-mode", build_mode,
-            "--functions", str(width),
-            "--output", str(record_path),
-            "--emit-source", str(source_path),
+            "--build-subdir",
+            build_subdir,
+            "--build-mode",
+            build_mode,
+            "--functions",
+            str(width),
+            "--output",
+            str(record_path),
+            "--emit-source",
+            str(source_path),
         ],
-        capture_output=True, text=True, encoding="utf-8",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
     if done.returncode != 0:
         raise SuiteError(f"the engine failed: {done.stderr.strip()}")
@@ -409,12 +421,18 @@ def run_smoke(build_subdir: str) -> int:
         done = subprocess.run(
             [
                 str(driver),
-                "--build-subdir", build_subdir,
-                "--functions", str(DEFAULT_WIDTH),
-                "--output", str(record_path),
-                "--emit-source", str(source_path),
+                "--build-subdir",
+                build_subdir,
+                "--functions",
+                str(DEFAULT_WIDTH),
+                "--output",
+                str(record_path),
+                "--emit-source",
+                str(source_path),
             ],
-            capture_output=True, text=True, encoding="utf-8",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
         )
         if done.returncode != 0:
             print(done.stderr, file=sys.stderr)
@@ -436,8 +454,7 @@ def run_smoke(build_subdir: str) -> int:
                 problems.append(f"{name}: not a micro record")
             if len(samples) != stats.get("count"):
                 problems.append(
-                    f"{name}: {len(samples)} samples but count "
-                    f"{stats.get('count')}"
+                    f"{name}: {len(samples)} samples but count {stats.get('count')}"
                 )
             if not samples:
                 problems.append(f"{name}: collected no sample")
@@ -459,7 +476,9 @@ def run_smoke(build_subdir: str) -> int:
 
         accepted = subprocess.run(
             [str(binary), "check", "--file", str(source_path), "--json"],
-            capture_output=True, text=True, encoding="utf-8",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
         )
         try:
             verdict = json.loads(accepted.stdout)
@@ -511,28 +530,49 @@ def run_reconcile(build_subdir: str, build_mode: str, tolerance: float) -> int:
         # describe that build rather than the compiler. Refused rather
         # than warned about: the spread below would be read as a verdict
         # on the harness when it is really a verdict on the build.
-        print(f"error: reconcile needs a release build; out/{build_subdir} is "
-              f"{build_mode!r}")
-        print("       a debug build's figures are not a measurement of the "
-              "compiler")
+        print(
+            f"error: reconcile needs a release build; out/{build_subdir} is "
+            f"{build_mode!r}"
+        )
+        print("       a debug build's figures are not a measurement of the compiler")
         return -1
 
     with tempfile.TemporaryDirectory(prefix="alcy_reconcile_") as scratch:
         work = Path(scratch)
         source_path = work / "bench.al"
         try:
-            first = engine_run(driver, build_subdir, build_mode, DEFAULT_WIDTH,
-                               work / "first.jsonl", source_path)
-            second = engine_run(driver, build_subdir, build_mode, DEFAULT_WIDTH,
-                                work / "second.jsonl", source_path)
+            first = engine_run(
+                driver,
+                build_subdir,
+                build_mode,
+                DEFAULT_WIDTH,
+                work / "first.jsonl",
+                source_path,
+            )
+            second = engine_run(
+                driver,
+                build_subdir,
+                build_mode,
+                DEFAULT_WIDTH,
+                work / "second.jsonl",
+                source_path,
+            )
         except SuiteError as e:
             print(f"error: {e}")
             return -1
 
         check = subprocess.run(
-            [str(binary), "check", "--file", str(source_path),
-             "--time-trace", "--json"],
-            capture_output=True, text=True, encoding="utf-8",
+            [
+                str(binary),
+                "check",
+                "--file",
+                str(source_path),
+                "--time-trace",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
         )
         (work / "trace.json").write_text(check.stdout, encoding="utf-8")
         try:
@@ -602,9 +642,13 @@ def run_process(args) -> int:
     records = []
     for case in cases:
         try:
-            record = measure(case, binary, fixtures_dir, args.build_subdir,
-                             args.build_mode or infer_build_mode(
-                                 args.build_subdir))
+            record = measure(
+                case,
+                binary,
+                fixtures_dir,
+                args.build_subdir,
+                args.build_mode or infer_build_mode(args.build_subdir),
+            )
         except SuiteError as e:
             print(f"error: {e}")
             return -1
@@ -632,9 +676,7 @@ def main() -> int:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    process = sub.add_parser(
-        "process", help="time the alcy binary as a process"
-    )
+    process = sub.add_parser("process", help="time the alcy binary as a process")
     micro = sub.add_parser(
         "micro", help="time compiler phases in process, with no file in the way"
     )
@@ -657,14 +699,12 @@ def main() -> int:
         target.add_argument(
             "--cases", default="", help="Comma-separated case ids to run"
         )
-        target.add_argument(
-            "--output", default="", help="JSONL file to append to"
-        )
+        target.add_argument("--output", default="", help="JSONL file to append to")
         target.add_argument(
             "--build-mode",
             default="",
             help="debug or release, recorded with the figures "
-                 "(default: read from --build-subdir)",
+            "(default: read from --build-subdir)",
         )
     process.add_argument(
         "--suite",
@@ -682,8 +722,7 @@ def main() -> int:
         target.add_argument(
             "--build-subdir",
             default="build",
-            help="Subdirectory inside out/ holding both binaries "
-                 "(default: build)",
+            help="Subdirectory inside out/ holding both binaries (default: build)",
         )
     rec.add_argument(
         "--build-subdir-unused",
@@ -693,8 +732,7 @@ def main() -> int:
     rec.add_argument(
         "--build-mode",
         default="",
-        help="Build the figures came from (default: read from "
-             "--build-subdir)",
+        help="Build the figures came from (default: read from --build-subdir)",
     )
     rec.add_argument(
         "--tolerance",

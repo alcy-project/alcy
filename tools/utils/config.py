@@ -4,11 +4,12 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import tomllib
-from typing import Any, Dict
+from typing import Any
+
 from utils.paths import config_toml_file
 
 
-def load_config() -> Dict[str, Any]:
+def load_config() -> dict[str, Any]:
     """Reads and parses config.toml from project root."""
     if not config_toml_file.is_file():
         raise FileNotFoundError(f"config.toml not found at {config_toml_file}")

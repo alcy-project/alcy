@@ -5,26 +5,27 @@
 
 import argparse
 import json
-from pathlib import Path
-import sys
-import subprocess
 import os
+import subprocess
+import sys
+from pathlib import Path
 
 import format
 import gn_check
-from build import build
 from utils.command import run_commands_in_parallel
 from utils.paths import (
+    excluded_source_dirs,
     out_dir,
     project_root_dir,
     project_source_dirs,
-    excluded_source_dirs,
 )
 from utils.source import (
     compile_unit_extensions,
     header_extensions,
     source_extensions,
 )
+
+from build import build
 
 
 def target_files(target_dirs: list[Path]):
@@ -51,16 +52,17 @@ def check_ascii_only(files: list[str]) -> bool:
     for rel_path in files:
         filepath = project_root_dir / rel_path
         try:
-            with open(filepath, "r", encoding="ascii") as f:
+            with open(filepath, encoding="ascii") as f:
                 f.read()
         except UnicodeDecodeError:
             passed = False
-            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+            with open(filepath, encoding="utf-8", errors="replace") as f:
                 for line_num, line in enumerate(f, start=1):
                     for col_num, char in enumerate(line, start=1):
                         if ord(char) > 127:
                             print(
-                                f"Non-ASCII character error: {rel_path}:{line_num}:{col_num}: "
+                                f"Non-ASCII character error: "
+                                f"{rel_path}:{line_num}:{col_num}: "
                                 f"found '{char}' (U+{ord(char):04X}) in: {line.strip()}"
                             )
     return passed

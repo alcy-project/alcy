@@ -4,16 +4,16 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import argparse
-import sys
 import os
 import platform
+import sys
 
 import download_llvm
 
 script_dir = os.path.dirname(__file__)
 tools_root = os.path.dirname(script_dir)
 sys.path.append(tools_root)
-from utils.config import get_llvm_fork_tag
+from utils.config import get_llvm_fork_tag  # noqa: E402 - tools_root is on sys.path now
 
 root_dir = os.path.dirname(tools_root)
 default_llvm_out_dir = os.path.join(root_dir, "out", "third_party", "llvm")
@@ -101,7 +101,10 @@ def main():
     parser.add_argument(
         "--tag",
         default="",
-        help="Release tag to download from alcy fork (defaults to llvm_fork_tag in config.toml)",
+        help=(
+            "Release tag to download from alcy fork "
+            "(defaults to llvm_fork_tag in config.toml)"
+        ),
     )
 
     parser.add_argument(
@@ -133,7 +136,7 @@ def main():
     cached_tag = None
     if os.path.isfile(args.tag_cache_file):
         try:
-            with open(args.tag_cache_file, "r") as f:
+            with open(args.tag_cache_file) as f:
                 cached_tag = f.read().strip()
         except Exception:
             cached_tag = None
@@ -144,7 +147,8 @@ def main():
 
     if enable_cache_llvm and tag_matches and has_include and has_lib:
         print(
-            f"Preinstalled LLVM matching tag '{args.tag}' found in '{args.install_dir}'. Skipping download."
+            f"Preinstalled LLVM matching tag '{args.tag}' found in "
+            f"'{args.install_dir}'. Skipping download."
         )
         return 0
 

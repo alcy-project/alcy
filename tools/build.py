@@ -5,9 +5,10 @@
 
 import argparse
 import json
+import os
 import subprocess
 import sys
-import os
+
 from utils.paths import project_root_dir
 from utils.source import source_extensions
 
@@ -168,8 +169,7 @@ def main():
         "--gn-arg",
         dest="gn_args_extra",
         default="",
-        help="Extra GN arguments, passed through verbatim "
-        '(e.g. --gn-arg=is_fuzz=true)',
+        help="Extra GN arguments, passed through verbatim (e.g. --gn-arg=is_fuzz=true)",
     )
     parser.add_argument(
         "--gen-only",
