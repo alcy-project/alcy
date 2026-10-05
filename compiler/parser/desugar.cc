@@ -74,8 +74,8 @@ class Desugarer {
 
   std::vector<Binding>& current() { return scopes.back(); }
 
-  const Binding* find_innermost(std::string_view name) const {
-    for (const Binding& binding : scopes.back()) {
+  Binding* find_innermost(std::string_view name) {
+    for (Binding& binding : scopes.back()) {
       if (binding.orig == name) {
         return &binding;
       }
@@ -117,9 +117,9 @@ class Desugarer {
     if (is_keyword_name(ident.name)) {
       return ident.name;
     }
-    if (const Binding* existing = find_innermost(ident.name)) {
+    if (Binding* existing = find_innermost(ident.name)) {
       if (existing->preseeded) {
-        const_cast<Binding*>(existing)->seen = true;
+        existing->seen = true;
         return existing->fresh;
       }
       const u32 index = bag.emit<i18n::Key::ParserNameAlreadyBound>(
@@ -568,14 +568,14 @@ class Desugarer {
         // declaration since they resolve through outer scopes. A
         // wildcard binds nothing, so two of them never collide.
         push_scope();
-        for (const ast::ClosureParam& param :
+        for (ast::ClosureParam& param :
              node.payload.get<ast::ExprClosure>().params) {
           if (param.is_wildcard) {
             continue;
           }
           ast::Ident name = param.name;
           name.name = declare_named(param.name);
-          const_cast<ast::ClosureParam&>(param).name = name;
+          param.name = name;
         }
         visit_expr(node.payload.get<ast::ExprClosure>().body);
         pop_scope();

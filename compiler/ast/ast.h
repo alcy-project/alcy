@@ -544,7 +544,10 @@ struct ClosureParam {
 // mean the closure sees nothing outside its parameters.
 struct ExprClosure {
   std::span<const Ident> captures;
-  std::span<const ClosureParam> params;
+  // The desugarer rewrites a parameter's name to its bound spelling, so
+  // the span is mutable even though only the parser and that pass write
+  // through it.
+  std::span<ClosureParam> params;
   ExprIdx body = ExprIdx::invalid();
 };
 

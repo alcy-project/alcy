@@ -107,7 +107,7 @@ class Lowerer {
   // Lexical comp bindings: persistent per-function bindings plus
   // evaluation-local frames.
   struct CompScope {
-    const std::vector<std::pair<std::string_view, CompVal>>* outer = nullptr;
+    std::vector<std::pair<std::string_view, CompVal>>* outer = nullptr;
     std::vector<std::vector<std::pair<std::string_view, CompVal>>> frames;
   };
 

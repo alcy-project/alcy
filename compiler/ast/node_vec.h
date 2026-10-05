@@ -242,6 +242,9 @@ class NodeVec {
 
  private:
   [[nodiscard]] char* base() const noexcept {
+    // The arena's base is fixed for its lifetime and fpag exposes it as
+    // const; the table writes through it.
+    // ast-grep-ignore: no-const-cast
     return const_cast<char*>(arena_.base_ptr());
   }
 

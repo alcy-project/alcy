@@ -490,9 +490,7 @@ bool Lowerer::comp_eval_stmt(u32 mod,
         }
       }
       if (scope.outer != nullptr) {
-        for (auto& binding :
-             const_cast<std::vector<std::pair<std::string_view, CompVal>>&>(
-                 *scope.outer)) {
+        for (auto& binding : *scope.outer) {
           if (binding.first == segments[0].name) {
             binding.second = std::move(value);
             out.kind = CompFlow::Kind::Value;

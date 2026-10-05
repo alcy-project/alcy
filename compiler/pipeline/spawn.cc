@@ -103,6 +103,8 @@ base::Result<i32, SpawnError> run_command(
   std::vector<char*> args;
   args.reserve(argv.size() + 1);
   for (const std::string& arg : argv) {
+    // posix_spawnp takes a mutable argv and does not write through it.
+    // ast-grep-ignore: no-const-cast
     args.push_back(const_cast<char*>(arg.c_str()));
   }
   args.push_back(nullptr);
