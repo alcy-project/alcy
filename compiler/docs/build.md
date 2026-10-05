@@ -41,9 +41,9 @@ installation under `out/<build-subdir>/third_party/llvm/install/<debug|release>/
 in this order:
 
 1. **Reuse**: if the installation directory exists and its recorded tag matches
-    `llvm_fork_tag` in `config.toml`, nothing is done.
+   `llvm_fork_tag` in `config.toml`, nothing is done.
 2. **Download**: otherwise, a prebuilt archive corresponding to `llvm_fork_tag`
-    and the target triple is fetched from the fork's GitHub Releases
+   and the target triple is fetched from the fork's GitHub Releases
    (`llvm-<debug|release>-<triple>.tar.zst`, `.zip` on Windows) and extracted.
 
 To update the LLVM dependency, change `llvm_fork_tag` in `config.toml`. GN and
@@ -80,7 +80,7 @@ One asymmetry is worked around rather than fixed upstream: Clang's
 `-fms-runtime-lib=*_debug` still selects the *release* CRT (`libcmt.lib`)
 instead of the debug CRT (`libcmtd.lib`), leaving debug-only symbols such as
 `_malloc_dbg` unresolved. Until that driver bug is fixed, Windows Debug
-builds additionally pass `-Xlinker /NODEFAULTLIB:libcmt.lib -Xlinker /DEFAULTLIB:libcmtd.lib` (same file, `linker` config). 
+builds additionally pass `-Xlinker /NODEFAULTLIB:libcmt.lib -Xlinker /DEFAULTLIB:libcmtd.lib` (same file, `linker` config).
 Do not remove those flags without re-checking the driver behavior.
 
 To verify which CRT an artifact uses, inspect its directives, e.g.
@@ -93,5 +93,4 @@ alike.
 - `gn gen` failures: make sure `gn` and `ninja` are on `PATH`
 (`nix develop`, or install them via your package manager).
 - Stale LLVM install: delete
-`out/<build-subdir>/third_party/llvm/install/`  to force re-resolution.
-
+`out/<build-subdir>/third_party/llvm/install/` to force re-resolution.

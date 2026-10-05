@@ -15,7 +15,7 @@ That is fine while the enum stays in the frame that made it, and wrong
 the moment it does not. Returning it hands the caller a pointer into a
 frame that the call has already left:
 
-```
+```alcy
 enum E { A(i32), B }
 
 fn mk(x: i32) -> E { ret E::A(x) }
@@ -127,8 +127,6 @@ that already takes every constant index, and a payload field is now
 addressed in two steps rather than through one pointer, which is more
 precise than before.
 
-## Alternatives considered
-## Alternatives considered
 ## Alternatives considered
 
 - **Keep the pointer and forbid returning an enum with a payload.**

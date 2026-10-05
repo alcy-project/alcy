@@ -10,7 +10,7 @@ domain. It extends `grammar.md` (which covers MVP only).
 
 `comp` annotates three positions:
 
-```
+```text
 params    := (("comp")? pattern ":" type ("," ...)* ","?)?
 decl_stmt := ("comp")? pattern (":" type)? ":=" expr
 primary   := ... | comp_block

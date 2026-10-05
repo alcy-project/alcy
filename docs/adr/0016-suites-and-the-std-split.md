@@ -57,7 +57,7 @@ the thing `"alcy/std/*" = {}` buys over naming packages one by one.
 
 ### The split
 
-```
+```text
 core    → nothing
 alloc   → core
 fmt     → core, alloc

@@ -3,7 +3,7 @@
 Where this language is going, and the properties that get it there.
 
 This document governs the *language*. For how the compiler that
-implements it is put together, see [architecture.md](../../compiler/docs/architecture.md);
+implements it is put together, see [architecture.md](../compiler/docs/architecture.md);
 `docs/spec/` holds the specification itself.
 
 `docs/spec/overview.md` states the goals and the non-goals for the MVP.

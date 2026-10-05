@@ -121,7 +121,7 @@ isolation: `push` grows and copies, `at_mut` bounds-checks, `pop`
 returns the last element, and the destructor releases the buffer. But a
 sequence of operations reads the wrong element:
 
-```
+```alcy
 mut v := Vec::<i32>::new()
 v.push(1i32)
 v.push(2i32)
@@ -135,7 +135,7 @@ The first conclusion drawn from this was that the container was blocked
 here, on the reference model. **That was wrong.** Reducing the case
 removed `Vec` altogether and left a much smaller fault:
 
-```
+```alcy
 enum E { A(i32), B }
 fn mk(x: i32) -> E { ret E::A(x) }
 fn get(e: E) -> i32 { ret match e { E::A(v) => v, E::B => 0 } }
@@ -154,7 +154,7 @@ container accessor returns.
 The reference model is separately incomplete, and the reason a write
 through a dereference goes unchecked is still worth stating plainly:
 
-```
+```alcy
 fn g(mut b: &mut i32) -> i32 {
   x := &*b      // a shared reborrow of the referent
   *b = 1        // a write through the same referent, not checked
@@ -180,7 +180,7 @@ modelled" but "a place whose type is itself a reference has no
 representation". A shared receiver already hands out borrows of its
 fields, repeatedly, and the field stays readable afterwards:
 
-```
+```alcy
 struct Cell { n: i32, tag: i32 }
 
 impl Cell {

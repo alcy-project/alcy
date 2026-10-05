@@ -99,4 +99,3 @@
 - `for` names the cursor through `into_iter` and consumes it as an
   `Iterator` (see `control.md`). Index and slice APIs accept bound
   data, never iterators.
-

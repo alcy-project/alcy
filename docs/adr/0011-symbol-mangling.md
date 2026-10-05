@@ -31,7 +31,7 @@ name. The signature is the module path, the item name, what the item
 is, and the type arguments of the instantiation. `compiler/symbol` encodes
 it to a string beginning `_A`, and decodes it back.
 
-```
+```ebnf
 symbol   = "_A" version kind seglist name generics
 kind     = "f" free | "a" associated | "m" method
 seglist  = { segment } "."

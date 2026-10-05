@@ -52,10 +52,11 @@ owns and `cli::is_block` states.
 ## Consequences
 
 - There is one shape for an error line, so a reader who has seen one has
-  seen all of them, and a tool that matches `error[EC016]: ` matches
-  compiler and cli errors alike.
-- A codeless message renders `error: ` rather than a number nobody
-  allocated. `--json` reports `"code":null` where a number would imply one.
+  seen all of them, and a tool that matches the `error[EC016]:` prefix
+  matches compiler and cli errors alike.
+- A codeless message renders `error:` and then the message, rather
+  than a number nobody allocated. `--json` reports `"code":null` where a
+  number would imply one.
 - Writing a diagnostic no longer means choosing a stream at the call site.
   Adding a diagnostic to a command cannot break a consumer's redirect.
 - `--json` is the only way to get diagnostics and the result together as

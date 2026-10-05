@@ -21,7 +21,7 @@ the language currently has no way to express.
 
 A type declares a destructor as a method named `drop`:
 
-```
+```alcy
 struct Res { buf: &mut MaybeUninit<u8> }
 
 impl Res {

@@ -5,6 +5,7 @@ This workspace contains `alcy`, a high-performance programming language compiler
 # Reference Documentation
 
 Prior to generating, refactoring, or reviewing code, strictly follow the specifications in:
+
 - `compiler/docs/architecture.md`: Pipeline architecture, intermediate representation design, LLVM integration, and repository structure.
 - `CONTRIBUTING.md`: Workflow scripts (`build.py`, `lint.py`), tooling setup, formatting, and commit conventions.
 
@@ -15,7 +16,7 @@ Prior to generating, refactoring, or reviewing code, strictly follow the specifi
   - Enforce explicit ownership using value semantics, `std::unique_ptr`, or `std::shared_ptr`. Avoid manual memory management (`new`/`delete`).
   - Keep functions pure and side-effect-free where possible. Prefer `const` by default for variables, members, and methods.
 - **Mechanical & Structural Refactoring**:
-  - Prefer `ast-grep`  over manual edits for repetitive, structural, or mechanical code transformations.
+  - Prefer `ast-grep` over manual edits for repetitive, structural, or mechanical code transformations.
 - **Error Handling & Constraints**:
   - The project builds with `-fno-exceptions` and `-fno-rtti`. **Do not use `try`, `catch`, `throw`, `dynamic_cast`, or RTTI.**
   - Use explicit, zero-overhead error reporting abstractions (e.g., `std::optional`, custom `Result`/`AutoTaggedUnion` types, or diagnostic handlers) instead of exceptions.

@@ -377,8 +377,8 @@ that happens to read them.
 3. **Semantic analysis** - `analyzer` resolves names and checks types on
    the attributed AST:
 
-   * **Name resolution**: mapping interned `SymbolId`s to declarations.
-   * **Type checking**: computing and verifying type signatures.
+   - **Name resolution**: mapping interned `SymbolId`s to declarations.
+   - **Type checking**: computing and verifying type signatures.
 
 4. **Lowering** - `lowering` turns the checked package into IR, consuming
    the type information above. Typed high-level desugars (`?`,

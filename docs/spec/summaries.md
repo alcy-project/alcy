@@ -7,7 +7,7 @@ region relations automatically, so callers never write annotations.
 
 A summary maps input regions to an output region expression:
 
-```
+```text
 summary f(r1..rn) -> R
 R ::= ri                    # identity
     | R ∩ R                 # conditional joins, struct composition

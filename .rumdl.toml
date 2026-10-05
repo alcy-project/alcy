@@ -1,0 +1,12 @@
+# The Markdown the project owns, checked by rumdl. The vendored trees
+# and the build output are excluded: a submodule's files are not this
+# project's to rewrite, and a run without the excludes fails on them.
+
+[global]
+exclude = ["third_party", "out", "treesitter", ".git"]
+
+# MD013: prose and tables are wrapped where a reader needs a break, not
+# at 80 columns, and AGENTS.md's lines are as long as their instruction.
+# MD025: AGENTS.md's sections are level 1 by design, the same way a
+# reference page titles each part.
+disable = ["MD013", "MD025"]

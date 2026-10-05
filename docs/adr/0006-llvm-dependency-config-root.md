@@ -13,6 +13,7 @@ within the submodule (`docs/adr/0002-llvm-fork-prebuilt.md`). A fallback to buil
 CMake was also maintained.
 
 This approach introduced several issues:
+
 - Shallow checkouts or clones without tags caused `git describe` to fail,
   requiring manual `git fetch --tags` steps in local and CI environments.
 - Maintaining the submodule checkout increased repository size and setup
@@ -38,6 +39,7 @@ workflow centered around `config.toml`:
 ## Consequences
 
 What this buys:
+
 - **Simpler repository and CI**: No submodule management, no `git fetch --tags`
   steps, and faster checkout times.
 - **Removed CMake dependency**: Contributors no longer need CMake
@@ -46,6 +48,7 @@ What this buys:
   in `config.toml`. GN/Ninja handles cache checking and downloads automatically.
 
 What it costs:
+
 - **No local source builds**: Fallback to building LLVM from source within
   this repo is no longer supported. Any new LLVM version or build variant
   must be built and published as a GitHub Release in `llvm-alcy-fork`
