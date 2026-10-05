@@ -19,15 +19,22 @@ story.
   unsafe function that becomes a value waits for unsafe function
   types, so using one in value position is refused rather than
   silently dropping the gate.
+- Dereferencing a raw pointer is an operation the gate covers, for a
+  read and for a write. Writing needs a `*mut` pointer and a `mut`
+  binding that names it, the same way writing through a reference
+  needs a `&mut` and a `mut` binding.
+- Offsetting a raw pointer is an operation the gate covers. It is a
+  call to `ptr_offset`/`ptr_offset_mut` (`items.md`), not a rule of
+  `*`, so the gate is the call gate.
 - The precondition-carrying intrinsics are declared `unsafe` —
   `memcopy`, `str_from_parts`, `slice_from_parts`,
   `slice_from_parts_mut`, `alloc`, `dealloc`, `elem_ptr`, `elem_ref`,
-  and `uninit_assume` — and the checker verifies the marker against
-  the canonical set the way it verifies the shape (`items.md`), so
-  the declaration and the gate cannot drift. `uninit_write` and
-  `uninit_ref` stay safe: they are the safe half of `MaybeUninit`.
-  Byte access, `size_of`, `align_of`, `print`, `println`, `panic`,
-  and `sys_write` stay safe too.
+  `uninit_assume`, `ptr_offset`, and `ptr_offset_mut` — and the
+  checker verifies the marker against the canonical set the way it
+  verifies the shape (`items.md`), so the declaration and the gate
+  cannot drift. `uninit_write` and `uninit_ref` stay safe: they are
+  the safe half of `MaybeUninit`. Byte access, `size_of`, `align_of`,
+  `print`, `println`, `panic`, and `sys_write` stay safe too.
 - Safe code MUST NOT be able to cause undefined behavior; that
   guarantee stays load bearing. Unsafe code carries the obligations
   the compiler cannot check: a dereference names a live, aligned,
@@ -39,15 +46,26 @@ story.
 - Unsafe receiver and spec methods are not implemented yet: the
   marker parses and is refused where it appears.
 
-## Raw pointers (reserved)
+## Raw pointers (Bootstrap)
 
-- `*T` and `*mut T` will be thin, Copy, and outside the region
-  system. Creating one will be safe: `&x as *T` and `p as *mut U`,
-  with integers crossing by cast too, which is what makes `0 as *T`
-  the null pointer. Dereferencing and offsetting will be unsafe
-  operations.
-- C's `void*` is expressed as `*u8` and cast until an erased pointer
-  earns its own spelling.
+- `*T` and `*mut T` are thin, Copy, and outside the region system: a
+  value that carries one carries no loan, and a loan the cast was
+  taken through expires at the cast. They are the address without
+  the obligation.
+- Creating one is safe: `&x as *T`, `&mut x as *mut T`, `p as *mut
+  U`, and `&x as usize` all move the address around without reading
+  through it. `*mut T` coerces to `*T` the way `&mut T` coerces to
+  `&T`, and `as` crosses raw pointer kinds, pointees, and integers in
+  both directions, which is what makes `0 as *T` the null pointer.
+  `&T` never casts to a `*mut T`, and a raw pointer never casts back
+  to a reference: a tracked reference has to be built where its loan
+  comes from.
+- Dereferencing and offsetting are operations the gate covers. A
+  `*mut T` names a writable place; a `*T` reads only, and a write
+  through one is rejected before the gate is consulted.
+- Two raw pointers of one type compare with `==` and `!=` by
+  address; ordering is not defined. An erased `void*` will spell as
+  `*u8` and cast until it earns its own spelling.
 
 ## External functions (reserved)
 

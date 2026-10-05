@@ -56,13 +56,16 @@ struct DecodedType {
     Ref,
     MutRef,
     Ptr,
+    RawPtr,
+    RawMutPtr,
     Array,
     Tuple,
     Nominal,
   };
   Kind kind = Kind::Prim;
   std::string spelling;
-  // Ref and MutRef: the pointee. Array: the element.
+  // Ref, MutRef, RawPtr, and RawMutPtr: the pointee. Array: the
+  // element.
   std::vector<DecodedType> parts;
   // Array length, or pointer width in bits.
   u64 count = 0;

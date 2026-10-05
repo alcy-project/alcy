@@ -110,6 +110,8 @@ llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
                                    {builder_->getPtrTy(), len_ty});
     }
     case T::Ptr: return builder_->getPtrTy();
+    case T::RawPtr:
+    case T::RawMutPtr: return builder_->getPtrTy();
     case T::Ref:
     case T::MutRef: {
       // A reference to a slice is the fat pointer itself, matching the

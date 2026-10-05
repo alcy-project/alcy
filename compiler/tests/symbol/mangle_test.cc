@@ -195,6 +195,44 @@ TEST_CASE("Demangle recovers a signature") {
   CHECK(symbol::display(out.generics[1]) == "&mut u8");
 }
 
+TEST_CASE("Mangle separates raw pointer kinds") {
+  Fixture f;
+  const TypeIdx raw_i32 = f.builder.raw_pointer_type(f.i32, false);
+  const TypeIdx raw_mut_i32 = f.builder.raw_pointer_type(f.i32, true);
+  symbol::Signature shared =
+      signature("m", "read", symbol::Signature::Kind::Free);
+  shared.generics = {raw_i32};
+  symbol::Signature exclusive =
+      signature("m", "read", symbol::Signature::Kind::Free);
+  exclusive.generics = {raw_mut_i32};
+  const ir::Storage types = f.build();
+  CHECK(symbol::mangle(shared, types, f.strings) !=
+        symbol::mangle(exclusive, types, f.strings));
+}
+
+TEST_CASE("Demangle recovers raw pointer types") {
+  Fixture f;
+  const TypeIdx raw_mut_u8 = f.builder.raw_pointer_type(f.u8, true);
+  const TypeIdx raw_str = f.builder.raw_pointer_type(f.str, false);
+  symbol::Signature sig = signature("m", "send", symbol::Signature::Kind::Free);
+  sig.generics = {raw_mut_u8, raw_str};
+  const ir::Storage types = f.build();
+  const std::string encoded = symbol::mangle(sig, types, f.strings);
+
+  base::Result<symbol::Demangled, symbol::DemangleError> decoded =
+      symbol::demangle(encoded);
+  CHECK(decoded.is_ok());
+  if (decoded.is_err()) {
+    return;
+  }
+  symbol::Demangled out = std::move(decoded).unwrap();
+  CHECK(out.generics.size() == 2);
+  CHECK(out.generics[0].kind == symbol::DecodedType::Kind::RawMutPtr);
+  CHECK(symbol::display(out.generics[0]) == "*mut u8");
+  CHECK(out.generics[1].kind == symbol::DecodedType::Kind::RawPtr);
+  CHECK(symbol::display(out.generics[1]) == "*str");
+}
+
 TEST_CASE("Demangle rejects what it does not understand") {
   // Not ours.
   CHECK(symbol::demangle("free").is_err());

@@ -1231,6 +1231,40 @@ TEST_CASE("Parser reads function types without disturbing parens") {
   }
 }
 
+TEST_CASE("Parser reads raw pointer types") {
+  Fixture f;
+  const ParseResult result = parse("fn f(p: *i32, q: *mut u8, r: **i32) {}", f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  CHECK(fn.params.size() == 3);
+  if (fn.params.size() != 3) {
+    return;
+  }
+  const ast::TypeNode& shared = f.ast.types[fn.params[0].type];
+  CHECK(shared.kind == ast::TypeKind::RawPtr);
+  if (shared.kind == ast::TypeKind::RawPtr) {
+    const ast::TypeRawPtr& ptr = shared.payload.get<ast::TypeRawPtr>();
+    CHECK(!ptr.is_mut);
+    CHECK(f.ast.types[ptr.inner].kind == ast::TypeKind::Primitive);
+  }
+  const ast::TypeNode& exclusive = f.ast.types[fn.params[1].type];
+  CHECK(exclusive.kind == ast::TypeKind::RawPtr);
+  if (exclusive.kind == ast::TypeKind::RawPtr) {
+    CHECK(exclusive.payload.get<ast::TypeRawPtr>().is_mut);
+  }
+  const ast::TypeNode& nested = f.ast.types[fn.params[2].type];
+  CHECK(nested.kind == ast::TypeKind::RawPtr);
+  if (nested.kind == ast::TypeKind::RawPtr) {
+    const ast::TypeNode& inner =
+        f.ast.types[nested.payload.get<ast::TypeRawPtr>().inner];
+    CHECK(inner.kind == ast::TypeKind::RawPtr);
+  }
+}
+
 TEST_CASE("Parser keeps a parenthesized type a type") {
   Fixture f;
   const ParseResult result = parse("fn f(x: (i32)) {}", f);

@@ -294,14 +294,16 @@ class Checker {
   bool fn_is_unsafe(ast::ItemIdx item) const;
   // A type parameter a declared parameter type pins on its own. The
   // flags say where in the argument the bound type sits: `through_ref`
-  // takes the pointee, `through_uninit` then unwraps the `MaybeUninit`
-  // wrapper, which is how a generic intrinsic recovers `T` from a
+  // takes a reference's pointee, `through_raw` takes a raw pointer's,
+  // and `through_uninit` then unwraps the `MaybeUninit` wrapper, which
+  // is how a generic intrinsic recovers `T` from a
   // `&mut MaybeUninit<T>` parameter.
   struct DeclaredBinding {
     u32 slot = 0;
     bool through_ref = false;
     bool through_uninit = false;
     bool through_slice = false;
+    bool through_raw = false;
   };
   DeclaredBinding declared_binding(std::span<const ast::Ident> params,
                                    const ast::TypeNode& declared) const;
@@ -581,6 +583,10 @@ class Checker {
   // A callee reached through a resolved signature: an unsafe one needs
   // an `unsafe { ... }` block at the call site (ADR-0050).
   void check_unsafe_call(const CheckedModule::FnSig* fn, diag::Span span);
+  // An operation the gate covers must name it: with no enclosing
+  // `unsafe { ... }` block, the diagnostic names the operation
+  // (ADR-0050).
+  void require_unsafe(diag::Span span, std::string_view what);
   // A closure literal: parameters bind from annotations or the
   // expected function type, the body checks as a function body,
   // and the value's type is the signature they make.

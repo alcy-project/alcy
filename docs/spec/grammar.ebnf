@@ -68,7 +68,7 @@ use_item    = "use" , path , [ "as" , IDENT ] , ";" ;
 
 type        = primitive | "()" | "!" | "str"
             | tuple_type | paren_type | array_type | slice_type
-            | ref_type | path_type | func_type ;
+            | ref_type | raw_ptr_type | path_type | func_type ;
 primitive   = integer_type | float_type | "bool" ;
 tuple_type  = "(" , type , "," , [ type , { "," , type } ] , [ "," ] , ")" ;
               (* The comma is what makes the parens a type of their own:
@@ -83,6 +83,10 @@ func_type   = "(" , [ type , { "," , type } , [ "," ] ] , ")" ,
 array_type  = "[" , type , ";" , INTEGER , "]" ;
 slice_type  = "[" , type , "]" ;
 ref_type    = "&" , [ "mut" ] , type ;
+raw_ptr_type = "*" , [ "mut" ] , type ;
+              (* Thin and Copy, outside the region system. `**T` lexes
+                 as the power token, so the pair is read as two stars
+                 in a type position; see docs/spec/ffi.md. *)
 path_type   = path , [ "<" , type , { "," , type } , ">" ] ;
 
 (* Patterns *)
@@ -117,6 +121,9 @@ mul_expr      = pow_expr , { ( "*" | "/" | "%" ) , pow_expr } ;
 pow_expr      = cast_expr , [ "**" , pow_expr ] ;
 cast_expr     = unary_expr , [ "as" , type ] ;
 unary_expr    = ( "-" | "!" | "~" | "&" , [ "mut" ] | "*" ) , unary_expr ;
+              (* `**p` lexes as the power token, but a binary `**`
+                 needs a left operand, so in prefix position the pair
+                 is two dereferences. *)
 question_expr = postfix_expr , [ "?" ] ;
 postfix_expr  = primary , { call | field | method | index | "?" } ;
 call          = [ turbofish ] , "(" , [ expr , { "," , expr } ] , ")" ;

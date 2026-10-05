@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Invalid cast from 'ref' to 'raw_mut_ptr'"]

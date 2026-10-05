@@ -24,6 +24,7 @@
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
+#include "ir/type_util.h"
 
 namespace analyzer {
 
@@ -1207,8 +1208,20 @@ void Checker::check_unsafe_call(const CheckedModule::FnSig* fn,
     return;
   }
   const u32 index = bag.emit<i18n::Key::AnalyzerUnsafeCall>(
-      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnsafeCall, span,
-      fn->name);
+      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnsafeOperation,
+      span, fn->name);
+  (void)index;
+}
+
+// An operation other than a call that the gate covers. The message
+// names the operation, so the diagnostic reads without the site.
+void Checker::require_unsafe(diag::Span span, std::string_view what) {
+  if (unsafe_depth > 0) {
+    return;
+  }
+  const u32 index = bag.emit<i18n::Key::AnalyzerUnsafeOperation>(
+      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnsafeOperation,
+      span, what);
   (void)index;
 }
 
@@ -1787,6 +1800,33 @@ ir::TypeIdx Checker::check_cast(u32 module,
   const bool numeric_to =
       is_integer_tag(to) || is_float_tag(to) || to == ir::TypeTag::I1;
   if (from == ir::TypeTag::Never || (numeric_from && numeric_to)) {
+    if (expected != nullptr) {
+      return unify(*expected, target, node.span, "cast");
+    }
+    return target;
+  }
+  // Pointer casts are safe: they move the address around, they do not
+  // read through it. A raw pointer crosses to and from every raw
+  // pointer and every integer; a reference crosses to a raw pointer of
+  // no more exclusive a kind and to an integer. A reference to a slice
+  // is the fat view itself, so it has no thin address to hand out.
+  const bool raw_from = ir::is_raw_ptr_type(from);
+  const bool raw_to = ir::is_raw_ptr_type(to);
+  const bool ref_from = from == ir::TypeTag::Ref || from == ir::TypeTag::MutRef;
+  const bool integer_from = is_integer_tag(from) && from != ir::TypeTag::I1;
+  const bool integer_to = is_integer_tag(to) && to != ir::TypeTag::I1;
+  bool thin_reference = false;
+  if (ref_from) {
+    const ir::TypeIdx pointee =
+        builder.ref_types()[builder.types()[inner.idx].as_ref()].pointee;
+    thin_reference = builder.types()[pointee.idx].tag != ir::TypeTag::Slice;
+  }
+  const bool through_raw =
+      (raw_from && (raw_to || integer_to)) || (integer_from && raw_to) ||
+      (ref_from && thin_reference &&
+       ((to == ir::TypeTag::RawPtr || integer_to) ||
+        (to == ir::TypeTag::RawMutPtr && from == ir::TypeTag::MutRef)));
+  if (through_raw) {
     if (expected != nullptr) {
       return unify(*expected, target, node.span, "cast");
     }
@@ -2582,14 +2622,18 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
     case ast::ExprKind::Deref: {
       // The place a reference addresses. Assignment through a shared
       // reference would need a second reference alive, so the
-      // mutability of the operand is preserved.
+      // mutability of the operand is preserved. A raw pointer names
+      // the same kind of place, but dereferencing one is an operation
+      // the gate covers (ADR-0050).
       const ir::TypeIdx inner =
           check_expr(module, node.payload.get<ast::ExprDeref>().inner, nullptr);
       if (is_error(inner)) {
         return error_type();
       }
       const ir::TypeTag tag = tag_of(inner);
-      if (tag != ir::TypeTag::Ref && tag != ir::TypeTag::MutRef) {
+      if (ir::is_raw_ptr_type(tag)) {
+        require_unsafe(node.span, "Dereferencing a raw pointer");
+      } else if (tag != ir::TypeTag::Ref && tag != ir::TypeTag::MutRef) {
         const u32 index = bag.emit<i18n::Key::AnalyzerCannotDereference>(
             diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::InvalidOperation, node.span, pretty_tag(tag_of(inner)));
@@ -2638,7 +2682,8 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
           const bool comparable =
               is_integer_tag(tag) || is_float_tag(tag) ||
               tag == ir::TypeTag::I1 || tag == ir::TypeTag::Ptr ||
-              tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef;
+              tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef ||
+              ir::is_raw_ptr_type(tag);
           if (!comparable) {
             break;
           }
@@ -2953,7 +2998,12 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
       if (is_error(inner)) {
         return error_type();
       }
-      if (tag_of(inner) != ir::TypeTag::MutRef) {
+      const ir::TypeTag tag = tag_of(inner);
+      if (tag == ir::TypeTag::RawMutPtr) {
+        require_unsafe(node.span, "Writing through a raw pointer");
+        return builder.ref_types()[builder.types()[inner.idx].as_ref()].pointee;
+      }
+      if (tag != ir::TypeTag::MutRef) {
         const u32 index = bag.emit<i18n::Key::AnalyzerAssignThroughShared>(
             diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::BadAssignment, node.span);

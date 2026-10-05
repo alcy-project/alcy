@@ -179,7 +179,8 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
       } else if (ir::is_float_type(tag)) {
         result = builder_->CreateFCmp(float_predicate(i.op), lhs_val, rhs_val);
       } else if ((tag == ir::TypeTag::Ptr || tag == ir::TypeTag::Ref ||
-                  tag == ir::TypeTag::MutRef) &&
+                  tag == ir::TypeTag::MutRef || tag == ir::TypeTag::RawPtr ||
+                  tag == ir::TypeTag::RawMutPtr) &&
                  (i.op == Op::Eq || i.op == Op::Ne)) {
         // References and raw pointers compare by address.
         result =
@@ -232,13 +233,46 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
         }
       } else if (ir::is_float_type(src_tag) && ir::is_float_type(dst_tag)) {
         result = builder_->CreateFPCast(value, dst_ty);
-      } else if (ir::is_integer_type(src_tag) && dst_tag == ir::TypeTag::Ptr) {
-        result = builder_->CreateIntToPtr(value, dst_ty);
+      } else if (ir::is_integer_type(src_tag) &&
+                 (dst_tag == ir::TypeTag::Ptr ||
+                  dst_tag == ir::TypeTag::RawPtr ||
+                  dst_tag == ir::TypeTag::RawMutPtr)) {
+        // `0 as *T` and friends: the integer is normalized to the
+        // pointer's own width before the bitcast, so a narrower
+        // literal extends rather than trips the instruction's
+        // operand rule.
+        const u32 word_bits = width_ == ir::PointerWidth::W64 ? 64 : 32;
+        llvm::Type* word_ty = width_ == ir::PointerWidth::W64
+                                  ? builder_->getInt64Ty()
+                                  : builder_->getInt32Ty();
+        const u32 src_bits = value->getType()->getIntegerBitWidth();
+        llvm::Value* as_word = value;
+        if (src_bits < word_bits) {
+          as_word = builder_->CreateZExt(value, word_ty);
+        } else if (src_bits > word_bits) {
+          as_word = builder_->CreateTrunc(value, word_ty);
+        }
+        result = builder_->CreateIntToPtr(as_word, dst_ty);
       } else if ((src_tag == ir::TypeTag::Ptr || src_tag == ir::TypeTag::Ref ||
-                  src_tag == ir::TypeTag::MutRef) &&
+                  src_tag == ir::TypeTag::MutRef ||
+                  src_tag == ir::TypeTag::RawPtr ||
+                  src_tag == ir::TypeTag::RawMutPtr) &&
                  ir::is_integer_type(dst_tag)) {
-        // References ride as pointers; casts read the address.
-        result = builder_->CreatePtrToInt(value, dst_ty);
+        // References ride as pointers; casts read the address. The
+        // word-sized integer comes first, then the width the source
+        // asked for.
+        const u32 word_bits = width_ == ir::PointerWidth::W64 ? 64 : 32;
+        llvm::Type* word_ty = width_ == ir::PointerWidth::W64
+                                  ? builder_->getInt64Ty()
+                                  : builder_->getInt32Ty();
+        llvm::Value* as_word = builder_->CreatePtrToInt(value, word_ty);
+        const u32 dst_bits = dst_ty->getIntegerBitWidth();
+        if (dst_bits < word_bits) {
+          as_word = builder_->CreateTrunc(as_word, dst_ty);
+        } else if (dst_bits > word_bits) {
+          as_word = builder_->CreateZExt(as_word, dst_ty);
+        }
+        result = as_word;
       } else if (value->getType()->isPointerTy() &&
                  (dst_tag == ir::TypeTag::Struct ||
                   dst_tag == ir::TypeTag::Array ||
@@ -249,6 +283,12 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
         // type so later element access resolves it.
         result = value;
         values_.add_alloca_type(i.dst, dst_ty);
+      } else if (value->getType()->isPointerTy() &&
+                 (dst_tag == ir::TypeTag::RawPtr ||
+                  dst_tag == ir::TypeTag::RawMutPtr)) {
+        // A raw pointer's pointee comes from its type payload, so the
+        // bitcast is the whole operation; nothing labels the alloca.
+        result = value;
       } else if (value->getType()->isPointerTy() &&
                  (dst_tag == ir::TypeTag::Ref ||
                   dst_tag == ir::TypeTag::MutRef)) {

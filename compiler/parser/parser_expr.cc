@@ -430,17 +430,30 @@ ast::ExprIdx Parser::parse_unary() {
       });
       return ast_.exprs.push_back(node);
     }
-    case lexer::TokenKind::Star: {
+    case lexer::TokenKind::Star:
+    case lexer::TokenKind::StarStar: {
+      // `*p` dereferences once; `**p` lexes as the power token but a
+      // binary `**` needs a left operand, so in prefix position the
+      // pair is two dereferences.
+      const bool paired = peek_kind() == lexer::TokenKind::StarStar;
       advance();
-      ast::ExprIdx inner = parse_unary();
-      if (!inner.is_valid()) {
+      ast::ExprIdx operand = parse_unary();
+      if (!operand.is_valid()) {
         return ast::ExprIdx::invalid();
       }
-      ast::ExprNode node;
-      node.kind = ast::ExprKind::Deref;
-      node.span = span_from(mark);
-      node.payload.set(ast::ExprDeref{.inner = inner});
-      return ast_.exprs.push_back(node);
+      ast::ExprNode first;
+      first.kind = ast::ExprKind::Deref;
+      first.span = span_from(mark);
+      first.payload.set(ast::ExprDeref{.inner = operand});
+      const ast::ExprIdx deref = ast_.exprs.push_back(first);
+      if (!paired) {
+        return deref;
+      }
+      ast::ExprNode second;
+      second.kind = ast::ExprKind::Deref;
+      second.span = span_from(mark);
+      second.payload.set(ast::ExprDeref{.inner = deref});
+      return ast_.exprs.push_back(second);
     }
     default: return parse_postfix();
   }

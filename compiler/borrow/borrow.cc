@@ -502,9 +502,15 @@ class Checker {
         // both or `Vec::at` hands back a pointer the checker never saw.
         // An element offset names a place inside the buffer it walks
         // from, and the wrapper is representation-transparent, so both
-        // keep the source's place and its loans.
+        // keep the source's place and its loans. A raw pointer
+        // destination is the exception: raw pointers are outside the
+        // region system (ADR-0050), so the address travels but the
+        // loan dies at the cast.
         u32 src = NO_ROOT;
         if (!operand_reg(0, src) || !instr.dst.is_valid()) {
+          break;
+        }
+        if (ir::is_raw_ptr_type(tag_of(storage.registers()[instr.dst].type))) {
           break;
         }
         if (home[src] == NO_ROOT) {

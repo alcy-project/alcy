@@ -218,13 +218,23 @@ class StorageBuilder {
     return state_.types.emplace_back(node);
   }
 
-  // Structural interning: identical reference shapes share one index, so
+  // Structural interning: identical pointer shapes share one index, so
   // type equality is index equality. Linear scans are fine at MVP scale;
   // hash tables arrive if measurement demands. Scans start past the
   // pre-interned block, whose placeholder Ref/MutRef payloads must
   // never match.
   TypeIdx reference_type(TypeIdx pointee, bool is_mut) {
-    const TypeTag tag = is_mut ? TypeTag::MutRef : TypeTag::Ref;
+    return pointer_type(is_mut ? TypeTag::MutRef : TypeTag::Ref, pointee);
+  }
+
+  // `*T` and `*mut T`. Raw pointers share the reference payload and the
+  // interning shape; only their tag differs.
+  TypeIdx raw_pointer_type(TypeIdx pointee, bool is_mut) {
+    return pointer_type(is_mut ? TypeTag::RawMutPtr : TypeTag::RawPtr, pointee);
+  }
+
+ private:
+  TypeIdx pointer_type(TypeTag tag, TypeIdx pointee) {
     for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
          ++idx) {
       const TypeNode& node = state_.types[idx];
@@ -243,6 +253,7 @@ class StorageBuilder {
     return state_.types.emplace_back(node);
   }
 
+ public:
   TypeIdx tuple_type(TypeIdxRange elements) {
     for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
          ++idx) {

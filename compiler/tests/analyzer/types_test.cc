@@ -2110,6 +2110,113 @@ TEST_CASE("Check rejects an unsafe marker on a safe intrinsic") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Check accepts raw pointer reads and writes behind the gate") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  mut x := 1\n"
+                                      "  p := &x as *i32\n"
+                                      "  mut q := &mut x as *mut i32\n"
+                                      "  unsafe { *q = 5 }\n"
+                                      "  ret unsafe { *p }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects a raw dereference outside the gate") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  p := 0 as *i32\n"
+                                      "  _ := *p\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a raw write through a shared pointer") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() {\n"
+                                      "  mut p := 0 as *i32\n"
+                                      "  *p = 1\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects casts that forge access") {
+  VirtualDir shared;
+  const bool setup_shared = write_all(shared, {{"main.al",
+                                                "fn main() {\n"
+                                                "  mut x := 1\n"
+                                                "  _ := &x as *mut i32\n"
+                                                "}\n"}});
+  CHECK(setup_shared);
+  if (!setup_shared) {
+    return;
+  }
+  Fixture a;
+  const CheckOutcome forged = check_case(shared, "main.al", {"main.al"}, a);
+  CHECK(!forged.package.has_value());
+  CHECK(a.bag.has_errors());
+
+  VirtualDir to_reference;
+  const bool setup_reference = write_all(to_reference, {{"main.al",
+                                                         "fn main() {\n"
+                                                         "  p := 0 as *i32\n"
+                                                         "  _ := p as &i32\n"
+                                                         "}\n"}});
+  CHECK(setup_reference);
+  if (!setup_reference) {
+    return;
+  }
+  Fixture b;
+  const CheckOutcome recovered =
+      check_case(to_reference, "main.al", {"main.al"}, b);
+  CHECK(!recovered.package.has_value());
+  CHECK(b.bag.has_errors());
+}
+
+TEST_CASE("Check infers a raw offset's element type") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "unsafe intrinsic fn ptr_offset<T>(ptr: *T, "
+                       "count: isize) -> *T;\n"
+                       "fn main() -> i32 {\n"
+                       "  mut a := [1, 2]\n"
+                       "  p := &mut a[0] as *mut i32\n"
+                       "  q := unsafe { ptr_offset(p, 1) }\n"
+                       "  ret unsafe { *q }\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
 TEST_CASE("Check rejects an unsafe function as a value") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",

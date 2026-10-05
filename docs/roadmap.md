@@ -27,10 +27,11 @@ peripheral work lives in `backlog.md`. The language record lives in
 - [ ] C FFI and freestanding.
 
   In slices: the `unsafe` gate and the standard library's migration
-  to it (landed), then `extern "C"` declarations against the system
-  libc, then `_start`, raw syscalls, and an allocator without libc.
-  Needs the driver work for nostdlib-style links; the libc fight must
-  not gate the FFI value. Designed in
+  to it (landed), raw pointers with casts, dereference, and offset
+  (landed), then `extern "C"` declarations against the system libc,
+  then `_start`, raw syscalls, and an allocator without libc. Needs
+  the driver work for nostdlib-style links; the libc fight must not
+  gate the FFI value. Designed in
   `docs/adr/0050-unsafe-is-a-gate-on-operations.md`.
 - [ ] `ArrayVec<T, N>`, a fixed-capacity inline container.
 

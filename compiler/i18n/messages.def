@@ -178,6 +178,7 @@
   F(AnalyzerRangeEndpointTypeMismatch, "Type mismatch in range endpoints: '{}' vs '{}'") \
   F(AnalyzerRangeExpressionsDeferred, "range expressions arrive post-MVP") \
   F(AnalyzerRangeNeedsStdCore, "Range expressions need the `core` standard library package") \
+  F(AnalyzerRawPointerNeedsSized, "A raw pointer is thin, so its pointee must be sized") \
   F(AnalyzerReceiverTypeMismatch, "Type mismatch in receiver") \
   F(AnalyzerRecursiveType, "Recursive type '{}' without indirection") \
   F(AnalyzerReferencePatternType, "Reference pattern on a non-reference type") \
@@ -205,6 +206,7 @@
   F(AnalyzerTryNeedsValueVariant, "A '?' needs a first variant carrying a value") \
   F(AnalyzerTryTypeMismatch, "The '?' type does not match the function return type") \
   F(AnalyzerTuplePatternArity, "Tuple pattern has {} elements, type has {}") \
+  F(AnalyzerTypeArgumentNeedsPointer, "Type `{}` needs a pointer to bind its type argument") \
   F(AnalyzerTypeArgumentNeedsReference, "Type `{}` needs a reference to bind its type argument") \
   F(AnalyzerTypeArgumentNeedsSequence, "Type `{}` needs an array or a slice to bind its type argument") \
   F(AnalyzerTypeArgumentNeedsUninit, "Type `{}` needs uninitialized storage to bind its type argument") \
@@ -227,6 +229,7 @@
   F(AnalyzerUnsafeCall, "Call to unsafe function '{}' requires an `unsafe {{ ... }}` block") \
   F(AnalyzerUnsafeFunctionValue, "Unsafe function '{}' cannot be used as a value yet") \
   F(AnalyzerUnsafeMethodUnsupported, "Unsafe methods are not implemented yet") \
+  F(AnalyzerUnsafeOperation, "{} requires an `unsafe {{ ... }}` block") \
   F(AnalyzerUnsizedTypeNeedsReference, "Unsized type `[T]` must be behind a reference (`&[T]`)") \
   F(AnalyzerUnsupportedLiteralSuffix, "Unsupported literal suffix '{}'") \
   F(AnalyzerUnusedValue, "Unused non-() value; discard it explicitly with `_ := ...`") \

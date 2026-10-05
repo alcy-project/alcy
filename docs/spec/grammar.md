@@ -77,7 +77,9 @@ A path takes type arguments for generic enums and structs only, and a
 closing `>>` splits into two `>` (dangling halves error). A function
 type is structural: `(A, B) -> R`, with `()` and `(A)` as its no- and
 one-parameter spellings; a bare `(A)` outside the arrow position is
-the type it wraps.
+the type it wraps. `*T` and `*mut T` are raw pointers: thin, Copy,
+and outside the region system; `**T` lexes as the power token but a
+type position reads the pair as two stars. See `ffi.md`.
 
 ## Patterns (shared by declarations and `match`)
 
@@ -96,8 +98,12 @@ Declaration left-hand sides use this grammar with `:=`
   access: `f()?.x` reads as `(f()?).x`, and so does `v.pop()?.0`.
 - `%`, `&`, `|`, `^`, `<<`, and `>>` are integer-only; applying one to
   a float is rejected. Floats admit `+ - * /` and the comparisons.
-- Unary `*` dereferences a reference into the place it names.
-  Assignment through it needs a `&mut` reference.
+- Unary `*` dereferences a reference into the place it names, and a
+  raw pointer into the place it addresses. Assignment through it
+  needs a `&mut` reference or a `*mut` pointer, and a raw
+  dereference is an operation the gate covers (`ffi.md`). `**p`
+  lexes as the power token, but a binary `**` needs a left operand,
+  so in prefix position the pair is two dereferences.
 - A turbofish supplies explicit type arguments to a generic call;
   without one, the parameters bind from the argument types.
 - Array indexing is builtin with panic-on-out-of-bounds semantics.

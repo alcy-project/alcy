@@ -124,6 +124,7 @@ enum class TypeKind : u8 {
   Slice,
   Path,
   Ref,
+  RawPtr,
   Func,
 };
 
@@ -159,6 +160,14 @@ struct TypeRef {
   TypeIdx inner = TypeIdx::invalid();
 };
 
+// A raw pointer `*T` or `*mut T`: thin, Copy, and outside the region
+// system. Creating one is safe; dereferencing and offsetting are
+// operations the unsafe gate covers.
+struct TypeRawPtr {
+  bool is_mut;
+  TypeIdx inner = TypeIdx::invalid();
+};
+
 // A function type `(A, B) -> R`: structural, with captures erased.
 // The parameter list is empty for `() -> R`.
 struct TypeFunc {
@@ -178,6 +187,7 @@ struct TypeNode {
                                   TypeSlice,
                                   TypePath,
                                   TypeRef,
+                                  TypeRawPtr,
                                   TypeFunc>;
   TypePayload payload;
 };

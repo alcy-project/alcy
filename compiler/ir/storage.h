@@ -184,6 +184,8 @@ inline TypeLayout type_layout(const StorageState& state,
     case TypeTag::Str: return {2 * word, word};
     case TypeTag::Slice: return {2 * word, word};
     case TypeTag::Ptr:
+    case TypeTag::RawPtr:
+    case TypeTag::RawMutPtr:
     case TypeTag::Function: return {word, word};
     case TypeTag::Func: {
       // Code plus environment, whatever the signature says: every
@@ -259,6 +261,8 @@ inline bool is_copy_type(const StorageState& state, TypeIdx idx) {
     case TypeTag::F64:
     case TypeTag::Str:
     case TypeTag::Ptr:
+    case TypeTag::RawPtr:
+    case TypeTag::RawMutPtr:
     case TypeTag::Function: return true;
     case TypeTag::Struct: {
       const StructType& struct_type = state.struct_types[node.as_struct()];

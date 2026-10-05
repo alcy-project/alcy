@@ -48,6 +48,18 @@ inline constexpr bool is_float_type(TypeTag tag) {
   }
 }
 
+// `*T` and `*mut T`: thin, Copy, and outside the region system.
+inline constexpr bool is_raw_ptr_type(TypeTag tag) {
+  return tag == TypeTag::RawPtr || tag == TypeTag::RawMutPtr;
+}
+
+// Every pointer-shaped tag: the opaque runtime pointer, region-tracked
+// references, and raw pointers.
+inline constexpr bool is_pointer_type(TypeTag tag) {
+  return tag == TypeTag::Ptr || tag == TypeTag::Ref || tag == TypeTag::MutRef ||
+         is_raw_ptr_type(tag);
+}
+
 // The unsigned tag of the same width, for the tags that have one.
 // Reinterpreting a signed value through it preserves every bit, which
 // is how a magnitude gets widened without re-extending the sign.

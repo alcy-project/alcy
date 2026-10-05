@@ -1,0 +1,2 @@
+exit = 4
+contains = ["A raw pointer is thin, so its pointee must be sized"]

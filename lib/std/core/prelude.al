@@ -12,6 +12,8 @@
 
 pub use super::iterator::Iterator;
 pub use super::mem::memcopy;
+pub use super::mem::ptr_offset;
+pub use super::mem::ptr_offset_mut;
 pub use super::mem::panic;
 pub use super::mem::print;
 pub use super::mem::println;

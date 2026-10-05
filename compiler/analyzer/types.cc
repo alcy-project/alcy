@@ -32,6 +32,7 @@
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
+#include "ir/type_util.h"
 #include "ir/verifier.h"
 
 namespace analyzer {
@@ -1253,6 +1254,21 @@ ir::TypeIdx Checker::resolve_type(u32 module,
       return builder.reference_type(pointee,
                                     node.payload.get<ast::TypeRef>().is_mut);
     }
+    case ast::TypeKind::RawPtr: {
+      const ast::TypeRawPtr& ptr = node.payload.get<ast::TypeRawPtr>();
+      // Raw pointers are thin, so an unsized pointee has no
+      // representation. Resolving it would refuse it as not behind a
+      // reference, which is the wrong guidance for a pointer.
+      if (ast.types[ptr.inner].kind == ast::TypeKind::Slice) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerRawPointerNeedsSized>(
+            diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
+            node.span);
+        (void)index;
+        return error_type();
+      }
+      const ir::TypeIdx pointee = resolve_type(module, ptr.inner, self, false);
+      return builder.raw_pointer_type(pointee, ptr.is_mut);
+    }
     case ast::TypeKind::Func: {
       const ast::TypeFunc& func = node.payload.get<ast::TypeFunc>();
       ir::TypeSeq seq;
@@ -1405,7 +1421,8 @@ bool Checker::is_known_intrinsic(std::string_view name) {
          name == "alloc" || name == "dealloc" || name == "elem_ptr" ||
          name == "elem_ref" || name == "size_of" || name == "align_of" ||
          name == "uninit_write" || name == "uninit_assume" ||
-         name == "uninit_ref";
+         name == "uninit_ref" || name == "ptr_offset" ||
+         name == "ptr_offset_mut";
 }
 
 // The intrinsics whose preconditions the compiler cannot check
@@ -1415,7 +1432,8 @@ static bool intrinsic_is_unsafe(std::string_view name) {
   return name == "alloc" || name == "dealloc" || name == "elem_ptr" ||
          name == "elem_ref" || name == "memcopy" || name == "uninit_assume" ||
          name == "str_from_parts" || name == "slice_from_parts" ||
-         name == "slice_from_parts_mut";
+         name == "slice_from_parts_mut" || name == "ptr_offset" ||
+         name == "ptr_offset_mut";
 }
 
 // Verifies a declared intrinsic signature against its canonical
@@ -1444,6 +1462,8 @@ bool Checker::check_intrinsic_signature(u32 module,
   const ir::TypeIdx u8 = builder.primitive(ir::TypeTag::U8);
   const ir::TypeIdx usize_ty = builder.primitive(
       width == ir::PointerWidth::W64 ? ir::TypeTag::U64 : ir::TypeTag::U32);
+  const ir::TypeIdx isize_ty = builder.primitive(
+      width == ir::PointerWidth::W64 ? ir::TypeTag::I64 : ir::TypeTag::I32);
   std::vector<ir::TypeIdx> expected;
   ir::TypeIdx expected_ret = builder.primitive(ir::TypeTag::Void);
   const auto wrong = [&]() {
@@ -1455,6 +1475,9 @@ bool Checker::check_intrinsic_signature(u32 module,
   };
   const auto is_usize = [&](ir::TypeIdx type) {
     return builder.types()[type.idx].tag == builder.types()[usize_ty.idx].tag;
+  };
+  const auto is_isize = [&](ir::TypeIdx type) {
+    return builder.types()[type.idx].tag == builder.types()[isize_ty.idx].tag;
   };
   const auto pointee = [&](ir::TypeIdx type) {
     return builder.ref_types()[builder.types()[type.idx].as_ref()].pointee;
@@ -1529,6 +1552,17 @@ bool Checker::check_intrinsic_signature(u32 module,
     return or_wrong(params.size() == 1 && uninit_slot(params[0]) &&
                     builder.types()[ret.idx].tag == ir::TypeTag::MutRef &&
                     same(uninit_payload(pointee(params[0])), pointee(ret)));
+  }
+  if (name == "ptr_offset" || name == "ptr_offset_mut") {
+    // `ptr_offset<T>(ptr: *T, count: isize) -> *T`, and the exclusive
+    // counterpart over `*mut T`. The count is signed so one spelling
+    // moves both ways; offsetting is an operation the gate covers.
+    const ir::TypeTag want =
+        name == "ptr_offset" ? ir::TypeTag::RawPtr : ir::TypeTag::RawMutPtr;
+    return or_wrong(
+        params.size() == 2 && builder.types()[params[0].idx].tag == want &&
+        is_isize(params[1]) && builder.types()[ret.idx].tag == want &&
+        same(pointee(params[0]), pointee(ret)));
   }
   // A slice reference of either kind: what `slice_len` reads and
   // what the slice constructors return through.
@@ -2232,7 +2266,9 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
   }
   switch (ta) {
     case ir::TypeTag::Ref:
-    case ir::TypeTag::MutRef: {
+    case ir::TypeTag::MutRef:
+    case ir::TypeTag::RawPtr:
+    case ir::TypeTag::RawMutPtr: {
       const ir::TypeIdx pa =
           builder.ref_types()[builder.types()[a].as_ref()].pointee;
       const ir::TypeIdx pb =
@@ -2290,11 +2326,16 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
   }
 }
 
-// `&mut T` coerces to `&T`: one is the other with the unique half
-// dropped, which is a shared reborrow of the same referent.
+// `&mut T` coerces to `&T`, and `*mut T` to `*T`: one is the other
+// with the unique half dropped, which is a shared reborrow of the
+// same referent or the same address without the write permission.
 bool Checker::coerces_to_shared(ir::TypeIdx expected, ir::TypeIdx actual) {
-  if (tag_of(expected) != ir::TypeTag::Ref ||
-      tag_of(actual) != ir::TypeTag::MutRef) {
+  const ir::TypeTag etag = tag_of(expected);
+  const ir::TypeTag atag = tag_of(actual);
+  const bool ref_pair = etag == ir::TypeTag::Ref && atag == ir::TypeTag::MutRef;
+  const bool raw_pair =
+      etag == ir::TypeTag::RawPtr && atag == ir::TypeTag::RawMutPtr;
+  if (!ref_pair && !raw_pair) {
     return false;
   }
   return builder.ref_types()[builder.types()[expected].as_ref()].pointee.idx ==
@@ -3080,6 +3121,12 @@ Checker::DeclaredBinding Checker::declared_binding(
     return DeclaredBinding{inner.slot, true, inner.through_uninit,
                            inner.through_slice};
   }
+  if (declared.kind == ast::TypeKind::RawPtr) {
+    const DeclaredBinding inner = declared_binding(
+        params, ast.types[declared.payload.get<ast::TypeRawPtr>().inner]);
+    return DeclaredBinding{inner.slot, false, inner.through_uninit,
+                           inner.through_slice, true};
+  }
   if (declared.kind == ast::TypeKind::Slice) {
     // `&[T]` pins `T` from the array or slice behind the reference.
     const DeclaredBinding inner = declared_binding(
@@ -3216,17 +3263,25 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
     if (is_error(actual)) {
       return nullptr;
     }
-    if (!declared.through_ref) {
+    if (!declared.through_ref && !declared.through_raw) {
       // A field's type is a storage copy; the parameter binds the
       // declared type behind it rather than the copy.
       bound[declared.slot] = type_origin(actual);
       continue;
     }
     const ir::TypeTag tag = builder.types()[actual.idx].tag;
-    if (tag != ir::TypeTag::Ref && tag != ir::TypeTag::MutRef) {
-      const u32 index = bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsReference>(
-          diag::Severity::Error, diag::Stage::Analyzer,
-          DiagCode::InvalidOperation, span, fn_name(item));
+    const bool pointer_ok = declared.through_raw ? ir::is_raw_ptr_type(tag)
+                                                 : (tag == ir::TypeTag::Ref ||
+                                                    tag == ir::TypeTag::MutRef);
+    if (!pointer_ok) {
+      const u32 index =
+          declared.through_raw
+              ? bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsPointer>(
+                    diag::Severity::Error, diag::Stage::Analyzer,
+                    DiagCode::InvalidOperation, span, fn_name(item))
+              : bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsReference>(
+                    diag::Severity::Error, diag::Stage::Analyzer,
+                    DiagCode::InvalidOperation, span, fn_name(item));
       (void)index;
       return nullptr;
     }
@@ -3947,6 +4002,8 @@ bool Checker::capture_is_copy(ir::TypeIdx idx, std::vector<u32>& visited) {
     case ir::TypeTag::F64:
     case ir::TypeTag::Str:
     case ir::TypeTag::Ptr:
+    case ir::TypeTag::RawPtr:
+    case ir::TypeTag::RawMutPtr:
     case ir::TypeTag::Function:
     case ir::TypeTag::Func: return true;
     case ir::TypeTag::Struct: {

@@ -127,6 +127,39 @@ ast::TypeIdx Parser::parse_type() {
       });
       return ast_.types.push_back(node);
     }
+    case T::Star:
+    case T::StarStar: {
+      const bool paired = peek_kind() == T::StarStar;
+      advance();
+      // `**T` lexes as the power token; a type position has no power,
+      // so the pair is two raw pointers. The outer star is shared and
+      // a `mut` after the pair binds to the inner one, which is what
+      // `*(*mut T)` would say spelled out.
+      const bool is_mut = !paired && match(T::Mut);
+      const bool inner_is_mut = paired && match(T::Mut);
+      ast::TypeIdx inner = parse_type();
+      if (!inner.is_valid()) {
+        return ast::TypeIdx::invalid();
+      }
+      if (paired) {
+        ast::TypeNode middle;
+        middle.kind = ast::TypeKind::RawPtr;
+        middle.span = span_from(mark);
+        middle.payload.set(ast::TypeRawPtr{
+            .is_mut = inner_is_mut,
+            .inner = inner,
+        });
+        inner = ast_.types.push_back(middle);
+      }
+      ast::TypeNode node;
+      node.kind = ast::TypeKind::RawPtr;
+      node.span = span_from(mark);
+      node.payload.set(ast::TypeRawPtr{
+          .is_mut = is_mut,
+          .inner = inner,
+      });
+      return ast_.types.push_back(node);
+    }
     case T::Str: {
       advance();
       ast::TypeNode node;

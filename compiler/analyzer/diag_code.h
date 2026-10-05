@@ -67,9 +67,9 @@ enum class DiagCode : u8 {
   // sized for fewer names than this package declares.
   NameTableExhausted = 35,
   // An operation that needs the gate (ADR-0050) sits in safe code: a
-  // call to an unsafe function or intrinsic with no enclosing
-  // `unsafe { ... }` block.
-  UnsafeCall = 36,
+  // call to an unsafe function or intrinsic, or a raw pointer
+  // dereference, with no enclosing `unsafe { ... }` block.
+  UnsafeOperation = 36,
 };
 
 }  // namespace analyzer

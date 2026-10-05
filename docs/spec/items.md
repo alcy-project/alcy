@@ -82,6 +82,11 @@
     slot as a mutable reference to its value. Reading through the
     result before anything was written yields whatever the allocator
     returned. See `docs/adr/0027-maybe-uninit-storage.md`.
+  - `ptr_offset<T>(ptr: *T, count: isize) -> *T` offsets a raw
+    pointer by whole elements; `ptr_offset_mut<T>` is its exclusive
+    counterpart over `*mut T`. The count is signed, so one spelling
+    moves both ways. The result is in bounds exactly when the caller
+    keeps it within the buffer the pointer names.
   - The allocation intrinsics are generic. `elem_ptr`, `dealloc`,
     `uninit_write`, and `uninit_assume` recover `T` from the pointee of
     their reference argument, so a call admits one instantiation;
@@ -94,11 +99,12 @@
     bounds check. See `docs/adr/0010-typed-heap-primitives.md`.
 - `memcopy`, `str_from_parts`, `slice_from_parts`,
   `slice_from_parts_mut`, `alloc`, `dealloc`, `elem_ptr`, `elem_ref`,
-  and `uninit_assume` carry a precondition the compiler cannot check,
-  so their declarations say `unsafe` and a call needs an `unsafe`
-  block (`ffi.md`). The checker verifies the marker against the set
-  the way it verifies the shape, so leaving it out, or adding it to a
-  safe intrinsic, is an error. The remaining intrinsics stay safe.
+  `uninit_assume`, `ptr_offset`, and `ptr_offset_mut` carry a
+  precondition the compiler cannot check, so their declarations say
+  `unsafe` and a call needs an `unsafe` block (`ffi.md`). The checker
+  verifies the marker against the set the way it verifies the shape,
+  so leaving it out, or adding it to a safe intrinsic, is an error.
+  The remaining intrinsics stay safe.
 - `print(msg: str)` and `println(msg: str)` are ordinary core
   functions over `sys_write`. They remain callable with or without
   a declaration: without the prelude, the legacy name-based path

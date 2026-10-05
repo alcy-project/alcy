@@ -31,6 +31,7 @@
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
+#include "ir/type_util.h"
 #include "lowering/diag_code.h"
 #include "lowering/lowerer.h"
 #include "text/unescape.h"
@@ -96,7 +97,9 @@ bool Lowerer::same_shape_inner(ir::TypeIdx a,
   }
   switch (ta) {
     case ir::TypeTag::Ref:
-    case ir::TypeTag::MutRef: {
+    case ir::TypeTag::MutRef:
+    case ir::TypeTag::RawPtr:
+    case ir::TypeTag::RawMutPtr: {
       const auto& refs = builder.state().ref_types;
       return same_shape_inner(refs[builder.state().types[a].as_ref()].pointee,
                               refs[builder.state().types[b].as_ref()].pointee,
@@ -353,14 +356,16 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
     }
     case ast::ExprKind::Deref: {
       // A reference local is a place that holds the address; the place
-      // `*p` names is the one that address points at.
+      // `*p` names is the one that address points at. A raw pointer is
+      // the address itself and names the same kind of place.
       Val inner = materialize(
           lower_expr(node.payload.get<ast::ExprDeref>().inner, nullptr));
       if (failed) {
         return Val{size_one, error_type(), true, false};
       }
       const ir::TypeTag tag = tag_of(inner.type);
-      if (tag != ir::TypeTag::Ref && tag != ir::TypeTag::MutRef) {
+      if (tag != ir::TypeTag::Ref && tag != ir::TypeTag::MutRef &&
+          !ir::is_raw_ptr_type(tag)) {
         internal(node.span, "dereference of a non-reference");
         return Val{size_one, error_type(), true, false};
       }
@@ -1356,7 +1361,8 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
   if (name == "str_len" || name == "str_byte" || name == "str_slice") {
     return lower_str_intrinsic(expr, name);
   }
-  if (name == "elem_ptr" || name == "elem_ref") {
+  if (name == "elem_ptr" || name == "elem_ref" || name == "ptr_offset" ||
+      name == "ptr_offset_mut") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
     if (call.args.size() != 2) {
       internal(node.span, "intrinsic arity");

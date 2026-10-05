@@ -118,7 +118,8 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
         // type; dereference reference tags once to reach it.
         ir::TypeIdx base_ty = storage_->registers()[base_reg].type;
         ir::TypeTag tag = storage_->types()[base_ty.idx].tag;
-        if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
+        if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef ||
+            tag == ir::TypeTag::RawPtr || tag == ir::TypeTag::RawMutPtr) {
           base_ty =
               storage_->ref_types()[storage_->types()[base_ty.idx].as_ref()]
                   .pointee;
@@ -148,7 +149,9 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       DCHECK(i.dst.is_valid());
       const ir::TypeIdx dst_ty = storage_->registers()[i.dst].type;
       const ir::TypeTag dst_tag = storage_->types()[dst_ty.idx].tag;
-      DCHECK(dst_tag == ir::TypeTag::Ref || dst_tag == ir::TypeTag::MutRef);
+      DCHECK(dst_tag == ir::TypeTag::Ref || dst_tag == ir::TypeTag::MutRef ||
+             dst_tag == ir::TypeTag::RawPtr ||
+             dst_tag == ir::TypeTag::RawMutPtr);
       llvm::Type* elem_ty =
           type(storage_->ref_types()[storage_->types()[dst_ty.idx].as_ref()]
                    .pointee);

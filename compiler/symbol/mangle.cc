@@ -71,6 +71,8 @@ constexpr char TAG_STR = 'z';
 constexpr char TAG_PTR = 'p';
 constexpr char TAG_REF = 'r';
 constexpr char TAG_MUT_REF = 'w';
+constexpr char TAG_RAW_PTR = 'P';
+constexpr char TAG_RAW_MUT_PTR = 'M';
 constexpr char TAG_ARRAY = 'y';
 constexpr char TAG_SLICE = 'v';
 constexpr char TAG_TUPLE = 'u';
@@ -186,6 +188,14 @@ class Encoder {
         return;
       case ir::TypeTag::MutRef:
         out_.push_back(TAG_MUT_REF);
+        encode_type(pointee(node));
+        return;
+      case ir::TypeTag::RawPtr:
+        out_.push_back(TAG_RAW_PTR);
+        encode_type(pointee(node));
+        return;
+      case ir::TypeTag::RawMutPtr:
+        out_.push_back(TAG_RAW_MUT_PTR);
         encode_type(pointee(node));
         return;
       case ir::TypeTag::Ptr: out_.push_back(TAG_PTR); return;
@@ -345,9 +355,15 @@ class Decoder {
       }
       case TAG_PTR: out.kind = DecodedType::Kind::Ptr; return true;
       case TAG_REF:
-      case TAG_MUT_REF: {
-        out.kind =
-            tag == TAG_REF ? DecodedType::Kind::Ref : DecodedType::Kind::MutRef;
+      case TAG_MUT_REF:
+      case TAG_RAW_PTR:
+      case TAG_RAW_MUT_PTR: {
+        switch (tag) {
+          case TAG_REF: out.kind = DecodedType::Kind::Ref; break;
+          case TAG_MUT_REF: out.kind = DecodedType::Kind::MutRef; break;
+          case TAG_RAW_PTR: out.kind = DecodedType::Kind::RawPtr; break;
+          default: out.kind = DecodedType::Kind::RawMutPtr; break;
+        }
         out.parts.resize(1);
         return decode_type(out.parts[0]);
       }
@@ -471,6 +487,9 @@ std::string display(const DecodedType& type) {
     case DecodedType::Kind::Ptr: return "ptr";
     case DecodedType::Kind::Ref: return "&" + display(type.parts.at(0));
     case DecodedType::Kind::MutRef: return "&mut " + display(type.parts.at(0));
+    case DecodedType::Kind::RawPtr: return "*" + display(type.parts.at(0));
+    case DecodedType::Kind::RawMutPtr:
+      return "*mut " + display(type.parts.at(0));
     case DecodedType::Kind::Array:
       return "[" + display(type.parts.at(0)) + "; " +
              std::to_string(type.count) + "]";

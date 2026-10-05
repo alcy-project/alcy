@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Writing through a raw pointer requires an `unsafe { ... }` block"]

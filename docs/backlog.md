@@ -116,4 +116,7 @@ replaced. The foundations are in `roadmap.md`.
   `unsafe` and the checker verifies the marker against its canonical
   set, the standard library wraps its uses, and the borrow checker's
   block handling was fixed so a move inside a block stays moved.
+  Raw pointers followed: `*T` and `*mut T` are thin, Copy, and
+  outside the region system, safe to create by cast (including
+  `0 as *T`), and read, written, and offset behind the gate.
   Designed in `docs/adr/0050-unsafe-is-a-gate-on-operations.md`.

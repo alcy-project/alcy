@@ -77,6 +77,10 @@ bool verify_type_children(const TypeNode& node, const AstArena& arena) {
       const TypeRef ref = node.payload.get<TypeRef>();
       return bound(ref.inner, arena.types);
     }
+    case TypeKind::RawPtr: {
+      const TypeRawPtr ptr = node.payload.get<TypeRawPtr>();
+      return bound(ptr.inner, arena.types);
+    }
     case TypeKind::Func: {
       const TypeFunc func = node.payload.get<TypeFunc>();
       for (const TypeIdx param : func.params) {

@@ -34,6 +34,10 @@ enum class TypeTag : u8 {
   Ptr,     // Opaque pointer
   Ref,     // Immutable reference (region tracked)
   MutRef,  // Mutable reference  (exclusive, region tracked)
+  // Raw pointers (ADR-0050): thin, Copy, and outside the region
+  // system. They share the reference payload, which names the pointee.
+  RawPtr,     // *T
+  RawMutPtr,  // *mut T
 
   Struct,
   Array,
@@ -111,8 +115,9 @@ struct EnumType {
   TypeIdxRange params;
 };
 
-// Pointee of a Ref or MutRef node. Reference nodes are structurally
-// interned by this payload (see StorageBuilder::reference_type); the
+// Pointee of a Ref, MutRef, RawPtr, or RawMutPtr node. Pointer nodes
+// are structurally interned by this payload (see
+// StorageBuilder::reference_type and ::raw_pointer_type); the
 // pre-interned placeholder nodes predate payloads and never match.
 struct RefType {
   TypeIdx pointee;
@@ -131,8 +136,8 @@ struct FuncType {
 
 struct TypeNode {
   TypeTag tag;
-  // Meaningful only for Struct/Array/Slice/Enum/Ref/MutRef/Tuple/Func
-  // tags.
+  // Meaningful only for Struct/Array/Slice/Enum/Ref/MutRef/RawPtr/
+  // RawMutPtr/Tuple/Func tags.
   base::Union<StructTypeIdx,
               ArrayTypeIdx,
               SliceTypeIdx,
@@ -162,9 +167,11 @@ struct TypeNode {
     return data.get<EnumTypeIdx>();
   }
 
+  // The pointee payload, shared by references and raw pointers.
   inline RefTypeIdx as_ref() const {
-    DCHECK_MSG(tag == TypeTag::Ref || tag == TypeTag::MutRef,
-               "type node is not a reference");
+    DCHECK_MSG(tag == TypeTag::Ref || tag == TypeTag::MutRef ||
+                   tag == TypeTag::RawPtr || tag == TypeTag::RawMutPtr,
+               "type node is not a pointer or reference");
     return data.get<RefTypeIdx>();
   }
 
@@ -202,6 +209,8 @@ constexpr const char* type_to_str(TypeTag tag) {
     case T::Ptr: return "ptr";
     case T::Ref: return "ref";
     case T::MutRef: return "mut_ref";
+    case T::RawPtr: return "raw_ptr";
+    case T::RawMutPtr: return "raw_mut_ptr";
 
     case T::Struct: return "struct";
     case T::Array: return "array";
