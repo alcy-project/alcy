@@ -192,9 +192,17 @@ base::Result<ParsedFiles, diag::Reported> parse_files(
     bytes.push_back(*content);
   }
 
+  // What the loop below actually uses: one parser per file, and no more than
+  // the thread count. The arena is told this and not the thread count, because
+  // a lane it cuts is room no parser can reach: a single-file compile asked
+  // for eight parsers would cut eight lanes and use one, and that one reads a
+  // third of the table.
+  const u32 workers =
+      std::min(ctx.parse_jobs(), static_cast<u32>(parsed.files.size()));
+
   // Every append leaves room for the appends that may race with it, so
   // the slot count is what the arena is told before parsing begins.
-  ctx.ast.set_parallel_slots(ctx.parse_jobs());
+  ctx.ast.set_parallel_slots(workers);
 
   // Several threads need a bag per file; one thread writes into the run's
   // own bag in the same order, so both paths report the same thing. The syntax
@@ -202,7 +210,7 @@ base::Result<ParsedFiles, diag::Reported> parse_files(
   // own, and which lane that is comes from the loop below rather than from a
   // count, because which file a thread takes is not knowable until it takes
   // one.
-  if (ctx.parse_jobs() < 2) {
+  if (workers < 2) {
     // The phases are named when one thread does the work: a region over
     // the whole parse would say nothing the phases do not.
     ast::set_current_lane(0);
@@ -219,8 +227,6 @@ base::Result<ParsedFiles, diag::Reported> parse_files(
     // the worker count is what the loop below hands out. Merging still
     // reads the bags in file order, which is the order the one-thread path
     // reports in and is not the order the work finished in.
-    const u32 workers =
-        std::min(ctx.parse_jobs(), static_cast<u32>(parsed.files.size()));
     std::vector<PerWorkerDiagnostics> per_worker(workers);
     std::vector<PerFileDiagnostics> per_file(parsed.files.size());
     {
@@ -230,16 +236,15 @@ base::Result<ParsedFiles, diag::Reported> parse_files(
       // as though one file took as many threads as there are.
       PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "parse-files",
                                                "frontend");
-      base::for_each(0, parsed.files.size(), ctx.parse_jobs(),
-                     [&](usize at, usize worker) {
-                       ast::set_current_lane(static_cast<u32>(worker));
-                       per_file[at].bag = std::make_unique<diag::DiagBag>(
-                           per_worker[worker].arena, ctx.bag.language());
-                       const bool ok =
-                           parse_one(ctx, parsed.files[at], bytes[at],
-                                     *per_file[at].bag, nullptr);
-                       per_file[at].ok.store(ok, std::memory_order_relaxed);
-                     });
+      base::for_each(
+          0, parsed.files.size(), workers, [&](usize at, usize worker) {
+            ast::set_current_lane(static_cast<u32>(worker));
+            per_file[at].bag = std::make_unique<diag::DiagBag>(
+                per_worker[worker].arena, ctx.bag.language());
+            const bool ok = parse_one(ctx, parsed.files[at], bytes[at],
+                                      *per_file[at].bag, nullptr);
+            per_file[at].ok.store(ok, std::memory_order_relaxed);
+          });
     }
 
     // The lowest failing file ends the run; the header says why the
