@@ -52,17 +52,60 @@ And one consequence that is not a rule about reporting:
    node in one table has the same fault, so whichever lane it is found in, the
    same error is reported.
 
+## Repeated runs, not only job counts
+
+Two ways to run one compiler on one package is one property; **the same
+answer twice** is another, and it is the one a build system caches on. They
+are different: a difference between two runs need not involve a thread, and a
+difference between two job counts need not appear twice.
+
+So each case reads the package three times at one, four and eight jobs - nine
+builds - and compares every one against the first. A round is the same input
+read again and the counts inside a round are the other half.
+
+## What can differ between runs, and why none of it can be read
+
+Every order a run does not control, and what keeps it out of the output:
+
+| order the run does not control | what keeps it out of the output |
+| --- | --- |
+| which worker took which file, and so which offsets a file's nodes got | nothing reads a table in offset order to produce anything: the passes read a module's items in the order they were written (§4), and the one walk that does read a table in lane order reports an error code that every node in that table shares |
+| the interning order, and so the numbers a `StringPoolId` gets | an id is only ever used to look up the spelling. No container is keyed by one, none is compared, sorted, or printed, so the numbering cannot be observed |
+| the order units in a `for_each` finish in | a unit reports into storage indexed by its unit, and the reader walks that storage in unit order (§1, §2) |
+| the order a directory is read in | `discover_sources` sorts the paths before it loads them, so the file ids it mints follow the sorted order |
+| which of several failing files is found last | the lowest failing index decides which are reported, so a failure reports the same thing whenever it is found (§3) |
+| the timings, and the order events are appended in | the trace is a record of the run and cannot be deterministic, and it is not part of what a build produces |
+
+Two properties of the code keep that table true rather than merely accurate
+today:
+
+- **An unordered container may be looked up and never walked.** Every
+  `std::unordered_map` in the compiler is read through `find`; the walk that
+  would make hash order observable does not exist. There is no `std::map` or
+  `std::set` anywhere, so there is no container ordered by a key that a
+  schedule could decide.
+- **Nothing orders by address.** A sort whose comparator can tie is
+  reproducible given the same sequence, but a container or sort keyed on a
+  pointer is reproducible only within one run, because the addresses are the
+  loader's to choose.
+
+Neither rule needs a sort to hold today. The two places where a sort is the
+mechanism already have one - the closure of a target (`target.cc`) and the
+files found under a root (`pipeline.cc`) - and both are there because a
+directory and a set of discovered ids arrive in an order that is nobody's
+decision.
+
 ## What holds it
 
 - `verify.cc` asks a table whether an index names a node it holds
   (`bound`) rather than comparing against a reach that counts the room between
   lanes, and walks the nodes a table holds (`for_each_node`) rather than every
   index up to that reach.
-- `emit_mode_test.cc` builds a nine-module package at one, four and eight jobs
-  and compares the emitted module byte for byte.
+- `emit_mode_test.cc` builds a nine-module package three times at each of one,
+  four and eight jobs and compares the emitted module byte for byte.
 - `emit_mode_test.cc` builds an eight-module package that names three things
-  that are not there, at one, four and eight jobs, and compares the rendered
-  diagnostics.
+  that are not there, three times at each of one, four and eight jobs, and
+  compares the rendered diagnostics.
 
 Both cases matter and neither covers the other: a phase can be right about
 what it reports and wrong about what it emits, and the emits are compared
