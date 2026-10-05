@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "config/build_config.h"
 #include "diag/bag.h"
@@ -304,40 +305,46 @@ TEST_CASE("A package's module does not depend on how many jobs read it") {
   }
   const path::Path root_path = std::move(root).unwrap();
 
-  std::string one_job;
-  for (u32 jobs : {1u, 4u, 8u}) {
-    INFO("jobs " << jobs);
-    PipelineContext ctx{i18n::Language::EnUs};
-    ctx.jobs = jobs;
-    base::Result<source::FileId, source::SourceError> manifest =
-        ctx.sources.load(root_path.join("alcy.toml").as_view());
-    CHECK(manifest.is_ok());
-    if (manifest.is_err()) {
-      return;
+  // Every round is the same input read again, so a difference between two
+  // rounds is a difference between two runs of one compiler on one package:
+  // the thing a build system caches on. The job counts inside a round are the
+  // other half, and both are needed, because a run-to-run difference need not
+  // involve a thread at all and a job-count difference need not appear twice.
+  std::vector<std::string> seen;
+  for (u32 round = 0; round < 3; ++round) {
+    for (u32 jobs : {1u, 4u, 8u}) {
+      INFO("round " << round << " jobs " << jobs);
+      PipelineContext ctx{i18n::Language::EnUs};
+      ctx.jobs = jobs;
+      base::Result<source::FileId, source::SourceError> manifest =
+          ctx.sources.load(root_path.join("alcy.toml").as_view());
+      CHECK(manifest.is_ok());
+      if (manifest.is_err()) {
+        return;
+      }
+      base::Result<std::string, diag::Reported> built = build_package(
+          ctx, root_path, std::move(manifest).unwrap(), "alcy.toml", "", false,
+          LinkOptions{}, EmitMode::LlvmIr);
+      CHECK(built.is_ok());
+      if (built.is_err()) {
+        // What the build said, because a refusal here is about the machine as
+        // much as about the package and CI is the only place some machines
+        // are.
+        std::string said;
+        ctx.bag.for_each([&](const diag::Diagnostic& d) {
+          said += d.message;
+          said += '\n';
+        });
+        MESSAGE("the build said: " << said);
+        return;
+      }
+      const std::string ir = read_file(dir.join("proj/out/app.ll"));
+      CHECK(!ir.empty());
+      seen.push_back(ir);
+      CHECK(ir == seen.front());
     }
-    base::Result<std::string, diag::Reported> built =
-        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
-                      "", false, LinkOptions{}, EmitMode::LlvmIr);
-    CHECK(built.is_ok());
-    if (built.is_err()) {
-      // What the build said, because a refusal here is about the machine as
-      // much as about the package and CI is the only place some machines are.
-      std::string said;
-      ctx.bag.for_each([&](const diag::Diagnostic& d) {
-        said += d.message;
-        said += '\n';
-      });
-      MESSAGE("the build said: " << said);
-      return;
-    }
-    const std::string ir = read_file(dir.join("proj/out/app.ll"));
-    CHECK(!ir.empty());
-    if (jobs == 1) {
-      one_job = ir;
-      continue;
-    }
-    CHECK(ir == one_job);
   }
+  CHECK(seen.size() == 9);
 }
 
 TEST_CASE("A package's diagnostics do not depend on how many jobs read it") {
@@ -386,38 +393,40 @@ TEST_CASE("A package's diagnostics do not depend on how many jobs read it") {
   }
   const path::Path root_path = std::move(root).unwrap();
 
-  std::string one_job;
-  for (u32 jobs : {1u, 4u, 8u}) {
-    INFO("jobs " << jobs);
-    PipelineContext ctx{i18n::Language::EnUs};
-    ctx.jobs = jobs;
-    base::Result<source::FileId, source::SourceError> manifest =
-        ctx.sources.load(root_path.join("alcy.toml").as_view());
-    CHECK(manifest.is_ok());
-    if (manifest.is_err()) {
-      return;
+  // As in the emitted module's case, a round is the same input read again and
+  // the counts inside a round are the other half.
+  std::vector<std::string> seen;
+  for (u32 round = 0; round < 3; ++round) {
+    for (u32 jobs : {1u, 4u, 8u}) {
+      INFO("round " << round << " jobs " << jobs);
+      PipelineContext ctx{i18n::Language::EnUs};
+      ctx.jobs = jobs;
+      base::Result<source::FileId, source::SourceError> manifest =
+          ctx.sources.load(root_path.join("alcy.toml").as_view());
+      CHECK(manifest.is_ok());
+      if (manifest.is_err()) {
+        return;
+      }
+      // The build is expected to fail: the package names three things that
+      // are not there. What is compared is what it said about them.
+      (void)build_package(ctx, root_path, std::move(manifest).unwrap(),
+                          "alcy.toml", "", false, LinkOptions{},
+                          EmitMode::LlvmIr);
+      std::string said;
+      ctx.bag.for_each([&](const diag::Diagnostic& d) {
+        said += diag::render(d);
+        said += '\n';
+      });
+      CHECK(ctx.bag.has_errors());
+      // Three of the eight named something that is not there, so the order is
+      // something to get wrong rather than one line that cannot move.
+      CHECK(ctx.bag.error_count() >= 3);
+      CHECK(!said.empty());
+      seen.push_back(said);
+      CHECK(said == seen.front());
     }
-    // The build is expected to fail: the package names three things that are
-    // not there. What is compared is what it said about them.
-    (void)build_package(ctx, root_path, std::move(manifest).unwrap(),
-                        "alcy.toml", "", false, LinkOptions{},
-                        EmitMode::LlvmIr);
-    std::string said;
-    ctx.bag.for_each([&](const diag::Diagnostic& d) {
-      said += diag::render(d);
-      said += '\n';
-    });
-    CHECK(ctx.bag.has_errors());
-    // Three of the eight named something that is not there, so the order is
-    // something to get wrong rather than one line that cannot move.
-    CHECK(ctx.bag.error_count() >= 3);
-    CHECK(!said.empty());
-    if (jobs == 1) {
-      one_job = said;
-      continue;
-    }
-    CHECK(said == one_job);
   }
+  CHECK(seen.size() == 9);
 }
 
 TEST_CASE("A package build refuses targets sharing one output") {
