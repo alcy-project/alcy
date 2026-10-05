@@ -575,6 +575,11 @@ class Lowerer {
   // recorded, both answered by table.
   std::unordered_map<u32, u32> type_origins_;
   std::unordered_map<u32, const analyzer::CheckedModule::StructInfo*> structs_;
+  // An enumeration's shape and where a path's variant was recorded, by what a
+  // caller knows when it asks. Each was a walk over every module in the
+  // package, so one question cost the package.
+  std::unordered_map<u32, const analyzer::CheckedModule::EnumInfo*> enums_;
+  std::unordered_map<u64, const analyzer::CheckedModule::VariantUse*> variants_;
   std::unordered_map<u32, u32> generic_insts_;
   // Where a specialization key already has an entry. Lowering asks this of
   // every call site, and walking the entries so far to compare keys charged

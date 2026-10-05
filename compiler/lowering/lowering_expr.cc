@@ -751,24 +751,19 @@ const analyzer::CheckedModule::VariantUse* Lowerer::variant_use(
 const analyzer::CheckedModule::VariantUse* Lowerer::variant_use_in(
     ast::PathIdx path,
     u32 inst) const {
-  for (const auto& checked : pkg.modules) {
-    for (const auto& use : checked.variants) {
-      if (use.path == path && use.inst == inst) {
-        return &use;
-      }
-    }
+  const auto found = variants_.find((static_cast<u64>(path.idx) << 32) |
+                                    static_cast<u64>(inst));
+  if (found != variants_.end()) {
+    return found->second;
   }
   return nullptr;
 }
 
 const analyzer::CheckedModule::EnumInfo* Lowerer::enum_info(
     ir::TypeIdx type) const {
-  for (const auto& checked : pkg.modules) {
-    for (const auto& info : checked.enums) {
-      if (info.type.idx == type.idx) {
-        return &info;
-      }
-    }
+  const auto found = enums_.find(type.idx);
+  if (found != enums_.end()) {
+    return found->second;
   }
   return nullptr;
 }
@@ -2440,12 +2435,12 @@ Val Lowerer::lower_struct(ast::ExprIdx expr) {
   const ir::RegisterIdx addr =
       emit(ir::Opcode::Alloca, struct_type, {size_one});
   u32 field_count = 0;
-  for (const auto& checked : pkg.modules) {
-    for (const auto& info : checked.structs) {
-      if (info.type.idx == struct_type.idx) {
-        field_count = static_cast<u32>(info.fields.size());
-      }
-    }
+  // The same table `struct_field_index` reads: a structure's shape is recorded
+  // where the structure is, so the walk this replaced asked the package how
+  // many fields one structure has.
+  const auto shape = structs_.find(struct_type.idx);
+  if (shape != structs_.end()) {
+    field_count = static_cast<u32>(shape->second->fields.size());
   }
   std::vector<bool> seen(field_count, false);
   for (const ast::ExprFieldInit& field :

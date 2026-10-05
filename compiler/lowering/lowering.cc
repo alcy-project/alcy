@@ -130,6 +130,16 @@ void Lowerer::index_structs() {
     for (const analyzer::CheckedModule::StructInfo& info : checked.structs) {
       structs_.emplace(info.type.idx, &info);
     }
+    for (const analyzer::CheckedModule::EnumInfo& info : checked.enums) {
+      enums_.emplace(info.type.idx, &info);
+    }
+    for (const analyzer::CheckedModule::VariantUse& use : checked.variants) {
+      // A use site names the path it wrote and the instantiation it was read
+      // under, so those two are what the table is keyed by.
+      variants_.emplace(
+          (static_cast<u64>(use.path.idx) << 32) | static_cast<u64>(use.inst),
+          &use);
+    }
   }
   for (u32 i = 0; i < static_cast<u32>(pkg.generic_insts.size()); ++i) {
     generic_insts_.emplace(pkg.generic_insts[i].idx, i);
