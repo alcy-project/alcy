@@ -13,6 +13,7 @@
 #include "diag/diagnostic.h"
 #include "diag/stage.h"
 #include "doctest/doctest.h"
+#include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
@@ -255,6 +256,78 @@ TEST_CASE("A package build honours the mode too") {
 #if !BUILD_FLAG(IS_OS_ASMJS)
     CHECK(!io::is_file(dir.join("proj/app.o")));
 #endif  // !BUILD_FLAG(IS_OS_ASMJS
+  }
+}
+
+TEST_CASE("A package's module does not depend on how many jobs read it") {
+  // Several parsers appending to one node table give each of them a lane of
+  // it, and which lane a file lands in depends on which thread took it, so
+  // the indices a tree's nodes have are not the same run to run. What must
+  // not move is the module: the passes after the parse read the tree in the
+  // order the modules and their items were written in, not in the order the
+  // nodes happened to land, and this is the test that says so.
+  constexpr u32 MODULES = 8;
+  io::TempDir dir = io::TempDir::create_unique("alcy_emit_jobs_test_");
+  std::string include = "[\"main\"";
+  for (u32 i = 0; i < MODULES; ++i) {
+    include += fmt::format(", \"m{}\"", i);
+  }
+  include += ']';
+  const bool setup = dir.write_file(
+      "proj/alcy.toml", fmt::format("[package]\nname = \"app\"\nversion = "
+                                    "\"0.1.0\"\n\n[dependencies]\n"
+                                    "\"alcy/std/*\" = {{}}\n\n[[bin]]\n"
+                                    "name = \"app\"\npath = \"main.al\"\n\n"
+                                    "[modules]\ninclude = {}\n",
+                                    include));
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  std::string main_source = "fn main() -> i32 {\n  mut total := 0\n";
+  for (u32 i = 0; i < MODULES; ++i) {
+    CHECK(dir.write_file(fmt::format("proj/m{}.al", i),
+                         fmt::format("pub fn f{0}(x: i32) -> i32 {{\n"
+                                     "  ret x + {0}\n}}\n",
+                                     i)));
+    main_source += fmt::format("  total = total + m{0}::f{0}({0})\n", i);
+  }
+  main_source += "  print(\"hi\")\n  ret total\n}\n";
+  CHECK(dir.write_file("proj/main.al", main_source));
+
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(dir.join("proj"));
+  CHECK(root.is_ok());
+  if (root.is_err()) {
+    return;
+  }
+  const path::Path root_path = std::move(root).unwrap();
+
+  std::string one_job;
+  for (u32 jobs : {1u, 4u, 8u}) {
+    INFO("jobs " << jobs);
+    PipelineContext ctx{i18n::Language::EnUs};
+    ctx.jobs = jobs;
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", false, LinkOptions{}, EmitMode::LlvmIr);
+    CHECK(built.is_ok());
+    if (built.is_err()) {
+      return;
+    }
+    const std::string ir = read_file(dir.join("proj/out/app.ll"));
+    CHECK(!ir.empty());
+    if (jobs == 1) {
+      one_job = ir;
+      continue;
+    }
+    CHECK(ir == one_job);
   }
 }
 
