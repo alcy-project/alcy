@@ -213,6 +213,10 @@ built from the same tree, minimum of five interleaved:
 Peak memory is flat across the job counts, 248 to 250 MiB, and the diagnostics
 are byte for byte the same at one, two, four and eight jobs.
 
+What a run reports and emits is the same at every job count, which is what
+makes the switch safe to default to more than one; the rules that keep it that
+way are [ADR-0048](0048-output-does-not-depend-on-the-job-count.md).
+
 **And the stage's own cost was a reservation per file.** Reading a package on
 several threads reported every file into a bag of its own, and a bag owns the
 arena it cuts its messages from, so a thousand files reserved a thousand
