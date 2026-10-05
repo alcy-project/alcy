@@ -82,7 +82,7 @@ Deliberately out of scope for MVP:
 - Parallel or incremental compilation.
 - Language-server functionality.
 - Build-system dependency tracking.
-- A completed native (non-LLVM) backend.
+- A direct x86 backend; the direct wasm backend is.
 
 ## Architectural shape
 
@@ -154,8 +154,9 @@ state between stages beyond the data explicitly passed along.
 | `pipeline`                | Project-level build flow: package discovery, source loading, and per-file stage orchestration. It calls every stage; none calls the next. | Explicit phase boundaries and arena resets.                                       |
 | `pkg`                     | Stands for `package`. Package manifests (`alcy.toml`) and the toolchain file: parsed bytes, never a file opened.                            | Arena-backed views; no heap allocation in the model itself.                       |
 | `source`                  | Source file registry: memory-mapped file loading with stable file ids.                                                                 | Mapped files plus small owned tables.                                             |
+| `codegen`                 | The backend seam: `Backend`, `EmitRequest`, `Target`, and the dispatch. Implementations live beside it; the pipeline names only the seam. | N/A - dispatch only.                                                             |
 | `codegen_llvm`            | Emits LLVM IR from analyzed IR, and the module to an object, textual IR, or bitcode. `Target` says what it builds for.                | Local API buffers only.                                                           |
-| `codegen`                 | Reserved native code generation backend; no committed design yet.                                                                      | N/A - not yet implemented.                                                        |
+| `codegen/wasm`            | alcy's own wasm emitter: verified IR in, a final WASI module out, no LLVM or linker behind it. Reached with `--backend=direct-wasm`.    | The module is built in memory, one pass.                                          |
 | `diag`                    | Stands for `diagnostic`. Source spans, diagnostics, arena-backed bags, and the fmtlib renderer.                                        | Zero heap allocation on hot paths; message bytes use an injected arena.           |
 | `i18n`                    | Stands for `internationalization`. The languages the compiler reports in, and the catalog that holds every message it can print.      | Catalog strings are static; the cli owns the composed copies.                      |
 | `text`                    | Text primitives shared across stages: escape decoding for string literals, and JSON reading and writing.                               | Owned strings; cold paths only.                                                   |
@@ -188,8 +189,9 @@ flowchart TD
     end
 
     subgraph Backend
-        borrow --> codegen[native]
-        borrow --> codegen_llvm
+        borrow --> codegen[codegen: seam]
+        codegen --> codegen_llvm
+        codegen --> codegen_wasm[codegen/wasm]
         codegen_llvm --> llvm
     end
 
@@ -355,9 +357,10 @@ Source bytes
 [ Borrow ]         -> ownership-checked IR
    │
    ▼
-[ codegen_llvm ]   -> LLVM IR / object code
-
-   (codegen: native backend - reserved, not yet implemented)
+[ codegen ]        -> the backend seam
+   │
+   ├─▶ [ codegen_llvm ]   -> LLVM IR / object code
+   └─▶ [ codegen/wasm ]   -> a final WASI module
 ```
 
 A stage never calls the one that follows it: `pipeline` calls each in turn,
@@ -553,8 +556,8 @@ The following do not have a committed MVP design:
 
 - Parallel and incremental compilation.
 - Custom memory management beyond the current arena model.
-- Completing the `codegen` native backend or replacing LLVM/the system linker
-  with a custom backend.
+- Completing `codegen/x86`, or replacing LLVM/the system linker with a direct
+  backend on both machines.
 - Advanced optimizations and whole-program analysis.
 - Language features beyond the MVP subset (defined in `docs/spec/`,
   which is normative for language behavior).

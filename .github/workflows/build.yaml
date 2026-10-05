@@ -112,6 +112,10 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_e2e.py --build-subdir=build
 
+      - name: Run Wasm Acceptance
+        shell: bash
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_wasm.py --build-subdir=build
+
       - name: Check Borrow Rules
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_borrow_rules.py --build-subdir=build

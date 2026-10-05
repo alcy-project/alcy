@@ -55,9 +55,13 @@ it. The pieces:
   `OutputKind::Module`, and the executable path links the former and
   writes the latter. `--emit=llvm-ir`/`--emit=llvm-bitcode` stay LLVM-only;
   asking another backend for them is a diagnostic, not a fallback.
-- GN selects implementations with `alcy_backends`, a list defaulting to
-  `["llvm"]`. A build without `llvm` in the list does not depend on
-  `//third_party/llvm`, so `setup_llvm` never runs and nothing is downloaded.
+- GN selects the optional implementations with `alcy_backends`, a list
+  defaulting to `["llvm"]`. The direct backends are always built: they carry
+  no third-party dependency, a build that lists no backend still emits wasm,
+  and a native debug build can test the wasm emitter without a wasm
+  toolchain. The list therefore says what to add, not what to leave out. A
+  build without `llvm` does not depend on `//third_party/llvm`, so
+  `setup_llvm` never runs and nothing is downloaded.
 - There is no LIR. The IR is already the low-level form, and a second one
   would be a converter and a second verifier for no consumer that does not
   exist yet. What the backends share -- frame layout, value-to-slot
