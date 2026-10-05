@@ -8,6 +8,8 @@ source_set("wasm") {
   sources = [
     "module.cc",
     "module.h",
+    "reach.cc",
+    "reach.h",
     "writer.cc",
     "writer.h",
   ]
