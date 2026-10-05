@@ -65,6 +65,10 @@ struct CheckedModule {
     // Instantiation this signature was checked under; NO_INST for
     // non-generic functions. Lowering keys the callee body by it.
     u32 inst = NO_INST;
+    // True for a method's signature. Methods share this table so
+    // lowering can name them by index, but a bare call reaches free
+    // functions only, whatever order the declarations appear in.
+    bool is_method = false;
   };
   // Lazily-instantiated generic methods append signatures during body
   // checking, so element addresses must stay stable: never

@@ -973,6 +973,64 @@ TEST_CASE("Check rejects duplicate definitions") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Check rejects a duplicate free function") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn foo() -> i32 { ret 1 }\n"
+                                      "fn foo() -> i32 { ret 2 }\n"
+                                      "fn main() -> i32 { ret foo() }\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a duplicate method across impl blocks") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct S { n: i32 }\n"
+                       "impl S {\n"
+                       "  fn get(self: &Self) -> i32 { ret self.n }\n"
+                       "}\n"
+                       "impl S {\n"
+                       "  fn get(self: &Self) -> i32 { ret self.n }\n"
+                       "}\n"
+                       "fn main() -> i32 { ret S { n: 1 }.get() }\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check keeps a free function beside a method of the same name") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct S { n: i32 }\n"
+                       "impl S {\n"
+                       "  fn get(self: &Self) -> i32 { ret self.n }\n"
+                       "}\n"
+                       "fn get() -> i32 { ret 7 }\n"
+                       "fn main() -> i32 { ret get() + S { n: 1 }.get() }\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
 TEST_CASE("Check rejects malformed generics") {
   {
     VirtualDir dir;

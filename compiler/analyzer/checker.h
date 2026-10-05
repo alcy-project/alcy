@@ -157,6 +157,15 @@ class Checker {
   std::vector<u32> spec_scope;
   std::vector<CheckedModule> modules;
   std::vector<u32> parents;
+  // Inherent methods declared so far, keyed by the nominal they attach
+  // to. Spec methods are not recorded: an inherent method shadows a
+  // spec method of the same name by design.
+  struct InherentMethod {
+    u32 target_module = NO_MODULE;
+    std::string_view target_name;
+    std::string_view method;
+  };
+  std::vector<InherentMethod> inherent_methods_;
 
   // Body-checking state, reset per function.
   struct Local {
@@ -207,6 +216,13 @@ class Checker {
   // signatures. Generic targets defer bodies to call-site
   // instantiation, exactly like generic inherent impls.
   void register_spec_impl(u32 module, ast::ItemIdx item);
+  // Records an inherent method declaration, answering false when the
+  // nominal already carries one under this name. Impl blocks may repeat
+  // a name in one module or in another, and the second method would be
+  // the one a receiver shape reaches while the first sits unreachable.
+  bool record_inherent_method(u32 target_module,
+                              std::string_view target_name,
+                              std::string_view method);
   // Declared signature of spec method `name` under `self_type`, with
   // the spec's parameters bound to `spec_args`. False when the spec
   // declares no such method.

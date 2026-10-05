@@ -293,6 +293,23 @@ NominalEntry* Checker::builtin_nominal(std::string_view name) {
 void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
   const ast::ItemNode& node = ast.items[item];
   const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
+  // Two methods sharing a name would both be checked against the one
+  // declaration, and the second would quietly shadow the first.
+  std::vector<std::string_view> method_names;
+  for (ast::ItemIdx method_item : impl.methods) {
+    const ast::Ident& name =
+        ast.items[method_item].payload.get<ast::ItemFn>().name;
+    for (std::string_view declared : method_names) {
+      if (declared == name.name) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::DuplicateDefinition, name.span, name.name);
+        (void)index;
+        return;
+      }
+    }
+    method_names.push_back(name.name);
+  }
   // The spec side parses through the type grammar; only a path names
   // a spec. Anything else is rejected where the impl is written.
   SpecEntry* spec_entry = nullptr;
@@ -582,6 +599,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       return;
     }
     modules[module].functions.push_back({name, params, ret, method_item});
+    modules[module].functions.back().is_method = true;
     const CheckedModule::FnSig& sig = modules[module].functions.back();
     add_method(module, {self_type, name, sig.params, sig.ret, receiver,
                         method_item, false, spec_index});
@@ -593,6 +611,19 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
   }
   spec_impls.push_back(SpecImplEntry{spec_index, module, std::move(target),
                                      std::move(shapes), item, node.span});
+}
+
+bool Checker::record_inherent_method(u32 target_module,
+                                     std::string_view target_name,
+                                     std::string_view method) {
+  for (const InherentMethod& declared : inherent_methods_) {
+    if (declared.target_module == target_module &&
+        declared.target_name == target_name && declared.method == method) {
+      return false;
+    }
+  }
+  inherent_methods_.push_back({target_module, target_name, method});
+  return true;
 }
 
 u32 Checker::find_child_module(u32 module, std::string_view name) const {
@@ -1551,6 +1582,24 @@ bool Checker::check_intrinsic_signature(u32 module,
 }
 
 void Checker::process_module(u32 module) {
+  // The value namespace of this module: functions, intrinsics, statics,
+  // and constants share it, and a second declaration under one name
+  // would resolve to whichever entry a lookup reached first.
+  std::vector<std::string_view> value_names;
+  const auto value_taken = [&value_names](std::string_view name) {
+    for (std::string_view declared : value_names) {
+      if (declared == name) {
+        return true;
+      }
+    }
+    return false;
+  };
+  const auto duplicate_value = [this](const ast::Ident& name) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::DuplicateDefinition, name.span, name.name);
+    (void)index;
+  };
   for (ast::ItemIdx item : tree.modules[module]->items) {
     const ast::ItemNode& node = ast.items[item];
     switch (node.kind) {
@@ -1591,6 +1640,12 @@ void Checker::process_module(u32 module) {
         }
       } break;
       case ast::ItemKind::Fn: {
+        const ast::Ident& name = node.payload.get<ast::ItemFn>().name;
+        if (value_taken(name.name)) {
+          duplicate_value(name);
+          break;
+        }
+        value_names.push_back(name.name);
         // Generic functions register per instantiation at their call
         // sites; eager registration cannot bind their parameters.
         if (!node.payload.get<ast::ItemFn>().generic.empty()) {
@@ -1614,6 +1669,11 @@ void Checker::process_module(u32 module) {
       case ast::ItemKind::Intrinsic: {
         const ast::ItemIntrinsic& intrinsic =
             node.payload.get<ast::ItemIntrinsic>();
+        if (value_taken(intrinsic.name.name)) {
+          duplicate_value(intrinsic.name);
+          break;
+        }
+        value_names.push_back(intrinsic.name.name);
         if (!is_known_intrinsic(intrinsic.name.name)) {
           const u32 index = bag.emit<i18n::Key::AnalyzerUnknownIntrinsic>(
               diag::Severity::Error, diag::Stage::Analyzer,
@@ -1671,21 +1731,23 @@ void Checker::process_module(u32 module) {
       }
       case ast::ItemKind::Static:
       case ast::ItemKind::Const: {
-        std::string_view name;
-        ast::TypeIdx type = ast::TypeIdx::invalid();
-        ast::ExprIdx init = ast::ExprIdx::invalid();
         const bool is_const = node.kind == ast::ItemKind::Const;
-        if (!is_const) {
-          name = node.payload.get<ast::ItemStatic>().name.name;
-          type = node.payload.get<ast::ItemStatic>().type;
-          init = node.payload.get<ast::ItemStatic>().init;
-        } else {
-          name = node.payload.get<ast::ItemConst>().name.name;
-          type = node.payload.get<ast::ItemConst>().type;
-          init = node.payload.get<ast::ItemConst>().init;
+        const ast::Ident name = is_const
+                                    ? node.payload.get<ast::ItemConst>().name
+                                    : node.payload.get<ast::ItemStatic>().name;
+        if (value_taken(name.name)) {
+          duplicate_value(name);
+          break;
         }
+        value_names.push_back(name.name);
+        const ast::TypeIdx type =
+            is_const ? node.payload.get<ast::ItemConst>().type
+                     : node.payload.get<ast::ItemStatic>().type;
+        const ast::ExprIdx init =
+            is_const ? node.payload.get<ast::ItemConst>().init
+                     : node.payload.get<ast::ItemStatic>().init;
         modules[module].statics.push_back(
-            {name, resolve_type(module, type, nullptr), init, is_const});
+            {name.name, resolve_type(module, type, nullptr), init, is_const});
         break;
       }
       case ast::ItemKind::Impl: {
@@ -1698,6 +1760,11 @@ void Checker::process_module(u32 module) {
         // Generic impls instantiate per method call; their methods
         // wait for instantiation-time checking.
         bool generic_impl = !node.payload.get<ast::ItemImpl>().params.empty();
+        // The nominal the block attaches to, when its path resolved; the
+        // method registry checks across blocks through it.
+        u32 target_module = NO_MODULE;
+        std::string_view target_name;
+        bool target_known = false;
         const ast::TypeNode& self_node =
             ast.types[node.payload.get<ast::ItemImpl>().type];
         if (self_node.kind == ast::TypeKind::Path) {
@@ -1709,13 +1776,12 @@ void Checker::process_module(u32 module) {
                     DiagCode::GenericArguments, self_node.span);
             (void)index;
           } else {
-            u32 target_module = NO_MODULE;
-            std::string_view target_name;
             if (resolve_type_path(module,
                                   self_node.payload.get<ast::TypePath>().path,
                                   target_module, target_name)) {
               NominalEntry* entry = find_nominal(target_module, target_name);
               if (entry != nullptr) {
+                target_known = true;
                 if (nominal_params(*entry).empty() &&
                     node.payload.get<ast::ItemImpl>().params.empty()) {
                   self_type = intern_nominal(*entry);
@@ -1740,10 +1806,21 @@ void Checker::process_module(u32 module) {
           (void)index;
         }
         for (ast::ItemIdx method : node.payload.get<ast::ItemImpl>().methods) {
-          if (generic_impl) {
-            break;
-          }
           const ast::ItemNode& method_node = ast.items[method];
+          // A second method under a name the nominal already carries in
+          // an inherent impl would shadow the first for one receiver
+          // shape; the registry spans blocks and modules, and generic
+          // blocks are on record here before their bodies defer.
+          if (target_known &&
+              !record_inherent_method(
+                  target_module, target_name,
+                  method_node.payload.get<ast::ItemFn>().name.name)) {
+            duplicate_value(method_node.payload.get<ast::ItemFn>().name);
+            continue;
+          }
+          if (generic_impl) {
+            continue;
+          }
           std::vector<ir::TypeIdx> params;
           for (const ast::ItemFnParam& param :
                method_node.payload.get<ast::ItemFn>().params) {
@@ -1759,6 +1836,7 @@ void Checker::process_module(u32 module) {
           modules[module].functions.push_back(
               {method_node.payload.get<ast::ItemFn>().name.name,
                std::move(params), ret, method});
+          modules[module].functions.back().is_method = true;
           const CheckedModule::FnSig& sig = modules[module].functions.back();
           CheckedModule::ReceiverKind receiver =
               CheckedModule::ReceiverKind::None;
@@ -2550,8 +2628,11 @@ const CheckedModule::FnSig* Checker::lookup_function(
   for (const CheckedModule::FnSig& fn : modules[module].functions) {
     // A generic function's registered signatures are per
     // instantiation; the name still resolves through
-    // lookup_generic_fn so each call rebinds its parameters.
-    if (fn.name == name && fn_generic_params(fn.item).empty()) {
+    // lookup_generic_fn so each call rebinds its parameters. A
+    // method's signature shares the table but not the name: a bare
+    // call cannot reach it.
+    if (fn.name == name && !fn.is_method &&
+        fn_generic_params(fn.item).empty()) {
       return &fn;
     }
   }
@@ -2561,7 +2642,8 @@ const CheckedModule::FnSig* Checker::lookup_function(
     }
     for (const CheckedModule::FnSig& fn :
          modules[import.target_module].functions) {
-      if (fn.name == import.member && fn_generic_params(fn.item).empty()) {
+      if (fn.name == import.member && !fn.is_method &&
+          fn_generic_params(fn.item).empty()) {
         return &fn;
       }
     }
@@ -3192,6 +3274,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     modules[impl_module].functions.push_back(
         {method_node.payload.get<ast::ItemFn>().name.name, params, ret,
          method_item});
+    modules[impl_module].functions.back().is_method = true;
     add_method(impl_module,
                {self_type, method_node.payload.get<ast::ItemFn>().name.name,
                 params, ret, receiver, method_item,
@@ -3294,6 +3377,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     modules[impl_module].functions.push_back(
         {method_node.payload.get<ast::ItemFn>().name.name, params, ret,
          method_item});
+    modules[impl_module].functions.back().is_method = true;
     CheckedModule::MethodInfo* entry = &add_method(
         impl_module,
         {self_type, method_node.payload.get<ast::ItemFn>().name.name, params,
