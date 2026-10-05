@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -187,6 +188,17 @@ class Checker {
   std::vector<std::vector<u32>> path;
   std::vector<std::vector<u32>> flow;
   std::vector<Loan> loans;
+  // What the package named, by the address it named, and the captured
+  // addresses among it. Both were walks over every name in the package: one
+  // per diagnostic, and one per function of every sweep.
+  struct NamedAddr {
+    std::string_view name;
+    // A register can be named more than once, and a parameter is one if any
+    // of its names says so.
+    bool is_param = false;
+  };
+  std::unordered_map<u32, NamedAddr> addr_by_register_;
+  std::vector<u32> captures_;
   // Entry-block allocas holding a block parameter, paired with that
   // parameter's position. Filled by param_allocas per function and read
   // by is_param_root, so both see the same homes.
@@ -234,12 +246,8 @@ class Checker {
   }
 
   std::string_view addr_name(u32 reg) const {
-    for (const auto& entry : lowered.addr_names) {
-      if (entry.addr.idx == reg) {
-        return entry.name;
-      }
-    }
-    return "value";
+    const auto found = addr_by_register_.find(reg);
+    return found == addr_by_register_.end() ? "value" : found->second.name;
   }
 
   bool is_param_root(u32 reg, const ir::Function& fn) const {
@@ -249,10 +257,9 @@ class Checker {
         return true;
       }
     }
-    for (const auto& entry : lowered.addr_names) {
-      if (entry.addr.idx == reg && entry.is_param) {
-        return true;
-      }
+    const auto named = addr_by_register_.find(reg);
+    if (named != addr_by_register_.end() && named->second.is_param) {
+      return true;
     }
     for (const auto& home_entry : param_homes) {
       if (home_entry.first == reg) {
@@ -299,13 +306,13 @@ class Checker {
   // path. That is what lets a move through the capture be told from
   // a move of an owned value. A moved Copy capture is owned storage
   // and needs none of this.
+  // The captured addresses, gathered once when the scratch is sized. Seeding
+  // them meant walking every name the package gave an address, once per
+  // function of every sweep.
   void seed_capture_places() {
-    for (const lowering::LoweredPackage::AddrInfo& entry : lowered.addr_names) {
-      if (!entry.is_capture || entry.addr.idx >= home.size()) {
-        continue;
-      }
-      home[entry.addr.idx] = entry.addr.idx;
-      path[entry.addr.idx] = {DEREF_STEP};
+    for (u32 addr : captures_) {
+      home[addr] = addr;
+      path[addr] = {DEREF_STEP};
     }
   }
 
@@ -1501,6 +1508,24 @@ class Checker {
     block_first.assign(blocks, 0);
     block_last.assign(blocks, 0);
     walk_mark.assign(blocks, 0);
+    index_addrs();
+  }
+
+  // What the package named, by the address it named. A diagnostic asks for one
+  // name and this asked by walking every name in the package; the captures are
+  // separated out in the same walk because a function seeds them before it
+  // looks at an instruction.
+  void index_addrs() {
+    for (const lowering::LoweredPackage::AddrInfo& entry : lowered.addr_names) {
+      auto [named, inserted] = addr_by_register_.emplace(
+          entry.addr.idx, NamedAddr{entry.name, entry.is_param});
+      if (!inserted) {
+        named->second.is_param = named->second.is_param || entry.is_param;
+      }
+      if (entry.is_capture && entry.addr.idx < home.size()) {
+        captures_.push_back(entry.addr.idx);
+      }
+    }
   }
 
   // Clears the rows indexed by block that a function reaches, the
