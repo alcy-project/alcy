@@ -10,14 +10,6 @@ runs:
   using: composite
   steps:
     - name: Install taplo
-      shell: bash
-      env:
-        TAPLO_VERSION: ${{ inputs.version }}
-      run: |
-        bin="$RUNNER_TEMP/taplo-bin"
-        mkdir -p "$bin"
-        curl -fsSL \
-          "https://github.com/tamasfe/taplo/releases/download/${TAPLO_VERSION}/taplo-linux-x86_64.gz" \
-          | gunzip > "$bin/taplo"
-        chmod +x "$bin/taplo"
-        echo "$bin" >> "$GITHUB_PATH"
+      uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0
+      with:
+        tool: taplo@${{ inputs.version }}
