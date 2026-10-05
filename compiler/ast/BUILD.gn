@@ -5,6 +5,7 @@ source_set("ast") {
   sources = [
     "ast.cc",
     "ast.h",
+    "lane.cc",
     "lane.h",
     "node_vec.h",
     "span_arena.h",

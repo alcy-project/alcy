@@ -18,17 +18,21 @@ namespace ast {
 //
 // A thread that no stage has spoken for is lane 0, and a table with no lanes
 // answers for lane 0 on the path a single parser takes.
-inline u32& current_lane_slot() {
-  static thread_local u32 lane = 0;
-  return lane;
-}
+//
+// The variable is at namespace scope rather than inside the accessor: a
+// function-local `static thread_local` in an inline function is one variable
+// per thread only where the toolchain agrees on what an inline function's
+// local static is, and a toolchain that does not gives two translation units
+// two variables and therefore two lanes. Nothing here is a lock, so that
+// failure is silent until two parsers write one lane's cursor.
+extern thread_local u32 current_lane_storage;
 
 inline void set_current_lane(u32 lane) {
-  current_lane_slot() = lane;
+  current_lane_storage = lane;
 }
 
 inline u32 current_lane() {
-  return current_lane_slot();
+  return current_lane_storage;
 }
 
 }  // namespace ast
