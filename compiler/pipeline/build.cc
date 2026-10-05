@@ -121,6 +121,12 @@ base::Result<void, diag::Reported> report_emit_failure(
     codegen::EmitError error,
     codegen::OutputKind kind,
     const std::string& output_path) {
+  // A backend that already reported the construct it could not encode has
+  // said what went wrong; a second line saying the output could not be
+  // written only buries the span.
+  if (ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
   switch (error) {
     case codegen::EmitError::UnknownTarget: {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineUnknownTarget>(
