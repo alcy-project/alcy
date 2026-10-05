@@ -101,8 +101,9 @@ module.exports = grammar({
     [$.mut_identifier_pattern, $.closure_parameter],
     [$.closure_parameter, $._path_segment],
     // `[a, b]` is an array and the capture list of `[a, b] (p) -> body`;
-    // the `(` after the `]` is what tells them apart.
-    [$.capture_list, $._path_segment],
+    // the `(` after the `]` is what tells them apart, and `self` in
+    // either position reads as a path segment or a capture until then.
+    [$.capture, $._path_segment],
     // `(A, B)` is a tuple type and the parameter list of `(A, B) -> R`;
     // the `->` after the `)` is what tells them apart.
     [$.tuple_type, $.function_parameters],
@@ -703,8 +704,17 @@ module.exports = grammar({
 
     capture_list: $ => seq(
       '[',
-      optional(sepByTrailing(choice($.identifier, alias('self', $.self)), ',')),
+      optional(sepByTrailing($.capture, ',')),
       ']',
+    ),
+
+    // One capture and how the closure takes it: a bare name takes the
+    // value (a move, or a copy for a Copy type), `&name` borrows
+    // shared, and `&mut name` borrows exclusively (grammar.ebnf,
+    // "Expressions").
+    capture: $ => seq(
+      optional(seq('&', optional('mut'))),
+      field('name', choice($.identifier, alias('self', $.self))),
     ),
 
     closure_parameters: $ => seq(

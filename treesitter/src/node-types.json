@@ -1019,6 +1019,26 @@
     }
   },
   {
+    "type": "capture",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "self",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "capture_list",
     "named": true,
     "fields": {},
@@ -1027,11 +1047,7 @@
       "required": false,
       "types": [
         {
-          "type": "identifier",
-          "named": true
-        },
-        {
-          "type": "self",
+          "type": "capture",
           "named": true
         }
       ]

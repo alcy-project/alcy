@@ -96,7 +96,8 @@ fn main() -> i32 {
           (identifier))
         (closure_expression
           (capture_list
-            (identifier))
+            (capture
+              (identifier)))
           (closure_parameters
             (closure_parameter
               (identifier)
@@ -394,7 +395,103 @@ impl Point {
             (identifier))
           (closure_expression
             (capture_list
-              (self))
+              (capture
+                (self)))
+            (closure_parameters)
+            (integer)))
+        (return_expression
+          (call_expression
+            (path_expression
+              (path
+                (identifier)))
+            (arguments)))))))
+
+================================================================================
+Capture modes borrow shared and exclusively beside a copied value
+================================================================================
+
+fn main() -> i32 {
+  mut c := 0
+  f := [a, &b, &mut c] (x: i32) -> x
+  ret f(1)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (declaration_statement
+        (mut_identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (closure_expression
+          (capture_list
+            (capture
+              (identifier))
+            (capture
+              (identifier))
+            (capture
+              (identifier)))
+          (closure_parameters
+            (closure_parameter
+              (identifier)
+              (primitive_type)))
+          (path_expression
+            (path
+              (identifier)))))
+      (return_expression
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments
+            (integer)))))))
+
+================================================================================
+A capture list borrows its own receiver
+================================================================================
+
+impl Point {
+  fn offset(self: Self) -> i32 {
+    f := [&self] () -> 0
+    ret f()
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (impl_item
+    (path_type
+      (path
+        (identifier)))
+    (function_item
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (self))
+          (path_type
+            (path
+              (self_type)))))
+      (return_type
+        (primitive_type))
+      (block
+        (declaration_statement
+          (identifier_pattern
+            (identifier))
+          (closure_expression
+            (capture_list
+              (capture
+                (self)))
             (closure_parameters)
             (integer)))
         (return_expression

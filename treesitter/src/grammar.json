@@ -3506,22 +3506,8 @@
               "type": "SEQ",
               "members": [
                 {
-                  "type": "CHOICE",
-                  "members": [
-                    {
-                      "type": "SYMBOL",
-                      "name": "identifier"
-                    },
-                    {
-                      "type": "ALIAS",
-                      "content": {
-                        "type": "STRING",
-                        "value": "self"
-                      },
-                      "named": true,
-                      "value": "self"
-                    }
-                  ]
+                  "type": "SYMBOL",
+                  "name": "capture"
                 },
                 {
                   "type": "REPEAT",
@@ -3533,22 +3519,8 @@
                         "value": ","
                       },
                       {
-                        "type": "CHOICE",
-                        "members": [
-                          {
-                            "type": "SYMBOL",
-                            "name": "identifier"
-                          },
-                          {
-                            "type": "ALIAS",
-                            "content": {
-                              "type": "STRING",
-                              "value": "self"
-                            },
-                            "named": true,
-                            "value": "self"
-                          }
-                        ]
+                        "type": "SYMBOL",
+                        "name": "capture"
                       }
                     ]
                   }
@@ -3575,6 +3547,62 @@
         {
           "type": "STRING",
           "value": "]"
+        }
+      ]
+    },
+    "capture": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "&"
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": "mut"
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "identifier"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "STRING",
+                  "value": "self"
+                },
+                "named": true,
+                "value": "self"
+              }
+            ]
+          }
         }
       ]
     },
@@ -5015,7 +5043,7 @@
       "_path_segment"
     ],
     [
-      "capture_list",
+      "capture",
       "_path_segment"
     ],
     [
