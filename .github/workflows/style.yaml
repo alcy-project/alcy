@@ -173,9 +173,9 @@ jobs:
           echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
 
       - name: Install taplo
-        uses: ./.github/actions/install-taplo
+        uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0
         with:
-          version: ${{ needs.load-config.outputs.taplo_version }}
+          tool: taplo@${{ needs.load-config.outputs.taplo_version }}
 
       - name: Check TOML Formatting
         run: taplo fmt --check

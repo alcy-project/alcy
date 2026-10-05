@@ -216,9 +216,9 @@ jobs:
       # does not install; the version comes from config.toml, so the
       # check here is the one a contributor runs.
       - name: Install taplo
-        uses: ./.github/actions/install-taplo
+        uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0
         with:
-          version: ${{ needs.load-config.outputs.taplo_version }}
+          tool: taplo@${{ needs.load-config.outputs.taplo_version }}
 
       # `typos` is not among the tools `setup-build` installs, and
       # `check.sh` reports a skip rather than passing one silently, so
