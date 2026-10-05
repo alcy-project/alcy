@@ -3,18 +3,39 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import subprocess
+import sys
 from pathlib import Path
+
+import header_license
 from utils.paths import (
     project_root_dir,
     project_source_dirs,
 )
 from utils.source import (
-    source_extensions,
     gn_extensions,
+    source_extensions,
 )
-import sys
-import header_license
-import subprocess
+
+
+def gn_files_outside_sources() -> list[str]:
+    """The tree's own GN files that sit outside the source directories.
+
+    The root files and everything under `build/` describe how the tree
+    is configured, and `gn format` covers them like any other. They are
+    listed from here rather than from a walk of the repository root,
+    which would descend into the vendored trees and the build output.
+    """
+    files: list[str] = []
+    build_dir = project_root_dir / "build"
+    for f in build_dir.rglob("*"):
+        if f.is_file() and f.suffix in gn_extensions:
+            files.append(str(f.relative_to(project_root_dir)))
+    # `.gn` has no suffix, so it is named rather than matched.
+    for name in (".gn", "BUILD.gn"):
+        if (project_root_dir / name).is_file():
+            files.append(name)
+    return files
 
 
 def create_commands(target_dirs: list[Path], dry_run: bool) -> list[list[str]]:
@@ -30,6 +51,10 @@ def create_commands(target_dirs: list[Path], dry_run: bool) -> list[list[str]]:
                     files.append(relative_path)
                 if f.suffix in gn_extensions:
                     gn_files.append(relative_path)
+
+    for relative_path in gn_files_outside_sources():
+        if relative_path not in gn_files:
+            gn_files.append(relative_path)
 
     if len(files) > 0:
         # print("target files:", *files, sep="\n  ")
