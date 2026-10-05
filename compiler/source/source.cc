@@ -16,10 +16,9 @@
 namespace source {
 
 base::Result<FileId, SourceError> SourceManager::load(std::string_view path) {
-  for (FileId i = 0; i < static_cast<FileId>(entries_.size()); ++i) {
-    if (entries_[i].path == path) {
-      return base::make_ok(i);
-    }
+  const auto known = by_name_.find(path);
+  if (known != by_name_.end()) {
+    return base::make_ok(known->second);
   }
 
   // Copy first: FileHandle::open requires a null-terminated path, which
@@ -37,24 +36,27 @@ base::Result<FileId, SourceError> SourceManager::load(std::string_view path) {
     return base::make_err(SourceError::MapFailed);
   }
   entries_.push_back(std::move(entry));
-  return base::make_ok(static_cast<FileId>(entries_.size() - 1));
+  const FileId id = static_cast<FileId>(entries_.size() - 1);
+  by_name_.emplace(entries_.back().path, id);
+  return base::make_ok(id);
 }
 
 FileId SourceManager::add_virtual(std::string_view name,
                                   std::string_view bytes) {
   // One id per name, matching load(): two ids for one name would let a
   // caller see two different contents under a single label.
-  for (FileId i = 0; i < static_cast<FileId>(entries_.size()); ++i) {
-    if (entries_[i].path == name) {
-      return i;
-    }
+  const auto known = by_name_.find(name);
+  if (known != by_name_.end()) {
+    return known->second;
   }
   virtuals_.emplace_back(bytes);
   Entry entry;
   entry.path = std::string(name);
   entry.virtual_index = static_cast<u32>(virtuals_.size() - 1);
   entries_.push_back(std::move(entry));
-  return static_cast<FileId>(entries_.size() - 1);
+  const FileId id = static_cast<FileId>(entries_.size() - 1);
+  by_name_.emplace(entries_.back().path, id);
+  return id;
 }
 
 std::optional<std::string_view> SourceManager::bytes(FileId id) const {

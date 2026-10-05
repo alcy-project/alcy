@@ -4,9 +4,11 @@
 #pragma once
 
 #include <deque>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 
 #include "fpag/base/limits.h"
 #include "fpag/base/numeric.h"
@@ -83,6 +85,17 @@ class SourceManager {
   std::deque<Entry> entries_;
   // Likewise: the bytes of a virtual source are handed out as a view.
   std::deque<std::string> virtuals_;
+  // The name of every entry, by the id it was given. Both load and
+  // add_virtual asked whether a name was already known by walking every
+  // entry, so a package paid its own files again for each one. The hash
+  // takes a view, so a lookup copies nothing.
+  struct NameHash {
+    using is_transparent = void;
+    usize operator()(std::string_view name) const {
+      return std::hash<std::string_view>{}(name);
+    }
+  };
+  std::unordered_map<std::string, FileId, NameHash, std::equal_to<>> by_name_;
 };
 
 }  // namespace source
