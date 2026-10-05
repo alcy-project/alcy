@@ -47,9 +47,14 @@ it. The pieces:
   selected by a `switch` in one dispatch file. Static dispatch with concepts,
   not virtuals: the project is `-fno-rtti` and `-fno-exceptions`, and a
   backend is chosen once per build, not per call.
-- `EmitMode` gains `Wasm`. The direct wasm backend answers only that mode and
-  `--emit=llvm-ir`/`--emit=llvm-bitcode` stay LLVM-only; asking another
-  backend for them is a diagnostic, not a fallback.
+- `--target` names the machine: `host` (the default) and
+  `wasm32-unknown-emscripten` today, resolved by `codegen` and reported by
+  the pipeline when it cannot be. The artifact's kind stays `--emit`'s, so
+  a wasm build is `--target=wasm32-unknown-emscripten`, not a new emit
+  mode: internally a backend answers `OutputKind::Object` or
+  `OutputKind::Module`, and the executable path links the former and
+  writes the latter. `--emit=llvm-ir`/`--emit=llvm-bitcode` stay LLVM-only;
+  asking another backend for them is a diagnostic, not a fallback.
 - GN selects implementations with `alcy_backends`, a list defaulting to
   `["llvm"]`. A build without `llvm` in the list does not depend on
   `//third_party/llvm`, so `setup_llvm` never runs and nothing is downloaded.
@@ -145,8 +150,9 @@ the profile concept), and the playground's site itself.
 
 Milestones:
 
-- **M0**: the seam. Neutral `Target`, the dispatch, `EmitMode::Wasm`,
-  `alcy_backends`, `--backend`, and a build with no LLVM that passes `check`.
+- **M0**: the seam. Neutral `Target`, `--target`, the dispatch,
+  `alcy_backends`, `--backend`, and a build with no LLVM that passes
+  `check`.
 - **M1**: `direct-wasm`. Module writer, dispatch loop, WASI runtime, bump
   allocator, unit tests, and the same programs run under `node` as under
   LLVM.
