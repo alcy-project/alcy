@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <unordered_map>
 #include <utility>
 
 #include "debug/dcheck.h"
@@ -27,7 +28,9 @@ namespace ir {
 class StorageBuilder {
  public:
   StorageBuilder() { intern_primitives(); }
-  explicit StorageBuilder(StorageState&& state) : state_(std::move(state)) {}
+  explicit StorageBuilder(StorageState&& state) : state_(std::move(state)) {
+    index_references();
+  }
 
   ~StorageBuilder() = default;
 
@@ -72,6 +75,12 @@ class StorageBuilder {
   }
   StorageBuilder& parameter_types(StorageState::Types&& parameter_types) {
     state_.types = std::move(parameter_types);
+    // The interning tables describe the table that was just replaced.
+    ref_by_pointee_.clear();
+    mut_ref_by_pointee_.clear();
+    raw_ptr_by_pointee_.clear();
+    raw_mut_ptr_by_pointee_.clear();
+    index_references();
     return *this;
   }
 
@@ -177,6 +186,9 @@ class StorageBuilder {
     state_.struct_types[node.as_struct()].params = params;
   }
 
+  // Array, slice, and tuple shapes still intern by scanning the type table:
+  // scans start past the pre-interned block, whose placeholder payloads must
+  // never match.
   TypeIdx slice_type(TypeIdx element) {
     for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
          ++idx) {
@@ -218,11 +230,12 @@ class StorageBuilder {
     return state_.types.emplace_back(node);
   }
 
-  // Structural interning: identical pointer shapes share one index, so
-  // type equality is index equality. Linear scans are fine at MVP scale;
-  // hash tables arrive if measurement demands. Scans start past the
-  // pre-interned block, whose placeholder Ref/MutRef payloads must
-  // never match.
+  // Structural interning: identical pointer shapes share one index, so type
+  // equality is index equality. A pointer used to find its shape by scanning
+  // every type in the package, and a program names one per borrow it writes or
+  // address it takes, so the shape is looked up instead. `Ref`, `MutRef`,
+  // `RawPtr`, and `RawMutPtr` of one pointee are four types, so each kind is
+  // keyed apart.
   TypeIdx reference_type(TypeIdx pointee, bool is_mut) {
     return pointer_type(is_mut ? TypeTag::MutRef : TypeTag::Ref, pointee);
   }
@@ -235,22 +248,18 @@ class StorageBuilder {
 
  private:
   TypeIdx pointer_type(TypeTag tag, TypeIdx pointee) {
-    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
-         ++idx) {
-      const TypeNode& node = state_.types[idx];
-      if (node.tag != tag) {
-        continue;
-      }
-      const RefTypeIdx ridx = node.data.get<RefTypeIdx>();
-      if (ridx.idx < state_.ref_types.size() &&
-          state_.ref_types[ridx].pointee.idx == pointee.idx) {
-        return idx;
-      }
+    std::unordered_map<u32, TypeIdx>* interned = pointer_table(tag);
+    DCHECK(interned != nullptr);
+    const auto found = interned->find(pointee.idx);
+    if (found != interned->end()) {
+      return found->second;
     }
     TypeNode node{};
     node.tag = tag;
     node.data.set(state_.ref_types.emplace_back(RefType{.pointee = pointee}));
-    return state_.types.emplace_back(node);
+    const TypeIdx idx = state_.types.emplace_back(node);
+    interned->emplace(pointee.idx, idx);
+    return idx;
   }
 
  public:
@@ -404,6 +413,42 @@ class StorageBuilder {
     state_.types.emplace_back(func);
   }
 
+  // The interning table of a pointer kind, or null for every other tag.
+  std::unordered_map<u32, TypeIdx>* pointer_table(TypeTag tag) {
+    if (tag == TypeTag::Ref) {
+      return &ref_by_pointee_;
+    }
+    if (tag == TypeTag::MutRef) {
+      return &mut_ref_by_pointee_;
+    }
+    if (tag == TypeTag::RawPtr) {
+      return &raw_ptr_by_pointee_;
+    }
+    if (tag == TypeTag::RawMutPtr) {
+      return &raw_mut_ptr_by_pointee_;
+    }
+    return nullptr;
+  }
+
+  // Fills the interning tables from a type table this builder did not fill
+  // itself. The scan is the shape lookup used to make, so the first node of a
+  // shape is the one a later pointer interns to.
+  void index_references() {
+    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
+         ++idx) {
+      const TypeNode& node = state_.types[idx];
+      std::unordered_map<u32, TypeIdx>* interned = pointer_table(node.tag);
+      if (interned == nullptr) {
+        continue;
+      }
+      const RefTypeIdx ridx = node.data.get<RefTypeIdx>();
+      if (ridx.idx >= state_.ref_types.size()) {
+        continue;
+      }
+      interned->emplace(state_.ref_types[ridx].pointee.idx, idx);
+    }
+  }
+
   StorageState state_;
 
   // The two tags that carry no payload, found by looking for a tag they do
@@ -412,6 +457,13 @@ class StorageBuilder {
   // answer stays the answer.
   TypeIdx never_ = TypeIdx::invalid();
   TypeIdx error_ = TypeIdx::invalid();
+
+  // Interned pointer shapes, by the type they point at: a `Ref`, a `MutRef`, a
+  // `*T`, and a `*mut T` of one pointee are four types.
+  std::unordered_map<u32, TypeIdx> ref_by_pointee_;
+  std::unordered_map<u32, TypeIdx> mut_ref_by_pointee_;
+  std::unordered_map<u32, TypeIdx> raw_ptr_by_pointee_;
+  std::unordered_map<u32, TypeIdx> raw_mut_ptr_by_pointee_;
 };
 
 }  // namespace ir
