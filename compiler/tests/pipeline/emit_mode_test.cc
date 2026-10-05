@@ -319,6 +319,14 @@ TEST_CASE("A package's module does not depend on how many jobs read it") {
                       "", false, LinkOptions{}, EmitMode::LlvmIr);
     CHECK(built.is_ok());
     if (built.is_err()) {
+      // What the build said, because a refusal here is about the machine as
+      // much as about the package and CI is the only place some machines are.
+      std::string said;
+      ctx.bag.for_each([&](const diag::Diagnostic& d) {
+        said += d.message;
+        said += '\n';
+      });
+      MESSAGE("the build said: " << said);
       return;
     }
     const std::string ir = read_file(dir.join("proj/out/app.ll"));
