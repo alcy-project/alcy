@@ -452,6 +452,25 @@ class Checker {
   // is resolved by walking the methods of the type it names, not every
   // method in the package.
   std::unordered_map<u32, std::vector<std::pair<u32, u32>>> methods_by_self_;
+  // The nominal that declares a structure, by the structure type it built. A
+  // field access knows the type it reaches into and needs the declaration that
+  // names the field; it asked by walking every nominal in the package, so one
+  // access cost the package and a package has an access per field read.
+  std::unordered_map<u32, u32> struct_by_type_;
+  // Where a module's children are, by the name a path calls them, and the
+  // module each package root opens, by the identity a path spells. A path of
+  // two segments or more walked every module in the package to find the one
+  // whose tail matched, and named a package by walking the roots.
+  std::vector<std::unordered_map<std::string_view, u32>> children_by_tail_;
+  std::unordered_map<std::string_view, u32> root_by_identity_;
+  // Where a signature and a method sit in their module, by address. Both
+  // tables are deques, so an address a caller holds stays the one it holds,
+  // and resolving a call site otherwise walked every function in the package
+  // to turn its pointer back into a position.
+  std::unordered_map<const void*, std::pair<u32, u32>> position_by_address_;
+  // Registers a function and answers the slot it went into, which is what a
+  // call site holds and what the positions above are keyed by.
+  CheckedModule::FnSig& add_function(u32 module, CheckedModule::FnSig sig);
   // Registers a method and returns it. Where two modules declare a
   // destructor for one type, the earlier module's is kept, which is what a
   // walk in module order would have found.

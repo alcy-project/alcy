@@ -506,18 +506,18 @@ bool Lowerer::struct_field_index(ir::TypeIdx type,
                                  std::string_view name,
                                  u32& index_out) {
   const ir::TypeIdx origin = type_origin(type);
-  for (const auto& checked : pkg.modules) {
-    for (const auto& info : checked.structs) {
-      if (info.type.idx != origin.idx) {
-        continue;
-      }
-      for (u32 i = 0; i < static_cast<u32>(info.fields.size()); ++i) {
-        if (info.fields[i] == name) {
-          index_out = i;
-          return true;
-        }
-      }
-      return false;
+  // Where a structure's shape is recorded, by the type it was recorded for.
+  // A field access asked by walking every structure in the package, so one
+  // access cost the package.
+  const auto declaring = structs_.find(origin.idx);
+  if (declaring == structs_.end()) {
+    return false;
+  }
+  const auto& fields = declaring->second->fields;
+  for (u32 i = 0; i < static_cast<u32>(fields.size()); ++i) {
+    if (fields[i] == name) {
+      index_out = i;
+      return true;
     }
   }
   return false;

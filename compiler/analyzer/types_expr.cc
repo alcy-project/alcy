@@ -1480,14 +1480,10 @@ ir::TypeIdx Checker::check_field(u32 module,
     // A field's type is a storage copy of the declared type, so owner
     // lookup follows the copy back to its origin.
     const ir::TypeIdx origin = type_origin(receiver);
-    for (NominalEntry& entry : nominals) {
-      if (!entry.complete || entry.type.idx != origin.idx) {
-        continue;
-      }
+    const auto declaring = struct_by_type_.find(origin.idx);
+    if (declaring != struct_by_type_.end()) {
+      NominalEntry& entry = nominals[declaring->second];
       const ast::ItemNode& owner_node = ast.items[entry.item];
-      if (owner_node.kind != ast::ItemKind::Struct) {
-        continue;
-      }
       u32 i = 0;
       for (const ast::ItemStructField& decl_field :
            owner_node.payload.get<ast::ItemStruct>().fields) {
@@ -1497,9 +1493,6 @@ ir::TypeIdx Checker::check_field(u32 module,
           break;
         }
         ++i;
-      }
-      if (owner != nullptr) {
-        break;
       }
     }
     if (owner == nullptr) {

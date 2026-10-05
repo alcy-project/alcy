@@ -7,6 +7,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -598,9 +599,9 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       (void)index;
       return;
     }
-    modules[module].functions.push_back({name, params, ret, method_item});
-    modules[module].functions.back().is_method = true;
-    const CheckedModule::FnSig& sig = modules[module].functions.back();
+    CheckedModule::FnSig& sig =
+        add_function(module, {name, params, ret, method_item});
+    sig.is_method = true;
     add_method(module, {self_type, name, sig.params, sig.ret, receiver,
                         method_item, false, spec_index});
   }
@@ -627,20 +628,11 @@ bool Checker::record_inherent_method(u32 target_module,
 }
 
 u32 Checker::find_child_module(u32 module, std::string_view name) const {
-  for (u32 i = 0; i < static_cast<u32>(tree.modules.size()); ++i) {
-    if (parents[i] != module) {
-      continue;
-    }
-    const std::string& path = tree.modules[i]->path;
-    const usize slash = path.find_last_of(':');
-    const std::string_view tail =
-        slash == std::string::npos ? std::string_view(path)
-                                   : std::string_view(path).substr(slash + 1);
-    if (tail == name) {
-      return i;
-    }
+  if (module >= children_by_tail_.size()) {
+    return NO_MODULE;
   }
-  return NO_MODULE;
+  const auto found = children_by_tail_[module].find(name);
+  return found == children_by_tail_[module].end() ? NO_MODULE : found->second;
 }
 
 ir::TypeIdx Checker::primitive_type(ast::PrimitiveKind kind, diag::Span span) {
@@ -824,6 +816,12 @@ ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
     builder.fill_enum(entry.type, variants.finish(), ir::TypeIdxRange{});
   }
   entry.complete = true;
+  if (is_struct) {
+    // A field access reaches into a structure and needs the declaration that
+    // names its fields, which is this one.
+    struct_by_type_.emplace(entry.type.idx,
+                            static_cast<u32>(&entry - nominals.data()));
+  }
   return entry.type;
 }
 
@@ -1139,12 +1137,10 @@ bool Checker::walk_module_prefix(u32 module,
     }
     current = parents[module];
   } else {
-    for (u32 i = 0; i < static_cast<u32>(tree.package_roots.size()); ++i) {
-      if (tree.package_roots[i].identity == head) {
-        current = tree.package_roots[i].module;
-        opened_root = i;
-        break;
-      }
+    const auto root = root_by_identity_.find(head);
+    if (root != root_by_identity_.end()) {
+      current = tree.package_roots[root->second].module;
+      opened_root = root->second;
     }
     if (opened_root == analyzer::NO_PACKAGE_ROOT) {
       current = find_child_module(module, head);
@@ -1661,9 +1657,8 @@ void Checker::process_module(u32 module) {
           ret = resolve_type(
               module, node.payload.get<ast::ItemFn>().return_type, nullptr);
         }
-        modules[module].functions.push_back(
-            {node.payload.get<ast::ItemFn>().name.name, std::move(params), ret,
-             item});
+        add_function(module, {node.payload.get<ast::ItemFn>().name.name,
+                              std::move(params), ret, item});
         break;
       }
       case ast::ItemKind::Intrinsic: {
@@ -1725,8 +1720,8 @@ void Checker::process_module(u32 module) {
         if (!check_intrinsic_signature(module, intrinsic, params, ret)) {
           break;
         }
-        modules[module].functions.push_back(
-            {intrinsic.name.name, std::move(params), ret, item});
+        add_function(module,
+                     {intrinsic.name.name, std::move(params), ret, item});
         break;
       }
       case ast::ItemKind::Static:
@@ -1833,11 +1828,10 @@ void Checker::process_module(u32 module) {
                 module, method_node.payload.get<ast::ItemFn>().return_type,
                 self_ok ? &self_type : nullptr);
           }
-          modules[module].functions.push_back(
-              {method_node.payload.get<ast::ItemFn>().name.name,
-               std::move(params), ret, method});
-          modules[module].functions.back().is_method = true;
-          const CheckedModule::FnSig& sig = modules[module].functions.back();
+          CheckedModule::FnSig& sig = add_function(
+              module, {method_node.payload.get<ast::ItemFn>().name.name,
+                       std::move(params), ret, method});
+          sig.is_method = true;
           CheckedModule::ReceiverKind receiver =
               CheckedModule::ReceiverKind::None;
           if (self_ok && !sig.params.empty()) {
@@ -1964,6 +1958,7 @@ CheckedModule::MethodInfo& Checker::add_method(u32 module,
   const CheckedModule::MethodInfo& method = target.methods.back();
   const u32 position = static_cast<u32>(target.methods.size() - 1);
   methods_by_self_[method.self_type.idx].emplace_back(module, position);
+  position_by_address_.emplace(&method, std::pair<u32, u32>{module, position});
   if (!method.is_drop) {
     return target.methods.back();
   }
@@ -3093,8 +3088,7 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
     type_params = kept_outer;
     return nullptr;
   }
-  modules[module].functions.push_back(
-      {fn_name(item), sig_params, ret, item, NO_INST});
+  add_function(module, {fn_name(item), sig_params, ret, item, NO_INST});
   const u32 sig_index = static_cast<u32>(modules[module].functions.size()) - 1;
   // Claim a slot in the shared instantiation numbering before checking
   // the body, so recursive calls key the same context.
@@ -3271,10 +3265,9 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     if (!params.empty()) {
       receiver = classify_receiver(params[0], self_type);
     }
-    modules[impl_module].functions.push_back(
-        {method_node.payload.get<ast::ItemFn>().name.name, params, ret,
-         method_item});
-    modules[impl_module].functions.back().is_method = true;
+    add_function(impl_module, {method_node.payload.get<ast::ItemFn>().name.name,
+                               params, ret, method_item})
+        .is_method = true;
     add_method(impl_module,
                {self_type, method_node.payload.get<ast::ItemFn>().name.name,
                 params, ret, receiver, method_item,
@@ -3374,10 +3367,9 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
       type_params = std::move(outer_scope);
       return nullptr;
     }
-    modules[impl_module].functions.push_back(
-        {method_node.payload.get<ast::ItemFn>().name.name, params, ret,
-         method_item});
-    modules[impl_module].functions.back().is_method = true;
+    add_function(impl_module, {method_node.payload.get<ast::ItemFn>().name.name,
+                               params, ret, method_item})
+        .is_method = true;
     CheckedModule::MethodInfo* entry = &add_method(
         impl_module,
         {self_type, method_node.payload.get<ast::ItemFn>().name.name, params,
@@ -3437,27 +3429,34 @@ void Checker::check_spec_impl_bodies(u32 module, ast::ItemIdx item) {
 void Checker::record_call(u32 module,
                           ast::ExprIdx callee,
                           const CheckedModule::FnSig* fn) {
-  for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
-    for (u32 i = 0; i < static_cast<u32>(modules[m].functions.size()); ++i) {
-      if (&modules[m].functions[i] == fn) {
-        modules[module].call_targets.push_back({callee, false, m, i, cur_inst});
-        return;
-      }
-    }
+  const auto found = position_by_address_.find(fn);
+  if (found == position_by_address_.end()) {
+    return;
   }
+  modules[module].call_targets.push_back(
+      {callee, false, found->second.first, found->second.second, cur_inst});
 }
 
 void Checker::record_call(u32 module,
                           ast::ExprIdx callee,
                           const CheckedModule::MethodInfo* method) {
-  for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
-    for (u32 i = 0; i < static_cast<u32>(modules[m].methods.size()); ++i) {
-      if (&modules[m].methods[i] == method) {
-        modules[module].call_targets.push_back({callee, true, m, i, cur_inst});
-        return;
-      }
-    }
+  const auto found = position_by_address_.find(method);
+  if (found == position_by_address_.end()) {
+    return;
   }
+  modules[module].call_targets.push_back(
+      {callee, true, found->second.first, found->second.second, cur_inst});
+}
+
+CheckedModule::FnSig& Checker::add_function(u32 module,
+                                            CheckedModule::FnSig sig) {
+  CheckedModule& target = modules[module];
+  target.functions.push_back(std::move(sig));
+  position_by_address_.emplace(
+      &target.functions.back(),
+      std::pair<u32, u32>{module,
+                          static_cast<u32>(target.functions.size() - 1)});
+  return target.functions.back();
 }
 
 // Resolves an expression path to its value meaning. Locals shadow
@@ -4150,14 +4149,38 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     return base::make_err(diag::Reported{});
   }
   checker.parents.assign(tree.modules.size(), NO_MODULE);
-  for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
-    for (const ModuleNode* child : tree.modules[m]->children) {
-      for (u32 c = 0; c < static_cast<u32>(tree.modules.size()); ++c) {
-        if (tree.modules[c] == child) {
-          checker.parents[c] = m;
-          break;
+  {
+    // The tree names a child by address and this names it by position, so the
+    // positions are a table: walking the modules for each child made one pass
+    // over the tree cost the square of its size. The same pass fills the
+    // children by the name a path calls them and the roots by the identity one
+    // spells, which is what name resolution reads.
+    std::unordered_map<const ModuleNode*, u32> position_of;
+    position_of.reserve(tree.modules.size());
+    for (u32 i = 0; i < static_cast<u32>(tree.modules.size()); ++i) {
+      position_of.emplace(tree.modules[i], i);
+    }
+    checker.children_by_tail_.resize(tree.modules.size());
+    for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
+      for (const ModuleNode* child : tree.modules[m]->children) {
+        const auto found = position_of.find(child);
+        if (found == position_of.end()) {
+          continue;
         }
+        checker.parents[found->second] = m;
+        // A path calls a child by the tail of its path: what the tree spells
+        // after the last separator.
+        const std::string& path = child->path;
+        const usize slash = path.find_last_of(':');
+        const std::string_view tail =
+            slash == std::string::npos
+                ? std::string_view(path)
+                : std::string_view(path).substr(slash + 1);
+        checker.children_by_tail_[m].emplace(tail, found->second);
       }
+    }
+    for (u32 i = 0; i < static_cast<u32>(tree.package_roots.size()); ++i) {
+      checker.root_by_identity_.emplace(tree.package_roots[i].identity, i);
     }
   }
   checker.modules.reserve(tree.modules.size());
