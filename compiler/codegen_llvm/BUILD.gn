@@ -17,7 +17,6 @@ source_set("codegen_llvm") {
     "llvm_ir_storage.h",
     "runtime_ir.cc",
     "runtime_ir.h",
-    "target.cc",
     "target.h",
   ]
 
@@ -28,6 +27,7 @@ source_set("codegen_llvm") {
     "//compiler/symbol",
   ]
   public_deps = [
+    "//compiler/codegen",
     "//compiler/ir",
     "//third_party/llvm",
   ]

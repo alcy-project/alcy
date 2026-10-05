@@ -8,7 +8,7 @@
 
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
-#include "codegen_llvm/target.h"
+#include "codegen/target.h"
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -33,8 +33,7 @@ struct PipelineContext {
   // pointer. One value, so the width the analyzer and lowering were
   // handed and the triple the backend writes cannot disagree, and so a
   // `--target` flag has one place to change.
-  codegen_llvm::Target target{codegen_llvm::host_triple(),
-                              ir::PointerWidth::W64};
+  codegen::Target target{codegen::host_triple(), ir::PointerWidth::W64};
   // Standard library sources, populated by std_prelude and kept alive
   // for the command: the names borrow the generated tables and the bytes
   // live in the source manager under those names. Restaged when a later

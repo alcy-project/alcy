@@ -102,6 +102,7 @@ source_set("pipeline") {
     "//compiler/analyzer",
     "//compiler/ast",
     "//compiler/borrow",
+    "//compiler/codegen",
     "//compiler/codegen_llvm",
     "//compiler/diag",
     "//compiler/i18n",

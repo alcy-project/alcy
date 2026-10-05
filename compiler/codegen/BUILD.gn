@@ -2,7 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 source_set("codegen") {
-  sources = [ "x86_emitter.cc" ]
-  deps = [ "//compiler:base_modules" ]
+  sources = [
+    "target.cc",
+    "target.h",
+    "x86_emitter.cc",
+  ]
+  deps = [
+    "//compiler:base_modules",
+    "//compiler/ir",
+  ]
   configs += [ "//compiler:alcy_config" ]
 }

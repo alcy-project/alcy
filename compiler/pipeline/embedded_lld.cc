@@ -14,7 +14,7 @@
 #include "diag/bag.h"
 
 #if defined(ALCY_EMBEDDED_LLD)
-#include "codegen_llvm/target.h"
+#include "codegen/target.h"
 #include "diag/diagnostic.h"
 #include "diag/stage.h"
 #include "fpag/base/numeric.h"
@@ -56,7 +56,7 @@ struct Startup {
 // loader's file name. Owned, because `host_triple()` hands back a string
 // and a view into it would not outlive this call.
 std::string host_arch() {
-  const std::string triple = codegen_llvm::host_triple();
+  const std::string triple = codegen::host_triple();
   return triple.substr(0, triple.find('-'));
 }
 
