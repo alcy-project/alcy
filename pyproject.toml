@@ -4,14 +4,22 @@ version = "0.1.0"
 description = ""
 authors = [{ name = "pugur", email = "pugurmc@gmail.com" }]
 requires-python = ">=3.14"
-dependencies = [
-    "cpplint>=2.0.2,<2.1.0",
-    "zstandard>=0.25.0",
-]
+dependencies = ["cpplint>=2.0.2,<2.1.0", "zstandard>=0.25.0"]
 
 [tool.uv]
 package = false
 
+[tool.ruff]
+# The Python tools are glue; the style is the same 88 columns the
+# editorconfig names for the language.
+line-length = 88
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP", "W"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["ast-grep-cli>=0.45.3", "ruff>=0.16.10", "rumdl>=0.2.78"]
