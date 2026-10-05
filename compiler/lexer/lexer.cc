@@ -3,6 +3,8 @@
 
 #include "lexer/lexer.h"
 
+#include <algorithm>
+#include <iterator>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -106,8 +108,7 @@ struct Keyword {
   TokenKind kind;
 };
 
-// Linear scan: identifiers are a fraction of tokens, and the table is
-// small enough that smarter lookup buys nothing measurable.
+// In spelling order, which is what lookup_keyword's search reads.
 constexpr Keyword KEYWORDS[] = {
     {"Self", TokenKind::SelfType},
     {"as", TokenKind::As},
@@ -164,11 +165,18 @@ constexpr Keyword KEYWORDS[] = {
     {"while", TokenKind::While},
 };
 
+// The table is in spelling order, which is what lets a word be looked up in
+// it. Every identifier and every keyword goes through here, so comparing the
+// word against each spelling in turn charged the lexer for the whole table
+// per token.
 TokenKind lookup_keyword(std::string_view word) {
-  for (const Keyword& keyword : KEYWORDS) {
-    if (keyword.spelling == word) {
-      return keyword.kind;
-    }
+  const auto found =
+      std::lower_bound(std::begin(KEYWORDS), std::end(KEYWORDS), word,
+                       [](const Keyword& keyword, std::string_view spelling) {
+                         return keyword.spelling < spelling;
+                       });
+  if (found != std::end(KEYWORDS) && found->spelling == word) {
+    return found->kind;
   }
   return TokenKind::Ident;
 }
