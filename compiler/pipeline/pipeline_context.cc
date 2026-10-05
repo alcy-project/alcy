@@ -5,6 +5,7 @@
 
 #include <string>
 #include <string_view>
+#include <thread>
 
 #include "config/build_config.h"
 #include "diag/bag.h"
@@ -80,9 +81,6 @@ PipelineContext::PipelineContext(i18n::Language language,
 }
 
 u32 PipelineContext::parse_jobs() const {
-  // Zero means the command line did not ask for threads, and one thread is
-  // the answer: reading the source is a small part of a run, so spreading it
-  // costs the passes that read what it built more than it saves.
 #if FPAG_BUILD_FLAG(IS_OS_ASMJS)
   // A target without threads has nothing to spread the work over, and the
   // count a caller asked for cannot make it appear. One is the answer here
@@ -95,7 +93,22 @@ u32 PipelineContext::parse_jobs() const {
   (void)jobs;
   return 1;
 #else
-  return jobs == 0 ? 1 : jobs;
+  // Half the machine, and never fewer than one. Both halves are deliberate.
+  //
+  // A compiler is not the only thing its user is running, and a stage that
+  // takes every core makes the run that measured it faster and everything the
+  // user does beside it slower. Half leaves room for that, and leaves the
+  // other half for the passes that do not spread yet but will: nothing here
+  // assumes a stage may use the whole machine.
+  //
+  // Zero means the caller did not ask, which is not the same as asking for
+  // one: `-j 1` is a request to read the input in order, and a caller that
+  // wants that says so.
+  if (jobs != 0) {
+    return jobs;
+  }
+  const u32 cores = std::thread::hardware_concurrency();
+  return cores < 2 ? 1 : cores / 2;
 #endif
 }
 

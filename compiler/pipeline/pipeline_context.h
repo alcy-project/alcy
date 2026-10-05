@@ -49,8 +49,9 @@ struct PipelineContext {
   // points it at Profiler::global() when --time-trace is given; a host
   // embedding the pipeline points it at its own instance.
   debug::Profiler* profiler = nullptr;
-  // How many threads the parse stage may read files with. Zero means the
-  // caller did not ask for any.
+  // How many threads a stage may spread over. Zero means the caller did not
+  // ask, which reads as half the machine rather than as one thread: one is
+  // what `-j 1` asks for.
   u32 jobs = 0;
 
   // `span_capacity` is the syntax arena's reservation. A case that has
