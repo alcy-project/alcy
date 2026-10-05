@@ -16,15 +16,12 @@ config("alcy_config") {
   # Which backends this build carries, as `codegen::backend_available`
   # reads them. A backend that was not compiled in has no code to run, so
   # the answer has to be a build-time fact rather than a runtime one.
+  # The direct backends are always built and need no flag; only the
+  # optional LLVM implementation is a build choice.
   if (alcy_use_llvm) {
     defines = [ "ALCY_BACKEND_LLVM=1" ]
   } else {
     defines = [ "ALCY_BACKEND_LLVM=0" ]
-  }
-  if (alcy_direct_wasm) {
-    defines += [ "ALCY_BACKEND_DIRECT_WASM=1" ]
-  } else {
-    defines += [ "ALCY_BACKEND_DIRECT_WASM=0" ]
   }
 }
 

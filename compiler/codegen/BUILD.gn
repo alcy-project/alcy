@@ -5,6 +5,7 @@ source_set("codegen") {
   sources = [
     "backend.cc",
     "backend.h",
+    "diag_code.h",
     "target.cc",
     "target.h",
     "x86_emitter.cc",

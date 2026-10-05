@@ -60,13 +60,7 @@ TEST_CASE("The default backend follows the target") {
 #if ALCY_BACKEND_LLVM
   CHECK(default_backend(host_target()) == Backend::Llvm);
 #endif
-#if ALCY_BACKEND_DIRECT_WASM
   CHECK(default_backend(wasm) == Backend::DirectWasm);
-#elif ALCY_BACKEND_LLVM
-  // This build has no wasm emitter, so LLVM answers the wasm target the
-  // same way it answers the host.
-  CHECK(default_backend(wasm) == Backend::Llvm);
-#endif
 }
 
 }  // namespace codegen

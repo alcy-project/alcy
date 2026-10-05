@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 declare_args() {
-  # The backend implementations compiled into the compiler. "llvm" brings
-  # the prebuilt LLVM, and on native Linux the embedded ELF linker with
-  # it; "direct-wasm" is alcy's own emitter, which needs neither. A build
-  # with no backend still checks.
+  # The optional backend implementations compiled into the compiler.
+  # "llvm" brings the prebuilt LLVM, and on native Linux the embedded ELF
+  # linker with it. The direct backends need neither and are always
+  # built, so this list is about what to add, not what to leave out. A
+  # build with no backend still checks.
   alcy_backends = [ "llvm" ]
 }
 
 alcy_use_llvm = filter_include(alcy_backends, [ "llvm" ]) != []
-alcy_direct_wasm = filter_include(alcy_backends, [ "direct-wasm" ]) != []

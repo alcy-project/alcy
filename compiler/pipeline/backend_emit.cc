@@ -18,9 +18,7 @@
 #if ALCY_BACKEND_LLVM
 #include "codegen_llvm/emit.h"
 #endif
-#if ALCY_BACKEND_DIRECT_WASM
 #include "codegen/wasm/backend.h"
-#endif
 
 namespace pipeline {
 
@@ -40,11 +38,7 @@ bool backend_supports(codegen::Backend backend,
       return false;
 #endif
     case codegen::Backend::DirectWasm:
-#if ALCY_BACKEND_DIRECT_WASM
       return codegen::wasm::Wasm::supports(kind, target);
-#else
-      return false;
-#endif
   }
   return false;
 }
@@ -65,11 +59,7 @@ base::Result<std::vector<u8>, codegen::EmitError> emit_with_backend(
       return base::make_err(codegen::EmitError::Unsupported);
 #endif
     case codegen::Backend::DirectWasm:
-#if ALCY_BACKEND_DIRECT_WASM
       return codegen::emit_with<codegen::wasm::Wasm>(std::move(request));
-#else
-      return base::make_err(codegen::EmitError::Unsupported);
-#endif
   }
   return base::make_err(codegen::EmitError::Unsupported);
 }

@@ -265,6 +265,7 @@
   /* codegen */ \
   F(CodegenArgumentNotFormattable, "Argument is not formattable") \
   F(CodegenInvalidModuleTree, "Internal error: invalid module tree: {}") \
+  F(CodegenWasmUnsupported, "Construct '{}' is not supported in the wasm backend") \
   /* pkg */ \
   F(PkgDependencyBadSpecifier, "Manifest '{}': dependency '{}' is not of the form name, owner/name, or owner/suite/package") \
   F(PkgDependencyBadVersion, "Manifest '{}': dependency '{}' needs a version of the form =1.2.3, 1.2, or 1") \

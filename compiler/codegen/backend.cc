@@ -39,11 +39,9 @@ bool backend_available(Backend backend) {
       return false;
 #endif
     case Backend::DirectWasm:
-#if ALCY_BACKEND_DIRECT_WASM
+      // The direct backends are built into every compiler; only the
+      // optional LLVM implementation has an availability question.
       return true;
-#else
-      return false;
-#endif
   }
   return false;
 }

@@ -6,8 +6,15 @@
 # toolchain and lets a build with no LLVM still emit a wasm module.
 source_set("wasm") {
   sources = [
+    "backend.cc",
+    "backend.h",
+    "emit.cc",
+    "emit.h",
+    "emit_compute.cc",
+    "emit_memory.cc",
     "module.cc",
     "module.h",
+    "opcodes.h",
     "reach.cc",
     "reach.h",
     "writer.cc",
@@ -15,6 +22,9 @@ source_set("wasm") {
   ]
   deps = [
     "//compiler:base_modules",
+    "//compiler/codegen",
+    "//compiler/diag",
+    "//compiler/i18n",
     "//compiler/ir",
   ]
   configs += [ "//compiler:alcy_config" ]
