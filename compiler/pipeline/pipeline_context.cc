@@ -12,6 +12,7 @@
 #include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/build/build_flag.h"
 #include "fpag/io/io_util.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"
@@ -82,7 +83,20 @@ u32 PipelineContext::parse_jobs() const {
   // Zero means the command line did not ask for threads, and one thread is
   // the answer: reading the source is a small part of a run, so spreading it
   // costs the passes that read what it built more than it saves.
+#if FPAG_BUILD_FLAG(IS_OS_ASMJS)
+  // A target without threads has nothing to spread the work over, and the
+  // count a caller asked for cannot make it appear. One is the answer here
+  // rather than at the loop because more than one is read as a promise: the
+  // syntax arena cuts a lane of itself for each parser it is told to expect,
+  // and a lane no parser takes is room the one parser that does the work
+  // cannot reach. A package whose arena is small -- the 32-bit targets
+  // reserve an eighth of what a 64-bit one does -- runs out of it while a
+  // third of it is sitting in lanes.
+  (void)jobs;
+  return 1;
+#else
   return jobs == 0 ? 1 : jobs;
+#endif
 }
 
 }  // namespace pipeline
