@@ -5,10 +5,6 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
-- [ ] Reserve the next ADR number in this file, so a branch claims it
-  before writing rather than after. 0032, 0037 and 0038 each collided
-  with work landing on `main` in between, and git merged two records
-  that carried one number without complaint - the filenames differ.
 - [ ] `unsafe` design as an ADR; implementation waits for the package
   suite.
 - [ ] Doc-comment collection in the parser (the SSG itself waits).
