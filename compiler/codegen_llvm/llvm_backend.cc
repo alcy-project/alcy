@@ -189,49 +189,52 @@ base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
   // Times come from `debug::current_timestamp_ns`, the clock
   // `ProfileSection` reads: an event recorded against another epoch
   // would nest under nothing and read as a root.
-  if (profiler != nullptr) {
-    // A thread-local stack of entries, because passes nest: a module
-    // pass runs function passes, which run loop passes. One entry per
-    // before-callback, popped by the matching after-callback, is what
-    // makes the nesting read in a trace viewer.
-    struct PassTimer {
-      explicit PassTimer(debug::Profiler* profiler) : profiler(profiler) {}
-      void push(llvm::StringRef name) {
-        // `runBeforePass` hands the string to the callback, so interning
-        // it here keeps the pool the events resolve into under the
-        // profiler rather than under the pass.
-        stack.push_back({profiler->intern(std::string(name)),
-                         ::debug::current_timestamp_ns()});
+  // A stack of entries, because passes nest: a module pass runs function
+  // passes, which run loop passes. One entry per before-callback, popped
+  // by the matching after-callback, is what makes the nesting read in a
+  // trace viewer.
+  struct PassTimer {
+    explicit PassTimer(debug::Profiler* profiler) : profiler(profiler) {}
+    void push(llvm::StringRef name) {
+      // `runBeforePass` hands the string to the callback, so interning
+      // it here keeps the pool the events resolve into under the
+      // profiler rather than under the pass.
+      stack.push_back({profiler->intern(std::string(name)),
+                       ::debug::current_timestamp_ns()});
+    }
+    void pop() {
+      if (stack.empty()) {
+        return;
       }
-      void pop() {
-        if (stack.empty()) {
-          return;
-        }
-        const Pending pending = stack.back();
-        stack.pop_back();
-        debug::ProfileEvent event;
-        event.name = pending.name;
-        event.category = profiler->intern("llvm-pass");
-        event.start_time_ns = pending.start_ns;
-        event.duration_ns = ::debug::current_timestamp_ns() - pending.start_ns;
-        event.thread_id = ::debug::current_thread_id();
-        event.process_id = ::debug::current_process_id();
-        profiler->record_event(event);
-      }
-      struct Pending {
-        str::StringPoolId name = str::INVALID_STRING_POOL_ID;
-        u64 start_ns = 0;
-      };
-      debug::Profiler* profiler;
-      // Nested passes are shallow, so a heap vector holds the whole stack
-      // without mattering; passes run rarely enough that one small
-      // allocation per optimize is noise against the pipeline itself.
-      std::vector<Pending> stack;
+      const Pending pending = stack.back();
+      stack.pop_back();
+      debug::ProfileEvent event;
+      event.name = pending.name;
+      event.category = profiler->intern("llvm-pass");
+      event.start_time_ns = pending.start_ns;
+      event.duration_ns = ::debug::current_timestamp_ns() - pending.start_ns;
+      event.thread_id = ::debug::current_thread_id();
+      event.process_id = ::debug::current_process_id();
+      profiler->record_event(event);
+    }
+    struct Pending {
+      str::StringPoolId name = str::INVALID_STRING_POOL_ID;
+      u64 start_ns = 0;
     };
-    // The passes below run inside this call, so the timer can be a
-    // local; a thread-local kept the first profiler it saw and reported
-    // a later run's passes through a stale pointer.
-    PassTimer timer{profiler};
+    debug::Profiler* profiler;
+    // Nested passes are shallow, so a heap vector holds the whole stack
+    // without mattering; passes run rarely enough that one small
+    // allocation per optimize is noise against the pipeline itself.
+    std::vector<Pending> stack;
+  };
+  // The timer is declared before the block that registers the callbacks,
+  // not in it: the passes it times run in the `mpm.run` below, past the
+  // end of that block, and a callback capturing a timer declared there
+  // would read a dead stack slot by then. A thread-local was the earlier
+  // shape and kept the first profiler it saw, so a later run reported
+  // through a stale pointer.
+  PassTimer timer{profiler};
+  if (profiler != nullptr) {
     pic.registerBeforeNonSkippedPassCallback(
         [&timer](llvm::StringRef name, const llvm::Any&) { timer.push(name); });
     pic.registerAfterPassCallback(

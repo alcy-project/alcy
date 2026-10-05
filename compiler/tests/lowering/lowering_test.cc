@@ -25,6 +25,7 @@
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profiler.h"
 #include "fpag/str/string_interner.h"
 #include "i18n/language.h"
 #include "ir/storage.h"
@@ -428,6 +429,49 @@ TEST_CASE("Optimization promotes stack allocas") {
             codegen_llvm::Target{"no-such-triple", ir::PointerWidth::W64},
             nullptr)
             .is_err());
+}
+
+TEST_CASE("Optimization records its passes when profiled") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "fn main() -> i32 {\n"
+                   "  x := 40\n"
+                   "  ret x + 2\n"
+                   "}\n"}});
+
+  Fixture f;
+  LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("lower_optimize_profile_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
+  codegen_llvm::LlvmIrEmitter emitter(module.get(),
+                                      std::move(result.lowered->storage),
+                                      &f.strings, host_target(), true);
+  std::move(emitter).emit();
+
+  debug::Profiler profiler;
+  profiler.start();
+  CHECK(
+      codegen_llvm::optimize_module(*module, host_target(), &profiler).is_ok());
+  profiler.stop();
+
+  // The timer behind these events has to outlive the callbacks that fill
+  // it; a timer scoped to the block that registers them is a dead stack
+  // slot by the time a pass runs, which is what ASan catches here.
+  bool saw_pass = false;
+  for (const debug::ProfileEvent& event : profiler.copy_events()) {
+    if (profiler.name(event.category) == "llvm-pass") {
+      saw_pass = true;
+      CHECK(!profiler.name(event.name).empty());
+    }
+  }
+  CHECK(saw_pass);
 }
 #endif
 
