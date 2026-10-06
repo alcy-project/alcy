@@ -55,6 +55,12 @@ class ModuleBuilder {
   // The module's one memory. `min_pages` is 64 KiB each.
   void set_memory(u32 min_pages);
 
+  // The module's one table, of funcref, and the functions its entries
+  // hold from `offset`. An indirect call names a table index, so a
+  // function value is the index its entry lives at.
+  void set_table(u32 min_size);
+  void add_element(u32 offset, std::span<const u32> functions);
+
   // A global with an i32 initial value; returns its global index.
   u32 add_global(ValType type, bool is_mutable, i32 init);
 
@@ -95,6 +101,10 @@ class ModuleBuilder {
     u32 index = 0;
   };
 
+  struct Element {
+    u32 offset = 0;
+    std::vector<u32> functions;
+  };
   std::vector<FuncType> types_;
   std::vector<Import> imports_;
   std::vector<Defined> functions_;
@@ -103,6 +113,9 @@ class ModuleBuilder {
   std::vector<Export> exports_;
   u32 memory_min_pages_ = 0;
   bool has_memory_ = false;
+  u32 table_min_size_ = 0;
+  bool has_table_ = false;
+  std::vector<Element> elements_;
   u32 data_end_ = 0;
   u32 start_ = 0;
   bool has_start_ = false;

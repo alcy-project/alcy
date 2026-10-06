@@ -47,6 +47,7 @@ using op::OP_BR;
 using op::OP_BR_IF;
 using op::OP_BR_TABLE;
 using op::OP_CALL;
+using op::OP_CALL_INDIRECT;
 using op::OP_DROP;
 using op::OP_ELSE;
 using op::OP_END;
@@ -162,6 +163,19 @@ base::Result<std::vector<u8>, codegen::EmitError> Emitter::run() {
   declare_runtime();
   if (choose_roots().is_err()) {
     return base::make_err(codegen::EmitError::Unsupported);
+  }
+  {
+    std::vector<u32> entries;
+    for (const ir::FunctionIdx index : storage_.functions().idx_range()) {
+      if (function_index_[index.idx] != NO_LOCAL) {
+        entries.push_back(function_index_[index.idx]);
+      }
+    }
+    if (!entries.empty()) {
+      // Slot i holds function i, so a function value is its own index.
+      builder_.set_table(RUNTIME_FUNCTIONS + static_cast<u32>(entries.size()));
+      builder_.add_element(RUNTIME_FUNCTIONS, entries);
+    }
   }
   if (emit_program().is_err()) {
     return base::make_err(codegen::EmitError::Unsupported);
@@ -744,8 +758,11 @@ Emitter::EmitResult Emitter::emit_call(const ir::Instruction& instr) {
   const ir::OperandIdxRange ops = instr.operands;
   DCHECK(!ops.empty());
   const ir::Operand& callee = storage_.operands()[ops.head()];
+  if (callee.is<ir::RegisterIdx>()) {
+    return emit_indirect_call(instr, callee);
+  }
   if (!callee.is<ir::FunctionIdx>() && !callee.is<ir::ExternalFunctionIdx>()) {
-    return unsupported(current_span_, "a call through a function value");
+    return unsupported(current_span_, "this call");
   }
 
   u32 callee_index = NO_LOCAL;
@@ -797,6 +814,78 @@ Emitter::EmitResult Emitter::emit_call(const ir::Instruction& instr) {
     }
   }
   call(callee_index);
+
+  if (aggregate_result) {
+    local_get(frame_local_);
+    i32_const(static_cast<i32>(slot));
+    op(OP_I32_ADD);
+    local_set(reg_base_[instr.dst.idx]);
+  } else if (instr.dst.is_valid() && reg_shape_[instr.dst.idx].words > 0) {
+    pop_words(reg_base_[instr.dst.idx], reg_shape_[instr.dst.idx].words);
+  }
+  return base::make_ok();
+}
+
+// A call through a function value: the value is {code, env}, the callee
+// takes the environment first, and the code word is the table slot an
+// indirect call names.
+Emitter::EmitResult Emitter::emit_indirect_call(const ir::Instruction& instr,
+                                                const ir::Operand& callee) {
+  const ir::OperandIdxRange ops = instr.operands;
+  const ir::RegisterIdx closure = callee.as_register();
+  const ir::TypeIdx closure_type = storage_.registers()[closure].type;
+  const ir::TypeTag closure_tag = storage_.types()[closure_type].tag;
+  if (closure_tag != ir::TypeTag::Func) {
+    return unsupported(current_span_, "a call through this value");
+  }
+  const ir::FuncType& signature =
+      storage_.func_types()[storage_.types()[closure_type].as_func()];
+
+  std::vector<ValType> params;
+  std::vector<ValType> results;
+  const std::optional<ValueShape> result = shape_of(signature.ret);
+  if (!result.has_value()) {
+    return unsupported(current_span_, "this call's result");
+  }
+  const bool aggregate_result =
+      is_aggregate_tag(storage_.types()[signature.ret].tag);
+  if (aggregate_result) {
+    params.push_back(ValType::I32);
+  }
+  params.push_back(ValType::I32);  // The environment.
+  for (const ir::TypeIdx param : signature.params) {
+    const std::optional<ValueShape> shape = shape_of(param);
+    if (!shape.has_value()) {
+      return unsupported(current_span_, "this call's parameters");
+    }
+    params.insert(params.end(), shape->words, shape->type);
+  }
+  if (!aggregate_result) {
+    results.assign(result->words, result->type);
+  }
+  const u32 type = builder_.add_type(FuncType{params, results});
+
+  u32 slot = NO_LOCAL;
+  if (aggregate_result) {
+    if (!instr.dst.is_valid()) {
+      return unsupported(current_span_, "this call's result");
+    }
+    slot = reg_slot_[instr.dst.idx];
+    DCHECK(slot != NO_LOCAL);
+    local_get(frame_local_);
+    i32_const(static_cast<i32>(slot));
+    op(OP_I32_ADD);
+  }
+  local_get(reg_base_[closure.idx] + 1);  // The environment.
+  for (u32 index = 1; index < ops.size(); ++index) {
+    if (push_operand(storage_.operands()[ops.head() + index]).is_err()) {
+      return base::make_err(codegen::EmitError::Unsupported);
+    }
+  }
+  local_get(reg_base_[closure.idx]);  // The table slot.
+  op(OP_CALL_INDIRECT);
+  body_.u32_leb(type);
+  body_.u32_leb(0);
 
   if (aggregate_result) {
     local_get(frame_local_);
@@ -872,6 +961,15 @@ Emitter::EmitResult Emitter::push_word(const ir::Operand& operand,
     case Payload::TagOf<ir::ImmutableIdx>:
       return push_immutable(storage_.immutables()[operand.as_immutable()],
                             word);
+    case Payload::TagOf<ir::FunctionIdx>: {
+      // The table slot the body lives at; an indirect call names it.
+      const u32 wasm = function_index_[operand.as_function().idx];
+      if (wasm == NO_LOCAL) {
+        return unsupported(current_span_, "this function value");
+      }
+      i32_const(static_cast<i32>(wasm));
+      return base::make_ok();
+    }
     default: return unsupported(current_span_, "this operand");
   }
 }

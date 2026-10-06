@@ -21,10 +21,12 @@ namespace {
 constexpr u8 TYPE_SECTION = 1;
 constexpr u8 IMPORT_SECTION = 2;
 constexpr u8 FUNCTION_SECTION = 3;
+constexpr u8 TABLE_SECTION = 4;
 constexpr u8 MEMORY_SECTION = 5;
 constexpr u8 GLOBAL_SECTION = 6;
 constexpr u8 EXPORT_SECTION = 7;
 constexpr u8 START_SECTION = 8;
+constexpr u8 ELEMENT_SECTION = 9;
 constexpr u8 CODE_SECTION = 10;
 constexpr u8 DATA_SECTION = 11;
 
@@ -117,6 +119,16 @@ void ModuleBuilder::set_memory(u32 min_pages) {
   memory_min_pages_ = min_pages;
 }
 
+void ModuleBuilder::set_table(u32 min_size) {
+  has_table_ = true;
+  table_min_size_ = min_size;
+}
+
+void ModuleBuilder::add_element(u32 offset, std::span<const u32> functions) {
+  elements_.push_back(
+      Element{offset, std::vector<u32>(functions.begin(), functions.end())});
+}
+
 u32 ModuleBuilder::add_global(ValType type, bool is_mutable, i32 init) {
   globals_.push_back(Global{type, is_mutable, init});
   return static_cast<u32>(globals_.size()) - 1;
@@ -167,6 +179,14 @@ std::vector<u8> ModuleBuilder::finish() const {
     }
     write_section(out, FUNCTION_SECTION, payload);
   }
+  if (has_table_) {
+    BinaryWriter payload;
+    payload.u32_leb(1);  // One table.
+    payload.byte(0x70);  // funcref.
+    payload.byte(0x00);  // No maximum.
+    payload.u32_leb(table_min_size_);
+    write_section(out, TABLE_SECTION, payload);
+  }
   if (has_memory_) {
     BinaryWriter payload;
     payload.u32_leb(1);  // One memory.
@@ -200,6 +220,21 @@ std::vector<u8> ModuleBuilder::finish() const {
     BinaryWriter payload;
     payload.u32_leb(start_);
     write_section(out, START_SECTION, payload);
+  }
+  if (!elements_.empty()) {
+    BinaryWriter payload;
+    payload.u32_leb(static_cast<u32>(elements_.size()));
+    for (const Element& element : elements_) {
+      payload.byte(0x00);  // Active, table 0.
+      payload.byte(0x41);  // i32.const
+      payload.i32_leb(static_cast<i32>(element.offset));
+      payload.byte(0x0B);
+      payload.u32_leb(static_cast<u32>(element.functions.size()));
+      for (const u32 function : element.functions) {
+        payload.u32_leb(function);
+      }
+    }
+    write_section(out, ELEMENT_SECTION, payload);
   }
   if (!functions_.empty()) {
     BinaryWriter payload;

@@ -23,6 +23,7 @@ constexpr u8 OP_BR_IF = 0x0D;
 constexpr u8 OP_BR_TABLE = 0x0E;
 constexpr u8 OP_RETURN = 0x0F;
 constexpr u8 OP_CALL = 0x10;
+constexpr u8 OP_CALL_INDIRECT = 0x11;
 constexpr u8 OP_DROP = 0x1A;
 constexpr u8 OP_SELECT = 0x1B;
 constexpr u8 OP_LOCAL_GET = 0x20;

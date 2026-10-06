@@ -143,6 +143,7 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       }
 
       if (tag == ir::TypeTag::Str || tag == ir::TypeTag::Slice ||
+          tag == ir::TypeTag::Func ||
           (tag == ir::TypeTag::Ref &&
            storage_.types()[storage_
                                 .ref_types()[storage_.types()[type].as_ref()]
@@ -186,8 +187,13 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       const ir::Operand& value = storage_.operands()[ops.head()];
       const ir::Operand& ptr = storage_.operands()[ops.head() + 1];
       const ir::TypeTag tag = storage_.types()[value.type].tag;
+      // An alloca's result is the address of its element, whatever the
+      // register's declared type says; the LLVM emitter stores the
+      // pointer word for the same reason.
+      const bool is_address = value.is<ir::RegisterIdx>() &&
+                              alloca_elem_[value.as_register().idx].is_valid();
 
-      if (is_aggregate_tag(tag)) {
+      if (!is_address && is_aggregate_tag(tag)) {
         const u32 size = static_cast<u32>(
             storage_.layout_of(value.type, target_.width).size);
         if (push_word(ptr, 0, ValType::I32).is_err() ||
@@ -200,6 +206,7 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       }
 
       if (tag == ir::TypeTag::Str || tag == ir::TypeTag::Slice ||
+          tag == ir::TypeTag::Func ||
           (tag == ir::TypeTag::Ref &&
            storage_.types()
                    [storage_.ref_types()[storage_.types()[value.type].as_ref()]
@@ -220,12 +227,13 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
         return base::make_ok();
       }
 
-      const std::optional<Access> access = access_for(tag);
+      const std::optional<Access> access =
+          access_for(is_address ? ir::TypeTag::Ptr : tag);
       if (!access.has_value()) {
         return unsupported(current_span_, ir::type_to_str(tag));
       }
       if (push_word(ptr, 0, ValType::I32).is_err() ||
-          push_operand(value).is_err()) {
+          push_word(value, 0, ValType::I32).is_err()) {
         return base::make_err(codegen::EmitError::Unsupported);
       }
       body_.byte(access->store);
@@ -410,6 +418,7 @@ Emitter::EmitResult Emitter::emit_field_projection(
     // because a data pointer has no element type the IR spelled.
     const bool fat =
         tag == ir::TypeTag::Str || tag == ir::TypeTag::Slice ||
+        tag == ir::TypeTag::Func ||
         ((tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) &&
          storage_.types()[storage_.ref_types()[storage_.types()[cur].as_ref()]
                               .pointee]

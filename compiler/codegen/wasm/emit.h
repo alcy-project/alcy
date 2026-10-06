@@ -102,6 +102,8 @@ class Emitter {
   EmitResult emit_cond_br(const ir::Instruction& instr);
   EmitResult emit_switch(const ir::Instruction& instr);
   EmitResult emit_call(const ir::Instruction& instr);
+  EmitResult emit_indirect_call(const ir::Instruction& instr,
+                                const ir::Operand& callee);
   EmitResult emit_ret(const ir::Instruction& instr);
   EmitResult emit_compute(const ir::Instruction& instr);
   EmitResult emit_memory(const ir::Instruction& instr);

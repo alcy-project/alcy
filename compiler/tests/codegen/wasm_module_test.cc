@@ -211,6 +211,43 @@ TEST_CASE("Imports take the first function indices") {
   CHECK(read_u32(sections[3].payload) == 1);
 }
 
+TEST_CASE("A table holds the functions its elements name") {
+  ModuleBuilder builder;
+  const u32 type = builder.add_type(FuncType{{}, {ValType::I32}});
+  const u32 function = builder.add_function(type);
+  builder.set_body(function, FuncBody{});
+  builder.set_table(3);
+  const u32 entries[1] = {function};
+  builder.add_element(2, entries);
+
+  const std::vector<u8> module = builder.finish();
+  std::vector<Section> sections = read_sections(module);
+  // Type, function, table, element, code.
+  CHECK(sections.size() == 5);
+  if (sections.size() != 5) {
+    return;
+  }
+  CHECK(sections[0].id == 1);
+  CHECK(sections[1].id == 3);
+  CHECK(sections[2].id == 4);
+  CHECK(sections[3].id == 9);
+  CHECK(sections[4].id == 10);
+
+  std::span<const u8> table = sections[2].payload;
+  CHECK(read_u32(table) == 1);  // One table.
+  CHECK(table[0] == 0x70);      // funcref.
+  CHECK(table[1] == 0x00);      // No maximum.
+  std::span<const u8> limits = table.subspan(2);
+  CHECK(read_u32(limits) == 3);
+
+  std::span<const u8> element = sections[3].payload;
+  CHECK(read_u32(element) == 1);  // One segment.
+  CHECK(element[0] == 0x00);      // Active, table 0.
+  CHECK(element[1] == 0x41);      // i32.const
+  std::span<const u8> offset = element.subspan(2);
+  CHECK(read_u32(offset) == 2);
+}
+
 TEST_CASE("Data segments are aligned and keep their offsets") {
   ModuleBuilder builder;
   builder.set_memory(1);
