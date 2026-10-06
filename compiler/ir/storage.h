@@ -190,7 +190,7 @@ inline TypeLayout type_layout(const StorageState& state,
     case TypeTag::Func: {
       // Code plus environment, whatever the signature says: every
       // function value fits two words.
-      return {word, word};
+      return {2 * word, word};
     }
     case TypeTag::Ref:
     case TypeTag::MutRef: {
