@@ -181,6 +181,103 @@ TEST_CASE("Manifest rejects library targets without paths") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Manifest parses the [spec] suite-only list") {
+  Fixture f;
+  constexpr std::string_view bytes =
+      "[package]\nname = \"core\"\nversion = \"0.1.0\"\n"
+      "\n"
+      "[spec]\nsuite-only = [\"Index\", \"Eq\"]\n";
+  base::Result<PackageManifest, diag::Reported> result =
+      parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  const PackageManifest manifest = std::move(result).unwrap();
+  CHECK(!f.bag.has_errors());
+  CHECK(manifest.suite_only_count == 2);
+  if (manifest.suite_only_count != 2) {
+    return;
+  }
+  CHECK(manifest.suite_only[0] == "Index");
+  CHECK(manifest.suite_only[1] == "Eq");
+  CHECK(verify_manifest(manifest).is_ok());
+}
+
+TEST_CASE("Manifest without a [spec] table seals nothing") {
+  Fixture f;
+  constexpr std::string_view bytes =
+      "[package]\nname = \"solo\"\nversion = \"2.0.0\"\n";
+  base::Result<PackageManifest, diag::Reported> result =
+      parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
+  CHECK(result.is_ok());
+  if (result.is_ok()) {
+    const PackageManifest manifest = std::move(result).unwrap();
+    CHECK(manifest.suite_only == nullptr);
+    CHECK(manifest.suite_only_count == 0);
+  }
+  // An empty table and an empty list are both the same as none at all.
+  constexpr std::string_view empty_table =
+      "[package]\nname = \"solo\"\nversion = \"2.0.0\"\n[spec]\n";
+  constexpr std::string_view empty_list =
+      "[package]\nname = \"solo\"\nversion = \"2.0.0\"\n"
+      "[spec]\nsuite-only = []\n";
+  for (const std::string_view table : {empty_table, empty_list}) {
+    base::Result<PackageManifest, diag::Reported> parsed = parse_manifest(
+        table, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
+    CHECK(parsed.is_ok());
+    if (!parsed.is_ok()) {
+      continue;
+    }
+    const PackageManifest manifest = std::move(parsed).unwrap();
+    CHECK(manifest.suite_only == nullptr);
+    CHECK(manifest.suite_only_count == 0);
+  }
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Manifest rejects bad [spec] tables") {
+  const std::string head = "[package]\nname = \"x\"\nversion = \"0.1.0\"\n";
+  struct Case {
+    std::string bytes;
+    std::string_view message;
+  };
+  const Case cases[] = {
+      {"spec = \"Index\"\n" + head,
+       "Manifest 'alcy.toml': [spec] must be a table"},
+      {head + "[spec]\nsuite-only = \"Index\"\n",
+       "Manifest 'alcy.toml': [spec] suite-only must be a list of strings"},
+      {head + "[spec]\nsuite-only = [\"Index\", 3]\n",
+       "Manifest 'alcy.toml': [spec] suite-only must be a list of strings"},
+      {head + "[spec]\nsuite-only = [\"Index\", \"\"]\n",
+       "Manifest 'alcy.toml': [spec] suite-only must be a list of strings"},
+      {head + "[spec]\nsuite-only = [\"Index\", \"Index\"]\n",
+       "Manifest 'alcy.toml': duplicate [spec] suite-only entry 'Index'"},
+      {head + "[spec]\nimplement = [\"Index\"]\n",
+       "Manifest 'alcy.toml': [spec] implement is reserved and not accepted "
+       "yet"},
+      {head + "[spec]\nfrobnicate = []\n",
+       "Manifest 'alcy.toml': unknown key in [spec]: 'frobnicate'"},
+  };
+  for (const Case& test_case : cases) {
+    Fixture f;
+    base::Result<PackageManifest, diag::Reported> result = parse_manifest(
+        test_case.bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
+    CHECK_MESSAGE(result.is_err(), test_case.bytes);
+    CHECK(f.bag.has_errors());
+    CHECK(f.bag.size() == 1);
+    if (f.bag.size() != 1) {
+      continue;
+    }
+    const diag::Diagnostic* const diag = f.bag.at(0);
+    CHECK(diag != nullptr);
+    if (diag == nullptr) {
+      continue;
+    }
+    CHECK(diag->message == test_case.message);
+  }
+}
+
 TEST_CASE("Suite manifest parses the std suite") {
   Fixture f;
   // The [suite] table of lib/std/alcy.toml, comments aside: the parser

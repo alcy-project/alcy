@@ -416,6 +416,14 @@ base::Result<void, ManifestError> verify_manifest(
       return base::make_err(ManifestError::EmptyModuleEntry);
     }
   }
+  if (manifest.suite_only_count > 0 && manifest.suite_only == nullptr) {
+    return base::make_err(ManifestError::NullSuiteOnly);
+  }
+  for (u32 i = 0; i < manifest.suite_only_count; ++i) {
+    if (manifest.suite_only[i].empty()) {
+      return base::make_err(ManifestError::EmptySuiteOnlyEntry);
+    }
+  }
   return base::make_ok();
 }
 
@@ -437,6 +445,9 @@ void report_manifest_error(ManifestError error,
     case ManifestError::NullModuleExport:
       detail = "module export count without an export array";
       break;
+    case ManifestError::NullSuiteOnly:
+      detail = "sealed spec count without a suite-only array";
+      break;
     case ManifestError::EmptyDependencyName:
       detail = "dependency with an empty name";
       break;
@@ -451,6 +462,9 @@ void report_manifest_error(ManifestError error,
       break;
     case ManifestError::EmptyModuleEntry:
       detail = "module list with an empty entry";
+      break;
+    case ManifestError::EmptySuiteOnlyEntry:
+      detail = "suite-only list with an empty entry";
       break;
   }
   const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
@@ -786,6 +800,80 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
     modules.wildcard = true;
   }
 
+  // The [spec] table names the specs this package seals to its suite,
+  // so only packages of that suite may implement them (ADR-0053).
+  // `implement` is the implementing side's reserved key; until its
+  // slice accepts it, naming it is an error rather than a no-op.
+  const std::string_view* suite_only = nullptr;
+  u32 suite_only_count = 0;
+  const auto spec_it = root.find("spec");
+  if (spec_it != root.end()) {
+    if (!spec_it->second.is_table()) {
+      return semantic_error(bag, filename, "[spec] must be a table");
+    }
+    const toml::table* const spec_table = spec_it->second.as_table();
+    for (const auto& [key, node] : *spec_table) {
+      const std::string_view field = key.str();
+      if (field == "suite-only") {
+        if (!node.is_array()) {
+          const u32 index = bag.emit<i18n::Key::PkgSpecSuiteOnlyNotStrings>(
+              diag::Severity::Error, diag::Stage::Pkg,
+              DiagCode::ManifestSemanticError, filename);
+          (void)index;
+          return base::make_err(diag::Reported{});
+        }
+        const toml::array* const array = node.as_array();
+        const u32 count = static_cast<u32>(array->size());
+        std::string_view* const names =
+            count > 0 ? static_cast<std::string_view*>(
+                            arena.alloc(sizeof(std::string_view) * count,
+                                        alignof(std::string_view)))
+                      : nullptr;
+        u32 filled = 0;
+        for (const toml::node& entry : *array) {
+          const auto text = entry.value<std::string_view>();
+          if (!text.has_value() || text->empty()) {
+            const u32 index = bag.emit<i18n::Key::PkgSpecSuiteOnlyNotStrings>(
+                diag::Severity::Error, diag::Stage::Pkg,
+                DiagCode::ManifestSemanticError, filename);
+            (void)index;
+            return base::make_err(diag::Reported{});
+          }
+          bool duplicate = false;
+          for (u32 i = 0; i < filled; ++i) {
+            if (names[i] == *text) {
+              duplicate = true;
+              break;
+            }
+          }
+          if (duplicate) {
+            const u32 index = bag.emit<i18n::Key::PkgSpecSuiteOnlyDuplicate>(
+                diag::Severity::Error, diag::Stage::Pkg,
+                DiagCode::ManifestSemanticError, filename, *text);
+            (void)index;
+            return base::make_err(diag::Reported{});
+          }
+          names[filled++] = copy_str(arena, *text);
+        }
+        suite_only = names;
+        suite_only_count = filled;
+        continue;
+      }
+      if (field == "implement") {
+        const u32 index = bag.emit<i18n::Key::PkgSpecImplementReserved>(
+            diag::Severity::Error, diag::Stage::Pkg,
+            DiagCode::ManifestSemanticError, filename);
+        (void)index;
+        return base::make_err(diag::Reported{});
+      }
+      const u32 index = bag.emit<i18n::Key::PkgSpecUnknownKey>(
+          diag::Severity::Error, diag::Stage::Pkg,
+          DiagCode::ManifestSemanticError, filename, field);
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
+  }
+
   return base::make_ok(PackageManifest{
       .name = copy_str(arena, *name),
       .version = std::move(version).unwrap(),
@@ -796,6 +884,8 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
       .bin_count = bin_count,
       .lib = lib,
       .modules = modules,
+      .suite_only = suite_only,
+      .suite_only_count = suite_only_count,
   });
 }
 

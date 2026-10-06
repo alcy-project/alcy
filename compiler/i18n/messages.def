@@ -281,6 +281,10 @@
   F(PkgDependencyTooManySources, "Manifest '{}': dependency '{}' names more than one source") \
   F(PkgDependencyUnknownField, "Manifest '{}': dependency '{}' has an unknown field '{}'") \
   F(PkgManifestInvalid, "Manifest '{}': {}") \
+  F(PkgSpecImplementReserved, "Manifest '{}': [spec] implement is reserved and not accepted yet") \
+  F(PkgSpecSuiteOnlyDuplicate, "Manifest '{}': duplicate [spec] suite-only entry '{}'") \
+  F(PkgSpecSuiteOnlyNotStrings, "Manifest '{}': [spec] suite-only must be a list of strings") \
+  F(PkgSpecUnknownKey, "Manifest '{}': unknown key in [spec]: '{}'") \
   F(PkgTomlSyntaxError, "TOML syntax error: {}") \
   F(PkgToolchainFreestandingNotBool, "Toolchain '{}': freestanding must be a bool") \
   F(PkgToolchainLinkArgsNotStrings, "Toolchain '{}': link-args must be a list of strings") \

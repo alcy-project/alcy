@@ -158,6 +158,12 @@ struct PackageManifest {
   // Module membership from the [modules] table. Absent means every
   // discovered source file.
   ModuleSet modules;
+  // Specs this package seals to its suite, from the optional [spec]
+  // table (`suite-only = [...]`); an arena-owned array, possibly
+  // empty. An implementation of a sealed spec is refused outside the
+  // declaring package's suite (ADR-0053).
+  const std::string_view* suite_only = nullptr;
+  u32 suite_only_count = 0;
 };
 
 // A suite manifest ([suite] table): a named set of packages under one
@@ -179,11 +185,13 @@ enum class ManifestError : u8 {
   NullBinArray,
   NullModuleInclude,
   NullModuleExport,
+  NullSuiteOnly,
   EmptyDependencyName,
   EmptyDependencyPath,
   EmptyBinPath,
   EmptyLibPath,
   EmptyModuleEntry,
+  EmptySuiteOnlyEntry,
 };
 
 // Pure structural verifier: pointer/count pairs agree and the strings
