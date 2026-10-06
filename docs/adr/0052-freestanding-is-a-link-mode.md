@@ -68,3 +68,15 @@ syscalls, so it can read and write without libc, and a libc-free
 allocator behind `alloc`/`dealloc`. Until the allocator lands, a
 freestanding program that allocates fails at the link with the
 missing libc symbol, which is honest but not the destination.
+
+## Staged landing
+
+**Landed:** the link mode, the compiler's `_start` with the exit
+syscall, and both follow-ups above. The freestanding runtime reaches
+the kernel through raw syscalls on x86-64, aarch64, and riscv64:
+`print`, `println`, and `panic` write with the write syscall,
+`panic` then exits nonzero, and `alloc`/`dealloc` map and unmap
+anonymous memory, so the heap containers work without a C
+allocator. A freestanding program prints and grows a `Vec` end to
+end in the exe suite, with no crt, no loader, and no libc in the
+binary.
