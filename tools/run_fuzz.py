@@ -207,8 +207,15 @@ def replay(paths: list[str]) -> int:
     for name in TARGETS:
         for target_path in paths:
             print(f"==> {name} {target_path}", flush=True)
+            argv = [str(binary(name))]
+            # A directory is a corpus, and libFuzzer keeps mutating one
+            # unless it is told how many runs to make. Zero replays the
+            # inputs already there and stops; a file is already one run.
+            if os.path.isdir(target_path):
+                argv.append("-runs=0")
+            argv.append(str(target_path))
             completed = subprocess.run(
-                [str(binary(name)), str(target_path)],
+                argv,
                 cwd=project_root_dir,
                 env=run_environment(),
                 stdout=subprocess.DEVNULL,
