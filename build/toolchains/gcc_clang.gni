@@ -89,7 +89,11 @@ template("gcc_clang") {
       extra_ldflags = ""
     }
 
-    md = "-MMD"
+    # System headers are dependencies too. The vendored trees (toml++,
+    # LLVM) are included through `-isystem` so their warnings do not fail
+    # the build, and `-MMD` would leave a submodule update rebuilding
+    # nothing: the compiled-in copy would stay old while the tree moved.
+    md = "-MD"
     object_subdir = "{{target_out_dir}}/{{label_name}}"
 
     tool("cc") {
