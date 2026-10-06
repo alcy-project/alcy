@@ -59,7 +59,7 @@ so a verifier message and a dump name the same row.
 
 struct Vec<u8>(ptr, u32)          // #12
 enum Option<i32> { Some(i32), None }   // #9
-extern fn alcy_print(msg: ptr, len: u32)   // #2
+extern fn alcy_print(ptr, u32)    // #2
 ```
 
 - One declaration per struct and enum in the storage, in table order,
@@ -82,21 +82,26 @@ b0:
 }
 ```
 
-- The header is `fn <name>#<idx> (<params>) -> <return> {`, then
-  `// #<idx> <kind>` on the same line when the index or kind is worth
-  showing: the index always, the kind when it is not `free`. The
-  parameter list comes from the entry block's block parameters, in
-  order, each as `vN: T`. The return type is the function's. A `void`
-  return omits `-> T`.
+- The header is `fn <name> (<params>) -> <return> {`, followed by
+  `// #<idx>` on the same line: the function's storage index, and the
+  kind word (`free`, `assoc`, `method`, `foreign`) when it is not
+  `free`. The name is the function's own; `name#idx` is used instead
+  when two dumped functions share a name. The parameter list comes from
+  the entry block's block parameters, in order, each as `vN: T`. The
+  return type is the function's. A `void` return omits `-> T`.
 - Function references in instructions print the name; when two dumped
   functions share a name, references print `name#idx` instead.
 - A block is `bN:` alone, or `bN (vA: T, vB: T):` when it takes
-  parameters. Blocks print in function order, which is storage order.
+  parameters; the entry block's parameters are the function header's and
+  are not repeated. Blocks print in function order, which is storage
+  order.
 - Instructions are indented two spaces and print in block order.
-- A trailing `// <file>:<offset>+<length>` comment appears when the
-  instruction has a span whose file has a name. `<offset>` and
-  `<length>` are the span's bytes. When the file has no name, the
-  comment is `// ?:<offset>+<length>`.
+- One trailing comment per instruction, in two parts separated by two
+  spaces: an `alloca`'s address name when the register has one (`x`,
+  `x (param)`, `x (capture)`, both flags joined by a comma), then the
+  span as `<file>:<offset>+<length>`. The span part is omitted when the
+  instruction has none, and prints `?:<offset>+<length>` when its file
+  has no name.
 
 ### 2.4 Types
 
@@ -134,7 +139,7 @@ Named values (`@function`, immutables) print inline.
 | Opcode | Text |
 |---|---|
 | `Noop` | `nop` |
-| `Alloca` | `v = alloca T` (T is the destination register's type) |
+| `Alloca` | `v = alloca T` (T is the destination register's type; a size operand other than the immediate `1` prints as `alloca T, <size>`) |
 | `Load` | `v = *p` |
 | `Store` | `*p = v` |
 | `GetElementPtr` | `v = addr(base, i, …)` |

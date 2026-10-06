@@ -33,16 +33,20 @@ source_set("ir") {
     "storage.h",
     "storage_builder.cc",
     "storage_builder.h",
+    "text_dump.cc",
+    "text_dump.h",
     "type.cc",
     "type.h",
     "type_util.cc",
     "type_util.h",
     "verifier.cc",
     "verifier.h",
+    "write_input.h",
   ]
   deps = [
     "//compiler:base_modules",
     "//compiler/diag",
+    "//third_party/fmt",
   ]
   configs += [ "//compiler:alcy_config" ]
 }
