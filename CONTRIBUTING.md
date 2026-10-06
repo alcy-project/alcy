@@ -59,6 +59,13 @@ the parser, and the grammar disagreeing. `check.sh` runs both and
 `measure_gates.py` times both. See
 [docs/adr/0041-alcy-treesitter-grammar.md](docs/adr/0041-alcy-treesitter-grammar.md).
 
+Performance work has its own loop: a generated corpus, instruction counts
+instead of wall clock, a profile that names the function, and an emitted-IR
+comparison as the equivalence proof. `uv run ./tools/perf.py` runs the
+measurements, and
+[compiler/docs/performance.md](compiler/docs/performance.md) is the loop they
+are steps in.
+
 To automatically fix code style and lint issues:
 
 ```bash

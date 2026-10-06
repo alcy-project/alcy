@@ -21,6 +21,9 @@ uv run ./tools/run.py --target=tests --mode=debug
 # All targets (compiler, tests, benchmarks):
 uv run ./tools/build.py --target=all --mode=release
 
+# A release build that keeps its symbols, for a profile:
+uv run ./tools/build.py --target=alcy --mode=release \
+  --build-subdir=opt --gn-arg=perf_symbols=true
 ```
 
 `default` builds the compiler group only; test and benchmark executables
@@ -28,7 +31,11 @@ are not referenced by any group, so they build solely under `all` (or when
 named explicitly, e.g. `--target=tests`).
 For a complete list of supported flags and options, pass `--help` to any script.
 
-Build output goes to `out/<build-subdir>/` (`out/build/` by default).
+Build output goes to `out/<build-subdir>/` (`out/build/` by default). A
+`perf_symbols` build is the exception to the strip a release build applies:
+the binary with symbols is `out/opt/exe.unstripped/alcy`, and `out/opt/alcy`
+beside it is the stripped one. See
+[performance.md](performance.md) for what to do with it.
 
 ## How the LLVM dependency works
 
