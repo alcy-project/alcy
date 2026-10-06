@@ -22,10 +22,12 @@ that still carries LLVM's default layout answers those for the host.
   `emit_object(module, target)` writes a relocatable object buffer into
   memory, `emit_ir` and `emit_bitcode` the module in the two forms a tool
   outside the compiler can read.
-- `add_runtime_definitions(module, target)` defines the `alcy_*`
-  functions in the module. The libc bindings they name follow the
-  target's OS, so a Windows target gets `_write` and `_aligned_malloc`
-  whoever is doing the building.
+- `add_runtime_definitions(module, target, freestanding)` defines the
+  `alcy_*` functions in the module, each only when the program
+  declared it. The libc bindings they name follow the target's OS, so
+  a Windows target gets `_write` and `_aligned_malloc` whoever is
+  doing the building; a freestanding runtime reaches the kernel
+  through raw syscalls instead.
 
 ## Input requirements
 

@@ -123,9 +123,10 @@ replaced. The foundations are in `roadmap.md`.
   are the linker's symbols, called behind the gate, over the ABI of
   scalars, raw pointers, and `()`.
   A freestanding link mode followed: `freestanding = true` in the
-  toolchain file, the compiler's `_start` ending through the exit
-  syscall, a runtime defined per declaration, and no crt, loader, or
-  libc in the link.
+  toolchain file, the compiler's `_start`, a per-declaration runtime
+  reaching the kernel through raw syscalls, and an `mmap`-backed
+  allocator, so `print` and the heap containers run with no crt, no
+  loader, and no libc.
   Designed in `docs/adr/0050-unsafe-is-a-gate-on-operations.md`,
   `docs/adr/0051-extern-c-for-a-minimal-abi.md`, and
   `docs/adr/0052-freestanding-is-a-link-mode.md`.

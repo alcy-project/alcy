@@ -56,7 +56,7 @@ struct EmittedModule {
     {
       PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.profiler, "runtime",
                                                "backend");
-      add_runtime_definitions(*module, request.target);
+      add_runtime_definitions(*module, request.target, request.freestanding);
     }
     if (!request.optimize) {
       return base::make_ok();

@@ -14,7 +14,8 @@ namespace codegen_llvm {
 // Defines the program runtime in `module`: `alcy_print`, `alcy_println`,
 // `alcy_panic`, `alcy_sys_write`, `alcy_alloc`, and `alcy_dealloc`,
 // along with the internal helper they share. A declaration the program
-// already made for one of them is filled in rather than duplicated.
+// already made for one of them is filled in rather than duplicated, and
+// a piece the program never declared is not defined at all.
 //
 // The runtime is defined here rather than compiled from a C source on
 // every build, so no system compiler is spawned for it and it joins the
@@ -23,7 +24,10 @@ namespace codegen_llvm {
 // Pointer-sized values follow `target.width`, which must be the width the
 // program was lowered with, and the libc bindings follow the target's OS:
 // a Windows target gets `_write` and `_aligned_malloc` whoever is
-// building it.
-void add_runtime_definitions(llvm::Module& module, const Target& target);
+// building it. A freestanding runtime reaches the kernel through raw
+// syscalls instead, so its pieces carry no libc call at all.
+void add_runtime_definitions(llvm::Module& module,
+                             const Target& target,
+                             bool freestanding = false);
 
 }  // namespace codegen_llvm

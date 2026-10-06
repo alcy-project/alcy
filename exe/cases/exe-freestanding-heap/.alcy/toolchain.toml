@@ -1,0 +1,4 @@
+# No startup objects, no dynamic linker, and no C library: print and
+# the allocator reach the kernel through raw syscalls.
+# See docs/adr/0052-freestanding-is-a-link-mode.md.
+freestanding = true

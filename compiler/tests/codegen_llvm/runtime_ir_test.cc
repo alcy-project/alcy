@@ -174,6 +174,38 @@ TEST_CASE("Runtime follows the target width") {
   check_definition(module, "alcy_alloc", signature(pointer, {usize, usize}));
 }
 
+TEST_CASE("A freestanding runtime calls no libc") {
+  llvm::LLVMContext context;
+  llvm::Module module("runtime_ir_test", context);
+  const auto usize = llvm::Type::getInt64Ty(context);
+  const auto void_ty = llvm::Type::getVoidTy(context);
+  const auto pointer = opaque_pointer(context);
+
+  // Every piece a program could use, so the whole runtime is built
+  // and any libc reference would show.
+  declare(module, "alcy_print", signature(void_ty, {pointer, usize}));
+  declare(module, "alcy_println", signature(void_ty, {pointer, usize}));
+  declare(module, "alcy_panic", signature(void_ty, {pointer, usize}));
+  declare(
+      module, "alcy_sys_write",
+      signature(void_ty, {llvm::Type::getInt32Ty(context), pointer, usize}));
+  declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
+  declare(module, "alcy_dealloc", signature(void_ty, {pointer, usize, usize}));
+
+  add_runtime_definitions(module, target_of(ir::PointerWidth::W64),
+                          /*freestanding=*/true);
+
+  CHECK(!llvm::verifyModule(module));
+  CHECK(module.getFunction("write") == nullptr);
+  CHECK(module.getFunction("posix_memalign") == nullptr);
+  CHECK(module.getFunction("free") == nullptr);
+  CHECK(module.getFunction("abort") == nullptr);
+  // The pieces reach the kernel through the syscall helper instead.
+  CHECK(module.getFunction("alcy_syscall") != nullptr);
+  const std::string text = module_text(module);
+  CHECK(text.find("asm sideeffect") != std::string::npos);
+}
+
 TEST_CASE("Runtime reaches libc the way the platform expects") {
   llvm::LLVMContext context;
   llvm::Module module("runtime_ir_test", context);

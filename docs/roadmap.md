@@ -24,15 +24,15 @@ peripheral work lives in `backlog.md`. The language record lives in
   values, and calls go through values. The owning environment —
   non-Copy captures and closures that escape their frame — is a
   follow-up in `deferred.md`.
-- [ ] C FFI and freestanding.
+- [x] C FFI and freestanding.
 
   In slices: the `unsafe` gate and the standard library's migration
-  to it (landed), raw pointers with casts, dereference, and offset
-  (landed), `extern "C"` declarations against the system libc
-  (landed), a freestanding link with the compiler's `_start` and an
-  exit syscall (landed), then raw syscalls and an allocator without
-  libc. Needs the driver work for nostdlib-style links; the libc
-  fight must not gate the FFI value. Designed in
+  to it, raw pointers with casts, dereference, and offset,
+  `extern "C"` declarations against the system libc, and the
+  freestanding link mode: the compiler's `_start`, a per-declaration
+  runtime reaching the kernel through raw syscalls, and an
+  `mmap`-backed allocator, so `print` and the heap containers run
+  with no crt, no loader, and no libc. Designed in
   `docs/adr/0050-unsafe-is-a-gate-on-operations.md`,
   `docs/adr/0051-extern-c-for-a-minimal-abi.md`, and
   `docs/adr/0052-freestanding-is-a-link-mode.md`.

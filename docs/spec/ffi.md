@@ -94,10 +94,12 @@ foreclose the baremetal story.
   but the first. See
   `docs/adr/0052-freestanding-is-a-link-mode.md`.
 - A runtime piece is defined only when the program declares it, so a
-  freestanding program carries only what it uses. Raw syscalls and a
-  libc-free allocator are the remaining slices; until they land, a
-  freestanding program that allocates fails at the link with the
-  missing libc symbol.
+  freestanding program carries only what it uses. The pieces reach
+  the kernel through raw syscalls: `print`, `println`, and `panic`
+  write with the write syscall, `panic` then exits nonzero, and
+  `alloc`/`dealloc` map and unmap anonymous memory, so the heap
+  containers work without a C allocator. The sequences are written
+  for x86-64, aarch64, and riscv64.
 
 ## Layout and statics
 
