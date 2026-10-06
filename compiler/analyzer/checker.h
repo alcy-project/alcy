@@ -500,11 +500,26 @@ class Checker {
   // whose tail matched, and named a package by walking the roots.
   std::vector<std::unordered_map<std::string_view, u32>> children_by_tail_;
   std::unordered_map<std::string_view, u32> root_by_identity_;
+  // An address as a key. The default hash is the address itself, whose low
+  // bits carry the alignment every such key shares, so a table with a
+  // power-of-two bucket count puts them in every k-th bucket. Mixing the bits
+  // spreads them.
+  struct AddressHash {
+    usize operator()(const void* address) const {
+      usize bits = reinterpret_cast<usize>(address);
+      bits >>= 4;
+      bits ^= bits >> 15;
+      bits *= 0x9e3779b1u;
+      bits ^= bits >> 13;
+      return bits;
+    }
+  };
   // Where a signature and a method sit in their module, by address. Both
   // tables are deques, so an address a caller holds stays the one it holds,
   // and resolving a call site otherwise walked every function in the package
   // to turn its pointer back into a position.
-  std::unordered_map<const void*, std::pair<u32, u32>> position_by_address_;
+  std::unordered_map<const void*, std::pair<u32, u32>, AddressHash>
+      position_by_address_;
   // Registers a function and answers the slot it went into, which is what a
   // call site holds and what the positions above are keyed by.
   CheckedModule::FnSig& add_function(u32 module, CheckedModule::FnSig sig);
