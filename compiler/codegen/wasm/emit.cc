@@ -77,7 +77,6 @@ using op::OP_RETURN;
 using op::OP_SELECT;
 using op::OP_UNREACHABLE;
 
-#if BUILD_FLAG(IS_DEBUG)
 // A definition whose aggregate result has to live somewhere the frame
 // owns: a call's sret destination, a load's copy target, an aggregate
 // built in place.
@@ -93,6 +92,7 @@ bool is_aggregate_tag(ir::TypeTag tag) {
          tag == T::Array;
 }
 
+#if BUILD_FLAG(IS_DEBUG)
 bool is_terminator(ir::Opcode op) {
   using O = ir::Opcode;
   return op == O::Br || op == O::CondBr || op == O::Switch || op == O::Ret ||
