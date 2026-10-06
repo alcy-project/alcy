@@ -7,6 +7,8 @@ source_set("diag") {
     "bag.h",
     "diagnostic.cc",
     "diagnostic.h",
+    "json.cc",
+    "json.h",
     "render.cc",
     "render.h",
     "span.cc",
@@ -21,6 +23,7 @@ source_set("diag") {
     "//compiler:base_modules",
     "//compiler/i18n",
     "//compiler/source",
+    "//compiler/text",
   ]
   configs += [ "//compiler:alcy_config" ]
 }

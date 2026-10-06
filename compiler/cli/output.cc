@@ -17,9 +17,8 @@
 #include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/json.h"
 #include "diag/render.h"
-#include "diag/span.h"
-#include "diag/stage.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
@@ -38,6 +37,7 @@
 
 namespace cli {
 
+using text::append_json_number;
 using text::append_json_string;
 
 namespace {
@@ -71,108 +71,6 @@ void append_diagnostic_text(std::string& out,
                             const diag::RenderOptions& options) {
   DCHECK(!diagnostic.has_primary_span);
   out += diag::render(diagnostic, options);
-}
-
-const char* severity_name(diag::Severity severity) {
-  switch (severity) {
-    case diag::Severity::Note: return "note";
-    case diag::Severity::Warning: return "warning";
-    case diag::Severity::Error: return "error";
-  }
-  return "error";
-}
-
-// The component a code came from, in the spelling the module directory
-// uses, so a tool reading `--json` sees the same name a source file does
-// and never has to know the letter table.
-const char* stage_name(diag::Stage stage) {
-  switch (stage) {
-    case diag::Stage::Lexer: return "lexer";
-    case diag::Stage::Parser: return "parser";
-    case diag::Stage::Analyzer: return "analyzer";
-    case diag::Stage::Lowering: return "lowering";
-    case diag::Stage::Borrow: return "borrow";
-    case diag::Stage::Ir: return "ir";
-    case diag::Stage::Pkg: return "pkg";
-    case diag::Stage::Pipeline: return "pipeline";
-    case diag::Stage::CodegenLlvm: return "codegen_llvm";
-    case diag::Stage::CodegenNative: return "codegen";
-  }
-  return "lexer";
-}
-
-// Numbers are written as decimal digits with no locale and no quoting,
-// which is all a JSON number is. Doing it here rather than through the
-// formatter keeps the raw-string literals below free of brace escaping,
-// where a `}` that is not a placeholder is easy to miscount.
-template <typename T>
-void append_json_number(std::string& out, T value) {
-  fmt::format_to(std::back_inserter(out), "{}", value);
-}
-
-// A span is only meaningful against a file the reader can reopen, so a
-// diagnostic that never got one emits the field as null rather than as
-// offsets into nothing.
-void append_span(std::string& out,
-                 const diag::Span& span,
-                 const source::SourceManager* sources) {
-  const std::optional<std::string_view> name =
-      sources != nullptr ? sources->name(span.file) : std::nullopt;
-  if (!name.has_value()) {
-    out += "null";
-    return;
-  }
-  out += R"({"file":)";
-  append_json_string(out, *name);
-  out += R"(,"offset":)";
-  append_json_number(out, span.offset);
-  out += R"(,"length":)";
-  append_json_number(out, span.length);
-  out += '}';
-}
-
-void append_diagnostic_json(std::string& out,
-                            const diag::Diagnostic& diagnostic,
-                            const source::SourceManager* sources) {
-  fmt::format_to(std::back_inserter(out),
-                 R"json({{"severity":"{}","code":)json",
-                 severity_name(diagnostic.severity));
-  // A message from outside a check area carries no code, and null says so
-  // where one would imply that exists. What a code *is* arrives as its
-  // two parts rather than as a string to be parsed: a tool matches the
-  // printed form, and reads the component and the id without having to
-  // know the letter table.
-  if (diagnostic.code.has_value()) {
-    fmt::format_to(std::back_inserter(out),
-                   R"json({{"stage":"{}","local_id":{}}})json",
-                   stage_name(diagnostic.code->stage), diagnostic.code->id);
-  } else {
-    out += "null";
-  }
-  out += R"(,"message":)";
-  append_json_string(out, diagnostic.message);
-  out += R"(,"span":)";
-  if (diagnostic.has_primary_span) {
-    append_span(out, diagnostic.primary_span, sources);
-  } else {
-    out += "null";
-  }
-  if (diagnostic.label_count == 0) {
-    out += '}';
-    return;
-  }
-  out += R"(,"labels":[)";
-  for (u32 i = 0; i < diagnostic.label_count; ++i) {
-    if (i > 0) {
-      out += ',';
-    }
-    out += R"({"span":)";
-    append_span(out, diagnostic.labels[i].span, sources);
-    out += R"(,"message":)";
-    append_json_string(out, diagnostic.labels[i].message);
-    out += '}';
-  }
-  out += "]}";
 }
 
 // An id the profiler never interned points outside its pool, so it is
@@ -502,18 +400,6 @@ void record_output(const std::string& output, Envelope& envelope) {
 // Composes the note that follows a bag whose arena was spent. It is
 // written here rather than emitted into the bag, which has no room left
 // by definition; the caller keeps the text alive while it renders.
-std::string dropped_note(u32 dropped, i18n::Language language) {
-  fmt::memory_buffer text;
-  if (dropped == 1) {
-    i18n::format_to<i18n::Key::CliDiagnosticsDroppedSingular>(
-        std::back_inserter(text), language, dropped);
-  } else {
-    i18n::format_to<i18n::Key::CliDiagnosticsDroppedPlural>(
-        std::back_inserter(text), language, dropped);
-  }
-  return std::string(text.data(), text.size());
-}
-
 std::string render_diagnostics(const Envelope& envelope,
                                const diag::RenderOptions& options) {
   std::string out;
@@ -523,7 +409,8 @@ std::string render_diagnostics(const Envelope& envelope,
     });
     const u32 dropped = envelope.bag->dropped_count();
     if (dropped > 0) {
-      const std::string note = dropped_note(dropped, options.language);
+      const std::string note =
+          diag::dropped_diagnostics_note(dropped, options.language);
       append_diagnostic_text(out, diag::message(diag::Severity::Note, note),
                              options);
     }
@@ -626,32 +513,13 @@ std::string render_json(const Envelope& envelope, i18n::Language language) {
   out += R"(,"peak_memory_bytes":)";
   append_json_number(out, envelope.peak_memory_bytes);
   out += '}';
-  out += R"(,"diagnostics":[)";
-  {
-    // A reader of the document wants every error in one array, so a
-    // failure the envelope carries counts as one more rather than as a
-    // summary that no other failure has.
-    u32 index = 0;
-    const auto append_one = [&](const diag::Diagnostic& diagnostic) {
-      if (index > 0) {
-        out += ',';
-      }
-      ++index;
-      append_diagnostic_json(out, diagnostic, envelope.sources);
-    };
-    if (envelope.bag != nullptr) {
-      envelope.bag->for_each(append_one);
-      const u32 dropped = envelope.bag->dropped_count();
-      if (dropped > 0) {
-        const std::string note = dropped_note(dropped, language);
-        append_one(diag::message(diag::Severity::Note, note));
-      }
-    }
-    if (envelope.failure.has_value()) {
-      append_one(*envelope.failure);
-    }
-  }
-  out += ']';
+  out += R"(,"diagnostics":)";
+  // A reader of the document wants every error in one array, so a
+  // failure the envelope carries counts as one more rather than as a
+  // summary that no other failure has.
+  diag::append_diagnostics_json(
+      out, envelope.bag, envelope.sources, language,
+      envelope.failure.has_value() ? &*envelope.failure : nullptr);
   // Only when there is something to carry: an empty array would say the
   // trace ran and recorded nothing, which is a different statement.
   if (!envelope.trace.events.empty()) {
