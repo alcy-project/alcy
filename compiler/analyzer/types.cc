@@ -829,12 +829,9 @@ ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
 }
 
 const GenericInstance* Checker::generic_find(ir::TypeIdx idx) const {
-  for (const GenericInstance& instance : generic_instances) {
-    if (instance.type.idx == idx.idx) {
-      return &instance;
-    }
-  }
-  return nullptr;
+  const auto found = instance_by_type_.find(idx.idx);
+  return found == instance_by_type_.end() ? nullptr
+                                          : &generic_instances[found->second];
 }
 
 u32 Checker::nominal_index(const NominalEntry* entry) {
@@ -997,26 +994,33 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
     (void)index;
     return error_type();
   }
-  for (const GenericInstance& instance : generic_instances) {
-    if (instance.nominal == nominal && instance.args == args) {
-      return instance.type;
+  // An instance already minted for these arguments is the one to reuse. The
+  // search is over the instances of this nominal: an instantiation request
+  // scans them, and a package requests one per site that spells it.
+  if (nominal < instances_by_nominal_.size()) {
+    for (u32 index : instances_by_nominal_[nominal]) {
+      const GenericInstance& instance = generic_instances[index];
+      if (instance.args == args) {
+        return instance.type;
+      }
     }
-  }
-  // Index equality under-compares compound arguments: tuple types are
-  // re-minted on each resolution, so two spellings of one
-  // instantiation carry different indices. Fall back to structural
-  // equality before minting another; instances are interned once and
-  // shared by identity.
-  for (const GenericInstance& instance : generic_instances) {
-    if (instance.nominal != nominal || instance.args.size() != args.size()) {
-      continue;
-    }
-    bool same = true;
-    for (usize i = 0; same && i < args.size(); ++i) {
-      same = types_equal(instance.args[i], args[i]);
-    }
-    if (same) {
-      return instance.type;
+    // Index equality under-compares compound arguments: tuple types are
+    // re-minted on each resolution, so two spellings of one
+    // instantiation carry different indices. Fall back to structural
+    // equality before minting another; instances are interned once and
+    // shared by identity.
+    for (u32 index : instances_by_nominal_[nominal]) {
+      const GenericInstance& instance = generic_instances[index];
+      if (instance.args.size() != args.size()) {
+        continue;
+      }
+      bool same = true;
+      for (usize i = 0; same && i < args.size(); ++i) {
+        same = types_equal(instance.args[i], args[i]);
+      }
+      if (same) {
+        return instance.type;
+      }
     }
   }
   const NominalEntry& entry = nominals[nominal];
@@ -1043,6 +1047,11 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
       is_struct ? builder.reserve_struct(name) : builder.reserve_enum(name);
   generic_instances.push_back(GenericInstance{nominal, args, reserved});
   const usize instance_index = generic_instances.size() - 1;
+  instance_by_type_.emplace(reserved.idx, static_cast<u32>(instance_index));
+  if (instances_by_nominal_.size() <= nominal) {
+    instances_by_nominal_.resize(nominal + 1);
+  }
+  instances_by_nominal_[nominal].push_back(static_cast<u32>(instance_index));
   inst_numbering.push_back(reserved);
   // A sequence must be contiguous in the type table, and the arguments
   // are arbitrary existing nodes, so each is copied in.

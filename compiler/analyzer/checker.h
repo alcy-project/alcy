@@ -121,6 +121,12 @@ class Checker {
   // Coherence is checked against this as each impl registers.
   std::vector<SpecImplEntry> spec_impls;
   std::vector<GenericInstance> generic_instances;
+  // The same instances, by the type each minted and by the nominal each
+  // instantiates. Both questions were answered by walking every instance the
+  // package had: which instance a type is, once per lookup, and which instance
+  // a request already has, once per request.
+  std::unordered_map<u32, u32> instance_by_type_;
+  std::vector<std::vector<u32>> instances_by_nominal_;
   std::vector<FnInstance> fn_instances;
   // Shared instantiation numbering that keys lowering side tables.
   // Holds each generic enum/struct instance type in creation order and

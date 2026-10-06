@@ -2197,18 +2197,15 @@ void Checker::check_exhaustive(u32 module,
       }
     }
     if (decl == nullptr) {
-      // Generic instantiations share their nominal's declaration.
-      for (const GenericInstance& instance : generic_instances) {
-        if (instance.type.idx != scrutinee.idx) {
-          continue;
-        }
+      // Generic instantiations share their nominal's declaration, which the
+      // instance the type names holds; this asked every instance in the
+      // package which one it was.
+      if (const GenericInstance* instance = generic_find(scrutinee)) {
         const ast::ItemNode& candidate =
-            ast.items[nominals[instance.nominal].item];
-        if (candidate.kind != ast::ItemKind::Enum) {
-          continue;
+            ast.items[nominals[instance->nominal].item];
+        if (candidate.kind == ast::ItemKind::Enum) {
+          decl = &candidate;
         }
-        decl = &candidate;
-        break;
       }
       if (decl == nullptr) {
         return;
