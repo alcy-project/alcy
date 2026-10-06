@@ -125,6 +125,7 @@ module.exports = grammar({
     _item: $ => choice(
       $.function_item,
       $.intrinsic_fn_item,
+      $.extern_item,
       $.struct_item,
       $.enum_item,
       $.impl_item,
@@ -156,6 +157,30 @@ module.exports = grammar({
       optional(field('visibility', $.visibility)),
       optional('unsafe'),
       'intrinsic',
+      'fn',
+      field('name', $.identifier),
+      optional(field('type_parameters', $.type_parameters)),
+      field('parameters', $.parameters),
+      optional(field('return_type', $.return_type)),
+      ';',
+    ),
+
+    // `extern "C" { ... }` declares bodyless functions whose names are
+    // the symbols the linker resolves (ffi.md, "External functions").
+    // The convention is part of the declaration and only "C" is
+    // defined; a grammar without a checker reads any string the same way.
+    extern_item: $ => seq(
+      optional(field('visibility', $.visibility)),
+      'extern',
+      field('convention', $.string),
+      $._block_lbrace,
+      itemList($, $.extern_fn_item),
+      '}',
+    ),
+
+    // A declaration, not a definition: no `pub` or `unsafe` marker of
+    // its own, and the signature ends at the `;`.
+    extern_fn_item: $ => seq(
       'fn',
       field('name', $.identifier),
       optional(field('type_parameters', $.type_parameters)),

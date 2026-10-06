@@ -9,6 +9,7 @@
 ; last capture here so that it loses to the ones that mean more.
 (function_item name: (identifier) @function)
 (intrinsic_fn_item name: (identifier) @function)
+(extern_fn_item name: (identifier) @function)
 (spec_method name: (identifier) @function.method)
 (method_call_expression name: (identifier) @function.method)
 
@@ -34,6 +35,7 @@
 [
   "fn"
   "intrinsic"
+  "extern"
   "struct"
   "enum"
   "impl"

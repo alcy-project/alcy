@@ -8,6 +8,9 @@
 (intrinsic_fn_item
   name: (identifier) @name) @definition.function
 
+(extern_fn_item
+  name: (identifier) @name) @definition.function
+
 (spec_method
   name: (identifier) @name) @definition.method
 

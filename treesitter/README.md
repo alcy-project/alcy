@@ -31,13 +31,13 @@ Both live in `src/scanner.c`.
 
 **The brace that opens a block.** The specification requires the `{` of
 `if`, `while`, `match`, `loop`, `for`, `fn`, `impl`, `struct`, `enum`,
-`spec`, `comp`, `unsafe`, and `else` to stay on the line of the header it
-belongs to. That brace is `_block_lbrace`, and the scanner produces it only
-when no newline stands between the header and the brace, and asks for it
-before any other token. So in a header position it wins over the plain `{`
-a struct literal would use, which keeps `if c { }` a block rather than a
-struct literal on `c` and makes parentheses the way to lift that ban, as
-the specification says they are.
+`spec`, `extern`, `comp`, `unsafe`, and `else` to stay on the line of the
+header it belongs to. That brace is `_block_lbrace`, and the scanner
+produces it only when no newline stands between the header and the brace,
+and asks for it before any other token. So in a header position it wins
+over the plain `{` a struct literal would use, which keeps `if c { }` a
+block rather than a struct literal on `c` and makes parentheses the way to
+lift that ban, as the specification says they are.
 
 A block used as an expression in its own right has no header, so its brace
 is an ordinary one and `{ ... }` on a line of its own is a block-valued
@@ -89,7 +89,7 @@ Two places read narrower:
 
 ## Reserved words
 
-`async`, `await`, `union`, `register`, `extern`, `where`, and `dyn` are
+`async`, `await`, `union`, `register`, `where`, and `dyn` are
 identifiers here. They are not identifiers in the compiler: the lexer
 gives each its own token kind and the parser reads it past with a
 diagnostic (`parser.cc`, "skip_insignificant"). A tree built here and a

@@ -482,3 +482,59 @@ spec Loader {
             (primitive_type))))
       (return_type
         (primitive_type)))))
+
+================================================================================
+An extern block declares bodyless functions
+================================================================================
+
+pub extern "C" {
+  fn abs(x: i32) -> i32;
+  fn exit(code: i32);
+  fn copy<T>(dst: *mut T, src: *T, n: usize);
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (extern_item
+    (visibility)
+    (string)
+    (extern_fn_item
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (identifier))
+          (primitive_type)))
+      (return_type
+        (primitive_type)))
+    (extern_fn_item
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (identifier))
+          (primitive_type))))
+    (extern_fn_item
+      (identifier)
+      (type_parameters
+        (identifier))
+      (parameters
+        (parameter
+          (identifier_pattern
+            (identifier))
+          (raw_ptr_type
+            (path_type
+              (path
+                (identifier)))))
+        (parameter
+          (identifier_pattern
+            (identifier))
+          (raw_ptr_type
+            (path_type
+              (path
+                (identifier)))))
+        (parameter
+          (identifier_pattern
+            (identifier))
+          (primitive_type))))))
