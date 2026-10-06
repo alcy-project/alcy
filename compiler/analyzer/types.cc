@@ -2145,14 +2145,14 @@ CheckedModule::DropGlue Checker::find_drop_glue(ir::TypeIdx type) {
   if (method == nullptr) {
     return {};
   }
-  for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
-    for (u32 k = 0; k < static_cast<u32>(modules[m].methods.size()); ++k) {
-      if (&modules[m].methods[k] == method) {
-        return {m, k};
-      }
-    }
+  // Where the method lives is what the address table holds. This walked every
+  // method in the package to find the one it already had, once per type asked
+  // about, so a package paid its methods for each of its types.
+  const auto position = position_by_address_.find(method);
+  if (position == position_by_address_.end()) {
+    return {};
   }
-  return {};
+  return {position->second.first, position->second.second};
 }
 
 bool Checker::holds_destructible(ir::TypeIdx type, std::vector<u32>& stack) {
@@ -2898,6 +2898,44 @@ NominalEntry* Checker::find_nominal_in_scope(u32 module,
   return nullptr;
 }
 
+// Collects the generic impls of the package by the nominal each targets. The
+// walk runs once: a lookup matches an instantiation by visiting the impls that
+// name its nominal, in the order the modules and their items were in, which is
+// the order a match would have found them.
+void Checker::index_generic_impls() {
+  generic_impls_by_nominal_.assign(nominals.size(), {});
+  indexed_nominals_ = nominals.size();
+  generic_impls_indexed_ = true;
+  for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
+    for (ast::ItemIdx item : tree.modules[m]->items) {
+      const ast::ItemNode& node = ast.items[item];
+      if (node.kind != ast::ItemKind::Impl) {
+        continue;
+      }
+      const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
+      if (impl.params.empty()) {
+        continue;
+      }
+      const ast::TypeNode& target = ast.types[impl.type];
+      if (target.kind != ast::TypeKind::Path) {
+        continue;
+      }
+      u32 target_module = NO_MODULE;
+      std::string_view target_name;
+      if (!resolve_type_path(m, target.payload.get<ast::TypePath>().path,
+                             target_module, target_name)) {
+        continue;
+      }
+      NominalEntry* target_entry = find_nominal(target_module, target_name);
+      if (target_entry == nullptr) {
+        continue;
+      }
+      generic_impls_by_nominal_[nominal_index(target_entry)].push_back(
+          {m, item});
+    }
+  }
+}
+
 const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
     ir::TypeIdx self,
     std::string_view name) {
@@ -2918,69 +2956,56 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
   if (const GenericInstance* instance = generic_find(self)) {
     const u32 nominal = instance->nominal;
     const std::vector<ir::TypeIdx> args = instance->args;
-    for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
-      for (ast::ItemIdx item : tree.modules[m]->items) {
-        const ast::ItemNode& node = ast.items[item];
-        if (node.kind != ast::ItemKind::Impl) {
-          continue;
+    // The impls that can match are the ones targeting this nominal. Finding
+    // them by walking every module's items and resolving every impl it held
+    // was one lookup's cost, and a package looks one up per instantiation.
+    if (!generic_impls_indexed_ || indexed_nominals_ != nominals.size()) {
+      index_generic_impls();
+    }
+    if (nominal >= generic_impls_by_nominal_.size()) {
+      return nullptr;
+    }
+    for (const auto& [m, item] : generic_impls_by_nominal_[nominal]) {
+      const ast::ItemNode& node = ast.items[item];
+      const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
+      const std::span<const ast::TypeIdx> target_args =
+          ast.types[impl.type].payload.get<ast::TypePath>().args;
+      if (target_args.size() != nominal_params(nominals[nominal]).size()) {
+        continue;
+      }
+      // Target arguments must name impl parameters directly.
+      std::vector<std::pair<std::string_view, ir::TypeIdx>> scope;
+      bool shape_ok = true;
+      for (usize i = 0; i < target_args.size() && shape_ok; ++i) {
+        const ast::TypeNode& arg = ast.types[target_args[i]];
+        if (arg.kind != ast::TypeKind::Path) {
+          shape_ok = false;
+          break;
         }
-        const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
-        if (impl.params.empty()) {
-          continue;
+        const ast::Path& path =
+            ast.paths[arg.payload.get<ast::TypePath>().path];
+        if (path.segments.size() != 1 ||
+            !arg.payload.get<ast::TypePath>().args.empty()) {
+          shape_ok = false;
+          break;
         }
-        const ast::TypeNode& target = ast.types[impl.type];
-        if (target.kind != ast::TypeKind::Path) {
-          continue;
-        }
-        u32 target_module = NO_MODULE;
-        std::string_view target_name;
-        if (!resolve_type_path(m, target.payload.get<ast::TypePath>().path,
-                               target_module, target_name)) {
-          continue;
-        }
-        NominalEntry* target_entry = find_nominal(target_module, target_name);
-        if (target_entry == nullptr || nominal_index(target_entry) != nominal) {
-          continue;
-        }
-        const std::span<const ast::TypeIdx> target_args =
-            target.payload.get<ast::TypePath>().args;
-        if (target_args.size() != nominal_params(nominals[nominal]).size()) {
-          continue;
-        }
-        // Target arguments must name impl parameters directly.
-        std::vector<std::pair<std::string_view, ir::TypeIdx>> scope;
-        bool shape_ok = true;
-        for (usize i = 0; i < target_args.size() && shape_ok; ++i) {
-          const ast::TypeNode& arg = ast.types[target_args[i]];
-          if (arg.kind != ast::TypeKind::Path) {
-            shape_ok = false;
+        bool found = false;
+        for (const auto& param : impl.params) {
+          if (param.name == path.segments[0].name) {
+            scope.emplace_back(param.name, args[i]);
+            found = true;
             break;
           }
-          const ast::Path& path =
-              ast.paths[arg.payload.get<ast::TypePath>().path];
-          if (path.segments.size() != 1 ||
-              !arg.payload.get<ast::TypePath>().args.empty()) {
-            shape_ok = false;
-            break;
-          }
-          bool found = false;
-          for (const auto& param : impl.params) {
-            if (param.name == path.segments[0].name) {
-              scope.emplace_back(param.name, args[i]);
-              found = true;
-              break;
-            }
-          }
-          shape_ok = found;
         }
-        if (!shape_ok) {
-          continue;
-        }
-        const CheckedModule::MethodInfo* method =
-            instantiate_method(m, self, scope, impl, name);
-        if (method != nullptr) {
-          return method;
-        }
+        shape_ok = found;
+      }
+      if (!shape_ok) {
+        continue;
+      }
+      const CheckedModule::MethodInfo* method =
+          instantiate_method(m, self, scope, impl, name);
+      if (method != nullptr) {
+        return method;
       }
     }
   }

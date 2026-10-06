@@ -429,6 +429,10 @@ class Checker {
   const CheckedModule::MethodInfo* lookup_inherent_method(
       ir::TypeIdx self,
       std::string_view name);
+  // Collects the generic impls of the package, by the nominal each targets.
+  // Built on the first generic lookup and rebuilt if a nominal was interned
+  // since, because a lookup may come before the last one is.
+  void index_generic_impls();
   // Finds a method for `self`: an inherent one, or with `spec_only` a
   // spec implementation reachable from `module`. Only in-scope specs
   // match.
@@ -478,6 +482,12 @@ class Checker {
   // belongs to, and a diagnostic needs the one to call the type by. Each asked
   // by walking every nominal in the package, so one question cost the package.
   std::unordered_map<u32, u32> nominal_by_type_;
+  // The generic impls of the package, by the nominal they target, and the
+  // nominal count the index was built against.
+  std::vector<std::vector<std::pair<u32, ast::ItemIdx>>>
+      generic_impls_by_nominal_;
+  usize indexed_nominals_ = 0;
+  bool generic_impls_indexed_ = false;
   // Where a module's children are, by the name a path calls them, and the
   // module each package root opens, by the identity a path spells. A path of
   // two segments or more walked every module in the package to find the one
