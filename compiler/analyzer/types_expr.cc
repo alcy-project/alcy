@@ -1535,13 +1535,11 @@ ir::TypeIdx Checker::check_field(u32 module,
     }
     if (owner == nullptr) {
       // A generic struct instance carries no NominalEntry; its
-      // declaration lives on the owning nominal.
-      for (const GenericInstance& instance : generic_instances) {
-        if (instance.type.idx != origin.idx) {
-          continue;
-        }
-        owner = &nominals[instance.nominal];
-        break;
+      // declaration lives on the owning nominal, which the instance the
+      // type names holds. This asked every instance in the package which
+      // one it was, per field read.
+      if (const GenericInstance* instance = generic_find(origin)) {
+        owner = &nominals[instance->nominal];
       }
       if (owner != nullptr) {
         u32 i = 0;
