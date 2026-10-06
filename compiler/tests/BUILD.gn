@@ -1,6 +1,8 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import("//compiler/backends.gni")
+
 executable("tests") {
   sources = [
     "analyzer/resolve_modules_test.cc",
@@ -26,8 +28,6 @@ executable("tests") {
     "codegen/wasm_module_test.cc",
     "codegen/wasm_reach_test.cc",
     "codegen/wasm_writer_test.cc",
-    "codegen_llvm/llvm_ir_emitter_test.cc",
-    "codegen_llvm/runtime_ir_test.cc",
     "diag/bag_test.cc",
     "diag/render_test.cc",
     "i18n/i18n_test.cc",
@@ -37,14 +37,12 @@ executable("tests") {
     "ir/verifier_test.cc",
     "lexer/lexer_test.cc",
     "lexer/token_test.cc",
-    "lowering/lowering_test.cc",
     "parser/desugar_test.cc",
     "parser/parser_test.cc",
     "path/path_test.cc",
     "pipeline/api_test.cc",
     "pipeline/check_test.cc",
     "pipeline/dependencies_test.cc",
-    "pipeline/emit_mode_test.cc",
     "pipeline/hostile_input_test.cc",
     "pipeline/modules_test.cc",
     "pipeline/nesting_test.cc",
@@ -69,6 +67,20 @@ executable("tests") {
     "util/virtual_source.cc",
     "util/virtual_source.h",
   ]
+
+  # The LLVM-backed cases need the implementation in the graph: the
+  # lowering cases emit through LLVM to check what lowering produced, and
+  # the two codegen_llvm suites test that emitter directly. A build with
+  # no LLVM still runs everything else, which is what the playground
+  # configuration wants.
+  if (alcy_use_llvm) {
+    sources += [
+      "codegen_llvm/llvm_ir_emitter_test.cc",
+      "codegen_llvm/runtime_ir_test.cc",
+      "lowering/lowering_test.cc",
+      "pipeline/emit_mode_test.cc",
+    ]
+  }
 
   configs += [
     "//compiler:alcy_config",

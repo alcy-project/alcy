@@ -6,7 +6,6 @@
 #include <string>
 #include <string_view>
 
-#include "benchmarks/case_codegen.h"
 #include "benchmarks/case_frontend.h"
 #include "benchmarks/case_pipeline.h"
 #include "benchmarks/clock.h"
@@ -19,6 +18,10 @@
 #include "fpag/debug/terminate_handler.h"
 #include "fpag/io/io_util.h"
 #include "fpag/term/console.h"
+
+#if ALCY_BACKEND_LLVM
+#include "benchmarks/case_codegen.h"
+#endif
 
 namespace {
 
@@ -129,7 +132,9 @@ i32 main(i32 argc, char** argv) {
   const bench::CaseFilter filter{case_filter};
   bench::run_frontend_cases(runner, spec, filter, emit);
   bench::run_pipeline_cases(runner, spec, filter, emit);
+#if ALCY_BACKEND_LLVM
   bench::run_codegen_cases(runner, spec, filter, emit);
+#endif
   if (emit.count == 0) {
     std::fprintf(stderr, "benchmarks: no case matched '%s'\n",
                  case_filter.c_str());

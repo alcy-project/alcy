@@ -1,6 +1,8 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import("//compiler/backends.gni")
+
 # The engine without the compiler. Its own test drives it with a fake
 # clock, so a duration that depends on the host is not a test.
 source_set("bench") {
@@ -30,8 +32,6 @@ source_set("bench") {
 # the engine carries no compiler dependency of its own.
 source_set("bench_cases") {
   sources = [
-    "case_codegen.cc",
-    "case_codegen.h",
     "case_frontend.cc",
     "case_frontend.h",
     "case_pipeline.cc",
@@ -39,6 +39,15 @@ source_set("bench_cases") {
     "fixture.cc",
     "fixture.h",
   ]
+
+  # The codegen case emits through LLVM; a build that carries none drops
+  # the case with the dependency.
+  if (alcy_use_llvm) {
+    sources += [
+      "case_codegen.cc",
+      "case_codegen.h",
+    ]
+  }
 
   deps = [
     ":bench",

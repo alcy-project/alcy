@@ -343,6 +343,11 @@ i32 run_compile_stdin(io::TempDir& dir,
 
 #if ALCY_TEST_LINKS
 TEST_CASE("Compile reads a program from standard input") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_stdin_ok_");
   SilencedOutput silenced;
   CHECK(run_compile_stdin(dir,
@@ -370,6 +375,11 @@ TEST_CASE("Compile reports a program piped in under the name <stdin>") {
 #endif
 
 TEST_CASE("Compile reads an empty pipe as an empty program") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_stdin_empty_");
   // Zero bytes, then whatever an empty file would be.
   SilencedOutput silenced;
@@ -473,6 +483,11 @@ i32 run_compile_on(io::TempDir& dir,
 }
 
 TEST_CASE("Compile emits an object file") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_object_");
   const bool setup = write_all(dir, "main.al",
                                "fn main() {\n"
@@ -493,6 +508,11 @@ TEST_CASE("Compile emits an object file") {
 }
 
 TEST_CASE("Compile emits textual IR") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_ir_test_");
   const bool setup = write_all(dir, "main.al",
                                "fn main() -> i32 {\n"
@@ -527,6 +547,11 @@ TEST_CASE("Compile rejects an unknown emit mode") {
 
 #if ALCY_TEST_LINKS
 TEST_CASE("Compile links an executable") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_exe_");
   const bool setup = write_all(dir, "main.al",
                                "fn main() -> i32 {\n"
@@ -542,6 +567,11 @@ TEST_CASE("Compile links an executable") {
 #endif
 
 TEST_CASE("Compile creates nonexistent directory") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir =
       io::TempDir::create_unique("alcy_cli_compile_bad_output_test_");
   const bool setup = write_all(dir, "main.al",
@@ -621,6 +651,11 @@ TEST_CASE("Build reads the linker from toolchain.toml") {
 
 #if ALCY_TEST_LINKS
 TEST_CASE("Build treats an empty linker as the default") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_linker_empty_");
   const bool setup = write_package(dir, "proj",
                                    "fn main() -> i32 {\n"
@@ -655,6 +690,11 @@ TEST_CASE("Build links the arguments toolchain.toml names") {
 }
 
 TEST_CASE("A link argument flag replaces the file's list rather than join it") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir =
       io::TempDir::create_unique("alcy_cli_build_link_args_flag_");
   const bool setup =
@@ -725,6 +765,11 @@ TEST_CASE("run links the arguments it was given") {
 #endif
 
 TEST_CASE("Time trace embeds its phases in the json result") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_trace_test_");
   const bool setup = write_all(dir, "main.al",
                                "fn main() -> i32 {\n"
@@ -878,6 +923,11 @@ i32 run_init_on(io::TempDir& dir, std::string_view rel) {
 
 #if ALCY_TEST_LINKS
 TEST_CASE("Run executes a package and forwards its exit code") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_exit_test_");
   const bool setup = write_package(dir, "proj",
                                    "fn main() -> i32 {\n"
@@ -895,6 +945,11 @@ TEST_CASE("Run executes a package and forwards its exit code") {
 // The two cases below read the streams rather than discarding them.
 #if ALCY_TEST_LINKS
 TEST_CASE("Run announces the target before the program, not after") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   // The label says whose output follows, so it has to come first: below
   // that output it would read as more of it.
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_announce_");
@@ -962,6 +1017,11 @@ TEST_CASE("Run does not announce a program that failed to build") {
 }
 
 TEST_CASE("Run tolerates program arguments") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_args_test_");
   const bool setup = write_package(dir, "proj",
                                    "fn main() -> i32 {\n"

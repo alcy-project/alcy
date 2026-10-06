@@ -44,6 +44,11 @@ TEST_CASE("Pipeline stages the standard library prelude") {
   }
 }
 TEST_CASE("Pipeline build produces object file") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir = io::TempDir::create_unique("pipeline_build_object_test_");
   const bool setup =
       dir.write_file("main.al", "fn main() {\n  print(\"hi\")\n}\n");
@@ -68,6 +73,11 @@ TEST_CASE("Pipeline build produces object file") {
 }
 
 TEST_CASE("Pipeline build produces executable") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir = io::TempDir::create_unique("pipeline_build_exe_test_");
   const bool setup =
       dir.write_file("main.al", "fn main() -> i32 {\n  ret 3\n}\n");
@@ -85,6 +95,11 @@ TEST_CASE("Pipeline build produces executable") {
 }
 
 TEST_CASE("Pipeline release build produces a working executable") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir = io::TempDir::create_unique("pipeline_build_release_test_");
   const bool setup =
       dir.write_file("main.al", "fn main() -> i32 {\n  ret 3\n}\n");
@@ -120,6 +135,11 @@ TEST_CASE("Pipeline release build produces a working executable") {
 // `posix_memalign` writes its result through a pointer - so the two are
 // told apart by element type.
 TEST_CASE("Release optimizes the textual IR, not only the object") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   io::TempDir dir = io::TempDir::create_unique("pipeline_ir_optimize_");
   const std::string source =
       "fn add(a: i32, b: i32) -> i32 {\n  ret a + b\n}\n"
@@ -196,6 +216,11 @@ TEST_CASE("Release optimizes the textual IR, not only the object") {
 }
 
 TEST_CASE("A build creates the directory its output names") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
   // The linker creates no directories of its own, so `build -o out/app`
   // used to fail where the same -o for an object worked. The output's
   // parent is made once, before the mode is acted on.
