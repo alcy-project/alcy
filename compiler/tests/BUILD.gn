@@ -64,6 +64,7 @@ executable("tests") {
     "source/source_test.cc",
     "source/virtual_source_test.cc",
     "symbol/mangle_test.cc",
+    "symbol/symbol_table_test.cc",
     "test_main.cc",
     "text/unescape_test.cc",
     "util/add_sources_test.cc",
