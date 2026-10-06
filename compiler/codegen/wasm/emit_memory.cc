@@ -252,11 +252,18 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       if (!elem.is_valid()) {
         const ir::TypeIdx base_type = storage_.registers()[base_reg].type;
         const ir::TypeTag tag = storage_.types()[base_type].tag;
-        if (tag != ir::TypeTag::Ref && tag != ir::TypeTag::MutRef) {
-          return unsupported(current_span_, "a projection of this pointer");
+        if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
+          elem = storage_.ref_types()[storage_.types()[base_type].as_ref()]
+                     .pointee;
+        } else if (tag != ir::TypeTag::Ptr && tag != ir::TypeTag::Function) {
+          // A register whose own type names the pointee, which is how
+          // the lowering carries pointers into payload bytes.
+          elem = base_type;
+        } else {
+          // A bare pointer says nothing about a pointee, so the walk is
+          // byte-addressed; a zero index, the common case, does not care.
+          elem = ir::primitive_idx(ir::TypeTag::U8);
         }
-        elem =
-            storage_.ref_types()[storage_.types()[base_type].as_ref()].pointee;
       }
       if (ops.size() == 2) {
         return emit_elem_offset(base, storage_.operands()[ops.head() + 1], elem,
@@ -381,6 +388,21 @@ Emitter::EmitResult Emitter::emit_field_projection(
       constant += ir::field_offset(storage_.state(), fields,
                                    static_cast<u32>(value), target_.width);
       cur = fields[static_cast<u32>(value)];
+      continue;
+    }
+    // An enum is the record {tag, payload area}: field 0 is the
+    // discriminant and field 1 the bytes every variant shares, padded to
+    // the area's own alignment. The walk stops at the tag; the payload's
+    // next step is the *next* projection's base to take, not this one's.
+    if (tag == ir::TypeTag::Enum) {
+      if (!is_const || value > 1 || i + 1 < ops.size()) {
+        return unsupported(current_span_, "a projection through this enum");
+      }
+      if (value == 1) {
+        const ir::TypeLayout area =
+            ir::enum_payload_area(storage_.state(), cur, target_.width);
+        constant += ir::align_up(4, area.align == 0 ? 1 : area.align);
+      }
       continue;
     }
     // A `str` or `slice` is the record {data, len} on the target; its two
