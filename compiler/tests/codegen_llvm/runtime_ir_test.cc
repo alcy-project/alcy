@@ -192,8 +192,12 @@ TEST_CASE("A freestanding runtime calls no libc") {
   declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
   declare(module, "alcy_dealloc", signature(void_ty, {pointer, usize, usize}));
 
-  add_runtime_definitions(module, target_of(ir::PointerWidth::W64),
-                          /*freestanding=*/true);
+  // The syscall sequence belongs to an architecture, and a wasm test
+  // build's host is not one of them; the case names the x86-64 Linux
+  // one, which needs no target machine to build IR for.
+  const codegen_llvm::Target linux_x64{"x86_64-unknown-linux-gnu",
+                                       ir::PointerWidth::W64};
+  add_runtime_definitions(module, linux_x64, /*freestanding=*/true);
 
   CHECK(!llvm::verifyModule(module));
   CHECK(module.getFunction("write") == nullptr);

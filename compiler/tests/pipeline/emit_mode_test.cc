@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "codegen/backend.h"
 #include "codegen/target.h"
 #include "config/build_config.h"
 #include "diag/bag.h"
@@ -49,6 +50,12 @@ constexpr std::string_view PROGRAM =
     "  ret 0\n"
     "}\n";
 
+// Every case here measures an output kind only the LLVM backend writes:
+// an object, textual IR, or bitcode. The host's default backend -- the
+// direct wasm one under Emscripten -- does not write them, so the
+// contexts name this instead of taking the default.
+constexpr codegen::Backend LLVM_BACKEND = codegen::Backend::Llvm;
+
 }  // namespace
 
 // An object needs a target machine, and the wasm build has none linked in,
@@ -66,6 +73,7 @@ TEST_CASE("A build writes an object where it was asked for one") {
   const std::string object_path = dir.join("out.bin");
   {
     PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = LLVM_BACKEND;
     base::Result<std::string, diag::Reported> built =
         build_single_file(ctx, source, object_path, false, LinkOptions{},
                           EmitMode::Object, pipeline::full_std_selection());
@@ -85,6 +93,7 @@ TEST_CASE("A build writes the module as textual IR") {
   const std::string ir_path = dir.join(path::DEFAULT_OUT_DIR);
   {
     PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = LLVM_BACKEND;
     base::Result<std::string, diag::Reported> built =
         build_single_file(ctx, source, ir_path, false, LinkOptions{},
                           EmitMode::LlvmIr, pipeline::full_std_selection());
@@ -109,6 +118,7 @@ TEST_CASE("A build writes the module as bitcode") {
   const std::string bitcode_path = dir.join("out.bin");
   {
     PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = LLVM_BACKEND;
     base::Result<std::string, diag::Reported> built = build_single_file(
         ctx, source, bitcode_path, false, LinkOptions{}, EmitMode::LlvmBitcode,
         pipeline::full_std_selection());
@@ -124,6 +134,7 @@ TEST_CASE("The default extension follows the mode") {
 
   {
     PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = LLVM_BACKEND;
     base::Result<std::string, diag::Reported> built =
         build_single_file(ctx, dir.join("main.al"), "", false, LinkOptions{},
                           EmitMode::LlvmIr, pipeline::full_std_selection());
@@ -132,6 +143,7 @@ TEST_CASE("The default extension follows the mode") {
   CHECK(io::is_file(dir.join("main.ll")));
   {
     PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = LLVM_BACKEND;
     base::Result<std::string, diag::Reported> built = build_single_file(
         ctx, dir.join("main.al"), "", false, LinkOptions{},
         EmitMode::LlvmBitcode, pipeline::full_std_selection());
@@ -143,6 +155,7 @@ TEST_CASE("The default extension follows the mode") {
 
   {
     PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = LLVM_BACKEND;
     base::Result<std::string, diag::Reported> built =
         build_single_file(ctx, dir.join("main.al"), "", false, LinkOptions{},
                           EmitMode::Object, pipeline::full_std_selection());
@@ -163,6 +176,7 @@ TEST_CASE("A source without an extension still gets an output name") {
 
   {
     PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = LLVM_BACKEND;
     base::Result<std::string, diag::Reported> built =
         build_single_file(ctx, dir.join("noext"), "", false, LinkOptions{},
                           EmitMode::Object, pipeline::full_std_selection());
@@ -176,6 +190,7 @@ TEST_CASE("A source without an extension still gets an output name") {
   // there is nothing to refuse.
   if (exe_suffix().empty() && !codegen::host_target().is_wasm()) {
     PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = LLVM_BACKEND;
     base::Result<std::string, diag::Reported> refused =
         build_single_file(ctx, dir.join("noext"), "", false, LinkOptions{},
                           EmitMode::Executable, pipeline::full_std_selection());
@@ -199,6 +214,7 @@ TEST_CASE("A dot in a directory name is not an extension") {
   CHECK(dir.write_file("sub.dir/main.al", PROGRAM));
 
   PipelineContext ctx{i18n::Language::EnUs};
+  ctx.backend = LLVM_BACKEND;
   base::Result<std::string, diag::Reported> built = build_single_file(
       ctx, dir.join("sub.dir/main.al"), "", false, LinkOptions{},
       EmitMode::Object, pipeline::full_std_selection());
@@ -235,6 +251,7 @@ TEST_CASE("A package build honours the mode too") {
   for (const Case& one : cases) {
     INFO("mode " << static_cast<u32>(one.mode));
     PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = LLVM_BACKEND;
     base::Result<path::Path, path::PathError> root =
         path::Path::from_native(dir.join("proj"));
     CHECK(root.is_ok());
@@ -317,6 +334,7 @@ TEST_CASE("A package's module does not depend on how many jobs read it") {
     for (u32 jobs : {1u, 4u, 8u}) {
       INFO("round " << round << " jobs " << jobs);
       PipelineContext ctx{i18n::Language::EnUs};
+      ctx.backend = LLVM_BACKEND;
       ctx.jobs = jobs;
       base::Result<source::FileId, source::SourceError> manifest =
           ctx.sources.load(root_path.join("alcy.toml").as_view());
@@ -402,6 +420,7 @@ TEST_CASE("A package's diagnostics do not depend on how many jobs read it") {
     for (u32 jobs : {1u, 4u, 8u}) {
       INFO("round " << round << " jobs " << jobs);
       PipelineContext ctx{i18n::Language::EnUs};
+      ctx.backend = LLVM_BACKEND;
       ctx.jobs = jobs;
       base::Result<source::FileId, source::SourceError> manifest =
           ctx.sources.load(root_path.join("alcy.toml").as_view());
@@ -461,6 +480,7 @@ TEST_CASE("A package build refuses targets sharing one output") {
   {
     // The object mode collides: both targets default to out/app.o.
     PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = LLVM_BACKEND;
     base::Result<source::FileId, source::SourceError> manifest =
         ctx.sources.load(root_path.join("alcy.toml").as_view());
     CHECK(manifest.is_ok());
@@ -482,6 +502,7 @@ TEST_CASE("A package build refuses targets sharing one output") {
     // The executable mode does not collide: the binary links to out/app
     // while the library stays an object beside it.
     PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = LLVM_BACKEND;
     base::Result<source::FileId, source::SourceError> manifest =
         ctx.sources.load(root_path.join("alcy.toml").as_view());
     CHECK(manifest.is_ok());

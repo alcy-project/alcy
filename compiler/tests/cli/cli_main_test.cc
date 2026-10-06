@@ -324,8 +324,8 @@ i32 run_compile_stdin(io::TempDir& dir,
 
   const std::string out = dir.join(output);
   const std::string mode(emit);
-  std::vector<std::string> storage{"alcy", "compile", "--stdin", "-o",
-                                   out,    "--emit",  mode};
+  std::vector<std::string> storage{"alcy",   "compile", "--stdin",   "-o",  out,
+                                   "--emit", mode,      "--backend", "llvm"};
   std::vector<char*> argv;
   argv.reserve(storage.size());
   for (std::string& arg : storage) {
@@ -472,8 +472,9 @@ i32 run_compile_on(io::TempDir& dir,
                    std::string_view emit = "executable") {
   const std::string target = dir.join(rel);
   const std::string out = dir.join(output);
-  std::vector<std::string> storage{"alcy", "compile", target,           "-o",
-                                   out,    "--emit",  std::string(emit)};
+  std::vector<std::string> storage{
+      "alcy",   "compile",         target,      "-o",  out,
+      "--emit", std::string(emit), "--backend", "llvm"};
   std::vector<char*> argv;
   argv.reserve(storage.size());
   for (std::string& arg : storage) {
@@ -596,7 +597,8 @@ TEST_CASE("Build rejects a single file") {
     return;
   }
   const std::string target = dir.join("main.al");
-  std::vector<std::string> storage{"alcy", "build", target};
+  std::vector<std::string> storage{"alcy", "build", target, "--backend",
+                                   "llvm"};
   std::vector<char*> argv;
   argv.reserve(storage.size());
   for (std::string& arg : storage) {
@@ -632,6 +634,7 @@ i32 run_build_on(io::TempDir& dir, std::string_view rel) {
   return cli_main(static_cast<i32>(argv.size()), argv.data());
 }
 
+#if ALCY_TEST_LINKS
 TEST_CASE("Build reads the linker from toolchain.toml") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_linker_");
   const bool setup =
@@ -649,7 +652,6 @@ TEST_CASE("Build reads the linker from toolchain.toml") {
   CHECK(run_build_on(dir, "proj") != 0);
 }
 
-#if ALCY_TEST_LINKS
 TEST_CASE("Build treats an empty linker as the default") {
 #if !ALCY_BACKEND_LLVM
   // The direct backend writes a module, not the object, IR, or
@@ -782,8 +784,9 @@ TEST_CASE("Time trace embeds its phases in the json result") {
   }
   const std::string target = dir.join("main.al");
   const std::string out = dir.join("main.ll");
-  std::vector<std::string> storage{"alcy", "-t",     "compile", target,  "-o",
-                                   out,    "--emit", "llvm-ir", "--json"};
+  std::vector<std::string> storage{"alcy",   "-t",        "compile", target,
+                                   "-o",     out,         "--emit",  "llvm-ir",
+                                   "--json", "--backend", "llvm"};
   std::vector<char*> argv;
   argv.reserve(storage.size());
   for (std::string& arg : storage) {

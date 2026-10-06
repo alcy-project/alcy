@@ -58,7 +58,13 @@ TEST_CASE("Target names resolve") {
 TEST_CASE("The default backend follows the target") {
   const Target wasm{"wasm32-unknown-emscripten", ir::PointerWidth::W32};
 #if ALCY_BACKEND_LLVM
+#if BUILD_FLAG(IS_OS_ASMJS)
+  // The host itself is the wasm machine here, and a wasm machine's
+  // default backend is the direct one.
+  CHECK(default_backend(host_target()) == Backend::DirectWasm);
+#else
   CHECK(default_backend(host_target()) == Backend::Llvm);
+#endif
 #endif
   CHECK(default_backend(wasm) == Backend::DirectWasm);
 }
