@@ -1,0 +1,10 @@
+[package]
+name = "freestanding"
+version = "0.1.0"
+
+[modules]
+include = ["main"]
+
+[[bin]]
+name = "freestanding"
+path = "main.al"

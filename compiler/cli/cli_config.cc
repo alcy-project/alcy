@@ -22,7 +22,8 @@ pipeline::LinkOptions resolve_link_options(const CliConfig& config,
   }
   return pipeline::LinkOptions{
       .driver = config.linker.empty() ? tool.linker : config.linker,
-      .args = args};
+      .args = args,
+      .freestanding = tool.freestanding};
 }
 
 }  // namespace cli

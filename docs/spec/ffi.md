@@ -1,9 +1,9 @@
 # FFI, Unsafe, and Platform Boundaries
 
-The `unsafe` gate and `extern "C"` declarations are Bootstrap,
-described here as they work today. The rest of the chapter is
-reserved: it is kept so MVP designs do not foreclose the baremetal
-story.
+The `unsafe` gate, `extern "C"` declarations, and the freestanding
+link mode are Bootstrap, described here as they work today. The rest
+of the chapter is reserved: it is kept so MVP designs do not
+foreclose the baremetal story.
 
 ## Unsafe (Bootstrap)
 
@@ -83,6 +83,21 @@ story.
   Everything else is refused with a diagnostic: by-value aggregates,
   `str`/slices/references, closures, generics, and variadics. The
   callee's own contract is the caller's `unsafe` block to keep.
+
+## Freestanding (Bootstrap)
+
+- `.alcy/toolchain.toml` with `freestanding = true` links without a C
+  runtime: no startup objects, no dynamic linker, and no libc. The
+  compiler emits `_start`, calls the program's `main`, and ends
+  through the target's exit syscall, so an `i32` main is the process
+  status, `()` is zero, and an enum main is nonzero on any variant
+  but the first. See
+  `docs/adr/0052-freestanding-is-a-link-mode.md`.
+- A runtime piece is defined only when the program declares it, so a
+  freestanding program carries only what it uses. Raw syscalls and a
+  libc-free allocator are the remaining slices; until they land, a
+  freestanding program that allocates fails at the link with the
+  missing libc symbol.
 
 ## Layout and statics
 

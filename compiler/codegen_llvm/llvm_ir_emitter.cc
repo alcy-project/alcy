@@ -27,6 +27,7 @@
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
+#include "llvm/IR/InlineAsm.h"
 #include "symbol/mangle.h"
 
 #if BUILD_FLAG(IS_DEBUG)
@@ -40,14 +41,17 @@ LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
                              str::StringInterner* interner,
                              const Target& target,
                              bool emit_entry,
+                             bool freestanding,
                              debug::Profiler* profiler)
     : module_(module),
       storage_(std::move(storage)),
       builder_(std::make_unique<IRBuilder>(module_->getContext())),
       interner_(interner),
       width_(target.width),
+      triple_(target.triple),
       profiler_(profiler),
-      emit_entry_(emit_entry) {}
+      emit_entry_(emit_entry),
+      freestanding_(freestanding) {}
 
 void LlvmIrEmitter::check_state() {
   // DCHECK_MSG(storage_, "IR Storage is null");
@@ -726,13 +730,35 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler_, "main", "emit-fn");
   check_state();
   llvm::LLVMContext& context = module_->getContext();
-  llvm::Function* main_function = llvm::Function::Create(
+  // A freestanding entry is the ELF entry symbol itself and never
+  // returns to a runtime; a hosted one is the C `main` a crt calls.
+  llvm::Function* wrapper = llvm::Function::Create(
       llvm::FunctionType::get(builder_->getInt32Ty(), false),
-      llvm::Function::ExternalLinkage, "main", module_);
+      llvm::Function::ExternalLinkage, freestanding_ ? "_start" : "main",
+      module_);
   llvm::BasicBlock* entry_block =
-      llvm::BasicBlock::Create(context, "", main_function);
+      llvm::BasicBlock::Create(context, "", wrapper);
   builder_->SetInsertPoint(entry_block);
   llvm::Value* result = builder_->CreateCall(entry_function);
+  if (freestanding_) {
+    // The exit status is the i32 main returned; an enum main exits
+    // nonzero on a variant other than the first, and `()` exits zero.
+    llvm::Value* code = llvm::ConstantInt::get(builder_->getInt32Ty(), 0);
+    if (ret == ir::TypeTag::I32) {
+      code = result;
+    } else if (ret == ir::TypeTag::Enum) {
+      llvm::Value* tag = builder_->CreateExtractValue(result, 0);
+      llvm::Value* is_ok = builder_->CreateICmpEQ(
+          tag, llvm::ConstantInt::get(builder_->getInt32Ty(), 0));
+      code = builder_->CreateSelect(
+          is_ok, llvm::ConstantInt::get(builder_->getInt32Ty(), 0),
+          llvm::ConstantInt::get(builder_->getInt32Ty(), 1));
+    }
+    if (!emit_exit(code)) {
+      DCHECK_MSG(false, "freestanding exit on an unsupported target");
+    }
+    return;
+  }
   if (ret == ir::TypeTag::I32) {
     builder_->CreateRet(result);
     return;
@@ -744,10 +770,9 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
     llvm::Value* tag = builder_->CreateExtractValue(result, 0);
     llvm::Value* is_ok = builder_->CreateICmpEQ(
         tag, llvm::ConstantInt::get(builder_->getInt32Ty(), 0));
-    llvm::BasicBlock* ok_block =
-        llvm::BasicBlock::Create(context, "", main_function);
+    llvm::BasicBlock* ok_block = llvm::BasicBlock::Create(context, "", wrapper);
     llvm::BasicBlock* err_block =
-        llvm::BasicBlock::Create(context, "", main_function);
+        llvm::BasicBlock::Create(context, "", wrapper);
     builder_->CreateCondBr(is_ok, ok_block, err_block);
     builder_->SetInsertPoint(ok_block);
     builder_->CreateRet(llvm::ConstantInt::get(builder_->getInt32Ty(), 0));
@@ -772,6 +797,41 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
     return;
   }
   builder_->CreateRet(llvm::ConstantInt::get(builder_->getInt32Ty(), 0));
+}
+
+// Ends the program through the target's exit syscall. The number is
+// loaded in the assembly text and the status rides an input operand,
+// so one shape covers every output kind: a syscall never returns, so
+// the call is immediately unreachable.
+bool LlvmIrEmitter::emit_exit(llvm::Value* code32) {
+  const std::string arch = triple_.substr(0, triple_.find('-'));
+  const char* text = nullptr;
+  const char* constraints = nullptr;
+  if (arch == "x86_64") {
+    // AT&T syntax is the assembler's default dialect, and `$$` is a
+    // literal `$` in inline assembly.
+    text = "movq $$60, %rax\nsyscall";
+    constraints = "{rdi},~{rax},~{rcx},~{r11},~{memory}";
+  } else if (arch == "aarch64") {
+    text = "mov x8, #93\nsvc #0";
+    constraints = "{x0},~{x8},~{memory}";
+  } else if (arch == "riscv64") {
+    text = "li a7, 93\necall";
+    constraints = "{a0},~{a7},~{memory}";
+  } else {
+    return false;
+  }
+  llvm::Type* word = builder_->getInt64Ty();
+  // One input: the status register. The syscall number is loaded in
+  // the assembly text, so nothing else crosses.
+  llvm::FunctionType* type =
+      llvm::FunctionType::get(builder_->getVoidTy(), {word}, false);
+  llvm::InlineAsm* exit_call =
+      llvm::InlineAsm::get(type, text, constraints, /*hasSideEffects=*/true);
+  llvm::Value* code = builder_->CreateSExt(code32, word);
+  builder_->CreateCall(exit_call, {code});
+  builder_->CreateUnreachable();
+  return true;
 }
 
 }  // namespace codegen_llvm

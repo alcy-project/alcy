@@ -34,6 +34,7 @@ class LlvmIrEmitter {
                 str::StringInterner* interner,
                 const Target& target,
                 bool emit_entry,
+                bool freestanding = false,
                 debug::Profiler* profiler = nullptr);
   ~LlvmIrEmitter() = default;
 
@@ -77,18 +78,27 @@ class LlvmIrEmitter {
   bool is_entry_candidate(const ir::Function& function) const;
   // Emits the C-ABI `main` wrapper around a renamed user entry.
   void emit_entry(llvm::Function* entry_function, ir::TypeTag ret);
+  // Ends a freestanding program through the target's exit syscall.
+  // Answers false for a target with no sequence here, which the
+  // pipeline refuses before emission.
+  bool emit_exit(llvm::Value* code32);
 
   llvm::Module* module_;
   ir::VerifiedStorage storage_;
   std::unique_ptr<IRBuilder> builder_;
   str::StringInterner* interner_;
   ir::PointerWidth width_;
+  // The target's triple, kept for the freestanding exit sequence.
+  std::string triple_;
   // Where the trace events go, or nothing. The function bodies emit one
   // region each under "emit-fn".
   debug::Profiler* profiler_ = nullptr;
   // Entry synthesis belongs to binaries; a library's `main` stays an
   // ordinary item, wrapped in nothing.
   bool emit_entry_;
+  // Whether the entry is `_start`, ending through the exit syscall
+  // instead of returning to a C runtime (ADR-0052).
+  bool freestanding_ = false;
   LlvmIrStorage values_;
   // LLVM types are immutable once built, and one shape is requested for
   // every register, operand, and signature that names it, so each is

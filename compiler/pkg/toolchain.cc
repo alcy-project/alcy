@@ -51,8 +51,21 @@ base::Result<Toolchain, diag::Reported> parse_toolchain(
   const toml::table& root = result.table();
   std::string_view linker;
   const toml::array* link_args = nullptr;
+  bool freestanding = false;
   for (const auto& [key, node] : root) {
     const std::string_view name = key.str();
+    if (name == "freestanding") {
+      const auto flag = node.value<bool>();
+      if (!flag.has_value()) {
+        const u32 index = bag.emit<i18n::Key::PkgToolchainFreestandingNotBool>(
+            diag::Severity::Error, diag::Stage::Pkg,
+            DiagCode::ToolchainSemanticError, filename);
+        (void)index;
+        return base::make_err(diag::Reported{});
+      }
+      freestanding = *flag;
+      continue;
+    }
     if (name == "linker") {
       const auto text = node.value<std::string_view>();
       if (!text.has_value()) {
@@ -99,8 +112,9 @@ base::Result<Toolchain, diag::Reported> parse_toolchain(
       args[filled++] = copy_str(arena, *text);
     }
   }
-  return base::make_ok(
-      Toolchain{.linker = linker, .link_args = {args, filled}});
+  return base::make_ok(Toolchain{.linker = linker,
+                                 .link_args = {args, filled},
+                                 .freestanding = freestanding});
 }
 
 }  // namespace pkg

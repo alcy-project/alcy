@@ -76,6 +76,15 @@ TEST_CASE("Runtime defines every entry point") {
   const auto void_ty = llvm::Type::getVoidTy(context);
   const auto pointer = opaque_pointer(context);
 
+  // The program's call sites hold the declarations; the runtime
+  // defines only what was declared, so this case declares them all.
+  declare(module, "alcy_print", signature(void_ty, {pointer, usize}));
+  declare(module, "alcy_println", signature(void_ty, {pointer, usize}));
+  declare(module, "alcy_panic", signature(void_ty, {pointer, usize}));
+  declare(module, "alcy_sys_write", signature(void_ty, {i32, pointer, usize}));
+  declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
+  declare(module, "alcy_dealloc", signature(void_ty, {pointer, usize, usize}));
+
   add_runtime_definitions(module, target_of(ir::PointerWidth::W64));
 
   CHECK(!llvm::verifyModule(module));
@@ -97,6 +106,25 @@ TEST_CASE("Runtime defines every entry point") {
   }
 }
 
+TEST_CASE("Runtime defines only what the program declares") {
+  llvm::LLVMContext context;
+  llvm::Module module("runtime_ir_test", context);
+  const auto usize = llvm::Type::getInt64Ty(context);
+  const auto void_ty = llvm::Type::getVoidTy(context);
+  const auto pointer = opaque_pointer(context);
+
+  llvm::Function* print =
+      declare(module, "alcy_print", signature(void_ty, {pointer, usize}));
+  add_runtime_definitions(module, target_of(ir::PointerWidth::W64));
+
+  CHECK(!print->isDeclaration());
+  // No allocator is declared, so none is defined: a freestanding
+  // program that never allocates carries no libc call.
+  CHECK(module.getFunction("alcy_alloc") == nullptr);
+  CHECK(module.getFunction("alcy_dealloc") == nullptr);
+  CHECK(!llvm::verifyModule(module));
+}
+
 TEST_CASE("Runtime fills in the program's declarations") {
   llvm::LLVMContext context;
   llvm::Module module("runtime_ir_test", context);
@@ -108,6 +136,7 @@ TEST_CASE("Runtime fills in the program's declarations") {
       declare(module, "alcy_print", signature(void_ty, {pointer, usize}));
   llvm::Function* alloc =
       declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
+  declare(module, "alcy_panic", signature(void_ty, {pointer, usize}));
 
   add_runtime_definitions(module, target_of(ir::PointerWidth::W64));
 
@@ -134,6 +163,9 @@ TEST_CASE("Runtime follows the target width") {
   const auto void_ty = llvm::Type::getVoidTy(context);
   const auto pointer = opaque_pointer(context);
 
+  declare(module, "alcy_print", signature(void_ty, {pointer, usize}));
+  declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
+
   add_runtime_definitions(module, target_of(ir::PointerWidth::W32));
 
   CHECK(!llvm::verifyModule(module));
@@ -145,6 +177,15 @@ TEST_CASE("Runtime follows the target width") {
 TEST_CASE("Runtime reaches libc the way the platform expects") {
   llvm::LLVMContext context;
   llvm::Module module("runtime_ir_test", context);
+  const auto usize = llvm::Type::getInt64Ty(context);
+  const auto void_ty = llvm::Type::getVoidTy(context);
+  const auto pointer = opaque_pointer(context);
+
+  // The allocator, the free path, and the panic path are the pieces
+  // that reach libc, so all of them are declared here.
+  declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
+  declare(module, "alcy_dealloc", signature(void_ty, {pointer, usize, usize}));
+  declare(module, "alcy_panic", signature(void_ty, {pointer, usize}));
 
   add_runtime_definitions(module, target_of(ir::PointerWidth::W64));
 

@@ -45,6 +45,7 @@ ResultCode run_build(const CliConfig& config,
     return failed;
   }
   const pkg::Toolchain tool = std::move(toolchain).unwrap();
+  ctx.freestanding = tool.freestanding;
   const pipeline::LinkOptions link = resolve_link_options(config, tool);
   base::Result<std::string, diag::Reported> res = pipeline::build_package(
       ctx, found.root, found.manifest, found.manifest_name, config.output,

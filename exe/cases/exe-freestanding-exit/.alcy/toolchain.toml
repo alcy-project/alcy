@@ -1,0 +1,4 @@
+# No startup objects, no dynamic linker, and no C library: the
+# compiler emits `_start` and the program ends through the exit
+# syscall. See docs/adr/0052-freestanding-is-a-link-mode.md.
+freestanding = true

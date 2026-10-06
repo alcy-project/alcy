@@ -116,32 +116,44 @@ base::Result<void, diag::Reported> link_with_embedded_lld(
     const LinkOptions& link,
     const std::string& object_path,
     const std::string& exe_path) {
-  const std::optional<Startup>& found = startup_inputs();
-  if (!found.has_value()) {
-    // The probe runs once per process, so only a caller that skipped
-    // `embedded_lld_ready()` gets here.
-    DCHECK(false);
-    return base::make_err(diag::Reported{});
-  }
-  const Startup& startup = *found;
   std::vector<std::string> args;
-  args.reserve(9 + startup.lib_dirs.size() + link.args.size());
   args.emplace_back("ld.lld");
   // A plain crt1.o is the non-PIE startup, and lld does not default the
-  // loader the way the system linker does.
+  // loader the way the system linker does, so every link here is
+  // non-PIE.
   args.emplace_back("-no-pie");
-  args.emplace_back("--dynamic-linker=" + startup.dynamic_linker);
-  args.push_back(startup.crt1);
-  args.push_back(startup.crti);
-  for (const std::string& dir : startup.lib_dirs) {
-    args.push_back("-L" + dir);
+  if (link.freestanding) {
+    // The object defines `_start` and the program owns every symbol it
+    // calls: no startup objects, no loader, no C library (ADR-0052).
+    args.emplace_back("-e");
+    args.emplace_back("_start");
+    args.push_back(object_path);
+    for (std::string_view argument : link.args) {
+      args.emplace_back(argument);
+    }
+  } else {
+    const std::optional<Startup>& found = startup_inputs();
+    if (!found.has_value()) {
+      // The probe runs once per process, so only a caller that skipped
+      // `embedded_lld_ready()` gets here.
+      DCHECK(false);
+      return base::make_err(diag::Reported{});
+    }
+    const Startup& startup = *found;
+    args.reserve(args.size() + 6 + startup.lib_dirs.size() + link.args.size());
+    args.emplace_back("--dynamic-linker=" + startup.dynamic_linker);
+    args.push_back(startup.crt1);
+    args.push_back(startup.crti);
+    for (const std::string& dir : startup.lib_dirs) {
+      args.push_back("-L" + dir);
+    }
+    args.push_back(object_path);
+    for (std::string_view argument : link.args) {
+      args.emplace_back(argument);
+    }
+    args.emplace_back("-lc");
+    args.push_back(startup.crtn);
   }
-  args.push_back(object_path);
-  for (std::string_view argument : link.args) {
-    args.emplace_back(argument);
-  }
-  args.emplace_back("-lc");
-  args.push_back(startup.crtn);
   args.emplace_back("-o");
   args.push_back(exe_path);
 

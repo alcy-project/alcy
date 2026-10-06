@@ -115,6 +115,36 @@ TEST_CASE("Toolchain rejects a link argument that is not text") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Toolchain parses a freestanding flag") {
+  Fixture f;
+  base::Result<Toolchain, diag::Reported> result =
+      parse(f, "freestanding = true\n");
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  CHECK(std::move(result).unwrap().freestanding);
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Toolchain without the freestanding flag is hosted") {
+  Fixture f;
+  base::Result<Toolchain, diag::Reported> result =
+      parse(f, "linker = \"lld\"\n");
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  CHECK(!std::move(result).unwrap().freestanding);
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Toolchain rejects a mistyped freestanding flag") {
+  Fixture f;
+  CHECK(parse(f, "freestanding = \"yes\"\n").is_err());
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Toolchain rejects broken TOML") {
   Fixture f;
   CHECK(parse(f, "[[unclosed\n").is_err());

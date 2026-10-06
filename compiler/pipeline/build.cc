@@ -215,6 +215,20 @@ base::Result<void, diag::Reported> emit_package_output(
     (void)index;
     return base::make_err(diag::Reported{});
   }
+  if (ctx.freestanding && !is_lib) {
+    // The exit sequence is written per architecture, so a target with
+    // no sequence has no freestanding entry to emit. Refusing here
+    // names the target instead of leaving the emitter to guess.
+    const std::string_view triple = ctx.target.triple;
+    const std::string_view arch = triple.substr(0, triple.find('-'));
+    if (arch != "x86_64" && arch != "aarch64" && arch != "riscv64") {
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineFreestandingTarget>(
+          diag::Severity::Error, diag::Stage::Pipeline,
+          DiagCode::UnsupportedOutput, ctx.target.triple);
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
+  }
   codegen::EmitRequest request{
       .storage = std::move(package.storage),
       .instr_spans = package.instr_spans,
@@ -222,6 +236,7 @@ base::Result<void, diag::Reported> emit_package_output(
       .bag = &ctx.bag,
       .target = ctx.target,
       .emit_entry = !is_lib,
+      .freestanding = ctx.freestanding,
       .optimize = optimize,
       .kind = kind,
       .profiler = ctx.profiler,
@@ -300,11 +315,19 @@ base::Result<void, diag::Reported> link_executable(
   // resolved against it, and stop short of the output, which stays the
   // last word.
   std::vector<std::string> argv;
-  argv.reserve(2 + link.args.size() + 2);
+  argv.reserve(6 + link.args.size() + 2);
   argv.emplace_back(driver);
   argv.emplace_back(object_path);
   for (std::string_view argument : link.args) {
     argv.emplace_back(argument);
+  }
+  if (link.freestanding) {
+    // No startup files and no C library; the object's `_start` is the
+    // entry. `-static` keeps the driver from asking for a loader the
+    // program has no symbols for (ADR-0052).
+    argv.emplace_back("-nostdlib");
+    argv.emplace_back("-static");
+    argv.emplace_back("-Wl,-e,_start");
   }
   argv.emplace_back("-o");
   argv.emplace_back(exe_path);

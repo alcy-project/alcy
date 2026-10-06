@@ -53,6 +53,10 @@ struct PipelineContext {
   // ask, which reads as half the machine rather than as one thread: one is
   // what `-j 1` asks for.
   u32 jobs = 0;
+  // Whether this run builds a freestanding program: the backend emits
+  // `_start` instead of `main`, and the link skips the C runtime
+  // (ADR-0052). Set from the goal package's toolchain file.
+  bool freestanding = false;
 
   // `span_capacity` is the syntax arena's reservation. A case that has
   // to spend it can ask for less, the way `ast::AstArena` allows.

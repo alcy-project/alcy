@@ -54,6 +54,9 @@ struct EmitRequest {
   // Whether the module owns the program entry: a wrapper around `main`
   // that a binary needs and a library does not.
   bool emit_entry = false;
+  // Whether the entry is `_start` and the link skips the C runtime
+  // (ADR-0052); only meaningful with `emit_entry`.
+  bool freestanding = false;
   // Whether to run the middle end. A backend without one answers
   // `NoOptimizer` rather than emitting unoptimized code under a release
   // command.

@@ -280,6 +280,7 @@
   F(PkgDependencyUnknownField, "Manifest '{}': dependency '{}' has an unknown field '{}'") \
   F(PkgManifestInvalid, "Manifest '{}': {}") \
   F(PkgTomlSyntaxError, "TOML syntax error: {}") \
+  F(PkgToolchainFreestandingNotBool, "Toolchain '{}': freestanding must be a bool") \
   F(PkgToolchainLinkArgsNotStrings, "Toolchain '{}': link-args must be a list of strings") \
   F(PkgToolchainLinkerNotAString, "Toolchain '{}': linker must be a string") \
   F(PkgToolchainNotLoaded, "Toolchain '{}' is not a loaded file") \
@@ -318,6 +319,7 @@
   F(PipelineDependencyNotASuiteMember, "Dependency '{}' is not a member of suite '{}/{}'") \
   F(PipelineDependencyOverlaps, "Dependency '{}' overlaps '{}'; name every member or glob the suite, not both") \
   F(PipelineDependencySuiteMismatch, "Dependency '{}' names suite '{}/{}', but '{}' holds suite '{}/{}'") \
+  F(PipelineFreestandingTarget, "A freestanding build is not implemented for target '{}' yet") \
   F(PipelineInvalidOutputPath, "Invalid output path '{}'") \
   F(PipelineInvalidPackageName, "Invalid package name '{}'; use [A-Za-z0-9_-] only") \
   F(PipelineInvalidSourceDirectory, "Invalid source directory '{}'") \

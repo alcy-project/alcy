@@ -122,5 +122,10 @@ replaced. The foundations are in `roadmap.md`.
   `extern "C"` declarations followed: bodyless functions whose names
   are the linker's symbols, called behind the gate, over the ABI of
   scalars, raw pointers, and `()`.
-  Designed in `docs/adr/0050-unsafe-is-a-gate-on-operations.md` and
-  `docs/adr/0051-extern-c-for-a-minimal-abi.md`.
+  A freestanding link mode followed: `freestanding = true` in the
+  toolchain file, the compiler's `_start` ending through the exit
+  syscall, a runtime defined per declaration, and no crt, loader, or
+  libc in the link.
+  Designed in `docs/adr/0050-unsafe-is-a-gate-on-operations.md`,
+  `docs/adr/0051-extern-c-for-a-minimal-abi.md`, and
+  `docs/adr/0052-freestanding-is-a-link-mode.md`.

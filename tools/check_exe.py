@@ -105,6 +105,20 @@ def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path):
     return proc, ""
 
 
+def is_freestanding(case_dir: Path) -> bool:
+    """Whether the goal package links without a C runtime.
+
+    The toolchain file says so (ADR-0052); a freestanding program owns
+    its `_start`, so the sanitizer's crt and libraries cannot join it.
+    """
+    toolchain = case_dir / ".alcy" / "toolchain.toml"
+    if not toolchain.is_file():
+        return False
+    with open(toolchain, "rb") as f:
+        data = tomllib.load(f)
+    return bool(data.get("freestanding", False))
+
+
 def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
     is_package = (case_dir / "alcy.toml").is_file()
     main_al = case_dir / "main.al"
@@ -114,6 +128,11 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
         return False, "no main.al found"
     if not expect_path.is_file():
         return False, "missing expect.toml"
+
+    if sanitize and is_freestanding(case_dir):
+        # A freestanding program defines its own entry and links no C
+        # runtime, so it runs uninstrumented rather than not at all.
+        sanitize = False
 
     expected_exit, expected_stdout, stdout_contains, stderr_contains = parse_expect(
         expect_path

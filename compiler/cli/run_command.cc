@@ -70,6 +70,7 @@ i32 run_run(const CliConfig& config,
     return failed;
   }
   const pkg::Toolchain tool = std::move(toolchain).unwrap();
+  ctx.freestanding = tool.freestanding;
   const pipeline::LinkOptions link = resolve_link_options(config, tool);
   const term::ColorStyle style =
       term::console_color_style(term::Stream::Stderr, config.color_mode);

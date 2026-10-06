@@ -48,7 +48,7 @@ struct EmittedModule {
     // carries its items unwrapped, even one named `main`.
     LlvmIrEmitter emitter(module.get(), std::move(request.storage),
                           request.strings, request.target, request.emit_entry,
-                          request.profiler);
+                          request.freestanding, request.profiler);
     std::move(emitter).emit();
     // Before the optimizer, so the runtime is inlined and folded like
     // any other code, and after the program, so its definitions land in

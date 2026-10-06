@@ -33,16 +33,43 @@ class RuntimeBuilder {
   void build() {
     empty_text_ = text_constant("");
     newline_text_ = text_constant("\n");
-    build_write_all();
-    build_writer("alcy_print", /*newline=*/false);
-    build_writer("alcy_println", /*newline=*/true);
-    build_panic();
-    build_sys_write();
-    build_alloc();
-    build_dealloc();
+    // A piece is defined only when the program declares it. A module
+    // that never allocates carries no allocator, and a freestanding
+    // program that never prints carries no libc call: the declaration
+    // is the program's call site, so nothing else can reach it
+    // (ADR-0052).
+    const bool print = declared("alcy_print");
+    const bool println = declared("alcy_println");
+    const bool panic = declared("alcy_panic");
+    const bool sys_write = declared("alcy_sys_write");
+    if (print || println || panic || sys_write) {
+      build_write_all();
+    }
+    if (print) {
+      build_writer("alcy_print", /*newline=*/false);
+    }
+    if (println) {
+      build_writer("alcy_println", /*newline=*/true);
+    }
+    if (panic) {
+      build_panic();
+    }
+    if (sys_write) {
+      build_sys_write();
+    }
+    if (declared("alcy_alloc")) {
+      build_alloc();
+    }
+    if (declared("alcy_dealloc")) {
+      build_dealloc();
+    }
   }
 
  private:
+  bool declared(std::string_view name) const {
+    return module_.getFunction(name) != nullptr;
+  }
+
   // A null message carries no bytes, so the length must drop with it;
   // passing the caller's length would read past the empty literal.
   struct Guarded {

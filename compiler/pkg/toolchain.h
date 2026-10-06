@@ -30,6 +30,10 @@ constexpr std::string_view TOOLCHAIN_FILE_NAME = "toolchain.toml";
 struct Toolchain {
   std::string_view linker;
   std::span<const std::string_view> link_args;
+  // Whether the goal package links without a C runtime: no startup
+  // objects, no C library, and the compiler emits `_start` as the
+  // entry instead of `main` (ADR-0052).
+  bool freestanding = false;
 };
 
 // Parses `.alcy/toolchain.toml` bytes. Unknown keys are ignored, like

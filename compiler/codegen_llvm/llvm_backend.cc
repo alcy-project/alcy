@@ -37,16 +37,21 @@ void init_linked_targets() {
   ::LLVMInitializeX86Target();
   ::LLVMInitializeX86TargetMC();
   ::LLVMInitializeX86AsmPrinter();
+  // A freestanding entry ends through an inline `syscall`, and the
+  // streamer needs the target's assembler to lay it down.
+  ::LLVMInitializeX86AsmParser();
 
   ::LLVMInitializeAArch64TargetInfo();
   ::LLVMInitializeAArch64Target();
   ::LLVMInitializeAArch64TargetMC();
   ::LLVMInitializeAArch64AsmPrinter();
+  ::LLVMInitializeAArch64AsmParser();
 
   ::LLVMInitializeRISCVTargetInfo();
   ::LLVMInitializeRISCVTarget();
   ::LLVMInitializeRISCVTargetMC();
   ::LLVMInitializeRISCVAsmPrinter();
+  ::LLVMInitializeRISCVAsmParser();
 #endif
 
   ::LLVMInitializeWebAssemblyTargetInfo();

@@ -29,11 +29,13 @@ peripheral work lives in `backlog.md`. The language record lives in
   In slices: the `unsafe` gate and the standard library's migration
   to it (landed), raw pointers with casts, dereference, and offset
   (landed), `extern "C"` declarations against the system libc
-  (landed), then `_start`, raw syscalls, and an allocator without
+  (landed), a freestanding link with the compiler's `_start` and an
+  exit syscall (landed), then raw syscalls and an allocator without
   libc. Needs the driver work for nostdlib-style links; the libc
   fight must not gate the FFI value. Designed in
-  `docs/adr/0050-unsafe-is-a-gate-on-operations.md` and
-  `docs/adr/0051-extern-c-for-a-minimal-abi.md`.
+  `docs/adr/0050-unsafe-is-a-gate-on-operations.md`,
+  `docs/adr/0051-extern-c-for-a-minimal-abi.md`, and
+  `docs/adr/0052-freestanding-is-a-link-mode.md`.
 - [ ] `ArrayVec<T, N>`, a fixed-capacity inline container.
 
   Blocked on value parameters: array lengths take decimal literals
