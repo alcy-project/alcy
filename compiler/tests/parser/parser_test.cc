@@ -765,6 +765,57 @@ TEST_CASE("Parser rejects unsafe outside functions and blocks") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Parser keeps a block's brace on its header line") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn f() {\n"
+      "  unsafe\n"
+      "  { }\n"
+      "}\n",
+      f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Parser reads a header whose closing bracket ends the line") {
+  Fixture f;
+  const ParseResult result = parse(
+      "struct S<T> { a: T }\n"
+      "fn f() -> S<i32>\n"
+      "{\n"
+      "  ret S { a: 1 }\n"
+      "}\n",
+      f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Parser reads a headerless block on its own line") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn f() -> i32 {\n"
+      "  x :=\n"
+      "  { 1 }\n"
+      "  ret x\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Parser reads a closure body on the line after the arrow") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn main() {\n"
+      "  g := (x: i32) ->\n"
+      "  { x }\n"
+      "  _ := g(1)\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+}
+
 TEST_CASE("Parentheses lift the struct-literal ban") {
   Fixture f;
   const ParseResult result = parse(

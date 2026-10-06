@@ -31,9 +31,12 @@ are rejected with guidance diagnostics.
   next token continues the construct (`else`, `,`, closers, `.`, or
   end of file). A line therefore continues only in operator-led,
   bracket-open, or continuation positions.
-- Block openers stay on their header line: the `{` of `if`, `while`,
-  `match`, `fn`, `impl`, and `else` MUST NOT start on a following
-  line (Go-style). `} else {` stays on one line.
+- Block openers stay on their header line: the `{` of a block that
+  belongs to a header — `if`, `else`, `while`, `for`, `loop`, `match`,
+  `fn`, `impl`, `spec`, `struct`, `enum`, `extern`, `comp`, and
+  `unsafe` — MUST NOT start on a following line (Go-style). A newline
+  inside a comment does not move the line. `} else {` stays on one
+  line.
 - Block comments nest. `///` attaches to the following item.
 - Integer literals accept `_` separators between digits. Suffixes
   (`42i32`, `1.5f64`) select the type; unsuffixed integers default

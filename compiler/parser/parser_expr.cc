@@ -1000,7 +1000,7 @@ ast::ExprIdx Parser::parse_if() {
   if (!cond.is_valid()) {
     return ast::ExprIdx::invalid();
   }
-  const ast::BlockIdx then_block = parse_block();
+  const ast::BlockIdx then_block = parse_header_block();
   if (!then_block.is_valid()) {
     return ast::ExprIdx::invalid();
   }
@@ -1017,7 +1017,7 @@ ast::ExprIdx Parser::parse_if() {
       block.value = nested_if;
       else_block = ast_.blocks.push_back(block);
     } else {
-      else_block = parse_block();
+      else_block = parse_header_block();
       if (!else_block.is_valid()) {
         return ast::ExprIdx::invalid();
       }
@@ -1052,7 +1052,7 @@ ast::ExprIdx Parser::parse_match() {
   if (!scrutinee.is_valid()) {
     return ast::ExprIdx::invalid();
   }
-  if (!expect(lexer::TokenKind::LBrace, "`{`")) {
+  if (!expect_header_lbrace()) {
     return ast::ExprIdx::invalid();
   }
   std::vector<ast::ExprMatchArm> arms;
@@ -1094,7 +1094,7 @@ ast::ExprIdx Parser::parse_loop() {
   if (!expect(lexer::TokenKind::Loop, "loop")) {
     return ast::ExprIdx::invalid();
   }
-  const ast::BlockIdx body = parse_block();
+  const ast::BlockIdx body = parse_header_block();
   if (!body.is_valid()) {
     return ast::ExprIdx::invalid();
   }
@@ -1116,7 +1116,7 @@ ast::ExprIdx Parser::parse_while() {
   if (!cond.is_valid()) {
     return ast::ExprIdx::invalid();
   }
-  const ast::BlockIdx body = parse_block();
+  const ast::BlockIdx body = parse_header_block();
   if (!body.is_valid()) {
     return ast::ExprIdx::invalid();
   }
@@ -1160,7 +1160,7 @@ ast::ExprIdx Parser::parse_for() {
   if (!head.is_valid()) {
     return ast::ExprIdx::invalid();
   }
-  const ast::BlockIdx body = parse_block();
+  const ast::BlockIdx body = parse_header_block();
   if (!body.is_valid()) {
     return ast::ExprIdx::invalid();
   }
@@ -1407,7 +1407,7 @@ ast::ExprIdx Parser::parse_unsafe_block() {
     (void)index;
     return ast::ExprIdx::invalid();
   }
-  const ast::BlockIdx block = parse_block();
+  const ast::BlockIdx block = parse_header_block();
   if (!block.is_valid()) {
     return ast::ExprIdx::invalid();
   }
@@ -1434,7 +1434,7 @@ ast::ExprIdx Parser::parse_comp_block() {
     (void)index;
     return ast::ExprIdx::invalid();
   }
-  const ast::BlockIdx block = parse_block();
+  const ast::BlockIdx block = parse_header_block();
   if (!block.is_valid()) {
     return ast::ExprIdx::invalid();
   }

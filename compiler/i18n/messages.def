@@ -55,6 +55,7 @@
   F(ArgVersionOption, "Print version information") \
   F(ParserArrayLengthNotDecimal, "Array length must be decimal") \
   F(ParserArrayLengthTooLarge, "Array length is too large") \
+  F(ParserBlockBraceOnHeader, "A block's `{{` must stay on its header line") \
   F(ParserCompOnlyOnBindings, "Comp evaluation is only allowed on parameters, declarations, and blocks") \
   F(ParserDuplicateTypeParameter, "Duplicate type parameter '{}'") \
   F(ParserExpectedFound, "Expected {}, found `{}`") \

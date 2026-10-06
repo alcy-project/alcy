@@ -563,7 +563,7 @@ ast::ItemIdx Parser::parse_fn(bool is_pub, bool is_unsafe) {
   if (!parse_fn_signature(signature)) {
     return ast::ItemIdx::invalid();
   }
-  ast::BlockIdx body = parse_block();
+  ast::BlockIdx body = parse_header_block();
   if (!body.is_valid()) {
     return ast::ItemIdx::invalid();
   }
@@ -683,7 +683,7 @@ ast::ItemIdx Parser::parse_extern(bool is_pub) {
     (void)index;
     return ast::ItemIdx::invalid();
   }
-  if (!expect(lexer::TokenKind::LBrace, "`{`")) {
+  if (!expect_header_lbrace()) {
     return ast::ItemIdx::invalid();
   }
   std::vector<ast::ItemExternFn> fns;
@@ -735,7 +735,7 @@ ast::ItemIdx Parser::parse_struct(bool is_pub) {
   if (!parse_generic_params(params)) {
     return ast::ItemIdx::invalid();
   }
-  if (!expect(lexer::TokenKind::LBrace, "`{`")) {
+  if (!expect_header_lbrace()) {
     return ast::ItemIdx::invalid();
   }
   std::vector<ast::ItemStructField> fields;
@@ -786,7 +786,7 @@ ast::ItemIdx Parser::parse_enum(bool is_pub) {
   if (!parse_generic_params(params)) {
     return ast::ItemIdx::invalid();
   }
-  if (!expect(lexer::TokenKind::LBrace, "`{`")) {
+  if (!expect_header_lbrace()) {
     return ast::ItemIdx::invalid();
   }
   std::vector<ast::ItemEnumVariant> variants;
@@ -902,7 +902,7 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
       return ast::ItemIdx::invalid();
     }
   }
-  if (!expect(lexer::TokenKind::LBrace, "`{`")) {
+  if (!expect_header_lbrace()) {
     return ast::ItemIdx::invalid();
   }
   std::vector<ast::ItemIdx> methods;
@@ -968,7 +968,7 @@ ast::ItemIdx Parser::parse_spec(bool is_pub) {
   if (!parse_generic_params(params)) {
     return ast::ItemIdx::invalid();
   }
-  if (!expect(lexer::TokenKind::LBrace, "`{`")) {
+  if (!expect_header_lbrace()) {
     return ast::ItemIdx::invalid();
   }
   std::vector<ast::SpecMethod> methods;
@@ -1167,6 +1167,78 @@ bool Parser::nesting_exhausted(diag::Span span) {
     (void)index;
   }
   return true;
+}
+
+ast::BlockIdx Parser::parse_header_block() {
+  check_header_brace();
+  return parse_block();
+}
+
+bool Parser::expect_header_lbrace() {
+  check_header_brace();
+  return expect(lexer::TokenKind::LBrace, "`{`");
+}
+
+void Parser::check_header_brace() {
+  if (peek_kind() != lexer::TokenKind::LBrace || !next_token_on_new_line()) {
+    return;
+  }
+  const u32 index = bag_.emit<i18n::Key::ParserBlockBraceOnHeader>(
+      diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+      peek().span);
+  (void)index;
+}
+
+bool Parser::next_token_on_new_line() const {
+  if (at_end()) {
+    return false;
+  }
+  usize at = static_cast<usize>(previous_span_.offset) + previous_span_.length;
+  const usize end = peek().span.offset;
+  if (end > bytes_.size() || at > end) {
+    return false;
+  }
+  // Only whitespace and comments may stand in the gap; a newline
+  // outside a comment is what breaks the line. A block comment may
+  // span lines without ending the brace's line, which is how the
+  // scanner reads it too.
+  while (at < end) {
+    const char c = bytes_[at];
+    if (c == '\n') {
+      return true;
+    }
+    if (c == ' ' || c == '\t' || c == '\r') {
+      ++at;
+      continue;
+    }
+    if (c == '/' && at + 1 < end && bytes_[at + 1] == '/') {
+      at += 2;
+      while (at < end && bytes_[at] != '\n') {
+        ++at;
+      }
+      continue;
+    }
+    if (c == '/' && at + 1 < end && bytes_[at + 1] == '*') {
+      u32 depth = 1;
+      at += 2;
+      while (at < end && depth > 0) {
+        if (bytes_[at] == '/' && at + 1 < end && bytes_[at + 1] == '*') {
+          ++depth;
+          at += 2;
+        } else if (bytes_[at] == '*' && at + 1 < end && bytes_[at + 1] == '/') {
+          --depth;
+          at += 2;
+        } else {
+          ++at;
+        }
+      }
+      continue;
+    }
+    // Something else stands in the gap, so the line cannot be judged
+    // here; the parser's own error is the better report.
+    return false;
+  }
+  return false;
 }
 
 ast::BlockIdx Parser::parse_block() {

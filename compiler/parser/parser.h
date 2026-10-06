@@ -151,6 +151,18 @@ class Parser {
   ast::ExprIdx parse_unsafe_block();
   ast::ExprIdx parse_array_literal();
   ast::BlockIdx parse_block();
+  // A block whose `{` belongs to a header: the brace must sit on that
+  // header's line (grammar.md, "Block openers stay on their header
+  // line"). The lexer's newline-to-`;` rule catches a header that
+  // ends in an expression, but a header ending in a keyword or a
+  // closing `>` needs the check spelled out.
+  ast::BlockIdx parse_header_block();
+  bool expect_header_lbrace();
+  // Whether the next token begins on a later line than the last one
+  // consumed. A newline inside a comment does not count, which is how
+  // the grammar's scanner reads it.
+  bool next_token_on_new_line() const;
+  void check_header_brace();
 
   // Statements (recover at boundaries).
   ast::StmtIdx parse_stmt();
