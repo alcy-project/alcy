@@ -36,8 +36,10 @@ for, because instructions do not grow from cache effects.
 `profile` is the step that names the work: it records the same shape at two
 sizes, reads each symbol's self time from `perf report`, and reports it per
 module at both sizes. A symbol whose per-module cost rises is the one to read.
-It needs a build with symbols, which `compiler/docs/performance.md` shows how
-to make without committing the change.
+The shares are samples of cycles, so a rise can also be locality rather than
+work; `scale` is what says which. It needs a build with symbols, which
+`compiler/docs/performance.md` shows how to make without committing the
+change.
 """
 
 import argparse
@@ -356,7 +358,7 @@ def cmd_profile(args: argparse.Namespace) -> int:
         f" instructions) vs {large_path.name} ({large_modules} modules,"
         f" {human(large_run)})"
     )
-    print(f"per-module self cost, largest growth first; binary={args.binary}")
+    print(f"per-module sampled cycles, largest growth first; binary={args.binary}")
     print(f"{'grow':>9} {'small':>9} {'large':>9}   symbol")
     rows = []
     for symbol, share in large.items():
@@ -587,7 +589,7 @@ def parse_args() -> argparse.Namespace:
     profile = subparsers.add_parser(
         "profile",
         parents=[common],
-        help="self cost per module of one shape at two sizes, from perf",
+        help="sampled cycles per module at two sizes, from perf",
     )
     profile.add_argument("small")
     profile.add_argument("large")

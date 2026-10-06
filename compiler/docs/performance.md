@@ -98,6 +98,10 @@ Two traps:
 - A cost proportional to the package is not growth. One-time work, and work on
   a `main` that grows with the package, both look like a rising per-module
   number in a single pair of profiles; the fixed-`main` shape tells them apart.
+- A sample is a cycle, not an instruction. A symbol whose share rises may be
+  doing the same work with worse locality, which no table removes; `scale`
+  says whether there are instructions to remove, and `profile` only says where
+  to look. A symbol whose per-module wall time does not move is the tell.
 
 ### 3. Read the code for the shape
 
