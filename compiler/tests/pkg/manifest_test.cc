@@ -327,6 +327,39 @@ TEST_CASE("Manifest syntax errors carry spans") {
   CHECK(diag->primary_span.file == 3);
 }
 
+// toml++ v3.4.0 called its key parser before checking the character that
+// followed a table header's opening bracket; with `-fno-exceptions` that
+// path asserts in debug and assumes the character is valid in release.
+// The vendored fix rejects the byte first, so an unfinished header is a
+// syntax error rather than a crash.
+TEST_CASE("Manifest rejects an unfinished table header") {
+  for (const std::string_view bytes : {"[\n", "[[\n", "[.\n", "[#\n"}) {
+    Fixture f;
+    base::Result<PackageManifest, diag::Reported> result =
+        parse_manifest(bytes, "alcy.toml", 3, f.bag, f.arena);
+    CHECK(result.is_err());
+    CHECK(f.bag.has_errors());
+    CHECK(f.bag.size() == 1);
+    if (f.bag.size() != 1) {
+      continue;
+    }
+    const diag::Diagnostic* const diag = f.bag.at(0);
+    CHECK(diag != nullptr);
+    if (diag == nullptr) {
+      continue;
+    }
+    CHECK(diag->severity == diag::Severity::Error);
+    CHECK(diag->code.has_value());
+    if (!diag->code.has_value()) {
+      continue;
+    }
+    CHECK(diag->code->stage == diag::Stage::Pkg);
+    CHECK(diag->code->id == 1);
+    CHECK(diag->has_primary_span);
+    CHECK(diag->primary_span.file == 3);
+  }
+}
+
 TEST_CASE("Manifest semantic errors are diagnosed") {
   Fixture f;
   constexpr std::string_view no_package = "[other]\n";
