@@ -2939,8 +2939,8 @@ void Checker::index_generic_impls() {
       if (target_entry == nullptr) {
         continue;
       }
-      generic_impls_by_nominal_[nominal_index(target_entry)].push_back(
-          {m, item});
+      generic_impls_by_nominal_[nominal_index(target_entry)].emplace_back(m,
+                                                                          item);
     }
   }
 }
