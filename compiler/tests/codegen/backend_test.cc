@@ -7,6 +7,7 @@
 #include <string>
 
 #include "codegen/target.h"
+#include "config/build_config.h"
 #include "doctest/doctest.h"
 #include "ir/type.h"
 
@@ -31,7 +32,13 @@ TEST_CASE("Target names resolve") {
   CHECK(host.has_value());
   if (host.has_value()) {
     CHECK(host->triple == host_triple());
+    // The Emscripten build runs on the wasm machine it emits for; every
+    // other host is not one.
+#if BUILD_FLAG(IS_OS_ASMJS)
+    CHECK(host->is_wasm());
+#else
     CHECK(!host->is_wasm());
+#endif
   }
 
   const std::optional<Target> wasm =

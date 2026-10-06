@@ -230,7 +230,7 @@ TEST_CASE("Dependencies extend the selection through the closure") {
       "[dependencies]\n\"alcy/std/core\" = {}\n\n"
       "[[bin]]\nname = \"acme-base\"\npath = \"util.al\"\n",
       {{"util.al",
-        "pub fn sz() -> u64 {\n  ret size_of::<i32>()\n}\n\npub fn "
+        "pub fn sz() -> usize {\n  ret size_of::<i32>()\n}\n\npub fn "
         "twice(x: i32) -> i32 {\n  ret x * 2\n}\n"}});
   CHECK(setup);
   CHECK(base_setup);

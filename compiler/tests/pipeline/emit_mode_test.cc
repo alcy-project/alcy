@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "codegen/target.h"
 #include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -171,8 +172,9 @@ TEST_CASE("A source without an extension still gets an output name") {
 
   // The executable mode has no suffix to append on POSIX, so a target
   // without an extension cannot be named and the build refuses it; where
-  // the mode does have one (Windows' `.exe`), there is nothing to refuse.
-  if (exe_suffix().empty()) {
+  // the mode does have one (Windows' `.exe`, a wasm target's `.wasm`),
+  // there is nothing to refuse.
+  if (exe_suffix().empty() && !codegen::host_target().is_wasm()) {
     PipelineContext ctx{i18n::Language::EnUs};
     base::Result<std::string, diag::Reported> refused =
         build_single_file(ctx, dir.join("noext"), "", false, LinkOptions{},
