@@ -50,6 +50,7 @@ group("modules") {
     "parser",
     "path",
     "pkg",
+    "playground",
     "source",
     "symbol",
     "text",

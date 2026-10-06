@@ -1,0 +1,47 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# The playground: the compiler behind a small C ABI, for a host that
+# embeds it. The library builds everywhere; the wasm executable is what
+# the page loads, and it carries no LLVM (build with
+# `alcy_backends = []`).
+source_set("playground") {
+  sources = [
+    "playground.cc",
+    "playground.h",
+  ]
+  deps = [
+    "//compiler:base_modules",
+    "//compiler/analyzer",
+    "//compiler/codegen",
+    "//compiler/diag",
+    "//compiler/i18n",
+    "//compiler/pipeline",
+    "//compiler/source",
+  ]
+  configs += [ "//compiler:alcy_config" ]
+}
+
+if (is_wasm) {
+  # A module with no entry and the C ABI exported, wrapped in the factory
+  # function a page's script calls. The `.wasm` sidecar is emcc's own
+  # output beside the launcher and is not a GN-declared file anywhere in
+  # this tree.
+  config("playground_wasm") {
+    ldflags = [
+      "--no-entry",
+      "-sEXPORTED_FUNCTIONS=_alcy_check,_alcy_compile,_alcy_release,_malloc,_free",
+      "-sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAPU32,UTF8ToString",
+      "-sMODULARIZE=1",
+      "-sEXPORT_NAME=createAlcyPlayground",
+      "-sENVIRONMENT=web,node",
+      "-sALLOW_MEMORY_GROWTH=1",
+      "-sEXIT_RUNTIME=0",
+    ]
+  }
+
+  executable("alcy_playground") {
+    deps = [ ":playground" ]
+    configs += [ ":playground_wasm" ]
+  }
+}

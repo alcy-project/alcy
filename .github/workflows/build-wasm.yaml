@@ -93,3 +93,14 @@ jobs:
       - name: Run Tests
         shell: bash
         run: uv run ./tools/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build --target-os=emscripten
+
+      # The playground build carries no LLVM, so it is its own configure
+      # rather than more of the one above, and the smoke runs the whole
+      # path: launcher, C ABI, compiler, emitted module.
+      - name: Build Playground
+        shell: bash
+        run: uv run ./tools/build.py --target=playground --mode=${{ inputs.build_type }} --build-subdir=playground --target-os=emscripten --gn-arg='alcy_backends=[]'
+
+      - name: Run Playground Smoke
+        shell: bash
+        run: uv run ./tools/check_playground.py --build-subdir=playground
