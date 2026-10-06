@@ -221,7 +221,8 @@ LINE_COMMENT  = "//" , { ANY_BUT_NEWLINE } ;
 BLOCK_COMMENT = "/*" , { ANY | BLOCK_COMMENT } , "*/" ;
 DOC_COMMENT   = "///" , { ANY_BUT_NEWLINE } ;
 
-(* Keywords: fn intrinsic struct enum impl spec static pub const mut use
+(* Keywords: fn intrinsic extern struct enum impl spec static pub const
+ *   mut unsafe use
  *   if else loop while for in break continue ret match
  *   package self super Self as
  *   i8 i16 i32 i64 isize u8 u16 u32 u64 usize f32 f64 bool str
