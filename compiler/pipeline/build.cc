@@ -23,6 +23,8 @@
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/messages.h"
+#include "ir/text_dump.h"
+#include "ir/write_input.h"
 #include "lowering/lowering.h"
 #include "path/path.h"
 #include "pipeline/backend_emit.h"
@@ -61,6 +63,7 @@ std::string suffix_for(const codegen::Target& target, EmitMode mode) {
     case EmitMode::Object: return ".o";
     case EmitMode::LlvmIr: return ".ll";
     case EmitMode::LlvmBitcode: return ".bc";
+    case EmitMode::Ir: return ".ir";
     case EmitMode::Executable: break;
   }
   // A wasm executable is the final module itself; every other target's
@@ -279,6 +282,48 @@ base::Result<void, diag::Reported> emit_package_ir(
                              codegen::OutputKind::Text, "ir");
 }
 
+// The alcy IR text view. It runs before the backend is consulted, because
+// the form belongs to the pipeline: a build with no code generator still
+// writes it. Nothing is optimized, so `--release` is refused rather than
+// answered with an unoptimized dump.
+base::Result<void, diag::Reported> emit_package_ir_text(
+    PipelineContext& ctx,
+    lowering::LoweredPackage& package,
+    bool optimize,
+    const std::string& output_path) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "dump-ir", "backend");
+  if (optimize) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineIrNotOptimized>(
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IrNoOptimizer,
+        "ir");
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  std::vector<std::string_view> names(ctx.sources.file_count());
+  for (u32 id = 0; id < names.size(); ++id) {
+    names[id] = ctx.sources.name(id).value_or(std::string_view{});
+  }
+  std::vector<ir::AddrName> addr_names;
+  addr_names.reserve(package.addr_names.size());
+  for (const lowering::LoweredPackage::AddrInfo& entry : package.addr_names) {
+    addr_names.push_back(
+        ir::AddrName{entry.addr, entry.name, entry.is_param, entry.is_capture});
+  }
+  const ir::WriteInput input{
+      .storage = &*package.storage,
+      .strings = &ctx.strings,
+      .instr_spans = package.instr_spans,
+      .files = ir::FileTable{.names = names, .hashes = {}},
+      .addr_names = addr_names,
+      .prelude_functions = package.prelude_functions,
+      .width = ctx.target.width,
+  };
+  const std::string text = ir::write_text(input);
+  const std::span<const u8> bytes(reinterpret_cast<const u8*>(text.data()),
+                                  text.size());
+  return write_output(ctx, "ir", output_path, bytes);
+}
+
 base::Result<void, diag::Reported> emit_package_bitcode(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
@@ -392,6 +437,9 @@ base::Result<std::string, diag::Reported> emit_output(
     }
     if (mode == EmitMode::LlvmBitcode) {
       return emit_package_bitcode(ctx, lowered, optimize, output_path, is_lib);
+    }
+    if (mode == EmitMode::Ir) {
+      return emit_package_ir_text(ctx, lowered, optimize, output_path);
     }
     // Executable: a backend that writes objects hands them to the linker;
     // one whose output is a final module writes that module and stops.

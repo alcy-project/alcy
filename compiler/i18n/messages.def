@@ -342,6 +342,7 @@
   F(PipelineInvalidSourceDirectory, "Invalid source directory '{}'") \
   F(PipelineInvalidSourcePath, "Invalid source path for file") \
   F(PipelineInvalidTarget, "Invalid target '{}'") \
+  F(PipelineIrNotOptimized, "The '{}' output is written unoptimized; build without --release") \
   F(PipelineLibTargetNotDiscovered, "Lib target '{}' was not discovered") \
   F(PipelineLibTargetNotSelected, "Lib target '{}' is not in [modules]") \
   F(PipelineLinkFailed, "Linking '{}' failed") \
@@ -390,7 +391,7 @@
   F(CliDepsHelp, "A dependency on top of the default suite, as a specifier (`alcy/std/core`) or `specifier = {{ ... }}`. Repeatable.") \
   F(CliDepsOnlyForCompile, "The `--no-std` and `--deps` flags only mean anything for `compile`") \
   F(CliDidYouMean, "{} (did you mean '{}'?)") \
-  F(CliEmitHelp, "What to write: executable (default), object, llvm-ir, or llvm-bc. The output's extension no longer decides.") \
+  F(CliEmitHelp, "What to write: executable (default), object, llvm-ir, llvm-bc, or ir. The output's extension no longer decides.") \
   F(CliFilePlural, "files") \
   F(CliFileSingular, "file") \
   F(CliFunctionPlural, "functions") \

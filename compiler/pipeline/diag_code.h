@@ -73,6 +73,9 @@ enum class DiagCode : u8 {
   // No backend was compiled in at all: the command can check, and a
   // build command says so here.
   NoBackend = 20,
+  // A release build asked for an IR form, and no IR form is optimized;
+  // the output would be silently unoptimized otherwise.
+  IrNoOptimizer = 21,
 };
 
 }  // namespace pipeline

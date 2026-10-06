@@ -45,6 +45,7 @@ executable("tests") {
     "pipeline/check_test.cc",
     "pipeline/dependencies_test.cc",
     "pipeline/hostile_input_test.cc",
+    "pipeline/ir_emit_test.cc",
     "pipeline/modules_test.cc",
     "pipeline/nesting_test.cc",
     "pipeline/new_test.cc",

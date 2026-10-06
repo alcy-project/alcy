@@ -533,6 +533,35 @@ TEST_CASE("Compile emits textual IR") {
   }
 }
 
+TEST_CASE("Compile emits alcy ir text") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_alcy_ir_");
+  const bool setup = write_all(dir, "main.al",
+                               "fn main() -> i32 {\n"
+                               "  ret 0\n"
+                               "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  const std::string target = dir.join("main.al");
+  const std::string out = dir.join("main.ir");
+  std::vector<std::string> storage{"alcy", "compile", target, "-o",
+                                   out,    "--emit",  "ir"};
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  SilencedOutput silenced;
+  CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) == 0);
+  const std::optional<std::string> text = io::read_file(out);
+  CHECK(text.has_value());
+  if (text.has_value()) {
+    CHECK(text->starts_with("// alcy ir, format 1, pointer width "));
+    CHECK(text->find("fn main(") != std::string::npos);
+  }
+}
+
 TEST_CASE("Compile rejects an unknown emit mode") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_emit_");
   const bool setup = write_all(dir, "main.al",

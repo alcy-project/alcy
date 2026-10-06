@@ -24,9 +24,10 @@ enum class EmitMode : u8 {
   // before code generation like the textual mode, so it needs no target
   // either.
   LlvmBitcode,
+  // Write the lowered package as alcy's own IR text, per
+  // `compiler/docs/ir-format.md`. Needs no target and no backend: the
+  // form is the pipeline's, not a code generator's.
+  Ir,
 };
-
-// `ir` stays unassigned: it names alcy's own intermediate representation,
-// which earns the spelling once it can be written.
 
 }  // namespace pipeline
