@@ -119,4 +119,8 @@ replaced. The foundations are in `roadmap.md`.
   Raw pointers followed: `*T` and `*mut T` are thin, Copy, and
   outside the region system, safe to create by cast (including
   `0 as *T`), and read, written, and offset behind the gate.
-  Designed in `docs/adr/0050-unsafe-is-a-gate-on-operations.md`.
+  `extern "C"` declarations followed: bodyless functions whose names
+  are the linker's symbols, called behind the gate, over the ABI of
+  scalars, raw pointers, and `()`.
+  Designed in `docs/adr/0050-unsafe-is-a-gate-on-operations.md` and
+  `docs/adr/0051-extern-c-for-a-minimal-abi.md`.

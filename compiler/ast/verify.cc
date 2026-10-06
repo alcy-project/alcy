@@ -357,6 +357,20 @@ bool verify_item_children(const ItemNode& node, const AstArena& arena) {
       }
       return bound(intrinsic.return_type, arena.types);
     }
+    case ItemKind::Extern: {
+      const ItemExtern block = node.payload.get<ItemExtern>();
+      for (const ItemExternFn& fn : block.fns) {
+        for (const ItemFnParam& param : fn.params) {
+          if (!verify_param_children(param, arena)) {
+            return false;
+          }
+        }
+        if (fn.return_type.is_valid() && !bound(fn.return_type, arena.types)) {
+          return false;
+        }
+      }
+      return true;
+    }
     case ItemKind::Struct: {
       const ItemStruct strukt = node.payload.get<ItemStruct>();
       for (const ItemStructField& field : strukt.fields) {

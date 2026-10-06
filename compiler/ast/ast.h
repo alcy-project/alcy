@@ -815,6 +815,7 @@ struct ExprStmt : Stmt {
 enum class ItemKind : u8 {
   Fn,
   Intrinsic,
+  Extern,
   Struct,
   Enum,
   Impl,
@@ -866,6 +867,24 @@ struct ItemIntrinsic {
 struct ItemStructField {
   Ident name;
   TypeIdx type = TypeIdx::invalid();
+};
+
+// One declaration in an `extern "C"` block: signature without a body,
+// and the name is the symbol the linker resolves.
+struct ItemExternFn {
+  Ident name;
+  // Type parameters; the checker refuses them (an extern function is
+  // not generic), so this is carried only for the diagnostic.
+  std::span<const Ident> generic;
+  std::span<const ItemFnParam> params;
+  TypeIdx return_type = TypeIdx::invalid();
+};
+
+// An `extern "C" { ... }` block. `convention` is the string the
+// declaration spelled, without the quotes; only "C" parses.
+struct ItemExtern {
+  std::string_view convention;
+  std::span<const ItemExternFn> fns;
 };
 
 struct ItemStruct {
@@ -941,6 +960,7 @@ struct ItemNode {
   // before pushing the node.
   using ItemPayload = base::Union<ItemFn,
                                   ItemIntrinsic,
+                                  ItemExtern,
                                   ItemStruct,
                                   ItemEnum,
                                   ItemImpl,

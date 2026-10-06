@@ -1,8 +1,8 @@
 # FFI, Unsafe, and Platform Boundaries
 
-The `unsafe` gate is Bootstrap, described here as it works today.
-The rest of the chapter is reserved: nothing else in it is usable
-yet, and it is kept so MVP designs do not foreclose the baremetal
+The `unsafe` gate and `extern "C"` declarations are Bootstrap,
+described here as they work today. The rest of the chapter is
+reserved: it is kept so MVP designs do not foreclose the baremetal
 story.
 
 ## Unsafe (Bootstrap)
@@ -67,13 +67,22 @@ story.
   address; ordering is not defined. An erased `void*` will spell as
   `*u8` and cast until it earns its own spelling.
 
-## External functions (reserved)
+## External functions (Bootstrap)
 
-- `extern "C" { ... }` blocks will declare bodyless functions.
-  `"C"` is the only planned convention; other convention strings are
-  reserved but undefined. Calling an `extern "C"` function will
-  require `unsafe`; variadic declarations and by-value aggregates
-  wait for the ABI slices.
+- `extern "C" { ... }` declares bodyless functions, and each
+  declared name is the symbol the linker resolves: an extern
+  declaration is not mangled. `"C"` is the only convention accepted;
+  another string is a diagnostic. The block is one item for
+  visibility, so `pub extern "C"` exports every declaration in it.
+  See `docs/adr/0051-extern-c-for-a-minimal-abi.md`.
+- Calling a declared function is an operation the gate covers, so
+  the call names `unsafe { ... }` and an extern function is refused
+  in value position until unsafe function types land. There is no
+  `unsafe extern` spelling.
+- The initial ABI is scalars, raw pointers, and `()` as a return.
+  Everything else is refused with a diagnostic: by-value aggregates,
+  `str`/slices/references, closures, generics, and variadics. The
+  callee's own contract is the caller's `unsafe` block to keep.
 
 ## Layout and statics
 

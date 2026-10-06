@@ -19,7 +19,7 @@ Primitive types: `i8`, `i16`, `i32`, `i64`, `isize`, `u8`,
 
 ## Reserved (parsed, rejected with guidance)
 
-`async`, `await`, `union`, `register`, `extern`,
+`async`, `await`, `union`, `register`,
 `where`, `dyn`
 
 A reserved word is read past rather than refused: the diagnostic names it
@@ -45,8 +45,8 @@ ordinary parse error, not a reserved-name diagnostic.
 
 ## Bootstrap
 
-`comp` (see `comp.md`), `intrinsic` (see `items.md`), `unsafe` (see
-`ffi.md`)
+`comp` (see `comp.md`), `intrinsic` (see `items.md`), `unsafe` and
+`extern` (see `ffi.md`)
 
 ## Literals, operators, delimiters, comments
 

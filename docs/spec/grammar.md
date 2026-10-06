@@ -69,6 +69,12 @@ operation the gate covers names `unsafe { ... }` where it happens,
 and the gate never suspends region, move, or drop checking. See
 `ffi.md`.
 
+An `extern "C" { ... }` block declares bodyless functions whose
+names are the symbols the linker resolves. `"C"` is the only
+convention accepted, calling a declaration needs `unsafe`, and the
+initial ABI is scalars, raw pointers, and `()` as a return; see
+`ffi.md`.
+
 ## Types
 
 `()` is the unit type. `!` is the never type and coerces to any type.

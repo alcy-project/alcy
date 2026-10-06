@@ -370,6 +370,10 @@ class Lowerer {
   Val lower_intrinsic_call(ast::ExprIdx expr,
                            const analyzer::CheckedModule::FnSig& sig,
                            const std::vector<ir::TypeIdx>& type_args);
+  // An `extern "C"` call: the declaration names the symbol, arguments
+  // pass by value, and the gate was checked at the call site.
+  Val lower_extern_call(ast::ExprIdx expr,
+                        const analyzer::CheckedModule::FnSig& sig);
   ir::TypeIdx usize_type();
   bool str_parts(Val str, ir::OperandIdx& bytes_out, ir::OperandIdx& len_out);
   bool slice_parts(Val slice,

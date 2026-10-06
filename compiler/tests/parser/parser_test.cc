@@ -1265,6 +1265,48 @@ TEST_CASE("Parser reads raw pointer types") {
   }
 }
 
+TEST_CASE("Parser reads an extern block") {
+  Fixture f;
+  const ParseResult result = parse(
+      "extern \"C\" {\n"
+      "  fn abs(x: i32) -> i32;\n"
+      "  fn exit(code: i32);\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemNode& item = f.ast.items[result.items[0]];
+  CHECK(item.kind == ast::ItemKind::Extern);
+  if (item.kind != ast::ItemKind::Extern) {
+    return;
+  }
+  const ast::ItemExtern& block = item.payload.get<ast::ItemExtern>();
+  CHECK(block.convention == "C");
+  CHECK(block.fns.size() == 2);
+  if (block.fns.size() != 2) {
+    return;
+  }
+  CHECK(block.fns[0].name.name == "abs");
+  CHECK(block.fns[0].params.size() == 1);
+  CHECK(block.fns[0].return_type.is_valid());
+  CHECK(block.fns[1].name.name == "exit");
+  CHECK(!block.fns[1].return_type.is_valid());
+}
+
+TEST_CASE("Parser rejects an unknown calling convention") {
+  Fixture f;
+  const ParseResult result = parse(
+      "extern \"stdcall\" {\n"
+      "  fn abs(x: i32) -> i32;\n"
+      "}\n",
+      f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Parser keeps a parenthesized type a type") {
   Fixture f;
   const ParseResult result = parse("fn f(x: (i32)) {}", f);

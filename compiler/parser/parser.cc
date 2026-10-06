@@ -33,7 +33,6 @@ bool is_reserved(lexer::TokenKind kind) {
     case lexer::TokenKind::Await:
     case lexer::TokenKind::Union:
     case lexer::TokenKind::Register:
-    case lexer::TokenKind::Extern:
     case lexer::TokenKind::Where:
     case lexer::TokenKind::Dyn: return true;
     default: return false;
@@ -403,6 +402,10 @@ ast::ItemIdx Parser::parse_item() {
     case lexer::TokenKind::Fn: return parse_fn(is_pub, is_unsafe);
     case lexer::TokenKind::Intrinsic:
       return parse_intrinsic_fn(is_pub, is_unsafe);
+    case lexer::TokenKind::Extern: {
+      only_functions();
+      return parse_extern(is_pub);
+    }
     case lexer::TokenKind::Struct:
       only_functions();
       return parse_struct(is_pub);
@@ -655,6 +658,68 @@ ast::ItemIdx Parser::parse_intrinsic_fn(bool is_pub, bool is_unsafe) {
       .is_unsafe = is_unsafe,
   });
   return ast_.items.push_back(node);
+}
+
+ast::ItemIdx Parser::parse_extern(bool is_pub) {
+  const usize mark = pos_;
+  if (!expect(lexer::TokenKind::Extern, "`extern`")) {
+    return ast::ItemIdx::invalid();
+  }
+  if (!check(lexer::TokenKind::String)) {
+    const u32 index = bag_.emit<i18n::Key::ParserExternNeedsConvention>(
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+        peek().span);
+    (void)index;
+    return ast::ItemIdx::invalid();
+  }
+  const diag::Span convention_span = peek().span;
+  const std::string_view raw =
+      bytes_.substr(convention_span.offset, convention_span.length);
+  advance();
+  if (raw != "\"C\"") {
+    const u32 index = bag_.emit<i18n::Key::ParserExternConvention>(
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+        convention_span);
+    (void)index;
+    return ast::ItemIdx::invalid();
+  }
+  if (!expect(lexer::TokenKind::LBrace, "`{`")) {
+    return ast::ItemIdx::invalid();
+  }
+  std::vector<ast::ItemExternFn> fns;
+  while (!check(lexer::TokenKind::RBrace) && !at_end()) {
+    if (match(lexer::TokenKind::Semicolon)) {
+      continue;
+    }
+    FnSignature signature;
+    if (!parse_fn_signature(signature)) {
+      synchronize();
+      continue;
+    }
+    // A declaration carries no body: the signature ends here.
+    if (!expect(lexer::TokenKind::Semicolon, "`;`")) {
+      synchronize();
+      continue;
+    }
+    fns.push_back(ast::ItemExternFn{
+        .name = signature.name,
+        .generic = ast::copy_to_arena(ast_.spans, signature.generic),
+        .params = ast::copy_to_arena(ast_.spans, signature.params),
+        .return_type = signature.return_type,
+    });
+  }
+  if (!expect(lexer::TokenKind::RBrace, "`}`")) {
+    return ast::ItemIdx::invalid();
+  }
+  ast::ItemNode block;
+  block.kind = ast::ItemKind::Extern;
+  block.span = span_from(mark);
+  block.is_pub = is_pub;
+  block.payload.set(ast::ItemExtern{
+      .convention = raw.substr(1, raw.size() - 2),
+      .fns = ast::copy_to_arena(ast_.spans, fns),
+  });
+  return ast_.items.push_back(block);
 }
 
 ast::ItemIdx Parser::parse_struct(bool is_pub) {

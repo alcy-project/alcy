@@ -63,6 +63,8 @@
   F(ParserExpectedItemFoundEndOfFile, "Expected item, found end of file") \
   F(ParserExpectedSemicolon, "Expected `;`") \
   F(ParserExpectedValueFoundType, "Expected a value, found a type") \
+  F(ParserExternConvention, "Only the \"C\" calling convention is supported") \
+  F(ParserExternNeedsConvention, "`extern` needs a convention string (`extern \"C\"`)") \
   F(ParserInvalidSyntaxTree, "Internal error: invalid syntax tree: {}") \
   F(ParserInvalidTokenStream, "Internal error: invalid token stream: {}") \
   F(ParserNameAlreadyBound, "Name `{}` is already bound in this scope") \
@@ -134,6 +136,9 @@
   F(AnalyzerDuplicateModule, "Module '{}' is declared more than once") \
   F(AnalyzerDuplicatePreludeModule, "Prelude module '{}' is declared more than once") \
   F(AnalyzerExportWithheld, "Package '{}' does not export module '{}'") \
+  F(AnalyzerExternCompParameter, "Comp parameters on external functions are not supported") \
+  F(AnalyzerExternGeneric, "External function '{}' cannot be generic") \
+  F(AnalyzerExternTypeNotSupported, "Type '{}' cannot cross a C boundary yet") \
   F(AnalyzerFloatSuffixOnInteger, "Float suffix on an integer literal") \
   F(AnalyzerForRequiresIterator, "A 'for' loop requires an 'Iterator' implementation in scope for this type") \
   F(AnalyzerFormatArity, "Intrinsic 'format' expects 2 arguments, found {}") \

@@ -46,9 +46,9 @@ relied upon by MVP programs or by the MVP compiler implementation.
   two-phase borrows.
 - `unsafe` methods (receiver or spec methods), unsafe function types
   for callbacks, `union` and volatile access, inline assembly, and an
-  erased `void*` spelling. The gate itself, its precondition-carrying
-  intrinsics, and the standard library's use of it are Bootstrap; see
-  `ffi.md`.
+  erased `void*` spelling. The gate, its precondition-carrying
+  intrinsics, raw pointers, and `extern "C"` declarations are
+  Bootstrap; see `ffi.md`.
 - `match` guards, string literal patterns, slice patterns.
 - An or-pattern nested inside another pattern (`(A | B, x) => ...`),
   which needs the distributive expansion `(A, x) | (B, x)`. The
@@ -88,6 +88,6 @@ relied upon by MVP programs or by the MVP compiler implementation.
 
 ## Keywords reserved for the above
 
-`async`, `await`, `union`, `register`, `extern`,
+`async`, `await`, `union`, `register`,
 `where`, `dyn`. The MVP keyword set is
 frozen in `keywords.md`; additions require a specification update.

@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Only the \"C\" calling convention is supported"]

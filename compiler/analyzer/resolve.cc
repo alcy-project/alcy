@@ -364,6 +364,13 @@ class Resolver {
             local_values[m].push_back(NameEntry{name});
             break;
           }
+          case I::Extern: {
+            for (const ast::ItemExternFn& fn :
+                 node.payload.get<ast::ItemExtern>().fns) {
+              local_values[m].push_back(NameEntry{fn.name.name});
+            }
+            break;
+          }
           case I::Use:
           case I::Impl: break;
         }

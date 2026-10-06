@@ -72,6 +72,9 @@ struct CheckedModule {
     // Calling this function is an operation that needs an unsafe
     // block (ADR-0050).
     bool is_unsafe = false;
+    // An `extern "C"` declaration (ADR-0051): the name is the symbol
+    // the linker resolves, and the body lives outside the program.
+    bool is_extern = false;
   };
   // Lazily-instantiated generic methods append signatures during body
   // checking, so element addresses must stay stable: never

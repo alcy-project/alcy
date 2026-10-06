@@ -21,9 +21,9 @@ file        = { item } ;
 
 (* Items *)
 
-item        = [ vis ] , ( fn_item | intrinsic_fn_item | struct_item
-                        | enum_item | impl_item | spec_item | static_item
-                        | const_item | use_item ) ;
+item        = [ vis ] , ( fn_item | intrinsic_fn_item | extern_item
+                        | struct_item | enum_item | impl_item
+                        | spec_item | static_item | const_item | use_item ) ;
 vis         = "pub" ;
 fn_item     = [ "unsafe" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
             , [ "->" , type ] , block ;
@@ -36,6 +36,12 @@ intrinsic_fn_item = [ "unsafe" ] , "intrinsic" , "fn" , IDENT , [ type_params ] 
                  precondition-carrying intrinsics say `unsafe`, which
                  the checker verifies. See docs/spec/items.md,
                  "Intrinsic declarations". *)
+extern_item = "extern" , STRING , "{" , { extern_fn } , "}" ;
+extern_fn   = "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
+            , [ "->" , type ] , ";" ;
+              (* Bodyless declarations whose names are the symbols the
+                 linker resolves; only "C" is accepted, and calling
+                 one needs the gate. See docs/spec/ffi.md. *)
 type_params = "<" , IDENT , { "," , IDENT } , ">" ;
 params      = [ [ "comp" ] , pattern , ":" , type ,
                 { "," , [ "comp" ] , pattern , ":" , type } , [ "," ] ] ;
@@ -219,7 +225,7 @@ DOC_COMMENT   = "///" , { ANY_BUT_NEWLINE } ;
  *   if else loop while for in break continue ret match
  *   package self super Self as
  *   i8 i16 i32 i64 isize u8 u16 u32 u64 usize f32 f64 bool str
- * Reserved: async await union register extern where dyn
+ * Reserved: async await union register where dyn
  *   i128 u128
  * Contextual, and a keyword rather than a reserved word because it only
  *   has a meaning in one position: `comp` in signatures, declarations, and

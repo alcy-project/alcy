@@ -1056,7 +1056,8 @@ void Lowerer::run() {
     }
     for (const auto& sig : checked.functions) {
       if (!sig.item.is_valid() || !comp_positions(sig.item).empty() ||
-          ast.items[sig.item].kind == ast::ItemKind::Intrinsic) {
+          ast.items[sig.item].kind == ast::ItemKind::Intrinsic ||
+          sig.is_extern) {
         continue;
       }
       bool is_method_copy = false;

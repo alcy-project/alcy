@@ -1436,6 +1436,16 @@ static bool intrinsic_is_unsafe(std::string_view name) {
          name == "ptr_offset_mut";
 }
 
+// What may cross a C boundary in the first ABI slice (ADR-0051):
+// scalars, raw pointers, and `()` as a return. Everything else is
+// refused rather than lowered optimistically.
+static bool extern_abi_type_ok(ir::TypeTag tag, bool is_return) {
+  if (is_return && tag == ir::TypeTag::Void) {
+    return true;
+  }
+  return is_integer_type(tag) || is_float_type(tag) || is_raw_ptr_type(tag);
+}
+
 // Verifies a declared intrinsic signature against its canonical
 // shape; declarations are documentation-checked, never trusted.
 bool Checker::check_intrinsic_signature(u32 module,
@@ -1796,6 +1806,75 @@ void Checker::process_module(u32 module) {
                               .ret = ret,
                               .item = item,
                               .is_unsafe = intrinsic.is_unsafe});
+        break;
+      }
+      case ast::ItemKind::Extern: {
+        // ADR-0051: a declaration names a symbol the linker resolves,
+        // calling it is an operation the gate covers, and the ABI is
+        // scalars, raw pointers, and `()` so every shape the compiler
+        // cannot lower honestly is refused here.
+        const ast::ItemExtern& block = node.payload.get<ast::ItemExtern>();
+        for (const ast::ItemExternFn& fn : block.fns) {
+          if (value_taken(fn.name.name)) {
+            duplicate_value(fn.name);
+            continue;
+          }
+          value_names.push_back(fn.name.name);
+          if (!fn.generic.empty()) {
+            const u32 index = bag.emit<i18n::Key::AnalyzerExternGeneric>(
+                diag::Severity::Error, diag::Stage::Analyzer,
+                DiagCode::GenericArguments, fn.name.span, fn.name.name);
+            (void)index;
+            continue;
+          }
+          std::vector<ir::TypeIdx> params;
+          bool abi_ok = true;
+          for (const ast::ItemFnParam& param : fn.params) {
+            if (param.is_comp) {
+              const u32 index =
+                  bag.emit<i18n::Key::AnalyzerExternCompParameter>(
+                      diag::Severity::Error, diag::Stage::Analyzer,
+                      DiagCode::InvalidComp, ast.patterns[param.pattern].span);
+              (void)index;
+              abi_ok = false;
+              break;
+            }
+            const ir::TypeIdx type = resolve_type(module, param.type, nullptr);
+            if (!is_error(type) && !extern_abi_type_ok(tag_of(type), false)) {
+              const u32 index =
+                  bag.emit<i18n::Key::AnalyzerExternTypeNotSupported>(
+                      diag::Severity::Error, diag::Stage::Analyzer,
+                      DiagCode::UnsupportedType, ast.types[param.type].span,
+                      pretty_tag(tag_of(type)));
+              (void)index;
+              abi_ok = false;
+              break;
+            }
+            params.push_back(type);
+          }
+          ir::TypeIdx ret = builder.primitive(ir::TypeTag::Void);
+          if (abi_ok && fn.return_type.is_valid()) {
+            ret = resolve_type(module, fn.return_type, nullptr);
+            if (!is_error(ret) && !extern_abi_type_ok(tag_of(ret), true)) {
+              const u32 index =
+                  bag.emit<i18n::Key::AnalyzerExternTypeNotSupported>(
+                      diag::Severity::Error, diag::Stage::Analyzer,
+                      DiagCode::UnsupportedType, ast.types[fn.return_type].span,
+                      pretty_tag(tag_of(ret)));
+              (void)index;
+              abi_ok = false;
+            }
+          }
+          if (!abi_ok) {
+            continue;
+          }
+          add_function(module, {.name = fn.name.name,
+                                .params = std::move(params),
+                                .ret = ret,
+                                .item = item,
+                                .is_unsafe = true,
+                                .is_extern = true});
+        }
         break;
       }
       case ast::ItemKind::Static:

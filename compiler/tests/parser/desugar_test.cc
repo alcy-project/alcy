@@ -98,7 +98,8 @@ struct NameCollector {
       case ast::ItemKind::Struct:
       case ast::ItemKind::Enum:
       case ast::ItemKind::Use:
-      case ast::ItemKind::Intrinsic: break;
+      case ast::ItemKind::Intrinsic:
+      case ast::ItemKind::Extern: break;
     }
   }
 

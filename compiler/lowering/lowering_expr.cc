@@ -1148,6 +1148,9 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
     return lower_intrinsic_call(
         expr, sig, fn_instance_args(target->module, target->index));
   }
+  if (sig.is_extern) {
+    return lower_extern_call(expr, sig);
+  }
   if (sig.name == "write" && pkg.tree.is_staged_item("fmt", sig.item)) {
     return lower_fmt_write(expr, sig);
   }
@@ -1295,6 +1298,40 @@ ir::RegisterIdx Lowerer::emit_heap_alloc(ir::TypeIdx elem,
   // The caller's `&mut` return is a reference; the runtime pointer
   // needs its pointee label for later element offsets.
   return emit(ir::Opcode::TypeCast, ref_ty, {to_operand(result, ptr_ty)});
+}
+
+// An `extern "C"` call: the declaration names the symbol the linker
+// resolves, arguments pass by value, and the gate was checked at the
+// call site (ADR-0051).
+Val Lowerer::lower_extern_call(ast::ExprIdx expr,
+                               const analyzer::CheckedModule::FnSig& sig) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != sig.params.size()) {
+    internal(node.span, "extern call arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::ExternalFunctionIdx ext =
+      declare_external(sig.name, sig.ret, sig.params);
+  if (!ext.is_valid()) {
+    return Val{size_one, error_type(), false, false};
+  }
+  std::vector<ir::OperandIdx> ops;
+  ops.push_back(builder.operand(ir::Operand::from_external_function(
+      ext, builder.primitive(ir::TypeTag::Function))));
+  for (usize i = 0; i < call.args.size(); ++i) {
+    Val arg = lower_expr(call.args[i], &sig.params[i]);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    ops.push_back(arg_for(arg, sig.params[i]));
+  }
+  if (tag_of(sig.ret) == ir::TypeTag::Void) {
+    emit_void(ir::Opcode::Call, ops);
+    return Val{size_one, sig.ret, false, false};
+  }
+  const ir::RegisterIdx dst = emit(ir::Opcode::Call, sig.ret, ops);
+  return Val{to_operand(dst, sig.ret), sig.ret, false, false};
 }
 
 Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,

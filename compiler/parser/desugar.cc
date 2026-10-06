@@ -187,6 +187,19 @@ class Desugarer {
         pop_scope();
         break;
       }
+      case ast::ItemKind::Extern: {
+        // Bodiless signatures: rename parameter patterns for
+        // uniformity, though nothing references them.
+        for (const ast::ItemExternFn& fn :
+             node.payload.get<ast::ItemExtern>().fns) {
+          push_scope();
+          for (const ast::ItemFnParam& param : fn.params) {
+            visit_pattern(param.pattern);
+          }
+          pop_scope();
+        }
+        break;
+      }
       case ast::ItemKind::Static: {
         push_scope();
         visit_expr(node.payload.get<ast::ItemStatic>().init);

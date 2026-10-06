@@ -2217,6 +2217,79 @@ TEST_CASE("Check infers a raw offset's element type") {
   CHECK(result.package.has_value());
 }
 
+TEST_CASE("Check gates an extern C call") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "extern \"C\" {\n"
+                                      "  fn abs(x: i32) -> i32;\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  ret abs(-42)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check accepts an extern C call behind the gate") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "extern \"C\" {\n"
+                                      "  fn abs(x: i32) -> i32;\n"
+                                      "  fn exit(code: i32);\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  ret unsafe { abs(-42) }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects a type that cannot cross a C boundary") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Pair { a: i32, b: i32 }\n"
+                                      "extern \"C\" {\n"
+                                      "  fn takes(p: Pair);\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a generic extern function") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "extern \"C\" {\n"
+                                      "  fn pick<T>(x: T) -> T;\n"
+                                      "}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Check rejects an unsafe function as a value") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
