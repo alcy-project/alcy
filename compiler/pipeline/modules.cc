@@ -190,20 +190,16 @@ base::Result<std::vector<analyzer::ModuleInput>, diag::Reported> select_modules(
     }
   }
   for (source::FileId id : files) {
-    bool taken = false;
-    for (const analyzer::ModuleInput& entry : selected) {
-      if (entry.id == id) {
-        taken = true;
-        break;
-      }
+    // Whether a file was selected is what the id set already answers; this
+    // asked the selected list, so a package paid its modules for each file.
+    if (selected_ids.contains(id)) {
+      continue;
     }
-    if (!taken) {
-      const u32 index = ctx.bag.emit<i18n::Key::PipelineModuleNotSelected>(
-          diag::Severity::Warning, diag::Stage::Pipeline,
-          DiagCode::UnselectedFile,
-          ctx.sources.name(id).value_or(std::string_view{"[unknown file]"}));
-      (void)index;
-    }
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineModuleNotSelected>(
+        diag::Severity::Warning, diag::Stage::Pipeline,
+        DiagCode::UnselectedFile,
+        ctx.sources.name(id).value_or(std::string_view{"[unknown file]"}));
+    (void)index;
   }
   return base::make_ok(std::move(selected));
 }
