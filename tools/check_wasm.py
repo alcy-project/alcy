@@ -121,9 +121,7 @@ def run_case(alcy: Path, shim: Path, case_dir: Path):
             cwd=project_root_dir,
         )
         if compiled.returncode != 0:
-            return False, (
-                "compile failed:\n" + compiled.stdout + compiled.stderr
-            )
+            return False, ("compile failed:\n" + compiled.stdout + compiled.stderr)
         # The warning the WASI module prints on load is the host's, not the
         # program's, and would otherwise read as program output.
         env = dict(os.environ)
@@ -141,9 +139,7 @@ def run_case(alcy: Path, shim: Path, case_dir: Path):
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(
-        description="Run the wasm backend's e2e cases."
-    )
+    parser = argparse.ArgumentParser(description="Run the wasm backend's e2e cases.")
     parser.add_argument(
         "--build-subdir",
         default="build",

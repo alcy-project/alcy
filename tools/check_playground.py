@@ -22,16 +22,13 @@ import argparse
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 from utils.paths import project_root_dir
 
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(
-        description="Run the playground wasm smoke test."
-    )
+    parser = argparse.ArgumentParser(description="Run the playground wasm smoke test.")
     parser.add_argument(
         "--build-subdir",
         default="playground",
@@ -39,9 +36,7 @@ def main():
     )
     args = parser.parse_args()
 
-    launcher = (
-        project_root_dir / "out" / args.build_subdir / "alcy_playground.js"
-    )
+    launcher = project_root_dir / "out" / args.build_subdir / "alcy_playground.js"
     if not launcher.is_file():
         print(f"playground launcher not found at {launcher}")
         print("build it with tools/build.py --target=playground --target-os=emscripten")
