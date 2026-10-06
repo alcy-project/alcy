@@ -16,6 +16,7 @@
 #include "codegen/wasm/opcodes.h"
 #include "codegen/wasm/reach.h"
 #include "codegen/wasm/writer.h"
+#include "config/build_config.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -76,11 +77,13 @@ using op::OP_RETURN;
 using op::OP_SELECT;
 using op::OP_UNREACHABLE;
 
+#if BUILD_FLAG(IS_DEBUG)
 bool is_terminator(ir::Opcode op) {
   using O = ir::Opcode;
   return op == O::Br || op == O::CondBr || op == O::Switch || op == O::Ret ||
          op == O::Unreachable;
 }
+#endif
 
 // The `main` a binary runs, matching what the analyzer admits and the
 // LLVM backend's wrapper expects.
@@ -178,18 +181,27 @@ void Emitter::declare_runtime() {
   const u32 alloc =
       builder_.add_type(FuncType{{ValType::I32, ValType::I32}, {ValType::I32}});
 
-  DCHECK_EQ(builder_.add_import("wasi_snapshot_preview1", "fd_write", fd_write),
-            FD_WRITE);
-  DCHECK_EQ(
-      builder_.add_import("wasi_snapshot_preview1", "proc_exit", proc_exit),
-      PROC_EXIT);
-  DCHECK_EQ(builder_.add_function(write_all), WRITE_ALL);
-  DCHECK_EQ(builder_.add_function(text), PRINT);
-  DCHECK_EQ(builder_.add_function(text), PRINTLN);
-  DCHECK_EQ(builder_.add_function(text), PANIC);
-  DCHECK_EQ(builder_.add_function(write_all), SYS_WRITE);
-  DCHECK_EQ(builder_.add_function(alloc), ALLOC);
-  DCHECK_EQ(builder_.add_function(write_all), DEALLOC);
+  // The builder calls run in every build; the DCHECKs only pin the indexes.
+  const u32 fd_write_index = builder_.add_import(
+      "wasi_snapshot_preview1", "fd_write", fd_write);
+  DCHECK_EQ(fd_write_index, FD_WRITE);
+  const u32 proc_exit_index = builder_.add_import(
+      "wasi_snapshot_preview1", "proc_exit", proc_exit);
+  DCHECK_EQ(proc_exit_index, PROC_EXIT);
+  const u32 write_all_index = builder_.add_function(write_all);
+  DCHECK_EQ(write_all_index, WRITE_ALL);
+  const u32 print_index = builder_.add_function(text);
+  DCHECK_EQ(print_index, PRINT);
+  const u32 println_index = builder_.add_function(text);
+  DCHECK_EQ(println_index, PRINTLN);
+  const u32 panic_index = builder_.add_function(text);
+  DCHECK_EQ(panic_index, PANIC);
+  const u32 sys_write_index = builder_.add_function(write_all);
+  DCHECK_EQ(sys_write_index, SYS_WRITE);
+  const u32 alloc_index = builder_.add_function(alloc);
+  DCHECK_EQ(alloc_index, ALLOC);
+  const u32 dealloc_index = builder_.add_function(write_all);
+  DCHECK_EQ(dealloc_index, DEALLOC);
 }
 
 Emitter::EmitResult Emitter::choose_roots() {
@@ -482,9 +494,11 @@ Emitter::EmitResult Emitter::emit_block(ir::BlockIdx block_index) {
       return base::make_err(codegen::EmitError::Unsupported);
     }
   }
+#if BUILD_FLAG(IS_DEBUG)
   DCHECK(block.instrs.empty() ||
          is_terminator(
              storage_.instrs()[block.instrs[block.instrs.size() - 1]].op));
+#endif
   return base::make_ok();
 }
 
