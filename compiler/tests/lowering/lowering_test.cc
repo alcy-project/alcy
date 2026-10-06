@@ -19,6 +19,7 @@
 #include "codegen_llvm/llvm_backend.h"
 #include "codegen_llvm/llvm_ir_emitter.h"
 #include "codegen_llvm/target.h"
+#include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/stage.h"
@@ -330,7 +331,7 @@ TEST_CASE("Lower emits verifiable LLVM IR for print") {
   CHECK(ir_str.find("c\"hi\\00\"") != std::string::npos);
 }
 
-#if !defined(OS_ASMJS)
+#if !BUILD_FLAG(IS_OS_ASMJS)
 TEST_CASE("Lower emits relocatable objects") {
   VirtualDir dir;
   write_all(dir, {{"main.al",

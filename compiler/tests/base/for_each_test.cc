@@ -7,8 +7,8 @@
 #include <chrono>
 #include <vector>
 
+#include "config/build_config.h"
 #include "doctest/doctest.h"
-#include "fpag/build/build_flag.h"
 #include "fpag/debug/thread_id.h"
 
 namespace base {
@@ -51,7 +51,7 @@ TEST_CASE("for_each runs every index once at any job count") {
 // contract the case above already exercises at every job count - and there
 // is no second thread here for the first unit to wait for, so asking for
 // one would fail a build that is behaving as documented.
-#if !FPAG_BUILD_FLAG(IS_OS_ASMJS)
+#if !BUILD_FLAG(IS_OS_ASMJS)
 TEST_CASE("for_each spreads work over more than one thread") {
   constexpr usize COUNT = 32;
   constexpr auto BOUND = std::chrono::seconds(2);
@@ -83,6 +83,6 @@ TEST_CASE("for_each spreads work over more than one thread") {
   CHECK(released_by.load(std::memory_order_relaxed) !=
         waiting_on.load(std::memory_order_relaxed));
 }
-#endif  // !FPAG_BUILD_FLAG(IS_OS_ASMJS)
+#endif  // !BUILD_FLAG(IS_OS_ASMJS)
 
 }  // namespace base

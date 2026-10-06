@@ -16,6 +16,7 @@
 #include "ast/ast.h"
 #include "ast/lane.h"
 #include "base/for_each.h"
+#include "config/build_config.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -23,7 +24,6 @@
 #include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/build/build_flag.h"
 #include "fpag/debug/profiler/profile_scope.h"
 #include "fpag/debug/profiler/profiler.h"
 #include "fpag/mem/arena.h"
@@ -67,7 +67,7 @@ struct PerFileDiagnostics {
 // the files: a clean file reports nothing, and a file that reports past
 // what is left has its excess dropped and counted, which the run reports,
 // the same answer the per-file arena gave.
-#if FPAG_BUILD_FLAG(IS_ARCH_64_BITS)
+#if BUILD_FLAG(IS_ARCH_64_BITS)
 constexpr usize WORKER_DIAGNOSTIC_CAPACITY = 256ull << 10;
 #else
 constexpr usize WORKER_DIAGNOSTIC_CAPACITY = 128ull << 10;

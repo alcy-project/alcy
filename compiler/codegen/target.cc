@@ -8,7 +8,7 @@
 #include <string_view>
 #include <vector>
 
-#include "fpag/build/build_config.h"
+#include "config/build_config.h"
 #include "ir/type.h"
 
 namespace codegen {
@@ -27,26 +27,26 @@ std::string host_triple() {
   // what llvm::sys::getDefaultTargetTriple names the same hosts, minus
   // the OS version suffix a Darwin triple can carry: the LLVM backend
   // accepts a versionless triple and derives the same machine from it.
-#if defined(__EMSCRIPTEN__)
+#if BUILD_FLAG(IS_OS_ASMJS)
   return "wasm32-unknown-emscripten";
-#elif FPAG_BUILD_FLAG(IS_OS_WIN)
-#if FPAG_BUILD_FLAG(IS_ARCH_ARM64)
+#elif BUILD_FLAG(IS_OS_WIN)
+#if BUILD_FLAG(IS_ARCH_ARM64)
   return "aarch64-pc-windows-msvc";
 #else
   return "x86_64-pc-windows-msvc";
 #endif
-#elif FPAG_BUILD_FLAG(IS_OS_MAC)
-#if FPAG_BUILD_FLAG(IS_ARCH_ARM64)
+#elif BUILD_FLAG(IS_OS_MAC)
+#if BUILD_FLAG(IS_ARCH_ARM64)
   return "arm64-apple-darwin";
 #else
   return "x86_64-apple-darwin";
 #endif
-#elif FPAG_BUILD_FLAG(IS_OS_LINUX)
-#if FPAG_BUILD_FLAG(IS_ARCH_X86_64)
+#elif BUILD_FLAG(IS_OS_LINUX)
+#if BUILD_FLAG(IS_ARCH_X86_64)
   return "x86_64-unknown-linux-gnu";
-#elif FPAG_BUILD_FLAG(IS_ARCH_ARM64)
+#elif BUILD_FLAG(IS_ARCH_ARM64)
   return "aarch64-unknown-linux-gnu";
-#elif FPAG_BUILD_FLAG(IS_ARCH_RISCV64)
+#elif BUILD_FLAG(IS_ARCH_RISCV64)
   return "riscv64-unknown-linux-gnu";
 #else
 #error "no host triple for this Linux architecture"
@@ -58,7 +58,7 @@ std::string host_triple() {
 
 Target host_target() {
   Target target{host_triple(), ir::PointerWidth::W64};
-#if defined(__EMSCRIPTEN__)
+#if BUILD_FLAG(IS_OS_ASMJS)
   // The one host this build runs on whose pointers are not 64-bit.
   target.width = ir::PointerWidth::W32;
 #endif

@@ -28,11 +28,11 @@
 
 #include "ast/node_vec.h"
 #include "ast/span_arena.h"
+#include "config/build_config.h"
 #include "diag/span.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/union.h"
-#include "fpag/build/build_flag.h"
 
 namespace ast {
 
@@ -1059,7 +1059,7 @@ struct AstArena {
   // of about a quarter of a megabyte. It reserves address space and commits
   // pages as it hands them out, so a figure no single run reaches costs
   // address space rather than memory.
-#if FPAG_BUILD_FLAG(IS_ARCH_64_BITS)
+#if BUILD_FLAG(IS_ARCH_64_BITS)
   static constexpr usize DEFAULT_SPAN_CAPACITY = 64ull << 20;
 #else
   static constexpr usize DEFAULT_SPAN_CAPACITY = 8ull << 20;
@@ -1071,7 +1071,7 @@ struct AstArena {
   // reservation of the same size would bound the input three times sooner
   // than the span reservation does. Each table takes the part of this that
   // its own share below names.
-#if FPAG_BUILD_FLAG(IS_ARCH_64_BITS)
+#if BUILD_FLAG(IS_ARCH_64_BITS)
   static constexpr usize DEFAULT_NODE_CAPACITY = 512ull << 20;
 #else
   static constexpr usize DEFAULT_NODE_CAPACITY = 64ull << 20;

@@ -8,8 +8,8 @@
 #include <thread>
 #include <vector>
 
+#include "config/build_config.h"
 #include "fpag/base/numeric.h"
-#include "fpag/build/build_flag.h"
 
 namespace base {
 
@@ -58,7 +58,7 @@ void for_each_serial(usize begin, usize end, F&& body) {
 // index order: the order work finished in is not the order to report in.
 template <typename F>
 void for_each(usize begin, usize end, u32 jobs, F&& body) {
-#if FPAG_BUILD_FLAG(IS_OS_ASMJS)
+#if BUILD_FLAG(IS_OS_ASMJS)
   // A target without threads has nothing to spread the work over, and the
   // `jobs` a caller asks for cannot make it appear.
   (void)jobs;

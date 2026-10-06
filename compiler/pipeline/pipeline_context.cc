@@ -13,7 +13,6 @@
 #include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/build/build_flag.h"
 #include "fpag/io/io_util.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"
@@ -81,7 +80,7 @@ PipelineContext::PipelineContext(i18n::Language language,
 }
 
 u32 PipelineContext::parse_jobs() const {
-#if FPAG_BUILD_FLAG(IS_OS_ASMJS)
+#if BUILD_FLAG(IS_OS_ASMJS)
   // A target without threads has nothing to spread the work over, and the
   // count a caller asked for cannot make it appear. One is the answer here
   // rather than at the loop because more than one is read as a promise: the
