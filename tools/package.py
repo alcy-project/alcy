@@ -23,6 +23,12 @@ METADATA_FILES: tuple[str, ...] = ("LICENSE", "README.md")
 
 WASM_BASE_TARGETS: tuple[str, ...] = ("alcy.js", "alcy.wasm", "libalcy.a")
 WASM_TEST_TARGETS: tuple[str, ...] = ("tests.js", "tests.wasm")
+# The playground's compiler module, built by the `playground` GN target
+# with no LLVM; a site loads these two files beside its own.
+WASM_PLAYGROUND_TARGETS: tuple[str, ...] = (
+    "alcy_playground.js",
+    "alcy_playground.wasm",
+)
 
 NATIVE_BASE_TARGETS: tuple[str, ...] = ("alcy",)
 NATIVE_TEST_TARGETS: tuple[str, ...] = ("tests", "benchmarks")
@@ -110,6 +116,7 @@ def main() -> int:
     # Collect required target binaries
     if args.plat == "wasm":
         required_targets = list(WASM_BASE_TARGETS)
+        required_targets.extend(WASM_PLAYGROUND_TARGETS)
         if args.role != "release":
             required_targets.extend(WASM_TEST_TARGETS)
     else:

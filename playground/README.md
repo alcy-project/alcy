@@ -110,8 +110,9 @@ The site is served from `https://alcy-project.github.io/alcy/`.
 ## Compiler artifacts
 
 The site consumes exactly two files from the compiler build:
-`alcy_playground.js` and its `alcy_playground.wasm` sidecar. The Pages
-workflow builds them with
+`alcy_playground.js` and its `alcy_playground.wasm` sidecar, which the
+wasm release archive also carries under those names. The Pages workflow
+builds them with
 `tools/build.py --target=playground --target-os=emscripten
 --gn-arg='alcy_backends=[]'`, runs `tools/check_playground.py` over the
 result, and only then assembles the site, so a broken module fails in CI

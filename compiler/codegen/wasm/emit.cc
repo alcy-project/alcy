@@ -182,11 +182,11 @@ void Emitter::declare_runtime() {
       builder_.add_type(FuncType{{ValType::I32, ValType::I32}, {ValType::I32}});
 
   // The builder calls run in every build; the DCHECKs only pin the indexes.
-  const u32 fd_write_index = builder_.add_import(
-      "wasi_snapshot_preview1", "fd_write", fd_write);
+  const u32 fd_write_index =
+      builder_.add_import("wasi_snapshot_preview1", "fd_write", fd_write);
   DCHECK_EQ(fd_write_index, FD_WRITE);
-  const u32 proc_exit_index = builder_.add_import(
-      "wasi_snapshot_preview1", "proc_exit", proc_exit);
+  const u32 proc_exit_index =
+      builder_.add_import("wasi_snapshot_preview1", "proc_exit", proc_exit);
   DCHECK_EQ(proc_exit_index, PROC_EXIT);
   const u32 write_all_index = builder_.add_function(write_all);
   DCHECK_EQ(write_all_index, WRITE_ALL);

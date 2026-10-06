@@ -22,8 +22,9 @@ tools_dir="$root_dir/tools"
 # script flags
 #
 #   --nix          run all checks in nix develop environment
-#   --wasm         also build and run the tests as WebAssembly (needs
-#                  Emscripten and node)
+#   --wasm         also build and run the tests as WebAssembly, and smoke
+#                  the playground module it loads (needs Emscripten and
+#                  node)
 #   --no-sanitize  skip the sanitized build of the exe cases (needs clang,
 #                  and roughly doubles their runtime)
 #   --no-coverage  skip the coverage ratchet (needs llvm-cov, and rebuilds
@@ -196,6 +197,18 @@ if [[ $run_wasm == true ]]; then
     --mode=debug \
     --build-subdir=$wasm_subdir \
     --target-os=emscripten
+
+  # The playground carries no LLVM and no tests, so it is its own
+  # configure; the smoke is what says the artifact a site loads runs.
+  playground_subdir="${wasm_subdir}_playground"
+  "${py_runner[@]}" "$tools_dir/build.py" \
+    --target=playground \
+    --mode=debug \
+    --build-subdir=$playground_subdir \
+    --target-os=emscripten \
+    "--gn-arg=alcy_backends=[]"
+  "${py_runner[@]}" "$tools_dir/check_playground.py" \
+    --build-subdir=$playground_subdir
 fi
 
 echo "check ok"
