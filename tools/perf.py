@@ -319,6 +319,14 @@ def corpus_dir(text: str) -> Path:
     return path
 
 
+def corpus_name(shape: str, modules: int, main_calls: int) -> str:
+    """A directory name that tells the two main sizes apart."""
+    name = f"{shape}{modules}"
+    if main_calls:
+        name += f"-main{main_calls}"
+    return name
+
+
 def cmd_corpus(args: argparse.Namespace) -> int:
     out = Path(args.out) if args.out else Path(WORK_DIR) / args.name
     if not out.is_absolute():
@@ -422,7 +430,7 @@ def cmd_scale(args: argparse.Namespace) -> int:
             args.shape,
             modules,
             args.main_calls if args.main_calls else modules,
-            Path(WORK_DIR) / f"{args.shape}{modules}",
+            Path(WORK_DIR) / corpus_name(args.shape, modules, args.main_calls),
         )
         count = instructions(binary, corpus, args.jobs)
         rows.append((modules, count))
@@ -614,7 +622,7 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     # --name only exists for corpus, and a missing one derives a directory name.
     if args.command == "corpus" and not args.name:
-        args.name = f"{args.shape}{args.modules}"
+        args.name = corpus_name(args.shape, args.modules, args.main_calls)
     return args
 
 
