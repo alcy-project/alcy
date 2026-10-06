@@ -55,6 +55,10 @@ constexpr u8 OP_BLOCK_VOID = 0x40;
 
 }  // namespace op
 
+// memory.copy, the bulk byte copy: destination, source, and length on
+// the stack.
+inline constexpr u8 MEMORY_COPY[4] = {0xFC, 0x0A, 0x00, 0x00};
+
 // The one load and store the emitter writes by hand, in the runtime and
 // in the instruction emitters' word loops alike.
 inline void i32_load(BinaryWriter& out, u32 align_log2, u32 offset) {

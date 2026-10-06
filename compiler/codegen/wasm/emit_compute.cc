@@ -272,6 +272,14 @@ Emitter::EmitResult Emitter::emit_compute(const ir::Instruction& instr) {
       } else if ((src_tag == ir::TypeTag::Ptr || src_tag == ir::TypeTag::Ref ||
                   src_tag == ir::TypeTag::MutRef ||
                   src_tag == ir::TypeTag::Function) &&
+                 (dst_tag == ir::TypeTag::Ptr || dst_tag == ir::TypeTag::Ref ||
+                  dst_tag == ir::TypeTag::MutRef ||
+                  dst_tag == ir::TypeTag::Function)) {
+        // Relabelling: the address is unchanged, and the destination
+        // names what it points at.
+      } else if ((src_tag == ir::TypeTag::Ptr || src_tag == ir::TypeTag::Ref ||
+                  src_tag == ir::TypeTag::MutRef ||
+                  src_tag == ir::TypeTag::Function) &&
                  ir::is_integer_type(dst_tag)) {
         if (is_wide_int(dst_tag)) {
           op(0xAD);  // i64.extend_i32_u: the address zero-extends.

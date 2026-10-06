@@ -109,6 +109,17 @@ class Emitter {
                               const ir::Operand& index,
                               ir::TypeIdx elem,
                               const ir::Instruction& instr);
+  // A field projection over an aggregate: the leading index scales the
+  // whole element, a constant field index folds into the offset, and an
+  // array walk keeps at most one scaled index.
+  EmitResult emit_field_projection(const ir::Operand& base,
+                                   ir::TypeIdx elem,
+                                   ir::OperandIdxRange indices,
+                                   const ir::Instruction& instr);
+  // An aggregate field read: fold the indices to an offset and load.
+  EmitResult emit_field_load(const ir::Operand& aggregate,
+                             ir::OperandIdxRange indices,
+                             const ir::Instruction& instr);
 
   // --- values ---
   [[nodiscard]] std::optional<ValueShape> shape_of(ir::TypeIdx type) const;
@@ -186,6 +197,11 @@ class Emitter {
   std::vector<ValType> locals_;
   std::vector<u32> reg_base_;
   std::vector<ValueShape> reg_shape_;
+  // Aggregate-valued results live in the frame: the register holds the
+  // address, and this is its byte offset from the frame base.
+  std::vector<u32> reg_slot_;
+  u32 frame_bytes_ = 0;
+  bool sret_ = false;
   std::vector<ir::TypeIdx> alloca_elem_;
   std::vector<ir::BlockIdx> blocks_;
   std::vector<u32> block_case_;

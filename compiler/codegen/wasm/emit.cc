@@ -78,6 +78,21 @@ using op::OP_SELECT;
 using op::OP_UNREACHABLE;
 
 #if BUILD_FLAG(IS_DEBUG)
+// A definition whose aggregate result has to live somewhere the frame
+// owns: a call's sret destination, a load's copy target, an aggregate
+// built in place.
+bool needs_slot(const ir::Instruction& instr) {
+  using O = ir::Opcode;
+  return instr.op == O::Call || instr.op == O::Load ||
+         instr.op == O::InsertValue;
+}
+
+bool is_aggregate_tag(ir::TypeTag tag) {
+  using T = ir::TypeTag;
+  return tag == T::Struct || tag == T::Tuple || tag == T::Enum ||
+         tag == T::Array;
+}
+
 bool is_terminator(ir::Opcode op) {
   using O = ir::Opcode;
   return op == O::Br || op == O::CondBr || op == O::Switch || op == O::Ret ||
@@ -285,6 +300,12 @@ std::optional<ValueShape> Emitter::shape_of(ir::TypeIdx type) const {
       }
       return ValueShape{ValType::I32, 1};
     }
+    // An aggregate value rides as the address of its words in memory:
+    // the frame slot a result owns, or the pointer a parameter borrowed.
+    case T::Struct:
+    case T::Tuple:
+    case T::Enum:
+    case T::Array: return ValueShape{ValType::I32, 1};
     default: return std::nullopt;
   }
 }
@@ -329,8 +350,15 @@ Emitter::EmitResult Emitter::emit_function(ir::FunctionIdx index) {
         diag::Span{},
         ir::type_to_str(storage_.types()[function.meta.return_type].tag));
   }
+  sret_ = is_aggregate_tag(storage_.types()[function.meta.return_type].tag) &&
+          result->words == 1;
   std::vector<ValType> params;
   u32 param_words = 0;
+  if (sret_) {
+    // The caller brings the storage for the result as a leading pointer.
+    params.push_back(ValType::I32);
+    ++param_words;
+  }
   for (const ir::TypeIdx param : function.meta.param_types) {
     const std::optional<ValueShape> shape = shape_of(param);
     if (!shape.has_value()) {
@@ -340,7 +368,10 @@ Emitter::EmitResult Emitter::emit_function(ir::FunctionIdx index) {
     params.insert(params.end(), shape->words, shape->type);
     param_words += shape->words;
   }
-  std::vector<ValType> results(result->words, result->type);
+  std::vector<ValType> results;
+  if (!sret_) {
+    results.assign(result->words, result->type);
+  }
 
   const u32 type = builder_.add_type(FuncType{params, results});
   const u32 wasm = builder_.add_function(type);
@@ -357,6 +388,12 @@ Emitter::EmitResult Emitter::emit_function(ir::FunctionIdx index) {
   // allocates does not walk the stack up.
   global_get(GLOBAL_SP);
   local_set(frame_local_);
+  // The frame's own slots sit above the saved pointer; the shadow stack
+  // moves past them once, and a return restores it.
+  local_get(frame_local_);
+  i32_const(static_cast<i32>(frame_bytes_));
+  op(OP_I32_ADD);
+  global_set(GLOBAL_SP);
   set_state(0);
   if (emit_dispatch().is_err()) {
     return base::make_err(codegen::EmitError::Unsupported);
@@ -368,6 +405,8 @@ Emitter::EmitResult Emitter::emit_function(ir::FunctionIdx index) {
 Emitter::EmitResult Emitter::build_locals(const ir::Function& function) {
   reg_base_.assign(storage_.registers().size(), NO_LOCAL);
   reg_shape_.assign(storage_.registers().size(), ValueShape{});
+  reg_slot_.assign(storage_.registers().size(), NO_LOCAL);
+  frame_bytes_ = 0;
   alloca_elem_.assign(storage_.registers().size(), ir::TypeIdx::invalid());
   blocks_.clear();
   blocks_.reserve(function.blocks.size());
@@ -388,7 +427,7 @@ Emitter::EmitResult Emitter::build_locals(const ir::Function& function) {
   // parameters are already locals 0..param_words-1, so those registers
   // share them instead of taking fresh slots.
   const ir::Block& entry = storage_.blocks()[function.blocks.head()];
-  u32 word = 0;
+  u32 word = sret_ ? 1 : 0;
   u32 param = 0;
   for (const ir::TypeIdx type : function.meta.param_types) {
     if (param >= entry.block_params.size()) {
@@ -456,6 +495,30 @@ Emitter::EmitResult Emitter::build_locals(const ir::Function& function) {
       }
     }
   }
+
+  // An aggregate produced by a call or a load owns a slot the frame
+  // reserves here; the def writes its address into the register and the
+  // words through it. Reserving at entry, not at the def, is what keeps
+  // a loop from walking the shadow stack up.
+  for (const ir::BlockIdx block_index : blocks_) {
+    const ir::Block& block = storage_.blocks()[block_index];
+    for (const ir::InstructionIdx instr_index : block.instrs) {
+      const ir::Instruction& instr = storage_.instrs()[instr_index];
+      if (!instr.dst.is_valid() || reg_slot_[instr.dst.idx] != NO_LOCAL) {
+        continue;
+      }
+      if (!needs_slot(instr)) {
+        continue;
+      }
+      const ir::TypeIdx type = storage_.registers()[instr.dst].type;
+      const ir::TypeLayout layout = storage_.layout_of(type, target_.width);
+      frame_bytes_ = static_cast<u32>(
+          ir::align_up(frame_bytes_, layout.align == 0 ? 1 : layout.align));
+      reg_slot_[instr.dst.idx] = frame_bytes_;
+      frame_bytes_ += static_cast<u32>(layout.size == 0 ? 1 : layout.size);
+    }
+  }
+  frame_bytes_ = static_cast<u32>(ir::align_up(frame_bytes_, 16));
   return base::make_ok();
 }
 
@@ -710,6 +773,24 @@ Emitter::EmitResult Emitter::emit_call(const ir::Instruction& instr) {
     }
   }
 
+  const bool aggregate_result =
+      callee.is<ir::FunctionIdx>() &&
+      is_aggregate_tag(storage_
+                           .types()[storage_.functions()[callee.as_function()]
+                                        .meta.return_type]
+                           .tag);
+  u32 slot = NO_LOCAL;
+  if (aggregate_result) {
+    DCHECK(instr.dst.is_valid());
+    slot = reg_slot_[instr.dst.idx];
+    DCHECK(slot != NO_LOCAL);
+    // The result's storage leads the arguments, the way the callee's
+    // signature declares it.
+    local_get(frame_local_);
+    i32_const(static_cast<i32>(slot));
+    op(OP_I32_ADD);
+  }
+
   for (u32 index = 1; index < ops.size(); ++index) {
     if (push_operand(storage_.operands()[ops.head() + index]).is_err()) {
       return base::make_err(codegen::EmitError::Unsupported);
@@ -717,7 +798,12 @@ Emitter::EmitResult Emitter::emit_call(const ir::Instruction& instr) {
   }
   call(callee_index);
 
-  if (instr.dst.is_valid() && reg_shape_[instr.dst.idx].words > 0) {
+  if (aggregate_result) {
+    local_get(frame_local_);
+    i32_const(static_cast<i32>(slot));
+    op(OP_I32_ADD);
+    local_set(reg_base_[instr.dst.idx]);
+  } else if (instr.dst.is_valid() && reg_shape_[instr.dst.idx].words > 0) {
     pop_words(reg_base_[instr.dst.idx], reg_shape_[instr.dst.idx].words);
   }
   return base::make_ok();
@@ -730,6 +816,22 @@ Emitter::EmitResult Emitter::emit_ret(const ir::Instruction& instr) {
   // an allocation in a loop does not walk the stack up across returns.
   local_get(frame_local_);
   global_set(GLOBAL_SP);
+  if (sret_ && !ops.empty()) {
+    // The result goes to the caller's storage, which is the leading
+    // parameter. The frame is already restored; the copy reads the
+    // value's own slot, which the caller's frame also holds.
+    const ir::Operand& value = storage_.operands()[ops.head()];
+    const u32 size =
+        static_cast<u32>(storage_.layout_of(value.type, target_.width).size);
+    local_get(0);
+    if (push_word(value, 0, ValType::I32).is_err()) {
+      return base::make_err(codegen::EmitError::Unsupported);
+    }
+    i32_const(static_cast<i32>(size));
+    body_.bytes(MEMORY_COPY);
+    op(OP_RETURN);
+    return base::make_ok();
+  }
   if (!ops.empty()) {
     if (push_operand(storage_.operands()[ops.head()]).is_err()) {
       return base::make_err(codegen::EmitError::Unsupported);

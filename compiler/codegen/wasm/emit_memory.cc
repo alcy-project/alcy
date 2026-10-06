@@ -60,7 +60,11 @@ std::optional<Access> access_for(ir::TypeTag tag) {
   }
 }
 
-constexpr u8 MEMORY_COPY[4] = {0xFC, 0x0A, 0x00, 0x00};
+bool is_aggregate_tag(ir::TypeTag tag) {
+  using T = ir::TypeTag;
+  return tag == T::Struct || tag == T::Tuple || tag == T::Enum ||
+         tag == T::Array;
+}
 
 }  // namespace
 
@@ -117,6 +121,26 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       const ir::TypeTag tag = storage_.types()[type].tag;
       const u32 base = reg_base_[instr.dst.idx];
 
+      if (is_aggregate_tag(tag)) {
+        const u32 slot = reg_slot_[instr.dst.idx];
+        DCHECK(slot != NO_LOCAL);
+        const u32 size =
+            static_cast<u32>(storage_.layout_of(type, target_.width).size);
+        local_get(frame_local_);
+        i32_const(static_cast<i32>(slot));
+        op(OP_I32_ADD);
+        if (push_word(ptr, 0, ValType::I32).is_err()) {
+          return base::make_err(codegen::EmitError::Unsupported);
+        }
+        i32_const(static_cast<i32>(size));
+        body_.bytes(codegen::wasm::MEMORY_COPY);
+        local_get(frame_local_);
+        i32_const(static_cast<i32>(slot));
+        op(OP_I32_ADD);
+        local_set(base);
+        return base::make_ok();
+      }
+
       if (tag == ir::TypeTag::Str || tag == ir::TypeTag::Slice ||
           (tag == ir::TypeTag::Ref &&
            storage_.types()[storage_
@@ -162,6 +186,18 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       const ir::Operand& ptr = storage_.operands()[ops.head() + 1];
       const ir::TypeTag tag = storage_.types()[value.type].tag;
 
+      if (is_aggregate_tag(tag)) {
+        const u32 size = static_cast<u32>(
+            storage_.layout_of(value.type, target_.width).size);
+        if (push_word(ptr, 0, ValType::I32).is_err() ||
+            push_word(value, 0, ValType::I32).is_err()) {
+          return base::make_err(codegen::EmitError::Unsupported);
+        }
+        i32_const(static_cast<i32>(size));
+        body_.bytes(codegen::wasm::MEMORY_COPY);
+        return base::make_ok();
+      }
+
       if (tag == ir::TypeTag::Str || tag == ir::TypeTag::Slice ||
           (tag == ir::TypeTag::Ref &&
            storage_.types()
@@ -204,13 +240,10 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
           return base::make_err(codegen::EmitError::Unsupported);
         }
       }
-      body_.bytes(MEMORY_COPY);
+      body_.bytes(codegen::wasm::MEMORY_COPY);
       return base::make_ok();
     }
     case O::GetElementPtr: {
-      if (ops.size() != 2) {
-        return unsupported(current_span_, "a multi-index projection");
-      }
       const ir::Operand& base = storage_.operands()[ops.head()];
       DCHECK(base.is<ir::RegisterIdx>());
       const ir::RegisterIdx base_reg = base.as_register();
@@ -224,8 +257,11 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
         elem =
             storage_.ref_types()[storage_.types()[base_type].as_ref()].pointee;
       }
-      return emit_elem_offset(base, storage_.operands()[ops.head() + 1], elem,
-                              instr);
+      if (ops.size() == 2) {
+        return emit_elem_offset(base, storage_.operands()[ops.head() + 1], elem,
+                                instr);
+      }
+      return emit_field_projection(base, elem, ops, instr);
     }
     case O::ElemOffset: {
       DCHECK_EQ(ops.size(), 2u);
@@ -239,10 +275,16 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
                               storage_.operands()[ops.head() + 1], elem, instr);
     }
     case O::ExtractValue: {
-      if (ops.size() != 2) {
+      if (ops.size() < 2) {
         return unsupported(current_span_, "this extraction");
       }
       const ir::Operand& aggregate = storage_.operands()[ops.head()];
+      if (is_aggregate_tag(storage_.types()[aggregate.type].tag)) {
+        return emit_field_load(aggregate, ops, instr);
+      }
+      if (ops.size() != 2) {
+        return unsupported(current_span_, "this extraction");
+      }
       const ir::Operand& index_op = storage_.operands()[ops.head() + 1];
       if (!index_op.is<ir::ImmutableIdx>()) {
         return unsupported(current_span_, "this extraction");
@@ -291,6 +333,155 @@ Emitter::EmitResult Emitter::emit_elem_offset(const ir::Operand& base,
     op(OP_DROP);
   }
   return base::make_ok();
+}
+
+// base + the folded field offset, the projection the lowering writes for
+// `t.0` and its siblings.
+Emitter::EmitResult Emitter::emit_field_projection(
+    const ir::Operand& base,
+    ir::TypeIdx elem,
+    ir::OperandIdxRange ops,
+    const ir::Instruction& instr) {
+  ir::TypeIdx cur = elem;
+  u64 constant = 0;
+  const ir::Operand* dynamic = nullptr;
+  u32 stride = 0;
+  for (u32 i = 1; i < ops.size(); ++i) {
+    const ir::Operand& index_op = storage_.operands()[ops.head() + i];
+    const ir::TypeTag tag = storage_.types()[cur].tag;
+    u64 value = 0;
+    bool is_const = false;
+    if (index_op.is<ir::ImmutableIdx>()) {
+      const ir::Immutable& imm = storage_.immutables()[index_op.as_immutable()];
+      value = imm.as_u64_integer(storage_.types()[imm.type].tag);
+      is_const = true;
+    }
+    if (i == 1) {
+      const u64 size = storage_.layout_of(cur, target_.width).size;
+      if (is_const) {
+        constant += value * size;
+      } else if (dynamic == nullptr) {
+        dynamic = &index_op;
+        stride = size == 0 ? 1 : static_cast<u32>(size);
+      } else {
+        return unsupported(current_span_, "this projection");
+      }
+      continue;
+    }
+    if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Tuple) {
+      if (!is_const) {
+        return unsupported(current_span_, "a dynamic field index");
+      }
+      const ir::TypeNode& node = storage_.types()[cur];
+      const ir::TypeIdxRange fields =
+          tag == ir::TypeTag::Struct
+              ? storage_.struct_types()[node.as_struct()].fields
+              : storage_.tuple_types()[node.as_tuple()].elements;
+      constant += ir::field_offset(storage_.state(), fields,
+                                   static_cast<u32>(value), target_.width);
+      cur = fields[static_cast<u32>(value)];
+      continue;
+    }
+    if (tag == ir::TypeTag::Array) {
+      const ir::ArrayType& array =
+          storage_.array_types()[storage_.types()[cur].as_array()];
+      const u64 size = storage_.layout_of(array.element, target_.width).size;
+      if (is_const) {
+        constant += value * size;
+      } else if (dynamic == nullptr) {
+        dynamic = &index_op;
+        stride = size == 0 ? 1 : static_cast<u32>(size);
+      } else {
+        return unsupported(current_span_, "this projection");
+      }
+      cur = array.element;
+      continue;
+    }
+    return unsupported(current_span_, "this projection");
+  }
+
+  if (push_word(base, 0, ValType::I32).is_err()) {
+    return base::make_err(codegen::EmitError::Unsupported);
+  }
+  if (constant != 0) {
+    i32_const(static_cast<i32>(static_cast<u32>(constant)));
+    op(OP_I32_ADD);
+  }
+  if (dynamic != nullptr) {
+    if (push_word(*dynamic, 0, ValType::I32).is_err()) {
+      return base::make_err(codegen::EmitError::Unsupported);
+    }
+    i32_const(static_cast<i32>(stride));
+    op(OP_I32_MUL);
+    op(OP_I32_ADD);
+  }
+  if (instr.dst.is_valid() && reg_shape_[instr.dst.idx].words > 0) {
+    local_set(reg_base_[instr.dst.idx]);
+  } else {
+    op(OP_DROP);
+  }
+  return base::make_ok();
+}
+
+Emitter::EmitResult Emitter::emit_field_load(const ir::Operand& aggregate,
+                                             ir::OperandIdxRange ops,
+                                             const ir::Instruction& instr) {
+  u32 offset = 0;
+  ir::TypeIdx cur = aggregate.type;
+  for (u32 i = 1; i < ops.size(); ++i) {
+    const ir::Operand& index_op = storage_.operands()[ops.head() + i];
+    if (!index_op.is<ir::ImmutableIdx>()) {
+      return unsupported(current_span_, "a dynamic field index");
+    }
+    const ir::Immutable& imm = storage_.immutables()[index_op.as_immutable()];
+    const u64 value = imm.as_u64_integer(storage_.types()[imm.type].tag);
+    const ir::TypeTag tag = storage_.types()[cur].tag;
+    if (tag != ir::TypeTag::Struct && tag != ir::TypeTag::Tuple) {
+      return unsupported(current_span_, "this extraction");
+    }
+    const ir::TypeNode& node = storage_.types()[cur];
+    const ir::TypeIdxRange fields =
+        tag == ir::TypeTag::Struct
+            ? storage_.struct_types()[node.as_struct()].fields
+            : storage_.tuple_types()[node.as_tuple()].elements;
+    offset += static_cast<u32>(ir::field_offset(
+        storage_.state(), fields, static_cast<u32>(value), target_.width));
+    cur = fields[static_cast<u32>(value)];
+  }
+  if (!instr.dst.is_valid()) {
+    return base::make_ok();
+  }
+  const std::optional<ValueShape> shape = shape_of(cur);
+  const u32 base = reg_base_[instr.dst.idx];
+  if (shape.has_value() && shape->words == 1) {
+    const std::optional<Access> access = access_for(storage_.types()[cur].tag);
+    if (!access.has_value()) {
+      return unsupported(current_span_, "this extraction");
+    }
+    if (push_word(aggregate, 0, ValType::I32).is_err()) {
+      return base::make_err(codegen::EmitError::Unsupported);
+    }
+    body_.byte(access->load);
+    body_.u32_leb(access->load_align);
+    body_.u32_leb(offset);
+    if (storage_.types()[cur].tag == ir::TypeTag::I1) {
+      i32_const(1);
+      op(OP_I32_AND);
+    }
+    local_set(base);
+    return base::make_ok();
+  }
+  if (shape.has_value() && shape->words == 2) {
+    for (u32 word = 0; word < 2; ++word) {
+      if (push_word(aggregate, 0, ValType::I32).is_err()) {
+        return base::make_err(codegen::EmitError::Unsupported);
+      }
+      codegen::wasm::i32_load(body_, 2, offset + word * 4);
+      local_set(base + word);
+    }
+    return base::make_ok();
+  }
+  return unsupported(current_span_, "this extraction");
 }
 
 }  // namespace codegen::wasm
