@@ -19,5 +19,7 @@ const wasi = new WASI({
 
 const module = new WebAssembly.Module(readFileSync(path));
 const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
-const code = wasi.start(instance);
-process.exit(code ?? 0);
+// The status is set, not exited with: process.exit() can cut buffered
+// stdout or stderr short, and a program's last line is the one a case
+// compares.
+process.exitCode = wasi.start(instance) ?? 0;

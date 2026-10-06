@@ -170,11 +170,11 @@ base::Result<std::vector<u8>, codegen::EmitError> Emitter::run() {
   // publishes sits after every string; both must be placed before the
   // runtime bodies bake the addresses in.
   (void)newline_offset();
-  add_memory_and_globals();
-  emit_runtime_bodies();
   if (emit_start().is_err()) {
     return base::make_err(codegen::EmitError::Unsupported);
   }
+  add_memory_and_globals();
+  emit_runtime_bodies();
   builder_.export_memory("memory");
   if (start_index_ != NO_LOCAL) {
     builder_.export_function("_start", start_index_);
@@ -1146,14 +1146,46 @@ Emitter::EmitResult Emitter::emit_start() {
   if (!emit_entry_) {
     return base::make_ok();
   }
-  const ir::TypeTag ret =
-      storage_.types()[storage_.functions()[entry_].meta.return_type].tag;
-  if (ret == ir::TypeTag::Enum) {
-    return unsupported(diag::Span{}, "a main that returns an enum");
-  }
+  const ir::TypeIdx return_type = storage_.functions()[entry_].meta.return_type;
+  const ir::TypeTag ret = storage_.types()[return_type].tag;
   const u32 type = builder_.add_type(FuncType{{}, {}});
   start_index_ = builder_.add_function(type);
   begin_body(0);
+  if (ret == ir::TypeTag::Enum) {
+    // A two-variant result: the first discriminant exits 0 and anything
+    // else panics, matching the LLVM entry thunk.
+    const ir::TypeLayout layout =
+        storage_.layout_of(return_type, target_.width);
+    const u32 size = layout.size == 0 ? 1 : static_cast<u32>(layout.size);
+    const u32 align = layout.align == 0 ? 1 : static_cast<u32>(layout.align);
+    const u32 slot = allocate_local(ValType::I32);
+    global_get(GLOBAL_SP);
+    i32_const(static_cast<i32>(align - 1));
+    op(OP_I32_ADD);
+    i32_const(static_cast<i32>(0u - align));
+    op(OP_I32_AND);
+    local_set(slot);
+    local_get(slot);
+    i32_const(static_cast<i32>(size));
+    op(OP_I32_ADD);
+    global_set(GLOBAL_SP);
+    // The callee writes the result through the leading pointer.
+    local_get(slot);
+    call(function_index_[entry_.idx]);
+    // A nonzero discriminant is the error variant.
+    local_get(slot);
+    i32_load(body_, 2, 0);
+    if_void();
+    constexpr std::string_view MAIN_ERROR = "main returned Err";
+    const u32 message = data_for(MAIN_ERROR);
+    i32_const(static_cast<i32>(message));
+    i32_const(static_cast<i32>(MAIN_ERROR.size()));
+    call(PANIC);
+    op(OP_UNREACHABLE);
+    end_op();
+    finish_body(start_index_);
+    return base::make_ok();
+  }
   call(function_index_[entry_.idx]);
   if (ret == ir::TypeTag::I32) {
     call(PROC_EXIT);

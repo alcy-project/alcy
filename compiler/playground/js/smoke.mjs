@@ -47,4 +47,5 @@ if (rejected.wasm !== null) {
   process.exit(6);
 }
 
-process.exit(ran.exitCode);
+// Set rather than exit: the module's output may still be buffered.
+process.exitCode = ran.exitCode;
