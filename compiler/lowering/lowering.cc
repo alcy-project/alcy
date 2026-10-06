@@ -419,12 +419,12 @@ ir::TypeIdx Lowerer::expr_type(ast::ExprIdx expr) {
 
 const analyzer::CheckedModule::CallTarget* Lowerer::call_target(
     ast::ExprIdx callee) const {
-  for (const auto& entry : pkg.modules[module].call_targets) {
-    if (entry.callee == callee && entry.inst == cur_inst_) {
-      return &entry;
-    }
-  }
-  return nullptr;
+  const analyzer::CheckedModule& checked = pkg.modules[module];
+  const auto found = checked.call_target_by_key.find(
+      analyzer::CheckedModule::call_target_key(callee, cur_inst_));
+  return found == checked.call_target_by_key.end()
+             ? nullptr
+             : &checked.call_targets[found->second];
 }
 
 const analyzer::CheckedModule::IndirectCall* Lowerer::indirect_call(

@@ -3660,8 +3660,12 @@ void Checker::record_call(u32 module,
   if (found == position_by_address_.end()) {
     return;
   }
-  modules[module].call_targets.push_back(
+  CheckedModule& target = modules[module];
+  const u32 index = static_cast<u32>(target.call_targets.size());
+  target.call_targets.push_back(
       {callee, false, found->second.first, found->second.second, cur_inst});
+  target.call_target_by_key.emplace(
+      CheckedModule::call_target_key(callee, cur_inst), index);
 }
 
 void Checker::record_call(u32 module,
@@ -3671,8 +3675,12 @@ void Checker::record_call(u32 module,
   if (found == position_by_address_.end()) {
     return;
   }
-  modules[module].call_targets.push_back(
+  CheckedModule& target = modules[module];
+  const u32 index = static_cast<u32>(target.call_targets.size());
+  target.call_targets.push_back(
       {callee, true, found->second.first, found->second.second, cur_inst});
+  target.call_target_by_key.emplace(
+      CheckedModule::call_target_key(callee, cur_inst), index);
 }
 
 CheckedModule::FnSig& Checker::add_function(u32 module,

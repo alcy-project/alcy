@@ -76,12 +76,12 @@ ir::TypeIdx Lowerer::expr_type_in(u32 mod, ast::ExprIdx expr) {
 const analyzer::CheckedModule::CallTarget* Lowerer::call_target_in(
     u32 mod,
     ast::ExprIdx callee) const {
-  for (const auto& entry : pkg.modules[mod].call_targets) {
-    if (entry.callee == callee && entry.inst == comp_inst_) {
-      return &entry;
-    }
-  }
-  return nullptr;
+  const analyzer::CheckedModule& checked = pkg.modules[mod];
+  const auto found = checked.call_target_by_key.find(
+      analyzer::CheckedModule::call_target_key(callee, comp_inst_));
+  return found == checked.call_target_by_key.end()
+             ? nullptr
+             : &checked.call_targets[found->second];
 }
 
 const Lowerer::CompVal* Lowerer::comp_lookup(const CompScope& scope,

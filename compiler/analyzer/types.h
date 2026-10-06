@@ -6,6 +6,7 @@
 #include <deque>
 #include <span>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -139,6 +140,15 @@ struct CheckedModule {
     u32 inst = NO_INST;
   };
   std::vector<CallTarget> call_targets;
+  // Key of a call target: the callee expression and the instantiation it was
+  // recorded under.
+  [[nodiscard]] static u64 call_target_key(ast::ExprIdx callee, u32 inst) {
+    return (static_cast<u64>(callee.idx) << 32) | static_cast<u64>(inst);
+  }
+  // Where a call target sits, by that key. Resolving one walked the module's
+  // list, and the entry module's list grows with the package: every call it
+  // makes is an entry, and lowering each of them walked all of them.
+  std::unordered_map<u64, u32> call_target_by_key;
   // One closure literal: the signature lowering compiles the body
   // against, with the parameters it binds. Keyed by the closure
   // expression; the body stays in the AST. `inst` keys entries
