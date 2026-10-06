@@ -9,6 +9,7 @@
 #include "codegen/wasm/writer.h"
 #include "debug/dcheck.h"
 #include "diag/span.h"
+#include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "ir/common.h"
@@ -364,7 +365,7 @@ Emitter::EmitResult Emitter::emit_field_projection(
         dynamic = &index_op;
         stride = size == 0 ? 1 : static_cast<u32>(size);
       } else {
-        return unsupported(current_span_, "this projection");
+        return unsupported(current_span_, "two scaled indices");
       }
       continue;
     }
@@ -382,6 +383,23 @@ Emitter::EmitResult Emitter::emit_field_projection(
       cur = fields[static_cast<u32>(value)];
       continue;
     }
+    // A `str` or `slice` is the record {data, len} on the target; its two
+    // fields are what `&s.0` and `&s.1` project. The walk ends there,
+    // because a data pointer has no element type the IR spelled.
+    const bool fat =
+        tag == ir::TypeTag::Str || tag == ir::TypeTag::Slice ||
+        ((tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) &&
+         storage_.types()[storage_.ref_types()[storage_.types()[cur].as_ref()]
+                              .pointee]
+                 .tag == ir::TypeTag::Slice);
+    if (fat) {
+      if (!is_const || value > 1 || i + 1 < ops.size()) {
+        return unsupported(current_span_, "a projection through this pair");
+      }
+      const u64 word = target_.width == ir::PointerWidth::W64 ? 8 : 4;
+      constant += value * word;
+      continue;
+    }
     if (tag == ir::TypeTag::Array) {
       const ir::ArrayType& array =
           storage_.array_types()[storage_.types()[cur].as_array()];
@@ -392,12 +410,14 @@ Emitter::EmitResult Emitter::emit_field_projection(
         dynamic = &index_op;
         stride = size == 0 ? 1 : static_cast<u32>(size);
       } else {
-        return unsupported(current_span_, "this projection");
+        return unsupported(current_span_, "two scaled array indices");
       }
       cur = array.element;
       continue;
     }
-    return unsupported(current_span_, "this projection");
+    return unsupported(current_span_,
+                       fmt::format("a projection through {} at index {}",
+                                   ir::type_to_str(tag), i));
   }
 
   if (push_word(base, 0, ValType::I32).is_err()) {
