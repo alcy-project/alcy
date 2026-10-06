@@ -133,6 +133,10 @@ class Checker {
   // an invalid placeholder per generic function body, so both kinds
   // draw keys from one space.
   std::vector<ir::TypeIdx> inst_numbering;
+  // The numbering a type was given, by the type. A lookup walked the whole
+  // numbering, and a package that instantiates a type per module asks for a
+  // method's instantiation once per method it instantiates.
+  std::unordered_map<u32, u32> inst_by_type_;
   // `ref_type` appends a storage copy of a type so a struct's field
   // range stays contiguous. This maps each copy back to the type it
   // was copied from, so owner lookups accept both indexes.

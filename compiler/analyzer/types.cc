@@ -855,12 +855,8 @@ ir::TypeIdx Checker::storage_copy(ir::TypeIdx type) {
 }
 
 u32 Checker::inst_index(ir::TypeIdx type) const {
-  for (u32 i = 0; i < static_cast<u32>(inst_numbering.size()); ++i) {
-    if (inst_numbering[i].idx == type.idx) {
-      return i;
-    }
-  }
-  return NO_INST;
+  const auto found = inst_by_type_.find(type.idx);
+  return found == inst_by_type_.end() ? NO_INST : found->second;
 }
 
 // Storage copies chain: a copy's origin can itself be a copy, so the
@@ -1053,6 +1049,10 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   }
   instances_by_nominal_[nominal].push_back(static_cast<u32>(instance_index));
   inst_numbering.push_back(reserved);
+  // The numbering's own index, which is not the instance's index: a generic
+  // function claims a slot of the numbering without minting a type.
+  inst_by_type_.emplace(reserved.idx,
+                        static_cast<u32>(inst_numbering.size() - 1));
   // A sequence must be contiguous in the type table, and the arguments
   // are arbitrary existing nodes, so each is copied in.
   ir::TypeSeq args_seq;
@@ -3314,6 +3314,7 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
   fn_instances.push_back(FnInstance{item, module, args, sig_index, NO_INST});
   const u32 inst = static_cast<u32>(inst_numbering.size());
   inst_numbering.emplace_back(base::INVALID_IDX);
+  inst_by_type_.emplace(base::INVALID_IDX, inst);
   fn_instances.back().inst = inst;
   modules[module].functions[sig_index].inst = inst;
 
