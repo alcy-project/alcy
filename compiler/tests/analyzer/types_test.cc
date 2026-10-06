@@ -130,6 +130,50 @@ CheckOutcome check_case(
   return {std::move(checked_result).unwrap()};
 }
 
+// Resolves a root and staged facades, then checks under a package
+// policy table the caller supplies: the seal cases need rows
+// resolve_inputs does not build.
+CheckOutcome check_with_policies(
+    VirtualDir& dir,
+    std::string_view root_rel,
+    std::initializer_list<std::pair<std::string_view, std::string_view>>
+        prelude,
+    std::span<const PackagePolicy> policies,
+    Fixture& f) {
+  const tests::VirtualSource* const root_file = dir.find(root_rel);
+  if (root_file == nullptr) {
+    return {std::nullopt};
+  }
+  const source::FileId root =
+      f.sources.add_virtual(root_file->name, root_file->bytes);
+  const ModuleInput root_input{"", root};
+  std::deque<std::string> prelude_storage;
+  std::vector<ModuleInput> prelude_inputs;
+  for (const auto& [name, rel] : prelude) {
+    const tests::VirtualSource* const file = dir.find(rel);
+    if (file == nullptr) {
+      continue;
+    }
+    const source::FileId id = f.sources.add_virtual(file->name, file->bytes);
+    prelude_storage.emplace_back(name);
+    prelude_inputs.push_back({prelude_storage.back(), id, true});
+  }
+  base::Result<ModuleTree, diag::Reported> tree_result =
+      pipeline::resolve_inputs(f.ctx, root, {&root_input, 1}, "testpkg",
+                               prelude_inputs);
+  if (tree_result.is_err() || f.bag.has_errors()) {
+    return {std::nullopt};
+  }
+  ModuleTree tree = std::move(tree_result).unwrap();
+  tree.package_policies = policies;
+  base::Result<CheckedPackage, diag::Reported> checked_result =
+      check_package(tree, ir::PointerWidth::W64, f.ast, f.bag, f.strings);
+  if (checked_result.is_err() || f.bag.has_errors()) {
+    return {std::nullopt};
+  }
+  return {std::move(checked_result).unwrap()};
+}
+
 const CheckedModule* find_checked(const CheckedPackage& package,
                                   std::string_view path) {
   for (const CheckedModule& module : package.modules) {
@@ -3491,6 +3535,98 @@ TEST_CASE("Check reports a spent name table") {
     }
   }
   CHECK(reported);
+}
+
+// A spec its package seals to a suite is implementable from inside
+// that package or its suite, and from nowhere else (ADR-0053). These
+// drive the checker directly because a local dependency cannot yet
+// import a suite sibling's spec.
+TEST_CASE("Check refuses a sealed spec implementation outside its package") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir,
+      {{"specs.al", "pub spec Sealed {\n  fn seal(self: &Self) -> i32;\n}\n"},
+       {"main.al",
+        "struct Tag {\n  n: i32,\n}\n"
+        "impl Sealed for Tag {\n"
+        "  fn seal(self: &Self) -> i32 {\n    ret self.n\n  }\n}\n"
+        "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  const std::string_view seals[] = {"Sealed"};
+  const PackagePolicy policies[] = {
+      {"core", "alcy/std", seals},
+      {"testpkg", "", {}},
+  };
+  Fixture f;
+  const CheckOutcome result =
+      check_with_policies(dir, "main.al", {{"core", "specs.al"}}, policies, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(f.bag.size() == 1);
+  if (f.bag.size() != 1) {
+    return;
+  }
+  CHECK(f.bag.at(0)->message ==
+        "Spec 'Sealed' is sealed by package 'core'; implementing it from "
+        "outside needs the [spec] implement key, which is not accepted "
+        "yet");
+}
+
+TEST_CASE("Check admits a sealed spec implementation from the same suite") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir,
+      {{"specs.al", "pub spec Sealed {\n  fn seal(self: &Self) -> i32;\n}\n"},
+       {"main.al",
+        "struct Tag {\n  n: i32,\n}\n"
+        "impl Sealed for Tag {\n"
+        "  fn seal(self: &Self) -> i32 {\n    ret self.n\n  }\n}\n"
+        "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  const std::string_view seals[] = {"Sealed"};
+  const PackagePolicy policies[] = {
+      {"core", "alcy/std", seals},
+      {"testpkg", "alcy/std", {}},
+  };
+  Fixture f;
+  const CheckOutcome result =
+      check_with_policies(dir, "main.al", {{"core", "specs.al"}}, policies, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check reports a seal that names no declared spec") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "spec Shown {\n  fn show(self: &Self) -> i32;\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  const std::string_view seals[] = {"Shown", "Missing"};
+  const PackagePolicy policies[] = {
+      {"testpkg", "", seals},
+  };
+  Fixture f;
+  const CheckOutcome result =
+      check_with_policies(dir, "main.al", {}, policies, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(f.bag.size() == 1);
+  if (f.bag.size() != 1) {
+    return;
+  }
+  CHECK(f.bag.at(0)->message ==
+        "Manifest seals spec 'Missing', which package 'testpkg' does not "
+        "declare");
 }
 
 }  // namespace analyzer

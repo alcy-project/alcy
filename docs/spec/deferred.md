@@ -38,6 +38,9 @@ relied upon by MVP programs or by the MVP compiler implementation.
   monomorphization beyond per-instantiation enum, struct, and method
   specialization. Declarations, implementations, dispatch, and
   coherence are settled (see `items.md` and `grammar.md`).
+- The implementing-side manifest key that would let a package outside a
+  seal opt in to a suite-only spec; seals are one-way until it ships
+  (see `modules.md`).
 - The owning environment for closures: capturing a non-Copy value
   by value, and a capturing closure escaping the frame that built
   it. Until it lands a capture is a reference or a copied value,

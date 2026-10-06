@@ -1,0 +1,4 @@
+# `Missing` names no spec this package declares, so the seal would
+# cover nothing: a policy typo is an error, not a shorter list.
+exit = 4
+contains = ["Manifest seals spec 'Missing', which package 'demo' does not declare"]

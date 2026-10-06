@@ -1,0 +1,5 @@
+# The declaring package itself is always inside the seal, so this
+# implementation needs no manifest key (ADR-0053).
+exit = 0
+contains = ["Checked   1 file, 1 module, 2 functions"]
+not_contains = ["error"]

@@ -1,0 +1,13 @@
+[package]
+name = "demo"
+version = "0.1.0"
+
+[modules]
+include = ["main"]
+
+[spec]
+suite-only = ["Shown"]
+
+[[bin]]
+name = "demo"
+path = "main.al"

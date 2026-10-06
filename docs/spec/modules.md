@@ -73,6 +73,13 @@ A package has two surfaces:
 A suite guarantees that no name appears in two members' implicit
 surfaces, so selecting a whole suite cannot produce an ambiguity.
 
+**A spec can be sealed to its suite.** `[spec] suite-only = [...]` in a
+package manifest names the specs the package declares that only it or a
+package of its suite may implement. Every name must resolve to a spec
+that package declares, an unknown key in `[spec]` is an error, and an
+implementation from outside the seal is an error. A spec the list does
+not name stays open.
+
 The standard library is the `alcy/std` suite; see `docs/adr/0016-suites-and-the-std-split.md` for the
 member list and the dependency graph.
 

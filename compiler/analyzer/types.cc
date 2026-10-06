@@ -139,6 +139,32 @@ SpecEntry* Checker::find_spec(u32 module, std::string_view name) {
   return nullptr;
 }
 
+std::string_view Checker::package_of(u32 module) const {
+  const u32 root = tree.module_root(module);
+  if (root != NO_PACKAGE_ROOT) {
+    return tree.package_roots[root].identity;
+  }
+  const ModuleNode& node = *tree.modules[module];
+  if (node.is_staged) {
+    // A staged source is named `member/module`, and the member is the
+    // package every module under it belongs to.
+    const usize sep = node.path.find("::");
+    return sep == std::string::npos
+               ? std::string_view(node.path)
+               : std::string_view(node.path).substr(0, sep);
+  }
+  return tree.package_name;
+}
+
+const PackagePolicy* Checker::policy_of(std::string_view package) const {
+  for (const PackagePolicy& policy : tree.package_policies) {
+    if (policy.package == package) {
+      return &policy;
+    }
+  }
+  return nullptr;
+}
+
 SpecEntry* Checker::find_spec_in_scope(u32 module, std::string_view name) {
   if (SpecEntry* entry = find_spec(module, name)) {
     return entry;
@@ -350,6 +376,36 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     return;
   }
   const u32 spec_index = static_cast<u32>(spec_entry - specs.data());
+  // ADR-0053: a spec its package seals to a suite may be implemented
+  // only by that package or by a package of that suite. The manifest
+  // name list is the seal; the reserved implementing-side key that
+  // would open it is not accepted yet.
+  if (const PackagePolicy* const declaring =
+          policy_of(package_of(spec_entry->module));
+      declaring != nullptr) {
+    bool sealed = false;
+    for (std::string_view sealed_name : declaring->suite_only) {
+      if (sealed_name == spec_entry->name) {
+        sealed = true;
+        break;
+      }
+    }
+    if (sealed) {
+      const PackagePolicy* const implementing = policy_of(package_of(module));
+      const bool same_package = implementing != nullptr &&
+                                implementing->package == declaring->package;
+      const bool same_suite = implementing != nullptr &&
+                              !declaring->suite.empty() &&
+                              implementing->suite == declaring->suite;
+      if (!same_package && !same_suite) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerSpecSealed>(
+            diag::Severity::Error, diag::Stage::Analyzer, DiagCode::SpecSealed,
+            spec_node.span, spec_entry->name, declaring->package);
+        (void)index;
+        return;
+      }
+    }
+  }
   const ast::ItemSpec& declaration =
       ast.items[spec_entry->item].payload.get<ast::ItemSpec>();
   const bool generic_impl = !impl.params.empty();
@@ -4432,6 +4488,28 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   }
   if (checker.name_table_exhausted_) {
     return base::make_err(diag::Reported{});
+  }
+  // ADR-0053: every name a manifest seals must resolve to a spec its
+  // package declares; a name that resolves to nothing would seal
+  // nothing, which is what the list exists to prevent.
+  for (const PackagePolicy& policy : tree.package_policies) {
+    for (std::string_view sealed_name : policy.suite_only) {
+      bool declared = false;
+      for (const SpecEntry& spec : checker.specs) {
+        if (spec.name == sealed_name &&
+            checker.package_of(spec.module) == policy.package) {
+          declared = true;
+          break;
+        }
+      }
+      if (!declared) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerSpecSealUnknown>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::SpecSealUnknown, diag::Span{}, sealed_name,
+            policy.package);
+        (void)index;
+      }
+    }
   }
   {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "bodies",

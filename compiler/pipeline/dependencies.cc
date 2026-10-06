@@ -22,6 +22,7 @@
 #include "pipeline/modules.h"
 #include "pipeline/pipeline.h"
 #include "pipeline/pipeline_context.h"
+#include "pkg/arena_copy.h"
 #include "pkg/manifest.h"
 #include "source/source.h"
 
@@ -145,6 +146,7 @@ bool load_path_edge(PipelineContext& ctx,
 bool load_dependency(PipelineContext& ctx,
                      const path::Path& dir,
                      std::string_view spec,
+                     std::string_view suite,
                      std::vector<path::Path>& visited,
                      std::vector<path::Path>& loaded,
                      std::vector<LoadedDependency>& staged) {
@@ -203,6 +205,7 @@ bool load_dependency(PipelineContext& ctx,
 
   LoadedDependency dependency;
   dependency.manifest = manifest;
+  dependency.suite = suite;
   dependency.modules = std::move(selection).unwrap();
   dependency.files = std::move(found.files);
   staged.push_back(std::move(dependency));
@@ -283,6 +286,13 @@ bool load_suite_members(PipelineContext& ctx,
   // The suite's closure contains the suite: a member resolving
   // back into this directory is a cycle, not a second load.
   visited.push_back(dir);
+  // The suite identity each member's policy carries: `owner/name`, the
+  // same spelling a suite specifier uses.
+  std::string suite_identity(dep.owner);
+  suite_identity += '/';
+  suite_identity += dep.suite;
+  const std::string_view member_suite =
+      pkg::copy_str(ctx.arena, suite_identity);
   for (std::string_view member : members) {
     // The spec a member's own diagnostics name: the specifier as
     // written for one member, the specifier with the member filled
@@ -292,8 +302,8 @@ bool load_suite_members(PipelineContext& ctx,
       member_spec.pop_back();
       member_spec += std::string(member);
     }
-    if (!load_dependency(ctx, dir.join(member), member_spec, visited, loaded,
-                         staged)) {
+    if (!load_dependency(ctx, dir.join(member), member_spec, member_suite,
+                         visited, loaded, staged)) {
       return false;
     }
   }
@@ -318,7 +328,7 @@ bool load_path_edge(PipelineContext& ctx,
   if (dep.suite_glob || !dep.suite.empty()) {
     return load_suite_members(ctx, dir, dep, visited, loaded, staged);
   }
-  return load_dependency(ctx, dir, dep.spec, visited, loaded, staged);
+  return load_dependency(ctx, dir, dep.spec, {}, visited, loaded, staged);
 }
 
 }  // namespace

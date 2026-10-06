@@ -82,6 +82,9 @@ class Resolver {
   // and ModuleTree::module_roots describe.
   std::vector<PackageRoot> package_roots_;
   std::vector<u32> module_roots_;
+  // The caller's spec policies, held so the tree's arena copy can be
+  // built after every package root exists.
+  std::vector<PackagePolicy> package_policies_;
   // Set when a node could not be placed, so the tree was left unfinished.
   bool out_of_arena = false;
 
@@ -694,10 +697,12 @@ class Resolver {
                  std::string_view package_name_in,
                  std::span<const ParsedModule> prelude,
                  std::span<const StdHint> std_hints,
-                 std::span<const DependencyPackage> dependencies) {
+                 std::span<const DependencyPackage> dependencies,
+                 std::span<const PackagePolicy> package_policies) {
     package_name = package_name_in;
     root = root_id;
     std_hints_ = std_hints;
+    package_policies_.assign(package_policies.begin(), package_policies.end());
     file_data.reserve(inputs.size());
     for (const ParsedModule& input : inputs) {
       file_data.push_back({input.input.id, input.input.name,
@@ -816,6 +821,8 @@ class Resolver {
         ast.spans, std::vector<ModuleNode*>(modules.begin(), modules.end()));
     tree.package_roots = ast::copy_to_arena(ast.spans, package_roots_);
     tree.module_roots = ast::copy_to_arena(ast.spans, module_roots_);
+    tree.package_policies = ast::copy_to_arena(ast.spans, package_policies_);
+    tree.package_name = package_name;
     if (ast.exhausted()) {
       fail_out_of_arena();
       return ModuleTree{};
@@ -852,10 +859,11 @@ base::Result<ModuleTree, diag::Reported> resolve_modules(
     diag::DiagBag& bag,
     std::span<const ParsedModule> prelude,
     std::span<const StdHint> std_hints,
-    std::span<const DependencyPackage> dependencies) {
+    std::span<const DependencyPackage> dependencies,
+    std::span<const PackagePolicy> package_policies) {
   Resolver resolver{ast, bag};
   ModuleTree tree = resolver.run(root, modules, package_name, prelude,
-                                 std_hints, dependencies);
+                                 std_hints, dependencies, package_policies);
   if (bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }

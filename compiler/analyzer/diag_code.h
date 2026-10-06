@@ -70,6 +70,12 @@ enum class DiagCode : u8 {
   // call to an unsafe function or intrinsic, or a raw pointer
   // dereference, with no enclosing `unsafe { ... }` block.
   UnsafeOperation = 36,
+  // An implementation of a spec its package seals to a suite
+  // (ADR-0053) comes from outside that package and suite.
+  SpecSealed = 37,
+  // A package's manifest seals a name that is not a spec the package
+  // declares, so the seal would cover nothing.
+  SpecSealUnknown = 38,
 };
 
 }  // namespace analyzer

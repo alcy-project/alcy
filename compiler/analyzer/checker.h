@@ -235,6 +235,12 @@ class Checker {
   NominalEntry* find_nominal(u32 module, std::string_view name);
   // A spec declaration by module and name; at most one per module.
   SpecEntry* find_spec(u32 module, std::string_view name);
+  // The package `module` belongs to, by the identity a `use` spells:
+  // the root package's name, a dependency's, or a staged member's.
+  std::string_view package_of(u32 module) const;
+  // The spec policy of `package`, or nullptr when the tree carries
+  // none, which reads as every spec being open.
+  const PackagePolicy* policy_of(std::string_view package) const;
   // A spec visible from `module`: declared there, imported, or
   // injected from a prelude facade. Mirrors the type-namespace walk.
   SpecEntry* find_spec_in_scope(u32 module, std::string_view name);

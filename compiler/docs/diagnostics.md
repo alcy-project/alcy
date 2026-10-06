@@ -38,7 +38,7 @@ partly because UTF-8 validation is coming and it should not have to move.
 | --- | --- | --- | --- |
 | `A` | lexer | `compiler/lexer` | 6 |
 | `B` | parser | `compiler/parser` | 8 |
-| `C` | analyzer | `compiler/analyzer` | 36 |
+| `C` | analyzer | `compiler/analyzer` | 38 |
 | `D` | lowering | `compiler/lowering` | 7 |
 | `F` | borrow | `compiler/borrow` | 5 |
 | `G` | ir | `compiler/ir` | one per `VerificationErrorKind` |
@@ -59,7 +59,7 @@ Each component counts its own from 1. Zero is never a check, so a
 diagnostic with no code is not a diagnostic with code zero. The width is
 fixed at three digits so codes sort in the order they were assigned,
 which is the order a report lists them in. 255 is the ceiling, which is
-what a `u8` id gives, and the widest component has 35; a component near
+what a `u8` id gives, and the widest component has 38; a component near
 the ceiling wants its checks split rather than a wider field.
 
 `ir` is the one component with no enum of its own. A code there is the

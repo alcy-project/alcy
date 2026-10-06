@@ -108,6 +108,10 @@ struct PackageSources {
   // as long as they resolve.
   std::vector<analyzer::ParsedModule> dependency_modules;
   std::vector<analyzer::DependencyPackage> dependencies;
+  // Every package's spec policy: the root's, each path dependency's,
+  // and each selected staged member's, in that order. The tree borrows
+  // the rows while it is checked (ADR-0053).
+  std::vector<analyzer::PackagePolicy> policies;
   usize file_count = 0;
 };
 
@@ -289,6 +293,31 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
             sources.dependency_modules.data() + begin, end - begin)});
     begin = end;
   }
+  // The root's policy names the package itself and no suite; a sealed
+  // spec it declares is implementable only from inside it.
+  sources.policies.push_back(analyzer::PackagePolicy{
+      manifest.name,
+      {},
+      std::span<const std::string_view>(manifest.suite_only,
+                                        manifest.suite_only_count)});
+  for (usize i = 0; i < dependencies.size(); ++i) {
+    const pkg::PackageManifest& dependency = dependencies[i].manifest;
+    sources.policies.push_back(analyzer::PackagePolicy{
+        identities[i], dependencies[i].suite,
+        std::span<const std::string_view>(dependency.suite_only,
+                                          dependency.suite_only_count)});
+  }
+  // Every selected staged member has the one embedded suite's identity,
+  // so a member's implementation may reach a spec another member seals.
+  for (std::string_view member : selection.members) {
+    const StdPackageSeals* const seals = std_seals_for(member);
+    sources.policies.push_back(analyzer::PackagePolicy{
+        member, STD_SUITE_IDENTITY,
+        seals == nullptr ? std::span<const std::string_view>{}
+                         : std::span<const std::string_view>(
+                               seals->suite_only,
+                               static_cast<usize>(seals->suite_only_count))});
+  }
   return base::make_ok(std::move(sources));
 }
 
@@ -387,7 +416,7 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
                                              "frontend");
     return analyzer::resolve_modules(root_file, modules, manifest.name, ctx.ast,
                                      ctx.bag, sources.prelude, std_hints(),
-                                     sources.dependencies);
+                                     sources.dependencies, sources.policies);
   }();
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});

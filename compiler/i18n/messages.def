@@ -199,6 +199,8 @@
   F(AnalyzerSourceFileHasNoModule, "Source file '{}' has no module") \
   F(AnalyzerSpecMethodTypeParameters, "Spec method '{}' must not declare type parameters") \
   F(AnalyzerSpecRequiresNominalTarget, "Spec implementation requires a nominal type") \
+  F(AnalyzerSpecSealed, "Spec '{}' is sealed by package '{}'; implementing it from outside needs the [spec] implement key, which is not accepted yet") \
+  F(AnalyzerSpecSealUnknown, "Manifest seals spec '{}', which package '{}' does not declare") \
   F(AnalyzerSpecSignatureMismatch, "Method '{}' does not match the declaration in '{}'") \
   F(AnalyzerSpecTargetNotDirect, "Spec implementation target must name its type parameters directly") \
   F(AnalyzerSpecUnknownMethod, "Method '{}' is not one of '{}'") \

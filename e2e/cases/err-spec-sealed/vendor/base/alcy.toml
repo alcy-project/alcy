@@ -1,0 +1,14 @@
+[package]
+name = "acme-base"
+version = "0.1.0"
+
+[modules]
+include = ["sealed"]
+export = ["sealed"]
+
+[spec]
+suite-only = ["Sealed"]
+
+[[bin]]
+name = "acme-base"
+path = "sealed.al"

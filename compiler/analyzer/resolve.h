@@ -63,6 +63,19 @@ struct PackageRoot {
   std::span<const std::string_view> exports;
 };
 
+// One package's spec policy: the identity a `use` spells, the suite the
+// dependency that loaded it puts it in (empty for the root package and
+// for a dependency no suite names), and the specs its manifest seals to
+// that suite (ADR-0053). One row per package - the root's, each path
+// dependency's, each staged standard-library member's - so an
+// implementation's package is placed even when it seals nothing.
+// Views borrow the caller's storage.
+struct PackagePolicy {
+  std::string_view package;
+  std::string_view suite;
+  std::span<const std::string_view> suite_only;
+};
+
 struct ModuleNode {
   // Dotted path from the root ("foo::bar"); "" for the root itself.
   std::string path;
@@ -106,6 +119,16 @@ struct ModuleTree {
   // module belonging to a package root.
   // NOLINTNEXTLINE(readability-redundant-member-init)
   std::span<const u32> module_roots = {};
+  // The root package's own identity: the `[package] name` a `use`
+  // cannot spell, which its modules belong to. Borrowed like the
+  // identities above.
+  // NOLINTNEXTLINE(readability-redundant-member-init)
+  std::string_view package_name = {};
+  // Every package's spec policy, root, dependencies, and staged
+  // members alike. Empty in a hand-built tree, which reads as every
+  // spec being open.
+  // NOLINTNEXTLINE(readability-redundant-member-init)
+  std::span<const PackagePolicy> package_policies = {};
 
   // The package root `module` belongs to, or NO_PACKAGE_ROOT. Trees
   // built by resolve_modules carry one entry per module; a hand-built
@@ -270,6 +293,10 @@ inline void emit_unresolved(diag::DiagBag& bag,
 // `use` or a qualified path spells a dependency by its identity, and
 // reaches only its `[modules] export` list.
 //
+// `package_policies` is every package's spec policy, the root's and
+// each dependency's and staged member's; the tree borrows it, so it
+// stays alive as long as the tree is checked.
+//
 // The caller owns the items, the paths, and the arena they live in,
 // and keeps all three alive for the call. `pipeline::parse_files`
 // produces exactly this input.
@@ -281,7 +308,8 @@ base::Result<ModuleTree, diag::Reported> resolve_modules(
     diag::DiagBag& bag,
     std::span<const ParsedModule> prelude = {},
     std::span<const StdHint> std_hints = {},
-    std::span<const DependencyPackage> dependencies = {});
+    std::span<const DependencyPackage> dependencies = {},
+    std::span<const PackagePolicy> package_policies = {});
 
 // A `use` or a qualified path that reaches `module_path` in the
 // package the root `root` opens, seen from `from_module`. A path

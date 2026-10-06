@@ -26,6 +26,11 @@
   methods first, then the in-scope spec impls. Coherence is global
   (one impl per spec and type), and every method the spec declares
   must be implemented with a matching signature. See `grammar.md`.
+- A spec may be sealed to its suite: the declaring package's manifest
+  names it in `[spec] suite-only`, and only that package or a package
+  of its suite may then implement it. A spec the list does not name
+  stays open, and an outside implementation is an error until the
+  implementing-side manifest key ships. See `modules.md`.
 - `static` items have storage and MUST NOT contain `&mut`.
   `const X: T = ...` items are inline constants restricted to literal
   expressions in MVP (full const evaluation arrives with `comp fn`,

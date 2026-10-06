@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <span>
+#include <string_view>
 
 #include "analyzer/resolve.h"
 #include "fpag/base/numeric.h"
@@ -35,6 +36,34 @@ struct StdPackageDeps {
 
 extern const StdPackageDeps STD_PACKAGE_DEPS[];
 extern const usize STD_PACKAGE_COUNT;
+
+// The specs each member seals to the standard library's suite
+// (`[spec] suite-only` in its manifest), by member name. Generated the
+// way the dependency table is, and for the same reason: the compiler
+// never parses a staged member's manifest, so this table is where its
+// seal is read (ADR-0053); see tools/embed_std.py.
+struct StdPackageSeals {
+  const char* name;
+  const std::string_view* suite_only;
+  u64 suite_only_count;
+};
+
+extern const StdPackageSeals STD_PACKAGE_SEALS[];
+extern const usize STD_PACKAGE_SEAL_COUNT;
+
+// The embedded suite's identity, the spelling a suite specifier uses.
+inline constexpr std::string_view STD_SUITE_IDENTITY = "alcy/std";
+
+// The seals the embedded member `name` declares, or nullptr for a name
+// that is no member.
+inline const StdPackageSeals* std_seals_for(std::string_view name) {
+  for (usize i = 0; i < STD_PACKAGE_SEAL_COUNT; ++i) {
+    if (name == STD_PACKAGE_SEALS[i].name) {
+      return &STD_PACKAGE_SEALS[i];
+    }
+  }
+  return nullptr;
+}
 
 // Every public name each member carries, for the missing-dependency
 // hint: an unresolved name found here names the package to add.

@@ -20,10 +20,14 @@ namespace pipeline {
 
 // One path dependency, loaded from source: the manifest it declares
 // and the modules that manifest selects, named by their paths within
-// the package, plus the files discovery loaded for them. The manifest
-// views borrow the context arena, which outlives the result.
+// the package, plus the files discovery loaded for them. `suite` is
+// the suite the specifier that reached it names ("owner/name"), empty
+// for a package no suite holds; the view borrows the context arena.
+// The manifest views borrow the context arena too, which outlives the
+// result.
 struct LoadedDependency {
   pkg::PackageManifest manifest;
+  std::string_view suite;
   std::vector<analyzer::ModuleInput> modules;
   std::vector<source::FileId> files;
 };

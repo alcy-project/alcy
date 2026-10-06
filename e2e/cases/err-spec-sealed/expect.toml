@@ -1,0 +1,5 @@
+# `base` seals `Sealed` to its own suite, and `app` is no member of
+# it, so the implementation is refused until the implementing-side
+# manifest key exists (ADR-0053).
+exit = 4
+contains = ["Spec 'Sealed' is sealed by package 'acme_base'; implementing it from outside needs the [spec] implement key, which is not accepted yet"]

@@ -49,12 +49,35 @@ def main():
         raise SystemExit("suite members and lib/std directories disagree")
     pkg_modules = {}
     pkg_deps = {}
+    pkg_specs = {}
     for name in members:
         with open(std_dir / name / "alcy.toml", "rb") as f:
             manifest = tomllib.load(f)
         if manifest["package"]["name"] != name:
             raise SystemExit(f"lib/std/{name}/alcy.toml names another package")
         pkg_modules[name] = manifest["modules"]["include"]
+        # The [spec] table's declaring side, read the way the manifest
+        # parser reads it: only `suite-only`, a list of spec names. The
+        # compiler never parses a staged member's manifest, so the
+        # generated table is where its seal must be checked.
+        spec_table = manifest.get("spec", {})
+        unknown = set(spec_table) - {"suite-only"}
+        if unknown:
+            raise SystemExit(
+                f"lib/std/{name}/alcy.toml [spec] has unknown keys: {sorted(unknown)}"
+            )
+        seals = spec_table.get("suite-only", [])
+        if not isinstance(seals, list) or any(
+            not isinstance(seal, str) or not seal for seal in seals
+        ):
+            raise SystemExit(
+                f"lib/std/{name}/alcy.toml [spec] suite-only must be a list of names"
+            )
+        if len(set(seals)) != len(seals):
+            raise SystemExit(
+                f"lib/std/{name}/alcy.toml [spec] suite-only repeats a name"
+            )
+        pkg_specs[name] = seals
         deps = []
         for spec in manifest.get("dependencies", {}):
             parts = spec.split("/")
@@ -148,6 +171,27 @@ def main():
         out.write(
             "const usize STD_PACKAGE_COUNT = "
             "sizeof(STD_PACKAGE_DEPS) / sizeof(STD_PACKAGE_DEPS[0]);\n\n"
+        )
+        # The specs each member seals to the suite, from its [spec]
+        # table. The compiler checks the staged member's declarations
+        # against these rows (ADR-0053).
+        for name in members:
+            seals = pkg_specs[name]
+            if seals:
+                listed = ", ".join(f'"{seal}"' for seal in seals)
+                out.write(
+                    f"const std::string_view STD_SPECS_{name.upper()}[] = "
+                    f"{{{listed}}};\n\n"
+                )
+        out.write("const StdPackageSeals STD_PACKAGE_SEALS[] = {\n")
+        for name in members:
+            seals = pkg_specs[name]
+            table = f"STD_SPECS_{name.upper()}" if seals else "nullptr"
+            out.write(f'  {{"{name}", {table}, {len(seals)}}},\n')
+        out.write("};\n\n")
+        out.write(
+            "const usize STD_PACKAGE_SEAL_COUNT = "
+            "sizeof(STD_PACKAGE_SEALS) / sizeof(STD_PACKAGE_SEALS[0]);\n\n"
         )
         # Every public name each package carries, for the missing
         # dependency hint: an unresolved name found here names the
