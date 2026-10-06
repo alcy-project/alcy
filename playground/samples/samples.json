@@ -1,0 +1,28 @@
+{
+  "default": "hello.al",
+  "samples": [
+    {
+      "file": "hello.al",
+      "title": "Hello, alcy",
+      "description": "The smallest complete program: print one line and exit."
+    },
+    {
+      "file": "fizzbuzz.al",
+      "source": "samples/fizzbuzz/main.al",
+      "title": "FizzBuzz",
+      "description": "while, mut, else if, and formatted output."
+    },
+    {
+      "file": "fibonacci.al",
+      "source": "samples/fibonacci/main.al",
+      "title": "Fibonacci",
+      "description": "A named function, iterative, printing a formatted table."
+    },
+    {
+      "file": "primes.al",
+      "source": "samples/primes/main.al",
+      "title": "Primes",
+      "description": "Two functions, an early ret, and trial division to a square root."
+    }
+  ]
+}

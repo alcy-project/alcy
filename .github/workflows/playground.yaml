@@ -1,0 +1,130 @@
+name: Playground
+
+on:
+  push:
+    branches: [main]
+    paths: &playground_paths
+      - playground/**
+      - compiler/**
+      - lib/**
+      - treesitter/**
+      - build/**
+      - third_party/**
+      - tools/**
+      - config.toml
+      - .github/workflows/playground.yaml
+      - .github/actions/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a queued run waits rather than cancels so the
+# site never lands in a half-published state.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  # The playground target from BUILD.gn: the compiler as a C ABI with no
+  # LLVM, built for Emscripten.
+  COMPILER_TARGET: playground
+  # The playground compiler carries no backend but the direct wasm one
+  # (see compiler/backends.gni).
+  ALCY_GN_ARGS: alcy_backends=[]
+  BUILD_SUBDIR: playground
+
+jobs:
+  build:
+    name: Build & Upload Site
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Setup Emscripten
+        uses: emscripten-core/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984
+
+      - name: Setup GN
+        uses: pug523/actions/setup-gn@6a99c1e7020935c77ea80adc3ed0e9365ec8a209
+
+      - name: Install Ninja
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          enable-cache: true
+
+      - name: Setup Python Virtual Environment
+        run: |
+          uv python install
+          uv sync --frozen
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+
+      - name: Install the tree-sitter CLI
+        shell: bash
+        run: |
+          TS_VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["tree_sitter_cli_version"])')
+          npm install --global "tree-sitter-cli@${TS_VERSION}"
+
+      - name: Cache the Compiler Build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            out/playground
+            out/playground-cache
+          key: ${{ runner.os }}-playground-wasm32-release-build-dir-${{ hashFiles('config.toml', '**/*.gn', 'compiler/**', 'lib/**') }}
+
+      - name: Cache tree-sitter's Wasm Toolchain
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.cache/tree-sitter
+          key: ${{ runner.os }}-playground-tree-sitter-${{ hashFiles('config.toml') }}
+
+      - name: Build the Compiler Wasm Module
+        shell: bash
+        run: |
+          uv run ./tools/build.py \
+            --target="$COMPILER_TARGET" \
+            --mode=release \
+            --build-subdir="$BUILD_SUBDIR" \
+            --target-os=emscripten \
+            --gn-arg="$ALCY_GN_ARGS"
+
+      # The smoke compiles and runs a program through the same ABI the page
+      # uses, so a broken module fails here rather than in the browser.
+      - name: Run the Playground Smoke
+        shell: bash
+        run: uv run ./tools/check_playground.py --build-subdir="$BUILD_SUBDIR"
+
+      - name: Assemble the Site
+        shell: bash
+        run: uv run ./tools/playground.py build --mode=release --build-subdir="$BUILD_SUBDIR"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+
+      - name: Upload the Site
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
+        with:
+          path: playground/dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e

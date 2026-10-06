@@ -2,3 +2,6 @@ llvm_toolchain_version = "23.1.2"
 llvm_fork_tag = "alcy-llvm-23.1.2-2"
 taplo_version = "0.10.0"
 tree_sitter_cli_version = "0.27.0"
+# The tree-sitter web binding the playground bundles; its parser ABI must
+# match the grammar the CLI generates. See playground/README.md.
+web_tree_sitter_version = "0.27.0"

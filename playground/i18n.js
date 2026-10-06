@@ -1,0 +1,155 @@
+// Copyright 2026 The Alcy Project Authors
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// The page's own strings. Compiler diagnostics arrive from the compiler's
+// catalogs and keep whatever language the compiler was built for; these
+// cover the chrome around them.
+//
+// Adding a language means one catalog here and one entry in `LANGUAGES`;
+// `data-i18n` attributes in index.html and `t()` calls in app.js are the
+// only consumers.
+
+const CATALOGS = {
+  en: {
+    "label.example": "Example",
+    "label.theme": "Theme",
+    "label.language": "Language",
+    "language.auto": "Auto",
+    "theme.auto": "Auto",
+    "theme.light": "Light",
+    "theme.dark": "Dark",
+    "button.check": "Check",
+    "button.checkTitle": "Check the program",
+    "button.run": "Run",
+    "button.runTitle": "Compile and run",
+    "button.running": "Running...",
+    "compiler.idle": "compiler not loaded",
+    "compiler.loading": "loading compiler...",
+    "compiler.ready": "compiler ready",
+    "compiler.error": "compiler unavailable",
+    "tab.problems": "Problems",
+    "tab.output": "Output",
+    "problems.empty": "No diagnostics yet.",
+    "problems.count": "diagnostics",
+    "severity.error": "error",
+    "severity.warning": "warning",
+    "severity.note": "note",
+    "samples.loading": "loading...",
+    "aria.splitter": "Resize the result panel",
+    "aria.editor": "Source editor",
+    "aria.source": "alcy source",
+    "aria.results": "Results",
+    "hint.run": "Ctrl/Cmd+Enter to run",
+    "status.ready": "ready",
+    "status.restored": "restored the last edit",
+    "status.checking": "checking...",
+    "status.checkOk": "check ok · {functions} functions · {ms} ms",
+    "status.checkFailed": "check failed · {count} diagnostics",
+    "status.compiling": "compiling...",
+    "status.running": "running...",
+    "status.compileFailed": "compile failed",
+    "status.runFinished": "run finished",
+    "status.exited": "exited with code {code}",
+    "status.timedOut": "timed out",
+    "status.runFailed": "run failed",
+    "status.compilerError": "compiler error",
+    "status.compilerUnavailable": "compiler unavailable",
+    "status.highlightingUnavailable": "highlighting unavailable: {detail}",
+    "status.highlightingDisabled": "highlighting disabled: {detail}",
+    "status.loadExampleFailed": "could not load the example: {detail}",
+    "meta.compiling": "compiling...",
+    "meta.compileFailed": "compile failed",
+    "meta.compiled": "compiled in {ms} ms · wasm {bytes} bytes · {functions} functions",
+    "meta.timedOut": "timed out",
+    "meta.exitCode": "exit code {code}",
+    "meta.notRunnable": "not runnable",
+    "program.timedOut": "program did not finish within {seconds} s and was terminated",
+    "compiler.missing":
+      "the compiler wasm module could not be loaded{detail}. Build it with `uv run ./tools/playground.py build` and serve the result.",
+  },
+  ja: {
+    "label.example": "例",
+    "label.theme": "テーマ",
+    "label.language": "言語",
+    "language.auto": "自動",
+    "theme.auto": "自動",
+    "theme.light": "ライト",
+    "theme.dark": "ダーク",
+    "button.check": "チェック",
+    "button.checkTitle": "プログラムをチェック",
+    "button.run": "実行",
+    "button.runTitle": "コンパイルして実行",
+    "button.running": "実行中...",
+    "compiler.idle": "コンパイラ未読込",
+    "compiler.loading": "コンパイラ読込中...",
+    "compiler.ready": "コンパイラ準備完了",
+    "compiler.error": "コンパイラ利用不可",
+    "tab.problems": "問題",
+    "tab.output": "出力",
+    "problems.empty": "診断はまだありません。",
+    "problems.count": "診断",
+    "severity.error": "エラー",
+    "severity.warning": "警告",
+    "severity.note": "注意",
+    "samples.loading": "読み込み中...",
+    "aria.splitter": "結果パネルのサイズを変更",
+    "aria.editor": "ソースエディタ",
+    "aria.source": "alcy ソース",
+    "aria.results": "結果",
+    "hint.run": "Ctrl/Cmd+Enter で実行",
+    "status.ready": "準備完了",
+    "status.restored": "前回の編集を復元しました",
+    "status.checking": "チェック中...",
+    "status.checkOk": "チェック成功 · 関数 {functions} 個 · {ms} ms",
+    "status.checkFailed": "チェック失敗 · 診断 {count} 件",
+    "status.compiling": "コンパイル中...",
+    "status.running": "実行中...",
+    "status.compileFailed": "コンパイル失敗",
+    "status.runFinished": "実行完了",
+    "status.exited": "終了コード {code}",
+    "status.timedOut": "タイムアウト",
+    "status.runFailed": "実行失敗",
+    "status.compilerError": "コンパイラエラー",
+    "status.compilerUnavailable": "コンパイラ利用不可",
+    "status.highlightingUnavailable": "ハイライトを利用できません: {detail}",
+    "status.highlightingDisabled": "ハイライトを停止しました: {detail}",
+    "status.loadExampleFailed": "例を読み込めません: {detail}",
+    "meta.compiling": "コンパイル中...",
+    "meta.compileFailed": "コンパイル失敗",
+    "meta.compiled": "{ms} ms でコンパイル · wasm {bytes} バイト · 関数 {functions} 個",
+    "meta.timedOut": "タイムアウト",
+    "meta.exitCode": "終了コード {code}",
+    "meta.notRunnable": "実行不可",
+    "program.timedOut": "プログラムが {seconds} 秒以内に終了しなかったため停止しました",
+    "compiler.missing":
+      "コンパイラの wasm モジュールを読み込めませんでした{detail}。`uv run ./tools/playground.py build` でビルドしてから配信してください。",
+  },
+};
+
+export const LANGUAGES = Object.keys(CATALOGS);
+
+// A stored preference names a language or "auto"; "auto" follows the
+// browser, and an unknown tag falls back to English.
+export function resolveLanguage(preference) {
+  if (LANGUAGES.includes(preference)) {
+    return preference;
+  }
+  const tags = navigator.languages ?? [navigator.language ?? ""];
+  for (const tag of tags) {
+    const base = String(tag).toLowerCase().split("-")[0];
+    if (LANGUAGES.includes(base)) {
+      return base;
+    }
+  }
+  return "en";
+}
+
+export function translate(language, key, params) {
+  const template = CATALOGS[language]?.[key] ?? CATALOGS.en[key] ?? key;
+  if (!params) {
+    return template;
+  }
+  return template.replace(/\{(\w+)\}/g, (match, name) =>
+    name in params ? String(params[name]) : match,
+  );
+}

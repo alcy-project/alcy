@@ -1,0 +1,790 @@
+/* Copyright 2026 The Alcy Project Authors */
+/* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception */
+
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-soft: #f6f6f4;
+  --bg-code: #fbfbfa;
+  --fg: #1c1c1e;
+  --fg-soft: #5f6368;
+  --fg-faint: #8b8f94;
+  --line: #e2e2dd;
+  --accent: #1a6b4a;
+  --accent-fg: #ffffff;
+  --error: #b3261e;
+  --warning: #8a5a00;
+  --note: #1a5fa8;
+  --selection: rgba(26, 107, 74, 0.22);
+  --accent-strong: #15563c;
+  --focus: rgba(28, 28, 30, 0.55);
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  --editor-font-size: 13px;
+  --editor-line-height: 1.55;
+  --editor-pad-y: 12px;
+  --editor-pad-x: 16px;
+  --editor-padding: var(--editor-pad-y) var(--editor-pad-x);
+  --radius: 2px;
+}
+
+/* `data-theme` is set before first paint by an inline script in
+   index.html, from the stored choice or the system preference; app.js
+   keeps the two in step afterwards. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #16181a;
+  --bg-soft: #1d2023;
+  --bg-code: #1b1e21;
+  --fg: #e6e6e3;
+  --fg-soft: #a8adb3;
+  --fg-faint: #7b8087;
+  --line: #2c3034;
+  --accent: #54b98a;
+  --accent-fg: #10241b;
+  --error: #f2857d;
+  --warning: #e0b55c;
+  --note: #7db4ea;
+  --selection: rgba(84, 185, 138, 0.28);
+  --accent-strong: #6cc79a;
+  --focus: rgba(230, 230, 227, 0.6);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+}
+
+/* Top bar */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.wordmark {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.subtitle {
+  color: var(--fg-faint);
+  font-size: 13px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.toolbar-controls,
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  color: var(--fg-soft);
+  font-size: 12px;
+}
+
+select,
+button {
+  font: inherit;
+  min-height: 28px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+select {
+  max-width: 220px;
+  min-width: 0;
+}
+
+button:hover:not(:disabled),
+select:hover:not(:disabled) {
+  border-color: var(--fg-faint);
+}
+
+button:disabled,
+select:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+button.busy {
+  opacity: 0.7;
+}
+
+/* Both labels stay in the grid, so the button is always as wide as its
+   widest state and starting a run moves nothing to its left. `aria-label`
+   on the button carries the state instead of the hidden label. */
+#run {
+  display: inline-grid;
+  place-items: center;
+}
+
+#run .run-label {
+  grid-area: 1 / 1;
+}
+
+#run .run-label-busy {
+  visibility: hidden;
+}
+
+#run.busy .run-label-idle {
+  visibility: hidden;
+}
+
+#run.busy .run-label-busy {
+  visibility: visible;
+}
+
+.compiler-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 170px;
+  color: var(--fg-soft);
+  font-size: 12px;
+}
+
+.compiler-state .dot {
+  width: 7px;
+  height: 7px;
+  background: var(--fg-faint);
+  flex: none;
+}
+
+.compiler-state[data-state="loading"] .dot {
+  background: var(--warning);
+}
+
+.compiler-state[data-state="ready"] .dot {
+  background: var(--accent);
+}
+
+.compiler-state[data-state="error"] .dot {
+  background: var(--error);
+}
+
+/* Layout */
+
+.layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr) 7px
+    minmax(220px, var(--side-fraction, 38%));
+}
+
+.editor-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  /* The gutter scrolls by transform, which moves it past its own clip:
+     clip it at the pane so line numbers never draw over the header or
+     footer. `clip` rather than `hidden` so the pane is not also a scroll
+     container that focus could scroll. */
+  overflow: hidden;
+  overflow: clip;
+  background: var(--bg-code);
+}
+
+.splitter {
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.splitter::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--line);
+}
+
+.splitter:hover::before {
+  background: var(--fg-faint);
+}
+
+.splitter:focus-visible::before,
+.splitter[data-dragging="true"]::before {
+  background: var(--fg-soft);
+}
+
+.splitter:focus-visible {
+  outline: none;
+}
+
+body.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.gutter {
+  flex: none;
+  /* Content-tall, not pane-tall: the transform scrolls the whole number
+     column, and the pane clips it. A stretched, `overflow: hidden` box
+     would hold only the first paneful of numbers. */
+  align-self: flex-start;
+  overflow: visible;
+  padding: var(--editor-padding);
+  padding-right: 4px;
+  min-width: 3ch;
+  text-align: right;
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: var(--editor-font-size);
+  line-height: var(--editor-line-height);
+  white-space: pre;
+  user-select: none;
+}
+
+.editor {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.highlight,
+#source {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  border: 0;
+  padding: var(--editor-padding);
+  font-family: var(--mono);
+  font-size: var(--editor-font-size);
+  line-height: var(--editor-line-height);
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+  word-wrap: normal;
+}
+
+.highlight {
+  z-index: 1;
+  pointer-events: none;
+  background: transparent;
+  color: var(--fg);
+  scrollbar-width: none;
+  /* The mirror hides its scrollbars while the textarea keeps them, so
+     without this the two would clamp at different scroll maxima and the
+     caret would drift from the glyphs at the right and bottom edges.
+     app.js measures the textarea's scrollbars into these two values. */
+  padding-right: calc(var(--editor-pad-x) + var(--editor-scrollbar-width, 0px));
+  padding-bottom: calc(var(--editor-pad-y) + var(--editor-scrollbar-height, 0px));
+}
+
+/* The mirror must lay text out with the textarea's font exactly. A `code`
+   element otherwise takes the UA's default monospace, which is not the
+   stack the textarea uses, and the glyphs drift from the caret. */
+.highlight code {
+  font: inherit;
+}
+
+.highlight::-webkit-scrollbar {
+  display: none;
+}
+
+#source {
+  z-index: 2;
+  resize: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--fg);
+  -webkit-text-fill-color: transparent;
+  outline: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+#source::selection {
+  background: var(--selection);
+}
+
+/* Side panels */
+
+.side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg-soft);
+  padding: 6px 10px;
+}
+
+.tab.active {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-block;
+  min-width: 16px;
+  margin-left: 5px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-faint);
+  font-size: 11px;
+  line-height: 15px;
+  text-align: center;
+  vertical-align: 1px;
+}
+
+/* `display: inline-block` above outranks the UA rule for `hidden`, so the
+   attribute needs its own rule; a zero-diagnostic tab shows no badge. */
+.badge[hidden] {
+  display: none;
+}
+
+.badge[data-severity="error"] {
+  color: var(--error);
+}
+
+.badge[data-severity="warning"] {
+  color: var(--warning);
+}
+
+.badge[data-severity="note"] {
+  color: var(--note);
+}
+
+.panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.hidden {
+  display: none;
+}
+
+.empty {
+  color: var(--fg-faint);
+  margin: 8px 2px;
+}
+
+/* Problems list */
+
+.problems {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.problems li {
+  padding: 8px 8px 8px 10px;
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.problems li.error {
+  border-left-color: var(--error);
+}
+
+.problems li.warning {
+  border-left-color: var(--warning);
+}
+
+.problems li.note {
+  border-left-color: var(--note);
+}
+
+.problems li:hover {
+  background: var(--bg-soft);
+}
+
+.problem-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.severity {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.severity.error {
+  color: var(--error);
+}
+
+.severity.warning {
+  color: var(--warning);
+}
+
+.severity.note {
+  color: var(--note);
+}
+
+.problem-location {
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: 12px;
+  flex: none;
+}
+
+.problem-message {
+  margin-top: 3px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.problem-code {
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+/* Output panel */
+
+.run-meta {
+  margin: 2px 2px 10px;
+  color: var(--fg-soft);
+  font-size: 12px;
+  font-family: var(--mono);
+  white-space: pre-wrap;
+}
+
+.panel h2 {
+  margin: 14px 2px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-faint);
+}
+
+.stream {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-code);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-height: 1.5em;
+}
+
+.stream:empty::before {
+  content: "(empty)";
+  color: var(--fg-faint);
+}
+
+/* Status bar */
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 14px;
+  padding: 5px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-soft);
+  color: var(--fg-soft);
+  font-size: 12px;
+}
+
+/* The one line the bar keeps: the status takes what it needs and gives
+   the rest to the fixed items, truncating rather than wrapping. */
+#status {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusbar a {
+  flex: none;
+  color: var(--note);
+  text-decoration: none;
+}
+
+.statusbar .hint {
+  flex: none;
+  color: var(--fg-faint);
+}
+
+.noscript {
+  margin: 16px;
+}
+
+/* Syntax highlighting */
+
+.hl-comment {
+  color: var(--fg-faint);
+  font-style: italic;
+}
+
+.hl-keyword {
+  color: #a626a4;
+  font-weight: 600;
+}
+
+.hl-string {
+  color: #0a7a3d;
+}
+
+.hl-number {
+  color: #b25b00;
+}
+
+.hl-constant {
+  color: #b25b00;
+}
+
+.hl-function {
+  color: #1a5fa8;
+}
+
+.hl-function-method {
+  color: #1a5fa8;
+}
+
+.hl-type,
+.hl-type-builtin,
+.hl-type-parameter {
+  color: #8a5a00;
+}
+
+.hl-constructor {
+  color: #8a5a00;
+}
+
+.hl-property {
+  color: #00627a;
+}
+
+.hl-namespace {
+  color: #00627a;
+}
+
+.hl-variable {
+  color: var(--fg);
+}
+
+.hl-variable-builtin {
+  color: #a626a4;
+}
+
+.hl-operator,
+.hl-punctuation {
+  color: var(--fg-soft);
+}
+
+:root[data-theme="dark"] .hl-keyword,
+:root[data-theme="dark"] .hl-variable-builtin {
+  color: #d9a0e8;
+}
+
+:root[data-theme="dark"] .hl-string {
+  color: #8fd694;
+}
+
+:root[data-theme="dark"] .hl-number,
+:root[data-theme="dark"] .hl-constant,
+:root[data-theme="dark"] .hl-type,
+:root[data-theme="dark"] .hl-type-builtin,
+:root[data-theme="dark"] .hl-type-parameter,
+:root[data-theme="dark"] .hl-constructor {
+  color: #e5c07b;
+}
+
+:root[data-theme="dark"] .hl-function,
+:root[data-theme="dark"] .hl-function-method {
+  color: #7db4ea;
+}
+
+:root[data-theme="dark"] .hl-property,
+:root[data-theme="dark"] .hl-namespace {
+  color: #66c2cd;
+}
+
+/* Narrow screens: the panes stack and the splitter turns horizontal.
+   Keep the 760px breakpoint in step with NARROW_QUERY in app.js. */
+
+@media (max-width: 760px) {
+  .topbar {
+    gap: 10px;
+  }
+
+  /* Brand and compiler state share the first line; the controls and the
+     actions take one row each, so Run never ends up alone on a line. */
+  .brand {
+    order: 1;
+  }
+
+  .compiler-state {
+    order: 2;
+    min-width: 0;
+    margin-left: auto;
+  }
+
+  .toolbar {
+    order: 3;
+    flex: 1 1 100%;
+    flex-direction: column;
+    align-items: stretch;
+    margin-left: 0;
+    gap: 6px;
+  }
+
+  .toolbar-controls {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  /* Three selects on one row leave no space for the labels; the selects
+     keep their accessible names through aria-label. */
+  .control-label {
+    display: none;
+  }
+
+  /* The actions keep a comfortable tap size instead of stretching to half
+     the row on a tablet-width screen. */
+  .toolbar-actions {
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .toolbar-actions button {
+    flex: 0 1 140px;
+    min-width: 96px;
+  }
+
+  .control {
+    min-width: 0;
+  }
+
+  .control select {
+    width: 100%;
+    max-width: none;
+  }
+
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows:
+      minmax(150px, 1fr) 7px
+      minmax(150px, var(--side-fraction, 45%));
+  }
+
+  .splitter {
+    cursor: row-resize;
+  }
+
+  .splitter::before {
+    top: 50%;
+    right: 0;
+    bottom: auto;
+    left: 0;
+    width: auto;
+    height: 1px;
+    transform: translateY(-50%);
+  }
+
+  body.resizing {
+    cursor: row-resize;
+  }
+
+  /* A touch screen has no Ctrl/Cmd+Enter, and the line stays one row. */
+  .statusbar .hint {
+    display: none;
+  }
+}

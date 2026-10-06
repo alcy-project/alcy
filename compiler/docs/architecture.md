@@ -134,6 +134,12 @@ what implements it lives in `compiler/`.
   the compiler; `tools/check_treesitter.py` checks it against the
   specification's corpus and against the compiler itself. See
   `docs/adr/0041-alcy-treesitter-grammar.md`.
+- `playground/` - the browser playground's site: plain HTML, CSS, and
+  JavaScript plus the examples it ships. `tools/playground.py` assembles
+  it into `playground/dist/`, combining the sources here with the grammar
+  and the compiler's wasm module; `.github/workflows/playground.yaml`
+  deploys that directory to GitHub Pages. See
+  `docs/adr/0049-the-direct-backends-and-the-playground.md`.
 
 ## Compiler modules
 
