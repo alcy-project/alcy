@@ -6,6 +6,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -68,6 +69,11 @@ class Resolver {
   std::vector<std::vector<NameEntry>> local_modules;
   std::vector<std::vector<Import>> module_imports;
   std::vector<std::vector<u32>> module_children;
+  // The same children, by the name a path segment spells. Attaching a file
+  // found its child by walking the siblings and comparing names, and the entry
+  // module has every module as a child, so a package paid its modules for each
+  // one. The first child of a name is the one the walk would have found.
+  std::vector<std::unordered_map<std::string_view, u32>> children_by_name_;
   // Export resolution state per module: 0 fresh, 1 in progress, 2 done.
   std::vector<u8> exports_state;
   // The package roots this tree carries besides its own, and the
@@ -111,6 +117,7 @@ class Resolver {
     local_modules.emplace_back();
     module_imports.emplace_back();
     module_children.emplace_back();
+    children_by_name_.emplace_back();
     exports_state.push_back(0);
     module_roots_.push_back(NO_PACKAGE_ROOT);
     return static_cast<u32>(modules.size() - 1);
@@ -136,12 +143,8 @@ class Resolver {
   }
 
   u32 find_child_module(u32 module, std::string_view name) const {
-    for (u32 child : module_children[module]) {
-      if (module_name(child) == name) {
-        return child;
-      }
-    }
-    return NO_MODULE;
+    const auto found = children_by_name_[module].find(name);
+    return found == children_by_name_[module].end() ? NO_MODULE : found->second;
   }
 
   void build_tree() {
@@ -237,6 +240,7 @@ class Resolver {
           return;
         }
         module_children[parent].push_back(child);
+        children_by_name_[parent].emplace(module_name(child), child);
       } else if (leaf) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateModule>(
             diag::Severity::Error, diag::Stage::Analyzer,
@@ -280,6 +284,7 @@ class Resolver {
           return;
         }
         module_children[parent].push_back(child);
+        children_by_name_[parent].emplace(module_name(child), child);
         module_roots_[child] = dependency;
       } else if (leaf) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateModule>(
@@ -755,6 +760,7 @@ class Resolver {
         // case skips the edge entirely.
         if (parent != NO_MODULE) {
           module_children[parent].push_back(child);
+          children_by_name_[parent].emplace(module_name(child), child);
         }
         prefix = child_path;
         parent = child;
