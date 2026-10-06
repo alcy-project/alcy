@@ -395,3 +395,45 @@ fn f(x: (i32), y: (i32,)) {}
         (tuple_type
           (primitive_type))))
     (block)))
+
+================================================================================
+Raw pointers, and `**` reads as two
+================================================================================
+
+fn f(a: *i32, b: *mut u8, c: **i32, d: **mut u8, e: *mut *i32) {}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (raw_ptr_type
+          (primitive_type)))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (raw_ptr_type
+          (primitive_type)))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (raw_ptr_type
+          (raw_ptr_type
+            (primitive_type))))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (raw_ptr_type
+          (raw_ptr_type
+            (primitive_type))))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (raw_ptr_type
+          (raw_ptr_type
+            (primitive_type)))))
+    (block)))

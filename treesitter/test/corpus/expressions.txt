@@ -779,3 +779,63 @@ fn f() {
         (tuple_expression
           (integer)
           (integer))))))
+
+================================================================================
+A prefix `**` is two dereferences
+================================================================================
+
+fn f(p: **i32) -> i32 {
+  ret unsafe { **p }
+}
+
+fn g(a: i32, b: *i32) -> i32 {
+  ret a * *b
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (raw_ptr_type
+          (raw_ptr_type
+            (primitive_type)))))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (unsafe_block
+          (block
+            (deref_expression
+              (deref_expression
+                (path_expression
+                  (path
+                    (identifier))))))))))
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (raw_ptr_type
+          (primitive_type))))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (binary_expression
+          (path_expression
+            (path
+              (identifier)))
+          (deref_expression
+            (path_expression
+              (path
+                (identifier)))))))))

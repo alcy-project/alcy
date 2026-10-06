@@ -124,6 +124,10 @@
         "named": true
       },
       {
+        "type": "unsafe_block",
+        "named": true
+      },
+      {
         "type": "while_expression",
         "named": true
       }
@@ -234,6 +238,10 @@
         "named": true
       },
       {
+        "type": "raw_ptr_type",
+        "named": true
+      },
+      {
         "type": "reference_type",
         "named": true
       },
@@ -254,6 +262,11 @@
         "named": true
       }
     ]
+  },
+  {
+    "type": "**",
+    "named": false,
+    "fields": {}
   },
   {
     "type": "arguments",
@@ -516,6 +529,10 @@
             "named": true
           },
           {
+            "type": "unsafe_block",
+            "named": true
+          },
+          {
             "type": "while_expression",
             "named": true
           }
@@ -697,6 +714,10 @@
           },
           {
             "type": "unit_expression",
+            "named": true
+          },
+          {
+            "type": "unsafe_block",
             "named": true
           },
           {
@@ -893,6 +914,10 @@
             "named": true
           },
           {
+            "type": "unsafe_block",
+            "named": true
+          },
+          {
             "type": "while_expression",
             "named": true
           }
@@ -1008,6 +1033,10 @@
           },
           {
             "type": "unit_expression",
+            "named": true
+          },
+          {
+            "type": "unsafe_block",
             "named": true
           },
           {
@@ -1173,6 +1202,10 @@
           },
           {
             "type": "unit_expression",
+            "named": true
+          },
+          {
+            "type": "unsafe_block",
             "named": true
           },
           {
@@ -1414,6 +1447,10 @@
             "named": true
           },
           {
+            "type": "unsafe_block",
+            "named": true
+          },
+          {
             "type": "while_expression",
             "named": true
           }
@@ -1567,6 +1604,10 @@
           },
           {
             "type": "unit_expression",
+            "named": true
+          },
+          {
+            "type": "unsafe_block",
             "named": true
           },
           {
@@ -1808,6 +1849,10 @@
             "named": true
           },
           {
+            "type": "unsafe_block",
+            "named": true
+          },
+          {
             "type": "while_expression",
             "named": true
           }
@@ -2041,6 +2086,10 @@
           },
           {
             "type": "unit_expression",
+            "named": true
+          },
+          {
+            "type": "unsafe_block",
             "named": true
           },
           {
@@ -2477,6 +2526,10 @@
             "named": true
           },
           {
+            "type": "unsafe_block",
+            "named": true
+          },
+          {
             "type": "while_expression",
             "named": true
           }
@@ -2741,6 +2794,10 @@
           },
           {
             "type": "unit_expression",
+            "named": true
+          },
+          {
+            "type": "unsafe_block",
             "named": true
           },
           {
@@ -3127,6 +3184,10 @@
             "named": true
           },
           {
+            "type": "unsafe_block",
+            "named": true
+          },
+          {
             "type": "while_expression",
             "named": true
           }
@@ -3271,7 +3332,27 @@
             "named": true
           },
           {
+            "type": "unsafe_block",
+            "named": true
+          },
+          {
             "type": "while_expression",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "raw_ptr_type",
+    "named": true,
+    "fields": {
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "_type",
             "named": true
           }
         ]
@@ -3825,6 +3906,10 @@
             "named": true
           },
           {
+            "type": "unsafe_block",
+            "named": true
+          },
+          {
             "type": "while_expression",
             "named": true
           }
@@ -4047,6 +4132,10 @@
             "named": true
           },
           {
+            "type": "unsafe_block",
+            "named": true
+          },
+          {
             "type": "while_expression",
             "named": true
           }
@@ -4096,6 +4185,21 @@
           }
         ]
       }
+    }
+  },
+  {
+    "type": "unsafe_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "block",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -4202,10 +4306,6 @@
   },
   {
     "type": "*",
-    "named": false
-  },
-  {
-    "type": "**",
     "named": false
   },
   {
@@ -4489,6 +4589,10 @@
   },
   {
     "type": "true",
+    "named": false
+  },
+  {
+    "type": "unsafe",
     "named": false
   },
   {

@@ -136,8 +136,12 @@ module.exports = grammar({
 
     visibility: _ => 'pub',
 
+    // `unsafe` marks an operation, so it is read only where a function
+    // declares one (ffi.md, "The gate"); the body of an `unsafe fn` is
+    // not an unsafe context implicitly.
     function_item: $ => seq(
       optional(field('visibility', $.visibility)),
+      optional('unsafe'),
       'fn',
       field('name', $.identifier),
       optional(field('type_parameters', $.type_parameters)),
@@ -147,9 +151,10 @@ module.exports = grammar({
     ),
 
     // A signature without a body, terminated by `;` (items.md, "Intrinsic
-    // declarations").
+    // declarations"). The precondition-carrying intrinsics say `unsafe`.
     intrinsic_fn_item: $ => seq(
       optional(field('visibility', $.visibility)),
+      optional('unsafe'),
       'intrinsic',
       'fn',
       field('name', $.identifier),
@@ -217,9 +222,11 @@ module.exports = grammar({
     ),
 
     // Signatures only: a body here is an error, and every implementation
-    // supplies each declared method.
+    // supplies each declared method. An `unsafe` marker parses and the
+    // checker refuses it for now (ffi.md).
     spec_method: $ => seq(
       optional(field('visibility', $.visibility)),
+      optional('unsafe'),
       'fn',
       field('name', $.identifier),
       optional(field('type_parameters', $.type_parameters)),
@@ -292,6 +299,7 @@ module.exports = grammar({
       $.array_type,
       $.slice_type,
       $.reference_type,
+      $.raw_ptr_type,
       $.path_type,
     ),
 
@@ -356,6 +364,16 @@ module.exports = grammar({
 
     reference_type: $ => seq(
       '&',
+      optional('mut'),
+      field('type', $._type),
+    ),
+
+    // A raw pointer is thin and Copy, outside the region system
+    // (ffi.md). The outer star is shared and a `mut` after the pair
+    // binds to the inner one, which is what `*(*mut T)` says spelled
+    // out; a type position has no power, so the `**` pair is two stars.
+    raw_ptr_type: $ => seq(
+      '*',
       optional('mut'),
       field('type', $._type),
     ),
@@ -547,10 +565,18 @@ module.exports = grammar({
       // `**` is right-associative: `a ** b ** c` is `a ** (b ** c)`.
       prec.right(PREC.POW, seq(
         field('left', $._operand),
-        field('operator', '**'),
+        field('operator', alias($._pow_operator, '**')),
         field('right', $._operand),
       )),
     ),
+
+    // The power operator is two stars with the second one immediate
+    // rather than a `**` token. A state that expects an operand has no
+    // power, so `**p` and `**T` read as a pair of stars there, while
+    // `a * *b` stays a multiplication of a dereference and `a **b` is
+    // the power (grammar.md, "Expressions"). The alias keeps `**` a
+    // single operator node, the way every other binary operator is.
+    _pow_operator: $ => seq('*', token.immediate('*')),
 
     comparison_expression: $ => prec.left(PREC.COMPARISON, seq(
       field('left', $._operand),
@@ -629,6 +655,7 @@ module.exports = grammar({
       $.closure_expression,
       $.block_expression,
       $.comp_block,
+      $.unsafe_block,
       $.if_expression,
       $.match_expression,
       $.loop_expression,
@@ -736,6 +763,10 @@ module.exports = grammar({
     block_expression: $ => seq('{', optional(blockBody($)), '}'),
 
     comp_block: $ => seq('comp', $.block),
+
+    // `unsafe { ... }` opens the gate for the operations inside and its
+    // value is the block's (ffi.md, "The gate").
+    unsafe_block: $ => seq('unsafe', $.block),
 
     // Right-associative so that `ret (a)` reads the parenthesized
     // expression as the returned value rather than as a bare `ret`

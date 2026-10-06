@@ -409,3 +409,76 @@ struct T { x: i32 }
     (field_declaration
       (identifier)
       (primitive_type))))
+
+================================================================================
+`unsafe` marks a function, an intrinsic, or a block
+================================================================================
+
+unsafe fn read(p: *i32) -> i32 {
+  ret unsafe { *p }
+}
+
+pub unsafe intrinsic fn memcopy(dst: &mut u8, src: &u8, n: usize);
+
+spec Loader {
+  pub unsafe fn load(self: Self, p: *i32) -> i32;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (raw_ptr_type
+          (primitive_type))))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (unsafe_block
+          (block
+            (deref_expression
+              (path_expression
+                (path
+                  (identifier)))))))))
+  (intrinsic_fn_item
+    (visibility)
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (reference_type
+          (primitive_type)))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (reference_type
+          (primitive_type)))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))))
+  (spec_item
+    (identifier)
+    (spec_method
+      (visibility)
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (self))
+          (path_type
+            (path
+              (self_type))))
+        (parameter
+          (identifier_pattern
+            (identifier))
+          (raw_ptr_type
+            (primitive_type))))
+      (return_type
+        (primitive_type)))))
