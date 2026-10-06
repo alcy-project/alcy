@@ -236,7 +236,12 @@ config("release") {
     "-O3",
     "-fomit-frame-pointer",
   ]
-  if (!is_mac && !is_win && !is_wasm) {
+  # A perf build keeps the debug information and the symbol table, so a profile
+  # can name what it sampled; see //compiler/docs/performance.md. It is the
+  # later flag that wins, and the strip is what would take the table away.
+  if (perf_symbols) {
+    cflags += [ "-g" ]
+  } else if (!is_mac && !is_win && !is_wasm) {
     ldflags = [ "-Wl,--strip-all" ]
   }
 }

@@ -76,6 +76,13 @@ declare_args() {
   is_coverage = false
 }
 
+# Keeps debug information and the symbol table in an optimised build, so a
+# profile can name what it sampled. Off by default: a release artifact does
+# not need either. See //compiler/docs/performance.md.
+declare_args() {
+  perf_symbols = false
+}
+
 if (!is_win && !is_mac && !is_ios) {
   declare_args() {
     use_mold =
