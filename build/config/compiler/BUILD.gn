@@ -236,6 +236,7 @@ config("release") {
     "-O3",
     "-fomit-frame-pointer",
   ]
+
   # A perf build keeps the debug information and the symbol table, so a profile
   # can name what it sampled; see //compiler/docs/performance.md. It is the
   # later flag that wins, and the strip is what would take the table away.
