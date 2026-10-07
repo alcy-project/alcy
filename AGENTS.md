@@ -32,9 +32,8 @@ Prior to generating, refactoring, or reviewing code, strictly follow the specifi
 To optimize token efficiency and execution speed:
 
 - **Silent Success & Isolated Output**:
-  - Direct output to a temporary unique file using `mktemp`. Only print log tails on failure using `||`.
-    (example: `LOG=$(mktemp) && uv run tools/lint.py > $LOG 2>&1 || tail -n 20 $LOG`)
-  - Inspect the generated `$LOG` file via `grep` or `cat` only when troubleshooting failures.
+  - Direct output to a clear log name under `/tmp/` that names the worktree or branch and the check, not the console; parallel checkouts then keep separate logs.
+    (example: `LOG="/tmp/alcy-<branch>-lint.log"; uv run tools/lint.py > $LOG 2>&1 || tail -n 50 $LOG`)
 - **Precision Search & Diffing**:
   - Use `-l` with `rg` to list matching files first: `rg "pattern" compiler/ -l`.
   - Cap search results using pipe limiters: `rg "pattern" compiler/ | head -n 30`.

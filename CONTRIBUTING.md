@@ -10,7 +10,9 @@
 
 ## Workflow
 
-Build, test, and check from the repository root:
+Build, test, and check from the repository root. Every tool takes
+`--help`; the invocations below are the ones the workflow needs, not the
+full option set:
 
 ```bash
 typos
@@ -31,6 +33,16 @@ uv run ./tools/check_treesitter.py --grammar
 
 # Faster iteration (skips gn gen, gn check, and compdb; never for CI):
 uv run ./tools/build.py --target=tests --fast
+
+# Lint only the files this branch changed, against the merge base with
+# main. CI still runs the full tree:
+uv run ./tools/lint.py --changed
+
+# Where the last build's time went (a report, not a gate):
+uv run ./tools/build_time.py
+
+# Debug builds carry line tables; --debug-info=full restores -g3 detail:
+uv run ./tools/build.py --target=tests --debug-info=full
 ```
 
 End-to-end acceptance cases live in `e2e/cases/<name>/` (sources plus
