@@ -59,8 +59,8 @@ TEST_CASE("A copied name survives the bytes it was made from") {
 TEST_CASE("Names that differ are different handles") {
   SymbolTable table;
   std::vector<str::StringPoolId> ids;
-  const std::vector<std::string_view> names = {"a",  "b",  "aa", "ab",
-                                               "ba", "bb", "abc"};
+  const std::vector<std::string_view> names = {"a",    "b",     "ab",    "abc",
+                                               "abcd", "abcde", "abcdef"};
   for (std::string_view name : names) {
     const auto id = table.try_intern(name);
     CHECK(id.has_value());
