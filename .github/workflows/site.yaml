@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths: &site_paths
       - site/**
+      - docs/guide/**
       - compiler/**
       - lib/**
       - treesitter/**
@@ -116,6 +117,10 @@ jobs:
       - name: Run the Playground Smoke
         shell: bash
         run: uv run ./tools/check_playground.py --build-subdir="$BUILD_SUBDIR"
+
+      - name: Test the Guide's Generator
+        shell: bash
+        run: uv run ./tools/site.py test
 
       - name: Assemble the Site
         shell: bash
