@@ -59,7 +59,8 @@ Emscripten (`emcc`) for the compiler module, and `uv` as everywhere else
 in the repository. `config.toml` pins the tree-sitter CLI, the
 web-tree-sitter binding, the TypeScript compiler, and pnpm. The CLI must
 already be on `PATH`; the binding and the compiler are installed with the
-pinned pnpm into `out/playground-cache/`.
+pinned pnpm into `out/playground-cache/`. Install pnpm at the pinned
+series with `corepack enable pnpm` or a standalone install.
 
 ```sh
 # Highlighting only; the compiler module is missing and Check/Run stay off.
