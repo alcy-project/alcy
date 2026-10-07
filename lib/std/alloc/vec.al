@@ -120,3 +120,17 @@ impl<T> Vec<T> {
     unsafe { dealloc(self.buf, self.cap) }
   }
 }
+
+// `a[i]` reads through `at` and panics on a miss, which is what array
+// indexing does.
+impl<T> Index<usize, T> for Vec<T> {
+  fn index(self: &Self, i: usize) -> &T {
+    ret self.at(i).unwrap()
+  }
+}
+
+impl<T> IndexMut<usize, T> for Vec<T> {
+  fn index_mut(mut self: &mut Self, i: usize) -> &mut T {
+    ret self.at_mut(i).unwrap()
+  }
+}

@@ -7,8 +7,13 @@ name = "core"
 version = "0.1.0"
 
 [modules]
-include = ["prelude", "iterator", "mem", "option", "range", "result", "slice", "string"]
+include = ["prelude", "iterator", "mem", "option", "range", "result", "slice", "string", "index"]
 # The public surface, in the form `docs/adr/0007-manifest-driven-modules.md` specifies. Nothing
 # enforces it yet. Its `pub` items are also the implicit surface:
 # a program depending on this package sees them with no `use`.
-export = ["prelude", "iterator", "mem", "option", "range", "result", "slice", "string"]
+export = ["prelude", "iterator", "mem", "option", "range", "result", "slice", "string", "index"]
+
+# Specs only this suite may implement (ADR-0053). Indexing is an
+# operator, so its capability is the compiler's, not a user's.
+[spec]
+suite-only = ["Index", "IndexMut"]

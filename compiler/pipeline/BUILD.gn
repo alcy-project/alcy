@@ -19,6 +19,7 @@ action("embed_std") {
     "//lib/std/simd/alcy.toml",
     "//lib/std/time/alcy.toml",
     "//lib/std/core/prelude.al",
+    "//lib/std/core/index.al",
     "//lib/std/core/iterator.al",
     "//lib/std/core/mem.al",
     "//lib/std/core/option.al",

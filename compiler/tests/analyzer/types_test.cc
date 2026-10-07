@@ -3769,4 +3769,24 @@ TEST_CASE("Check reports an argument-bearing super-spec") {
         "yet");
 }
 
+TEST_CASE("Check binds a concrete spec argument in a generic impl") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "spec P<I> {\n  fn p(self: &Self, i: I) -> i32;\n}\n"
+             "struct Box<T> {\n  v: T,\n}\n"
+             "impl<T> P<usize> for Box<T> {\n"
+             "  fn p(self: &Self, i: usize) -> i32 {\n    ret 0\n  }\n}\n"
+             "fn main() -> i32 {\n  b: Box<i32> := Box { v: 1 }\n  ret "
+             "b.p(3)\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
 }  // namespace analyzer

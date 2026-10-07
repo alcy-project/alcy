@@ -547,8 +547,11 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
   const bool generic_impl = !impl.params.empty();
   // Spec arguments bind the spec's parameters; a generic impl names
   // its own parameters directly, exactly like an inherent target.
+  // Spec arguments bind the spec's parameters. A generic impl may name
+  // one of its own parameters or a concrete type, so `Index<usize, T>`
+  // is expressible; the shapes persist for call-site instantiation.
+  std::vector<SpecTarget::Arg> spec_arg_shapes;
   std::vector<ir::TypeIdx> spec_args;
-  std::vector<std::string_view> spec_arg_params;
   {
     const ast::TypePath& spec_path = spec_node.payload.get<ast::TypePath>();
     if (spec_path.args.size() != declaration.params.size()) {
@@ -560,10 +563,10 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       return;
     }
     for (ast::TypeIdx arg : spec_path.args) {
+      bool direct = false;
+      std::string_view param;
       if (generic_impl) {
         const ast::TypeNode& arg_node = ast.types[arg];
-        bool direct = false;
-        std::string_view param;
         if (arg_node.kind == ast::TypeKind::Path) {
           const ast::Path& path =
               ast.paths[arg_node.payload.get<ast::TypePath>().path];
@@ -578,19 +581,17 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
             }
           }
         }
-        if (!direct) {
-          const u32 index = bag.emit<i18n::Key::AnalyzerSpecTargetNotDirect>(
-              diag::Severity::Error, diag::Stage::Analyzer,
-              DiagCode::GenericArguments, arg_node.span);
-          (void)index;
-          return;
-        }
-        spec_arg_params.push_back(param);
-      } else {
-        const ir::TypeIdx resolved = resolve_type(module, arg, nullptr);
-        if (is_error(resolved)) {
-          return;
-        }
+      }
+      if (direct) {
+        spec_arg_shapes.push_back(SpecTarget::Arg{true, param, error_type()});
+        continue;
+      }
+      const ir::TypeIdx resolved = resolve_type(module, arg, nullptr);
+      if (is_error(resolved)) {
+        return;
+      }
+      spec_arg_shapes.push_back(SpecTarget::Arg{false, {}, resolved});
+      if (!generic_impl) {
         spec_args.push_back(resolved);
       }
     }
@@ -746,13 +747,9 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     }
   }
   if (generic_impl) {
-    std::vector<SpecTarget::Arg> shapes;
-    shapes.reserve(spec_arg_params.size());
-    for (std::string_view param : spec_arg_params) {
-      shapes.push_back(SpecTarget::Arg{true, param, error_type()});
-    }
     spec_impls.push_back(SpecImplEntry{spec_index, module, std::move(target),
-                                       std::move(shapes), item, node.span});
+                                       std::move(spec_arg_shapes), item,
+                                       node.span});
     return;
   }
   for (ast::ItemIdx method_item : impl.methods) {
@@ -806,13 +803,9 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     add_method(module, {self_type, name, sig.params, sig.ret, receiver,
                         method_item, false, spec_index});
   }
-  std::vector<SpecTarget::Arg> shapes;
-  shapes.reserve(spec_args.size());
-  for (ir::TypeIdx arg : spec_args) {
-    shapes.push_back(SpecTarget::Arg{false, {}, arg});
-  }
   spec_impls.push_back(SpecImplEntry{spec_index, module, std::move(target),
-                                     std::move(shapes), item, node.span});
+                                     std::move(spec_arg_shapes), item,
+                                     node.span});
 }
 
 bool Checker::record_inherent_method(u32 target_module,
