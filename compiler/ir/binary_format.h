@@ -43,6 +43,8 @@ enum class Section : u8 {
   Files = 19,
   Spans = 20,
   AddrNames = 21,
+  // The package's prelude count, a single u32. Absent means zero.
+  Prelude = 22,
 };
 
 }  // namespace ir::binary

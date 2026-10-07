@@ -10,6 +10,8 @@ source_set("ir") {
     "block_param.h",
     "common.cc",
     "common.h",
+    "deserialize.cc",
+    "deserialize.h",
     "external_function.cc",
     "external_function.h",
     "formatter.cc",

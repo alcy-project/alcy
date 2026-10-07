@@ -133,6 +133,11 @@ class Serializer {
     if (!addr_names_.empty()) {
       sections.push_back({Section::AddrNames, addr_names_section()});
     }
+    if (input_.prelude_functions != 0) {
+      ByteWriter prelude;
+      prelude.put_u32(static_cast<u32>(input_.prelude_functions));
+      sections.push_back({Section::Prelude, std::move(prelude)});
+    }
 
     // The header and the table come first, so an offset depends on the
     // table's own size; compute them before writing anything.

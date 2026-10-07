@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -11,6 +12,7 @@
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
+#include "ir/deserialize.h"
 #include "pipeline/build.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/link_options.h"
@@ -62,6 +64,14 @@ TEST_CASE("The ir-bc mode writes the binary form beside the source") {
     return;
   }
   CHECK(bytes->starts_with("ALIR"));
+  const std::span<const u8> written(reinterpret_cast<const u8*>(bytes->data()),
+                                    bytes->size());
+  const base::Result<ir::LoadedIr, ir::IrLoadError> loaded =
+      ir::deserialize(written);
+  CHECK(loaded.is_ok());
+  if (loaded.is_ok()) {
+    CHECK((*loaded.value().storage).functions().size() > 0);
+  }
 }
 
 TEST_CASE("The ir mode refuses a release build") {

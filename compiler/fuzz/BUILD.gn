@@ -65,6 +65,10 @@ if (!is_fuzz) {
   # Every target is a libFuzzer entry point over one boundary: the
   # narrow ones exist so a failure can be reached without paying for the
   # stages before it, and the wide one is the honest end-to-end check.
+  fuzz_target("fuzz_ir_load") {
+    sources = [ "fuzz_ir_load.cc" ]
+  }
+
   fuzz_target("fuzz_lexer") {
     sources = [ "fuzz_lexer.cc" ]
   }
@@ -92,6 +96,7 @@ if (!is_fuzz) {
   group("fuzz") {
     testonly = true
     deps = [
+      ":fuzz_ir_load",
       ":fuzz_lexer",
       ":fuzz_manifest",
       ":fuzz_parser",
