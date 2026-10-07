@@ -1,6 +1,7 @@
 [package]
 name = "acme-hash"
 version = "0.1.0"
+license = ""
 
 [modules]
 include = ["sha2"]

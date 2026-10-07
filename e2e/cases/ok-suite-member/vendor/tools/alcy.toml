@@ -1,4 +1,5 @@
 [suite]
 owner = "acme"
 name = "tools"
+license = ""
 packages = ["cli", "fmt"]

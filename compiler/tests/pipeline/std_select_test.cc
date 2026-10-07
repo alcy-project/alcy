@@ -37,8 +37,9 @@ pkg::Dependency dep(Fixture& f, std::string_view spec) {
   text += "\" = {}\n";
   base::Result<pkg::PackageManifest, diag::Reported> parsed =
       pkg::parse_manifest(
-          "[package]\nname = \"x\"\nversion = \"0.1.0\"\n" + text, "alcy.toml",
-          source::UNKNOWN_FILE, f.bag, f.arena);
+          "[package]\nname = \"x\"\nversion = \"0.1.0\"\nlicense = \"\"\n" +
+              text,
+          "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
   CHECK(parsed.is_ok());
   if (parsed.is_err()) {
     return pkg::Dependency{};
@@ -134,7 +135,8 @@ TEST_CASE("Selection rejects a bare suite and unknown members") {
 TEST_CASE("Selection leaves path entries to inclusion") {
   Fixture f;
   std::string bytes =
-      "[package]\nname = \"x\"\nversion = \"0.1.0\"\n[dependencies]\n"
+      "[package]\nname = \"x\"\nversion = \"0.1.0\"\nlicense = "
+      "\"\"\n[dependencies]\n"
       "helper = { path = \"../helper\" }\n";
   base::Result<pkg::PackageManifest, diag::Reported> parsed =
       pkg::parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag,
@@ -157,7 +159,8 @@ TEST_CASE("Selection rejects sources it cannot fetch") {
   {
     Fixture f;
     std::string bytes =
-        "[package]\nname = \"x\"\nversion = \"0.1.0\"\n[dependencies]\n"
+        "[package]\nname = \"x\"\nversion = \"0.1.0\"\nlicense = "
+        "\"\"\n[dependencies]\n"
         "\"acme/json\" = { version = \"1.x\" }\n";
     base::Result<pkg::PackageManifest, diag::Reported> parsed =
         pkg::parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag,
@@ -174,7 +177,8 @@ TEST_CASE("Selection rejects sources it cannot fetch") {
   {
     Fixture f;
     std::string bytes =
-        "[package]\nname = \"x\"\nversion = \"0.1.0\"\n[dependencies]\n"
+        "[package]\nname = \"x\"\nversion = \"0.1.0\"\nlicense = "
+        "\"\"\n[dependencies]\n"
         "\"acme/tool\" = { git = \"https://example.com/t.git\" }\n";
     base::Result<pkg::PackageManifest, diag::Reported> parsed =
         pkg::parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag,

@@ -32,6 +32,7 @@ constexpr std::string_view BASE_MANIFEST =
     "[package]\n"
     "name = \"demo\"\n"
     "version = \"0.1.0\"\n"
+    "license = \"\"\n"
     "\n"
     "[[bin]]\n"
     "name = \"demo\"\n"

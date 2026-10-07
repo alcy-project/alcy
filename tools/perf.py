@@ -218,6 +218,7 @@ def manifest_source(shape: str, modules: int) -> str:
     return f"""[package]
 name = "perf"
 version = "0.1.0"
+license = ""
 
 [modules]
 include = ["main", {includes}]

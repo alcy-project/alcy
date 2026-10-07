@@ -32,6 +32,7 @@ constexpr std::string_view VALID_MANIFEST =
     "[package]\n"
     "name = \"hello\"\n"
     "version = \"0.1.0\"\n"
+    "license = \"\"\n"
     "edition = \"2026\"\n"
     "\n"
     "[dependencies]\n"
@@ -81,7 +82,7 @@ TEST_CASE("Manifest parses a valid package") {
 TEST_CASE("Manifest without dependencies parses") {
   Fixture f;
   constexpr std::string_view bytes =
-      "[package]\nname = \"solo\"\nversion = \"2.0.0\"\n";
+      "[package]\nname = \"solo\"\nversion = \"2.0.0\"\nlicense = \"\"\n";
   base::Result<PackageManifest, diag::Reported> result =
       parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
   CHECK(result.is_ok());
@@ -100,7 +101,7 @@ TEST_CASE("Manifest without dependencies parses") {
 TEST_CASE("Manifest parses binary targets") {
   Fixture f;
   constexpr std::string_view bytes =
-      "[package]\nname = \"app\"\nversion = \"0.1.0\"\n"
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n"
       "\n"
       "[[bin]]\npath = \"main.al\"\n"
       "\n"
@@ -126,7 +127,7 @@ TEST_CASE("Manifest parses binary targets") {
 TEST_CASE("Manifest parses a library target") {
   Fixture f;
   constexpr std::string_view bytes =
-      "[package]\nname = \"hash\"\nversion = \"0.1.0\"\n"
+      "[package]\nname = \"hash\"\nversion = \"0.1.0\"\nlicense = \"\"\n"
       "\n"
       "[lib]\nname = \"hash\"\npath = \"lib.al\"\n";
   base::Result<PackageManifest, diag::Reported> result =
@@ -150,7 +151,7 @@ TEST_CASE("Manifest parses a library target") {
 TEST_CASE("Manifest library names default empty") {
   Fixture f;
   constexpr std::string_view bytes =
-      "[package]\nname = \"hash\"\nversion = \"0.1.0\"\n"
+      "[package]\nname = \"hash\"\nversion = \"0.1.0\"\nlicense = \"\"\n"
       "\n"
       "[lib]\npath = \"lib.al\"\n";
   base::Result<PackageManifest, diag::Reported> result =
@@ -173,7 +174,7 @@ TEST_CASE("Manifest library names default empty") {
 TEST_CASE("Manifest rejects library targets without paths") {
   Fixture f;
   constexpr std::string_view bytes =
-      "[package]\nname = \"hash\"\nversion = \"0.1.0\"\n"
+      "[package]\nname = \"hash\"\nversion = \"0.1.0\"\nlicense = \"\"\n"
       "\n"
       "[lib]\nname = \"hash\"\n";
   CHECK(parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena)
@@ -184,7 +185,7 @@ TEST_CASE("Manifest rejects library targets without paths") {
 TEST_CASE("Manifest parses the [spec] suite-only list") {
   Fixture f;
   constexpr std::string_view bytes =
-      "[package]\nname = \"core\"\nversion = \"0.1.0\"\n"
+      "[package]\nname = \"core\"\nversion = \"0.1.0\"\nlicense = \"\"\n"
       "\n"
       "[spec]\nsuite-only = [\"Index\", \"Eq\"]\n";
   base::Result<PackageManifest, diag::Reported> result =
@@ -207,7 +208,7 @@ TEST_CASE("Manifest parses the [spec] suite-only list") {
 TEST_CASE("Manifest without a [spec] table seals nothing") {
   Fixture f;
   constexpr std::string_view bytes =
-      "[package]\nname = \"solo\"\nversion = \"2.0.0\"\n";
+      "[package]\nname = \"solo\"\nversion = \"2.0.0\"\nlicense = \"\"\n";
   base::Result<PackageManifest, diag::Reported> result =
       parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
   CHECK(result.is_ok());
@@ -218,9 +219,10 @@ TEST_CASE("Manifest without a [spec] table seals nothing") {
   }
   // An empty table and an empty list are both the same as none at all.
   constexpr std::string_view empty_table =
-      "[package]\nname = \"solo\"\nversion = \"2.0.0\"\n[spec]\n";
+      "[package]\nname = \"solo\"\nversion = \"2.0.0\"\nlicense = "
+      "\"\"\n[spec]\n";
   constexpr std::string_view empty_list =
-      "[package]\nname = \"solo\"\nversion = \"2.0.0\"\n"
+      "[package]\nname = \"solo\"\nversion = \"2.0.0\"\nlicense = \"\"\n"
       "[spec]\nsuite-only = []\n";
   for (const std::string_view table : {empty_table, empty_list}) {
     base::Result<PackageManifest, diag::Reported> parsed = parse_manifest(
@@ -237,7 +239,8 @@ TEST_CASE("Manifest without a [spec] table seals nothing") {
 }
 
 TEST_CASE("Manifest rejects bad [spec] tables") {
-  const std::string head = "[package]\nname = \"x\"\nversion = \"0.1.0\"\n";
+  const std::string head =
+      "[package]\nname = \"x\"\nversion = \"0.1.0\"\nlicense = \"\"\n";
   struct Case {
     std::string bytes;
     std::string_view message;
@@ -283,7 +286,7 @@ TEST_CASE("Suite manifest parses the std suite") {
   // The [suite] table of lib/std/alcy.toml, comments aside: the parser
   // must accept the suite the compiler embeds.
   constexpr std::string_view bytes =
-      "[suite]\nname = \"std\"\nowner = \"alcy\"\n"
+      "[suite]\nname = \"std\"\nlicense = \"\"\nowner = \"alcy\"\n"
       "packages = [\"core\", \"fmt\", \"alloc\", \"atomic\", \"sync\", "
       "\"io\", \"network\", \"thread\", \"arch\", \"simd\", \"time\"]\n";
   base::Result<SuiteManifest, diag::Reported> result = parse_suite_manifest(
@@ -307,7 +310,7 @@ TEST_CASE("Suite manifest parses the std suite") {
 
   // A fresh suite has no members and no owner yet (ADR-0057).
   constexpr std::string_view empty =
-      "[suite]\nname = \"tools\"\npackages = []\n";
+      "[suite]\nname = \"tools\"\nlicense = \"\"\npackages = []\n";
   base::Result<SuiteManifest, diag::Reported> empty_result =
       parse_suite_manifest(empty, "alcy.toml", source::UNKNOWN_FILE, f.bag,
                            f.arena);
@@ -320,7 +323,7 @@ TEST_CASE("Suite manifest parses the std suite") {
 TEST_CASE("Suite manifest rejects the wrong kind and bad shapes") {
   Fixture f;
   constexpr std::string_view package_manifest =
-      "[package]\nname = \"hash\"\nversion = \"0.1.0\"\n";
+      "[package]\nname = \"hash\"\nversion = \"0.1.0\"\nlicense = \"\"\n";
   CHECK(parse_suite_manifest(package_manifest, "alcy.toml",
                              source::UNKNOWN_FILE, f.bag, f.arena)
             .is_err());
@@ -340,7 +343,7 @@ TEST_CASE("Suite manifest rejects the wrong kind and bad shapes") {
                              f.bag, f.arena)
             .is_err());
   constexpr std::string_view bad_version =
-      "[suite]\nname = \"std\"\nversion = \"nope\"\n"
+      "[suite]\nname = \"std\"\nlicense = \"\"\nversion = \"nope\"\n"
       "packages = [\"core\"]\n";
   CHECK(parse_suite_manifest(bad_version, "alcy.toml", source::UNKNOWN_FILE,
                              f.bag, f.arena)
@@ -351,18 +354,18 @@ TEST_CASE("Suite manifest rejects the wrong kind and bad shapes") {
                              f.arena)
             .is_err());
   constexpr std::string_view no_packages =
-      "[suite]\nowner = \"alcy\"\nname = \"std\"\n";
+      "[suite]\nowner = \"alcy\"\nname = \"std\"\nlicense = \"\"\n";
   CHECK(parse_suite_manifest(no_packages, "alcy.toml", source::UNKNOWN_FILE,
                              f.bag, f.arena)
             .is_err());
   constexpr std::string_view empty_entry =
-      "[suite]\nowner = \"alcy\"\nname = \"std\"\n"
+      "[suite]\nowner = \"alcy\"\nname = \"std\"\nlicense = \"\"\n"
       "packages = [\"\"]\n";
   CHECK(parse_suite_manifest(empty_entry, "alcy.toml", source::UNKNOWN_FILE,
                              f.bag, f.arena)
             .is_err());
   constexpr std::string_view duplicate =
-      "[suite]\nowner = \"alcy\"\nname = \"std\"\n"
+      "[suite]\nowner = \"alcy\"\nname = \"std\"\nlicense = \"\"\n"
       "packages = [\"core\", \"core\"]\n";
   CHECK(parse_suite_manifest(duplicate, "alcy.toml", source::UNKNOWN_FILE,
                              f.bag, f.arena)
@@ -406,7 +409,7 @@ TEST_CASE("Suite manifest verification rejects bad shapes") {
 TEST_CASE("Package manifest names a suite manifest") {
   Fixture f;
   constexpr std::string_view bytes =
-      "[suite]\nname = \"std\"\nowner = \"alcy\"\n"
+      "[suite]\nname = \"std\"\nlicense = \"\"\nowner = \"alcy\"\n"
       "packages = [\"core\"]\n";
   CHECK(parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena)
             .is_err());
@@ -416,7 +419,7 @@ TEST_CASE("Package manifest names a suite manifest") {
 TEST_CASE("Manifest rejects binary targets without paths") {
   Fixture f;
   constexpr std::string_view bytes =
-      "[package]\nname = \"app\"\nversion = \"0.1.0\"\n"
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n"
       "\n"
       "[[bin]]\nname = \"tool\"\n";
   CHECK(parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena)
@@ -496,19 +499,19 @@ TEST_CASE("Manifest semantic errors are diagnosed") {
                        f.arena)
             .is_err());
   constexpr std::string_view bad_version =
-      "[package]\nname = \"x\"\nversion = \"nope\"\n";
+      "[package]\nname = \"x\"\nversion = \"nope\"\nlicense = \"\"\n";
   CHECK(parse_version("nope").is_err());
   CHECK(parse_manifest(bad_version, "alcy.toml", source::UNKNOWN_FILE, f.bag,
                        f.arena)
             .is_err());
   constexpr std::string_view registry_dep =
-      "[package]\nname = \"x\"\nversion = \"0.1.0\"\n"
+      "[package]\nname = \"x\"\nversion = \"0.1.0\"\nlicense = \"\"\n"
       "[dependencies]\nfoo = \"1.0\"\n";
   CHECK(parse_manifest(registry_dep, "alcy.toml", source::UNKNOWN_FILE, f.bag,
                        f.arena)
             .is_err());
   constexpr std::string_view bad_req =
-      "[package]\nname = \"x\"\nversion = \"0.1.0\"\n"
+      "[package]\nname = \"x\"\nversion = \"0.1.0\"\nlicense = \"\"\n"
       "[dependencies]\nfoo = { version = \"1.2\" }\n";
   CHECK(
       parse_manifest(bad_req, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena)
@@ -541,14 +544,16 @@ SuiteManifest parse_suite_ok(std::string_view bytes, Fixture& f) {
 }
 
 constexpr std::string_view DEPS_HEAD =
-    "[package]\nname = \"x\"\nversion = \"0.1.0\"\n[dependencies]\n";
+    "[package]\nname = \"x\"\nversion = \"0.1.0\"\nlicense = "
+    "\"\"\n[dependencies]\n";
 
 }  // namespace
 
 TEST_CASE("Manifest parses suite and package specifiers") {
   Fixture f;
   constexpr std::string_view bytes =
-      "[package]\nname = \"x\"\nversion = \"0.1.0\"\n[dependencies]\n"
+      "[package]\nname = \"x\"\nversion = \"0.1.0\"\nlicense = "
+      "\"\"\n[dependencies]\n"
       "\"alcy/std/*\" = {}\n"
       "\"alcy/std/core\" = {}\n";
   const PackageManifest manifest = parse_ok(bytes, f);
@@ -574,7 +579,8 @@ TEST_CASE("Manifest parses suite and package specifiers") {
 TEST_CASE("Manifest parses registry and git sources") {
   Fixture f;
   constexpr std::string_view bytes =
-      "[package]\nname = \"x\"\nversion = \"0.1.0\"\n[dependencies]\n"
+      "[package]\nname = \"x\"\nversion = \"0.1.0\"\nlicense = "
+      "\"\"\n[dependencies]\n"
       "\"acme/json\" = { version = \"1.x\" }\n"
       "\"acme/exact\" = { version = \"=2.3.4\" }\n"
       "\"acme/tool\" = { git = \"https://example.com/t.git\", "
@@ -674,6 +680,7 @@ constexpr std::string_view MODULES_MANIFEST =
     "[package]\n"
     "name = \"demo\"\n"
     "version = \"0.1.0\"\n"
+    "license = \"\"\n"
     "\n"
     "[[bin]]\n"
     "name = \"demo\"\n"
@@ -768,10 +775,12 @@ TEST_CASE("A member takes the keys it spelled from its suite") {
 
 TEST_CASE("An inherited version needs a suite that declares one") {
   Fixture f;
-  PackageManifest member =
-      parse_ok("[package]\nname = \"cli\"\nversion.suite = true\n", f);
-  const SuiteManifest suite =
-      parse_suite_ok("[suite]\nname = \"tools\"\npackages = []\n", f);
+  PackageManifest member = parse_ok(
+      "[package]\nname = \"cli\"\nversion.suite = true\n"
+      "license = \"\"\n",
+      f);
+  const SuiteManifest suite = parse_suite_ok(
+      "[suite]\nname = \"tools\"\nlicense = \"\"\npackages = []\n", f);
   CHECK(inherit_from_suite(member, suite).unwrap_err() ==
         InheritError::SuiteVersionMissing);
 }
@@ -779,7 +788,7 @@ TEST_CASE("An inherited version needs a suite that declares one") {
 TEST_CASE("Identity fields refuse shapes that are not a value or a marker") {
   for (const std::string_view bytes :
        {"[package]\nname = \"x\"\nversion.suite = false\n",
-        "[package]\nname = \"x\"\nversion = \"0.1.0\"\n"
+        "[package]\nname = \"x\"\nversion = \"0.1.0\"\nlicense = \"\"\n"
         "owner = { suite = true, extra = 1 }\n",
         "[package]\nname = \"x\"\nversion = \"0.1.0\"\nlicense = 1\n"}) {
     Fixture f;

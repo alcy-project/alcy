@@ -641,7 +641,8 @@ bool write_package(io::TempDir& dir,
                    std::string_view rel,
                    std::string_view program) {
   return write_all(dir, std::string(rel) + "/alcy.toml",
-                   "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+                   "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = "
+                   "\"\"\n\n"
                    "[[bin]]\nname = \"app\"\npath = \"main.al\"\n") &&
          write_all(dir, std::string(rel) + "/main.al", program);
 }
@@ -995,10 +996,11 @@ TEST_CASE("Run announces the target before the program, not after") {
   // Written out because this program prints and write_package's manifest
   // names no std dependency.
   const bool setup =
-      write_all(dir, "proj/alcy.toml",
-                "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
-                "[dependencies]\n\"alcy/std/*\" = {}\n\n"
-                "[[bin]]\nname = \"app\"\npath = \"main.al\"\n") &&
+      write_all(
+          dir, "proj/alcy.toml",
+          "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+          "[dependencies]\n\"alcy/std/*\" = {}\n\n"
+          "[[bin]]\nname = \"app\"\npath = \"main.al\"\n") &&
       write_all(dir, "proj/main.al",
                 "fn main() -> i32 {\n"
                 "  println(\"marker\")\n"

@@ -26,7 +26,7 @@ namespace {
 // tree answer its calls differently: a problem rooted in one is
 // invisible from the other.
 constexpr std::string_view SHARED_MANIFEST =
-    "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
+    "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
     "[modules]\ninclude = [\"main\", \"lib\"]\n\n"
     "[[bin]]\npath = \"main.al\"\n\n"
     "[lib]\npath = \"lib.al\"\n";

@@ -6,6 +6,7 @@
 # docs/adr/0016-suites-and-the-std-split.md.
 [suite]
 name = "std"
+license = "Apache-2.0 WITH LLVM-exception"
 owner = "alcy"
 packages = [
   "core",

@@ -5,6 +5,7 @@
 [package]
 name = "fmt"
 version = "0.1.0"
+license = "Apache-2.0 WITH LLVM-exception"
 
 [modules]
 include = ["prelude", "format", "write"]

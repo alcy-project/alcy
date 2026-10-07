@@ -91,6 +91,7 @@ NewResult write_package_files(PipelineContext& ctx,
   const std::string manifest_template = fmt::format(R"([package]
 name = "{}"
 version = "0.1.0"
+license = ""
 
 [modules]
 include = ["main"]

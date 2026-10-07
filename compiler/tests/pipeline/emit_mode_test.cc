@@ -227,10 +227,11 @@ TEST_CASE("A package build honours the mode too") {
   // manifest, so the two modes do not land in the same place.
   io::TempDir dir = io::TempDir::create_unique("alcy_emit_package_test_");
   const bool setup =
-      dir.write_file("proj/alcy.toml",
-                     "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
-                     "[dependencies]\n\"alcy/std/*\" = {}\n\n[[bin]]\n"
-                     "name = \"app\"\npath = \"main.al\"\n") &&
+      dir.write_file(
+          "proj/alcy.toml",
+          "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+          "[dependencies]\n\"alcy/std/*\" = {}\n\n[[bin]]\n"
+          "name = \"app\"\npath = \"main.al\"\n") &&
       dir.write_file("proj/main.al", PROGRAM);
   CHECK(setup);
   if (!setup) {
@@ -294,13 +295,14 @@ TEST_CASE("A package's module does not depend on how many jobs read it") {
     include += fmt::format(", \"m{}\"", i);
   }
   include += ']';
-  const bool setup = dir.write_file(
-      "proj/alcy.toml", fmt::format("[package]\nname = \"app\"\nversion = "
-                                    "\"0.1.0\"\n\n[dependencies]\n"
-                                    "\"alcy/std/*\" = {{}}\n\n[[bin]]\n"
-                                    "name = \"app\"\npath = \"main.al\"\n\n"
-                                    "[modules]\ninclude = {}\n",
-                                    include));
+  const bool setup =
+      dir.write_file("proj/alcy.toml",
+                     fmt::format("[package]\nname = \"app\"\nversion = "
+                                 "\"0.1.0\"\nlicense = \"\"\n\n[dependencies]\n"
+                                 "\"alcy/std/*\" = {{}}\n\n[[bin]]\n"
+                                 "name = \"app\"\npath = \"main.al\"\n\n"
+                                 "[modules]\ninclude = {}\n",
+                                 include));
   CHECK(setup);
   if (!setup) {
     return;
@@ -380,13 +382,14 @@ TEST_CASE("A package's diagnostics do not depend on how many jobs read it") {
     include += fmt::format(", \"m{}\"", i);
   }
   include += ']';
-  const bool setup = dir.write_file(
-      "proj/alcy.toml", fmt::format("[package]\nname = \"app\"\nversion = "
-                                    "\"0.1.0\"\n\n[dependencies]\n"
-                                    "\"alcy/std/*\" = {{}}\n\n[[bin]]\n"
-                                    "name = \"app\"\npath = \"main.al\"\n\n"
-                                    "[modules]\ninclude = {}\n",
-                                    include));
+  const bool setup =
+      dir.write_file("proj/alcy.toml",
+                     fmt::format("[package]\nname = \"app\"\nversion = "
+                                 "\"0.1.0\"\nlicense = \"\"\n\n[dependencies]\n"
+                                 "\"alcy/std/*\" = {{}}\n\n[[bin]]\n"
+                                 "name = \"app\"\npath = \"main.al\"\n\n"
+                                 "[modules]\ninclude = {}\n",
+                                 include));
   CHECK(setup);
   if (!setup) {
     return;
@@ -456,12 +459,13 @@ TEST_CASE("A package build refuses targets sharing one output") {
   // The build names the collision instead, before compiling either.
   io::TempDir dir = io::TempDir::create_unique("alcy_emit_collide_test_");
   const bool setup =
-      dir.write_file("proj/alcy.toml",
-                     "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n"
-                     "[modules]\ninclude = [\"main\", \"lib\"]\n\n"
-                     "[dependencies]\n\"alcy/std/core\" = {}\n\n"
-                     "[[bin]]\npath = \"main.al\"\n\n"
-                     "[lib]\npath = \"lib.al\"\n") &&
+      dir.write_file(
+          "proj/alcy.toml",
+          "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+          "[modules]\ninclude = [\"main\", \"lib\"]\n\n"
+          "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+          "[[bin]]\npath = \"main.al\"\n\n"
+          "[lib]\npath = \"lib.al\"\n") &&
       dir.write_file("proj/main.al", PROGRAM) &&
       dir.write_file("proj/lib.al",
                      "pub fn double(x: i32) -> i32 {\n  ret x + x\n}\n");

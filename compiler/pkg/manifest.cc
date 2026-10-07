@@ -759,6 +759,9 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
     return base::make_err(diag::Reported{});
   }
   const InheritedString license = std::move(license_field).unwrap();
+  if (!license.present && !license.from_suite) {
+    return semantic_error(bag, filename, "missing [package] license");
+  }
 
   std::string_view edition;
   const auto edition_it = pkg_table->find("edition");
@@ -1124,6 +1127,10 @@ base::Result<SuiteManifest, diag::Reported> parse_suite_manifest(
   const auto name = name_it->second.value<std::string_view>();
   if (!name.has_value() || name->empty()) {
     return suite_semantic_error(bag, filename, "[suite] name must be a string");
+  }
+
+  if (!license.present) {
+    return suite_semantic_error(bag, filename, "missing [suite] license");
   }
 
   const auto packages_it = suite_table->find("packages");
