@@ -60,6 +60,8 @@ struct arg::Converter<pipeline::EmitMode> {
       return make_ok(EmitMode::LlvmBitcode);
     } else if (v == "ir") {
       return make_ok(EmitMode::Ir);
+    } else if (v == "ir-bc") {
+      return make_ok(EmitMode::IrBinary);
     } else {
       return make_err(GetError::InvalidArgument);
     }

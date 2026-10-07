@@ -52,6 +52,9 @@ struct WriteInput {
   // The pointer width lowering ran with; the text header and the binary
   // header both record it.
   PointerWidth width = PointerWidth::W64;
+  // The compiler build's version string, recorded by the binary form so
+  // a cache can reject a mismatch. Empty when the caller has none.
+  std::string_view compiler_version;
 };
 
 }  // namespace ir

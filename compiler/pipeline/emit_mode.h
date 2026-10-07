@@ -28,6 +28,9 @@ enum class EmitMode : u8 {
   // `compiler/docs/ir-format.md`. Needs no target and no backend: the
   // form is the pipeline's, not a code generator's.
   Ir,
+  // Write the same package in the binary form the same document
+  // defines: what a reader rebuilds verified IR from.
+  IrBinary,
 };
 
 }  // namespace pipeline

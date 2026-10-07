@@ -25,6 +25,7 @@
 #include "cli/result_code.h"
 #include "cli/run_command.h"
 #include "cli/validate.h"
+#include "cli/version.h"
 #include "codegen/backend.h"
 #include "debug/fatal.h"
 #include "diag/diagnostic.h"
@@ -150,6 +151,10 @@ i32 cli_main(i32 argc, char** argv) {
       pipeline::PipelineContext ctx{config.language};
       ctx.jobs = config.jobs;
       ctx.target = config.target;
+      // What a written artifact records about the build that made it:
+      // the IR binary's header carries it so a cache can reject a
+      // mismatch.
+      ctx.version = alcy_version();
       // A command that named no backend takes the first one that can
       // write for the target it did name.
       ctx.backend = config.backend == codegen::Backend::None

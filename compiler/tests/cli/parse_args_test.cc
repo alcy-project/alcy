@@ -132,6 +132,9 @@ TEST_CASE("Parse emit modes") {
   const std::string_view alcy_ir[] = {"alcy", "build", "--emit=ir"};
   CHECK(parse_ok(alcy_ir).emit == pipeline::EmitMode::Ir);
   CHECK(parse_ok(alcy_ir).emit != pipeline::EmitMode::LlvmIr);
+  const std::string_view alcy_ir_bc[] = {"alcy", "build", "--emit=ir-bc"};
+  CHECK(parse_ok(alcy_ir_bc).emit == pipeline::EmitMode::IrBinary);
+  CHECK(parse_ok(alcy_ir_bc).emit != pipeline::EmitMode::LlvmBitcode);
 }
 
 TEST_CASE("Parse rejects an unknown emit spelling") {

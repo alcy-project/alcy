@@ -53,6 +53,9 @@ struct PipelineContext {
   // ask, which reads as half the machine rather than as one thread: one is
   // what `-j 1` asks for.
   u32 jobs = 0;
+  // The compiler build's version string, for outputs that record it (the
+  // IR binary's header). Empty when the host does not provide one.
+  std::string_view version;
   // Whether this run builds a freestanding program: the backend emits
   // `_start` instead of `main`, and the link skips the C runtime
   // (ADR-0052). Set from the goal package's toolchain file.

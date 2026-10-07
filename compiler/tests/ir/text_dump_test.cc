@@ -191,6 +191,7 @@ TEST_CASE("The text view names blocks and values by their storage indices") {
       .addr_names = {},
       .prelude_functions = 0,
       .width = PointerWidth::W64,
+      .compiler_version = {},
   };
   const std::string text = write_text(input);
   const std::string want =
@@ -230,6 +231,7 @@ TEST_CASE("Address names and spans ride as comments") {
       .addr_names = addr_names,
       .prelude_functions = 0,
       .width = PointerWidth::W64,
+      .compiler_version = {},
   };
   const std::string text = write_text(input);
   const std::string want =
@@ -287,6 +289,7 @@ TEST_CASE("The preamble declares composites and externs") {
       .addr_names = {},
       .prelude_functions = 0,
       .width = PointerWidth::W64,
+      .compiler_version = {},
   };
   const std::string text = write_text(input);
   const std::string want = fmt::format(

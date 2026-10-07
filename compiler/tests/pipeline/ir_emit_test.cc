@@ -48,6 +48,22 @@ TEST_CASE("The ir mode writes the lowered package beside the source") {
   CHECK(text->find("fn main(") != std::string::npos);
 }
 
+TEST_CASE("The ir-bc mode writes the binary form beside the source") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_ir_bc_emit_test_");
+  CHECK(dir.write_file("main.al", PROGRAM));
+  PipelineContext ctx{i18n::Language::EnUs};
+  const base::Result<std::string, diag::Reported> built =
+      build_single_file(ctx, dir.join("main.al"), "", false, LinkOptions{},
+                        EmitMode::IrBinary, full_std_selection());
+  CHECK(built.is_ok());
+  const std::optional<std::string> bytes = io::read_file(dir.join("main.irb"));
+  CHECK(bytes.has_value());
+  if (!bytes.has_value() || bytes->size() < 4) {
+    return;
+  }
+  CHECK(bytes->starts_with("ALIR"));
+}
+
 TEST_CASE("The ir mode refuses a release build") {
   io::TempDir dir = io::TempDir::create_unique("alcy_ir_release_test_");
   CHECK(dir.write_file("main.al", PROGRAM));
@@ -56,6 +72,12 @@ TEST_CASE("The ir mode refuses a release build") {
       build_single_file(ctx, dir.join("main.al"), "", true, LinkOptions{},
                         EmitMode::Ir, full_std_selection());
   CHECK(built.is_err());
+
+  PipelineContext binary_ctx{i18n::Language::EnUs};
+  const base::Result<std::string, diag::Reported> binary = build_single_file(
+      binary_ctx, dir.join("main.al"), "", true, LinkOptions{},
+      EmitMode::IrBinary, full_std_selection());
+  CHECK(binary.is_err());
 }
 
 }  // namespace pipeline

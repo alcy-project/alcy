@@ -3,6 +3,7 @@
 
 source_set("ir") {
   sources = [
+    "binary_format.h",
     "block.cc",
     "block.h",
     "block_param.cc",
@@ -29,6 +30,8 @@ source_set("ir") {
     "register.h",
     "seq_builder.cc",
     "seq_builder.h",
+    "serialize.cc",
+    "serialize.h",
     "storage.cc",
     "storage.h",
     "storage_builder.cc",
