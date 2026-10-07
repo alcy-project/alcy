@@ -88,11 +88,17 @@ uv run ruff format tools
 
 Please make sure the CI pass before requesting a review.
 
-```bash
-# Locally (requires emcc and node on PATH):
-./tools/check.sh --wasm
+`./tools/check.sh` runs every gate, including the WebAssembly tests and
+the playground smoke, which need `emcc` and `node` on `PATH`.
 
-# Or directly:
+```bash
+# Everything (requires emcc and node on PATH):
+./tools/check.sh
+
+# Skip the wasm gates:
+./tools/check.sh --no-wasm
+
+# Just the wasm tests:
 uv run ./tools/run.py --target=tests --mode=debug \
   --build-subdir=build_wasm --target-os=emscripten
 ```

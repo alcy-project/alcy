@@ -22,9 +22,8 @@ tools_dir="$root_dir/tools"
 # script flags
 #
 #   --nix          run all checks in nix develop environment
-#   --wasm         also build and run the tests as WebAssembly, and smoke
-#                  the playground module it loads (needs Emscripten and
-#                  node)
+#   --no-wasm      skip the WebAssembly builds and the playground smoke
+#                  (needs Emscripten and node)
 #   --no-sanitize  skip the sanitized build of the exe cases (needs clang,
 #                  and roughly doubles their runtime)
 #   --no-coverage  skip the coverage ratchet (needs llvm-cov, and rebuilds
@@ -32,14 +31,13 @@ tools_dir="$root_dir/tools"
 #   --no-grammar   skip the tree-sitter checks (needs the tree-sitter CLI
 #                  and node, which build the grammar)
 nix=false
-run_wasm=false
+run_wasm=true
 run_sanitize=true
 run_coverage=true
 run_grammar=true
 for flag in "$@"; do
   case "$flag" in
     --nix) nix=true ;;
-    --wasm) run_wasm=true ;;
     --no-wasm) run_wasm=false ;;
     --no-sanitize) run_sanitize=false ;;
     --no-coverage) run_coverage=false ;;
@@ -47,6 +45,19 @@ for flag in "$@"; do
     *) echo "error: unknown flag '$flag'" >&2; exit 1 ;;
   esac
 done
+
+# The wasm gates are on by default, so a missing tool is worth saying
+# now rather than after every other gate has run.
+if [[ $run_wasm == true ]]; then
+  command -v emcc >/dev/null 2>&1 || {
+    echo "error: emcc not found; install Emscripten first (or pass --no-wasm)" >&2
+    exit 1
+  }
+  command -v node >/dev/null 2>&1 || {
+    echo "error: node not found; install node first (or pass --no-wasm)" >&2
+    exit 1
+  }
+fi
 
 if command -v typos >/dev/null 2>&1; then
   typos
@@ -184,14 +195,6 @@ fi
   --build-dir="$root_dir/out/$debug_subdir"
 
 if [[ $run_wasm == true ]]; then
-  command -v emcc >/dev/null 2>&1 || {
-    echo "error: emcc not found; install Emscripten first" >&2
-    exit 1
-  }
-  command -v node >/dev/null 2>&1 || {
-    echo "error: node not found; install node first" >&2
-    exit 1
-  }
   "${py_runner[@]}" "$tools_dir/run.py" \
     --target=tests \
     --mode=debug \
