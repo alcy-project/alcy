@@ -170,24 +170,54 @@ std::optional<SymbolTable::Id> SymbolTable::insert(std::string_view name,
   return Id{index};
 }
 
-std::optional<SymbolTable::Id> SymbolTable::try_intern(std::string_view name) {
-  const u64 hash = hash::Xxh3Hasher64{}(name);
+std::optional<SymbolTable::Id> SymbolTable::intern_hashed(std::string_view name,
+                                                          u64 hash,
+                                                          bool copy) {
   const usize shard_index = shard_of(hash);
   if (const std::optional<u32> found = find(shards_[shard_index], hash, name)) {
     return Id{*found};
   }
-  return insert(name, hash, shard_index);
+  if (!copy) {
+    return insert(name, hash, shard_index);
+  }
+  owned_.emplace_back(name);
+  return insert(owned_.back(), hash, shard_index);
+}
+
+std::optional<SymbolTable::Id> SymbolTable::try_intern(std::string_view name) {
+  return intern_hashed(name, hash::Xxh3Hasher64{}(name), false);
 }
 
 std::optional<SymbolTable::Id> SymbolTable::intern_copied(
     std::string_view name) {
-  const u64 hash = hash::Xxh3Hasher64{}(name);
-  const usize shard_index = shard_of(hash);
-  if (const std::optional<u32> found = find(shards_[shard_index], hash, name)) {
-    return Id{*found};
+  return intern_hashed(name, hash::Xxh3Hasher64{}(name), true);
+}
+
+void SymbolTable::record(Bins& bins,
+                         std::string_view name,
+                         bool stable,
+                         u32 key) {
+  if (bins.shards.empty()) {
+    bins.shards.resize(NUM_SHARDS);
   }
-  owned_.emplace_back(name);
-  return insert(owned_.back(), hash, shard_index);
+  const u64 hash = hash::Xxh3Hasher64{}(name);
+  bins.shards[shard_of(hash)].push_back(
+      Pending{hash, name, key, stable, str::INVALID_STRING_POOL_ID});
+}
+
+void SymbolTable::gather(std::vector<Bins>& bins) {
+  for (usize shard_index = 0; shard_index < NUM_SHARDS; ++shard_index) {
+    for (Bins& producer : bins) {
+      if (shard_index >= producer.shards.size()) {
+        continue;
+      }
+      for (Pending& pending : producer.shards[shard_index]) {
+        pending.handle =
+            intern_hashed(pending.name, pending.hash, !pending.stable)
+                .value_or(str::INVALID_STRING_POOL_ID);
+      }
+    }
+  }
 }
 
 std::string_view SymbolTable::get(Id id) const {

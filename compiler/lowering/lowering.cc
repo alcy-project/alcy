@@ -360,11 +360,7 @@ ir::OperandIdx Lowerer::use_value(Val v) {
 
 // The one report a spent name table gets, and the failed run that follows it.
 // Both interning paths end here, so a run that fills the table says so once.
-str::StringPoolId Lowerer::intern_result(
-    const std::optional<str::StringPoolId>& id) {
-  if (id.has_value()) {
-    return *id;
-  }
+str::StringPoolId Lowerer::report_name_table_exhausted() {
   if (!name_table_exhausted_) {
     name_table_exhausted_ = true;
     const u32 index = bag.emit<i18n::Key::LowerNameTableExhausted>(
@@ -374,6 +370,14 @@ str::StringPoolId Lowerer::intern_result(
   }
   failed = true;
   return str::INVALID_STRING_POOL_ID;
+}
+
+str::StringPoolId Lowerer::intern_result(
+    const std::optional<str::StringPoolId>& id) {
+  if (id.has_value()) {
+    return *id;
+  }
+  return report_name_table_exhausted();
 }
 
 str::StringPoolId Lowerer::intern_name(std::string_view name) {
@@ -560,9 +564,10 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   entry.idx = idx;
   entry.mod = mod;
   entry.name = std::string(name);
-  // The caller's bytes are the source's, so the handle is interned here rather
-  // than from the copy above, which a later reallocation would move.
-  entry.name_id = intern_name(name);
+  // The caller's bytes are the source's, so the name is recorded as a view:
+  // the gather interns it once the work list is built, and until then the
+  // entry's copy is only what the profile scopes read.
+  ir::SymbolTable::record(name_bins_.front(), name, /*stable=*/true, idx.idx);
   entry.params = params;
   entry.ret = ret;
   entry.inst = inst;
@@ -624,9 +629,11 @@ ir::FunctionIdx Lowerer::closure_fn_index(
   entry.idx = idx;
   entry.mod = mod;
   entry.name = "closure$" + std::to_string(idx.idx);
-  // A synthesized name has no source bytes to point at, so the table takes the
-  // only copy this pass makes.
-  entry.name_id = intern_copied(entry.name);
+  // A synthesized name has no source bytes to point at, so it waits in the
+  // deque for the gather, which copies it into the table.
+  synth_names_.push_back(entry.name);
+  ir::SymbolTable::record(name_bins_.front(), synth_names_.back(),
+                          /*stable=*/false, idx.idx);
   // The environment arrives as a reference to the tuple the
   // creation site built; a closure without captures keeps the
   // opaque pointer the call convention always passes first.
@@ -1143,6 +1150,23 @@ void Lowerer::run() {
       ++prelude_functions_;
     }
   }
+  // The names the work list recorded are interned in one gather, in the
+  // order the entries were made rather than the order the bodies ran, and
+  // each entry takes the handle it was given.
+  strings.gather(name_bins_);
+  bool names_ok = true;
+  for (const ir::SymbolTable::Bins& producer : name_bins_) {
+    for (const std::vector<ir::SymbolTable::Pending>& shard : producer.shards) {
+      for (const ir::SymbolTable::Pending& pending : shard) {
+        fns[pending.key].name_id = pending.handle;
+        names_ok = names_ok && pending.handle != str::INVALID_STRING_POOL_ID;
+      }
+    }
+  }
+  if (!names_ok) {
+    (void)report_name_table_exhausted();
+    return;
+  }
   for (const Done& entry : done) {
     const std::vector<u32> comp = comp_positions(entry.entry.item);
     ir::TypeSeq params;
@@ -1160,11 +1184,9 @@ void Lowerer::run() {
     for (const ir::TypeIdx arg : entry.entry.generics) {
       generics.push(builder.ref_type(arg));
     }
-    // The entry's name is a string this pass owns, and a pass that interns a
-    // view of it would hand codegen bytes that die with the pass. The handle
-    // was taken where the name was made, when its bytes were still the
-    // source's.
-    const str::StringPoolId name = entry.entry.name_id;
+    // The handle the gather left in the entry, which this copy of it
+    // predates.
+    const str::StringPoolId name = fns[entry.entry.idx.idx].name_id;
     const str::StringPoolId path =
         intern_name(pkg.tree.modules[entry.entry.mod]->path);
     if (name == str::INVALID_STRING_POOL_ID ||

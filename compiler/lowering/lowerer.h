@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 #pragma once
 
+#include <deque>
 #include <optional>
 #include <span>
 #include <string>
@@ -64,6 +65,11 @@ class Lowerer {
   ir::SymbolTable& strings;
   diag::DiagBag& bag;
   bool failed = false;
+  // The names this pass will intern in one gather, and the synthesized ones
+  // whose bytes have to outlive the recording: a closure name is not the
+  // source's, so it waits in the deque until the gather copies it.
+  std::vector<ir::SymbolTable::Bins> name_bins_{ir::SymbolTable::Bins{}};
+  std::deque<std::string> synth_names_;
   // Set once the shared table has no room for another name; the loop
   // that saw it stops and `lower_package` refuses the package.
   bool name_table_exhausted_ = false;
@@ -260,6 +266,9 @@ class Lowerer {
   str::StringPoolId intern_copied(std::string_view name);
   // The report and the failure both paths share.
   str::StringPoolId intern_result(const std::optional<str::StringPoolId>& id);
+  // The one report a spent name table gets, which the gather path reaches
+  // without an interning call of its own.
+  str::StringPoolId report_name_table_exhausted();
   Val lower_literal(ast::LiteralIdx lit_idx, const ir::TypeIdx* expected);
   ir::OperandIdx imm_from_u64(ir::TypeTag tag, ir::TypeIdx type, u64 value);
   Val place_addr(ast::ExprIdx expr);

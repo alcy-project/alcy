@@ -3,6 +3,7 @@
 
 #include "ir/symbol_table.h"
 
+#include <array>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -142,6 +143,82 @@ TEST_CASE("A table sized for the empty name alone holds nothing else") {
   CHECK(table.count() == 1);
   CHECK(!table.try_intern("a").has_value());
   CHECK(table.get(str::EMPTY_STRING_ID).empty());
+}
+
+// The handle each recorded key got, by key, so a case can compare two gathers
+// whose shards were filled in different orders.
+std::vector<str::StringPoolId> handles_by_key(
+    const std::vector<std::vector<SymbolTable::Pending>>& shards,
+    usize keys) {
+  std::vector<str::StringPoolId> ids(keys, str::INVALID_STRING_POOL_ID);
+  for (const std::vector<SymbolTable::Pending>& shard : shards) {
+    for (const SymbolTable::Pending& pending : shard) {
+      ids[pending.key] = pending.handle;
+    }
+  }
+  return ids;
+}
+
+TEST_CASE("A gather interns every name a producer recorded") {
+  static constexpr std::array<std::string_view, 4> NAMES = {
+      "advance", "length_squared", "make", "area"};
+  SymbolTable table;
+  std::vector<SymbolTable::Bins> bins(2);
+  for (SymbolTable::Bins& producer : bins) {
+    for (usize i = 0; i < NAMES.size(); ++i) {
+      SymbolTable::record(producer, NAMES[i], /*stable=*/true,
+                          static_cast<u32>(i));
+    }
+  }
+  table.gather(bins);
+  const std::vector<str::StringPoolId> first =
+      handles_by_key(bins[0].shards, NAMES.size());
+  const std::vector<str::StringPoolId> second =
+      handles_by_key(bins[1].shards, NAMES.size());
+  CHECK(first == second);
+  CHECK(table.count() == NAMES.size() + 1);
+  for (usize i = 0; i < NAMES.size(); ++i) {
+    CHECK(table.get(first[i]) == NAMES[i]);
+  }
+}
+
+TEST_CASE("The order the producers were filled does not reach the handles") {
+  static constexpr std::array<std::string_view, 3> NAMES = {"alpha", "beta",
+                                                            "gamma"};
+  SymbolTable table;
+  std::vector<SymbolTable::Bins> bins(2);
+  for (SymbolTable::Bins& producer : bins) {
+    for (usize i = 0; i < NAMES.size(); ++i) {
+      SymbolTable::record(producer, NAMES[i], /*stable=*/true,
+                          static_cast<u32>(i));
+    }
+  }
+  // The same two producers, filled in the opposite order.
+  std::vector<SymbolTable::Bins> reversed(2);
+  for (usize producer = reversed.size(); producer-- > 0;) {
+    for (usize i = 0; i < NAMES.size(); ++i) {
+      SymbolTable::record(reversed[producer], NAMES[i], /*stable=*/true,
+                          static_cast<u32>(i));
+    }
+  }
+  table.gather(bins);
+  table.gather(reversed);
+  for (usize producer = 0; producer < bins.size(); ++producer) {
+    CHECK(handles_by_key(bins[producer].shards, NAMES.size()) ==
+          handles_by_key(reversed[producer].shards, NAMES.size()));
+  }
+}
+
+TEST_CASE("A name recorded as unstable is copied by the gather") {
+  SymbolTable table;
+  std::vector<SymbolTable::Bins> bins(1);
+  std::string synthesized = "closure$1";
+  SymbolTable::record(bins[0], synthesized, /*stable=*/false, 0);
+  synthesized = "closure$1\0two";
+  table.gather(bins);
+  const std::vector<str::StringPoolId> handles =
+      handles_by_key(bins[0].shards, 1);
+  CHECK(table.get(handles[0]) == std::string_view("closure$1"));
 }
 
 }  // namespace

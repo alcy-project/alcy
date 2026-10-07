@@ -77,6 +77,40 @@ class SymbolTable {
   // slots before the empty name's hold no name.
   usize count() const { return names_.size() - str::EMPTY_STRING_ID.offset; }
 
+  // One name a producer wants a handle for. The producer keeps the entries it
+  // recorded and reads the handle a gather left in them, so a gather needs no
+  // stable slot in anybody else's table.
+  struct Pending {
+    // The name's hash, taken where the name was recorded, so a gather does not
+    // take it again.
+    u64 hash = 0;
+    std::string_view name;
+    // The producer's own key for the name, which is how it finds the entry
+    // again once the gather has run.
+    u32 key = 0;
+    // Whether the name's bytes outlive the table. A name that came out of a
+    // source does; a synthesized one is copied by the gather.
+    bool stable = true;
+    // What the gather left: the handle, or INVALID when the table is full.
+    Id handle = str::INVALID_STRING_POOL_ID;
+  };
+
+  // The names one producer recorded, one run per shard. A producer appends to
+  // its own bins and no other producer touches them, so recording takes no
+  // lock.
+  struct Bins {
+    std::vector<std::vector<Pending>> shards;
+  };
+
+  // Records one name for the bins' producer.
+  static void record(Bins& bins, std::string_view name, bool stable, u32 key);
+
+  // Interns every recorded name and leaves each entry's handle in it. A shard
+  // is visited before the next and the bins in the order they are given, so
+  // the caller indexes them by what produced them -- a module, a file -- and
+  // not by the order the work happened to finish in.
+  void gather(std::vector<Bins>& bins);
+
  private:
   // The number of tables the names are spread over.
   static constexpr usize NUM_SHARDS = 64;
@@ -90,6 +124,10 @@ class SymbolTable {
     std::vector<u32> indices;
     usize size = 0;
   };
+
+  // The id for a name whose hash is already known, copying its bytes when they
+  // do not outlive the table.
+  std::optional<Id> intern_hashed(std::string_view name, u64 hash, bool copy);
 
   // The shard a hash falls in.
   static usize shard_of(u64 hash);
