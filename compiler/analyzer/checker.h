@@ -624,7 +624,7 @@ class Checker {
   bool is_core_fmt(const CheckedModule::FnSig* fn) const;
   std::vector<bool> comp_param_flags(ast::ItemIdx item) const;
   bool comp_checked_in_scope(ast::ExprIdx init) const;
-  bool is_literal_const(u32 module, ast::PathIdx path) const;
+  bool is_const_item(u32 module, ast::PathIdx path) const;
   // Bounds the recursive tree walk; see base::MAX_NESTING. A long
   // operator chain parses in a loop, so the parser's own descent does
   // not bound the tree it produces and this pass has to.

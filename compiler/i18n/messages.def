@@ -128,7 +128,6 @@
   F(AnalyzerCompoundAssignNeedsNumeric, "Compound assignment needs a numeric place") \
   F(AnalyzerConflictingSpecImpl, "Conflicting implementation of '{}' for '{}'") \
   F(AnalyzerConflictsWithLocalItem, "Import `{}` conflicts with a local item") \
-  F(AnalyzerConstNeedsLiteral, "Const '{}' admits literal expressions only") \
   F(AnalyzerContinueOutsideLoop, "Continue outside of a loop") \
   F(AnalyzerCopyTypeCannotHaveDestructor, "Type is Copy because all of its fields are, so it cannot have a destructor") \
   F(AnalyzerDuplicateDefinition, "Duplicate definition of '{}'") \

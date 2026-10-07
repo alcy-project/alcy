@@ -149,6 +149,37 @@ LowerCase lower_case(
 
 }  // namespace
 
+TEST_CASE("Lower evaluates a const item initializer") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "const N: i32 = 1 + 2\n"
+                   "const M: i32 = N * 2\n"
+                   "\n"
+                   "fn main() -> i32 {\n"
+                   "  ret M\n"
+                   "}\n"}});
+  Fixture f;
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.lowered.has_value());
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Lower reports a const cycle instead of recursing") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "const A: i32 = B\n"
+                   "const B: i32 = A\n"
+                   "\n"
+                   "fn main() -> i32 {\n"
+                   "  ret A\n"
+                   "}\n"}});
+  Fixture f;
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Lower straight-line arithmetic") {
   VirtualDir dir;
   write_all(dir, {{"main.al",

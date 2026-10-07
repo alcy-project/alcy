@@ -985,6 +985,27 @@ bool Lowerer::comp_evaluate(u32 mod, ast::ExprIdx expr, CompVal& out) {
   return comp_eval_expr(mod, expr, scope, out);
 }
 
+bool Lowerer::comp_evaluate_item(u32 mod, ast::ExprIdx init, CompVal& out) {
+  comp_budget_ = COMP_STEP_BUDGET;
+  comp_call_depth_ = 0;
+  return comp_eval_const_item(mod, init, out);
+}
+
+bool Lowerer::comp_eval_const_item(u32 mod, ast::ExprIdx init, CompVal& out) {
+  // A const initializer sees items, never a caller's comp bindings, so
+  // it evaluates in a scope of its own; the depth counts as a call so a
+  // const chain cannot recurse without bound.
+  if (comp_call_depth_ >= COMP_MAX_CALL_DEPTH) {
+    return comp_fail(ast.exprs[init].span, "const evaluation is too deep");
+  }
+  ++comp_call_depth_;
+  CompScope scope;
+  scope.frames.emplace_back();
+  const bool ok = comp_eval_expr(mod, init, scope, out);
+  --comp_call_depth_;
+  return ok;
+}
+
 bool Lowerer::comp_eval_expr(u32 mod,
                              ast::ExprIdx expr,
                              CompScope& scope,
@@ -1004,9 +1025,8 @@ bool Lowerer::comp_eval_expr(u32 mod,
           return true;
         }
         if (const auto* info = lookup_static(mod, segments[0].name)) {
-          if (info->is_const && info->init.is_valid() &&
-              ast.exprs[info->init].kind == ast::ExprKind::Literal) {
-            return comp_eval_literal(mod, info->init, out);
+          if (info->is_const && info->init.is_valid()) {
+            return comp_eval_const_item(mod, info->init, out);
           }
         }
       }

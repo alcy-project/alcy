@@ -4663,12 +4663,6 @@ void Checker::check_bodies() {
             init = node.payload.get<ast::ItemStatic>().init;
           }
           const ir::TypeIdx declared = resolve_type(m, type, nullptr);
-          if (is_const && ast.exprs[init].kind != ast::ExprKind::Literal) {
-            const u32 index = bag.emit<i18n::Key::AnalyzerConstNeedsLiteral>(
-                diag::Severity::Error, diag::Stage::Analyzer,
-                DiagCode::InvalidOperation, ast.exprs[init].span, name);
-            (void)index;
-          }
           if (!is_const) {
             std::vector<u32> visited;
             if (contains_mut_ref(declared, visited)) {

@@ -679,17 +679,25 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       }
     }
     if (const auto* info = lookup_static(module, name)) {
-      if (info->is_const && info->init.is_valid() &&
-          ast.exprs[info->init].kind == ast::ExprKind::Literal) {
+      if (info->is_const && info->init.is_valid()) {
         // The declared type wins over the context: a `const` read is
         // always the type it was declared with.
         const ir::TypeIdx want =
             info->type.is_valid()
                 ? info->type
                 : (expected != nullptr ? *expected : error_type());
-        return lower_literal(
-            ast.exprs[info->init].payload.get<ast::ExprLiteral>().value,
-            info->type.is_valid() ? &want : expected);
+        if (ast.exprs[info->init].kind == ast::ExprKind::Literal) {
+          return lower_literal(
+              ast.exprs[info->init].payload.get<ast::ExprLiteral>().value,
+              info->type.is_valid() ? &want : expected);
+        }
+        // Anything else is a compile-time value: evaluate the
+        // initializer and splice it.
+        CompVal value;
+        if (!comp_evaluate_item(module, info->init, value)) {
+          return Val{size_one, error_type(), false, false};
+        }
+        return materialize_comp_value(value, node.span);
       }
       unsupported(node.span, "static item in lowering");
       return Val{size_one, error_type(), false, false};

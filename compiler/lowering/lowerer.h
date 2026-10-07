@@ -541,6 +541,13 @@ class Lowerer {
                              CompVal& out);
   Val materialize_comp_value(const CompVal& value, diag::Span span);
   bool comp_evaluate(u32 mod, ast::ExprIdx expr, CompVal& out);
+  // One const item's initializer, evaluated at a use site: item scope,
+  // so no comp binding of the caller is visible, with the evaluation
+  // budget reset for the run.
+  bool comp_evaluate_item(u32 mod, ast::ExprIdx init, CompVal& out);
+  // The same, from inside an evaluation already running: the budget is
+  // shared and the recursion depth counts against the call limit.
+  bool comp_eval_const_item(u32 mod, ast::ExprIdx init, CompVal& out);
   bool comp_eval_expr(u32 mod,
                       ast::ExprIdx expr,
                       CompScope& scope,

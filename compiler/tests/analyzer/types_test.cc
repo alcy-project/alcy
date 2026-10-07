@@ -1803,12 +1803,26 @@ TEST_CASE("Check items enforce entry and initializer rules") {
     CHECK(!result.package.has_value());
   }
   {
+    // A const initializer is a compile-time value, not a literal: a
+    // pure call evaluates during compilation.
     VirtualDir dir;
     const bool setup = write_all(dir, {{"main.al",
                                         "fn one() -> i32 {\n"
                                         "  ret 1\n"
                                         "}\n"
                                         "const k: i32 = one()\n"}});
+    CHECK(setup);
+    if (!setup) {
+      return;
+    }
+    Fixture f;
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(result.package.has_value());
+    CHECK(!f.bag.has_errors());
+  }
+  {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al", "const k: i32 = \"x\"\n"}});
     CHECK(setup);
     if (!setup) {
       return;

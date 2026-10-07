@@ -37,9 +37,11 @@
   scope, and the chain must not cycle. A generic super-spec is
   deferred, as is a bound admitting the super's methods.
 - `static` items have storage and MUST NOT contain `&mut`.
-  `const X: T = ...` items are inline constants restricted to literal
-  expressions in MVP (full const evaluation arrives with `comp fn`,
-  post-MVP). Binding-position `const` does not exist.
+  `const X: T = ...` items are compile-time values: the initializer is
+  evaluated during compilation, must terminate within the evaluation
+  bound, and is pure (no runtime storage or I/O). A const value is
+  immutable and readable wherever a value is; see `comp.md`.
+  Binding-position `const` does not exist yet.
 
 ## Intrinsic declarations (Bootstrap)
 

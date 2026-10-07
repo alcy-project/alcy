@@ -339,7 +339,7 @@ bool Checker::expr_comp_known(u32 module, ast::ExprIdx expr) const {
       if (const Local* local = lookup_local(segments[0].name)) {
         return local->comp_known;
       }
-      return is_literal_const(module, path);
+      return is_const_item(module, path);
     }
     case ast::ExprKind::Unary:
       return expr_comp_known(module, node.payload.get<ast::ExprUnary>().inner);
@@ -613,17 +613,16 @@ bool Checker::comp_checked_in_scope(ast::ExprIdx init) const {
          ast.exprs[init].payload.get<ast::ExprBlock>().is_comp;
 }
 
-// Literal consts (inline constants) are readable in comp
-// evaluation; anything else with storage is not.
-bool Checker::is_literal_const(u32 module, ast::PathIdx path) const {
+// A const item is a compile-time value by construction, so it is
+// readable in comp evaluation; anything else with storage is not.
+bool Checker::is_const_item(u32 module, ast::PathIdx path) const {
   const std::span<const ast::Ident> segments = ast.paths[path].segments;
   if (segments.size() != 1) {
     return false;
   }
   const CheckedModule::StaticInfo* info =
       lookup_static(module, segments[0].name);
-  return info != nullptr && info->is_const && info->init.is_valid() &&
-         ast.exprs[info->init].kind == ast::ExprKind::Literal;
+  return info != nullptr && info->is_const && info->init.is_valid();
 }
 
 ir::TypeIdx Checker::check_path_expr(u32 module,
@@ -641,7 +640,7 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
     case PathValue::Kind::Static:
     case PathValue::Kind::UnitVariant: {
       if (resolved.kind == PathValue::Kind::Static && comp_depth > 0 &&
-          !is_literal_const(module, path)) {
+          !is_const_item(module, path)) {
         const u32 index =
             bag.emit<i18n::Key::AnalyzerStaticReadInCompEvaluation>(
                 diag::Severity::Error, diag::Stage::Analyzer,
