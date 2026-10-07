@@ -484,14 +484,14 @@ constexpr std::string_view TOOLS_SUITE_MANIFEST =
     "packages = [\"cli\", \"fmt\"]\n";
 
 constexpr std::string_view CLI_MANIFEST =
-    "[package]\nname = \"acme-cli\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+    "[package]\nname = \"cli\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
     "[modules]\ninclude = [\"run\"]\nexport = [\"run\"]\n\n"
-    "[[bin]]\nname = \"acme-cli\"\npath = \"run.al\"\n";
+    "[[bin]]\nname = \"cli\"\npath = \"run.al\"\n";
 
 constexpr std::string_view FMT_MANIFEST =
-    "[package]\nname = \"acme-fmt\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+    "[package]\nname = \"fmt\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
     "[modules]\ninclude = [\"show\"]\nexport = [\"show\"]\n\n"
-    "[[bin]]\nname = \"acme-fmt\"\npath = \"show.al\"\n";
+    "[[bin]]\nname = \"fmt\"\npath = \"show.al\"\n";
 
 // Writes the two-member suite every suite case below resolves
 // through: the `cli` and `fmt` packages under vendor/tools.
@@ -512,7 +512,7 @@ TEST_CASE("Suites load every member a glob selects") {
       "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
       "[dependencies]\n\"acme/tools/*\" = { path = \"vendor/tools\" }\n",
       {{"main.al",
-        "use acme_cli::run::go;\nuse acme_fmt::show::shout;\n\nfn main() "
+        "use cli::run::go;\nuse fmt::show::shout;\n\nfn main() "
         "-> i32 {\n  ret go() + shout(1)\n}\n"}});
   const bool suite_setup = write_tools_suite(dir);
   CHECK(setup);
@@ -540,7 +540,7 @@ TEST_CASE("Suites load one member a specifier names") {
       "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
       "[dependencies]\n\"acme/tools/cli\" = { path = \"vendor/tools\" }\n",
       {{"main.al",
-        "use acme_cli::run::go;\n\nfn main() -> i32 {\n  ret go()\n}\n"}});
+        "use cli::run::go;\n\nfn main() -> i32 {\n  ret go()\n}\n"}});
   const bool suite_setup = write_tools_suite(dir);
   CHECK(setup);
   CHECK(suite_setup);
@@ -568,7 +568,7 @@ TEST_CASE("Suites share members two specifiers name") {
       "[dependencies]\n\"acme/tools/*\" = { path = \"vendor/tools\" }\n"
       "\"acme/tools/cli\" = { path = \"vendor/tools\" }\n",
       {{"main.al",
-        "use acme_cli::run::go;\nuse acme_fmt::show::shout;\n\nfn main() "
+        "use cli::run::go;\nuse fmt::show::shout;\n\nfn main() "
         "-> i32 {\n  ret go() + shout(1)\n}\n"}});
   const bool suite_setup = write_tools_suite(dir);
   CHECK(setup);
@@ -638,6 +638,68 @@ TEST_CASE("Suites reject a specifier the manifest does not name") {
                     "' holds suite 'acme/tools'"));
 }
 
+TEST_CASE("A suite member is addressed by the last path segment") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_dep_test_");
+  const bool setup = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
+      "[dependencies]\n\"acme/tools/cli\" = { path = \"vendor/tools\" }\n",
+      {{"main.al",
+        "use cli::run::go;\n\nfn main() -> i32 {\n  ret go()\n}\n"}});
+  const bool suite_setup =
+      write_package(dir, "proj/vendor/tools",
+                    "[suite]\nowner = \"acme\"\nname = \"tools\"\n"
+                    "license = \"\"\npackages = [\"first-party/cli\"]\n",
+                    {}) &&
+      write_package(dir, "proj/vendor/tools/first-party/cli", CLI_MANIFEST,
+                    {{"run.al", "pub fn go() -> i32 {\n  ret 20\n}\n"}});
+  CHECK(setup);
+  CHECK(suite_setup);
+  if (!setup || !suite_setup) {
+    return;
+  }
+
+  // The address names the package; the suite keeps the path.
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<CheckOutcome, diag::Reported> outcome = check_proj(ctx, dir);
+  CHECK(outcome.is_ok());
+  CHECK(!ctx.bag.has_errors());
+}
+
+TEST_CASE("A member's manifest must carry the name it is listed by") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_dep_test_");
+  const bool setup = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
+      "[dependencies]\n\"acme/tools/cli\" = { path = \"vendor/tools\" }\n",
+      {{"main.al", "fn main() -> i32 {\n  ret 0\n}\n"}});
+  const bool suite_setup =
+      write_package(dir, "proj/vendor/tools",
+                    "[suite]\nowner = \"acme\"\nname = \"tools\"\n"
+                    "license = \"\"\npackages = [\"first-party/cli\"]\n",
+                    {}) &&
+      write_package(dir, "proj/vendor/tools/first-party/cli",
+                    "[package]\nname = \"other\"\nversion = \"0.1.0\"\n"
+                    "license = \"\"\n\n"
+                    "[modules]\ninclude = [\"run\"]\nexport = [\"run\"]\n\n"
+                    "[[bin]]\nname = \"other\"\npath = \"run.al\"\n",
+                    {{"run.al", "pub fn go() -> i32 {\n  ret 20\n}\n"}});
+  CHECK(setup);
+  CHECK(suite_setup);
+  if (!setup || !suite_setup) {
+    return;
+  }
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  CHECK(check_proj(ctx, dir).is_err());
+  CHECK(ctx.bag.has_errors());
+  CHECK(reports(ctx.bag,
+                "Dependency 'acme/tools/cli' declares package 'other', "
+                "but its suite lists it as 'cli'"));
+}
+
 TEST_CASE("Suites read a package manifest as the wrong kind") {
   io::TempDir dir = io::TempDir::create_unique("alcy_dep_test_");
   const bool setup = write_package(
@@ -700,16 +762,16 @@ TEST_CASE("Suites resolve a member's own dependencies") {
       "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
       "[dependencies]\n\"acme/tools/cli\" = { path = \"vendor/tools\" }\n",
       {{"main.al",
-        "use acme_cli::run::go;\n\nfn main() -> i32 {\n  ret go()\n}\n"}});
+        "use cli::run::go;\n\nfn main() -> i32 {\n  ret go()\n}\n"}});
   const bool suite_setup =
       write_package(dir, "proj/vendor/tools", TOOLS_SUITE_MANIFEST, {}) &&
       write_package(
           dir, "proj/vendor/tools/cli",
-          "[package]\nname = \"acme-cli\"\nversion = \"0.1.0\"\nlicense = "
+          "[package]\nname = \"cli\"\nversion = \"0.1.0\"\nlicense = "
           "\"\"\n\n"
           "[modules]\ninclude = [\"run\"]\nexport = [\"run\"]\n\n"
           "[dependencies]\n\"acme/solo\" = { path = \"../../solo\" }\n\n"
-          "[[bin]]\nname = \"acme-cli\"\npath = \"run.al\"\n",
+          "[[bin]]\nname = \"cli\"\npath = \"run.al\"\n",
           {{"run.al",
             "use solo::x::x;\n\npub fn go() -> i32 {\n  ret x() + 1\n}\n"}}) &&
       write_package(
@@ -746,15 +808,15 @@ TEST_CASE("Suites reject a member resolving back into its suite") {
       "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
       "[dependencies]\n\"acme/tools/*\" = { path = \"vendor/tools\" }\n",
       {{"main.al",
-        "use acme_cli::run::go;\n\nfn main() -> i32 {\n  ret go()\n}\n"}});
+        "use cli::run::go;\n\nfn main() -> i32 {\n  ret go()\n}\n"}});
   const bool suite_setup =
       write_package(dir, "proj/vendor/tools", TOOLS_SUITE_MANIFEST, {}) &&
       write_package(dir, "proj/vendor/tools/cli",
-                    "[package]\nname = \"acme-cli\"\nversion = "
+                    "[package]\nname = \"cli\"\nversion = "
                     "\"0.1.0\"\nlicense = \"\"\n\n"
                     "[modules]\ninclude = [\"run\"]\nexport = [\"run\"]\n\n"
                     "[dependencies]\n\"acme/tools/*\" = { path = \"../\" }\n\n"
-                    "[[bin]]\nname = \"acme-cli\"\npath = \"run.al\"\n",
+                    "[[bin]]\nname = \"cli\"\npath = \"run.al\"\n",
                     {{"run.al", "pub fn go() -> i32 {\n  ret 1\n}\n"}}) &&
       write_package(
           dir, "proj/vendor/tools/fmt", FMT_MANIFEST,

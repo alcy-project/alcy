@@ -1,5 +1,5 @@
 [package]
-name = "acme-cli"
+name = "cli"
 version = "0.1.0"
 license = ""
 
@@ -11,5 +11,5 @@ export = ["run"]
 "acme/tools/*" = { path = "../" }
 
 [[bin]]
-name = "acme-cli"
+name = "cli"
 path = "run.al"

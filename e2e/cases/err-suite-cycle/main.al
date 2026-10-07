@@ -1,4 +1,4 @@
-use acme_cli::run::go;
+use cli::run::go;
 
 fn main() -> i32 {
   ret go()

@@ -71,6 +71,13 @@ bool is_module_segment(std::string_view name) {
          name.find("::") == std::string_view::npos;
 }
 
+// The name a suite member is addressed by: the last segment of its
+// suite-relative path (ADR-0057).
+std::string_view member_name(std::string_view path) {
+  const usize slash = path.rfind('/');
+  return slash == std::string_view::npos ? path : path.substr(slash + 1);
+}
+
 // Reads the manifest of the package at `dir`, which the
 // caller has established names a package.
 base::Result<pkg::PackageManifest, diag::Reported> read_manifest(
@@ -147,6 +154,7 @@ bool load_dependency(PipelineContext& ctx,
                      const path::Path& dir,
                      std::string_view spec,
                      std::string_view suite,
+                     std::string_view expected_name,
                      std::vector<path::Path>& visited,
                      std::vector<path::Path>& loaded,
                      std::vector<LoadedDependency>& staged) {
@@ -187,6 +195,17 @@ bool load_dependency(PipelineContext& ctx,
     const u32 index = ctx.bag.emit<i18n::Key::PipelineDependencyBadName>(
         diag::Severity::Error, diag::Stage::Pipeline,
         DiagCode::DependencyBadName, spec, manifest.name);
+    (void)index;
+    return false;
+  }
+  // A suite addresses a member by its package name, so the member's
+  // own manifest has to carry that name.
+  if (!expected_name.empty() && manifest.name != expected_name) {
+    const u32 index =
+        ctx.bag.emit<i18n::Key::PipelineDependencyMemberNameMismatch>(
+            diag::Severity::Error, diag::Stage::Pipeline,
+            DiagCode::DependencySuiteMismatch, spec, manifest.name,
+            expected_name);
     (void)index;
     return false;
   }
@@ -265,14 +284,16 @@ bool load_suite_members(PipelineContext& ctx,
       members.push_back(suite.packages[i]);
     }
   } else {
-    bool listed = false;
+    // The address names the member's package; the path the suite
+    // lists is found by its last segment.
+    std::string_view listed;
     for (u32 i = 0; i < suite.package_count; ++i) {
-      if (suite.packages[i] == dep.member) {
-        listed = true;
+      if (member_name(suite.packages[i]) == dep.member) {
+        listed = suite.packages[i];
         break;
       }
     }
-    if (!listed) {
+    if (listed.empty()) {
       const u32 index =
           ctx.bag.emit<i18n::Key::PipelineDependencyNotASuiteMember>(
               diag::Severity::Error, diag::Stage::Pipeline,
@@ -281,7 +302,7 @@ bool load_suite_members(PipelineContext& ctx,
       (void)index;
       return false;
     }
-    members.push_back(dep.member);
+    members.push_back(listed);
   }
   // The suite's closure contains the suite: a member resolving
   // back into this directory is a cycle, not a second load.
@@ -303,7 +324,7 @@ bool load_suite_members(PipelineContext& ctx,
       member_spec += std::string(member);
     }
     if (!load_dependency(ctx, dir.join(member), member_spec, member_suite,
-                         visited, loaded, staged)) {
+                         member_name(member), visited, loaded, staged)) {
       return false;
     }
   }
@@ -328,7 +349,7 @@ bool load_path_edge(PipelineContext& ctx,
   if (dep.suite_glob || !dep.suite.empty()) {
     return load_suite_members(ctx, dir, dep, visited, loaded, staged);
   }
-  return load_dependency(ctx, dir, dep.spec, {}, visited, loaded, staged);
+  return load_dependency(ctx, dir, dep.spec, {}, {}, visited, loaded, staged);
 }
 
 }  // namespace

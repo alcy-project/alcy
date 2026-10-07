@@ -1,5 +1,5 @@
 [package]
-name = "acme-fmt"
+name = "fmt"
 version = "0.1.0"
 license = ""
 
@@ -8,5 +8,5 @@ include = ["show"]
 export = ["show"]
 
 [[bin]]
-name = "acme-fmt"
+name = "fmt"
 path = "show.al"

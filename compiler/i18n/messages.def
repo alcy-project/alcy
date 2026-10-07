@@ -330,6 +330,7 @@
   F(PipelineDependencyCycle, "Dependency cycle through '{}'") \
   F(PipelineDependencyIsAStdMember, "Dependency '{}' is a member of alcy/std; write \"alcy/std/{}\"") \
   F(PipelineDependencyIsEmbeddedStd, "Dependency '{}' is part of the embedded standard library, which takes no source") \
+  F(PipelineDependencyMemberNameMismatch, "Dependency '{}' declares package '{}', but its suite lists it as '{}'") \
   F(PipelineDependencyNamesNoSource, "Dependency '{}' names no source; give one of path, version, git") \
   F(PipelineDependencyNeedsFetcher, "Dependency '{}' needs a fetcher the resolver does not have yet") \
   F(PipelineDependencyNotAStdMember, "Dependency '{}' is not a member of alcy/std") \
