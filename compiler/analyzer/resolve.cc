@@ -49,10 +49,13 @@ struct NameEntry {
 
 class Resolver {
  public:
-  Resolver(ast::AstArena& ast, diag::DiagBag& bag) : ast(ast), bag(bag) {}
+  Resolver(ast::AstArena& ast, diag::DiagBag& bag, debug::Profiler* profiler)
+      : ast(ast), bag(bag), profiler(profiler) {}
 
   ast::AstArena& ast;
   diag::DiagBag& bag;
+  // Where the walk's scopes go, or nothing.
+  debug::Profiler* profiler = nullptr;
   std::string_view package_name;
   source::FileId root = source::UNKNOWN_FILE;
   std::vector<FileData> file_data;
@@ -350,6 +353,8 @@ class Resolver {
 
   void collect_locals() {
     for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(
+          profiler, trace_module_name(*modules[m]), "frontend");
       for (ast::ItemIdx item : modules[m]->items) {
         const ast::ItemNode& node = ast.items[item];
         std::string_view name = node.name();
@@ -714,7 +719,11 @@ class Resolver {
                               input.path.as_view(), input.items,
                               input.input.is_facade});
     }
-    build_tree();
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "build-tree",
+                                               "frontend");
+      build_tree();
+    }
     if (out_of_arena) {
       return ModuleTree{};
     }
@@ -723,57 +732,63 @@ class Resolver {
     // and can reach each other. Only a facade is a prelude, so only its
     // public surface is in scope without a `use`.
     const u32 modules_before = static_cast<u32>(modules.size());
-    for (FileData& file : prelude_data) {
-      const std::vector<std::string_view> segments = split_segments(file.name);
-      u32 parent = NO_MODULE;
-      std::string prefix;
-      for (usize seg = 0; seg < segments.size(); ++seg) {
-        const bool leaf = seg + 1 == segments.size();
-        const std::string child_path =
-            prefix.empty() ? std::string(segments[seg])
-                           : prefix + "::" + std::string(segments[seg]);
-        u32 child = NO_MODULE;
-        for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
-          if (modules[m]->path == child_path && parents[m] == parent) {
-            child = m;
-            break;
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "stage-prelude",
+                                               "frontend");
+      for (FileData& file : prelude_data) {
+        const std::vector<std::string_view> segments =
+            split_segments(file.name);
+        u32 parent = NO_MODULE;
+        std::string prefix;
+        for (usize seg = 0; seg < segments.size(); ++seg) {
+          const bool leaf = seg + 1 == segments.size();
+          const std::string child_path =
+              prefix.empty() ? std::string(segments[seg])
+                             : prefix + "::" + std::string(segments[seg]);
+          u32 child = NO_MODULE;
+          for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+            if (modules[m]->path == child_path && parents[m] == parent) {
+              child = m;
+              break;
+            }
           }
-        }
-        if (child == NO_MODULE) {
-          child = add_module(
-              child_path, leaf ? file.id : source::UNKNOWN_FILE,
-              leaf ? file.items : std::span<const ast::ItemIdx>{}, parent);
-          if (out_of_arena) {
-            return ModuleTree{};
+          if (child == NO_MODULE) {
+            child = add_module(
+                child_path, leaf ? file.id : source::UNKNOWN_FILE,
+                leaf ? file.items : std::span<const ast::ItemIdx>{}, parent);
+            if (out_of_arena) {
+              return ModuleTree{};
+            }
+            // The whole staged tree is toolchain sources, facades and
+            // siblings alike; only facades are preludes.
+            modules[child]->is_staged = true;
+          } else if (leaf) {
+            // Two staged sources resolved to the same leaf: the later one
+            // would silently overwrite the earlier module's items.
+            const u32 index =
+                bag.emit<i18n::Key::AnalyzerDuplicatePreludeModule>(
+                    diag::Severity::Error, diag::Stage::Analyzer,
+                    DiagCode::DuplicateModule,
+                    file.id == source::UNKNOWN_FILE ? diag::Span{}
+                                                    : diag::Span{file.id, 0, 0},
+                    child_path);
+            (void)index;
+            continue;
           }
-          // The whole staged tree is toolchain sources, facades and
-          // siblings alike; only facades are preludes.
-          modules[child]->is_staged = true;
-        } else if (leaf) {
-          // Two staged sources resolved to the same leaf: the later one
-          // would silently overwrite the earlier module's items.
-          const u32 index = bag.emit<i18n::Key::AnalyzerDuplicatePreludeModule>(
-              diag::Severity::Error, diag::Stage::Analyzer,
-              DiagCode::DuplicateModule,
-              file.id == source::UNKNOWN_FILE ? diag::Span{}
-                                              : diag::Span{file.id, 0, 0},
-              child_path);
-          (void)index;
-          continue;
+          // A top-level module has no parent to hang off, so the root
+          // case skips the edge entirely.
+          if (parent != NO_MODULE) {
+            module_children[parent].push_back(child);
+            children_by_name_[parent].emplace(module_name(child), child);
+          }
+          prefix = child_path;
+          parent = child;
         }
-        // A top-level module has no parent to hang off, so the root
-        // case skips the edge entirely.
-        if (parent != NO_MODULE) {
-          module_children[parent].push_back(child);
-          children_by_name_[parent].emplace(module_name(child), child);
+        file.module = parent;
+        if (file.is_facade) {
+          modules[parent]->is_prelude = true;
+          prelude_modules.push_back(parent);
         }
-        prefix = child_path;
-        parent = child;
-      }
-      file.module = parent;
-      if (file.is_facade) {
-        modules[parent]->is_prelude = true;
-        prelude_modules.push_back(parent);
       }
     }
     // The staged count stops at the standard library: a path
@@ -781,33 +796,59 @@ class Resolver {
     // other module rather than read as toolchain sources.
     const u32 staged_modules =
         static_cast<u32>(modules.size()) - modules_before;
-    if (!stage_dependencies(dependencies)) {
-      return ModuleTree{};
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "stage-dependencies",
+                                               "frontend");
+      if (!stage_dependencies(dependencies)) {
+        return ModuleTree{};
+      }
     }
     // Every module now exists and every edge is in place, so the
     // children spans are taken here rather than in build_tree: the
     // prelude and the dependencies stage their modules behind
     // fileless roots the package's own files never name, and the
     // checker walks these spans the way resolution walks the edges.
-    for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
-      std::vector<ModuleNode*> children;
-      children.reserve(module_children[m].size());
-      for (u32 child : module_children[m]) {
-        children.push_back(modules[child]);
-      }
-      modules[m]->children = ast::copy_to_arena(ast.spans, children);
-      if (ast.exhausted()) {
-        fail_out_of_arena();
-        return ModuleTree{};
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "link-children",
+                                               "frontend");
+      for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+        std::vector<ModuleNode*> children;
+        children.reserve(module_children[m].size());
+        for (u32 child : module_children[m]) {
+          children.push_back(modules[child]);
+        }
+        modules[m]->children = ast::copy_to_arena(ast.spans, children);
+        if (ast.exhausted()) {
+          fail_out_of_arena();
+          return ModuleTree{};
+        }
       }
     }
-    collect_locals();
-    inject_prelude();
-    for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
-      resolve_exports(m);
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "collect-locals",
+                                               "frontend");
+      collect_locals();
     }
-    for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
-      modules[m]->imports = ast::copy_to_arena(ast.spans, module_imports[m]);
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "inject-prelude",
+                                               "frontend");
+      inject_prelude();
+    }
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "resolve-exports",
+                                               "frontend");
+      for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+        PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(
+            profiler, trace_module_name(*modules[m]), "frontend");
+        resolve_exports(m);
+      }
+    }
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "link-imports",
+                                               "frontend");
+      for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+        modules[m]->imports = ast::copy_to_arena(ast.spans, module_imports[m]);
+      }
     }
     u32 root_index = 0;
     for (u32 i = 0; i < static_cast<u32>(modules.size()); ++i) {
@@ -860,8 +901,9 @@ base::Result<ModuleTree, diag::Reported> resolve_modules(
     std::span<const ParsedModule> prelude,
     std::span<const StdHint> std_hints,
     std::span<const DependencyPackage> dependencies,
-    std::span<const PackagePolicy> package_policies) {
-  Resolver resolver{ast, bag};
+    std::span<const PackagePolicy> package_policies,
+    debug::Profiler* profiler) {
+  Resolver resolver{ast, bag, profiler};
   ModuleTree tree = resolver.run(root, modules, package_name, prelude,
                                  std_hints, dependencies, package_policies);
   if (bag.has_errors()) {

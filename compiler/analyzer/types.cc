@@ -4603,6 +4603,8 @@ void Checker::check_main(u32 module, ast::ItemIdx fn) {
 
 void Checker::check_bodies() {
   for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(
+        profiler, trace_module_name(*tree.modules[m]), "analyze");
     for (ast::ItemIdx item : tree.modules[m]->items) {
       const ast::ItemNode& node = ast.items[item];
       switch (node.kind) {
@@ -4797,6 +4799,8 @@ base::Result<CheckedPackage, diag::Reported> check_package(
                                              "analyze");
     for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
       checker.modules.push_back(checker.empty_module(m));
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(
+          checker.profiler, trace_module_name(*tree.modules[m]), "analyze");
       checker.process_module(m);
     }
   }

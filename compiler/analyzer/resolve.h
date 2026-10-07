@@ -15,6 +15,7 @@
 #include "fpag/base/limits.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profiler.h"
 #include "i18n/messages.h"
 #include "path/path.h"
 #include "source/source.h"
@@ -93,6 +94,13 @@ struct ModuleNode {
   // rest are ordinary modules that happen to be toolchain sources.
   bool is_staged = false;
 };
+
+// What a trace row for a module reads: the path the tree gave it, or the
+// package root when the tree left the path empty.
+[[nodiscard]] inline std::string_view trace_module_name(
+    const ModuleNode& module) {
+  return module.path.empty() ? std::string_view("(root)") : module.path;
+}
 
 struct ModuleTree {
   std::span<ModuleNode* const> modules;
@@ -296,6 +304,9 @@ inline void emit_unresolved(diag::DiagBag& bag,
 // The caller owns the items, the paths, and the arena they live in,
 // and keeps all three alive for the call. `pipeline::parse_files`
 // produces exactly this input.
+//
+// A profiler, when one is given, records the walk's stages and one scope per
+// module as they run.
 base::Result<ModuleTree, diag::Reported> resolve_modules(
     source::FileId root,
     std::span<const ParsedModule> modules,
@@ -305,7 +316,8 @@ base::Result<ModuleTree, diag::Reported> resolve_modules(
     std::span<const ParsedModule> prelude = {},
     std::span<const StdHint> std_hints = {},
     std::span<const DependencyPackage> dependencies = {},
-    std::span<const PackagePolicy> package_policies = {});
+    std::span<const PackagePolicy> package_policies = {},
+    debug::Profiler* profiler = nullptr);
 
 // A `use` or a qualified path that reaches `module_path` in the
 // package the root `root` opens, seen from `from_module`. A path

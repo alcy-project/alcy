@@ -286,7 +286,7 @@ base::Result<analyzer::ModuleTree, diag::Reported> resolve_inputs(
   }
   return analyzer::resolve_modules(root, parsed_modules, package_name, ctx.ast,
                                    ctx.bag, parsed_prelude, std_hints,
-                                   parsed_dependencies);
+                                   parsed_dependencies, {}, ctx.profiler);
 }
 
 }  // namespace pipeline
