@@ -15,6 +15,8 @@
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
 #include "i18n/language.h"
+#include "pkg/version.h"
+#include "pkg/version_req.h"
 #include "source/source.h"
 
 namespace pkg {

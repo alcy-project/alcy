@@ -955,39 +955,65 @@ TEST_CASE("Resolve prefers a package root over a same-named module") {
 }
 
 TEST_CASE("Module tree verification rejects malformed trees") {
-  const ModuleTree empty{.modules = {}, .root = 0};
+  const ModuleTree empty{.modules = {},
+                         .root = 0,
+                         .package_roots = {},
+                         .module_roots = {},
+                         .package_policies = {}};
   CHECK(verify_module_tree(empty).is_err());
 
   ModuleNode node;
   node.path = "";
   node.file = source::UNKNOWN_FILE;
   ModuleNode* const one[] = {&node};
-  const ModuleTree bad_root{.modules = {one, 1}, .root = 5};
+  const ModuleTree bad_root{.modules = {one, 1},
+                            .root = 5,
+                            .package_roots = {},
+                            .module_roots = {},
+                            .package_policies = {}};
   CHECK(verify_module_tree(bad_root).is_err());
 
   ModuleNode* const null_entry[] = {nullptr};
-  const ModuleTree null_module{.modules = {null_entry, 1}, .root = 0};
+  const ModuleTree null_module{.modules = {null_entry, 1},
+                               .root = 0,
+                               .package_roots = {},
+                               .module_roots = {},
+                               .package_policies = {}};
   CHECK(verify_module_tree(null_module).is_err());
 
-  const ModuleTree bad_prelude{
-      .modules = {one, 1}, .root = 0, .prelude_modules = 2};
+  const ModuleTree bad_prelude{.modules = {one, 1},
+                               .root = 0,
+                               .prelude_modules = 2,
+                               .package_roots = {},
+                               .module_roots = {},
+                               .package_policies = {}};
   CHECK(verify_module_tree(bad_prelude).is_err());
 
   const u32 one_root[] = {NO_PACKAGE_ROOT, NO_PACKAGE_ROOT};
-  const ModuleTree bad_module_roots{
-      .modules = {one, 1}, .root = 0, .module_roots = {one_root, 2}};
+  const ModuleTree bad_module_roots{.modules = {one, 1},
+                                    .root = 0,
+                                    .package_roots = {},
+                                    .module_roots = {one_root, 2},
+                                    .package_policies = {}};
   CHECK(verify_module_tree(bad_module_roots).is_err());
 
   const u32 covered[] = {NO_PACKAGE_ROOT};
-  const ModuleTree valid{
-      .modules = {one, 1}, .root = 0, .module_roots = {covered, 1}};
+  const ModuleTree valid{.modules = {one, 1},
+                         .root = 0,
+                         .package_roots = {},
+                         .module_roots = {covered, 1},
+                         .package_policies = {}};
   CHECK(verify_module_tree(valid).is_ok());
 }
 
 TEST_CASE("Check package rejects a malformed module tree") {
   Fixture f;
   ir::SymbolTable strings{mem::page_size()};
-  const ModuleTree empty{.modules = {}, .root = 0};
+  const ModuleTree empty{.modules = {},
+                         .root = 0,
+                         .package_roots = {},
+                         .module_roots = {},
+                         .package_policies = {}};
   CHECK(check_package(empty, ir::PointerWidth::W64, f.ast, f.bag, strings)
             .is_err());
   CHECK(f.bag.has_errors());

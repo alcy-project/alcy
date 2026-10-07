@@ -87,7 +87,7 @@ struct CliConfig {
   // scaffolds a suite, and an empty value scaffolds a package (which
   // joins an enclosing suite when one is found). Borrows argv storage
   // like target_dir.
-  std::string_view suite = {};
+  std::string_view suite = "";
   // Emit the result as one JSON document on standard output instead of
   // the text report, for an editor or another tool reading it.
   bool json = false;

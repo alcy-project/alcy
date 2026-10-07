@@ -110,25 +110,21 @@ struct ModuleTree {
   // The package roots besides the package's own: staged
   // standard-library members and path dependencies, each behind a
   // fileless root a `use` or a qualified path spells the identity of.
-  // NOLINTNEXTLINE(readability-redundant-member-init)
-  std::span<const PackageRoot> package_roots = {};
+  std::span<const PackageRoot> package_roots;
   // The package root each module belongs to, or NO_PACKAGE_ROOT for
   // the package's own modules and the staged standard library's. A
   // `use` from inside a package stays inside it, so the export list
   // does not trim it. Empty in a hand-built tree, which reads as no
   // module belonging to a package root.
-  // NOLINTNEXTLINE(readability-redundant-member-init)
-  std::span<const u32> module_roots = {};
+  std::span<const u32> module_roots;
   // The root package's own identity: the `[package] name` a `use`
   // cannot spell, which its modules belong to. Borrowed like the
   // identities above.
-  // NOLINTNEXTLINE(readability-redundant-member-init)
-  std::string_view package_name = {};
+  std::string_view package_name = "";
   // Every package's spec policy, root, dependencies, and staged
   // members alike. Empty in a hand-built tree, which reads as every
   // spec being open.
-  // NOLINTNEXTLINE(readability-redundant-member-init)
-  std::span<const PackagePolicy> package_policies = {};
+  std::span<const PackagePolicy> package_policies;
 
   // The package root `module` belongs to, or NO_PACKAGE_ROOT. Trees
   // built by resolve_modules carry one entry per module; a hand-built

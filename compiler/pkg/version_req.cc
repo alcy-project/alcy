@@ -5,7 +5,10 @@
 
 #include <charconv>
 #include <limits>
+#include <string_view>
 #include <system_error>
+
+#include "pkg/version.h"
 
 namespace pkg {
 

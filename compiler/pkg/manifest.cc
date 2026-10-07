@@ -17,6 +17,8 @@
 #include "fpag/mem/arena.h"
 #include "i18n/messages.h"
 #include "pkg/arena_copy.h"
+#include "pkg/version.h"
+#include "pkg/version_req.h"
 #include "source/source.h"
 
 // clang-format off
