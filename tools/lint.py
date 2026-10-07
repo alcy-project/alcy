@@ -145,6 +145,11 @@ def create_commands(
             base_cpplint_cmd.append("--quiet")
         commands.append(base_cpplint_cmd + files)
 
+    # The rules' own tests: the scan over the tree is part of the format
+    # dry run, but whether the rules still pass their cases is its own
+    # question.
+    commands.append(["uv", "run", "ast-grep", "test"])
+
     return commands
 
 
@@ -196,6 +201,7 @@ def lint_files(
             failed = True
 
     files, comp_files, header_files = target_files(target_dirs)
+    enumerated = len(files) + len(comp_files) + len(header_files)
 
     # Check that all source and header files under project_source_dirs remain pure ASCII
     all_source_files = sorted(set(files + comp_files + header_files))
@@ -223,7 +229,7 @@ def lint_files(
     # A lint that lints nothing is not a pass: a source directory that no
     # longer exists leaves every check silently unapplied, which is exactly
     # what a tree reorganization looks like from here.
-    if len(commands) == 0:
+    if enumerated == 0:
         print("None of the files were linted")
         failed = True
 

@@ -3,6 +3,7 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -79,6 +80,37 @@ def create_commands(target_dirs: list[Path], dry_run: bool) -> list[list[str]]:
     return commands
 
 
+def tool_commands(dry_run: bool) -> list[list[str]]:
+    """The tree's other formatters and rule fixes.
+
+    Each has a fix and the check a dry run reports in its place: the
+    ast-grep rules rewrite before clang-format normalizes what they
+    wrote, ruff's fixes run before its formatter, and rumdl fixes
+    markdown. `taplo` is a system tool rather than a uv dependency, so
+    it runs when it is on PATH and says so when it is not; CI's tree
+    checks enforce it either way.
+    """
+    commands: list[list[str]] = []
+    commands.append(
+        ["uv", "run", "ast-grep", "scan", "--error", "compiler"]
+        if dry_run
+        else ["uv", "run", "ast-grep", "scan", "-U", "compiler"]
+    )
+    if shutil.which("taplo") is not None:
+        commands.append(["taplo", "fmt", "--check"] if dry_run else ["taplo", "fmt"])
+    else:
+        print("note: taplo not on PATH, so the TOML formatting did not run")
+    if dry_run:
+        commands.append(["uv", "run", "rumdl", "check", "."])
+        commands.append(["uv", "run", "ruff", "check", "tools"])
+        commands.append(["uv", "run", "ruff", "format", "--check", "tools"])
+    else:
+        commands.append(["uv", "run", "rumdl", "check", "--fix", "."])
+        commands.append(["uv", "run", "ruff", "check", "--fix", "tools"])
+        commands.append(["uv", "run", "ruff", "format", "tools"])
+    return commands
+
+
 def format_files(dry_run: bool) -> int:
     ok = header_license.apply_to_files(dry_run)
     target_dirs = []
@@ -89,7 +121,9 @@ def format_files(dry_run: bool) -> int:
 
         target_dirs.append(d)
 
-    commands = create_commands(target_dirs, dry_run)
+    # The rule fixes come before clang-format, so the final pass
+    # normalizes whatever they rewrote.
+    commands = tool_commands(dry_run) + create_commands(target_dirs, dry_run)
     # Every command's exit code is the gate; a discarded one lets both
     # clang-format drift and a license that would be applied pass.
     for cmd in commands:

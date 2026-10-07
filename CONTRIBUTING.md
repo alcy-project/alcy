@@ -18,18 +18,10 @@ uv run ./tools/build.py --target=all --mode=debug
 uv run ./tools/run.py --target=tests --mode=debug
 uv run ./tools/check_e2e.py
 uv run ./tools/check_exe.py
+# lint.py also runs the tree's TOML, Markdown, rule, and Python checks.
 uv run ./tools/lint.py
 uv run ./tools/format.py --dry-run
 uv run ./tools/verify_static_linkage.py --build-dir=out/build
-
-# The tree's TOML, Markdown, rule, and Python checks. taplo is in the
-# Nix shell; the rest run through uv, which pins them in uv.lock:
-taplo fmt --check
-uv run rumdl check .
-uv run ast-grep test
-uv run ast-grep scan --error compiler
-uv run ruff check tools
-uv run ruff format --check tools
 
 # The grammar needs no toolchain but the tree-sitter CLI and Node:
 uv run ./tools/check_treesitter.py --grammar
@@ -66,25 +58,26 @@ measurements, and
 [compiler/docs/performance.md](compiler/docs/performance.md) is the loop they
 are steps in.
 
-To automatically fix code style and lint issues:
+To fix code style and lint issues:
 
 ```bash
-# Apply code formatting
+# Everything the tools can fix: clang-format and license headers over
+# the sources, gn format, ast-grep's rule fixes, rumdl, and ruff --
+# plus taplo when it is on PATH.
 uv run ./tools/format.py
 
-# Fix lint issues (clang-tidy, clang-include-cleaner, etc.)
+# Lint, with clang-tidy's fixes applied first:
 uv run ./tools/lint.py --fix
 
-# Also apply fixes that may require manual verification
+# The same, allowing fixes that may need a manual look:
 uv run ./tools/lint.py --fix-errors
-
-# The tree's other formatters and rule fixes:
-taplo fmt
-uv run rumdl check --fix .
-uv run ast-grep scan -U compiler
-uv run ruff format tools
-
 ```
+
+`uv run ./tools/format.py --dry-run` reports the same checks without
+writing, and `uv run ./tools/lint.py` runs them plus clang-tidy and
+cpplint. `taplo` is a system tool rather than a uv dependency: the
+scripts use it when it is installed, and CI's tree checks enforce it
+regardless.
 
 Please make sure the CI pass before requesting a review.
 
