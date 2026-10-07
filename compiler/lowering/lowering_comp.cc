@@ -81,7 +81,7 @@ bool Lowerer::comp_eval_literal(u32 mod, ast::ExprIdx expr, CompVal& out) {
   }
   if (lit.kind == ast::LiteralKind::Integer) {
     out.value.tag = CompValue::Tag::Int;
-    out.value.int_value = parse_numeric_value(lit.spelling);
+    out.value.int_value = comp::parse_numeric_value(lit.spelling);
     if (lit.is_negative) {
       out.value.int_value = 0 - out.value.int_value;
     }
@@ -185,7 +185,7 @@ bool Lowerer::comp_match_pattern(u32 mod,
         if (value.value.tag != CompValue::Tag::Int) {
           return false;
         }
-        u64 expected = parse_numeric_value(lit.spelling);
+        u64 expected = comp::parse_numeric_value(lit.spelling);
         if (lit.is_negative) {
           expected = 0 - expected;
         }
