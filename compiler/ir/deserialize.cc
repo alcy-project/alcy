@@ -6,12 +6,14 @@
 #include <array>
 #include <bit>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "debug/check.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/str/string_pool_id.h"
@@ -29,6 +31,7 @@
 #include "ir/register.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/verifier.h"
 
@@ -131,8 +134,8 @@ class Cursor {
 // is assembled.
 struct Parsed {
   StorageState state;
-  std::unique_ptr<str::StringInterner> strings =
-      std::make_unique<str::StringInterner>();
+  std::unique_ptr<ir::SymbolTable> strings =
+      std::make_unique<ir::SymbolTable>();
   std::vector<str::StringPoolId> string_ids;
   std::vector<std::string> file_names;
   std::vector<u64> file_hashes;
@@ -191,7 +194,13 @@ bool read_strings(Parsed& parsed, std::span<const u8> payload) {
     }
     const std::string_view text(reinterpret_cast<const char*>(bytes.data()),
                                 bytes.size());
-    parsed.string_ids.push_back(parsed.strings->intern(text));
+    // The bytes belong to the buffer this reader was handed, so the table
+    // keeps a copy of each name rather than a view of it.
+    const std::optional<str::StringPoolId> id =
+        parsed.strings->intern_copied(text);
+    CHECK_MSG(id.has_value(),
+              "the name table is full; a read interns the names a package has");
+    parsed.string_ids.push_back(id.value_or(str::INVALID_STRING_POOL_ID));
   }
   return cursor.at() == payload.size();
 }

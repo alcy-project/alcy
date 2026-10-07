@@ -30,10 +30,10 @@
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
 #include "ir/verifier.h"
-#include "symbol/symbol_table.h"
 
 namespace analyzer {
 
@@ -41,7 +41,7 @@ Checker::Checker(const ModuleTree& tree,
                  ir::PointerWidth width,
                  ast::AstArena& ast,
                  diag::DiagBag& bag,
-                 symbol::SymbolTable& strings,
+                 ir::SymbolTable& strings,
                  std::span<const StdHint> std_hints,
                  debug::Profiler* profiler)
     : tree(tree),
@@ -4713,7 +4713,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     ir::PointerWidth width,
     ast::AstArena& ast,
     diag::DiagBag& bag,
-    symbol::SymbolTable& strings,
+    ir::SymbolTable& strings,
     std::span<const StdHint> std_hints,
     debug::Profiler* profiler) {
   // Consumer precondition: the tree shape and every arena index the

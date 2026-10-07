@@ -19,8 +19,8 @@
 #include "fpag/debug/profiler/profiler.h"
 #include "ir/common.h"
 #include "ir/storage.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
-#include "symbol/symbol_table.h"
 
 namespace analyzer {
 
@@ -263,7 +263,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     ir::PointerWidth width,
     ast::AstArena& ast,
     diag::DiagBag& bag,
-    symbol::SymbolTable& strings,
+    ir::SymbolTable& strings,
     std::span<const StdHint> std_hints = {},
     debug::Profiler* profiler = nullptr);
 

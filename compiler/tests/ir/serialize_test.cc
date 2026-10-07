@@ -9,15 +9,15 @@
 
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
-#include "fpag/str/string_interner.h"
 #include "ir/binary_format.h"
 #include "ir/storage.h"
+#include "ir/symbol_table.h"
 #include "tests/ir/ir_fixtures.h"
 
 namespace ir {
 
 TEST_CASE("The binary form frames its sections and hashes its bytes") {
-  str::StringInterner strings;
+  ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);
   const std::vector<u8> bytes = test::composite_bytes(strings, storage);
   const std::span<const u8> file(bytes);
@@ -56,7 +56,7 @@ TEST_CASE("The binary form frames its sections and hashes its bytes") {
 }
 
 TEST_CASE("The binary form holds the strings the tables reference") {
-  str::StringInterner strings;
+  ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);
   const std::vector<u8> bytes = test::composite_bytes(strings, storage);
   const std::span<const u8> file(bytes);
@@ -86,7 +86,7 @@ TEST_CASE("The binary form holds the strings the tables reference") {
 }
 
 TEST_CASE("The same package serializes to the same bytes") {
-  str::StringInterner strings;
+  ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);
   const std::vector<u8> first = test::composite_bytes(strings, storage);
   const std::vector<u8> second = test::composite_bytes(strings, storage);

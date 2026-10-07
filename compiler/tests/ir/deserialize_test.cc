@@ -12,11 +12,11 @@
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/str/string_interner.h"
 #include "ir/binary_format.h"
 #include "ir/common.h"
 #include "ir/serialize.h"
 #include "ir/storage.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/write_input.h"
 #include "tests/ir/ir_fixtures.h"
@@ -58,7 +58,7 @@ struct LoadedInput {
 }  // namespace
 
 TEST_CASE("A serialized package reads back as the same bytes") {
-  str::StringInterner strings;
+  ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);
   const std::vector<u8> bytes = test::composite_bytes(strings, storage);
 
@@ -95,7 +95,7 @@ TEST_CASE("A serialized package reads back as the same bytes") {
 }
 
 TEST_CASE("A corrupt binary form is refused") {
-  str::StringInterner strings;
+  ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);
   const std::vector<u8> bytes = test::composite_bytes(strings, storage);
   const std::span<const u8> file(bytes);

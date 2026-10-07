@@ -28,10 +28,10 @@
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/verifier.h"
 #include "lowering/lowering.h"
-#include "symbol/symbol_table.h"
 
 namespace lowering {
 
@@ -61,7 +61,7 @@ class Lowerer {
   ir::StorageBuilder builder;
   ir::PointerWidth width;
   ast::AstArena& ast;
-  symbol::SymbolTable& strings;
+  ir::SymbolTable& strings;
   diag::DiagBag& bag;
   bool failed = false;
   // Set once the shared table has no room for another name; the loop
@@ -179,7 +179,7 @@ class Lowerer {
   Lowerer(analyzer::CheckedPackage package,
           ir::PointerWidth width,
           ast::AstArena& ast,
-          symbol::SymbolTable& strings,
+          ir::SymbolTable& strings,
           diag::DiagBag& bag,
           debug::Profiler* profiler = nullptr);
   void unsupported(diag::Span span, std::string_view what);

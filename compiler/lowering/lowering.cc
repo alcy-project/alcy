@@ -38,11 +38,11 @@
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/verifier.h"
 #include "lowering/diag_code.h"
 #include "lowering/lowerer.h"
-#include "symbol/symbol_table.h"
 
 namespace lowering {
 
@@ -87,7 +87,7 @@ bool Lowerer::terminated_cur() {
 Lowerer::Lowerer(analyzer::CheckedPackage package,
                  ir::PointerWidth width,
                  ast::AstArena& ast,
-                 symbol::SymbolTable& strings,
+                 ir::SymbolTable& strings,
                  diag::DiagBag& bag,
                  debug::Profiler* profiler)
     : pkg(std::move(package)),
@@ -1188,7 +1188,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     analyzer::CheckedPackage package,
     ir::PointerWidth width,
     ast::AstArena& ast,
-    symbol::SymbolTable& strings,
+    ir::SymbolTable& strings,
     diag::DiagBag& bag,
     debug::Profiler* profiler) {
   Lowerer lowerer(std::move(package), width, ast, strings, bag, profiler);

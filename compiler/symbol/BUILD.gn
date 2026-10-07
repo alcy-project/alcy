@@ -5,8 +5,6 @@ source_set("symbol") {
   sources = [
     "mangle.cc",
     "mangle.h",
-    "symbol_table.cc",
-    "symbol_table.h",
   ]
   deps = [
     "//compiler:base_modules",

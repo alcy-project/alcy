@@ -11,9 +11,9 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/storage.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 
 namespace ir {
@@ -60,9 +60,9 @@ struct LoadedIr {
   LoadedIr& operator=(const LoadedIr&) = delete;
 
   VerifiedStorage storage;
-  // The interner the storage's ids resolve in. Held by pointer because
-  // the pool a StringInterner owns is not movable.
-  std::unique_ptr<str::StringInterner> strings;
+  // The table the storage's ids resolve in. Held by pointer because the ids
+  // are indices into it and the names it copied must stay where they are.
+  std::unique_ptr<ir::SymbolTable> strings;
   std::vector<diag::Span> instr_spans;
   std::vector<std::string> file_names;
   std::vector<u64> file_hashes;

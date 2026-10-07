@@ -11,7 +11,6 @@
 
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
-#include "fpag/str/string_interner.h"
 #include "fpag/str/string_pool_id.h"
 #include "ir/binary_format.h"
 #include "ir/common.h"
@@ -26,6 +25,7 @@
 #include "ir/serialize.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/write_input.h"
 
@@ -80,7 +80,7 @@ inline usize section_at(std::span<const u8> bytes, binary::Section kind) {
 // A package with one function, one external, spans, an address name, and
 // every composite table populated, so a writer's sections all carry a
 // row.
-inline Storage composite_storage(str::StringInterner& strings) {
+inline Storage composite_storage(ir::SymbolTable& strings) {
   StorageBuilder builder;
   const TypeIdx i32 = builder.primitive(TypeTag::I32);
   const TypeIdx u32 = builder.primitive(TypeTag::U32);
@@ -183,7 +183,7 @@ inline Storage composite_storage(str::StringInterner& strings) {
 }
 
 // The bytes `composite_storage` writes, with its side tables.
-inline std::vector<u8> composite_bytes(str::StringInterner& strings,
+inline std::vector<u8> composite_bytes(ir::SymbolTable& strings,
                                        const Storage& storage) {
   const std::array<std::string_view, 1> names{"main.al"};
   const std::array<AddrName, 1> addr_names{

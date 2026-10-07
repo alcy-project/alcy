@@ -13,7 +13,6 @@ source_set("borrow") {
     "//compiler/i18n",
     "//compiler/ir",
     "//compiler/lowering",
-    "//compiler/symbol",
   ]
   configs += [ "//compiler:alcy_config" ]
 }

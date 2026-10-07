@@ -18,12 +18,12 @@
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
 #include "i18n/language.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "lowering/lowering.h"
 #include "pipeline/parse.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
-#include "symbol/symbol_table.h"
 #include "tests/util/virtual_source.h"
 
 namespace borrow {
@@ -38,7 +38,7 @@ struct Fixture {
   ast::AstArena& ast = ctx.ast;
   diag::DiagBag& bag = ctx.bag;
   source::SourceManager& sources = ctx.sources;
-  symbol::SymbolTable& strings = ctx.strings;
+  ir::SymbolTable& strings = ctx.strings;
 };
 
 // The sources one case declared, held in memory. It stands in for a

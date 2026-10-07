@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "symbol/symbol_table.h"
+#include "ir/symbol_table.h"
 
 #include <cstring>
 #include <optional>
@@ -14,7 +14,7 @@
 #include "debug/dcheck.h"
 #include "fpag/hash/xxh3_hasher.h"
 
-namespace symbol {
+namespace ir {
 
 namespace {
 
@@ -204,4 +204,4 @@ SymbolTable::Id SymbolTable::intern(std::string_view name) {
   return id.value_or(str::INVALID_STRING_POOL_ID);
 }
 
-}  // namespace symbol
+}  // namespace ir

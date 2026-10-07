@@ -25,10 +25,10 @@
 #include "ir/instruction.h"
 #include "ir/opcode.h"
 #include "ir/storage.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
 #include "lowering/lowering.h"
-#include "symbol/symbol_table.h"
 
 namespace borrow {
 
@@ -166,7 +166,7 @@ class Checker {
   Checker(const lowering::LoweredPackage& lowered,
           const ir::Storage& storage,
           diag::DiagBag& bag,
-          symbol::SymbolTable& strings,
+          ir::SymbolTable& strings,
           debug::Profiler* profiler = nullptr)
       : lowered(lowered),
         storage(storage),
@@ -177,7 +177,7 @@ class Checker {
   const lowering::LoweredPackage& lowered;
   const ir::Storage& storage;
   diag::DiagBag& bag;
-  symbol::SymbolTable& strings;
+  ir::SymbolTable& strings;
   // Where the trace events go, or nothing. The two sweeps - summaries,
   // then the check - run function by function on the caller's thread,
   // and each function body gets its own region under "borrow".
@@ -1661,7 +1661,7 @@ class Checker {
 base::Result<void, diag::Reported> check_borrows(
     const lowering::LoweredPackage& lowered,
     diag::DiagBag& bag,
-    symbol::SymbolTable& strings,
+    ir::SymbolTable& strings,
     debug::Profiler* profiler) {
   const u32 errors = bag.error_count();
   Checker checker{lowered, *lowered.storage, bag, strings, profiler};

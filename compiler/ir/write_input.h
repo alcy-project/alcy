@@ -8,9 +8,9 @@
 
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
-#include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/storage.h"
+#include "ir/symbol_table.h"
 
 namespace ir {
 
@@ -43,7 +43,7 @@ struct AddrName {
 // means the package carries none of that piece.
 struct WriteInput {
   const Storage* storage = nullptr;
-  const str::StringInterner* strings = nullptr;
+  const ir::SymbolTable* strings = nullptr;
   // Parallel to the instruction table; empty when the package has none.
   std::span<const diag::Span> instr_spans;
   FileTable files;

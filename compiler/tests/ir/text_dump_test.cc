@@ -11,7 +11,6 @@
 #include "doctest/doctest.h"
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
-#include "fpag/str/string_interner.h"
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 #include "ir/external_function.h"
@@ -21,6 +20,7 @@
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/write_input.h"
 
@@ -30,7 +30,7 @@ namespace {
 
 // Two parameters and a branch, so the dump covers block parameters,
 // block labels, a terminator with block operands, and a binary op.
-Storage branch_storage(str::StringInterner& strings) {
+Storage branch_storage(ir::SymbolTable& strings) {
   StorageBuilder builder;
   const TypeIdx i1 = builder.primitive(TypeTag::I1);
   const TypeIdx i32 = builder.primitive(TypeTag::I32);
@@ -116,7 +116,7 @@ Storage branch_storage(str::StringInterner& strings) {
 }
 
 // An alloca with a name and spans, so the dump covers the comment parts.
-Storage named_alloca_storage(str::StringInterner& strings) {
+Storage named_alloca_storage(ir::SymbolTable& strings) {
   StorageBuilder builder;
   const TypeIdx i32 = builder.primitive(TypeTag::I32);
 
@@ -180,7 +180,7 @@ Storage named_alloca_storage(str::StringInterner& strings) {
 }  // namespace
 
 TEST_CASE("The text view names blocks and values by their storage indices") {
-  str::StringInterner strings;
+  ir::SymbolTable strings;
   const Storage storage = branch_storage(strings);
 
   const WriteInput input{
@@ -210,7 +210,7 @@ TEST_CASE("The text view names blocks and values by their storage indices") {
 }
 
 TEST_CASE("Address names and spans ride as comments") {
-  str::StringInterner strings;
+  ir::SymbolTable strings;
   const Storage storage = named_alloca_storage(strings);
 
   const std::array<std::string_view, 1> names{"main.al"};
@@ -249,7 +249,7 @@ TEST_CASE("Address names and spans ride as comments") {
 
 TEST_CASE("The preamble declares composites and externs") {
   StorageBuilder builder;
-  str::StringInterner strings;
+  ir::SymbolTable strings;
   const TypeIdx i32 = builder.primitive(TypeTag::I32);
   const TypeIdx ptr = builder.primitive(TypeTag::Ptr);
   const TypeIdx u32 = builder.primitive(TypeTag::U32);

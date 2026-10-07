@@ -16,8 +16,8 @@
 #include "fpag/debug/profiler/profiler.h"
 #include "fpag/mem/arena.h"
 #include "i18n/language.h"
+#include "ir/symbol_table.h"
 #include "source/source.h"
-#include "symbol/symbol_table.h"
 
 namespace pipeline {
 
@@ -28,7 +28,7 @@ struct PipelineContext {
   diag::DiagBag bag;
   // Long-lived string pool for lowering and codegen (function names,
   // string literals). Must outlive every phase that reads its ids.
-  symbol::SymbolTable strings;
+  ir::SymbolTable strings;
   // The machine this run builds for: the host's triple and a 64-bit
   // pointer. One value, so the width the analyzer and lowering were
   // handed and the triple the backend writes cannot disagree, and so a

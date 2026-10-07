@@ -15,8 +15,8 @@
 #include "ir/common.h"
 #include "ir/function.h"
 #include "ir/storage.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
-#include "symbol/symbol_table.h"
 
 namespace codegen_llvm {
 
@@ -31,7 +31,7 @@ class LlvmIrEmitter {
   // StorageBuilder::build.
   LlvmIrEmitter(llvm::Module* module,
                 ir::VerifiedStorage storage,
-                symbol::SymbolTable* interner,
+                ir::SymbolTable* interner,
                 const Target& target,
                 bool emit_entry,
                 bool freestanding = false,
@@ -86,7 +86,7 @@ class LlvmIrEmitter {
   llvm::Module* module_;
   ir::VerifiedStorage storage_;
   std::unique_ptr<IRBuilder> builder_;
-  symbol::SymbolTable* interner_;
+  ir::SymbolTable* interner_;
   ir::PointerWidth width_;
   // The target's triple, kept for the freestanding exit sequence.
   std::string triple_;

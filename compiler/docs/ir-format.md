@@ -20,7 +20,7 @@ Both forms carry one lowered package:
 | Piece | Source |
 |---|---|
 | storage | the `ir::StorageState` tables (functions, blocks, block parameters, instructions, operands, registers, immutables, external functions, types and composites) |
-| strings | the `str::StringInterner` the storage's `StringPoolId`s resolve in |
+| strings | the `ir::SymbolTable` the storage's `StringPoolId`s resolve in |
 | instruction spans | one `diag::Span` per instruction, or none |
 | files | a name (and optionally a size and content hash) per `source::FileId` |
 | address names | `(register, name, is_param, is_capture)` per allocated place |

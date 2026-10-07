@@ -15,8 +15,8 @@
 #include "fpag/debug/profiler/profiler.h"
 #include "ir/common.h"
 #include "ir/storage.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
-#include "symbol/symbol_table.h"
 
 namespace lowering {
 
@@ -89,7 +89,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     analyzer::CheckedPackage package,
     ir::PointerWidth width,
     ast::AstArena& ast,
-    symbol::SymbolTable& strings,
+    ir::SymbolTable& strings,
     diag::DiagBag& bag,
     debug::Profiler* profiler = nullptr);
 

@@ -29,6 +29,7 @@
 #include "ir/operand.h"
 #include "ir/register.h"
 #include "ir/storage.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
 #include "ir/write_input.h"
@@ -81,7 +82,7 @@ class TextWriter {
  private:
   const WriteInput& input_;
   const StorageState& state_;
-  const str::StringInterner& strings_;
+  const ir::SymbolTable& strings_;
   std::span<const diag::Span> spans_;
   FileTable files_;
   std::span<const AddrName> addr_names_;

@@ -11,7 +11,7 @@
 #include "fpag/base/result.h"
 #include "ir/common.h"
 #include "ir/storage.h"
-#include "symbol/symbol_table.h"
+#include "ir/symbol_table.h"
 
 // Deterministic encoding of a linkable symbol from the signature it
 // names. Every symbol the compiler defines is encoded this way, so a
@@ -85,7 +85,7 @@ struct Demangled {
 // the same string, independent of the order items were lowered in.
 std::string mangle(const Signature& signature,
                    const ir::Storage& types,
-                   const SymbolTable& strings);
+                   const ir::SymbolTable& strings);
 
 // Recovers a signature. A symbol that is truncated, carries an
 // unknown version, or is not alcy's becomes a structured error

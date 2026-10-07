@@ -22,7 +22,6 @@ source_set("analyzer") {
     "//compiler/ir",
     "//compiler/path",
     "//compiler/source",
-    "//compiler/symbol",
     "//compiler/text",
   ]
   configs += [ "//compiler:alcy_config" ]

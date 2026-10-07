@@ -24,11 +24,11 @@
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/storage.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
 #include "llvm/IR/InlineAsm.h"
 #include "symbol/mangle.h"
-#include "symbol/symbol_table.h"
 
 #if BUILD_FLAG(IS_DEBUG)
 #include "ir/formatter.h"  // IWYU pragma: keep
@@ -38,7 +38,7 @@ namespace codegen_llvm {
 
 LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
                              ir::VerifiedStorage storage,
-                             symbol::SymbolTable* interner,
+                             ir::SymbolTable* interner,
                              const Target& target,
                              bool emit_entry,
                              bool freestanding,

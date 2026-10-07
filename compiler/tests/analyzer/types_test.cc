@@ -24,11 +24,11 @@
 #include "i18n/language.h"
 #include "ir/common.h"
 #include "ir/storage.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "pipeline/parse.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
-#include "symbol/symbol_table.h"
 #include "tests/util/virtual_source.h"
 
 namespace analyzer {
@@ -48,7 +48,7 @@ struct Fixture {
   ast::AstArena& ast = ctx.ast;
   diag::DiagBag& bag = ctx.bag;
   source::SourceManager& sources = ctx.sources;
-  symbol::SymbolTable& strings = ctx.strings;
+  ir::SymbolTable& strings = ctx.strings;
 };
 
 // The sources one case declares, held in memory. It stands in for a

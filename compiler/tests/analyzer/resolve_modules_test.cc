@@ -23,11 +23,11 @@
 #include "fpag/mem/arena.h"
 #include "fpag/mem/page_allocator.h"
 #include "i18n/language.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "pipeline/parse.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
-#include "symbol/symbol_table.h"
 #include "tests/util/virtual_source.h"
 
 namespace analyzer {
@@ -986,7 +986,7 @@ TEST_CASE("Module tree verification rejects malformed trees") {
 
 TEST_CASE("Check package rejects a malformed module tree") {
   Fixture f;
-  symbol::SymbolTable strings{mem::page_size()};
+  ir::SymbolTable strings{mem::page_size()};
   const ModuleTree empty{.modules = {}, .root = 0};
   CHECK(check_package(empty, ir::PointerWidth::W64, f.ast, f.bag, strings)
             .is_err());

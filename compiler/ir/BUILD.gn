@@ -38,6 +38,8 @@ source_set("ir") {
     "storage.h",
     "storage_builder.cc",
     "storage_builder.h",
+    "symbol_table.cc",
+    "symbol_table.h",
     "text_dump.cc",
     "text_dump.h",
     "type.cc",

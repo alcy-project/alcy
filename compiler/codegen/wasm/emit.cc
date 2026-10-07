@@ -34,9 +34,9 @@
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/storage.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
-#include "symbol/symbol_table.h"
 
 namespace codegen::wasm {
 namespace {
@@ -104,7 +104,7 @@ bool is_terminator(ir::Opcode op) {
 // The `main` a binary runs, matching what the analyzer admits and the
 // LLVM backend's wrapper expects.
 bool is_entry_candidate(const ir::Storage& storage,
-                        symbol::SymbolTable& strings,
+                        ir::SymbolTable& strings,
                         const ir::Function& function) {
   if (function.meta.kind != ir::SymbolKind::Free) {
     return false;
@@ -1049,7 +1049,7 @@ u32 Emitter::data_for(std::string_view text) {
 }
 
 u32 Emitter::data_for(str::StringPoolId id) {
-  const u32 handle = symbol::handle_value(id);
+  const u32 handle = ir::handle_value(id);
   const auto found = string_data_.find(handle);
   if (found != string_data_.end()) {
     return found->second;

@@ -12,7 +12,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/str/string_pool_id.h"
 
-namespace symbol {
+namespace ir {
 
 // The value behind a handle, for a table that keys by it.
 [[nodiscard]] constexpr u32 handle_value(str::StringPoolId id) {
@@ -117,4 +117,4 @@ class SymbolTable {
   usize max_names_ = MAX_NAMES;
 };
 
-}  // namespace symbol
+}  // namespace ir

@@ -6,8 +6,8 @@
 #include "diag/bag.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profiler.h"
+#include "ir/symbol_table.h"
 #include "lowering/lowering.h"
-#include "symbol/symbol_table.h"
 
 namespace borrow {
 
@@ -23,7 +23,7 @@ namespace borrow {
 base::Result<void, diag::Reported> check_borrows(
     const lowering::LoweredPackage& lowered,
     diag::DiagBag& bag,
-    symbol::SymbolTable& strings,
+    ir::SymbolTable& strings,
     debug::Profiler* profiler = nullptr);
 
 }  // namespace borrow

@@ -23,7 +23,7 @@
 #include "ir/instruction.h"
 #include "ir/operand.h"
 #include "ir/storage.h"
-#include "symbol/symbol_table.h"
+#include "ir/symbol_table.h"
 
 namespace codegen::wasm {
 
@@ -177,7 +177,7 @@ class Emitter {
   // --- module state ---
   ir::Storage storage_;
   std::span<const diag::Span> spans_;
-  symbol::SymbolTable* strings_;
+  ir::SymbolTable* strings_;
   diag::DiagBag* bag_;
   codegen::Target target_;
   bool emit_entry_;

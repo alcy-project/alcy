@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "symbol/symbol_table.h"
+#include "ir/symbol_table.h"
 
 #include <string>
 #include <string_view>
@@ -12,7 +12,7 @@
 
 namespace {
 
-using symbol::SymbolTable;
+using ir::SymbolTable;
 
 // An id a test can compare against when interning was expected to answer and
 // did not; no name is ever given this handle.
