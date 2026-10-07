@@ -386,6 +386,17 @@ ast::ItemIdx Parser::parse_item() {
   }
   const bool is_pub = match(lexer::TokenKind::Pub);
   const bool is_unsafe = match(lexer::TokenKind::Unsafe);
+  // `comp` in item position marks a free function (ADR-0054); a
+  // receiver method keeps the marker for a later slice.
+  const lexer::Token comp_token = peek();
+  const bool is_comp = match(lexer::TokenKind::Comp);
+  if (is_comp && peek_kind() != lexer::TokenKind::Fn) {
+    const u32 index = bag_.emit<i18n::Key::ParserCompOnlyOnFunctions>(
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+        comp_token.span);
+    (void)index;
+    return ast::ItemIdx::invalid();
+  }
   // `unsafe` marks an operation, and only functions declare one, so
   // it is refused anywhere else rather than read past.
   const auto only_functions = [&] {
@@ -399,7 +410,7 @@ ast::ItemIdx Parser::parse_item() {
     return false;
   };
   switch (peek_kind()) {
-    case lexer::TokenKind::Fn: return parse_fn(is_pub, is_unsafe);
+    case lexer::TokenKind::Fn: return parse_fn(is_pub, is_unsafe, is_comp);
     case lexer::TokenKind::Intrinsic:
       return parse_intrinsic_fn(is_pub, is_unsafe);
     case lexer::TokenKind::Extern: {
@@ -557,7 +568,7 @@ bool Parser::parse_fn_signature(FnSignature& signature) {
   return true;
 }
 
-ast::ItemIdx Parser::parse_fn(bool is_pub, bool is_unsafe) {
+ast::ItemIdx Parser::parse_fn(bool is_pub, bool is_unsafe, bool is_comp) {
   const usize mark = pos_;
   FnSignature signature;
   if (!parse_fn_signature(signature)) {
@@ -578,6 +589,7 @@ ast::ItemIdx Parser::parse_fn(bool is_pub, bool is_unsafe) {
       .return_type = signature.return_type,
       .body = body,
       .is_unsafe = is_unsafe,
+      .is_comp = is_comp,
   });
   return ast_.items.push_back(node);
 }
@@ -910,8 +922,8 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
     if (match(lexer::TokenKind::Semicolon)) {
       continue;
     }
-    ast::ItemIdx method =
-        parse_fn(match(lexer::TokenKind::Pub), match(lexer::TokenKind::Unsafe));
+    ast::ItemIdx method = parse_fn(match(lexer::TokenKind::Pub),
+                                   match(lexer::TokenKind::Unsafe), false);
     if (!method.is_valid()) {
       synchronize();
       continue;

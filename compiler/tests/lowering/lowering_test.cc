@@ -165,6 +165,24 @@ TEST_CASE("Lower evaluates a const item initializer") {
   CHECK(!f.bag.has_errors());
 }
 
+TEST_CASE("Lower evaluates a comp fn through a const item") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "comp fn twice(x: i32) -> i32 {\n"
+                   "  ret x * 2\n"
+                   "}\n"
+                   "const N: i32 = twice(21)\n"
+                   "\n"
+                   "fn main() -> i32 {\n"
+                   "  ret N - 42\n"
+                   "}\n"}});
+  Fixture f;
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.lowered.has_value());
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+}
+
 TEST_CASE("Lower reports a const cycle instead of recursing") {
   VirtualDir dir;
   write_all(dir, {{"main.al",

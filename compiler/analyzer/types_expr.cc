@@ -694,6 +694,12 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
         (void)index;
         return error_type();
       }
+      // A `comp fn` value outside comp evaluation is a deferred call
+      // that compilation cannot produce (ADR-0054).
+      if (fn->is_comp && comp_depth == 0) {
+        check_comp_fn_call(fn, span);
+        return error_type();
+      }
       bool plain = fn->item.is_valid() &&
                    ast.items[fn->item].kind != ast::ItemKind::Intrinsic;
       for (bool flag : comp_param_flags(fn->item)) {
@@ -1212,6 +1218,17 @@ void Checker::check_unsafe_call(const CheckedModule::FnSig* fn,
   (void)index;
 }
 
+void Checker::check_comp_fn_call(const CheckedModule::FnSig* fn,
+                                 diag::Span span) {
+  if (fn == nullptr || !fn->is_comp || comp_depth > 0) {
+    return;
+  }
+  const u32 index = bag.emit<i18n::Key::AnalyzerCompFunctionOutsideComp>(
+      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::InvalidOperation,
+      span, fn->name);
+  (void)index;
+}
+
 // An operation other than a call that the gate covers. The message
 // names the operation, so the diagnostic reads without the site.
 void Checker::require_unsafe(diag::Span span, std::string_view what) {
@@ -1281,6 +1298,7 @@ ir::TypeIdx Checker::check_call(u32 module,
       return error_type();
     }
     check_unsafe_call(fn, span);
+    check_comp_fn_call(fn, span);
     record_call(module, callee, fn);
     check_call_args(module, call.args, fn->params, comp_param_flags(fn->item),
                     span, fn->name, false);
@@ -1298,6 +1316,7 @@ ir::TypeIdx Checker::check_call(u32 module,
       return check_fmt_write(module, expr, expected, fn);
     }
     check_unsafe_call(fn, span);
+    check_comp_fn_call(fn, span);
     record_call(module, callee, fn);
     check_call_args(module, args, fn->params, comp_param_flags(fn->item), span,
                     fn->name, false);

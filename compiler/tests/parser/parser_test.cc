@@ -951,6 +951,26 @@ TEST_CASE("Parser reports a comp declaration") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Parser reads a comp fn item") {
+  Fixture f;
+  const ParseResult result =
+      parse("comp fn twice(x: i32) -> i32 { ret x * 2 }\n", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  CHECK(fn.is_comp);
+  CHECK(!fn.is_unsafe);
+}
+
+TEST_CASE("Parser rejects comp outside a function item") {
+  Fixture f;
+  const ParseResult result = parse("comp struct S {}\n", f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Parser accepts comp blocks") {
   Fixture f;
   const ParseResult result = parse("fn f() -> i32 { ret comp { 1 + 2 } }", f);

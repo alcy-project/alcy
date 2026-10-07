@@ -848,6 +848,9 @@ struct ItemFn {
   BlockIdx body = BlockIdx::invalid();
   // An `unsafe fn`: calling it is an operation that needs the gate.
   bool is_unsafe = false;
+  // A `comp fn`: the call is evaluated during compilation only
+  // (ADR-0054).
+  bool is_comp = false;
 };
 
 // A compiler-provided function: signature without a body. Calls

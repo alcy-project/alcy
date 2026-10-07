@@ -73,6 +73,9 @@ struct CheckedModule {
     // Calling this function is an operation that needs an unsafe
     // block (ADR-0050).
     bool is_unsafe = false;
+    // A `comp fn`: the call is evaluated during compilation only
+    // (ADR-0054).
+    bool is_comp = false;
     // An `extern "C"` declaration (ADR-0051): the name is the symbol
     // the linker resolves, and the body lives outside the program.
     bool is_extern = false;

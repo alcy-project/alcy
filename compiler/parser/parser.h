@@ -99,7 +99,7 @@ class Parser {
 
   // Items.
   ast::ItemIdx parse_item();
-  ast::ItemIdx parse_fn(bool is_pub, bool is_unsafe);
+  ast::ItemIdx parse_fn(bool is_pub, bool is_unsafe, bool is_comp);
   ast::ItemIdx parse_intrinsic_fn(bool is_pub, bool is_unsafe);
   ast::ItemIdx parse_extern(bool is_pub);
   bool parse_fn_params(std::vector<ast::ItemFnParam>& params);

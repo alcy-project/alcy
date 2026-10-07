@@ -2095,7 +2095,8 @@ void Checker::process_module(u32 module) {
                               .params = std::move(params),
                               .ret = ret,
                               .item = item,
-                              .is_unsafe = fn.is_unsafe});
+                              .is_unsafe = fn.is_unsafe,
+                              .is_comp = fn.is_comp});
         break;
       }
       case ast::ItemKind::Intrinsic: {
@@ -3526,6 +3527,12 @@ bool Checker::fn_is_unsafe(ast::ItemIdx item) const {
   return false;
 }
 
+bool Checker::fn_is_comp(ast::ItemIdx item) const {
+  const ast::ItemNode& node = ast.items[item];
+  return node.kind == ast::ItemKind::Fn &&
+         node.payload.get<ast::ItemFn>().is_comp;
+}
+
 std::span<const ast::Ident> Checker::fn_generic_params(
     ast::ItemIdx item) const {
   const ast::ItemNode& node = ast.items[item];
@@ -3666,7 +3673,8 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
                         .ret = ret,
                         .item = item,
                         .inst = NO_INST,
-                        .is_unsafe = fn_is_unsafe(item)});
+                        .is_unsafe = fn_is_unsafe(item),
+                        .is_comp = fn_is_comp(item)});
   const u32 sig_index = static_cast<u32>(modules[module].functions.size()) - 1;
   // Claim a slot in the shared instantiation numbering before checking
   // the body, so recursive calls key the same context.
@@ -4675,7 +4683,16 @@ void Checker::check_bodies() {
           }
           in_fn = false;
           scopes.emplace_back();
+          // A const initializer is a compile-time value, so the same
+          // restrictions as a comp block apply while it is checked.
+          const bool entered_comp = is_const;
+          if (entered_comp) {
+            ++comp_depth;
+          }
           const ir::TypeIdx actual = check_expr(m, init, &declared);
+          if (entered_comp) {
+            --comp_depth;
+          }
           unify(declared, actual, ast.exprs[init].span, "item initializer");
           scopes.pop_back();
           break;

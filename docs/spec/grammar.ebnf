@@ -25,7 +25,7 @@ item        = [ vis ] , ( fn_item | intrinsic_fn_item | extern_item
                         | struct_item | enum_item | impl_item
                         | spec_item | static_item | const_item | use_item ) ;
 vis         = "pub" ;
-fn_item     = [ "unsafe" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
+fn_item     = [ "comp" ] , [ "unsafe" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
             , [ "->" , type ] , block ;
               (* An `unsafe fn` hands its callers an operation that
                  needs the gate; the body is not one implicitly. See
@@ -236,11 +236,11 @@ DOC_COMMENT   = "///" , { ANY_BUT_NEWLINE } ;
  * Reserved: async await union register where dyn
  *   i128 u128
  * Contextual, and a keyword rather than a reserved word because it only
- *   has a meaning in one position: `comp` in signatures and blocks;
- *   `intrinsic` in item position; `spec` in item position; `for`
- *   in a loop head and in an `impl` header; `in` in a `for` head. Using
- *   one outside its position is an ordinary parse error rather than a
- *   reserved-name diagnostic. See docs/spec/keywords.md.
+ *   has a meaning in one position: `comp` in signatures, function items,
+ *   and blocks; `intrinsic` in item position; `spec` in item position;
+ *   `for` in a loop head and in an `impl` header; `in` in a `for` head.
+ *   Using one outside its position is an ordinary parse error rather
+ *   than a reserved-name diagnostic. See docs/spec/keywords.md.
  *
  * Nesting is bounded at 256 levels on expressions, types, blocks,
  * patterns, and items alike; exceeding it reports E3004/E4050/E5005.

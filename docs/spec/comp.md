@@ -20,6 +20,8 @@ comp_block := "comp" block
 - `fn repeat(comp n: usize, x: i32)` declares a compile-time parameter.
 - `comp { ... }` is an expression evaluated at compile time; its value
   splices into the surrounding runtime code.
+- `comp fn name(...) -> T { ... }` is a free function whose call is
+  evaluated during compilation (see "Functions" below).
 - Brace placement follows the Go-style rule in `grammar.md`: the `{`
   stays on the header line.
 
@@ -51,7 +53,21 @@ arrays composed of comp-known values.
 - Each distinct set of comp arguments specializes the function
   independently (monomorphization-like, as-if semantics; no code-shape
   contract is promised).
-- No `comp fn` marker exists at this stage (see Deferred).
+
+## Functions
+
+- `comp fn` marks a free function whose calls happen during
+  compilation: called from a `comp` block or another comp-evaluated
+  context, with comp-known arguments, its result splices as a
+  comp-known value.
+- Calling one outside comp evaluation, in a call or a value position,
+  is a compile-time error. There is no `const fn`; `comp` is the one
+  word for code evaluated during compilation.
+- A receiver method with the marker is deferred; `comp fn` is a free
+  function for now.
+- Only a tail `ret` is supported by the AST evaluator; an early `ret`
+  reached through a branch is a compile-time error until the IR
+  interpreter lands (see Deferred).
 
 ## Blocks
 
@@ -93,7 +109,7 @@ compile-time error.
 
 ## Deferred
 
-- `comp fn` markers as explicitness/optimization annotations.
+- Receiver methods with the `comp` marker.
 - `comp` in type positions (array lengths) and `const`-position
   extensions.
 - Floating-point evaluation, recursion policy beyond the step bound,

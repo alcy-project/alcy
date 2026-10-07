@@ -1975,6 +1975,55 @@ TEST_CASE("Check rejects non-comp-known const initializers") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Check rejects a comp fn call outside comp evaluation") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "comp fn twice(x: i32) -> i32 {\n"
+                                      "  ret x * 2\n"
+                                      "}\n"
+                                      "\n"
+                                      "fn main() -> i32 {\n"
+                                      "  ret twice(21)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(f.bag.size() == 1);
+  if (f.bag.size() != 1) {
+    return;
+  }
+  CHECK(f.bag.at(0)->message ==
+        "Function 'twice' is a `comp fn`; it can only be used during "
+        "compilation");
+}
+
+TEST_CASE("Check accepts comp fn calls during compilation") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "comp fn twice(x: i32) -> i32 {\n"
+                                      "  ret x * 2\n"
+                                      "}\n"
+                                      "\n"
+                                      "const N: i32 = twice(21)\n"
+                                      "\n"
+                                      "fn main() -> i32 {\n"
+                                      "  ret comp { twice(1) } + N\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
 TEST_CASE("Check rejects ret inside comp blocks") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",

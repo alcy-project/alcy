@@ -331,6 +331,8 @@ class Checker {
   // Whether calling the function or intrinsic item is an operation
   // that needs an unsafe block.
   bool fn_is_unsafe(ast::ItemIdx item) const;
+  // Whether the function item carries the `comp fn` marker (ADR-0054).
+  bool fn_is_comp(ast::ItemIdx item) const;
   // A type parameter a declared parameter type pins on its own. The
   // flags say where in the argument the bound type sits: `through_ref`
   // takes a reference's pointee, `through_raw` takes a raw pointer's,
@@ -655,6 +657,9 @@ class Checker {
   // A callee reached through a resolved signature: an unsafe one needs
   // an `unsafe { ... }` block at the call site (ADR-0050).
   void check_unsafe_call(const CheckedModule::FnSig* fn, diag::Span span);
+  // A `comp fn` call happens during compilation only; outside comp
+  // evaluation it is an error (ADR-0054).
+  void check_comp_fn_call(const CheckedModule::FnSig* fn, diag::Span span);
   // An operation the gate covers must name it: with no enclosing
   // `unsafe { ... }` block, the diagnostic names the operation
   // (ADR-0050).

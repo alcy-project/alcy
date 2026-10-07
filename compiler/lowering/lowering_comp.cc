@@ -433,6 +433,28 @@ bool Lowerer::comp_eval_block(u32 mod,
     out.value.type = builder.primitive(ir::TypeTag::Void);
     return true;
   }
+  // A trailing `ret` is the block's value in the syntax and a return
+  // in the flow: the evaluator needs the difference, so an early
+  // return reached through a branch fails loudly rather than splicing
+  // a wrong value.
+  if (ast.exprs[node.value].kind == ast::ExprKind::Return) {
+    const ast::ExprReturn& ret =
+        ast.exprs[node.value].payload.get<ast::ExprReturn>();
+    CompVal value;
+    if (ret.value.is_valid()) {
+      if (!comp_eval_expr(mod, ret.value, scope, value)) {
+        scope.frames.pop_back();
+        return false;
+      }
+    } else {
+      value.value.tag = CompValue::Tag::Void;
+      value.type = builder.primitive(ir::TypeTag::Void);
+    }
+    scope.frames.pop_back();
+    out.kind = CompFlow::Kind::Return;
+    out.value = std::move(value);
+    return true;
+  }
   CompVal value;
   const bool ok = comp_eval_expr(mod, node.value, scope, value);
   scope.frames.pop_back();
@@ -509,6 +531,25 @@ bool Lowerer::comp_eval_stmt(u32 mod,
       }
       if (kind == ast::ExprKind::Continue) {
         out.kind = CompFlow::Kind::Continue;
+        return true;
+      }
+      // A `ret` in an evaluated function body ends the evaluation with
+      // its value. A `ret` inside a comp block never reaches here: the
+      // checker rejects crossing the block boundary.
+      if (kind == ast::ExprKind::Return) {
+        CompVal value;
+        const ast::ExprReturn& ret =
+            ast.exprs[expr.value].payload.get<ast::ExprReturn>();
+        if (ret.value.is_valid()) {
+          if (!comp_eval_expr(mod, ret.value, scope, value)) {
+            return false;
+          }
+        } else {
+          value.value.tag = CompValue::Tag::Void;
+          value.type = builder.primitive(ir::TypeTag::Void);
+        }
+        out.kind = CompFlow::Kind::Return;
+        out.value = std::move(value);
         return true;
       }
       CompVal discarded;
@@ -591,7 +632,10 @@ bool Lowerer::comp_run_fn(u32 def_module,
   callee_scope.frames.emplace_back();
   bool ok = true;
   for (usize i = 0; i < args.size() && ok; ++i) {
-    if (!fn.params[i].is_comp) {
+    // A `comp fn`'s arguments all bind as comp values; an ordinary
+    // callee binds only its `comp` parameters and leaves the rest to
+    // the runtime call the evaluator cannot make.
+    if (!fn.params[i].is_comp && !fn.is_comp) {
       continue;
     }
     CompVal arg;

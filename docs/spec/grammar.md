@@ -71,10 +71,12 @@ impls whose spec is in scope (declared alongside, imported, or in
 the prelude).
 
 An `unsafe fn` declares that calling it is an operation that needs
-the gate. Its body is not an unsafe context implicitly, so every
-operation the gate covers names `unsafe { ... }` where it happens,
-and the gate never suspends region, move, or drop checking. See
-`ffi.md`.
+the gate; a `comp fn` declares that calling it happens during
+compilation only (see `comp.md`), and the two markers do not
+combine yet. An unsafe function's body is not an unsafe context
+implicitly, so every operation the gate covers names `unsafe { ... }`
+where it happens, and the gate never suspends region, move, or drop
+checking. See `ffi.md`.
 
 An `extern "C" { ... }` block declares bodyless functions whose
 names are the symbols the linker resolves. `"C"` is the only

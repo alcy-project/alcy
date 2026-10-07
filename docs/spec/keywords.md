@@ -34,7 +34,7 @@ identifier and reports an unknown name.
 
 `comp`, `intrinsic`, `spec`, `for`, and `in` are keywords rather than
 reserved words, because each means something in one position and nothing
-outside it: `comp` in a signature or a block;
+outside it: `comp` in a signature, a function item, or a block;
 `intrinsic` and `spec` in item position; `for` in a loop head and in an
 `impl` header; `in` in a `for` head. Using one outside its position is an
 ordinary parse error, not a reserved-name diagnostic.
