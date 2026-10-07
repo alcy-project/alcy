@@ -147,12 +147,108 @@ body.site {
   text-decoration: underline;
 }
 
-.site-controls {
+/* The settings menu: one popover with the theme toggle and the
+   language link, so the header stays quiet. */
+
+.settings {
+  position: relative;
+  margin-left: auto;
+}
+
+.settings summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--fg-soft);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings summary:hover,
+.settings[open] summary {
+  color: var(--fg);
+  background: var(--bg);
+  border-color: var(--line);
+}
+
+.settings summary svg {
+  width: 16px;
+  height: 16px;
+}
+
+.settings-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 210px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+}
+
+.settings-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-left: auto;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-label {
+  color: var(--fg-soft);
+  font-size: 12px;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--fg-soft);
+  background: none;
+  border: 1px solid transparent;
+}
+
+.theme-toggle:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: var(--line);
+}
+
+.theme-toggle svg {
+  display: none;
+  width: 16px;
+  height: 16px;
+}
+
+.theme-toggle[data-theme-mode="auto"] .theme-icon:nth-of-type(1),
+.theme-toggle[data-theme-mode="light"] .theme-icon:nth-of-type(2),
+.theme-toggle[data-theme-mode="dark"] .theme-icon:nth-of-type(3) {
+  display: block;
+}
+
+.language-link {
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.language-link:hover {
+  text-decoration: underline;
 }
 
 .site-footer {
@@ -218,6 +314,18 @@ body.site {
   border-color: var(--accent);
   color: var(--accent-fg);
   font-weight: 600;
+}
+
+/* The guide's contents page at `/guide/`. */
+
+.guide-contents ol {
+  max-width: 40ch;
+  padding-left: 20px;
+  line-height: 1.9;
+}
+
+.guide-contents a {
+  color: var(--accent);
 }
 
 /* The guide: contents beside the article, then the previous/next pager. */

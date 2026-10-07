@@ -5,15 +5,21 @@ with no server behind the page. The page is plain HTML, CSS, and
 TypeScript, and the compiler is the project's own wasm module, built
 without LLVM through the direct wasm backend described in
 [ADR-0049](../../docs/adr/0049-the-direct-backends-and-the-playground.md).
-It is one page of the site under `site/`; the theme, the language, and
-the shell around the pages live in `site/shared/`.
+It is one page of the site under `site/`; the shell around the pages
+lives in `site/shared/`, the theme is a site-wide preference there, and
+the page is stamped once per language by the site generator.
 
 The built site is deployed to GitHub Pages by
 [`.github/workflows/site.yaml`](../../.github/workflows/site.yaml).
 
 ## Layout
 
-- `index.html`, `style.css` - the page.
+- `index.html` - the page's template; the site generator stamps one copy
+  per language into `site/dist/`.
+- `style.css` - the page's own styles.
+- `assets.ts` - the deployed page's own directory, resolved against the
+  module's URL so the assets stay in one place even when the page that
+  loads them lives in another language's tree.
 - `app.ts` - the wiring: it builds the modules, connects their callbacks,
   and starts the flows.
 - `editor.ts` - the textarea, the highlighted mirror, the line-number
@@ -78,12 +84,13 @@ first; `--compiler-dir` points it at artifacts somewhere else.
 `--with-compiler` defaults to the `playground` target and passes
 `alcy_backends=[]` to GN; both are overridable.
 
-The assembled page is:
+The assembled site is:
 
 ```text
 site/dist/
-  index.html                          the landing page
-  shared/     boot.js, site.css, site.js, shell.js
+  index.html                          the landing page (English)
+  ja/                                 the Japanese tree (landing, guide, playground)
+  shared/     boot.js, site.css, site.js, shell.js, ...
   playground/
     index.html, style.css, app.js, app.js.map, ...
     compiler/   alcy_playground.js, alcy_playground.wasm
@@ -91,6 +98,10 @@ site/dist/
     grammar/    tree-sitter-alcy.wasm, highlights.scm
     samples/    index.json and the example programs
 ```
+
+The page's `index.html` is written by the site generator from the
+template in this directory, so the language tree's copy points at this
+one `playground/` directory for everything else.
 
 ## What the page expects from the compiler module
 

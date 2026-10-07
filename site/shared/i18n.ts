@@ -6,19 +6,25 @@
 // arrive from the compiler's catalogs and keep whatever language the
 // compiler was built for; these cover everything around them.
 //
-// Adding a language means one catalog here and one entry in `LANGUAGES`;
-// `data-i18n` attributes in the pages and `t()` calls in the scripts are
-// the only consumers.
+// The site has one page tree per language: the generator stamps the
+// static labels of each page from this catalog at build time (`t:` at
+// the template level), and the playground's dynamic strings go through
+// `t()` at runtime. Adding a language means one catalog here, one entry
+// in `LANGUAGES`, and one tree for the generator to emit.
 
 const en = {
   "site.guide": "Guide",
   "site.playground": "Playground",
   "site.previous": "Previous",
   "site.next": "Next",
+  "label.settings": "Settings",
+  "meta.guide": "the alcy guide",
+  "noscript.playground": "The playground needs JavaScript to run.",
+  "meta.playground":
+    "A browser wasm playground for the alcy programming language: edit, check, and run alcy without a server.",
   "label.example": "Example",
   "label.theme": "Theme",
   "label.language": "Language",
-  "language.auto": "Auto",
   "theme.auto": "Auto",
   "theme.light": "Light",
   "theme.dark": "Dark",
@@ -81,9 +87,13 @@ const ja: Record<MessageKey, string> = {
   "site.playground": "プレイグラウンド",
   "site.previous": "前へ",
   "site.next": "次へ",
+  "label.settings": "設定",
+  "meta.guide": "alcy ガイド",
+  "noscript.playground": "プレイグラウンドの実行には JavaScript が必要です。",
+  "meta.playground":
+    "alcy 言語のブラウザ wasm プレイグラウンド。サーバなしで編集・チェック・実行できます。",
   "label.theme": "テーマ",
   "label.language": "言語",
-  "language.auto": "自動",
   "theme.auto": "自動",
   "theme.light": "ライト",
   "theme.dark": "ダーク",
@@ -141,22 +151,19 @@ export type Language = "en" | "ja";
 
 export const LANGUAGES: Language[] = ["en", "ja"];
 
+// The name of a language in that language, which is what a switcher
+// should show.
+export const LANGUAGE_NAMES: Record<Language, string> = {
+  en: "English",
+  ja: "日本語",
+};
+
 const CATALOGS: Record<Language, Record<MessageKey, string>> = { en, ja };
 
-// A stored preference names a language or "auto"; "auto" follows the
-// browser, and an unknown tag falls back to English.
-export function resolveLanguage(preference: string): Language {
-  if (LANGUAGES.includes(preference as Language)) {
-    return preference as Language;
-  }
-  const tags = navigator.languages ?? [navigator.language ?? ""];
-  for (const tag of tags) {
-    const base = String(tag).toLowerCase().split("-")[0] as Language;
-    if (LANGUAGES.includes(base)) {
-      return base;
-    }
-  }
-  return "en";
+// A page's `<html lang>` names its tree; a value outside the catalog
+// falls back to English so a hand-edited page still renders.
+export function toLanguage(value: string): Language {
+  return LANGUAGES.includes(value as Language) ? (value as Language) : "en";
 }
 
 export function translate(
@@ -171,4 +178,10 @@ export function translate(
   return template.replace(/\{(\w+)\}/g, (match: string, name: string) =>
     name in params ? String(params[name]) : match,
   );
+}
+
+// A guard for the template stamper, so a typo in `{{t:...}}` fails the
+// build instead of rendering as "undefined".
+export function isMessageKey(key: string): key is MessageKey {
+  return key in en;
 }

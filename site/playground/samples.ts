@@ -5,6 +5,7 @@
 // names, and the restore path that prefers the last session over the
 // default example.
 
+import { assetBase } from "./assets.js";
 import { FALLBACK_SOURCE, setText } from "./editor.js";
 import { elements } from "./elements.js";
 import { renderDiagnostics } from "./problems.js";
@@ -31,7 +32,7 @@ function applySource(text: string): void {
 
 export async function loadSample(file: string): Promise<void> {
   try {
-    const response = await fetch(`samples/${file}`);
+    const response = await fetch(new URL(`samples/${file}`, assetBase));
     applySource(await response.text());
     saveCodeNow();
   } catch (error) {
@@ -44,7 +45,7 @@ export async function loadSample(file: string): Promise<void> {
 export async function loadSamples(): Promise<void> {
   let manifest: SampleManifest | null = null;
   try {
-    manifest = (await (await fetch("samples/index.json")).json()) as SampleManifest;
+    manifest = (await (await fetch(new URL("samples/index.json", assetBase))).json()) as SampleManifest;
   } catch {
     manifest = null;
   }

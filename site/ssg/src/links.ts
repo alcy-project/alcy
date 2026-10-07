@@ -2,15 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // The link audit. Every link a guide page renders goes through `resolve`:
-// a page-to-page `.md` link becomes the built `.html`, a link to anything
-// else in the repository becomes a GitHub URL, and a link into the built
-// site must point at something that exists. A target that resolves
-// nowhere is an error, so the build fails rather than publishing a dead
-// link.
+// a page-to-page `.md` link becomes the built `.html` in the same
+// language's tree, a link to anything else in the repository becomes a
+// GitHub URL, a link starting with `/` names a path from the language
+// tree's root, and a link into the built site must point at something
+// that exists. A target that resolves nowhere is an error, so the build
+// fails rather than publishing a dead link.
 
 import { posix } from "node:path";
 
 import type { GuidePage } from "./guide.js";
+import { prefixOf } from "./languages.js";
 
 export interface LinkContext {
   pages: readonly GuidePage[];
@@ -38,7 +40,9 @@ function splitTarget(url: string): { path: string; suffix: string } {
 }
 
 export function createLinkChecker(context: LinkContext): LinkChecker {
-  const pagesBySource = new Map(context.pages.map((page) => [page.sourceRel, page]));
+  const pagesBySource = new Map(
+    context.pages.map((page) => [`${page.language}\0${page.sourceRel}`, page]),
+  );
   const errors: string[] = [];
 
   const fail = (page: GuidePage, url: string, detail: string): void => {
@@ -63,7 +67,7 @@ export function createLinkChecker(context: LinkContext): LinkChecker {
         );
         if (repoPath.startsWith(GUIDE_PREFIX)) {
           const sourceRel = repoPath.slice(GUIDE_PREFIX.length);
-          const target = pagesBySource.get(sourceRel);
+          const target = pagesBySource.get(`${page.language}\0${sourceRel}`);
           if (target === undefined) {
             fail(page, url, `does not name a guide page (${sourceRel})`);
             return url;
@@ -77,11 +81,11 @@ export function createLinkChecker(context: LinkContext): LinkChecker {
         return `${REPO_URL}/${repoPath}${suffix}`;
       }
 
-      // A link that starts with `/` names a path from the built site's
-      // root; the page's own depth decides what the reader's href has to
-      // be, so the generator rebases it.
+      // A link that starts with `/` names a path from the language
+      // tree's root; the page's own depth decides what the reader's href
+      // has to be, so the generator rebases it.
       if (path.startsWith("/")) {
-        const candidate = path.slice(1);
+        const candidate = prefixOf(page.language) + path.slice(1);
         if (!context.siteExists(candidate)) {
           fail(page, url, `does not exist in the built site (${candidate || "index.html"})`);
           return url;

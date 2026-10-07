@@ -2,22 +2,32 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // The guide's pages: which source files there are, in what order they
-// read, and what each one's route in the built site is.
+// read, and what each one's path is. A source is parsed once; the
+// generator derives one page per language from it, because only the
+// chrome around the article differs.
 
 import { readFileSync, readdirSync } from "node:fs";
 import { join, posix } from "node:path";
 
+import { prefixOf } from "./languages.js";
+import type { Language } from "./languages.js";
 import { parseMarkdown } from "./markdown.js";
 import type { Block } from "./markdown.js";
 
-export interface GuidePage {
+export interface GuideSource {
   // The path under `docs/guide/`, e.g. `01-introduction.md`.
   sourceRel: string;
-  // The path under the built site's root, e.g. `guide/introduction.html`.
-  route: string;
+  // The path inside one language tree, e.g. `guide/introduction.html`.
+  path: string;
   order: number;
   title: string;
   blocks: Block[];
+}
+
+export interface GuidePage extends GuideSource {
+  language: Language;
+  // The path under the built site's root, e.g. `ja/guide/introduction.html`.
+  route: string;
 }
 
 // `NN-slug.md`: the number orders the pages, the slug is the URL.
@@ -36,9 +46,9 @@ function walk(dir: string, prefix: string): string[] {
   return found;
 }
 
-export function discoverGuide(docsDir: string): GuidePage[] {
+export function discoverGuide(docsDir: string): GuideSource[] {
   const sources = walk(docsDir, "").sort();
-  const pages: GuidePage[] = [];
+  const pages: GuideSource[] = [];
   const orders = new Map<number, string>();
 
   for (const sourceRel of sources) {
@@ -60,10 +70,21 @@ export function discoverGuide(docsDir: string): GuidePage[] {
     }
     const dir = posix.dirname(sourceRel);
     const name = `${match[2] ?? ""}.html`;
-    const route = dir === "." ? posix.join("guide", name) : posix.join("guide", dir, name);
-    pages.push({ sourceRel, route, order, title: first.text, blocks });
+    const path = dir === "." ? posix.join("guide", name) : posix.join("guide", dir, name);
+    pages.push({ sourceRel, path, order, title: first.text, blocks });
   }
 
-  pages.sort((a, b) => a.order - b.order || a.route.localeCompare(b.route));
+  pages.sort((a, b) => a.order - b.order || a.path.localeCompare(b.path));
   return pages;
+}
+
+export function pagesForLanguage(
+  sources: readonly GuideSource[],
+  language: Language,
+): GuidePage[] {
+  return sources.map((source) => ({
+    ...source,
+    language,
+    route: prefixOf(language) + source.path,
+  }));
 }

@@ -3,7 +3,7 @@
 
 // Resolves the color theme before first paint, from the stored choice or
 // the system preference, so no page flashes the wrong one. This is a plain
-// script for the head; `site.ts` owns the picker afterwards, and its keys
+// script for the head; `site.ts` owns the toggle afterwards, and its keys
 // and resolution must stay in step with these.
 
 (() => {

@@ -4,6 +4,7 @@
 // The run side of the page: the compiler worker behind Check and the
 // disposable runner worker behind Run.
 
+import { assetBase } from "./assets.js";
 import { elements } from "./elements.js";
 import { normalizedSource } from "./editor.js";
 import { t } from "../shared/site.js";
@@ -31,7 +32,7 @@ function ensureCompilerWorker(): Worker {
   if (state.compiler !== null) {
     return state.compiler;
   }
-  const worker = new Worker("compiler.worker.js");
+  const worker = new Worker(new URL("compiler.worker.js", assetBase));
   worker.addEventListener("message", (event: MessageEvent<CompilerMessage>) => {
     const message = event.data;
     if (message.type === "status") {
@@ -145,7 +146,7 @@ export async function runCheck({
 function execute(wasmBuffer: ArrayBuffer): Promise<void> {
   return new Promise((resolve) => {
     state.runner?.terminate();
-    const runner = new Worker("runner.worker.js");
+    const runner = new Worker(new URL("runner.worker.js", assetBase));
     state.runner = runner;
     state.runnerTimer = window.setTimeout(() => {
       runner.terminate();

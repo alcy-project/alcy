@@ -135,14 +135,15 @@ what implements it lives in `compiler/`.
   the compiler; `tools/check_treesitter.py` checks it against the
   specification's corpus and against the compiler itself. See
   `docs/adr/0041-alcy-treesitter-grammar.md`.
-- `site/` - the published site: the landing page, the shared shell under
-  `site/shared/`, and the browser playground page under
-  `site/playground/`; the guide under `docs/guide/` is rendered beside
-  them by the site's own generator (`site/ssg/`). `tools/site.py` builds
-  it into `site/dist/`, combining those sources with the grammar and the
-  compiler's wasm module; `.github/workflows/site.yaml` deploys that
-  directory to GitHub Pages. See
-  `docs/adr/0057-the-site-its-generator-and-the-guide.md`.
+- `site/` - the published site: one page tree per language (English at
+  the site root, `/ja/` beside it), the shared shell under
+  `site/shared/`, and the browser playground under `site/playground/`;
+  the guide under `docs/guide/` is rendered by the site's own generator
+  (`site/ssg/`), which also stamps the landing and playground templates
+  per language. `tools/site.py` builds it into `site/dist/`, combining
+  those sources with the grammar and the compiler's wasm module;
+  `.github/workflows/site.yaml` deploys that directory to GitHub Pages.
+  See `docs/adr/0057-the-site-its-generator-and-the-guide.md`.
 
 ## Compiler modules
 

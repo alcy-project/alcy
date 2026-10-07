@@ -5,7 +5,7 @@
 // callbacks, and start the flows. Everything else lives in the feature
 // modules next to this file.
 
-import { initLanguage, initTheme, LANGUAGE_CHANGED } from "../shared/site.js";
+import { initThemeToggle } from "../shared/site.js";
 
 import { elements } from "./elements.js";
 import * as editor from "./editor.js";
@@ -19,28 +19,13 @@ import { state } from "./state.js";
 import * as status from "./status.js";
 import * as tabs from "./tabs.js";
 
-// Everything that keeps its own rendered state is redrawn from the state
-// it came from, so switching the language never leaves a mixed page.
-function renderForLanguage(): void {
-  status.renderStatus();
-  status.renderCompilerState();
-  output.renderRunMeta();
-  status.setRunning(state.running);
-  if (state.compilerErrorShown && state.compilerStatus === "error") {
-    status.showCompilerError(state.compilerDetail);
-  } else {
-    problems.renderLast();
-  }
-}
-
 function onInput(): void {
   runtime.scheduleCheck();
   session.scheduleCodeSave();
 }
 
 function init(): void {
-  initTheme(elements.theme);
-  initLanguage(elements.language);
+  initThemeToggle(elements.theme);
   splitter.initSplitter();
   tabs.initTabs();
   status.renderStatus();
@@ -57,7 +42,6 @@ function init(): void {
   elements.check.addEventListener("click", () => {
     void runtime.runCheck({ automatic: false });
   });
-  document.addEventListener(LANGUAGE_CHANGED, renderForLanguage);
 
   // A reload or a tab switch right after a keystroke must not lose it:
   // both events flush the pending debounced save.

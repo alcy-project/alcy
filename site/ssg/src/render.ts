@@ -2,16 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // The guide's pages: the shell every page shares, the article its blocks
-// render to, the contents beside it, and the previous/next pager. The
-// shell's controls carry the same ids as the landing page's and the
-// playground's, so `shared/shell.js` wires them all the same way.
+// render to, the contents beside it, the previous/next pager, and the
+// contents page at the tree's `/guide/`. Every label is stamped in the
+// page's language, so nothing has to be translated at runtime.
 
 import { posix } from "node:path";
 
 import { escapeHtml } from "../../shared/highlight.js";
+import { translate } from "../../shared/i18n.js";
+import type { MessageKey } from "../../shared/i18n.js";
 import type { GuidePage } from "./guide.js";
+import { otherLanguages, prefixOf } from "./languages.js";
+import type { Language } from "./languages.js";
 import { renderInline } from "./markdown.js";
 import type { Block } from "./markdown.js";
+import { renderSettings } from "./shell.js";
 
 export interface PageOptions {
   pages: readonly GuidePage[];
@@ -19,56 +24,67 @@ export interface PageOptions {
   resolveLink(url: string): string;
 }
 
-// How to climb from a page's directory to the built site's root.
-function prefix(route: string): string {
+// The prefix from a page's directory to the built site's root, where the
+// shared assets live.
+function assetPrefix(route: string): string {
   const depth = route.split("/").length - 1;
-  return "../".repeat(depth);
+  return depth === 0 ? "" : "../".repeat(depth);
+}
+
+// The prefix from a page's directory to its language tree's root.
+function treeHome(route: string, language: Language): string {
+  const root = prefixOf(language).replace(/\/$/, "");
+  const relative = posix.relative(posix.dirname(route), root);
+  return relative === "" ? "./" : `${relative}/`;
+}
+
+// The URL of the same tree path in the page's other language.
+function languageSwitch(route: string, language: Language, treePath: string): string {
+  const other = otherLanguages(language)[0];
+  if (other === undefined) {
+    return "";
+  }
+  return posix.relative(posix.dirname(route), prefixOf(other) + treePath);
 }
 
 function relativeRoute(from: string, to: string): string {
   return posix.relative(posix.dirname(from), to);
 }
 
-function header(page: GuidePage): string {
-  const up = prefix(page.route);
+function header(route: string, language: Language, treePath: string): string {
+  const home = treeHome(route, language);
+  const t = (key: MessageKey): string => translate(language, key);
+  const settings = renderSettings({
+    language,
+    switchHref: languageSwitch(route, language, treePath),
+  });
   return `<header class="site-header">
-      <a class="site-brand" href="${up}">alcy</a>
+      <a class="site-brand" href="${home}">alcy</a>
       <nav class="site-nav">
-        <a href="${up}guide/" data-i18n="site.guide">Guide</a>
-        <a href="${up}playground/" data-i18n="site.playground">Playground</a>
+        <a href="${home}guide/">${t("site.guide")}</a>
+        <a href="${home}playground/">${t("site.playground")}</a>
         <a href="https://github.com/alcy-project/alcy" rel="noopener">GitHub</a>
       </nav>
-      <div class="site-controls">
-        <label class="control">
-          <span class="control-label" data-i18n="label.theme">Theme</span>
-          <select id="theme" aria-label="Color theme" data-i18n-aria="label.theme">
-            <option value="auto" data-i18n="theme.auto">Auto</option>
-            <option value="light" data-i18n="theme.light">Light</option>
-            <option value="dark" data-i18n="theme.dark">Dark</option>
-          </select>
-        </label>
-        <label class="control">
-          <span class="control-label" data-i18n="label.language">Language</span>
-          <select id="language" aria-label="Language" data-i18n-aria="label.language">
-            <option value="auto" data-i18n="language.auto">Auto</option>
-            <option value="en">English</option>
-            <option value="ja">日本語</option>
-          </select>
-        </label>
-      </div>
+      ${settings}
     </header>`;
 }
 
-function blockHtml(block: Block, page: GuidePage, options: PageOptions): string {
+function footer(): string {
+  return `<footer class="site-footer">
+      <span>alcy · pre-MVP</span>
+      <a href="https://github.com/alcy-project/alcy" rel="noopener">GitHub</a>
+    </footer>`;
+}
+
+function blockHtml(block: Block, options: PageOptions): string {
   switch (block.type) {
-    case "heading": {
-      const level = block.level;
-      return `<h${level}>${renderInline(block.text, options.resolveLink)}</h${level}>`;
-    }
+    case "heading":
+      return `<h${block.level}>${renderInline(block.text, options.resolveLink)}</h${block.level}>`;
     case "paragraph":
       return `<p>${renderInline(block.text, options.resolveLink)}</p>`;
     case "code": {
-      const code = block.language === "alcy" ? options.highlight(block.text) : escapeHtml(block.text);
+      const code =
+        block.language === "alcy" ? options.highlight(block.text) : escapeHtml(block.text);
       return `<pre><code>${code}</code></pre>`;
     }
     case "list": {
@@ -86,15 +102,15 @@ function blockHtml(block: Block, page: GuidePage, options: PageOptions): string 
 }
 
 function contents(page: GuidePage, options: PageOptions): string {
+  const t = (key: MessageKey): string => translate(page.language, key);
   const items = options.pages
     .map((other) => {
       const current = other === page ? ' aria-current="page"' : "";
-      const href = relativeRoute(page.route, other.route);
-      return `<li><a href="${href}"${current}>${escapeHtml(other.title)}</a></li>`;
+      return `<li><a href="${relativeRoute(page.route, other.route)}"${current}>${escapeHtml(other.title)}</a></li>`;
     })
     .join("\n        ");
-  return `<nav class="guide-nav" aria-label="Guide">
-      <h2 data-i18n="site.guide">Guide</h2>
+  return `<nav class="guide-nav" aria-label="${t("site.guide")}">
+      <h2>${t("site.guide")}</h2>
       <ol>
         ${items}
       </ol>
@@ -102,40 +118,41 @@ function contents(page: GuidePage, options: PageOptions): string {
 }
 
 function pager(page: GuidePage, options: PageOptions): string {
+  const t = (key: MessageKey): string => translate(page.language, key);
   const index = options.pages.indexOf(page);
   const previous = index > 0 ? options.pages[index - 1] : undefined;
-  const next = index >= 0 && index + 1 < options.pages.length ? options.pages[index + 1] : undefined;
+  const next =
+    index >= 0 && index + 1 < options.pages.length ? options.pages[index + 1] : undefined;
   const back = previous
-    ? `<a href="${relativeRoute(page.route, previous.route)}">← <span data-i18n="site.previous">Previous</span> · ${escapeHtml(previous.title)}</a>`
+    ? `<a href="${relativeRoute(page.route, previous.route)}">← ${t("site.previous")} · ${escapeHtml(previous.title)}</a>`
     : `<span class="empty"></span>`;
   const forward = next
-    ? `<a href="${relativeRoute(page.route, next.route)}"><span data-i18n="site.next">Next</span> · ${escapeHtml(next.title)} →</a>`
+    ? `<a href="${relativeRoute(page.route, next.route)}">${t("site.next")} · ${escapeHtml(next.title)} →</a>`
     : `<span class="empty"></span>`;
-  return `<nav class="guide-pager" aria-label="Guide pages">
+  return `<nav class="guide-pager" aria-label="${t("site.guide")}">
         ${back}
         ${forward}
       </nav>`;
 }
 
 export function renderGuidePage(page: GuidePage, options: PageOptions): string {
-  const up = prefix(page.route);
-  const article = page.blocks
-    .map((block) => blockHtml(block, page, options))
-    .join("\n      ");
+  const assets = assetPrefix(page.route);
+  const t = (key: MessageKey): string => translate(page.language, key);
+  const article = page.blocks.map((block) => blockHtml(block, options)).join("\n      ");
   return `<!doctype html>
 <!-- Copyright 2026 The Alcy Project Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception -->
-<html lang="en">
+<html lang="${page.language}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="${escapeHtml(page.title)} · the alcy guide" />
+    <meta name="description" content="${escapeHtml(page.title)} · ${escapeHtml(t("meta.guide"))}" />
     <title>${escapeHtml(page.title)} · alcy</title>
-    <script src="${up}shared/boot.js"></script>
-    <link rel="stylesheet" href="${up}shared/site.css" />
+    <script src="${assets}shared/boot.js"></script>
+    <link rel="stylesheet" href="${assets}shared/site.css" />
   </head>
   <body class="site">
-    ${header(page)}
+    ${header(page.route, page.language, page.path)}
 
     <div class="guide-layout">
       ${contents(page, options)}
@@ -146,32 +163,54 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
       </main>
     </div>
 
-    <footer class="site-footer">
-      <span>alcy · pre-MVP</span>
-      <a href="https://github.com/alcy-project/alcy" rel="noopener">GitHub</a>
-    </footer>
+    ${footer()}
 
-    <script type="module" src="${up}shared/shell.js"></script>
+    <script type="module" src="${assets}shared/shell.js"></script>
   </body>
 </html>
 `;
 }
 
-// `/guide/` is a signpost, not a page: it sends a reader to the first
-// page without taking part in the contents.
-export function renderGuideIndex(first: GuidePage): string {
-  const href = posix.basename(first.route);
+// `/guide/` is a real page, not a signpost: a contents list a reader can
+// land on, so following the header's Guide link never flashes empty.
+export function renderGuideIndex(
+  pages: readonly GuidePage[],
+  language: Language,
+): string {
+  const route = `${prefixOf(language)}guide/index.html`;
+  const assets = assetPrefix(route);
+  const t = (key: MessageKey): string => translate(language, key);
+  const items = pages
+    .map(
+      (page) =>
+        `<li><a href="${relativeRoute(route, page.route)}">${escapeHtml(page.title)}</a></li>`,
+    )
+    .join("\n        ");
   return `<!doctype html>
 <!-- Copyright 2026 The Alcy Project Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception -->
-<html lang="en">
+<html lang="${language}">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="refresh" content="0; url=${href}" />
-    <title>alcy guide</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="${escapeHtml(t("meta.guide"))}" />
+    <title>${t("site.guide")} · alcy</title>
+    <script src="${assets}shared/boot.js"></script>
+    <link rel="stylesheet" href="${assets}shared/site.css" />
   </head>
-  <body>
-    <p><a href="${href}">alcy guide</a></p>
+  <body class="site">
+    ${header(route, language, "guide/index.html")}
+
+    <main class="site-main guide-contents">
+      <h1>${t("site.guide")}</h1>
+      <ol>
+        ${items}
+      </ol>
+    </main>
+
+    ${footer()}
+
+    <script type="module" src="${assets}shared/shell.js"></script>
   </body>
 </html>
 `;

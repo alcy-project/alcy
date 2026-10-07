@@ -29,6 +29,8 @@ The published thing is the *site*, and the playground is one page of it.
   `NN-slug.md`: the number is the reading order, the `# heading` is the
   title, and the slug (number dropped) is the URL. The directory is flat;
   a second kind of page gets a directory of its own only when one exists.
+  `/guide/` itself is a contents page, not a redirect, so following the
+  header's Guide link never flashes an empty page.
 - `site/` carries its own generator (`site/ssg/`) rather than a
   documentation framework: a hand-written parser for a documented Markdown
   subset, page templates, navigation, and link checking. No new runtime
@@ -37,13 +39,22 @@ The published thing is the *site*, and the playground is one page of it.
   wasm module, and every fence is highlighted at build time with the
   existing tree-sitter grammar. The guide cannot show code that does not
   compile, and reading it needs no JavaScript.
-- Theme and language become site-wide through one shared module, with
-  `alcy-site-theme` and `alcy-site-language` as the keys. The old
-  `alcy-playground-*` keys are read once so a visitor keeps their choice.
+- The site has one page tree per language. English is the tree at the
+  site root; every other language lives under its own prefix
+  (`/ja/guide/...`). The landing page and the playground page are
+  templates under `site/`, and the generator stamps every page's labels
+  from the catalog, so a page is already in its language before any
+  script runs. The header links to the same page in the other tree; the
+  playground's dynamic strings read the tree's language.
+- The color theme stays a site-wide preference through one shared module,
+  with `alcy-site-theme` as the key (the playground's old
+  `alcy-playground-theme` is read once), resolved before first paint and
+  toggled from the header's settings menu.
 
 Out of scope: publishing `docs/spec/` or `docs/adr/`, search, and content
-translations. The guide is written in English; the interface labels follow
-the site's language.
+translations. The guide's body is written in English in every tree;
+translating it means adding translated sources beside the English ones.
+The interface labels are part of the tree.
 
 ## Consequences
 

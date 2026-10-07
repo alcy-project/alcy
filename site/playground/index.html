@@ -1,81 +1,61 @@
 <!doctype html>
 <!-- Copyright 2026 The Alcy Project Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception -->
-<html lang="en">
+<!-- A template: the site generator stamps one copy per language into
+     site/dist/. The placeholders are `t:` for catalog strings, `dist`
+     for the assets, `home` for this tree's root, `settings` for the
+     settings menu, and `lang`/`switch` for the language. -->
+<html lang="{{lang}}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="A browser wasm playground for the alcy programming language: edit, check, and run alcy without a server."
-    />
-    <title>alcy playground</title>
-    <script src="../shared/boot.js"></script>
-    <link rel="stylesheet" href="../shared/site.css" />
-    <link rel="stylesheet" href="style.css" />
+    <meta name="description" content="{{t:meta.playground}}" />
+    <title>alcy {{t:site.playground}}</title>
+    <script src="{{dist}}shared/boot.js"></script>
+    <link rel="stylesheet" href="{{dist}}shared/site.css" />
+    <link rel="stylesheet" href="{{dist}}playground/style.css" />
   </head>
   <body>
     <header class="topbar">
       <div class="brand">
-        <a class="wordmark" href="../">alcy</a>
-        <span class="subtitle">playground</span>
-        <a class="guide-link" href="../guide/introduction.html" data-i18n="site.guide">Guide</a>
+        <a class="wordmark" href="{{home}}">alcy</a>
+        <span class="subtitle">{{t:site.playground}}</span>
+        <a class="guide-link" href="{{home}}guide/">{{t:site.guide}}</a>
       </div>
       <div class="toolbar">
         <div class="toolbar-controls">
           <label class="control">
-            <span class="control-label" data-i18n="label.example">Example</span>
-            <select id="samples" aria-label="Example" data-i18n-aria="label.example" disabled>
-              <option data-i18n="samples.loading">loading...</option>
-            </select>
-          </label>
-          <label class="control">
-            <span class="control-label" data-i18n="label.theme">Theme</span>
-            <select id="theme" aria-label="Color theme" data-i18n-aria="label.theme">
-              <option value="auto" data-i18n="theme.auto">Auto</option>
-              <option value="light" data-i18n="theme.light">Light</option>
-              <option value="dark" data-i18n="theme.dark">Dark</option>
-            </select>
-          </label>
-          <label class="control">
-            <span class="control-label" data-i18n="label.language">Language</span>
-            <select id="language" aria-label="Language" data-i18n-aria="label.language">
-              <option value="auto" data-i18n="language.auto">Auto</option>
-              <option value="en">English</option>
-              <option value="ja">日本語</option>
+            <span class="control-label">{{t:label.example}}</span>
+            <select id="samples" aria-label="{{t:label.example}}" disabled>
+              <option>{{t:samples.loading}}</option>
             </select>
           </label>
         </div>
         <div class="toolbar-actions">
-          <button
-            id="check"
-            type="button"
-            title="Check the program"
-            data-i18n-title="button.checkTitle"
-          >
-            <span data-i18n="button.check">Check</span>
+          <button id="check" type="button" title="{{t:button.checkTitle}}">
+            <span>{{t:button.check}}</span>
           </button>
           <button
             id="run"
             type="button"
             class="primary"
-            title="Compile and run"
-            aria-label="Run"
-            data-i18n-title="button.runTitle"
+            title="{{t:button.runTitle}}"
+            aria-label="{{t:button.run}}"
           >
-            <span class="run-label run-label-idle" aria-hidden="true" data-i18n="button.run">Run</span>
-            <span class="run-label run-label-busy" aria-hidden="true" data-i18n="button.running">Running...</span>
+            <span class="run-label run-label-idle" aria-hidden="true">{{t:button.run}}</span>
+            <span class="run-label run-label-busy" aria-hidden="true">{{t:button.running}}</span>
           </button>
         </div>
+        {{settings}}
       </div>
       <div class="compiler-state" id="compiler-state" data-state="idle">
         <span class="dot"></span>
-        <span id="compiler-state-text">compiler not loaded</span>
+        <span id="compiler-state-text">{{t:compiler.idle}}</span>
       </div>
     </header>
 
     <main class="layout">
-      <section class="editor-pane" aria-label="Source editor" data-i18n-aria="aria.editor">
+      <section class="editor-pane" aria-label="{{t:aria.editor}}">
         <div class="gutter" id="gutter" aria-hidden="true"></div>
         <div class="editor">
           <pre class="highlight" id="highlight" aria-hidden="true"><code id="highlight-code"></code></pre>
@@ -86,8 +66,7 @@
             autocapitalize="off"
             autocorrect="off"
             wrap="off"
-            aria-label="alcy source"
-            data-i18n-aria="aria.source"
+            aria-label="{{t:aria.source}}"
           ></textarea>
         </div>
       </section>
@@ -97,27 +76,26 @@
         id="splitter"
         role="separator"
         tabindex="0"
-        aria-label="Resize the result panel"
-        data-i18n-aria="aria.splitter"
+        aria-label="{{t:aria.splitter}}"
         aria-orientation="vertical"
         aria-valuenow="38"
         aria-valuemin="20"
         aria-valuemax="80"
       ></div>
 
-      <aside class="side" aria-label="Results" data-i18n-aria="aria.results">
+      <aside class="side" aria-label="{{t:aria.results}}">
         <div class="tabs" role="tablist">
           <button id="tab-problems" class="tab active" role="tab" aria-selected="true" type="button">
-            <span data-i18n="tab.problems">Problems</span>
+            <span>{{t:tab.problems}}</span>
             <span class="badge" id="problems-count" hidden>0</span>
           </button>
           <button id="tab-output" class="tab" role="tab" aria-selected="false" type="button">
-            <span data-i18n="tab.output">Output</span>
+            <span>{{t:tab.output}}</span>
           </button>
         </div>
         <div class="panel" id="panel-problems" role="tabpanel">
           <ul class="problems" id="problems"></ul>
-          <p class="empty" id="problems-empty" data-i18n="problems.empty">No diagnostics yet.</p>
+          <p class="empty" id="problems-empty">{{t:problems.empty}}</p>
         </div>
         <div class="panel hidden" id="panel-output" role="tabpanel">
           <p class="run-meta" id="run-meta"></p>
@@ -130,15 +108,15 @@
     </main>
 
     <footer class="statusbar">
-      <span id="status" data-i18n="status.ready">ready</span>
-      <span class="hint" data-i18n="hint.run">Ctrl/Cmd+Enter to run</span>
+      <span id="status">{{t:status.ready}}</span>
+      <span class="hint">{{t:hint.run}}</span>
       <a href="https://github.com/alcy-project/alcy" rel="noopener">GitHub</a>
     </footer>
 
     <noscript>
-      <p class="noscript">The playground needs JavaScript to run.</p>
+      <p class="noscript">{{t:noscript.playground}}</p>
     </noscript>
 
-    <script type="module" src="app.js"></script>
+    <script type="module" src="{{dist}}playground/app.js"></script>
   </body>
 </html>

@@ -1,115 +1,84 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// The site-wide preferences: color theme and language. Every page loads
-// this module, so a choice made on one page holds on the next.
+// The site's shared behavior: the color theme and the page's language.
 //
-// The theme is written to `data-theme` on the root before first paint by
-// `boot.js`; the resolved values here and its keys must stay in step.
+// The language comes from the tree the page was generated into
+// (`document.documentElement.lang`); nothing switches it at runtime,
+// because the generator already stamped every label. The theme is a
+// stored preference (`alcy-site-theme`) that `boot.js` applies to
+// `data-theme` before first paint; the settings menu's toggle drives it
+// afterwards.
 
-import { resolveLanguage, translate } from "./i18n.js";
+import { toLanguage, translate } from "./i18n.js";
 import type { Language, MessageKey, MessageParams } from "./i18n.js";
 
 const THEME_KEY = "alcy-site-theme";
 const LEGACY_THEME_KEY = "alcy-playground-theme";
-const LANGUAGE_KEY = "alcy-site-language";
-const LEGACY_LANGUAGE_KEY = "alcy-playground-language";
-
-/** Dispatched on `document` after the language changes. */
-export const LANGUAGE_CHANGED = "site-language-changed";
+const THEME_MODES = ["auto", "light", "dark"] as const;
+type ThemeMode = (typeof THEME_MODES)[number];
 
 const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-let language: Language = "en";
-
-// The site's keys are new; the playground's old ones are read once and
-// rewritten so a returning visitor keeps the choice they made.
-function stored(key: string, legacyKey: string): string | null {
-  try {
-    const value = localStorage.getItem(key);
-    if (value !== null) {
-      return value;
-    }
-    const legacy = localStorage.getItem(legacyKey);
-    if (legacy !== null) {
-      try {
-        localStorage.setItem(key, legacy);
-      } catch {
-        // The preference still applies; only its persistence is lost.
-      }
-    }
-    return legacy;
-  } catch {
-    return null;
-  }
-}
-
-function persist(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // A denied store costs the preference, not the setting.
-  }
-}
-
-export function storedTheme(): string {
-  return stored(THEME_KEY, LEGACY_THEME_KEY) ?? "auto";
-}
-
-export function applyTheme(mode: string): void {
-  const dark = mode === "dark" || (mode === "auto" && darkQuery.matches);
-  document.documentElement.dataset.theme = dark ? "dark" : "light";
-}
-
-// `select` is the picker; every page's shell carries one.
-export function initTheme(select: HTMLSelectElement): void {
-  select.value = storedTheme();
-  applyTheme(select.value);
-  select.addEventListener("change", () => {
-    persist(THEME_KEY, select.value);
-    applyTheme(select.value);
-  });
-  darkQuery.addEventListener("change", () => {
-    if (storedTheme() === "auto") {
-      applyTheme("auto");
-    }
-  });
-}
+const language: Language = toLanguage(document.documentElement.lang);
 
 export function t(key: MessageKey, params?: MessageParams): string {
   return translate(language, key, params);
 }
 
-export function storedLanguage(): string {
-  return stored(LANGUAGE_KEY, LEGACY_LANGUAGE_KEY) ?? "auto";
+function isThemeMode(value: string | null): value is ThemeMode {
+  return value !== null && (THEME_MODES as readonly string[]).includes(value);
 }
 
-function applyI18n(): void {
-  document.documentElement.lang = language;
-  for (const node of document.querySelectorAll<HTMLElement>("[data-i18n]")) {
-    node.textContent = t(node.dataset.i18n as MessageKey);
-  }
-  for (const node of document.querySelectorAll<HTMLElement>("[data-i18n-aria]")) {
-    node.setAttribute("aria-label", t(node.dataset.i18nAria as MessageKey));
-  }
-  for (const node of document.querySelectorAll<HTMLElement>("[data-i18n-title]")) {
-    node.title = t(node.dataset.i18nTitle as MessageKey);
+function storedTheme(): ThemeMode {
+  try {
+    const value =
+      localStorage.getItem(THEME_KEY) ?? localStorage.getItem(LEGACY_THEME_KEY);
+    return isThemeMode(value) ? value : "auto";
+  } catch {
+    return "auto";
   }
 }
 
-export function applyLanguage(preference: string): Language {
-  language = resolveLanguage(preference);
-  applyI18n();
-  return language;
+function persistTheme(mode: ThemeMode): void {
+  try {
+    localStorage.setItem(THEME_KEY, mode);
+  } catch {
+    // A denied store costs the preference, not the theme.
+  }
 }
 
-export function initLanguage(select: HTMLSelectElement): void {
-  const preference = storedLanguage();
-  select.value = preference === "auto" ? "auto" : resolveLanguage(preference);
-  applyLanguage(preference);
-  select.addEventListener("change", () => {
-    persist(LANGUAGE_KEY, select.value);
-    applyLanguage(select.value);
-    document.dispatchEvent(new CustomEvent(LANGUAGE_CHANGED));
+function applyTheme(mode: ThemeMode): void {
+  const dark = mode === "dark" || (mode === "auto" && darkQuery.matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+}
+
+const THEME_LABEL: Record<ThemeMode, MessageKey> = {
+  auto: "theme.auto",
+  light: "theme.light",
+  dark: "theme.dark",
+};
+
+export function initThemeToggle(button: HTMLButtonElement): void {
+  let mode = storedTheme();
+
+  const render = (): void => {
+    button.dataset.themeMode = mode;
+    button.setAttribute("aria-label", t(THEME_LABEL[mode]));
+  };
+
+  applyTheme(mode);
+  render();
+  button.addEventListener("click", () => {
+    const next = THEME_MODES[(THEME_MODES.indexOf(mode) + 1) % THEME_MODES.length];
+    mode = next ?? "auto";
+    persistTheme(mode);
+    applyTheme(mode);
+    render();
+  });
+  darkQuery.addEventListener("change", () => {
+    if (mode === "auto") {
+      applyTheme(mode);
+    }
   });
 }

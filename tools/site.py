@@ -5,15 +5,16 @@
 
 """Builds and serves the site.
 
-The site under `site/` holds the landing page, the shared shell, and the
-playground page under `site/playground/`: TypeScript and plain HTML and
-CSS that is not self-contained. The sources compile to the JavaScript the
-pages load, highlighting needs the grammar compiled to wasm and a
-tree-sitter binding, and the Check and Run buttons need the compiler's
-wasm module. The guide under `docs/guide/` is rendered by the site's own
-generator (`site/ssg/`) into `site/dist/guide/`, checking its examples
-with the same compiler module. This assembles all of those into
-`site/dist/`, which any static file server can host.
+The site under `site/` holds the landing page and the playground page as
+templates plus the shared shell: TypeScript and plain HTML and CSS that
+is not self-contained. The sources compile to the JavaScript the pages
+load, highlighting needs the grammar compiled to wasm and a tree-sitter
+binding, and the Check and Run buttons need the compiler's wasm module.
+The site's own generator (`site/ssg/`) stamps one page tree per language
+(English at the root, `/ja/` beside it) from the templates and the guide
+under `docs/guide/`, checking the guide's examples with the same compiler
+module. This assembles all of those into `site/dist/`, which any static
+file server can host.
 
     uv run ./tools/site.py build            # assemble site/dist
     uv run ./tools/site.py test             # run the generator's tests
@@ -72,6 +73,7 @@ STORE_DIR = CACHE_DIR / "pnpm-store"
 # not here.
 TYPESCRIPT_MODULES = [
     "app",
+    "assets",
     "compiler.worker",
     "editor",
     "elements",
@@ -91,7 +93,7 @@ TYPESCRIPT_MODULES = [
     "wasi",
 ]
 
-PLAIN_FILES = ["index.html", "style.css"]
+PLAIN_FILES = ["style.css"]
 
 # The shared shell: the plain files are copied as they are, and everything
 # under `build/shared/` was compiled from `site/shared/*.ts`.
@@ -241,13 +243,6 @@ def copy_shared(dist_dir: Path) -> None:
             shutil.copy2(source_map, target / source_map.name)
 
 
-def copy_landing(dist_dir: Path) -> None:
-    source = SITE_DIR / "index.html"
-    if not source.is_file():
-        raise FileNotFoundError(f"{source} is missing")
-    shutil.copy2(source, dist_dir / "index.html")
-
-
 def copy_samples(dist_dir: Path) -> None:
     samples_dir = PLAYGROUND_DIR / "samples"
     manifest_path = samples_dir / "samples.json"
@@ -355,6 +350,8 @@ def build_guide(dist_dir: Path) -> None:
         str(GUIDE_DIR),
         "--dist",
         str(dist_dir),
+        "--site",
+        str(SITE_DIR),
         "--repo-root",
         str(project_root_dir),
         "--alcy",
@@ -401,7 +398,6 @@ def command_build(args: argparse.Namespace) -> int:
         shutil.rmtree(dist_dir)
     dist_dir.mkdir(parents=True)
 
-    copy_landing(dist_dir)
     copy_static(dist_dir)
     copy_shared(dist_dir)
     copy_samples(dist_dir)

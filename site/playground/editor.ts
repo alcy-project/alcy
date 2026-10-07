@@ -9,6 +9,7 @@
 import { elements } from "./elements.js";
 import type { MessageKey, MessageParams } from "../shared/i18n.js";
 import { state } from "./state.js";
+import { assetBase } from "./assets.js";
 
 export const FALLBACK_SOURCE = `fn main() {\n  println("Hello, alcy!")\n}\n`;
 
@@ -135,12 +136,12 @@ function whenIdle(callback: () => void): void {
 }
 
 async function initHighlighter(): Promise<void> {
-  const runtimeUrl = new URL("vendor/web-tree-sitter.wasm", document.baseURI).href;
-  const grammarUrl = new URL("grammar/tree-sitter-alcy.wasm", document.baseURI).href;
+  const runtimeUrl = new URL("vendor/web-tree-sitter.wasm", assetBase).href;
+  const grammarUrl = new URL("grammar/tree-sitter-alcy.wasm", assetBase).href;
   try {
     const [module, queryResponse, runtimeBytes, grammarBytes] = await Promise.all([
       import("./highlight.js"),
-      fetch("grammar/highlights.scm"),
+      fetch(new URL("grammar/highlights.scm", assetBase)),
       fetch(runtimeUrl).then((response) => response.arrayBuffer()),
       fetch(grammarUrl).then((response) => response.arrayBuffer()),
     ]);

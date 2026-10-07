@@ -10,17 +10,21 @@ site is shaped this way.
 
 ## Layout
 
-- `index.html` - the landing page.
+- `index.html` - the landing page's template; the generator stamps it
+  once per language.
 - `shared/` - the shell every page loads: `boot.js` resolves the color
   theme before first paint, `site.css` holds the design tokens and the
-  shared styles, and `site.ts` holds the theme and language stores and
-  wires the pickers. The playground's editor and the guide's build-time
-  highlighting share the rendering half in `shared/highlight.ts`.
-- `playground/` - the browser playground page. Its own README covers the
-  page and what it expects from the compiler module.
-- `ssg/` - the guide's generator: a parser for the Markdown subset the
-  guide is written in, the page shell, the link audit, and the
-  build-time highlighter. Its tests are in `ssg/test/`.
+  shared styles, and `site.ts` holds the theme store, the settings
+  toggle, and the page's language. The playground's editor and the
+  guide's build-time highlighting share `shared/highlight.ts`, and
+  `shared/i18n.ts` is the one catalog the generator stamps from.
+- `playground/` - the browser playground. Its `index.html` is a template
+  too; the launch scripts resolve the page's assets against their own
+  URL, so a page in another language's tree finds the one set of assets.
+  Its own README covers the page and the compiler module it expects.
+- `ssg/` - the generator: a parser for the Markdown subset the guide is
+  written in, the page shell, the link audit, the build-time
+  highlighter, and the template stamper. Its tests are in `ssg/test/`.
 - `tsconfig.json`, `tsconfig.workers.json`, `tsconfig.ssg.json` - the
   three builds: the pages (DOM), the playground's two workers
   (WebWorker), and the generator (node).
@@ -28,6 +32,17 @@ site is shaped this way.
 The guide's sources live outside the site, under `docs/guide/`, named
 `NN-slug.md`: the number is the reading order, the `# heading` is the
 title, and the slug (number dropped) is the URL.
+
+## Languages
+
+Every page exists once per language. English is the tree at the site
+root; each other language lives under its prefix, so `/ja/guide/...` is
+the Japanese guide and `/ja/playground/` its playground. The generator
+stamps the labels from `shared/i18n.ts` at build time and the header
+links to the same page in the other tree, which means no page renders in
+the wrong language first and the guide reads without JavaScript. The
+compiled assets (`shared/`, `playground/`) stay in one place; only the
+pages are duplicated per tree.
 
 ## Building
 
