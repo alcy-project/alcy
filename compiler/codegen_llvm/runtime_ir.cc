@@ -8,6 +8,7 @@
 
 #include "codegen_llvm/common.h"
 #include "codegen_llvm/target.h"
+#include "debug/check.h"
 #include "debug/dcheck.h"
 #include "fpag/base/numeric.h"
 #include "ir/type.h"
@@ -220,7 +221,8 @@ class RuntimeBuilder {
                           llvm::Value* len) {
     if (freestanding_) {
       SyscallAbi abi{};
-      DCHECK(syscall_abi(abi));
+      CHECK_MSG(syscall_abi(abi),
+                "freestanding runtime on an unsupported target");
       llvm::Type* i64 = builder_.getInt64Ty();
       llvm::Value* zero = llvm::ConstantInt::get(i64, 0);
       llvm::Value* count = syscall({
@@ -356,7 +358,8 @@ class RuntimeBuilder {
   // runtime takes this path; a hosted one returns to its crt.
   void exit_now(u64 code) {
     SyscallAbi abi{};
-    DCHECK(syscall_abi(abi));
+    CHECK_MSG(syscall_abi(abi),
+              "freestanding runtime on an unsupported target");
     llvm::Type* i64 = builder_.getInt64Ty();
     llvm::Value* zero = llvm::ConstantInt::get(i64, 0);
     syscall({
@@ -513,7 +516,8 @@ class RuntimeBuilder {
   // exactly what the kernel mapped.
   void build_alloc_mmap(llvm::Function* function) {
     SyscallAbi abi{};
-    DCHECK(syscall_abi(abi));
+    CHECK_MSG(syscall_abi(abi),
+              "freestanding runtime on an unsupported target");
     llvm::LLVMContext& context = module_.getContext();
     llvm::Type* i64 = builder_.getInt64Ty();
     const auto constant = [&](u64 value) {
@@ -586,7 +590,8 @@ class RuntimeBuilder {
 
   void build_dealloc_mmap(llvm::Function* function) {
     SyscallAbi abi{};
-    DCHECK(syscall_abi(abi));
+    CHECK_MSG(syscall_abi(abi),
+              "freestanding runtime on an unsupported target");
     llvm::LLVMContext& context = module_.getContext();
     llvm::Type* i64 = builder_.getInt64Ty();
     llvm::BasicBlock* entry =
