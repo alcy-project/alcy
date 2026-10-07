@@ -236,11 +236,15 @@ module.exports = grammar({
       '}',
     ),
 
+    // A path after `:` names a super-spec: every implementation of this
+    // spec then also requires an implementation of the super for the
+    // same target (grammar.ebnf, `spec_item`).
     spec_item: $ => seq(
       optional(field('visibility', $.visibility)),
       'spec',
       field('name', $.identifier),
       optional(field('type_parameters', $.type_parameters)),
+      optional(seq(':', field('super', $.path_type))),
       $._block_lbrace,
       itemList($, $.spec_method),
       '}',

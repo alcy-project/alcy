@@ -538,3 +538,41 @@ pub extern "C" {
           (identifier_pattern
             (identifier))
           (primitive_type))))))
+
+================================================================================
+A spec names a super-spec
+================================================================================
+
+spec Eq: PartialEq {}
+
+spec Ord: core::cmp::Ord {
+  fn cmp(self: &Self) -> i32;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (spec_item
+    (identifier)
+    (path_type
+      (path
+        (identifier))))
+  (spec_item
+    (identifier)
+    (path_type
+      (path
+        (identifier)
+        (identifier)
+        (identifier)))
+    (spec_method
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (self))
+          (reference_type
+            (path_type
+              (path
+                (self_type))))))
+      (return_type
+        (primitive_type)))))

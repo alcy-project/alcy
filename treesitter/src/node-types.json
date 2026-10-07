@@ -3649,6 +3649,16 @@
           }
         ]
       },
+      "super": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "path_type",
+            "named": true
+          }
+        ]
+      },
       "type_parameters": {
         "multiple": false,
         "required": false,
