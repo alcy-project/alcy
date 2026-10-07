@@ -139,10 +139,12 @@ module.exports = grammar({
 
     // `unsafe` marks an operation, so it is read only where a function
     // declares one (ffi.md, "The gate"); the body of an `unsafe fn` is
-    // not an unsafe context implicitly.
+    // not an unsafe context implicitly. `comp` marks a free function
+    // whose calls happen during compilation (comp.md, "Functions").
     function_item: $ => seq(
       optional(field('visibility', $.visibility)),
       optional('unsafe'),
+      optional('comp'),
       'fn',
       field('name', $.identifier),
       optional(field('type_parameters', $.type_parameters)),

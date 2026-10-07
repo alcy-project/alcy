@@ -178,3 +178,31 @@ spec Iterable {
                 (self_type))))))
       (return_type
         (primitive_type)))))
+
+================================================================================
+A comp fn marks a free function
+================================================================================
+
+comp fn twice(x: i32) -> i32 {
+  ret x * 2
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (binary_expression
+          (path_expression
+            (path
+              (identifier)))
+          (integer))))))
