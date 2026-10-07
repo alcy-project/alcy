@@ -1,4 +1,6 @@
 # `core` seals `Index` to `alcy/std`, and a program is no member of
 # that suite, so the operator specs stay the compiler's (ADR-0053).
 exit = 4
-contains = ["Spec 'Index' is sealed by package 'core'; implementing it from outside needs the [spec] implement key, which is not accepted yet"]
+contains = [
+  "Spec 'Index' is sealed by package 'core'; implementing it from outside needs the [spec] implement key, which is not accepted yet",
+]

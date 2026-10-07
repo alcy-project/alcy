@@ -7,11 +7,33 @@ name = "core"
 version = "0.1.0"
 
 [modules]
-include = ["prelude", "iterator", "mem", "option", "range", "result", "slice", "string", "index", "cmp"]
+include = [
+  "prelude",
+  "iterator",
+  "mem",
+  "option",
+  "range",
+  "result",
+  "slice",
+  "string",
+  "index",
+  "cmp",
+]
 # The public surface, in the form `docs/adr/0007-manifest-driven-modules.md` specifies. Nothing
 # enforces it yet. Its `pub` items are also the implicit surface:
 # a program depending on this package sees them with no `use`.
-export = ["prelude", "iterator", "mem", "option", "range", "result", "slice", "string", "index", "cmp"]
+export = [
+  "prelude",
+  "iterator",
+  "mem",
+  "option",
+  "range",
+  "result",
+  "slice",
+  "string",
+  "index",
+  "cmp",
+]
 
 # Specs only this suite may implement (ADR-0053). Indexing and
 # equality are operators, so their capabilities are the compiler's,
