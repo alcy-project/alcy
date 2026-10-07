@@ -28,6 +28,58 @@ from utils.source import (
 from build import build
 
 
+def git_output(args: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args], cwd=project_root_dir, capture_output=True, text=True
+    )
+
+
+def default_changed_base() -> str:
+    """The closest commit HEAD forked from, or HEAD when there is none.
+
+    Candidates are every spelling of the integration branch; the one whose
+    merge base is nearest HEAD is taken, because a stale branch and a
+    branch that has already absorbed this one name different commits and
+    only the nearest is "where my work starts". Falling back to HEAD keeps
+    an already-merged branch from reporting main's own commits as changes.
+    """
+    best = "HEAD"
+    best_count: int | None = None
+    for candidate in ("origin/main", "main", "origin/master", "master"):
+        found = git_output(["rev-parse", "--verify", "--quiet", candidate])
+        if found.returncode != 0:
+            continue
+        merge_base = git_output(["merge-base", "HEAD", candidate])
+        if merge_base.returncode != 0 or not merge_base.stdout.strip():
+            continue
+        base = merge_base.stdout.strip()
+        count = git_output(["rev-list", "--count", f"{base}..HEAD"])
+        if count.returncode != 0:
+            continue
+        since = int(count.stdout.strip() or "0")
+        if best_count is None or since < best_count:
+            best, best_count = base, since
+    return best
+
+
+def git_changed_files(rev: str) -> list[str] | None:
+    """Working-tree-relative paths this branch changed, deletions aside."""
+    base = rev or default_changed_base()
+    tracked = git_output(["diff", "--name-only", "--diff-filter=ACMR", base, "--"])
+    if tracked.returncode != 0:
+        print(
+            f"git diff against '{base}' failed: {tracked.stderr.strip()}",
+            file=sys.stderr,
+        )
+        return None
+    untracked = git_output(["ls-files", "--others", "--exclude-standard"])
+    if untracked.returncode != 0:
+        print(untracked.stderr.strip(), file=sys.stderr)
+        return None
+    paths = (tracked.stdout + untracked.stdout).splitlines()
+    return sorted({p for p in paths if p})
+
+
 def target_files(target_dirs: list[Path]):
     files: list[str] = []
     comp_files: list[str] = []
@@ -158,7 +210,21 @@ def lint_files(
     fix: bool,
     fix_errors: bool,
     verbose: bool,
+    changed: str | None = None,
 ):
+    changed_set: set[str] | None = None
+    if changed is not None:
+        paths = git_changed_files(changed)
+        if paths is None:
+            return -1
+        changed_set = set(paths)
+        # A change to a manifest or a document has nothing this gate
+        # reads; running gn gen and a whole-tree format for it is the
+        # cost the flag exists to avoid.
+        if not any(Path(p).suffix in source_extensions for p in changed_set):
+            print("lint: no changed source files")
+            return 0
+
     ret = build(
         target="all",
         mode="debug",
@@ -201,6 +267,15 @@ def lint_files(
             failed = True
 
     files, comp_files, header_files = target_files(target_dirs)
+    if changed_set is not None:
+        files = [f for f in files if f in changed_set]
+        comp_files = [f for f in comp_files if f in changed_set]
+        header_files = [h for h in header_files if h in changed_set]
+        # A changed source outside the linted directories leaves nothing
+        # to check; that is a pass for this flag, not an empty run.
+        if not files and not comp_files and not header_files:
+            print("lint: no changed source files")
+            return 0
     enumerated = len(files) + len(comp_files) + len(header_files)
 
     # Check that all source and header files under project_source_dirs remain pure ASCII
@@ -257,6 +332,16 @@ def main():
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose output"
     )
+    parser.add_argument(
+        "--changed",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="REV",
+        help="Lint only files changed since REV, or since the merge base "
+        "with main when REV is omitted. Local iteration; CI runs the full "
+        "tree",
+    )
 
     args = parser.parse_args()
 
@@ -271,7 +356,9 @@ def main():
         elif fix:
             print(f"{os.path.basename(__file__)}: fix enabled")
 
-    return lint_files(args.build_subdir, fix, fix_errors, args.verbose)
+    return lint_files(
+        args.build_subdir, fix, fix_errors, args.verbose, changed=args.changed
+    )
 
 
 if __name__ == "__main__":
