@@ -13,6 +13,7 @@
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "base/nesting.h"
+#include "comp/comp_value.h"
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/idx.h"
@@ -76,40 +77,11 @@ class Lowerer {
   std::vector<diag::Span> instr_spans_;
   std::vector<LoweredPackage::AddrInfo> addr_names_;
 
-  // Compile-time values for comp evaluation. Integers ride as u64
-  // with their type attached (semantics follow the emitting opcodes:
-  // wrapping arithmetic, two's-complement negation); aggregates carry
-  // positional fields.
-  struct CompValue {
-    enum class Tag : u8 {
-      Void,
-      Int,
-      Bool,
-      Str,
-      Tuple,
-      Array,
-      Struct,
-      Enum,
-    };
-    Tag tag = Tag::Void;
-    u64 int_value = 0;
-    bool bool_value = false;
-    std::string str_value;
-    std::vector<CompValue> fields;
-    u32 variant = 0;
-  };
-
-  struct CompVal {
-    CompValue value;
-    ir::TypeIdx type = ir::TypeIdx(base::INVALID_IDX);
-  };
-
-  // Lexical comp bindings: persistent per-function bindings plus
-  // evaluation-local frames.
-  struct CompScope {
-    std::vector<std::pair<std::string_view, CompVal>>* outer = nullptr;
-    std::vector<std::vector<std::pair<std::string_view, CompVal>>> frames;
-  };
+  // Compile-time values and their integer semantics live in the comp
+  // component; the lowerer is one of its two readers.
+  using CompValue = comp::CompValue;
+  using CompVal = comp::CompVal;
+  using CompScope = comp::CompScope;
 
   struct FnEntry {
     ast::ItemIdx item = ast::ItemIdx::invalid();
@@ -463,17 +435,12 @@ class Lowerer {
 
   static constexpr usize COMP_STEP_BUDGET = 1u << 20;
   static constexpr u32 COMP_MAX_CALL_DEPTH = 64;
-  static bool comp_is_signed(ir::TypeTag tag);
-  static u32 comp_int_bytes(ir::TypeTag tag);
-  static u64 comp_mask(ir::TypeTag tag);
   bool comp_fail(diag::Span span, std::string_view what);
   bool comp_tick(diag::Span span);
   ir::TypeIdx expr_type_in(u32 mod, ast::ExprIdx expr);
   const analyzer::CheckedModule::CallTarget* call_target_in(
       u32 mod,
       ast::ExprIdx callee) const;
-  const CompVal* comp_lookup(const CompScope& scope, std::string_view name);
-  static std::string comp_unescape(std::string_view spelling);
   bool comp_eval_literal(u32 mod, ast::ExprIdx expr, CompVal& out);
 
   struct CompFlow {
@@ -552,12 +519,10 @@ class Lowerer {
                       ast::ExprIdx expr,
                       CompScope& scope,
                       CompVal& out);
-  static bool comp_truth(const CompVal& value);
   bool comp_eval_binary(u32 mod,
                         ast::ExprIdx expr,
                         CompScope& scope,
                         CompVal& out);
-  static i64 comp_sign_extend(u64 bits, ir::TypeTag tag);
   struct FmtState {
     ir::RegisterIdx off_addr = ir::RegisterIdx::invalid();
     ir::RegisterIdx tot_addr = ir::RegisterIdx::invalid();

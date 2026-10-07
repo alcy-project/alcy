@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <cstdlib>
-#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -12,6 +11,7 @@
 #include "analyzer/fmt.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "comp/comp_value.h"
 #include "diag/span.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
@@ -24,32 +24,8 @@
 #include "ir/type.h"
 #include "ir/type_util.h"
 #include "lowering/lowerer.h"
-#include "text/unescape.h"
 
 namespace lowering {
-
-bool Lowerer::comp_is_signed(ir::TypeTag tag) {
-  return tag == ir::TypeTag::I8 || tag == ir::TypeTag::I16 ||
-         tag == ir::TypeTag::I32 || tag == ir::TypeTag::I64;
-}
-
-u32 Lowerer::comp_int_bytes(ir::TypeTag tag) {
-  switch (tag) {
-    case ir::TypeTag::I8:
-    case ir::TypeTag::U8: return 1;
-    case ir::TypeTag::I16:
-    case ir::TypeTag::U16: return 2;
-    case ir::TypeTag::I32:
-    case ir::TypeTag::U32: return 4;
-    default: return 8;
-  }
-}
-
-u64 Lowerer::comp_mask(ir::TypeTag tag) {
-  const u32 bytes = comp_int_bytes(tag);
-  return bytes >= 8 ? ~static_cast<u64>(0)
-                    : ((static_cast<u64>(1) << (bytes * 8)) - 1);
-}
 
 bool Lowerer::comp_fail(diag::Span span, std::string_view what) {
   unsupported(span, what);
@@ -84,31 +60,6 @@ const analyzer::CheckedModule::CallTarget* Lowerer::call_target_in(
              : &checked.call_targets[found->second];
 }
 
-const Lowerer::CompVal* Lowerer::comp_lookup(const CompScope& scope,
-                                             std::string_view name) {
-  for (usize i = scope.frames.size(); i-- > 0;) {
-    for (const auto& binding : scope.frames[i] | std::views::reverse) {
-      if (binding.first == name) {
-        return &binding.second;
-      }
-    }
-  }
-  if (scope.outer != nullptr) {
-    for (const auto& binding : *scope.outer | std::views::reverse) {
-      if (binding.first == name) {
-        return &binding.second;
-      }
-    }
-  }
-  return nullptr;
-}
-
-// Unescapes with exactly the runtime literal rules so comp strings
-// match lowered ones byte for byte.
-std::string Lowerer::comp_unescape(std::string_view spelling) {
-  return text::unescape_string(spelling);
-}
-
 bool Lowerer::comp_eval_literal(u32 mod, ast::ExprIdx expr, CompVal& out) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::Literal& lit =
@@ -125,7 +76,7 @@ bool Lowerer::comp_eval_literal(u32 mod, ast::ExprIdx expr, CompVal& out) {
   }
   if (lit.kind == ast::LiteralKind::String) {
     out.value.tag = CompValue::Tag::Str;
-    out.value.str_value = comp_unescape(lit.spelling);
+    out.value.str_value = comp::unescape(lit.spelling);
     return true;
   }
   if (lit.kind == ast::LiteralKind::Integer) {
@@ -239,13 +190,13 @@ bool Lowerer::comp_match_pattern(u32 mod,
           expected = 0 - expected;
         }
         return value.value.int_value ==
-               (expected & comp_mask(tag_of(value.type)));
+               (expected & comp::mask(tag_of(value.type)));
       }
       if (lit.kind == ast::LiteralKind::String) {
         if (value.value.tag != CompValue::Tag::Str) {
           return false;
         }
-        return value.value.str_value == comp_unescape(lit.spelling);
+        return value.value.str_value == comp::unescape(lit.spelling);
       }
       return comp_fail(node.span, "pattern is not comp-evaluable");
     }
@@ -1064,7 +1015,7 @@ bool Lowerer::comp_eval_expr(u32 mod,
       const ast::PathIdx path = node.payload.get<ast::ExprPath>().idx;
       const std::span<const ast::Ident> segments = ast.paths[path].segments;
       if (segments.size() == 1) {
-        if (const CompVal* bound = comp_lookup(scope, segments[0].name)) {
+        if (const CompVal* bound = comp::lookup(scope, segments[0].name)) {
           out = *bound;
           return true;
         }
@@ -1106,7 +1057,7 @@ bool Lowerer::comp_eval_expr(u32 mod,
         return comp_fail(node.span, "unary operand without value");
       }
       const ir::TypeTag tag = tag_of(inner.type);
-      const u64 mask = comp_mask(tag);
+      const u64 mask = comp::mask(tag);
       out.value.tag = CompValue::Tag::Int;
       if (unary.op == ast::UnaryOp::BitNot) {
         out.value.int_value = ~inner.value.int_value & mask;
@@ -1134,7 +1085,7 @@ bool Lowerer::comp_eval_expr(u32 mod,
       const ir::TypeTag target = tag_of(out.type);
       if (target == ir::TypeTag::I1) {
         out.value.tag = CompValue::Tag::Bool;
-        out.value.bool_value = comp_truth(inner);
+        out.value.bool_value = comp::truth(inner);
         return true;
       }
       if (inner.value.tag == CompValue::Tag::Bool) {
@@ -1146,17 +1097,17 @@ bool Lowerer::comp_eval_expr(u32 mod,
         return comp_fail(node.span, "cast without value");
       }
       out.value.tag = CompValue::Tag::Int;
-      u64 bits = inner.value.int_value & comp_mask(tag_of(inner.type));
-      if (comp_is_signed(target) && comp_is_signed(tag_of(inner.type))) {
-        const u32 bytes = comp_int_bytes(target);
+      u64 bits = inner.value.int_value & comp::mask(tag_of(inner.type));
+      if (comp::is_signed(target) && comp::is_signed(tag_of(inner.type))) {
+        const u32 bytes = comp::int_bytes(target);
         const u64 sign = bytes >= 8 ? static_cast<u64>(1) << 63
                                     : (static_cast<u64>(1) << (bytes * 8 - 1));
-        bits &= comp_mask(target);
+        bits &= comp::mask(target);
         if ((bits & sign) != 0) {
-          bits |= ~comp_mask(target);
+          bits |= ~comp::mask(target);
         }
       } else {
-        bits &= comp_mask(target);
+        bits &= comp::mask(target);
       }
       out.value.int_value = bits;
       return true;
@@ -1381,13 +1332,6 @@ bool Lowerer::comp_eval_expr(u32 mod,
   return comp_fail(node.span, "expression is not comp-evaluable");
 }
 
-bool Lowerer::comp_truth(const CompVal& value) {
-  if (value.value.tag == CompValue::Tag::Bool) {
-    return value.value.bool_value;
-  }
-  return value.value.int_value != 0;
-}
-
 bool Lowerer::comp_eval_binary(u32 mod,
                                ast::ExprIdx expr,
                                CompScope& scope,
@@ -1418,8 +1362,8 @@ bool Lowerer::comp_eval_binary(u32 mod,
     bool equal = false;
     if (lhs.value.tag == CompValue::Tag::Int &&
         rhs.value.tag == CompValue::Tag::Int) {
-      equal = (lhs.value.int_value & comp_mask(tag_of(lhs.type))) ==
-              (rhs.value.int_value & comp_mask(tag_of(rhs.type)));
+      equal = (lhs.value.int_value & comp::mask(tag_of(lhs.type))) ==
+              (rhs.value.int_value & comp::mask(tag_of(rhs.type)));
     } else if (lhs.value.tag == CompValue::Tag::Bool &&
                rhs.value.tag == CompValue::Tag::Bool) {
       equal = lhs.value.bool_value == rhs.value.bool_value;
@@ -1438,15 +1382,15 @@ bool Lowerer::comp_eval_binary(u32 mod,
     return comp_fail(node.span, "operand without value");
   }
   const ir::TypeTag tag = tag_of(lhs.type);
-  const u64 mask = comp_mask(tag);
+  const u64 mask = comp::mask(tag);
   const u64 left = lhs.value.int_value & mask;
   const u64 right = rhs.value.int_value & mask;
   if (bin.op == ast::BinaryOp::Gt || bin.op == ast::BinaryOp::Lt ||
       bin.op == ast::BinaryOp::GtEq || bin.op == ast::BinaryOp::LtEq) {
     bool ordered = false;
-    if (comp_is_signed(tag)) {
-      const i64 sl = comp_sign_extend(left, tag);
-      const i64 sr = comp_sign_extend(right, tag);
+    if (comp::is_signed(tag)) {
+      const i64 sl = comp::sign_extend(left, tag);
+      const i64 sr = comp::sign_extend(right, tag);
       switch (bin.op) {
         case ast::BinaryOp::Gt: ordered = sl > sr; break;
         case ast::BinaryOp::Lt: ordered = sl < sr; break;
@@ -1481,11 +1425,11 @@ bool Lowerer::comp_eval_binary(u32 mod,
       if (right == 0) {
         return comp_fail(node.span, "division by zero in comp evaluation");
       }
-      if (comp_is_signed(tag)) {
-        const i64 sl = comp_sign_extend(left, tag);
-        const i64 sr = comp_sign_extend(right, tag);
+      if (comp::is_signed(tag)) {
+        const i64 sl = comp::sign_extend(left, tag);
+        const i64 sr = comp::sign_extend(right, tag);
         static constexpr i64 MIN = static_cast<i64>(static_cast<u64>(1) << 63);
-        if (sl == MIN && sr == -1 && comp_int_bytes(tag) == 8) {
+        if (sl == MIN && sr == -1 && comp::int_bytes(tag) == 8) {
           out.value.int_value = static_cast<u64>(MIN);
           return true;
         }
@@ -1517,9 +1461,9 @@ bool Lowerer::comp_eval_binary(u32 mod,
         out.value.int_value = (left << right) & mask;
         return true;
       }
-      if (comp_is_signed(tag)) {
+      if (comp::is_signed(tag)) {
         out.value.int_value =
-            static_cast<u64>(comp_sign_extend(left, tag) >> right) & mask;
+            static_cast<u64>(comp::sign_extend(left, tag) >> right) & mask;
         return true;
       }
       out.value.int_value = (left >> right) & mask;
@@ -1528,20 +1472,6 @@ bool Lowerer::comp_eval_binary(u32 mod,
     default: break;
   }
   return comp_fail(node.span, "operator is not comp-evaluable");
-}
-
-i64 Lowerer::comp_sign_extend(u64 bits, ir::TypeTag tag) {
-  const u32 bytes = comp_int_bytes(tag);
-  if (bytes >= 8) {
-    return static_cast<i64>(bits);
-  }
-  const u64 mask = comp_mask(tag);
-  const u64 sign = static_cast<u64>(1) << (bytes * 8 - 1);
-  bits &= mask;
-  if ((bits & sign) != 0) {
-    bits |= ~mask;
-  }
-  return static_cast<i64>(bits);
 }
 
 // Formats into a caller buffer by compile-time expansion: literal

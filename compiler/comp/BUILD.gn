@@ -1,0 +1,15 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("comp") {
+  sources = [
+    "comp_value.cc",
+    "comp_value.h",
+  ]
+  deps = [
+    "//compiler:base_modules",
+    "//compiler/ir",
+    "//compiler/text",
+  ]
+  configs += [ "//compiler:alcy_config" ]
+}

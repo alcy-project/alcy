@@ -42,6 +42,7 @@ group("modules") {
     "borrow",
     "codegen",
     "codegen/wasm",
+    "comp",
     "diag",
     "i18n",
     "ir",

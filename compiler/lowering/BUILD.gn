@@ -15,6 +15,7 @@ source_set("lowering") {
     "//compiler:base_modules",
     "//compiler/analyzer",
     "//compiler/ast",
+    "//compiler/comp",
     "//compiler/diag",
     "//compiler/i18n",
     "//compiler/ir",
