@@ -219,8 +219,9 @@ between the footer and the bytes.
 
 `STRINGS` is `u32 count` followed by `count` entries of
 `u32 length, u8[length]`. Every `StringPoolId` in the storage is
-written as the index of its bytes in this table, in ascending pool
-offset order for the strings the package references. A reader interns
+written as the index of its bytes in this table: the referenced pool
+strings in ascending pool offset order, then the address names in
+address-name order, each name deduplicated by content. A reader interns
 the entries in order and remaps every reference; the pool offsets of
 the writer are not preserved and MUST NOT be written.
 
@@ -267,9 +268,10 @@ register has no defining instruction.
 operands_head u32, operands_size u32 }`. `flags` keeps
 `InstructionFlags`' bit layout: bits 0–2 `rmw_op`, bit 3 the boolean.
 
-**OPERANDS**: `{ tag u8, pad u8[3], payload u32, type u32 }`. `tag`
-matches `ir::Operand::Payload`'s order; `payload` is the row index in
-the table that tag names.
+**OPERANDS**: `{ tag u8, pad u8[3], payload u32, type u32 }`. `tag` is
+the numeric value of `ir::Operand::TAG_OF<T>` for the operand's
+alternative; `payload` is the row index in the table that tag names
+(zero for `void`).
 
 **IMMUTABLES**: `{ type u32, aux u32, value u64 }`. For a `Str`
 immutable, `aux` is the string index and `value` is 0; for every other
@@ -279,9 +281,9 @@ tag, `aux` is 0 and `value` is the union's bytes.
 name u32, path u32, kind u8, cc u8, pad u8[2], generics_head u32,
 generics_size u32 }`.
 
-**FILES**: `{ name u32, pad u32, size u64, hash u64 }`, one per file the
-spans name, in `FileId` order. `hash` is 0 when the writer did not
-compute one.
+**FILES**: `{ name u32, pad u32, hash u64 }`, one per file the spans
+name, in `FileId` order. `hash` is 0 when the writer did not compute
+one.
 
 **SPANS**: `count` × `{ file u32, offset u32, length u32 }`, parallel to
 the instruction table. `file` is `U32_MAX` for a span with no file.
@@ -289,6 +291,9 @@ The section is absent or empty when the package carries no spans.
 
 **ADDR_NAMES**: `count` × `{ reg u32, name u32, flags u8, pad u8[3] }`,
 `flags` bit 0 `is_param`, bit 1 `is_capture`.
+
+**PRELUDE**: one `u32`, the package's prelude count. The section is
+absent when the count is zero.
 
 ### 3.5 Reading
 
