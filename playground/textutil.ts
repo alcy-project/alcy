@@ -9,11 +9,11 @@
 // Returns a table where `table[byteOffset]` is the code-unit index at or
 // before that byte. The last entry is the text's length in code units, so
 // `table` has `utf8Length(text) + 1` entries.
-export function byteToUtf16Map(text) {
-  const table = [];
+export function byteToUtf16Map(text: string): Uint32Array {
+  const table: number[] = [];
   let utf16 = 0;
   for (const ch of text) {
-    const codePoint = ch.codePointAt(0);
+    const codePoint = ch.codePointAt(0) ?? 0;
     const bytes =
       codePoint < 0x80 ? 1 : codePoint < 0x800 ? 2 : codePoint < 0x10000 ? 3 : 4;
     for (let i = 0; i < bytes; i++) {
@@ -25,12 +25,12 @@ export function byteToUtf16Map(text) {
   return Uint32Array.from(table);
 }
 
-export function utf16IndexAtByte(table, byteOffset) {
+export function utf16IndexAtByte(table: Uint32Array, byteOffset: number): number {
   if (byteOffset <= 0) {
     return 0;
   }
   if (byteOffset >= table.length) {
-    return table[table.length - 1];
+    return table[table.length - 1] ?? 0;
   }
-  return table[byteOffset];
+  return table[byteOffset] ?? 0;
 }

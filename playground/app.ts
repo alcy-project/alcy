@@ -21,7 +21,7 @@ import * as theme from "./theme.js";
 
 // Everything that keeps its own rendered state is redrawn from the state
 // it came from, so switching the language never leaves a mixed page.
-function renderForLanguage() {
+function renderForLanguage(): void {
   status.renderStatus();
   status.renderCompilerState();
   output.renderRunMeta();
@@ -33,12 +33,12 @@ function renderForLanguage() {
   }
 }
 
-function onInput() {
+function onInput(): void {
   runtime.scheduleCheck();
   session.scheduleCodeSave();
 }
 
-function init() {
+function init(): void {
   theme.initTheme();
   language.applyLanguage(language.storedLanguage());
   splitter.initSplitter();
@@ -54,7 +54,9 @@ function init() {
   });
 
   elements.run.addEventListener("click", () => void runtime.run());
-  elements.check.addEventListener("click", () => void runtime.runCheck({ automatic: false }));
+  elements.check.addEventListener("click", () => {
+    void runtime.runCheck({ automatic: false });
+  });
   elements.language.addEventListener("change", () => {
     const preference = elements.language.value;
     language.persistLanguage(preference);

@@ -11,28 +11,39 @@ import { state } from "./state.js";
 const CODE_KEY = "alcy-playground-code";
 const CODE_SAVE_DEBOUNCE_MS = 300;
 
-export function readSavedCode() {
+export interface SavedCode {
+  source: string;
+  sampleFile: string | null;
+}
+
+export function readSavedCode(): SavedCode | null {
   try {
     const raw = localStorage.getItem(CODE_KEY);
     if (raw === null) {
       return null;
     }
-    const saved = JSON.parse(raw);
-    if (typeof saved?.source !== "string") {
+    const saved: unknown = JSON.parse(raw);
+    if (
+      typeof saved !== "object" ||
+      saved === null ||
+      typeof (saved as { source?: unknown }).source !== "string"
+    ) {
       return null;
     }
+    const source = (saved as { source: string }).source;
+    const sampleFile = (saved as { sampleFile?: unknown }).sampleFile;
     return {
-      source: saved.source,
-      sampleFile: typeof saved.sampleFile === "string" ? saved.sampleFile : null,
+      source,
+      sampleFile: typeof sampleFile === "string" ? sampleFile : null,
     };
   } catch {
     return null;
   }
 }
 
-export function saveCodeNow() {
+export function saveCodeNow(): void {
   window.clearTimeout(state.codeSaveTimer);
-  state.codeSaveTimer = null;
+  state.codeSaveTimer = undefined;
   try {
     localStorage.setItem(
       CODE_KEY,
@@ -47,7 +58,7 @@ export function saveCodeNow() {
   }
 }
 
-export function scheduleCodeSave() {
+export function scheduleCodeSave(): void {
   window.clearTimeout(state.codeSaveTimer);
   state.codeSaveTimer = window.setTimeout(saveCodeNow, CODE_SAVE_DEBOUNCE_MS);
 }

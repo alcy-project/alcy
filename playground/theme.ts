@@ -9,7 +9,7 @@ import { elements } from "./elements.js";
 const THEME_KEY = "alcy-playground-theme";
 const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-function storedTheme() {
+function storedTheme(): string {
   try {
     return localStorage.getItem(THEME_KEY) ?? "auto";
   } catch {
@@ -17,13 +17,13 @@ function storedTheme() {
   }
 }
 
-export function applyTheme(mode) {
+export function applyTheme(mode: string): void {
   const dark = mode === "dark" || (mode === "auto" && darkQuery.matches);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
   elements.theme.value = mode;
 }
 
-export function initTheme() {
+export function initTheme(): void {
   applyTheme(storedTheme());
   elements.theme.addEventListener("change", () => {
     const mode = elements.theme.value;

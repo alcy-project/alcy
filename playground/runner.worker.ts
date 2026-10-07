@@ -10,8 +10,13 @@
 
 importScripts("wasi.js");
 
-self.addEventListener("message", async (event) => {
-  const request = event.data ?? {};
+interface RunRequest {
+  type: "run";
+  wasm: ArrayBuffer;
+}
+
+self.addEventListener("message", async (event: MessageEvent<RunRequest>) => {
+  const request = event.data;
   if (request.type !== "run") {
     return;
   }
@@ -21,7 +26,7 @@ self.addEventListener("message", async (event) => {
   } catch (error) {
     self.postMessage({
       type: "error",
-      message: error && error.message ? error.message : String(error),
+      message: error instanceof Error ? error.message : String(error),
     });
   }
 });

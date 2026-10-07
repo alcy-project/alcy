@@ -5,3 +5,5 @@ tree_sitter_cli_version = "0.27.0"
 # The tree-sitter web binding the playground bundles; its parser ABI must
 # match the grammar the CLI generates. See playground/README.md.
 web_tree_sitter_version = "0.27.0"
+typescript_version = "7.0.2"
+pnpm_version = "12.10.1"

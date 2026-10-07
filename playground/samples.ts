@@ -12,26 +12,39 @@ import { scheduleCheck } from "./runtime.js";
 import { readSavedCode, saveCodeNow } from "./session.js";
 import { setStatus } from "./status.js";
 
-function applySource(text) {
+interface SampleEntry {
+  file: string;
+  title?: string;
+  description?: string;
+}
+
+interface SampleManifest {
+  default?: string;
+  samples: SampleEntry[];
+}
+
+function applySource(text: string): void {
   renderDiagnostics([]);
   setText(text);
   scheduleCheck();
 }
 
-export async function loadSample(file) {
+export async function loadSample(file: string): Promise<void> {
   try {
     const response = await fetch(`samples/${file}`);
     applySource(await response.text());
     saveCodeNow();
   } catch (error) {
-    setStatus("status.loadExampleFailed", { detail: error.message ?? String(error) });
+    setStatus("status.loadExampleFailed", {
+      detail: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
-export async function loadSamples() {
-  let manifest = null;
+export async function loadSamples(): Promise<void> {
+  let manifest: SampleManifest | null = null;
   try {
-    manifest = await (await fetch("samples/index.json")).json();
+    manifest = (await (await fetch("samples/index.json")).json()) as SampleManifest;
   } catch {
     manifest = null;
   }
@@ -48,21 +61,23 @@ export async function loadSamples() {
     elements.samples.append(option);
   }
   elements.samples.disabled = false;
-  const first = manifest.default ?? manifest.samples[0].file;
+  const first = manifest.default ?? manifest.samples[0]?.file ?? "";
   const initial = manifest.samples.some((sample) => sample.file === first)
     ? first
-    : manifest.samples[0].file;
+    : (manifest.samples[0]?.file ?? "");
   const saved = readSavedCode();
   const restored =
     saved !== null &&
     saved.sampleFile !== null &&
     manifest.samples.some((sample) => sample.file === saved.sampleFile);
-  elements.samples.value = restored ? saved.sampleFile : initial;
+  elements.samples.value = restored && saved !== null ? (saved.sampleFile ?? initial) : initial;
   if (saved !== null) {
     applySource(saved.source);
     setStatus("status.restored");
   } else {
     await loadSample(elements.samples.value);
   }
-  elements.samples.addEventListener("change", () => loadSample(elements.samples.value));
+  elements.samples.addEventListener("change", () => {
+    void loadSample(elements.samples.value);
+  });
 }

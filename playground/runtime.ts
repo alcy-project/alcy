@@ -2,15 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // The run side of the page: the compiler worker behind Check and the
-// disposable runner worker behind Run. The run meta line is a translated
-// main sentence plus an optional suffix, so a language switch re-renders
-// a finished run the same way.
+// disposable runner worker behind Run.
 
 import { elements } from "./elements.js";
+import { normalizedSource } from "./editor.js";
 import { t } from "./language.js";
 import { setRunMeta, setRunMetaSuffix } from "./output.js";
 import { renderDiagnostics } from "./problems.js";
-import { normalizedSource } from "./editor.js";
 import { state } from "./state.js";
 import {
   setCompilerState,
@@ -19,35 +17,39 @@ import {
   showCompilerError,
 } from "./status.js";
 import { showTab } from "./tabs.js";
+import type {
+  CompilerMessage,
+  CompilerResponse,
+  CompilerStatusName,
+  RunnerMessage,
+} from "./types.js";
 
 const CHECK_DEBOUNCE_MS = 500;
 const RUN_TIMEOUT_MS = 5000;
 
-function ensureCompilerWorker() {
+function ensureCompilerWorker(): Worker {
   if (state.compiler !== null) {
     return state.compiler;
   }
   const worker = new Worker("compiler.worker.js");
-  worker.addEventListener("message", (event) => {
-    const message = event.data ?? {};
+  worker.addEventListener("message", (event: MessageEvent<CompilerMessage>) => {
+    const message = event.data;
     if (message.type === "status") {
       applyCompilerState(message.status, message.detail);
       return;
     }
-    if (message.type === "response") {
-      const pending = state.requests.get(message.id);
-      if (pending === undefined) {
-        return;
-      }
-      state.requests.delete(message.id);
-      pending.resolve(message);
+    const pending = state.requests.get(message.id);
+    if (pending === undefined) {
+      return;
     }
+    state.requests.delete(message.id);
+    pending.resolve(message);
   });
   worker.addEventListener("error", (event) => {
-    failAllRequests(event.message ?? "the compiler worker stopped");
+    failAllRequests(event.message || "the compiler worker stopped");
     worker.terminate();
     state.compiler = null;
-    applyCompilerState("error", event.message ?? "");
+    applyCompilerState("error", event.message || "");
   });
   worker.addEventListener("messageerror", () => {
     failAllRequests("the compiler worker sent an unreadable message");
@@ -56,14 +58,17 @@ function ensureCompilerWorker() {
   return worker;
 }
 
-function failAllRequests(message) {
+function failAllRequests(message: string): void {
   for (const pending of state.requests.values()) {
     pending.reject(new Error(message));
   }
   state.requests.clear();
 }
 
-function callCompiler(op, source) {
+function callCompiler(
+  op: "check" | "compile",
+  source: string,
+): Promise<CompilerResponse> {
   const worker = ensureCompilerWorker();
   const id = ++state.requestSeq;
   return new Promise((resolve, reject) => {
@@ -74,7 +79,7 @@ function callCompiler(op, source) {
 
 // What a compiler state change means for the page: a ready worker gets a
 // check scheduled, and a failed load shows the error diagnostic.
-function applyCompilerState(status, detail) {
+function applyCompilerState(status: CompilerStatusName, detail: string): void {
   setCompilerState(status, detail);
   if (status === "ready") {
     scheduleCheck();
@@ -84,7 +89,7 @@ function applyCompilerState(status, detail) {
   }
 }
 
-export function scheduleCheck() {
+export function scheduleCheck(): void {
   if (state.compilerStatus !== "ready") {
     return;
   }
@@ -94,7 +99,9 @@ export function scheduleCheck() {
   }, CHECK_DEBOUNCE_MS);
 }
 
-export async function runCheck({ automatic = false } = {}) {
+export async function runCheck({
+  automatic = false,
+}: { automatic?: boolean } = {}): Promise<void> {
   if (state.running) {
     return;
   }
@@ -108,12 +115,12 @@ export async function runCheck({ automatic = false } = {}) {
     if (sequence !== state.checkSeq) {
       return;
     }
-    if (response.error) {
+    if (response.error !== undefined) {
       // The load failure was already reported through the compiler state;
       // this response's empty diagnostics must not clear that report.
       return;
     }
-    renderDiagnostics(response.diagnostics ?? []);
+    renderDiagnostics(response.diagnostics);
     if (!automatic) {
       showTab("problems");
       const ms = (performance.now() - started).toFixed(1);
@@ -124,18 +131,18 @@ export async function runCheck({ automatic = false } = {}) {
         });
       } else {
         setStatus("status.checkFailed", {
-          count: response.diagnostics?.length ?? 0,
+          count: response.diagnostics.length,
         });
       }
     }
   } catch (error) {
     if (sequence === state.checkSeq) {
-      applyCompilerState("error", error.message ?? String(error));
+      applyCompilerState("error", error instanceof Error ? error.message : String(error));
     }
   }
 }
 
-function execute(wasmBuffer) {
+function execute(wasmBuffer: ArrayBuffer): Promise<void> {
   return new Promise((resolve) => {
     state.runner?.terminate();
     const runner = new Worker("runner.worker.js");
@@ -151,8 +158,8 @@ function execute(wasmBuffer) {
       resolve();
     }, RUN_TIMEOUT_MS);
 
-    runner.addEventListener("message", (event) => {
-      const message = event.data ?? {};
+    runner.addEventListener("message", (event: MessageEvent<RunnerMessage>) => {
+      const message = event.data;
       window.clearTimeout(state.runnerTimer);
       runner.terminate();
       state.runner = null;
@@ -166,7 +173,7 @@ function execute(wasmBuffer) {
           setStatus("status.exited", { code: message.exitCode });
         }
       } else {
-        elements.stderr.textContent = message.message ?? "the program could not be instantiated";
+        elements.stderr.textContent = message.message;
         setRunMetaSuffix({ key: "meta.notRunnable" });
         setStatus("status.runFailed");
       }
@@ -175,7 +182,7 @@ function execute(wasmBuffer) {
 
     runner.addEventListener("error", (event) => {
       window.clearTimeout(state.runnerTimer);
-      elements.stderr.textContent = event.message ?? "the run worker stopped";
+      elements.stderr.textContent = event.message || "the run worker stopped";
       setStatus("status.runFailed");
       resolve();
     });
@@ -184,7 +191,7 @@ function execute(wasmBuffer) {
   });
 }
 
-export async function run() {
+export async function run(): Promise<void> {
   if (state.running) {
     return;
   }
@@ -198,12 +205,12 @@ export async function run() {
   try {
     const started = performance.now();
     const response = await callCompiler("compile", normalizedSource());
-    if (response.error) {
+    if (response.error !== undefined) {
       setRunMeta({ key: "meta.compileFailed" });
       setStatus("status.compilerUnavailable");
       return;
     }
-    renderDiagnostics(response.diagnostics ?? []);
+    renderDiagnostics(response.diagnostics);
     if (!response.ok || response.wasm === null) {
       showTab("problems");
       setRunMeta({ key: "meta.compileFailed" });
@@ -224,7 +231,7 @@ export async function run() {
       {
         severity: "error",
         code: null,
-        message: error.message ?? String(error),
+        message: error instanceof Error ? error.message : String(error),
         span: null,
         labels: [],
       },

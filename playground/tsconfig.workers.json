@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "preserve",
+    "lib": ["ES2022", "WebWorker"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmitOnError": true,
+    "sourceMap": true,
+    "inlineSources": true,
+    "rootDir": ".",
+    "outDir": "build",
+    "newLine": "lf"
+  },
+  "files": ["wasm-api.ts", "wasi.ts", "compiler.worker.ts", "runner.worker.ts"]
+}

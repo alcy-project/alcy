@@ -16,7 +16,21 @@
 
 import { Parser, Language, Query } from "./vendor/web-tree-sitter.js";
 
-const ROOT_PRIORITY = {
+export interface Highlighter {
+  highlight(text: string): string;
+  dispose(): void;
+}
+
+interface HighlighterOptions {
+  // Bytes fetched by the caller let the runtime, grammar, and query load
+  // together; the URL is the fallback when the binding fetches its own.
+  runtimeWasm?: ArrayBuffer;
+  runtimeWasmUrl?: string;
+  languageWasm: Uint8Array | string;
+  querySource: string;
+}
+
+const ROOT_PRIORITY: Record<string, number> = {
   comment: 3,
   constant: 3,
   keyword: 3,
@@ -33,13 +47,13 @@ const ROOT_PRIORITY = {
   type: 4,
 };
 
-function priority(name) {
-  return ROOT_PRIORITY[name.split(".")[0]] ?? 2;
+function priority(name: string): number {
+  return ROOT_PRIORITY[name.split(".")[0] ?? ""] ?? 2;
 }
 
-function classesFor(name) {
+function classesFor(name: string): string {
   const parts = name.split(".");
-  const classes = [];
+  const classes: string[] = [];
   let prefix = "";
   for (const part of parts) {
     prefix = prefix ? `${prefix}-${part}` : part;
@@ -48,30 +62,25 @@ function classesFor(name) {
   return classes.join(" ");
 }
 
-function escapeHtml(text) {
+function escapeHtml(text: string): string {
   return text
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 }
 
-// `runtimeWasm` and `languageWasm` may be bytes, which lets the page
-// fetch the runtime, the grammar, and the query at the same time;
-// `runtimeWasmUrl` is the fallback for a caller that would rather let
-// the binding fetch the runtime itself. `querySource` is the text of
-// `queries/alcy/highlights.scm`.
 export async function createHighlighter({
   runtimeWasm,
   runtimeWasmUrl,
   languageWasm,
   querySource,
-}) {
+}: HighlighterOptions): Promise<Highlighter> {
   await Parser.init(
     runtimeWasm
       ? { wasmBinary: runtimeWasm }
       : {
-          locateFile: (name) =>
-            name.endsWith(".wasm") ? runtimeWasmUrl : name,
+          locateFile: (name: string) =>
+            name.endsWith(".wasm") ? (runtimeWasmUrl ?? name) : name,
         },
   );
   const language = await Language.load(languageWasm);
@@ -79,16 +88,16 @@ export async function createHighlighter({
   const parser = new Parser();
   parser.setLanguage(language);
 
-  let previousTree = null;
-  const captureIds = new Map();
-  const captureNames = [];
-  const captureClasses = [];
+  let previousTree: ReturnType<Parser["parse"]> | null = null;
+  const captureIds = new Map<string, number>();
+  const captureNames: string[] = [];
+  const captureClasses: string[] = [];
 
   return {
     // Returns HTML for the whole text, one `<span class="hl-...">` run
     // per highlight. Node indices are UTF-16 code units, matching the
     // string a `<textarea>` holds, so no byte mapping is needed here.
-    highlight(text) {
+    highlight(text: string): string {
       const tree = parser.parse(text);
       const classes = new Int32Array(text.length);
       const captures = query.captures(tree.rootNode);
@@ -113,7 +122,7 @@ export async function createHighlighter({
       let html = "";
       let index = 0;
       while (index < text.length) {
-        const id = classes[index];
+        const id = classes[index] ?? 0;
         let end = index + 1;
         while (end < text.length && classes[end] === id) {
           end++;
@@ -129,7 +138,7 @@ export async function createHighlighter({
       return html;
     },
 
-    dispose() {
+    dispose(): void {
       previousTree?.delete();
       previousTree = null;
       query.delete();

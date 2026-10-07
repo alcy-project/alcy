@@ -9,13 +9,20 @@
 
 importScripts("wasm-api.js");
 
-let compilerPromise = null;
+interface CompilerRequest {
+  type: "request";
+  id: number;
+  op: "check" | "compile";
+  source: string;
+}
 
-function notify(status, detail = "") {
+let compilerPromise: Promise<AlcyCompiler> | null = null;
+
+function notify(status: CompilerStateName, detail = ""): void {
   self.postMessage({ type: "status", status, detail });
 }
 
-function loadCompiler() {
+function loadCompiler(): Promise<AlcyCompiler> {
   if (compilerPromise === null) {
     notify("loading");
     compilerPromise = AlcyWasmApi.loadCompiler({
@@ -27,8 +34,8 @@ function loadCompiler() {
         notify("ready");
         return compiler;
       })
-      .catch((error) => {
-        notify("error", error && error.message ? error.message : String(error));
+      .catch((error: unknown) => {
+        notify("error", error instanceof Error ? error.message : String(error));
         compilerPromise = null;
         throw error;
       });
@@ -36,8 +43,8 @@ function loadCompiler() {
   return compilerPromise;
 }
 
-self.addEventListener("message", async (event) => {
-  const request = event.data ?? {};
+self.addEventListener("message", async (event: MessageEvent<CompilerRequest>) => {
+  const request = event.data;
   if (request.type !== "request") {
     return;
   }
@@ -45,7 +52,7 @@ self.addEventListener("message", async (event) => {
   try {
     const compiler = await loadCompiler();
     const entry = request.op === "check" ? "alcy_check" : "alcy_compile";
-    const result = compiler.call(entry, request.source ?? "");
+    const result = compiler.call(entry, request.source);
     const response = {
       type: "response",
       id,
@@ -57,7 +64,7 @@ self.addEventListener("message", async (event) => {
         moduleCount: result.moduleCount,
         functionCount: result.functionCount,
       },
-      wasm: result.wasm ? result.wasm.buffer : null,
+      wasm: result.wasm ? (result.wasm.buffer as ArrayBuffer) : null,
     };
     if (response.wasm !== null) {
       self.postMessage(response, [response.wasm]);
@@ -69,7 +76,7 @@ self.addEventListener("message", async (event) => {
       type: "response",
       id,
       ok: false,
-      error: error && error.message ? error.message : String(error),
+      error: error instanceof Error ? error.message : String(error),
       diagnostics: [],
     });
   }

@@ -5,11 +5,12 @@
 
 """Builds and serves the playground site.
 
-The site under `playground/` is plain HTML, CSS, and JavaScript, but it
-is not self-contained: highlighting needs the grammar compiled to wasm
-and a tree-sitter binding, and the Check and Run buttons need the
-compiler's wasm module. This assembles all of those into one directory
-that any static file server can host.
+The site under `playground/` is TypeScript and plain HTML and CSS, but it
+is not self-contained: the sources compile to the JavaScript the page
+loads, highlighting needs the grammar compiled to wasm and a tree-sitter
+binding, and the Check and Run buttons need the compiler's wasm module.
+This assembles all of those into one directory that any static file
+server can host.
 
     uv run ./tools/playground.py build            # assemble playground/dist
     uv run ./tools/playground.py serve            # serve it on :8000
@@ -18,6 +19,10 @@ that any static file server can host.
 are none, so the site still works for highlighting alone. Pass
 `--with-compiler` to build the `playground` target first; it carries the
 direct wasm backend and no LLVM (see `compiler/playground/README.md`).
+
+The TypeScript compiler and the tree-sitter web binding are installed
+with pnpm into `out/playground-cache/`, at the versions `config.toml`
+pins; `tree-sitter` itself must be on `PATH`.
 """
 
 import argparse
@@ -29,8 +34,8 @@ import os
 import shutil
 import subprocess
 import sys
-import tarfile
 import tomllib
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
@@ -40,6 +45,8 @@ from build import build
 
 PLAYGROUND_DIR = project_root_dir / "playground"
 DEFAULT_DIST_DIR = PLAYGROUND_DIR / "dist"
+# The JavaScript the page loads, as emitted by `tsc`.
+BUILD_DIR = PLAYGROUND_DIR / "build"
 GRAMMAR_DIR = project_root_dir / "treesitter"
 DEFAULT_BUILD_SUBDIR = "playground"
 DEFAULT_WASM_TARGET = "playground"
@@ -47,32 +54,44 @@ DEFAULT_WASM_TARGET = "playground"
 # backends, and an empty list is what a browser needs.
 DEFAULT_GN_ARG = "alcy_backends=[]"
 CACHE_DIR = project_root_dir / "out" / "playground-cache"
+DEPS_DIR = CACHE_DIR / "deps"
+STORE_DIR = CACHE_DIR / "pnpm-store"
 
-STATIC_FILES = [
-    "app.js",
-    "compiler.worker.js",
-    "editor.js",
-    "elements.js",
-    "highlight.js",
-    "i18n.js",
-    "index.html",
-    "language.js",
-    "output.js",
-    "problems.js",
-    "runner.worker.js",
-    "runtime.js",
-    "samples.js",
-    "session.js",
-    "splitter.js",
-    "state.js",
-    "status.js",
-    "style.css",
-    "tabs.js",
-    "textutil.js",
-    "theme.js",
-    "wasm-api.js",
-    "wasi.js",
+# The page's modules, compiled from `playground/*.ts` into `build/`.
+# `types` carries only types and emits nothing the page loads, so it is
+# not here.
+TYPESCRIPT_MODULES = [
+    "app",
+    "compiler.worker",
+    "editor",
+    "elements",
+    "highlight",
+    "i18n",
+    "language",
+    "output",
+    "problems",
+    "runner.worker",
+    "runtime",
+    "samples",
+    "session",
+    "splitter",
+    "state",
+    "status",
+    "tabs",
+    "textutil",
+    "theme",
+    "wasm-api",
+    "wasi",
 ]
+
+PLAIN_FILES = ["index.html", "style.css"]
+
+
+@dataclass(frozen=True)
+class Versions:
+    pnpm: str
+    typescript: str
+    web_tree_sitter: str
 
 
 def log(message: str) -> None:
@@ -84,17 +103,111 @@ def fail(message: str) -> int:
     return 1
 
 
-def web_tree_sitter_version() -> str:
+def load_versions() -> Versions:
     with open(project_root_dir / "config.toml", "rb") as handle:
-        return tomllib.load(handle)["web_tree_sitter_version"]
+        config = tomllib.load(handle)
+    return Versions(
+        pnpm=config["pnpm_version"],
+        typescript=config["typescript_version"],
+        web_tree_sitter=config["web_tree_sitter_version"],
+    )
+
+
+def series(version: str) -> str:
+    return ".".join(version.split(".")[:2])
+
+
+def ensure_pnpm(pinned: str) -> str:
+    pnpm = shutil.which("pnpm")
+    if pnpm is None:
+        raise RuntimeError(
+            f"pnpm is not on PATH; install {pinned} (see playground/README.md)"
+        )
+    found = subprocess.run(
+        [pnpm, "--version"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    if series(found) != series(pinned):
+        raise RuntimeError(
+            f"pnpm {found} is on PATH; this build pins {pinned} "
+            "(config.toml). Install the pinned series."
+        )
+    return pnpm
+
+
+def install_dependencies(versions: Versions) -> Path:
+    pnpm = ensure_pnpm(versions.pnpm)
+    DEPS_DIR.mkdir(parents=True, exist_ok=True)
+    manifest = DEPS_DIR / "package.json"
+    wanted = json.dumps(
+        {
+            "name": "alcy-playground-deps",
+            "private": True,
+            "version": "0.0.0",
+            "dependencies": {
+                "typescript": versions.typescript,
+                "web-tree-sitter": versions.web_tree_sitter,
+            },
+        },
+        indent=2,
+    )
+    if not manifest.is_file() or manifest.read_text(encoding="utf-8") != wanted:
+        manifest.write_text(wanted + "\n", encoding="utf-8")
+    subprocess.run(
+        [
+            pnpm,
+            "install",
+            "--dir",
+            str(DEPS_DIR),
+            "--store-dir",
+            str(STORE_DIR),
+            "--ignore-scripts",
+            "--no-frozen-lockfile",
+            "--prefer-offline",
+            "--reporter",
+            "silent",
+        ],
+        check=True,
+    )
+    modules = DEPS_DIR / "node_modules"
+    log(
+        f"deps: typescript {versions.typescript}, "
+        f"web-tree-sitter {versions.web_tree_sitter}"
+    )
+    return modules
+
+
+def build_typescript(modules: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        raise RuntimeError("node is not on PATH; needed to run tsc")
+    tsc = modules / "typescript" / "lib" / "tsc.js"
+    if not tsc.is_file():
+        raise FileNotFoundError(f"{tsc} is missing")
+    if BUILD_DIR.exists():
+        shutil.rmtree(BUILD_DIR)
+    for config in ("tsconfig.json", "tsconfig.workers.json"):
+        subprocess.run(
+            [node, str(tsc), "-p", config],
+            check=True,
+            cwd=PLAYGROUND_DIR,
+        )
+    log(f"typescript: {BUILD_DIR}")
 
 
 def copy_static(dist_dir: Path) -> None:
-    for name in STATIC_FILES:
+    for name in PLAIN_FILES:
         source = PLAYGROUND_DIR / name
         if not source.is_file():
             raise FileNotFoundError(f"{source} is missing")
         shutil.copy2(source, dist_dir / name)
+    for module in TYPESCRIPT_MODULES:
+        source = BUILD_DIR / f"{module}.js"
+        if not source.is_file():
+            raise FileNotFoundError(f"{source} is missing; run the TypeScript build")
+        shutil.copy2(source, dist_dir / source.name)
+        source_map = BUILD_DIR / f"{module}.js.map"
+        if source_map.is_file():
+            shutil.copy2(source_map, dist_dir / source_map.name)
 
 
 def copy_samples(dist_dir: Path) -> None:
@@ -151,41 +264,15 @@ def build_grammar(dist_dir: Path) -> None:
     log(f"grammar: {output}")
 
 
-def fetch_web_tree_sitter(dist_dir: Path, version: str) -> None:
+def copy_web_tree_sitter(modules: Path, dist_dir: Path, version: str) -> None:
     vendor_out = dist_dir / "vendor"
     vendor_out.mkdir(parents=True, exist_ok=True)
-    cache = CACHE_DIR / f"web-tree-sitter-{version}"
-    binding = cache / "package" / "web-tree-sitter.js"
-    runtime = cache / "package" / "web-tree-sitter.wasm"
-    if not binding.is_file() or not runtime.is_file():
-        npm = shutil.which("npm")
-        if npm is None:
-            raise RuntimeError("npm is not on PATH; needed to fetch web-tree-sitter")
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        log(f"fetching web-tree-sitter@{version}")
-        subprocess.run(
-            [
-                npm,
-                "pack",
-                f"web-tree-sitter@{version}",
-                "--pack-destination",
-                str(CACHE_DIR),
-            ],
-            check=True,
-            cwd=project_root_dir,
-            capture_output=True,
-            text=True,
-        )
-        tarball = CACHE_DIR / f"web-tree-sitter-{version}.tgz"
-        if not tarball.is_file():
-            raise FileNotFoundError(f"npm did not produce {tarball}")
-        if cache.exists():
-            shutil.rmtree(cache)
-        cache.mkdir(parents=True)
-        with tarfile.open(tarball, "r:gz") as archive:
-            archive.extractall(cache, filter="data")
-    shutil.copy2(binding, vendor_out / "web-tree-sitter.js")
-    shutil.copy2(runtime, vendor_out / "web-tree-sitter.wasm")
+    sources = modules / "web-tree-sitter"
+    for name in ("web-tree-sitter.js", "web-tree-sitter.wasm"):
+        source = sources / name
+        if not source.is_file():
+            raise FileNotFoundError(f"{source} is missing")
+        shutil.copy2(source, vendor_out / name)
     log(f"vendor: web-tree-sitter {version}")
 
 
@@ -231,6 +318,10 @@ def command_build(args: argparse.Namespace) -> int:
         if code != 0:
             return code
 
+    versions = load_versions()
+    modules = install_dependencies(versions)
+    build_typescript(modules)
+
     dist_dir = args.dist.resolve()
     if dist_dir.exists():
         shutil.rmtree(dist_dir)
@@ -241,7 +332,7 @@ def command_build(args: argparse.Namespace) -> int:
 
     if not args.skip_grammar:
         build_grammar(dist_dir)
-    fetch_web_tree_sitter(dist_dir, args.web_tree_sitter_version)
+    copy_web_tree_sitter(modules, dist_dir, versions.web_tree_sitter)
     copy_compiler(
         dist_dir, project_root_dir / "out" / args.build_subdir, args.compiler_dir
     )
@@ -265,6 +356,7 @@ def command_serve(args: argparse.Namespace) -> int:
         ".html",
         ".js",
         ".json",
+        ".map",
         ".mjs",
         ".scm",
         ".svg",
@@ -344,7 +436,6 @@ def main() -> int:
         f'(default: "{DEFAULT_GN_ARG}")',
     )
     build_parser.add_argument("--skip-grammar", action="store_true")
-    build_parser.add_argument("--web-tree-sitter-version", default=None)
     build_parser.set_defaults(handler=command_build)
 
     serve_parser = subparsers.add_parser("serve", help="serve the assembled site")
@@ -354,11 +445,6 @@ def main() -> int:
     serve_parser.set_defaults(handler=command_serve)
 
     args = parser.parse_args()
-    if (
-        getattr(args, "web_tree_sitter_version", None) is None
-        and args.command == "build"
-    ):
-        args.web_tree_sitter_version = web_tree_sitter_version()
     try:
         return args.handler(args)
     except (FileNotFoundError, RuntimeError, subprocess.CalledProcessError) as error:

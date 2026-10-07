@@ -12,50 +12,54 @@ The built site is deployed to GitHub Pages by
 ## Layout
 
 - `index.html`, `style.css` - the page.
-- `app.js` - the wiring: it builds the modules, connects their callbacks,
+- `app.ts` - the wiring: it builds the modules, connects their callbacks,
   and starts the flows.
-- `editor.js` - the textarea, the highlighted mirror, the line-number
+- `editor.ts` - the textarea, the highlighted mirror, the line-number
   gutter, and the geometry that keeps the three in step. Highlighting
   starts once the page is idle, so first paint and typing never wait for
   the tree-sitter wasm; the mirror shows plain text until the colors are
   ready.
-- `problems.js` - the diagnostics list, including jump-to-span.
-- `output.js` - the run meta line and the program's two streams.
-- `runtime.js` - the compiler worker, the disposable runner worker, and
+- `problems.ts` - the diagnostics list, including jump-to-span.
+- `output.ts` - the run meta line and the program's two streams.
+- `runtime.ts` - the compiler worker, the disposable runner worker, and
   the Check and Run flows.
-- `samples.js` - the example picker and the restore-or-default choice.
-- `session.js` - the buffer and selected example kept in `localStorage`.
-- `status.js` - the status line, the compiler indicator, and the Run
+- `samples.ts` - the example picker and the restore-or-default choice.
+- `session.ts` - the buffer and selected example kept in `localStorage`.
+- `status.ts` - the status line, the compiler indicator, and the Run
   button's busy state.
-- `tabs.js`, `splitter.js`, `theme.js`, `language.js` - the side panel's
+- `tabs.ts`, `splitter.ts`, `theme.ts`, `language.ts` - the side panel's
   tabs, the pane divider, the color theme, and the language.
-- `elements.js`, `state.js` - the page's elements and its shared state.
-- `highlight.js` - tree-sitter highlighting through `web-tree-sitter`.
-- `textutil.js` - byte-offset to UTF-16 conversion for diagnostics.
-- `i18n.js` - the page's own strings, in English and Japanese. Adding a
+- `elements.ts`, `state.ts`, `types.ts` - the page's elements, its shared
+  state, and the shapes that cross module boundaries.
+- `highlight.ts` - tree-sitter highlighting through `web-tree-sitter`.
+- `textutil.ts` - byte-offset to UTF-16 conversion for diagnostics.
+- `i18n.ts` - the page's own strings, in English and Japanese. Adding a
   language is one catalog there; the `data-i18n` attributes and `t()`
   calls are the only consumers.
-- `wasm-api.js` - the JavaScript side of the compiler's C ABI.
-- `compiler.worker.js` - owns the compiler wasm module (expensive to load,
+- `wasm-api.ts` - the JavaScript side of the compiler's C ABI.
+- `compiler.worker.ts` - owns the compiler wasm module (expensive to load,
   reused across requests).
-- `runner.worker.js` - instantiates one program and runs it (disposable, so
+- `runner.worker.ts` - instantiates one program and runs it (disposable, so
   a program that does not return can be terminated).
-- `wasi.js` - the WASI preview1 host side for one program, kept apart from
+- `wasi.ts` - the WASI preview1 host side for one program, kept apart from
   the worker so it is testable on its own.
 - `samples/` - the examples shown in the picker, with `samples.json` naming
   them. An entry either names a file here or points at a program under the
   repository's `samples/` suite, which is copied under its site name.
 
-Nothing here is built in place. `tools/playground.py build` copies these
-files into `playground/dist/` next to the generated pieces. `dist/` is not
-committed.
+The sources are TypeScript. `tools/playground.py build` compiles them to
+`playground/build/` with the pinned `tsc` and copies the JavaScript and
+its source maps into `playground/dist/` next to the generated pieces.
+`build/`, `dist/`, and the vendored binding types are not committed.
 
 ## Building and serving
 
-Prerequisites: `tree-sitter` and `npm` on `PATH`, Emscripten (`emcc`) for
-the compiler module, and `uv` as everywhere else in the repository. The
-versions of the tree-sitter CLI and of `web-tree-sitter` are pinned in
-[`config.toml`](../config.toml).
+Prerequisites: `pnpm` and `tree-sitter` on `PATH`, Node for `tsc`,
+Emscripten (`emcc`) for the compiler module, and `uv` as everywhere else
+in the repository. `config.toml` pins the tree-sitter CLI, the
+web-tree-sitter binding, the TypeScript compiler, and pnpm. The CLI must
+already be on `PATH`; the binding and the compiler are installed with the
+pinned pnpm into `out/playground-cache/`.
 
 ```sh
 # Highlighting only; the compiler module is missing and Check/Run stay off.
@@ -78,7 +82,7 @@ The assembled directory is:
 
 ```text
 dist/
-  index.html, app.js, style.css, ...
+  index.html, style.css, app.js, app.js.map, ...
   compiler/   alcy_playground.js, alcy_playground.wasm
   vendor/     web-tree-sitter.js, web-tree-sitter.wasm
   grammar/    tree-sitter-alcy.wasm, highlights.scm

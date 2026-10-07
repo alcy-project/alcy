@@ -10,8 +10,9 @@ import { syncScroll } from "./editor.js";
 import { t } from "./language.js";
 import { state } from "./state.js";
 import { byteToUtf16Map, utf16IndexAtByte } from "./textutil.js";
+import type { Diagnostic, DiagnosticCode, Severity, SourceSpan } from "./types.js";
 
-function lineColumnAt(text, index) {
+function lineColumnAt(text: string, index: number): { line: number; column: number } {
   let line = 1;
   let lineStart = 0;
   for (let i = 0; i < index; i++) {
@@ -23,7 +24,7 @@ function lineColumnAt(text, index) {
   return { line, column: index - lineStart + 1 };
 }
 
-function selectionRangeFor(span) {
+function selectionRangeFor(span: SourceSpan): { start: number; end: number } {
   const text = elements.source.value;
   const table = byteToUtf16Map(text);
   const start = utf16IndexAtByte(table, span.offset);
@@ -31,7 +32,7 @@ function selectionRangeFor(span) {
   return { start, end };
 }
 
-function selectSpan(span) {
+function selectSpan(span: SourceSpan): void {
   const { start, end } = selectionRangeFor(span);
   const text = elements.source.value;
   const { line } = lineColumnAt(text, start);
@@ -46,8 +47,9 @@ function selectSpan(span) {
   syncScroll();
 }
 
-function codeLabel(code) {
-  if (code === null || code === undefined) {
+function codeLabel(code: DiagnosticCode | null): string {
+  // The compiler's JSON may omit the field outright.
+  if (code == null) {
     return "";
   }
   return `${code.stage} ${code.local_id}`;
@@ -55,8 +57,8 @@ function codeLabel(code) {
 
 // The badge says how loud the loudest diagnostic is rather than always
 // reading as an error.
-function worstSeverity(diagnostics) {
-  let worst = "note";
+function worstSeverity(diagnostics: Diagnostic[]): Severity {
+  let worst: Severity = "note";
   for (const diagnostic of diagnostics) {
     const severity = diagnostic.severity ?? "error";
     if (severity === "error") {
@@ -69,7 +71,7 @@ function worstSeverity(diagnostics) {
   return worst;
 }
 
-export function renderDiagnostics(diagnostics) {
+export function renderDiagnostics(diagnostics: Diagnostic[]): void {
   state.lastDiagnostics = diagnostics;
   state.compilerErrorShown = false;
   elements.problems.replaceChildren();
@@ -79,14 +81,13 @@ export function renderDiagnostics(diagnostics) {
   elements.problemsCount.dataset.severity = worstSeverity(diagnostics);
 
   const text = elements.source.value;
-  const table =
-    diagnostics.some((diagnostic) => diagnostic.span !== null)
-      ? byteToUtf16Map(text)
-      : null;
+  const table = diagnostics.some((diagnostic) => diagnostic.span !== null)
+    ? byteToUtf16Map(text)
+    : null;
 
   for (const diagnostic of diagnostics) {
     const item = document.createElement("li");
-    const severityName = diagnostic.severity ?? "error";
+    const severityName: Severity = diagnostic.severity ?? "error";
     item.className =
       severityName === "warning" || severityName === "note" ? severityName : "error";
 
@@ -98,7 +99,7 @@ export function renderDiagnostics(diagnostics) {
     severity.textContent = t(`severity.${severityName}`);
     head.append(severity);
 
-    if (diagnostic.span) {
+    if (diagnostic.span !== null && table !== null) {
       const start = utf16IndexAtByte(table, diagnostic.span.offset);
       const { line, column } = lineColumnAt(text, start);
       const location = document.createElement("span");
@@ -120,14 +121,15 @@ export function renderDiagnostics(diagnostics) {
     message.textContent = diagnostic.message ?? "";
 
     item.append(head, message);
-    if (diagnostic.span) {
-      item.addEventListener("click", () => selectSpan(diagnostic.span));
+    if (diagnostic.span !== null) {
+      const span = diagnostic.span;
+      item.addEventListener("click", () => selectSpan(span));
     }
     elements.problems.append(item);
   }
 }
 
 // Re-renders what is on screen, for a language switch.
-export function renderLast() {
+export function renderLast(): void {
   renderDiagnostics(state.lastDiagnostics);
 }

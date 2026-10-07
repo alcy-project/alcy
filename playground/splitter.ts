@@ -23,17 +23,17 @@ const NARROW_QUERY = "(max-width: 760px)";
 
 const narrowQuery = window.matchMedia(NARROW_QUERY);
 
-function currentSplitKey() {
+function currentSplitKey(): string {
   return narrowQuery.matches ? SPLIT_ROW_KEY : SPLIT_COLUMN_KEY;
 }
 
-function defaultSideFraction() {
+function defaultSideFraction(): number {
   return narrowQuery.matches ? DEFAULT_ROW_FRACTION : DEFAULT_COLUMN_FRACTION;
 }
 
-function storedSideFraction() {
+function storedSideFraction(): number {
   try {
-    const stored = Number.parseFloat(localStorage.getItem(currentSplitKey()));
+    const stored = Number.parseFloat(localStorage.getItem(currentSplitKey()) ?? "");
     return Number.isFinite(stored) && stored > 0 && stored < 1
       ? stored
       : defaultSideFraction();
@@ -42,7 +42,7 @@ function storedSideFraction() {
   }
 }
 
-function persistSideFraction(fraction) {
+function persistSideFraction(fraction: number): void {
   try {
     localStorage.setItem(currentSplitKey(), String(fraction));
   } catch {
@@ -53,7 +53,7 @@ function persistSideFraction(fraction) {
 // Clamping happens here so the grid can only be given a share both panes
 // survive. The clamped value is what the state keeps, so a keypress at an
 // edge does not have to walk back through unclamped values.
-function applySideFraction(requested) {
+function applySideFraction(requested: number): number {
   const stacked = narrowQuery.matches;
   const extent =
     (stacked ? elements.layout.clientHeight : elements.layout.clientWidth) || 1;
@@ -75,7 +75,7 @@ function applySideFraction(requested) {
   return clamped;
 }
 
-export function initSplitter() {
+export function initSplitter(): void {
   applySideFraction(storedSideFraction());
   const splitter = elements.splitter;
 
@@ -100,7 +100,7 @@ export function initSplitter() {
     persistSideFraction(applySideFraction(fraction));
   });
 
-  const stopDragging = (event) => {
+  const stopDragging = (event: PointerEvent): void => {
     if (splitter.dataset.dragging !== "true") {
       return;
     }

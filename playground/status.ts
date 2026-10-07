@@ -6,42 +6,43 @@
 // kept as catalog keys so switching the language re-renders them.
 
 import { elements } from "./elements.js";
+import type { MessageKey, MessageParams } from "./i18n.js";
 import { t } from "./language.js";
 import { renderDiagnostics } from "./problems.js";
 import { state } from "./state.js";
 import { showTab } from "./tabs.js";
+import type { CompilerStatusName, Diagnostic } from "./types.js";
 
-export function renderStatus() {
+export function renderStatus(): void {
   elements.status.textContent = t(state.status.key, state.status.params);
 }
 
-export function setStatus(key, params) {
+export function setStatus(key: MessageKey, params?: MessageParams): void {
   state.status = { key, params };
   renderStatus();
 }
 
-export function renderCompilerState() {
+export function renderCompilerState(): void {
   elements.compilerState.dataset.state = state.compilerStatus;
   elements.compilerStateText.textContent = t(`compiler.${state.compilerStatus}`);
   elements.compilerState.title = state.compilerDetail;
 }
 
-export function setCompilerState(status, detail = "") {
+export function setCompilerState(status: CompilerStatusName, detail = ""): void {
   state.compilerStatus = status;
   state.compilerDetail = detail;
   renderCompilerState();
 }
 
-export function showCompilerError(detail) {
-  state.lastDiagnostics = [
-    {
-      severity: "error",
-      code: null,
-      message: t("compiler.missing", { detail: detail ? `: ${detail}` : "" }),
-      span: null,
-      labels: [],
-    },
-  ];
+export function showCompilerError(detail: string): void {
+  const error: Diagnostic = {
+    severity: "error",
+    code: null,
+    message: t("compiler.missing", { detail: detail ? `: ${detail}` : "" }),
+    span: null,
+    labels: [],
+  };
+  state.lastDiagnostics = [error];
   renderDiagnostics(state.lastDiagnostics);
   // The message is this module's own text, so a language switch has to
   // re-render it; a diagnostic from the compiler is kept verbatim.
@@ -50,14 +51,14 @@ export function showCompilerError(detail) {
   setStatus("status.compilerUnavailable");
 }
 
-export function renderRunButton() {
+export function renderRunButton(): void {
   elements.run.setAttribute(
     "aria-label",
     t(state.running ? "button.running" : "button.run"),
   );
 }
 
-export function setRunning(running) {
+export function setRunning(running: boolean): void {
   state.running = running;
   elements.run.disabled = running;
   elements.check.disabled = running;

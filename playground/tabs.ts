@@ -6,7 +6,7 @@
 
 import { elements } from "./elements.js";
 
-export function showTab(name) {
+export function showTab(name: "problems" | "output"): void {
   const problems = name === "problems";
   elements.tabProblems.classList.toggle("active", problems);
   elements.tabOutput.classList.toggle("active", !problems);
@@ -16,7 +16,7 @@ export function showTab(name) {
   elements.panelOutput.classList.toggle("hidden", problems);
 }
 
-export function initTabs() {
+export function initTabs(): void {
   elements.tabProblems.addEventListener("click", () => showTab("problems"));
   elements.tabOutput.addEventListener("click", () => showTab("output"));
 }

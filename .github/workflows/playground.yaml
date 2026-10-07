@@ -75,6 +75,18 @@ jobs:
           TS_VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["tree_sitter_cli_version"])')
           npm install --global "tree-sitter-cli@${TS_VERSION}"
 
+      - name: Read the Pinned pnpm
+        id: pnpm
+        shell: bash
+        run: |
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["pnpm_version"])')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288
+        with:
+          version: ${{ steps.pnpm.outputs.version }}
+
       - name: Cache the Compiler Build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:

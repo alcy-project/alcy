@@ -8,8 +8,9 @@
 import { elements } from "./elements.js";
 import { t } from "./language.js";
 import { state } from "./state.js";
+import type { TextRef } from "./types.js";
 
-export function renderRunMeta() {
+export function renderRunMeta(): void {
   if (state.runMeta === null) {
     elements.runMeta.textContent = "";
     return;
@@ -22,12 +23,12 @@ export function renderRunMeta() {
   elements.runMeta.textContent = text;
 }
 
-export function setRunMeta(main) {
+export function setRunMeta(main: TextRef): void {
   state.runMeta = { main, suffix: null };
   renderRunMeta();
 }
 
-export function setRunMetaSuffix(suffix) {
+export function setRunMetaSuffix(suffix: TextRef): void {
   if (state.runMeta === null) {
     return;
   }

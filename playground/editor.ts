@@ -7,21 +7,28 @@
 // keeps the three in step.
 
 import { elements } from "./elements.js";
+import type { MessageKey, MessageParams } from "./i18n.js";
 import { state } from "./state.js";
 
 export const FALLBACK_SOURCE = `fn main() {\n  println("Hello, alcy!")\n}\n`;
 
+export interface EditorHandlers {
+  onInput?: () => void;
+  onRun?: () => void;
+  onHighlightError?: (key: MessageKey, params?: MessageParams) => void;
+}
+
 // Wired by `initEditor` so this module stays a leaf: errors it cannot fix
 // are reported through the page's status line by the caller.
-let onInput = () => {};
-let onRun = () => {};
-let onHighlightError = () => {};
+let onInput: () => void = () => {};
+let onRun: () => void = () => {};
+let onHighlightError: (key: MessageKey, params?: MessageParams) => void = () => {};
 
-export function normalizedSource() {
+export function normalizedSource(): string {
   return elements.source.value.replaceAll("\r\n", "\n");
 }
 
-function updateGutter() {
+function updateGutter(): void {
   const lines = elements.source.value.split("\n").length;
   if (lines === state.gutterLines) {
     return;
@@ -31,7 +38,7 @@ function updateGutter() {
   elements.gutter.style.minWidth = `${String(lines).length + 1}ch`;
 }
 
-export function syncScroll() {
+export function syncScroll(): void {
   // iOS overscroll reports offsets past either end of the range while
   // rubber-banding. The mirror clamps those silently when they are
   // assigned to its scrollTop, but the transform would move the gutter
@@ -52,7 +59,7 @@ export function syncScroll() {
 // has to pad by the space they take or the two clamp at different scroll
 // maxima. The ResizeObserver on the textarea calls this when a scrollbar
 // appears or disappears, which is the only time the numbers change.
-export function syncMetrics() {
+export function syncMetrics(): void {
   const scrollbarWidth = elements.source.offsetWidth - elements.source.clientWidth;
   const scrollbarHeight = elements.source.offsetHeight - elements.source.clientHeight;
   elements.highlight.style.setProperty(
@@ -65,7 +72,7 @@ export function syncMetrics() {
   );
 }
 
-function insertAtCursor(text) {
+function insertAtCursor(text: string): void {
   const start = elements.source.selectionStart;
   const end = elements.source.selectionEnd;
   const value = elements.source.value;
@@ -77,13 +84,13 @@ function insertAtCursor(text) {
 // under the caret are never stale; the colors arrive when the parse that
 // produces them is done. A parse that cannot run (or fails) leaves the
 // plain text in place.
-function updateMirrorPlain() {
+function updateMirrorPlain(): void {
   state.highlightedText = null;
   elements.highlightCode.textContent = elements.source.value;
   syncScroll();
 }
 
-function scheduleHighlight() {
+function scheduleHighlight(): void {
   updateMirrorPlain();
   if (state.highlightFrame !== null) {
     return;
@@ -94,7 +101,7 @@ function scheduleHighlight() {
   });
 }
 
-function renderHighlight() {
+function renderHighlight(): void {
   if (state.highlighter === null) {
     return;
   }
@@ -110,7 +117,7 @@ function renderHighlight() {
     state.highlighter = null;
     state.highlightedText = null;
     onHighlightError("status.highlightingDisabled", {
-      detail: error.message ?? String(error),
+      detail: error instanceof Error ? error.message : String(error),
     });
     updateMirrorPlain();
   }
@@ -119,7 +126,7 @@ function renderHighlight() {
 // Colors are an enhancement, so the runtime, the grammar, and the query
 // are fetched together once the page is idle: first paint and typing do
 // not wait for a wasm download. Plain text is already on screen.
-function whenIdle(callback) {
+function whenIdle(callback: () => void): void {
   if (typeof window.requestIdleCallback === "function") {
     window.requestIdleCallback(callback, { timeout: 1500 });
   } else {
@@ -127,7 +134,7 @@ function whenIdle(callback) {
   }
 }
 
-async function initHighlighter() {
+async function initHighlighter(): Promise<void> {
   const runtimeUrl = new URL("vendor/web-tree-sitter.wasm", document.baseURI).href;
   const grammarUrl = new URL("grammar/tree-sitter-alcy.wasm", document.baseURI).href;
   try {
@@ -145,12 +152,12 @@ async function initHighlighter() {
     renderHighlight();
   } catch (error) {
     onHighlightError("status.highlightingUnavailable", {
-      detail: error.message ?? String(error),
+      detail: error instanceof Error ? error.message : String(error),
     });
   }
 }
 
-function noteEdit() {
+function noteEdit(): void {
   scheduleHighlight();
   updateGutter();
   onInput();
@@ -158,7 +165,7 @@ function noteEdit() {
 
 // Replaces the buffer from the outside (a sample, or the restored
 // session) and puts the editor back at the top.
-export function setText(text) {
+export function setText(text: string): void {
   elements.source.value = text;
   scheduleHighlight();
   updateGutter();
@@ -167,7 +174,7 @@ export function setText(text) {
   syncScroll();
 }
 
-export function initEditor(handlers) {
+export function initEditor(handlers: EditorHandlers): void {
   onInput = handlers.onInput ?? onInput;
   onRun = handlers.onRun ?? onRun;
   onHighlightError = handlers.onHighlightError ?? onHighlightError;
