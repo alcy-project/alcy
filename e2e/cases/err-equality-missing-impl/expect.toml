@@ -1,0 +1,4 @@
+# `==` over a nominal type reaches `PartialEq`, and `Nope` has no
+# implementation; an aggregate with none has no equality (ADR-0053).
+exit = 4
+contains = ["Type does not implement the 'PartialEq' spec"]

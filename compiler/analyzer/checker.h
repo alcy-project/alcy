@@ -705,6 +705,12 @@ class Checker {
                                ast::ExprIdx index_expr,
                                const ir::TypeIdx* expected,
                                bool mutating);
+  // `a == b` over a nominal type: resolves the `PartialEq`
+  // implementation and records the call lowering emits.
+  ir::TypeIdx check_spec_equality(u32 module,
+                                  ast::ExprIdx expr,
+                                  ir::TypeIdx type,
+                                  const ir::TypeIdx* expected);
   // Element access: `receiver[integer]`, already checked. The expected
   // type, when given, is the element type.
   ir::TypeIdx check_element_index(ir::TypeIdx receiver,

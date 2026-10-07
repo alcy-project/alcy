@@ -1,0 +1,10 @@
+[package]
+name = "app"
+version = "0.1.0"
+
+[modules]
+include = ["main"]
+
+[[bin]]
+name = "app"
+path = "main.al"

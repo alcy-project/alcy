@@ -2479,6 +2479,52 @@ Val Lowerer::lower_spec_index(ast::ExprIdx expr,
   return as_place ? place : materialize(place);
 }
 
+Val Lowerer::lower_spec_equality(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::CallTarget* target) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprBinary& bin = node.payload.get<ast::ExprBinary>();
+  const analyzer::CheckedModule& def = pkg.modules[target->module];
+  const analyzer::CheckedModule::MethodInfo& info = def.methods[target->index];
+  if (!comp_positions(info.item).empty()) {
+    internal(node.span, "comp equality method");
+    return Val{size_one, error_type(), false, false};
+  }
+  // `eq` takes both operands by shared reference, so a rooted place is
+  // borrowed and anything else is materialized into one.
+  Val receiver = is_ref_tag(tag_of(info.params[0])) && is_rooted_place(bin.lhs)
+                     ? place_addr(bin.lhs)
+                     : lower_expr(bin.lhs, nullptr);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  Val argument = is_ref_tag(tag_of(info.params[1])) && is_rooted_place(bin.rhs)
+                     ? place_addr(bin.rhs)
+                     : lower_expr(bin.rhs, nullptr);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::FunctionIdx fn = fn_index(
+      target->module, info.item, info.name, info.params, info.ret,
+      callee_inst(target), std::vector<CompVal>{}, ir::SymbolKind::Method);
+  if (!fn.is_valid()) {
+    return Val{size_one, error_type(), false, false};
+  }
+  std::vector<ir::OperandIdx> ops;
+  ops.push_back(builder.operand(ir::Operand::from_function(
+      fn, builder.primitive(ir::TypeTag::Function))));
+  ops.push_back(arg_for(receiver, info.params[0]));
+  ops.push_back(arg_for(argument, info.params[1]));
+  const ir::RegisterIdx dst = emit(ir::Opcode::Call, info.ret, ops);
+  const Val result{to_operand(dst, info.ret), info.ret, false, false};
+  if (bin.op == ast::BinaryOp::NotEq) {
+    const ir::RegisterIdx negated =
+        emit(ir::Opcode::Not, result.type, {result.op});
+    return Val{to_operand(negated, result.type), result.type, false, false};
+  }
+  return result;
+}
+
 // Address of `base.name`: sees through references to the nominal
 // carrying the field. Works for values and places alike.
 Val Lowerer::field_addr(Val base, std::string_view name, diag::Span span) {
@@ -2709,6 +2755,10 @@ ir::Opcode Lowerer::int_binop(ast::BinaryOp op, ir::TypeTag tag) {
 Val Lowerer::lower_binary(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprBinary& bin = node.payload.get<ast::ExprBinary>();
+  if (const analyzer::CheckedModule::CallTarget* target = call_target(expr);
+      target != nullptr) {
+    return lower_spec_equality(expr, target);
+  }
   if (bin.op == ast::BinaryOp::Pow) {
     unsupported(node.span, "power operator");
     return Val{size_one, error_type(), false, false};

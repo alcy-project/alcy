@@ -422,6 +422,11 @@ class Lowerer {
   Val lower_spec_index(ast::ExprIdx expr,
                        const analyzer::CheckedModule::CallTarget* target,
                        bool as_place);
+  // `a == b` where the checker resolved a `PartialEq` impl: the
+  // recorded call takes both operands by shared reference, and `!=`
+  // negates its result.
+  Val lower_spec_equality(ast::ExprIdx expr,
+                          const analyzer::CheckedModule::CallTarget* target);
   Val field_addr(Val base, std::string_view name, diag::Span span);
   Val lower_struct(ast::ExprIdx expr);
   Val lower_tuple(ast::ExprIdx expr);

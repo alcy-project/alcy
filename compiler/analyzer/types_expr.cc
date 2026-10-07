@@ -1938,7 +1938,7 @@ ir::TypeIdx Checker::check_spec_index(u32 module,
   if (method == nullptr ||
       method->receiver == CheckedModule::ReceiverKind::None ||
       method->params.size() != 2) {
-    const u32 diag = bag.emit<i18n::Key::AnalyzerIndexMissingImpl>(
+    const u32 diag = bag.emit<i18n::Key::AnalyzerMissingOperatorSpec>(
         diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::InvalidOperation, ast.exprs[index_expr].span, spec_name);
     (void)diag;
@@ -1971,6 +1971,34 @@ ir::TypeIdx Checker::check_spec_index(u32 module,
     return unify(*expected, element, ast.exprs[expr].span, "index");
   }
   return element;
+}
+
+ir::TypeIdx Checker::check_spec_equality(u32 module,
+                                         ast::ExprIdx expr,
+                                         ir::TypeIdx type,
+                                         const ir::TypeIdx* expected) {
+  // `==` and `!=` both reach `eq`; `!=` is the negation, which
+  // lowering applies to the call's result.
+  const u32 spec = operator_spec("PartialEq");
+  const CheckedModule::MethodInfo* method =
+      spec == U32_MAX
+          ? nullptr
+          : lookup_method(type, "eq", module, ast.exprs[expr].span, true, spec);
+  if (method == nullptr ||
+      method->receiver != CheckedModule::ReceiverKind::Shared ||
+      method->params.size() != 2) {
+    const u32 diag = bag.emit<i18n::Key::AnalyzerMissingOperatorSpec>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::InvalidOperation, ast.exprs[expr].span, "PartialEq");
+    (void)diag;
+    return error_type();
+  }
+  record_call(module, expr, method);
+  const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+  if (expected != nullptr) {
+    return unify(*expected, boolean, ast.exprs[expr].span, "comparison");
+  }
+  return boolean;
 }
 
 ir::TypeIdx Checker::check_run_index(ir::TypeIdx receiver,
@@ -2748,6 +2776,11 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
               tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef ||
               ir::is_raw_ptr_type(tag);
           if (!comparable) {
+            // A nominal type compares through the sealed `PartialEq`
+            // spec (ADR-0053); everything else has no comparison.
+            if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum) {
+              return check_spec_equality(module, expr, operands, expected);
+            }
             break;
           }
           const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);

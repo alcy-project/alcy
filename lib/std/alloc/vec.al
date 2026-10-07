@@ -134,3 +134,22 @@ impl<T> IndexMut<usize, T> for Vec<T> {
     ret self.at_mut(i).unwrap()
   }
 }
+
+// `==` compares lengths and then elements. Whether `T` compares is
+// checked where an instantiation happens, which is what bounds will
+// state up front once they exist.
+impl<T> PartialEq for Vec<T> {
+  fn eq(self: &Self, other: &Self) -> bool {
+    if self.len() != other.len() {
+      ret false
+    }
+    mut i := 0 as usize
+    while i < self.len() {
+      if self[i] != other[i] {
+        ret false
+      }
+      i = i + 1
+    }
+    ret true
+  }
+}

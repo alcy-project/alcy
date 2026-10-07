@@ -151,7 +151,6 @@
   F(AnalyzerGenericImplUnsupported, "Generic impl blocks are not supported") \
   F(AnalyzerIfWithoutElse, "If without else yields '()'") \
   F(AnalyzerImportNotQualified, "Imports must be module-qualified (`self::foo`)") \
-  F(AnalyzerIndexMissingImpl, "Type does not implement the '{}' spec") \
   F(AnalyzerInherentImplNeedsNominalType, "Inherent impl requires a nominal type") \
   F(AnalyzerIntegerSuffixOnFloat, "Integer suffix on a float literal") \
   F(AnalyzerIntrinsicMissingUnsafe, "Intrinsic '{}' is unsafe; declare it `unsafe`") \
@@ -171,6 +170,7 @@
   F(AnalyzerMatchNotExhaustiveTuple, "Non-exhaustive tuple match: add a wildcard arm") \
   F(AnalyzerMaybeUninitArity, "Type 'MaybeUninit' takes one type argument") \
   F(AnalyzerMissingField, "Missing field '{}'") \
+  F(AnalyzerMissingOperatorSpec, "Type does not implement the '{}' spec") \
   F(AnalyzerMissingSpecMethod, "Missing method '{}' in implementation of '{}'") \
   F(AnalyzerNameTableExhausted, "The compiler's name table cannot hold the names this package declares") \
   F(AnalyzerMoveCaptureUnsupported, "Capturing the non-Copy value '{}' by value is not implemented yet") \

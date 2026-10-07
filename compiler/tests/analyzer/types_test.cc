@@ -3834,4 +3834,52 @@ TEST_CASE("Check rejects a core operator spec off the canonical shape") {
         "Spec 'Index' must keep the compiler's operator shape");
 }
 
+TEST_CASE("Check rejects a core equality spec off the canonical shape") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"specs.al",
+             "pub spec PartialEq {\n  fn eq(self: &Self, other: &Self) -> "
+             "i32;\n}\n"},
+            {"main.al", "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_with_policies(dir, "main.al", {{"core", "specs.al"}}, {}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(f.bag.size() == 1);
+  if (f.bag.size() != 1) {
+    return;
+  }
+  CHECK(f.bag.at(0)->message ==
+        "Spec 'PartialEq' must keep the compiler's operator shape");
+}
+
+TEST_CASE("Check rejects a core index spec with a non-reference result") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"specs.al",
+             "pub spec Index<I, O> {\n  fn index(self: &Self, i: I) -> "
+             "O;\n}\n"},
+            {"main.al", "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_with_policies(dir, "main.al", {{"core", "specs.al"}}, {}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(f.bag.size() == 1);
+  if (f.bag.size() != 1) {
+    return;
+  }
+  CHECK(f.bag.at(0)->message ==
+        "Spec 'Index' must keep the compiler's operator shape");
+}
+
 }  // namespace analyzer

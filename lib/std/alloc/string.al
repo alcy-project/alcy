@@ -109,3 +109,23 @@ impl IndexMut<usize, u8> for String {
     ret unsafe { uninit_assume(elem_ptr(self.buf, i)) }
   }
 }
+
+impl PartialEq for String {
+  fn eq(self: &Self, other: &Self) -> bool {
+    if self.len() != other.len() {
+      ret false
+    }
+    mut i := 0 as usize
+    while i < self.len() {
+      if self[i] != other[i] {
+        ret false
+      }
+      i = i + 1
+    }
+    ret true
+  }
+}
+
+// Byte equality is reflexive, so `String` is `Eq`.
+impl Eq for String {
+}

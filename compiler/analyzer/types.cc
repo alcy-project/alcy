@@ -238,19 +238,39 @@ static bool is_ref_to(const ast::AstArena& ast,
   return ref.is_mut == is_mut && bare_path_name(ast, ref.inner) == name;
 }
 
+// Whether `type` is the primitive `bool`.
+static bool is_bool_type(const ast::AstArena& ast, ast::TypeIdx type) {
+  if (!type.is_valid()) {
+    return false;
+  }
+  const ast::TypeNode& node = ast.types[type];
+  return node.kind == ast::TypeKind::Primitive &&
+         node.payload.get<ast::TypePrimitive>().primitive ==
+             ast::PrimitiveKind::Bool;
+}
+
 bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
   // The compiler owns the operator specs (ADR-0053): their declared
   // shape is part of the operator's meaning, so a staged declaration
   // that does not match the canonical shape is an error rather than a
-  // different operator.
+  // different operator. Index and IndexMut take `<I, O>` and one
+  // method, PartialEq has one `eq` method over `&Self`, and Eq is a
+  // marker over PartialEq that declares nothing.
+  enum class Shape : u8 {
+    Index,
+    IndexMut,
+    Equality,
+    Marker,
+  };
   struct Canonical {
     std::string_view spec;
-    std::string_view method;
-    bool mut_receiver;
+    Shape shape;
   };
   static constexpr Canonical CANONICAL[] = {
-      {"Index", "index", false},
-      {"IndexMut", "index_mut", true},
+      {"Index", Shape::Index},
+      {"IndexMut", Shape::IndexMut},
+      {"PartialEq", Shape::Equality},
+      {"Eq", Shape::Marker},
   };
   const Canonical* canonical = nullptr;
   for (const Canonical& candidate : CANONICAL) {
@@ -270,25 +290,57 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
     (void)index;
     return false;
   };
+  if (canonical->shape == Shape::Marker) {
+    // No parameters and no methods: the super-spec carries the
+    // requirement the marker stands for.
+    if (!declaration.params.empty() || !declaration.methods.empty()) {
+      return wrong();
+    }
+    return true;
+  }
+  if (canonical->shape == Shape::Equality) {
+    // `fn eq(self: &Self, other: &Self) -> bool`, no parameters.
+    if (!declaration.params.empty() || declaration.methods.size() != 1) {
+      return wrong();
+    }
+    const ast::SpecMethod& method = declaration.methods[0];
+    if (method.name.name != "eq" || method.is_unsafe ||
+        !method.generic.empty() || method.params.size() != 2) {
+      return wrong();
+    }
+    if (!is_ref_to(ast, method.params[0].type, false, "Self") ||
+        !is_ref_to(ast, method.params[1].type, false, "Self")) {
+      return wrong();
+    }
+    if (!is_bool_type(ast, method.return_type)) {
+      return wrong();
+    }
+    return true;
+  }
   // `<I, O>` with one method taking `&Self` and `I` and returning
   // `&O` (`&mut` on receiver and result for the mutating form).
+  const bool mut_receiver = canonical->shape == Shape::IndexMut;
   if (declaration.params.size() != 2 || declaration.methods.size() != 1) {
     return wrong();
   }
   const ast::SpecMethod& method = declaration.methods[0];
-  if (method.name.name != canonical->method || method.is_unsafe ||
-      !method.generic.empty() || method.params.size() != 2) {
+  if (method.name.name != (mut_receiver ? "index_mut" : "index") ||
+      method.is_unsafe || !method.generic.empty() ||
+      method.params.size() != 2) {
     return wrong();
   }
-  if (!is_ref_to(ast, method.params[0].type, canonical->mut_receiver, "Self")) {
+  if (!is_ref_to(ast, method.params[0].type, mut_receiver, "Self")) {
     return wrong();
   }
   if (bare_path_name(ast, method.params[1].type) !=
       declaration.params[0].name) {
     return wrong();
   }
-  return is_ref_to(ast, method.return_type, canonical->mut_receiver,
-                   declaration.params[1].name);
+  if (!is_ref_to(ast, method.return_type, mut_receiver,
+                 declaration.params[1].name)) {
+    return wrong();
+  }
+  return true;
 }
 
 u32 Checker::operator_spec(std::string_view name) const {

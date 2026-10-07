@@ -10,6 +10,8 @@
 // Core is the one package of the suite with no dependencies; see
 // docs/adr/0016-suites-and-the-std-split.md.
 
+pub use super::cmp::Eq;
+pub use super::cmp::PartialEq;
 pub use super::index::Index;
 pub use super::index::IndexMut;
 pub use super::iterator::Iterator;

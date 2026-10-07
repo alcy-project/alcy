@@ -62,6 +62,23 @@
   covers these types and no others until the implementing-side
   manifest key ships (see `deferred.md`).
 
+## Equality over specs
+
+- `==` over a nominal type resolves through the sealed `PartialEq`
+  spec, and `!=` is its negation; a type with no implementation has no
+  equality. Scalars and addresses keep their builtin comparison. See
+  `docs/adr/0053-operators-are-sealed-specs.md`.
+- `Eq` is the reflexivity marker over `PartialEq` and declares no
+  method of its own: implementing it requires a `PartialEq`
+  implementation for the same type. `String` implements both; floats
+  implement only `PartialEq`, because IEEE equality is not reflexive.
+- `Vec<T>` compares lengths and then elements through `PartialEq` in
+  turn, and `String` compares its bytes. The element's capability is
+  checked where the generic body is instantiated until spec bounds
+  land (see `deferred.md`), so comparing a vector of a type without
+  `PartialEq` is an error at that use rather than at the
+  implementation.
+
 ## Text (staged)
 
 - The compiler-known text type is `str`: byte sequences backing

@@ -122,6 +122,9 @@ Declaration left-hand sides use this grammar with `:=`
 - Array indexing is builtin with panic-on-out-of-bounds semantics;
   indexing a nominal type resolves through the sealed `Index` and
   `IndexMut` specs (see `types.md`).
+- `==` and `!=` are builtin over scalars and addresses; over a
+  nominal type they resolve through the sealed `PartialEq` spec, with
+  `!=` the negation of `eq` (see `types.md`).
 - Calls to `panic(...)` diverge with type `!`.
 - `unsafe { ... }` opens the gate for the operations inside and
   evaluates to the block's value; everything inside is checked as
