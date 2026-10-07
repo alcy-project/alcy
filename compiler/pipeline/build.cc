@@ -4,6 +4,7 @@
 #include "pipeline/build.h"
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>

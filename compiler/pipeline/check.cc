@@ -3,6 +3,7 @@
 
 #include "pipeline/check.h"
 
+#include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>

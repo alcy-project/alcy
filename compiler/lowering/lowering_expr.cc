@@ -12,6 +12,7 @@
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "base/nesting.h"
+#include "comp/comp_value.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
