@@ -34,7 +34,10 @@ A **suite** is a named set of packages, addressed as
 `<owner>/<suite>`. A package is addressed as `<owner>/<suite>/<package>`.
 A dependency entry is either form: a suite entry pulls every member, a
 package entry pulls one. A suite in a suite is not a thing, so a
-three-segment path is always a package.
+three-segment path is always a package. A member's entry in
+`[suite] packages` is its suite-relative directory path, while the
+address's third segment is the member's package name
+(`docs/adr/0057-suites-are-scaffolded-and-built-as-one.md`).
 
 **Everything is opt-in, `core` included.** A program that wants `Option`
 asks for `alcy/std/core`. Uniformity is worth the verbosity: a name in
