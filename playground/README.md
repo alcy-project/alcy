@@ -12,11 +12,24 @@ The built site is deployed to GitHub Pages by
 ## Layout
 
 - `index.html`, `style.css` - the page.
-- `app.js` - the editor, the diagnostics list, and the Check and Run
-  buttons. Highlighting starts once the page is idle, so first paint and
-  typing never wait for the tree-sitter wasm, and the mirror shows plain
-  text until the colors are ready. The buffer and the selected example are
-  kept in `localStorage`, so a reload returns to the last edit.
+- `app.js` - the wiring: it builds the modules, connects their callbacks,
+  and starts the flows.
+- `editor.js` - the textarea, the highlighted mirror, the line-number
+  gutter, and the geometry that keeps the three in step. Highlighting
+  starts once the page is idle, so first paint and typing never wait for
+  the tree-sitter wasm; the mirror shows plain text until the colors are
+  ready.
+- `problems.js` - the diagnostics list, including jump-to-span.
+- `output.js` - the run meta line and the program's two streams.
+- `runtime.js` - the compiler worker, the disposable runner worker, and
+  the Check and Run flows.
+- `samples.js` - the example picker and the restore-or-default choice.
+- `session.js` - the buffer and selected example kept in `localStorage`.
+- `status.js` - the status line, the compiler indicator, and the Run
+  button's busy state.
+- `tabs.js`, `splitter.js`, `theme.js`, `language.js` - the side panel's
+  tabs, the pane divider, the color theme, and the language.
+- `elements.js`, `state.js` - the page's elements and its shared state.
 - `highlight.js` - tree-sitter highlighting through `web-tree-sitter`.
 - `textutil.js` - byte-offset to UTF-16 conversion for diagnostics.
 - `i18n.js` - the page's own strings, in English and Japanese. Adding a
