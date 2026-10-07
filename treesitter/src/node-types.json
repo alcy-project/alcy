@@ -1694,12 +1694,12 @@
     "type": "declaration_statement",
     "named": true,
     "fields": {
-      "comp": {
+      "const": {
         "multiple": false,
         "required": false,
         "types": [
           {
-            "type": "comp",
+            "type": "const",
             "named": false
           }
         ]

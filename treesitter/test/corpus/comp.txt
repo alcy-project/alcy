@@ -47,33 +47,6 @@ fn plain(x: i32) -> i32 {
             (identifier)))))))
 
 ================================================================================
-A comp variable
-================================================================================
-
-fn f() {
-  comp count := 3
-  comp mut x := 1
-  ret
-}
-
---------------------------------------------------------------------------------
-
-(source_file
-  (function_item
-    (identifier)
-    (parameters)
-    (block
-      (declaration_statement
-        (identifier_pattern
-          (identifier))
-        (integer))
-      (declaration_statement
-        (mut_identifier_pattern
-          (identifier))
-        (integer))
-      (return_expression))))
-
-================================================================================
 A comp block is an expression
 ================================================================================
 

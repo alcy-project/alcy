@@ -884,10 +884,11 @@ module.exports = grammar({
       $.expression_statement,
     ),
 
-    // `mut` in declaration position folds into the pattern, so only `comp` is
-    // a decl-level modifier.
+    // `const` is the one decl-level modifier, and its initializer is a
+    // compile-time value (comp.md, "Syntax"). `mut` in declaration
+    // position folds into the pattern.
     declaration_statement: $ => seq(
-      optional(field('comp', 'comp')),
+      optional(field('const', 'const')),
       field('pattern', $._pattern),
       optional(seq(':', field('type', $._type))),
       ':=',

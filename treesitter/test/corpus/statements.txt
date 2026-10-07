@@ -51,6 +51,32 @@ fn f() {
         (integer)))))
 
 ================================================================================
+A const declaration
+================================================================================
+
+fn f() {
+  const x := 1
+  const y: i32 := 2
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (integer))
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (primitive_type)
+        (integer)))))
+
+================================================================================
 Assignment, plain and compound
 ================================================================================
 

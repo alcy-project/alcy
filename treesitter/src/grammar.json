@@ -4426,10 +4426,10 @@
           "members": [
             {
               "type": "FIELD",
-              "name": "comp",
+              "name": "const",
               "content": {
                 "type": "STRING",
-                "value": "comp"
+                "value": "const"
               }
             },
             {
