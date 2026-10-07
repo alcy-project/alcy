@@ -64,7 +64,7 @@ arrays composed of comp-known values.
   is a compile-time error. There is no `const fn`; `comp` is the one
   word for code evaluated during compilation.
 - A receiver method with the marker is deferred; `comp fn` is a free
-  function for now.
+  function for now, and the marker does not combine with `unsafe` yet.
 - Only a tail `ret` is supported by the AST evaluator; an early `ret`
   reached through a branch is a compile-time error until the IR
   interpreter lands (see Deferred).

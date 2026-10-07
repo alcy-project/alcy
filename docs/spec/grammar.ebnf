@@ -25,11 +25,14 @@ item        = [ vis ] , ( fn_item | intrinsic_fn_item | extern_item
                         | struct_item | enum_item | impl_item
                         | spec_item | static_item | const_item | use_item ) ;
 vis         = "pub" ;
-fn_item     = [ "comp" ] , [ "unsafe" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
+fn_item     = [ "unsafe" ] , [ "comp" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
             , [ "->" , type ] , block ;
               (* An `unsafe fn` hands its callers an operation that
-                 needs the gate; the body is not one implicitly. See
-                 docs/spec/ffi.md. *)
+                 needs the gate; the body is not one implicitly. A
+                 `comp fn` is called during compilation only. At most
+                 one of the two markers may appear, whichever order it
+                 is written in; their meaning together is not settled
+                 yet. See docs/spec/ffi.md and docs/spec/comp.md. *)
 intrinsic_fn_item = [ "unsafe" ] , "intrinsic" , "fn" , IDENT , [ type_params ] ,
             "(" , [ params ] , ")" , [ "->" , type ] , ";" ;
               (* A signature with no body, terminated by `;`. The

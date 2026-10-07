@@ -971,6 +971,16 @@ TEST_CASE("Parser rejects comp outside a function item") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Parser refuses comp and unsafe together") {
+  for (const std::string_view source :
+       {"unsafe comp fn f() {}\n", "comp unsafe fn f() {}\n"}) {
+    Fixture f;
+    const ParseResult result = parse(source, f);
+    CHECK(!result.ok);
+    CHECK(f.bag.has_errors());
+  }
+}
+
 TEST_CASE("Parser accepts comp blocks") {
   Fixture f;
   const ParseResult result = parse("fn f() -> i32 { ret comp { 1 + 2 } }", f);

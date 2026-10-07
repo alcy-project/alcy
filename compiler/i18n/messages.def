@@ -59,6 +59,7 @@
   F(ParserCompDeclarationSpelling, "`comp` marks parameters and blocks; write the declaration as `const x := ...`") \
   F(ParserCompOnlyOnBindings, "Comp evaluation is only allowed on parameters and blocks") \
   F(ParserCompOnlyOnFunctions, "`comp` marks a function in item position") \
+  F(ParserCompUnsafeCombination, "`comp` and `unsafe` do not combine yet") \
   F(ParserDuplicateTypeParameter, "Duplicate type parameter '{}'") \
   F(ParserExpectedFound, "Expected {}, found `{}`") \
   F(ParserExpectedFoundEndOfFile, "Expected {}, found end of file") \

@@ -387,9 +387,24 @@ ast::ItemIdx Parser::parse_item() {
   const bool is_pub = match(lexer::TokenKind::Pub);
   const bool is_unsafe = match(lexer::TokenKind::Unsafe);
   // `comp` in item position marks a free function (ADR-0054); a
-  // receiver method keeps the marker for a later slice.
+  // receiver method keeps the marker for a later slice. The two
+  // markers do not combine yet, in either spelling order.
   const lexer::Token comp_token = peek();
   const bool is_comp = match(lexer::TokenKind::Comp);
+  const auto refuse_comp_unsafe = [&] {
+    const u32 index = bag_.emit<i18n::Key::ParserCompUnsafeCombination>(
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+        comp_token.span);
+    (void)index;
+    return ast::ItemIdx::invalid();
+  };
+  if (is_unsafe && is_comp) {
+    return refuse_comp_unsafe();
+  }
+  if (is_comp && peek_kind() == lexer::TokenKind::Unsafe) {
+    advance();
+    return refuse_comp_unsafe();
+  }
   if (is_comp && peek_kind() != lexer::TokenKind::Fn) {
     const u32 index = bag_.emit<i18n::Key::ParserCompOnlyOnFunctions>(
         diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
