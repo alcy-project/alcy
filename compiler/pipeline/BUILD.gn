@@ -119,6 +119,7 @@ source_set("pipeline") {
     "//compiler/path",
     "//compiler/pkg",
     "//compiler/source",
+    "//compiler/symbol",
   ]
 
   # The dispatch reaches the implementations; a build that carries none

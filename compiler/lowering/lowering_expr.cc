@@ -251,7 +251,14 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
   const ir::TypeIdx type = builder.primitive(tag);
   if (tag == ir::TypeTag::Str) {
     const std::string bytes = text::unescape_string(lit.spelling);
-    const str::StringPoolId id = intern_name(bytes);
+    // A literal with no escape denotes the source's own bytes, and a source
+    // lives as long as the table reads it; anything else is copied once.
+    const std::string_view inner =
+        lit.spelling.size() >= 2
+            ? lit.spelling.substr(1, lit.spelling.size() - 2)
+            : std::string_view{};
+    const str::StringPoolId id =
+        bytes == inner ? intern_name(inner) : intern_copied(bytes);
     if (id == str::INVALID_STRING_POOL_ID) {
       return Val{size_one, error_type(), false, false};
     }

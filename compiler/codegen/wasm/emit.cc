@@ -24,7 +24,6 @@
 #include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/str/string_interner.h"
 #include "fpag/str/string_pool_id.h"
 #include "i18n/messages.h"
 #include "ir/block.h"
@@ -37,6 +36,7 @@
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
+#include "symbol/symbol_table.h"
 
 namespace codegen::wasm {
 namespace {
@@ -104,7 +104,7 @@ bool is_terminator(ir::Opcode op) {
 // The `main` a binary runs, matching what the analyzer admits and the
 // LLVM backend's wrapper expects.
 bool is_entry_candidate(const ir::Storage& storage,
-                        str::StringInterner& strings,
+                        symbol::SymbolTable& strings,
                         const ir::Function& function) {
   if (function.meta.kind != ir::SymbolKind::Free) {
     return false;
@@ -1049,12 +1049,13 @@ u32 Emitter::data_for(std::string_view text) {
 }
 
 u32 Emitter::data_for(str::StringPoolId id) {
-  const auto found = string_data_.find(id.offset);
+  const u32 handle = symbol::handle_value(id);
+  const auto found = string_data_.find(handle);
   if (found != string_data_.end()) {
     return found->second;
   }
   const u32 offset = data_for(string_text(id));
-  string_data_.emplace(id.offset, offset);
+  string_data_.emplace(handle, offset);
   return offset;
 }
 

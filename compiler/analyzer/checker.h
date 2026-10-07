@@ -20,12 +20,12 @@
 #include "fpag/debug/profiler/profile_scope.h"
 #include "fpag/debug/profiler/profiler.h"
 #include "fpag/hash/xxh3_hasher.h"
-#include "fpag/str/string_interner.h"
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
+#include "symbol/symbol_table.h"
 
 namespace analyzer {
 
@@ -92,7 +92,7 @@ class Checker {
           ir::PointerWidth width,
           ast::AstArena& ast,
           diag::DiagBag& bag,
-          str::StringInterner& strings,
+          symbol::SymbolTable& strings,
           std::span<const StdHint> std_hints = {},
           debug::Profiler* profiler = nullptr);
 
@@ -108,7 +108,7 @@ class Checker {
   ir::StorageBuilder builder;
   // The compilation's one interner; a second one here would mint storage ids
   // that lowering and codegen could not resolve.
-  str::StringInterner& interner;
+  symbol::SymbolTable& interner;
   std::vector<NominalEntry> nominals;
   std::vector<SpecEntry> specs;
   // Where a module's entries sit in those two tables. Both tables span the

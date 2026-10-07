@@ -13,7 +13,6 @@
 #include "doctest/doctest.h"
 #include "fpag/base/idx.h"
 #include "fpag/mem/page_allocator.h"
-#include "fpag/str/string_interner.h"
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 #include "ir/external_function.h"
@@ -24,6 +23,7 @@
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
+#include "symbol/symbol_table.h"
 
 namespace codegen_llvm {
 
@@ -38,7 +38,7 @@ Target host_target() {
 
 }  // namespace
 
-ir::VerifiedStorage hello_world_ir(str::StringInterner* interner) {
+ir::VerifiedStorage hello_world_ir(symbol::SymbolTable* interner) {
   ir::StorageBuilder builder;
 
   const str::StringPoolId main_str = interner->intern("main");
@@ -152,7 +152,7 @@ TEST_CASE("Emit Hello World") {
       std::make_unique<llvm::Module>("llvm_ir_emitter_test", context);
   CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
 
-  str::StringInterner interner(mem::page_size());
+  symbol::SymbolTable interner(mem::page_size());
   ir::VerifiedStorage storage = hello_world_ir(&interner);
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         host_target(), true);
@@ -172,7 +172,7 @@ TEST_CASE("Emit struct and array calls") {
       std::make_unique<llvm::Module>("struct_array_test", context);
   CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
 
-  str::StringInterner interner(mem::page_size());
+  symbol::SymbolTable interner(mem::page_size());
   ir::StorageBuilder builder;
 
   const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
@@ -298,7 +298,7 @@ TEST_CASE("Emit compute instructions") {
       std::make_unique<llvm::Module>("compute_test", context);
   CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
 
-  str::StringInterner interner(mem::page_size());
+  symbol::SymbolTable interner(mem::page_size());
   ir::StorageBuilder builder;
 
   const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
@@ -468,7 +468,7 @@ TEST_CASE("Emit control flow") {
       std::make_unique<llvm::Module>("control_test", context);
   CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
 
-  str::StringInterner interner(mem::page_size());
+  symbol::SymbolTable interner(mem::page_size());
   ir::StorageBuilder builder;
 
   const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
@@ -607,7 +607,7 @@ TEST_CASE("Emit memory instructions") {
       std::make_unique<llvm::Module>("memory_test", context);
   CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
 
-  str::StringInterner interner(mem::page_size());
+  symbol::SymbolTable interner(mem::page_size());
   ir::StorageBuilder builder;
 
   const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
@@ -839,7 +839,7 @@ TEST_CASE("Emit ignores Drop markers") {
       std::make_unique<llvm::Module>("marker_test", context);
   CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
 
-  str::StringInterner interner(mem::page_size());
+  symbol::SymbolTable interner(mem::page_size());
   ir::StorageBuilder builder;
 
   const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);

@@ -15,9 +15,9 @@
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profiler.h"
 #include "fpag/mem/arena.h"
-#include "fpag/str/string_interner.h"
 #include "i18n/language.h"
 #include "source/source.h"
+#include "symbol/symbol_table.h"
 
 namespace pipeline {
 
@@ -28,7 +28,7 @@ struct PipelineContext {
   diag::DiagBag bag;
   // Long-lived string pool for lowering and codegen (function names,
   // string literals). Must outlive every phase that reads its ids.
-  str::StringInterner strings;
+  symbol::SymbolTable strings;
   // The machine this run builds for: the host's triple and a 64-bit
   // pointer. One value, so the width the analyzer and lowering were
   // handed and the triple the backend writes cannot disagree, and so a
@@ -63,9 +63,8 @@ struct PipelineContext {
 
   // `span_capacity` is the syntax arena's reservation. A case that has
   // to spend it can ask for less, the way `ast::AstArena` allows.
-  // `name_capacity` is the name table's; zero takes its default, and a
-  // case that has to spend it asks for less the same way. The table is
-  // sized once, before the first name is interned.
+  // `name_capacity` caps the name table's distinct names; zero takes its
+  // default, and a case that has to spend it asks for less the same way.
   explicit PipelineContext(
       i18n::Language language,
       usize span_capacity = ast::AstArena::DEFAULT_SPAN_CAPACITY,

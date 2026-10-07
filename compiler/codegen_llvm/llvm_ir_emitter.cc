@@ -16,7 +16,6 @@
 #include "debug/fatal.h"
 #include "fpag/base/numeric.h"
 #include "fpag/debug/profiler/profile_scope.h"
-#include "fpag/str/string_interner.h"
 #include "ir/block.h"
 #include "ir/common.h"
 #include "ir/external_function.h"
@@ -29,6 +28,7 @@
 #include "ir/type_util.h"
 #include "llvm/IR/InlineAsm.h"
 #include "symbol/mangle.h"
+#include "symbol/symbol_table.h"
 
 #if BUILD_FLAG(IS_DEBUG)
 #include "ir/formatter.h"  // IWYU pragma: keep
@@ -38,7 +38,7 @@ namespace codegen_llvm {
 
 LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
                              ir::VerifiedStorage storage,
-                             str::StringInterner* interner,
+                             symbol::SymbolTable* interner,
                              const Target& target,
                              bool emit_entry,
                              bool freestanding,

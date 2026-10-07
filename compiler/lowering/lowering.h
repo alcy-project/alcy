@@ -13,10 +13,10 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profiler.h"
-#include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
+#include "symbol/symbol_table.h"
 
 namespace lowering {
 
@@ -89,7 +89,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     analyzer::CheckedPackage package,
     ir::PointerWidth width,
     ast::AstArena& ast,
-    str::StringInterner& strings,
+    symbol::SymbolTable& strings,
     diag::DiagBag& bag,
     debug::Profiler* profiler = nullptr);
 

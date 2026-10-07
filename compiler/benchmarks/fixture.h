@@ -13,12 +13,12 @@
 #include "benchmarks/generator.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
-#include "fpag/str/string_interner.h"
 #include "i18n/language.h"
 #include "ir/storage.h"
 #include "lowering/lowering.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
+#include "symbol/symbol_table.h"
 
 namespace bench {
 
@@ -80,7 +80,7 @@ class CompilerFixture {
 
   // The interner lowering interned names into, which the emitter reads
   // while it builds a module.
-  str::StringInterner& strings() { return ctx_.strings; }
+  symbol::SymbolTable& strings() { return ctx_.strings; }
 
   // Hands over the verified storage, consuming the proof: the emitter
   // takes it by value, so one emission consumes it and a second needs a

@@ -19,13 +19,13 @@
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
 #include "symbol/mangle.h"
+#include "symbol/symbol_table.h"
 
 namespace {
 
@@ -35,7 +35,7 @@ using ir::TypeTag;
 
 struct Fixture {
   StorageBuilder builder;
-  str::StringInterner strings{16};
+  symbol::SymbolTable strings{16};
   TypeIdx i32 = builder.primitive(TypeTag::I32);
   TypeIdx u8 = builder.primitive(TypeTag::U8);
   TypeIdx str = builder.primitive(TypeTag::Str);

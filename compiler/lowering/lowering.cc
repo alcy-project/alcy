@@ -29,7 +29,6 @@
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
 #include "fpag/debug/profiler/profiler.h"
-#include "fpag/str/string_interner.h"
 #include "i18n/messages.h"
 #include "ir/common.h"
 #include "ir/function.h"
@@ -43,6 +42,7 @@
 #include "ir/verifier.h"
 #include "lowering/diag_code.h"
 #include "lowering/lowerer.h"
+#include "symbol/symbol_table.h"
 
 namespace lowering {
 
@@ -87,7 +87,7 @@ bool Lowerer::terminated_cur() {
 Lowerer::Lowerer(analyzer::CheckedPackage package,
                  ir::PointerWidth width,
                  ast::AstArena& ast,
-                 str::StringInterner& strings,
+                 symbol::SymbolTable& strings,
                  diag::DiagBag& bag,
                  debug::Profiler* profiler)
     : pkg(std::move(package)),
@@ -358,13 +358,11 @@ ir::OperandIdx Lowerer::use_value(Val v) {
   return value;
 }
 
-// Interns a name, or reports the shared table as spent once and marks the
-// run failed. The table is shared with checking and codegen, so one report
-// covers the run; a caller that gets an invalid id stops rather than
-// storing it.
-str::StringPoolId Lowerer::intern_name(std::string_view name) {
-  if (const std::optional<str::StringPoolId> id = strings.try_intern(name);
-      id.has_value()) {
+// The one report a spent name table gets, and the failed run that follows it.
+// Both interning paths end here, so a run that fills the table says so once.
+str::StringPoolId Lowerer::intern_result(
+    const std::optional<str::StringPoolId>& id) {
+  if (id.has_value()) {
     return *id;
   }
   if (!name_table_exhausted_) {
@@ -376,6 +374,14 @@ str::StringPoolId Lowerer::intern_name(std::string_view name) {
   }
   failed = true;
   return str::INVALID_STRING_POOL_ID;
+}
+
+str::StringPoolId Lowerer::intern_name(std::string_view name) {
+  return intern_result(strings.try_intern(name));
+}
+
+str::StringPoolId Lowerer::intern_copied(std::string_view name) {
+  return intern_result(strings.intern_copied(name));
 }
 
 const Local* Lowerer::lookup_local(std::string_view name) const {
@@ -554,6 +560,9 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   entry.idx = idx;
   entry.mod = mod;
   entry.name = std::string(name);
+  // The caller's bytes are the source's, so the handle is interned here rather
+  // than from the copy above, which a later reallocation would move.
+  entry.name_id = intern_name(name);
   entry.params = params;
   entry.ret = ret;
   entry.inst = inst;
@@ -615,6 +624,9 @@ ir::FunctionIdx Lowerer::closure_fn_index(
   entry.idx = idx;
   entry.mod = mod;
   entry.name = "closure$" + std::to_string(idx.idx);
+  // A synthesized name has no source bytes to point at, so the table takes the
+  // only copy this pass makes.
+  entry.name_id = intern_copied(entry.name);
   // The environment arrives as a reference to the tuple the
   // creation site built; a closure without captures keeps the
   // opaque pointer the call convention always passes first.
@@ -1148,7 +1160,11 @@ void Lowerer::run() {
     for (const ir::TypeIdx arg : entry.entry.generics) {
       generics.push(builder.ref_type(arg));
     }
-    const str::StringPoolId name = intern_name(entry.entry.name);
+    // The entry's name is a string this pass owns, and a pass that interns a
+    // view of it would hand codegen bytes that die with the pass. The handle
+    // was taken where the name was made, when its bytes were still the
+    // source's.
+    const str::StringPoolId name = entry.entry.name_id;
     const str::StringPoolId path =
         intern_name(pkg.tree.modules[entry.entry.mod]->path);
     if (name == str::INVALID_STRING_POOL_ID ||
@@ -1172,7 +1188,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     analyzer::CheckedPackage package,
     ir::PointerWidth width,
     ast::AstArena& ast,
-    str::StringInterner& strings,
+    symbol::SymbolTable& strings,
     diag::DiagBag& bag,
     debug::Profiler* profiler) {
   Lowerer lowerer(std::move(package), width, ast, strings, bag, profiler);

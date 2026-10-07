@@ -27,7 +27,6 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profiler.h"
-#include "fpag/str/string_interner.h"
 #include "i18n/language.h"
 #include "ir/storage.h"
 #include "ir/type.h"
@@ -36,6 +35,7 @@
 #include "pipeline/parse.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
+#include "symbol/symbol_table.h"
 #include "tests/util/virtual_source.h"
 
 namespace lowering {
@@ -57,7 +57,7 @@ namespace {
 struct Fixture {
   // Resolution runs through the pipeline's parse, which is where the
   // items come from, so the context owns the arena, the bag, and the
-  // interner the cases inspect. `name_capacity` sizes the shared name
+  // interner the cases inspect. `name_capacity` caps the shared name
   // table; zero takes its default, and a case that has to spend it asks
   // for less.
   explicit Fixture(usize name_capacity = 0)
@@ -67,7 +67,7 @@ struct Fixture {
   ast::AstArena& ast = ctx.ast;
   diag::DiagBag& bag = ctx.bag;
   source::SourceManager& sources = ctx.sources;
-  str::StringInterner& strings = ctx.strings;
+  symbol::SymbolTable& strings = ctx.strings;
 };
 
 // The sources one case declared, held in memory. It stands in for a

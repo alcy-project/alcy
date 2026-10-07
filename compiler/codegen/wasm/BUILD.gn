@@ -26,6 +26,7 @@ source_set("wasm") {
     "//compiler/diag",
     "//compiler/i18n",
     "//compiler/ir",
+    "//compiler/symbol",
   ]
   configs += [ "//compiler:alcy_config" ]
 }

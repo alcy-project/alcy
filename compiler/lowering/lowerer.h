@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 #pragma once
 
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -21,7 +22,6 @@
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
 #include "fpag/debug/profiler/profiler.h"
-#include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/function.h"
 #include "ir/opcode.h"
@@ -31,6 +31,7 @@
 #include "ir/type.h"
 #include "ir/verifier.h"
 #include "lowering/lowering.h"
+#include "symbol/symbol_table.h"
 
 namespace lowering {
 
@@ -60,7 +61,7 @@ class Lowerer {
   ir::StorageBuilder builder;
   ir::PointerWidth width;
   ast::AstArena& ast;
-  str::StringInterner& strings;
+  symbol::SymbolTable& strings;
   diag::DiagBag& bag;
   bool failed = false;
   // Set once the shared table has no room for another name; the loop
@@ -91,6 +92,11 @@ class Lowerer {
     ir::FunctionIdx idx = ir::FunctionIdx(base::INVALID_IDX);
     u32 mod = 0;
     std::string name;
+    // The name's handle, interned where the entry is made: the source's own
+    // bytes when the name came from one, a copy when it was synthesized. The
+    // string above is for the profile scopes, which name a function by its
+    // spelling.
+    str::StringPoolId name_id = str::INVALID_STRING_POOL_ID;
     std::vector<ir::TypeIdx> params;
     ir::TypeIdx ret = ir::TypeIdx(base::INVALID_IDX);
     // Generic instantiation lowered under (NO_INST for plain code).
@@ -173,7 +179,7 @@ class Lowerer {
   Lowerer(analyzer::CheckedPackage package,
           ir::PointerWidth width,
           ast::AstArena& ast,
-          str::StringInterner& strings,
+          symbol::SymbolTable& strings,
           diag::DiagBag& bag,
           debug::Profiler* profiler = nullptr);
   void unsupported(diag::Span span, std::string_view what);
@@ -246,9 +252,14 @@ class Lowerer {
   ir::TypeIdx type_origin(ir::TypeIdx type) const;
   u64 parse_numeric_value(std::string_view spelling);
   ir::TypeTag literal_tag(ast::LiteralIdx value, const ir::TypeIdx* expected);
-  // Interns a name, or reports the shared table as spent once and marks
-  // the run failed. A caller that gets an invalid id stops.
+  // Interns a name whose bytes outlive the call, or one whose bytes may not
+  // and so are copied into the table when it is new. Either reports the shared
+  // table as spent once and marks the run failed; a caller that gets an
+  // invalid id stops.
   str::StringPoolId intern_name(std::string_view name);
+  str::StringPoolId intern_copied(std::string_view name);
+  // The report and the failure both paths share.
+  str::StringPoolId intern_result(const std::optional<str::StringPoolId>& id);
   Val lower_literal(ast::LiteralIdx lit_idx, const ir::TypeIdx* expected);
   ir::OperandIdx imm_from_u64(ir::TypeTag tag, ir::TypeIdx type, u64 value);
   Val place_addr(ast::ExprIdx expr);

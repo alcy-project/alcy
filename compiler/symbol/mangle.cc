@@ -10,9 +10,9 @@
 
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/storage.h"
+#include "symbol/symbol_table.h"
 
 namespace symbol {
 
@@ -170,7 +170,7 @@ void append_path(std::string& out, std::string_view path) {
 class Encoder {
  public:
   Encoder(const ir::Storage& types,
-          const str::StringInterner& strings,
+          const SymbolTable& strings,
           std::string& out)
       : types_(types), strings_(strings), out_(out) {}
 
@@ -259,7 +259,7 @@ class Encoder {
   }
 
   const ir::Storage& types_;
-  const str::StringInterner& strings_;
+  const SymbolTable& strings_;
   std::string& out_;
 };
 
@@ -423,7 +423,7 @@ class Decoder {
 
 std::string mangle(const Signature& signature,
                    const ir::Storage& types,
-                   const str::StringInterner& strings) {
+                   const SymbolTable& strings) {
   if (signature.kind == Signature::Kind::Foreign) {
     return signature.name;
   }

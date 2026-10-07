@@ -15,8 +15,8 @@
 #include "diag/span.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profiler.h"
-#include "fpag/str/string_interner.h"
 #include "ir/storage.h"
+#include "symbol/symbol_table.h"
 
 namespace codegen {
 
@@ -48,7 +48,7 @@ struct EmitRequest {
   // Source spans parallel to storage instructions, for a backend that
   // reports a construct it cannot encode at the place it was written.
   std::span<const diag::Span> instr_spans;
-  str::StringInterner* strings = nullptr;
+  symbol::SymbolTable* strings = nullptr;
   diag::DiagBag* bag = nullptr;
   Target target;
   // Whether the module owns the program entry: a wrapper around `main`

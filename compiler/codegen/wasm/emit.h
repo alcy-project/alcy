@@ -17,13 +17,13 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "fpag/str/string_interner.h"
 #include "ir/common.h"
 #include "ir/function.h"
 #include "ir/immutable.h"
 #include "ir/instruction.h"
 #include "ir/operand.h"
 #include "ir/storage.h"
+#include "symbol/symbol_table.h"
 
 namespace codegen::wasm {
 
@@ -177,7 +177,7 @@ class Emitter {
   // --- module state ---
   ir::Storage storage_;
   std::span<const diag::Span> spans_;
-  str::StringInterner* strings_;
+  symbol::SymbolTable* strings_;
   diag::DiagBag* bag_;
   codegen::Target target_;
   bool emit_entry_;
