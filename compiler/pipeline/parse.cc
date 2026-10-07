@@ -16,12 +16,12 @@
 #include "ast/ast.h"
 #include "ast/lane.h"
 #include "base/for_each.h"
-#include "config/build_config.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
 #include "diag/stage.h"
+#include "diag/worker_bags.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
@@ -42,52 +42,10 @@ namespace pipeline {
 
 namespace {
 
-// One file's diagnostics live in the bag its own thread built, over an
-// arena the thread shares with the files it reads before and after. A bag
-// only ever appends, and truncate only moves the bag's own count, so the
-// bytes of a file already reported stay valid while the next file's are
-// appended after them on the same arena.
-struct PerFileDiagnostics {
-  // Built by the thread that reads the file, because which worker's arena it
-  // reports into is not known until then, and kept until the merge, because
-  // what a file said is read in file order and not in the order it was said.
-  std::unique_ptr<diag::DiagBag> bag;
+// One file's outcome, kept until the merge: the bag it reported into is the
+// one `diag::WorkerBags` holds for it.
+struct PerFileOutcome {
   std::atomic<bool> ok{true};
-};
-
-// One worker's share of the reporting: the arena every file it reads
-// reports into. This is per worker rather than per file because a file
-// that reports nothing still reserved a whole arena of its own, and a
-// package of a thousand files each doing that is what spreading the read
-// costs. The arena is written by one thread only -- the worker that owns
-// it -- so sharing it needs no synchronization; what shares it is ordered
-// by the worker reading one file at a time.
-//
-// The reservation is one file's worth of messages times a few, not times
-// the files: a clean file reports nothing, and a file that reports past
-// what is left has its excess dropped and counted, which the run reports,
-// the same answer the per-file arena gave.
-#if BUILD_FLAG(IS_ARCH_64_BITS)
-constexpr usize WORKER_DIAGNOSTIC_CAPACITY = 256ull << 10;
-#else
-constexpr usize WORKER_DIAGNOSTIC_CAPACITY = 128ull << 10;
-#endif
-
-struct PerWorkerDiagnostics {
-  explicit PerWorkerDiagnostics() {
-    // The arena takes whole pages, and a page is not always the 4 KiB the
-    // constant assumes: a wasm page is 64 KiB, so the reservation rounds
-    // up to the host's.
-    const usize page = mem::page_size();
-    arena.reserve((WORKER_DIAGNOSTIC_CAPACITY + page - 1) & ~(page - 1));
-  }
-
-  PerWorkerDiagnostics(const PerWorkerDiagnostics&) = delete;
-  PerWorkerDiagnostics& operator=(const PerWorkerDiagnostics&) = delete;
-  PerWorkerDiagnostics(PerWorkerDiagnostics&&) = delete;
-  PerWorkerDiagnostics& operator=(PerWorkerDiagnostics&&) = delete;
-
-  mem::Arena arena;
 };
 
 // Parses and desugars one admitted file, reporting whether it did.
@@ -227,8 +185,10 @@ base::Result<ParsedFiles, diag::Reported> parse_files(
     // the worker count is what the loop below hands out. Merging still
     // reads the bags in file order, which is the order the one-thread path
     // reports in and is not the order the work finished in.
-    std::vector<PerWorkerDiagnostics> per_worker(workers);
-    std::vector<PerFileDiagnostics> per_file(parsed.files.size());
+    // One bag per file over one arena per worker, merged in file order:
+    // which thread reads a file is not knowable until it takes one.
+    diag::WorkerBags bags{ctx.bag.language(), workers, parsed.files.size()};
+    std::vector<PerFileOutcome> per_file(parsed.files.size());
     {
       // The region is named when several threads do the work, and the
       // phases are not: under several threads a phase's duration is its
@@ -239,10 +199,9 @@ base::Result<ParsedFiles, diag::Reported> parse_files(
       base::for_each(
           0, parsed.files.size(), workers, [&](usize at, usize worker) {
             ast::set_current_lane(static_cast<u32>(worker));
-            per_file[at].bag = std::make_unique<diag::DiagBag>(
-                per_worker[worker].arena, ctx.bag.language());
-            const bool ok = parse_one(ctx, parsed.files[at], bytes[at],
-                                      *per_file[at].bag, nullptr);
+            diag::DiagBag& file_bag = bags.bag_for(at, worker);
+            const bool ok =
+                parse_one(ctx, parsed.files[at], bytes[at], file_bag, nullptr);
             per_file[at].ok.store(ok, std::memory_order_relaxed);
           });
     }
@@ -251,15 +210,11 @@ base::Result<ParsedFiles, diag::Reported> parse_files(
     // index and not the schedule decides.
     for (usize i = 0; i < per_file.size(); ++i) {
       if (!per_file[i].ok.load(std::memory_order_relaxed)) {
-        for (usize j = 0; j <= i; ++j) {
-          ctx.bag.merge(*per_file[j].bag);
-        }
+        bags.merge_into(ctx.bag, i + 1);
         return base::make_err(diag::Reported{});
       }
     }
-    for (PerFileDiagnostics& into : per_file) {
-      ctx.bag.merge(*into.bag);
-    }
+    bags.merge_into(ctx.bag, per_file.size());
   }
 
   // Once, here, rather than after each file: see `verify_trees`. A file's
