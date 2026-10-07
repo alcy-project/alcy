@@ -144,6 +144,33 @@ change (`docs/adr/0048-output-does-not-depend-on-the-job-count.md`).
   attributable.
 - The unit suite, the wasm suite, and `./tools/check.sh --no-coverage`.
 
+## What did not pay
+
+Measured and rejected, so the next attempt starts from a number rather than
+from the idea.
+
+- **Spreading the borrow check.** Both passes walk the functions in order, and
+  the second one only reads what the first wrote, which makes the bodies look
+  like free work to hand to threads. On `plain1200` at `-j 4`:
+  - a scratch per worker costs `+9.3%` instructions and `+43 MiB` peak, and the
+    run is about `10%` slower: the scratch is sized by the package, so every
+    worker pays the whole package's setup to check a quarter of it;
+  - one scratch shared by the workers, which is sound because a function's
+    registers and blocks are its own and so the rows two workers touch are
+    disjoint, costs `+1.7%` instructions and `+1 MiB`, and moves the total by
+    less than the run-to-run spread: the bodies are a few milliseconds of the
+    phase, and the summary sweeps in front of them do not spread.
+
+  Borrow is about `22 ms` of a `138 ms` run at `-j 1` on that corpus, so even a
+  perfect spread of the bodies is worth low single-digit percent.
+- **Spreading `analyze` and `lower` instead**, where the serial time actually
+  is, is not the same move. Both append to the IR as they go, so the type,
+  function, and instruction tables would end up ordered by whichever thread
+  arrived first, and that order is part of the output
+  (`docs/adr/0048-output-does-not-depend-on-the-job-count.md`). Those phases
+  need per-module storage merged in module order, which is a design of its own
+  rather than a loop to mark parallel.
+
 ## Tools
 
 | command | what it does |
