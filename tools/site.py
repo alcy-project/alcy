@@ -5,15 +5,18 @@
 
 """Builds and serves the site.
 
-The site under `site/` holds the playground page under
-`site/playground/`: TypeScript and plain HTML and CSS that is not
-self-contained. The sources compile to the JavaScript the page loads,
-highlighting needs the grammar compiled to wasm and a tree-sitter
-binding, and the Check and Run buttons need the compiler's wasm module.
-This assembles all of those into `site/dist/`, which any static file
-server can host.
+The site under `site/` holds the landing page, the shared shell, and the
+playground page under `site/playground/`: TypeScript and plain HTML and
+CSS that is not self-contained. The sources compile to the JavaScript the
+pages load, highlighting needs the grammar compiled to wasm and a
+tree-sitter binding, and the Check and Run buttons need the compiler's
+wasm module. The guide under `docs/guide/` is rendered by the site's own
+generator (`site/ssg/`) into `site/dist/guide/`, checking its examples
+with the same compiler module. This assembles all of those into
+`site/dist/`, which any static file server can host.
 
     uv run ./tools/site.py build            # assemble site/dist
+    uv run ./tools/site.py test             # run the generator's tests
     uv run ./tools/site.py serve            # serve it on :8000
 
 `build` takes whatever compiler artifacts it finds and warns when there
@@ -48,6 +51,8 @@ SITE_DIR = project_root_dir / "site"
 PLAYGROUND_DIR = SITE_DIR / "playground"
 SHARED_DIR = SITE_DIR / "shared"
 DEFAULT_DIST_DIR = SITE_DIR / "dist"
+# The user-facing guide; the site's generator renders it.
+GUIDE_DIR = project_root_dir / "docs" / "guide"
 # Where the playground page lives inside the assembled site.
 PAGE_SUBDIR = "playground"
 # The JavaScript the site loads, as emitted by `tsc`.
@@ -191,12 +196,15 @@ def build_typescript(modules: Path) -> None:
         raise FileNotFoundError(f"{tsc} is missing")
     if BUILD_DIR.exists():
         shutil.rmtree(BUILD_DIR)
-    for config in ("tsconfig.json", "tsconfig.workers.json"):
+    for config in ("tsconfig.json", "tsconfig.workers.json", "tsconfig.ssg.json"):
         subprocess.run(
             [node, str(tsc), "-p", config],
             check=True,
             cwd=SITE_DIR,
         )
+    # The generator and its tests run under node as ES modules; the marker
+    # is what tells node to read the compiled `.js` files that way.
+    (BUILD_DIR / "package.json").write_text('{"type": "module"}\n', encoding="utf-8")
     log(f"typescript: {BUILD_DIR}")
 
 
@@ -336,6 +344,42 @@ def copy_compiler(dist_dir: Path, build_dir: Path, compiler_dir: Path | None) ->
     return True
 
 
+def build_guide(dist_dir: Path) -> None:
+    generator = BUILD_DIR / "ssg" / "src" / "main.js"
+    if not generator.is_file():
+        raise FileNotFoundError(f"{generator} is missing; run the TypeScript build")
+    command = [
+        "node",
+        str(generator),
+        "--docs",
+        str(GUIDE_DIR),
+        "--dist",
+        str(dist_dir),
+        "--repo-root",
+        str(project_root_dir),
+        "--alcy",
+        str(project_root_dir / "compiler" / "playground" / "js" / "alcy.mjs"),
+    ]
+    grammar = dist_dir / PAGE_SUBDIR / "grammar"
+    if (grammar / "tree-sitter-alcy.wasm").is_file():
+        command += [
+            "--grammar",
+            str(grammar / "tree-sitter-alcy.wasm"),
+            "--highlights",
+            str(grammar / "highlights.scm"),
+            "--tree-sitter",
+            str(DEPS_DIR / "node_modules" / "web-tree-sitter" / "web-tree-sitter.js"),
+        ]
+    else:
+        log("guide: grammar wasm is missing; code fences are not highlighted")
+    glue = dist_dir / PAGE_SUBDIR / "compiler" / "alcy_playground.js"
+    if glue.is_file():
+        command += ["--glue", str(glue)]
+    else:
+        log("guide: compiler wasm is missing; alcy fences were not compiled")
+    subprocess.run(command, check=True, cwd=project_root_dir)
+
+
 def command_build(args: argparse.Namespace) -> int:
     if args.with_compiler:
         code = build(
@@ -368,9 +412,26 @@ def command_build(args: argparse.Namespace) -> int:
     copy_compiler(
         dist_dir, project_root_dir / "out" / args.build_subdir, args.compiler_dir
     )
+    build_guide(dist_dir)
 
     log(f"site ready: {dist_dir}")
     log(f"serve it with: uv run ./tools/site.py serve --dist {dist_dir}")
+    return 0
+
+
+def command_test(_args: argparse.Namespace) -> int:
+    versions = load_versions()
+    modules = install_dependencies(versions)
+    build_typescript(modules)
+    node = shutil.which("node")
+    if node is None:
+        raise RuntimeError("node is not on PATH; needed to run the tests")
+    subprocess.run(
+        [node, "--test", str(BUILD_DIR / "ssg" / "test")],
+        check=True,
+        cwd=project_root_dir,
+    )
+    log("generator tests passed")
     return 0
 
 
@@ -469,6 +530,9 @@ def main() -> int:
     )
     build_parser.add_argument("--skip-grammar", action="store_true")
     build_parser.set_defaults(handler=command_build)
+
+    test_parser = subparsers.add_parser("test", help="run the generator's tests")
+    test_parser.set_defaults(handler=command_test)
 
     serve_parser = subparsers.add_parser("serve", help="serve the assembled site")
     serve_parser.add_argument("--dist", type=Path, default=DEFAULT_DIST_DIR)

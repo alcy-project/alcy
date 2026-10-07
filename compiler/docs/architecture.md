@@ -105,8 +105,9 @@ two are kept apart: what a program is written against lives at the root, and
 what implements it lives in `compiler/`.
 
 - `docs/` - the language's own documentation: the specification
-  (`docs/spec/`), the decision log (`docs/adr/`), and where the language is
-  going (`principles.md`, `roadmap.md`, `backlog.md`).
+  (`docs/spec/`), the decision log (`docs/adr/`), the user-facing guide
+  (`docs/guide/`), and where the language is going (`principles.md`,
+  `roadmap.md`, `backlog.md`).
 - `compiler/` - the compiler. One directory per module, each with a
   `BUILD.gn`, which is also the unit the language will call a package once it
   is self-hosted. Its own documentation is in `compiler/docs/`.
@@ -134,10 +135,11 @@ what implements it lives in `compiler/`.
   the compiler; `tools/check_treesitter.py` checks it against the
   specification's corpus and against the compiler itself. See
   `docs/adr/0041-alcy-treesitter-grammar.md`.
-- `site/` - the published site. `site/playground/` is the browser
-  playground page and the assets it resolves against itself; the rest of
-  the site is assembled around it. `tools/site.py` builds it into
-  `site/dist/`, combining those sources with the grammar and the
+- `site/` - the published site: the landing page, the shared shell under
+  `site/shared/`, and the browser playground page under
+  `site/playground/`; the guide under `docs/guide/` is rendered beside
+  them by the site's own generator (`site/ssg/`). `tools/site.py` builds
+  it into `site/dist/`, combining those sources with the grammar and the
   compiler's wasm module; `.github/workflows/site.yaml` deploys that
   directory to GitHub Pages. See
   `docs/adr/0057-the-site-its-generator-and-the-guide.md`.
