@@ -1,10 +1,10 @@
-name: Playground
+name: Site
 
 on:
   push:
     branches: [main]
-    paths: &playground_paths
-      - playground/**
+    paths: &site_paths
+      - site/**
       - compiler/**
       - lib/**
       - treesitter/**
@@ -12,7 +12,7 @@ on:
       - third_party/**
       - tools/**
       - config.toml
-      - .github/workflows/playground.yaml
+      - .github/workflows/site.yaml
       - .github/actions/**
   workflow_dispatch:
 
@@ -28,10 +28,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # The playground target from BUILD.gn: the compiler as a C ABI with no
-  # LLVM, built for Emscripten.
+  # The compiler target the playground page calls: a C ABI with no LLVM,
+  # built for Emscripten.
   COMPILER_TARGET: playground
-  # The playground compiler carries no backend but the direct wasm one
+  # The compiler carries no backend but the direct wasm one
   # (see compiler/backends.gni).
   ALCY_GN_ARGS: alcy_backends=[]
   BUILD_SUBDIR: playground
@@ -92,14 +92,14 @@ jobs:
         with:
           path: |
             out/playground
-            out/playground-cache
-          key: ${{ runner.os }}-playground-wasm32-release-build-dir-${{ hashFiles('config.toml', '**/*.gn', 'compiler/**', 'lib/**') }}
+            out/site-cache
+          key: ${{ runner.os }}-site-wasm32-release-build-dir-${{ hashFiles('config.toml', '**/*.gn', 'compiler/**', 'lib/**') }}
 
       - name: Cache tree-sitter's Wasm Toolchain
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/tree-sitter
-          key: ${{ runner.os }}-playground-tree-sitter-${{ hashFiles('config.toml') }}
+          key: ${{ runner.os }}-site-tree-sitter-${{ hashFiles('config.toml') }}
 
       - name: Build the Compiler Wasm Module
         shell: bash
@@ -119,7 +119,7 @@ jobs:
 
       - name: Assemble the Site
         shell: bash
-        run: uv run ./tools/playground.py build --mode=release --build-subdir="$BUILD_SUBDIR"
+        run: uv run ./tools/site.py build --mode=release --build-subdir="$BUILD_SUBDIR"
 
       - name: Configure Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
@@ -127,7 +127,7 @@ jobs:
       - name: Upload the Site
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
         with:
-          path: playground/dist
+          path: site/dist
 
   deploy:
     name: Deploy

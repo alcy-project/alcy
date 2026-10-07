@@ -3,17 +3,18 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Builds and serves the playground site.
+"""Builds and serves the site.
 
-The site under `playground/` is TypeScript and plain HTML and CSS, but it
-is not self-contained: the sources compile to the JavaScript the page
-loads, highlighting needs the grammar compiled to wasm and a tree-sitter
+The site under `site/` holds the playground page under
+`site/playground/`: TypeScript and plain HTML and CSS that is not
+self-contained. The sources compile to the JavaScript the page loads,
+highlighting needs the grammar compiled to wasm and a tree-sitter
 binding, and the Check and Run buttons need the compiler's wasm module.
-This assembles all of those into one directory that any static file
+This assembles all of those into `site/dist/`, which any static file
 server can host.
 
-    uv run ./tools/playground.py build            # assemble playground/dist
-    uv run ./tools/playground.py serve            # serve it on :8000
+    uv run ./tools/site.py build            # assemble site/dist
+    uv run ./tools/site.py serve            # serve it on :8000
 
 `build` takes whatever compiler artifacts it finds and warns when there
 are none, so the site still works for highlighting alone. Pass
@@ -21,8 +22,8 @@ are none, so the site still works for highlighting alone. Pass
 direct wasm backend and no LLVM (see `compiler/playground/README.md`).
 
 The TypeScript compiler and the tree-sitter web binding are installed
-with pnpm into `out/playground-cache/`, at the versions `config.toml`
-pins; `tree-sitter` itself must be on `PATH`.
+with pnpm into `out/site-cache/`, at the versions `config.toml` pins;
+`tree-sitter` itself must be on `PATH`.
 """
 
 import argparse
@@ -43,8 +44,11 @@ from utils.paths import project_root_dir
 
 from build import build
 
-PLAYGROUND_DIR = project_root_dir / "playground"
-DEFAULT_DIST_DIR = PLAYGROUND_DIR / "dist"
+SITE_DIR = project_root_dir / "site"
+PLAYGROUND_DIR = SITE_DIR / "playground"
+DEFAULT_DIST_DIR = SITE_DIR / "dist"
+# Where the playground page lives inside the assembled site.
+PAGE_SUBDIR = "playground"
 # The JavaScript the page loads, as emitted by `tsc`.
 BUILD_DIR = PLAYGROUND_DIR / "build"
 GRAMMAR_DIR = project_root_dir / "treesitter"
@@ -53,13 +57,13 @@ DEFAULT_WASM_TARGET = "playground"
 # The playground build carries no LLVM; `compiler/backends.gni` selects the
 # backends, and an empty list is what a browser needs.
 DEFAULT_GN_ARG = "alcy_backends=[]"
-CACHE_DIR = project_root_dir / "out" / "playground-cache"
+CACHE_DIR = project_root_dir / "out" / "site-cache"
 DEPS_DIR = CACHE_DIR / "deps"
 STORE_DIR = CACHE_DIR / "pnpm-store"
 
-# The page's modules, compiled from `playground/*.ts` into `build/`.
-# `types` carries only types and emits nothing the page loads, so it is
-# not here.
+# The page's modules, compiled from `site/playground/*.ts` into its
+# `build/`. `types` carries only types and emits nothing the page loads,
+# so it is not here.
 TYPESCRIPT_MODULES = [
     "app",
     "compiler.worker",
@@ -95,11 +99,11 @@ class Versions:
 
 
 def log(message: str) -> None:
-    print(f"playground: {message}")
+    print(f"site: {message}")
 
 
 def fail(message: str) -> int:
-    print(f"playground: error: {message}", file=sys.stderr)
+    print(f"site: error: {message}", file=sys.stderr)
     return 1
 
 
@@ -121,7 +125,7 @@ def ensure_pnpm(pinned: str) -> str:
     pnpm = shutil.which("pnpm")
     if pnpm is None:
         raise RuntimeError(
-            f"pnpm is not on PATH; install {pinned} (see playground/README.md)"
+            f"pnpm is not on PATH; install {pinned} (see site/playground/README.md)"
         )
     found = subprocess.run(
         [pnpm, "--version"], capture_output=True, text=True, check=True
@@ -140,7 +144,7 @@ def install_dependencies(versions: Versions) -> Path:
     manifest = DEPS_DIR / "package.json"
     wanted = json.dumps(
         {
-            "name": "alcy-playground-deps",
+            "name": "alcy-site-deps",
             "private": True,
             "version": "0.0.0",
             "dependencies": {
@@ -195,19 +199,21 @@ def build_typescript(modules: Path) -> None:
 
 
 def copy_static(dist_dir: Path) -> None:
+    target = dist_dir / PAGE_SUBDIR
+    target.mkdir(parents=True, exist_ok=True)
     for name in PLAIN_FILES:
         source = PLAYGROUND_DIR / name
         if not source.is_file():
             raise FileNotFoundError(f"{source} is missing")
-        shutil.copy2(source, dist_dir / name)
+        shutil.copy2(source, target / name)
     for module in TYPESCRIPT_MODULES:
         source = BUILD_DIR / f"{module}.js"
         if not source.is_file():
             raise FileNotFoundError(f"{source} is missing; run the TypeScript build")
-        shutil.copy2(source, dist_dir / source.name)
+        shutil.copy2(source, target / source.name)
         source_map = BUILD_DIR / f"{module}.js.map"
         if source_map.is_file():
-            shutil.copy2(source_map, dist_dir / source_map.name)
+            shutil.copy2(source_map, target / source_map.name)
 
 
 def copy_samples(dist_dir: Path) -> None:
@@ -218,7 +224,7 @@ def copy_samples(dist_dir: Path) -> None:
     with open(manifest_path, "rb") as handle:
         manifest = json.loads(handle.read().decode("utf-8"))
     samples = manifest["samples"]
-    target = dist_dir / "samples"
+    target = dist_dir / PAGE_SUBDIR / "samples"
     target.mkdir(parents=True, exist_ok=True)
     # The manifest the page reads carries no repository paths; a sample
     # sourced from the repository's own `samples/` suite is copied under
@@ -245,7 +251,7 @@ def copy_samples(dist_dir: Path) -> None:
 
 
 def build_grammar(dist_dir: Path) -> None:
-    grammar_out = dist_dir / "grammar"
+    grammar_out = dist_dir / PAGE_SUBDIR / "grammar"
     grammar_out.mkdir(parents=True, exist_ok=True)
     highlights = GRAMMAR_DIR / "queries" / "alcy" / "highlights.scm"
     shutil.copy2(highlights, grammar_out / "highlights.scm")
@@ -265,7 +271,7 @@ def build_grammar(dist_dir: Path) -> None:
 
 
 def copy_web_tree_sitter(modules: Path, dist_dir: Path, version: str) -> None:
-    vendor_out = dist_dir / "vendor"
+    vendor_out = dist_dir / PAGE_SUBDIR / "vendor"
     vendor_out.mkdir(parents=True, exist_ok=True)
     sources = modules / "web-tree-sitter"
     for name in ("web-tree-sitter.js", "web-tree-sitter.wasm"):
@@ -298,7 +304,7 @@ def copy_compiler(dist_dir: Path, build_dir: Path, compiler_dir: Path | None) ->
             "both alcy_playground.js and alcy_playground.wasm are needed; "
             f"{source} has one"
         )
-    target = dist_dir / "compiler"
+    target = dist_dir / PAGE_SUBDIR / "compiler"
     target.mkdir(parents=True, exist_ok=True)
     shutil.copy2(glue, target / "alcy_playground.js")
     shutil.copy2(binary, target / "alcy_playground.wasm")
@@ -338,14 +344,14 @@ def command_build(args: argparse.Namespace) -> int:
     )
 
     log(f"site ready: {dist_dir}")
-    log(f"serve it with: uv run ./tools/playground.py serve --dist {dist_dir}")
+    log(f"serve it with: uv run ./tools/site.py serve --dist {dist_dir}")
     return 0
 
 
 def command_serve(args: argparse.Namespace) -> int:
     dist_dir = args.dist.resolve()
     if not (dist_dir / "index.html").is_file():
-        return fail(f"{dist_dir} has no index.html; run `playground.py build` first")
+        return fail(f"{dist_dir} has no index.html; run `site.py build` first")
 
     # GitHub Pages compresses the site's text assets; the local server does
     # the same so what is measured here matches what is deployed. The
@@ -413,10 +419,10 @@ def command_serve(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build and serve the playground site.")
+    parser = argparse.ArgumentParser(description="Build and serve the site.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    build_parser = subparsers.add_parser("build", help="assemble playground/dist")
+    build_parser = subparsers.add_parser("build", help="assemble site/dist")
     build_parser.add_argument("--mode", choices=["debug", "release"], default="release")
     build_parser.add_argument("--build-subdir", default=DEFAULT_BUILD_SUBDIR)
     build_parser.add_argument("--dist", type=Path, default=DEFAULT_DIST_DIR)
