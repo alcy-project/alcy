@@ -156,7 +156,8 @@ bool suite_lists_member(const pkg::SuiteManifest& suite,
 }
 
 std::optional<EnclosingSuite> find_enclosing_suite(
-    PipelineContext& ctx, const path::Path& package_dir) {
+    PipelineContext& ctx,
+    const path::Path& package_dir) {
   path::Path at = package_dir;
   std::string member(suite_dir_basename(at.as_view()));
   if (member.empty()) {
@@ -174,7 +175,8 @@ std::optional<EnclosingSuite> find_enclosing_suite(
   while (true) {
     const path::Path manifest_path = at.join(pkg::MANIFEST_FILE_NAME);
     if (suite_file_exists(manifest_path.as_view())) {
-      const std::string bytes = io::read_file(std::string(manifest_path.as_view()));
+      const std::string bytes =
+          io::read_file(std::string(manifest_path.as_view()));
       switch (pkg::probe_manifest_kind(bytes)) {
         case pkg::ManifestKind::Suite: {
           base::Result<pkg::SuiteManifest, diag::Reported> parsed =
@@ -194,8 +196,7 @@ std::optional<EnclosingSuite> find_enclosing_suite(
           }
           return EnclosingSuite{std::move(at), suite, std::move(member)};
         }
-        case pkg::ManifestKind::Package:
-          return std::nullopt;
+        case pkg::ManifestKind::Package: return std::nullopt;
         case pkg::ManifestKind::Unknown:
           // Report through the suite parser: the nearest manifest is
           // the one the walk would have joined.
@@ -585,8 +586,7 @@ resolve_package_targets(PipelineContext& ctx,
   // A package that sits inside a suite takes the keys it spelled from
   // it; one that is not listed is standalone, and a marker with no
   // suite to resolve against is an error rather than a silent {0,0,0}.
-  const std::optional<EnclosingSuite> suite =
-      find_enclosing_suite(ctx, root);
+  const std::optional<EnclosingSuite> suite = find_enclosing_suite(ctx, root);
   if (!suite.has_value() && ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }

@@ -356,8 +356,8 @@ bool load_path_edge(PipelineContext& ctx,
   if (dep.suite_glob || !dep.suite.empty()) {
     return load_suite_members(ctx, dir, dep, visited, loaded, staged);
   }
-  return load_dependency(ctx, dir, dep.spec, {}, {}, nullptr, visited,
-                         loaded, staged);
+  return load_dependency(ctx, dir, dep.spec, {}, {}, nullptr, visited, loaded,
+                         staged);
 }
 
 }  // namespace

@@ -58,7 +58,8 @@ bool suite_lists_member(const pkg::SuiteManifest& suite,
 // Diagnostics go to the bag; no value means the package is standalone,
 // or that the walk reported an error.
 std::optional<EnclosingSuite> find_enclosing_suite(
-    PipelineContext& ctx, const path::Path& package_dir);
+    PipelineContext& ctx,
+    const path::Path& package_dir);
 
 // A manifest probe result: `found` with a loaded manifest, or absent
 // when the raw target has no alcy.toml. Path errors are emitted to the

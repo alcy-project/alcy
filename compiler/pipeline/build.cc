@@ -605,9 +605,9 @@ base::Result<std::string, diag::Reported> build_package(
       // module beside the manifest landed outside the one region the
       // compiler told git to ignore, so `git status` reported the
       // build's own output as untracked.
-      const path::Path out_dir =
-          target.output_dir.has_value() ? *target.output_dir
-                                        : root.join(path::DEFAULT_OUT_DIR);
+      const path::Path out_dir = target.output_dir.has_value()
+                                     ? *target.output_dir
+                                     : root.join(path::DEFAULT_OUT_DIR);
       output_path = out_dir
                         .join(std::string(target.name) +
                               suffix_for(ctx.target, target_mode))
@@ -735,8 +735,7 @@ base::Result<std::string, diag::Reported> build_suite(
   }
   // A member is not more the build than its siblings, so the suite
   // reports the one directory its artifacts share.
-  return base::make_ok(
-      std::string(root.join(path::DEFAULT_OUT_DIR).as_view()));
+  return base::make_ok(std::string(root.join(path::DEFAULT_OUT_DIR).as_view()));
 }
 
 }  // namespace pipeline

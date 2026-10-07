@@ -171,8 +171,8 @@ base::Result<CheckOutcome, diag::Reported> check_suite(
       return base::make_err(diag::Reported{});
     }
     ManifestProbe member = std::move(probe).unwrap();
-    base::Result<CheckOutcome, diag::Reported> one = check_package(
-        ctx, member.root, member.manifest, member.manifest_name);
+    base::Result<CheckOutcome, diag::Reported> one =
+        check_package(ctx, member.root, member.manifest, member.manifest_name);
     if (one.is_err() || ctx.bag.has_errors()) {
       return base::make_err(diag::Reported{});
     }

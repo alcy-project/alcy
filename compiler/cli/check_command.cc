@@ -63,9 +63,9 @@ ResultCode run_check(const CliConfig& config,
   pipeline::ManifestProbe found = std::move(probe).unwrap();
   const std::optional<std::string_view> manifest_bytes =
       ctx.sources.bytes(found.manifest);
-  const bool suite = manifest_bytes.has_value() &&
-                     pkg::probe_manifest_kind(*manifest_bytes) ==
-                         pkg::ManifestKind::Suite;
+  const bool suite =
+      manifest_bytes.has_value() &&
+      pkg::probe_manifest_kind(*manifest_bytes) == pkg::ManifestKind::Suite;
   base::Result<pipeline::CheckOutcome, diag::Reported> result =
       suite ? pipeline::check_suite(ctx, found.root, found.manifest,
                                     found.manifest_name)

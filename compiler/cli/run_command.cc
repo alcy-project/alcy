@@ -20,13 +20,13 @@
 #include "fpag/io/io_util.h"
 #include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
+#include "i18n/messages.h"
+#include "pipeline/diag_code.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/run.h"
-#include "i18n/messages.h"
-#include "pipeline/diag_code.h"
-#include "pkg/manifest.h"
 #include "pipeline/target.h"
+#include "pkg/manifest.h"
 #include "pkg/toolchain.h"
 
 namespace cli {

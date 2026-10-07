@@ -53,9 +53,9 @@ ResultCode run_build(const CliConfig& config,
   // itself (ADR-0057).
   const std::optional<std::string_view> manifest_bytes =
       ctx.sources.bytes(found.manifest);
-  const bool suite = manifest_bytes.has_value() &&
-                     pkg::probe_manifest_kind(*manifest_bytes) ==
-                         pkg::ManifestKind::Suite;
+  const bool suite =
+      manifest_bytes.has_value() &&
+      pkg::probe_manifest_kind(*manifest_bytes) == pkg::ManifestKind::Suite;
   base::Result<std::string, diag::Reported> res =
       suite ? pipeline::build_suite(ctx, found.root, found.manifest,
                                     found.manifest_name, config.output,
