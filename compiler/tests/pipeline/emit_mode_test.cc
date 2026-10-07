@@ -524,4 +524,55 @@ TEST_CASE("A package build refuses targets sharing one output") {
 #endif  // !BUILD_FLAG(IS_OS_ASMJS
 }
 
+TEST_CASE("A suite builds every member into its own out/") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_suite_build_test_");
+  const bool setup =
+      dir.write_file("tools/alcy.toml",
+                     "[suite]\nname = \"tools\"\nowner = \"acme\"\n"
+                     "version = \"1.2.3\"\nlicense = \"MIT\"\n"
+                     "packages = [\"cli\", \"first-party/other\"]\n") &&
+      dir.write_file("tools/cli/alcy.toml",
+                     "[package]\nname = \"cli\"\nversion.suite = true\n"
+                     "license.suite = true\n\n"
+                     "[[bin]]\npath = \"main.al\"\n") &&
+      dir.write_file("tools/cli/main.al", "fn main() -> i32 {\n  ret 1\n}\n") &&
+      dir.write_file("tools/first-party/other/alcy.toml",
+                     "[package]\nname = \"other\"\nversion.suite = true\n"
+                     "license.suite = true\n\n"
+                     "[[bin]]\npath = \"main.al\"\n") &&
+      dir.write_file("tools/first-party/other/main.al",
+                     "fn main() -> i32 {\n  ret 2\n}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(dir.join("tools"));
+  CHECK(root.is_ok());
+  if (root.is_err()) {
+    return;
+  }
+  const path::Path suite_root = std::move(root).unwrap();
+  PipelineContext ctx{i18n::Language::EnUs};
+  ctx.backend = LLVM_BACKEND;
+  base::Result<source::FileId, source::SourceError> manifest =
+      ctx.sources.load(suite_root.join("alcy.toml").as_view());
+  CHECK(manifest.is_ok());
+  if (manifest.is_err()) {
+    return;
+  }
+  base::Result<std::string, diag::Reported> built =
+      build_suite(ctx, suite_root, std::move(manifest).unwrap(), "alcy.toml",
+                  "", false, LinkOptions{}, EmitMode::LlvmIr);
+  CHECK(built.is_ok());
+  CHECK(!ctx.bag.has_errors());
+  // One out/ for the suite, one directory per member, and the member's
+  // path under the suite is the directory's.
+  CHECK(io::is_file(dir.join("tools/out/cli/cli.ll")));
+  CHECK(io::is_file(dir.join("tools/out/first-party/other/other.ll")));
+  if (built.is_ok()) {
+    CHECK(std::move(built).unwrap() == dir.join("tools/out"));
+  }
+}
+
 }  // namespace pipeline

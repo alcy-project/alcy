@@ -638,6 +638,41 @@ TEST_CASE("Suites reject a specifier the manifest does not name") {
                     "' holds suite 'acme/tools'"));
 }
 
+TEST_CASE("A suite member delivered by path takes its inherited keys") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_dep_marker_test_");
+  const bool setup = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
+      "[dependencies]\n\"acme/tools/cli\" = { path = \"vendor/tools\" }\n",
+      {{"main.al",
+        "use cli::run::go;\n\nfn main() -> i32 {\n  ret go()\n}\n"}});
+  const bool suite_setup =
+      write_package(dir, "proj/vendor/tools",
+                    "[suite]\nowner = \"acme\"\nname = \"tools\"\n"
+                    "version = \"1.2.3\"\nlicense = \"MIT\"\n"
+                    "packages = [\"cli\"]\n",
+                    {}) &&
+      write_package(dir, "proj/vendor/tools/cli",
+                    "[package]\nname = \"cli\"\nversion.suite = true\n"
+                    "license.suite = true\n\n"
+                    "[modules]\ninclude = [\"run\"]\nexport = [\"run\"]\n\n"
+                    "[[bin]]\nname = \"cli\"\npath = \"run.al\"\n",
+                    {{"run.al", "pub fn go() -> i32 {\n  ret 20\n}\n"}});
+  CHECK(setup);
+  CHECK(suite_setup);
+  if (!setup || !suite_setup) {
+    return;
+  }
+
+  // The verifier sees the member only after its suite resolved the
+  // markers it spelled.
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<CheckOutcome, diag::Reported> outcome = check_proj(ctx, dir);
+  CHECK(outcome.is_ok());
+  CHECK(!ctx.bag.has_errors());
+}
+
 TEST_CASE("A suite member is addressed by the last path segment") {
   io::TempDir dir = io::TempDir::create_unique("alcy_dep_test_");
   const bool setup = write_package(

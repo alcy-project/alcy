@@ -60,7 +60,113 @@ base::Result<CheckOutcome, diag::Reported> check_dir(PipelineContext& ctx,
                        "alcy.toml");
 }
 
+// A suite with one member whose identity it inherits: the member
+// spells the markers instead of values (ADR-0057).
+constexpr std::string_view SUITE_MANIFEST =
+    "[suite]\nname = \"tools\"\nowner = \"acme\"\nversion = \"1.2.3\"\n"
+    "license = \"MIT\"\npackages = [\"cli\"]\n";
+
+constexpr std::string_view MEMBER_MANIFEST =
+    "[package]\nname = \"cli\"\nversion.suite = true\n"
+    "license.suite = true\n\n"
+    "[[bin]]\npath = \"main.al\"\n";
+
+// Writes the suite and its member under `tools/`; false on I/O failure.
+bool write_tools_suite(io::TempDir& dir) {
+  return dir.write_file("tools/alcy.toml", SUITE_MANIFEST) &&
+         dir.write_file("tools/cli/alcy.toml", MEMBER_MANIFEST) &&
+         dir.write_file("tools/cli/main.al",
+                        "fn main() -> i32 {\n  ret 0\n}\n");
+}
+
+base::Result<source::FileId, source::SourceError> load_manifest(
+    PipelineContext& ctx,
+    const path::Path& dir) {
+  return ctx.sources.load(dir.join("alcy.toml").as_view());
+}
+
 }  // namespace
+
+TEST_CASE("Checking a suite covers every member and their inheritance") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_check_suite_test_");
+  CHECK(write_tools_suite(dir));
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(dir.join("tools"));
+  CHECK(root.is_ok());
+  if (root.is_err()) {
+    return;
+  }
+  const path::Path suite_root = std::move(root).unwrap();
+  base::Result<source::FileId, source::SourceError> manifest =
+      load_manifest(ctx, suite_root);
+  CHECK(manifest.is_ok());
+  if (manifest.is_err()) {
+    return;
+  }
+  base::Result<CheckOutcome, diag::Reported> result =
+      check_suite(ctx, suite_root, std::move(manifest).unwrap(), "alcy.toml");
+  CHECK(result.is_ok());
+  CHECK(!ctx.bag.has_errors());
+  if (result.is_ok()) {
+    const CheckOutcome counted = std::move(result).unwrap();
+    CHECK(counted.file_count == 1);
+    CHECK(counted.function_count == 1);
+  }
+}
+
+TEST_CASE("Checking a member alone resolves the suite above it") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_check_member_test_");
+  CHECK(write_tools_suite(dir));
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(dir.join("tools/cli"));
+  CHECK(root.is_ok());
+  if (root.is_err()) {
+    return;
+  }
+  const path::Path member_root = std::move(root).unwrap();
+  base::Result<source::FileId, source::SourceError> manifest =
+      load_manifest(ctx, member_root);
+  CHECK(manifest.is_ok());
+  if (manifest.is_err()) {
+    return;
+  }
+  base::Result<CheckOutcome, diag::Reported> result = check_package(
+      ctx, member_root, std::move(manifest).unwrap(), "alcy.toml");
+  CHECK(result.is_ok());
+  CHECK(!ctx.bag.has_errors());
+}
+
+TEST_CASE("An inherited key with no suite to resolve is refused") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_check_orphan_test_");
+  const bool setup =
+      dir.write_file("proj/alcy.toml", MEMBER_MANIFEST) &&
+      dir.write_file("proj/main.al", "fn main() -> i32 {\n  ret 0\n}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(dir.join("proj"));
+  CHECK(root.is_ok());
+  if (root.is_err()) {
+    return;
+  }
+  const path::Path root_path = std::move(root).unwrap();
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<source::FileId, source::SourceError> manifest =
+      load_manifest(ctx, root_path);
+  CHECK(manifest.is_ok());
+  if (manifest.is_err()) {
+    return;
+  }
+  CHECK(check_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml")
+            .is_err());
+  CHECK(ctx.bag.has_errors());
+}
 
 TEST_CASE("Check sees an error only the library's tree carries") {
   // The binary's root defines `helper`, the library's root calls it
