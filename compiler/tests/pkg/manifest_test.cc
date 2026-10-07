@@ -304,6 +304,17 @@ TEST_CASE("Suite manifest parses the std suite") {
   CHECK(manifest.packages[2] == "alloc");
   CHECK(manifest.packages[10] == "time");
   CHECK(verify_suite_manifest(manifest).is_ok());
+
+  // A fresh suite has no members and no owner yet (ADR-0057).
+  constexpr std::string_view empty =
+      "[suite]\nname = \"tools\"\npackages = []\n";
+  base::Result<SuiteManifest, diag::Reported> empty_result =
+      parse_suite_manifest(empty, "alcy.toml", source::UNKNOWN_FILE, f.bag,
+                           f.arena);
+  CHECK(empty_result.is_ok());
+  if (empty_result.is_ok()) {
+    CHECK(verify_suite_manifest(std::move(empty_result).unwrap()).is_ok());
+  }
 }
 
 TEST_CASE("Suite manifest rejects the wrong kind and bad shapes") {
@@ -317,10 +328,22 @@ TEST_CASE("Suite manifest rejects the wrong kind and bad shapes") {
   CHECK(parse_suite_manifest(no_suite, "alcy.toml", source::UNKNOWN_FILE, f.bag,
                              f.arena)
             .is_err());
-  constexpr std::string_view no_owner =
-      "[suite]\nname = \"std\"\npackages = [\"core\"]\n";
-  CHECK(parse_suite_manifest(no_owner, "alcy.toml", source::UNKNOWN_FILE, f.bag,
-                             f.arena)
+  constexpr std::string_view bad_owner =
+      "[suite]\nowner = 1\nname = \"std\"\npackages = [\"core\"]\n";
+  CHECK(parse_suite_manifest(bad_owner, "alcy.toml", source::UNKNOWN_FILE,
+                             f.bag, f.arena)
+            .is_err());
+  constexpr std::string_view inherited_owner =
+      "[suite]\nowner.suite = true\nname = \"std\"\n"
+      "packages = [\"core\"]\n";
+  CHECK(parse_suite_manifest(inherited_owner, "alcy.toml", source::UNKNOWN_FILE,
+                             f.bag, f.arena)
+            .is_err());
+  constexpr std::string_view bad_version =
+      "[suite]\nname = \"std\"\nversion = \"nope\"\n"
+      "packages = [\"core\"]\n";
+  CHECK(parse_suite_manifest(bad_version, "alcy.toml", source::UNKNOWN_FILE,
+                             f.bag, f.arena)
             .is_err());
   constexpr std::string_view no_name =
       "[suite]\nowner = \"alcy\"\npackages = [\"core\"]\n";
@@ -330,11 +353,6 @@ TEST_CASE("Suite manifest rejects the wrong kind and bad shapes") {
   constexpr std::string_view no_packages =
       "[suite]\nowner = \"alcy\"\nname = \"std\"\n";
   CHECK(parse_suite_manifest(no_packages, "alcy.toml", source::UNKNOWN_FILE,
-                             f.bag, f.arena)
-            .is_err());
-  constexpr std::string_view empty_packages =
-      "[suite]\nowner = \"alcy\"\nname = \"std\"\npackages = []\n";
-  CHECK(parse_suite_manifest(empty_packages, "alcy.toml", source::UNKNOWN_FILE,
                              f.bag, f.arena)
             .is_err());
   constexpr std::string_view empty_entry =
@@ -354,24 +372,34 @@ TEST_CASE("Suite manifest rejects the wrong kind and bad shapes") {
 
 TEST_CASE("Suite manifest verification rejects bad shapes") {
   CHECK(verify_suite_manifest(SuiteManifest{}).unwrap_err() ==
-        SuiteError::EmptyOwner);
+        SuiteError::EmptyName);
+  // An owner-less, memberless suite is a valid starting point.
+  SuiteManifest fresh;
+  fresh.name = "tools";
+  CHECK(verify_suite_manifest(fresh).is_ok());
   const std::string_view members[] = {"core", "core"};
-  CHECK(verify_suite_manifest(SuiteManifest{
-                                  .owner = "alcy",
-                                  .name = "std",
-                                  .packages = members,
-                                  .package_count = 2,
-                              })
-            .unwrap_err() == SuiteError::DuplicatePackageEntry);
-  CHECK(verify_suite_manifest(SuiteManifest{
-                                  .owner = "alcy",
-                                  .name = "std",
-                                  .packages = nullptr,
-                                  .package_count = 0,
-                              })
-            .unwrap_err() == SuiteError::NoPackages);
+  SuiteManifest duplicate;
+  duplicate.name = "std";
+  duplicate.packages = members;
+  duplicate.package_count = 2;
+  CHECK(verify_suite_manifest(duplicate).unwrap_err() ==
+        SuiteError::DuplicatePackageEntry);
+  const std::string_view same_name[] = {"a/core", "b/core"};
+  SuiteManifest names;
+  names.name = "std";
+  names.packages = same_name;
+  names.package_count = 2;
+  CHECK(verify_suite_manifest(names).unwrap_err() ==
+        SuiteError::DuplicatePackageName);
+  const std::string_view trailing_slash[] = {"core/"};
+  SuiteManifest bad_path;
+  bad_path.name = "std";
+  bad_path.packages = trailing_slash;
+  bad_path.package_count = 1;
+  CHECK(verify_suite_manifest(bad_path).unwrap_err() ==
+        SuiteError::BadPackageEntry);
   Fixture f;
-  report_suite_error(SuiteError::NoPackages, "alcy.toml", f.bag);
+  report_suite_error(SuiteError::EmptyName, "alcy.toml", f.bag);
   CHECK(f.bag.has_errors());
 }
 
@@ -497,6 +525,17 @@ PackageManifest parse_ok(std::string_view bytes, Fixture& f) {
   CHECK(!f.bag.has_errors());
   if (result.is_err()) {
     return PackageManifest{};
+  }
+  return std::move(result).unwrap();
+}
+
+SuiteManifest parse_suite_ok(std::string_view bytes, Fixture& f) {
+  base::Result<SuiteManifest, diag::Reported> result = parse_suite_manifest(
+      bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
+  CHECK(result.is_ok());
+  CHECK(!f.bag.has_errors());
+  if (result.is_err()) {
+    return SuiteManifest{};
   }
   return std::move(result).unwrap();
 }
@@ -688,6 +727,67 @@ TEST_CASE("Manifest rejects duplicate module entries") {
                      "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
   CHECK(result.is_err());
   CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Package identity parses literals and suite markers") {
+  Fixture f;
+  constexpr std::string_view bytes =
+      "[package]\nname = \"cli\"\nversion.suite = true\n"
+      "owner.suite = true\nlicense = \"MIT\"\n";
+  const PackageManifest manifest = parse_ok(bytes, f);
+  CHECK(manifest.name == "cli");
+  CHECK(!manifest.has_version);
+  CHECK(manifest.version_from_suite);
+  CHECK(manifest.owner_from_suite);
+  CHECK(!manifest.license_from_suite);
+  CHECK(manifest.license == "MIT");
+  // Only resolution turns a marker into a value, so an unresolved
+  // manifest does not cross the verifier.
+  CHECK(verify_manifest(manifest).unwrap_err() ==
+        ManifestError::UnresolvedInheritance);
+}
+
+TEST_CASE("A member takes the keys it spelled from its suite") {
+  Fixture f;
+  PackageManifest member = parse_ok(
+      "[package]\nname = \"cli\"\nversion.suite = true\n"
+      "owner.suite = true\nlicense.suite = true\n",
+      f);
+  const SuiteManifest suite = parse_suite_ok(
+      "[suite]\nname = \"tools\"\nowner = \"acme\"\n"
+      "version = \"1.2.3\"\nlicense = \"Apache-2.0\"\n"
+      "packages = [\"cli\"]\n",
+      f);
+  CHECK(inherit_from_suite(member, suite).is_ok());
+  CHECK(member.has_version);
+  CHECK(member.version == Version{1, 2, 3});
+  CHECK(member.owner == "acme");
+  CHECK(member.license == "Apache-2.0");
+  CHECK(verify_manifest(member).is_ok());
+}
+
+TEST_CASE("An inherited version needs a suite that declares one") {
+  Fixture f;
+  PackageManifest member =
+      parse_ok("[package]\nname = \"cli\"\nversion.suite = true\n", f);
+  const SuiteManifest suite =
+      parse_suite_ok("[suite]\nname = \"tools\"\npackages = []\n", f);
+  CHECK(inherit_from_suite(member, suite).unwrap_err() ==
+        InheritError::SuiteVersionMissing);
+}
+
+TEST_CASE("Identity fields refuse shapes that are not a value or a marker") {
+  for (const std::string_view bytes :
+       {"[package]\nname = \"x\"\nversion.suite = false\n",
+        "[package]\nname = \"x\"\nversion = \"0.1.0\"\n"
+        "owner = { suite = true, extra = 1 }\n",
+        "[package]\nname = \"x\"\nversion = \"0.1.0\"\nlicense = 1\n"}) {
+    Fixture f;
+    CHECK(
+        parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena)
+            .is_err());
+    CHECK(f.bag.has_errors());
+  }
 }
 
 }  // namespace pkg

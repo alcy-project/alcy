@@ -93,9 +93,25 @@ struct ModuleSet {
 
 struct PackageManifest {
   std::string_view name;
+  // The package's own version. `has_version` is false only while the
+  // manifest spells `version.suite = true`, which resolution fills;
+  // `version_from_suite` is then set until it does.
   Version version;
+  bool has_version = false;
+  bool version_from_suite = false;
   // Optional edition string; empty when absent.
   std::string_view edition;
+  // The owner, empty when the manifest declares none. Empty is a
+  // value: it is the local, unowned package. `owner_from_suite` marks
+  // the `owner.suite = true` spelling until resolution fills it.
+  std::string_view owner;
+  bool owner_from_suite = false;
+  // The license expression; the key is required, and the empty string
+  // is how a package says it grants nothing. `license_from_suite`
+  // marks the `license.suite = true` spelling until resolution fills
+  // it.
+  std::string_view license;
+  bool license_from_suite = false;
   // Arena-owned array, possibly empty.
   const Dependency* dependencies = nullptr;
   u32 dependency_count = 0;
@@ -123,8 +139,18 @@ struct PackageManifest {
 // member names. Views borrow arena storage owned by the caller of
 // parse_suite_manifest().
 struct SuiteManifest {
+  // The owner, empty when the suite declares none. Dependency matching
+  // compares it, so an owner-less suite is a local build target rather
+  // than an address.
   std::string_view owner;
   std::string_view name;
+  // The suite's own version, when it declares one. It exists to be
+  // inherited: a member that spells `version.suite = true` takes it.
+  Version version;
+  bool has_version = false;
+  // The license expression members inherit; required, may be empty.
+  std::string_view license;
+  // Arena-owned array of suite-relative member paths, possibly empty.
   const std::string_view* packages = nullptr;
   u32 package_count = 0;
 };
@@ -143,6 +169,7 @@ enum class ManifestError : u8 {
   EmptyLibPath,
   EmptyModuleEntry,
   EmptySuiteOnlyEntry,
+  UnresolvedInheritance,
 };
 
 // Pure structural verifier: pointer/count pairs agree and the strings
@@ -179,17 +206,36 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
     diag::DiagBag& bag,
     mem::Arena& arena);
 
+// Why a member's inherited key cannot be filled.
+enum class InheritError : u8 {
+  SuiteVersionMissing,
+};
+
+// Fills each `X.suite = true` key of `member` from `suite` and clears
+// the marker: `owner`, `license`, and `version`. The caller has
+// established that the package is a member; a manifest with no marker
+// is left alone, and a member that keeps a literal keeps it. Pure.
+// After this, `verify_manifest` accepts the result.
+base::Result<void, InheritError> inherit_from_suite(PackageManifest& member,
+                                                    const SuiteManifest& suite);
+
+// Entry-point conversion helper: emits `manifest '<name>': <detail>`
+// (code 1001, the manifest semantic range) into bag.
+void report_inherit_error(InheritError error,
+                          std::string_view name,
+                          diag::DiagBag& bag);
+
 // Structural failure of a suite manifest assembled outside
 // parse_suite_manifest. Mirrors ManifestError for the [suite] shape:
 // pointer/count pairs agree, required strings are present, and the
 // member list holds unique non-empty names.
 enum class SuiteError : u8 {
-  EmptyOwner,
   EmptyName,
-  NoPackages,
   NullPackageArray,
   EmptyPackageEntry,
+  BadPackageEntry,
   DuplicatePackageEntry,
+  DuplicatePackageName,
 };
 
 // Pure structural verifier for suite manifests. Its own output satisfies

@@ -126,6 +126,108 @@ base::Result<std::string_view, diag::Reported> dep_string(
   return base::make_ok(*value);
 }
 
+// Emits one manifest semantic error and returns it; the return type is
+// the caller's, so a field parser can fail directly.
+template <typename T>
+base::Result<T, diag::Reported> manifest_field_error(diag::DiagBag& bag,
+                                                     std::string_view filename,
+                                                     std::string_view message) {
+  const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
+      diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSemanticError,
+      filename, message);
+  (void)index;
+  return base::make_err(diag::Reported{});
+}
+
+// Whether a node is exactly `{ suite = true }` (the dotted
+// `field.suite = true` parses the same), the spelling that takes the
+// suite's value (ADR-0057).
+bool is_suite_marker(const toml::node& node) {
+  const toml::table* const table = node.as_table();
+  if (table == nullptr || table->size() != 1) {
+    return false;
+  }
+  const auto suite = table->find("suite");
+  if (suite == table->end()) {
+    return false;
+  }
+  const auto value = suite->second.value<bool>();
+  return value.has_value() && *value;
+}
+
+// A string field that may spell `{ suite = true }` instead. `present`
+// tells a declared value from an absent key, which an empty string
+// needs.
+struct InheritedString {
+  std::string_view text;
+  bool present = false;
+  bool from_suite = false;
+};
+
+base::Result<InheritedString, diag::Reported> inherited_string(
+    diag::DiagBag& bag,
+    std::string_view filename,
+    mem::Arena& arena,
+    const toml::table& table,
+    std::string_view field,
+    std::string_view bad_message) {
+  InheritedString out;
+  const auto it = table.find(field);
+  if (it == table.end()) {
+    return base::make_ok(out);
+  }
+  if (const auto value = it->second.value<std::string_view>();
+      value.has_value()) {
+    out.text = copy_str(arena, *value);
+    out.present = true;
+    return base::make_ok(out);
+  }
+  if (is_suite_marker(it->second)) {
+    out.present = true;
+    out.from_suite = true;
+    return base::make_ok(out);
+  }
+  return manifest_field_error<InheritedString>(bag, filename, bad_message);
+}
+
+// The `version` field of a manifest: a string, or `{ suite = true }`
+// for a member that takes the suite's.
+struct ManifestVersionField {
+  Version version;
+  bool present = false;
+  bool from_suite = false;
+};
+
+base::Result<ManifestVersionField, diag::Reported> manifest_version(
+    diag::DiagBag& bag,
+    std::string_view filename,
+    const toml::table& table,
+    std::string_view bad_shape_message,
+    std::string_view bad_version_message) {
+  ManifestVersionField out;
+  const auto it = table.find("version");
+  if (it == table.end()) {
+    return base::make_ok(out);
+  }
+  if (const auto text = it->second.value<std::string_view>();
+      text.has_value()) {
+    base::Result<Version, VersionError> parsed = parse_version(*text);
+    if (parsed.is_err()) {
+      return manifest_field_error<ManifestVersionField>(bag, filename,
+                                                        bad_version_message);
+    }
+    out.version = std::move(parsed).unwrap();
+    out.present = true;
+    return base::make_ok(out);
+  }
+  if (is_suite_marker(it->second)) {
+    out.from_suite = true;
+    return base::make_ok(out);
+  }
+  return manifest_field_error<ManifestVersionField>(bag, filename,
+                                                    bad_shape_message);
+}
+
 base::Result<Dependency, diag::Reported> parse_dependency(
     diag::DiagBag& bag,
     std::string_view filename,
@@ -347,6 +449,12 @@ base::Result<void, ManifestError> verify_manifest(
   if (manifest.name.empty()) {
     return base::make_err(ManifestError::EmptyName);
   }
+  // A resolved manifest has a version and no inheritance marker left;
+  // anything else crossed this boundary without inherit_from_suite.
+  if (!manifest.has_version || manifest.version_from_suite ||
+      manifest.owner_from_suite || manifest.license_from_suite) {
+    return base::make_err(ManifestError::UnresolvedInheritance);
+  }
   if (manifest.dependency_count > 0 && manifest.dependencies == nullptr) {
     return base::make_err(ManifestError::NullDependencyArray);
   }
@@ -449,6 +557,9 @@ void report_manifest_error(ManifestError error,
     case ManifestError::EmptySuiteOnlyEntry:
       detail = "suite-only list with an empty entry";
       break;
+    case ManifestError::UnresolvedInheritance:
+      detail = "an inherited key was not resolved";
+      break;
   }
   const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
       diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSemanticError,
@@ -458,25 +569,37 @@ void report_manifest_error(ManifestError error,
 
 base::Result<void, SuiteError> verify_suite_manifest(
     const SuiteManifest& manifest) {
-  if (manifest.owner.empty()) {
-    return base::make_err(SuiteError::EmptyOwner);
-  }
   if (manifest.name.empty()) {
     return base::make_err(SuiteError::EmptyName);
   }
-  if (manifest.package_count == 0) {
-    return base::make_err(SuiteError::NoPackages);
-  }
-  if (manifest.packages == nullptr) {
+  if (manifest.package_count > 0 && manifest.packages == nullptr) {
     return base::make_err(SuiteError::NullPackageArray);
   }
+  // A member's address is its package name, the last segment of its
+  // path, so a path has to end in one and names are unique
+  // (ADR-0057).
   for (u32 i = 0; i < manifest.package_count; ++i) {
-    if (manifest.packages[i].empty()) {
+    const std::string_view path = manifest.packages[i];
+    if (path.empty()) {
       return base::make_err(SuiteError::EmptyPackageEntry);
     }
+    const usize slash = path.rfind('/');
+    const std::string_view name =
+        slash == std::string_view::npos ? path : path.substr(slash + 1);
+    if (name.empty()) {
+      return base::make_err(SuiteError::BadPackageEntry);
+    }
     for (u32 j = 0; j < i; ++j) {
-      if (manifest.packages[j] == manifest.packages[i]) {
+      if (manifest.packages[j] == path) {
         return base::make_err(SuiteError::DuplicatePackageEntry);
+      }
+      const std::string_view other = manifest.packages[j];
+      const usize other_slash = other.rfind('/');
+      const std::string_view other_name = other_slash == std::string_view::npos
+                                              ? other
+                                              : other.substr(other_slash + 1);
+      if (other_name == name) {
+        return base::make_err(SuiteError::DuplicatePackageName);
       }
     }
   }
@@ -488,17 +611,58 @@ void report_suite_error(SuiteError error,
                         diag::DiagBag& bag) {
   std::string_view detail = "invalid manifest";
   switch (error) {
-    case SuiteError::EmptyOwner: detail = "empty [suite] owner"; break;
     case SuiteError::EmptyName: detail = "empty [suite] name"; break;
-    case SuiteError::NoPackages: detail = "[suite] declares no packages"; break;
     case SuiteError::NullPackageArray:
       detail = "package count without a package array";
       break;
     case SuiteError::EmptyPackageEntry:
       detail = "[suite] package list with an empty entry";
       break;
+    case SuiteError::BadPackageEntry:
+      detail = "[suite] package path that does not end in a name";
+      break;
     case SuiteError::DuplicatePackageEntry:
       detail = "duplicate [suite] package entry";
+      break;
+    case SuiteError::DuplicatePackageName:
+      detail = "duplicate [suite] package name";
+      break;
+  }
+  const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
+      diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSemanticError,
+      name, detail);
+  (void)index;
+}
+
+base::Result<void, InheritError> inherit_from_suite(
+    PackageManifest& member,
+    const SuiteManifest& suite) {
+  if (member.owner_from_suite) {
+    member.owner = suite.owner;
+    member.owner_from_suite = false;
+  }
+  if (member.license_from_suite) {
+    member.license = suite.license;
+    member.license_from_suite = false;
+  }
+  if (member.version_from_suite) {
+    if (!suite.has_version) {
+      return base::make_err(InheritError::SuiteVersionMissing);
+    }
+    member.version = suite.version;
+    member.version_from_suite = false;
+    member.has_version = true;
+  }
+  return base::make_ok();
+}
+
+void report_inherit_error(InheritError error,
+                          std::string_view name,
+                          diag::DiagBag& bag) {
+  std::string_view detail = "invalid manifest";
+  switch (error) {
+    case InheritError::SuiteVersionMissing:
+      detail = "inherits a version, but the suite declares none";
       break;
   }
   const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
@@ -567,18 +731,34 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
     return semantic_error(bag, filename, "[package] name must be a string");
   }
 
-  const auto version_it = pkg_table->find("version");
-  if (version_it == pkg_table->end()) {
+  base::Result<ManifestVersionField, diag::Reported> version_field =
+      manifest_version(bag, filename, *pkg_table,
+                       "[package] version must be a string or { suite = true }",
+                       "invalid [package] version");
+  if (version_field.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  const ManifestVersionField version = std::move(version_field).unwrap();
+  if (!version.present && !version.from_suite) {
     return semantic_error(bag, filename, "missing [package] version");
   }
-  const auto version_text = version_it->second.value<std::string_view>();
-  if (!version_text.has_value()) {
-    return semantic_error(bag, filename, "[package] version must be a string");
+
+  base::Result<InheritedString, diag::Reported> owner_field =
+      inherited_string(bag, filename, arena, *pkg_table, "owner",
+                       "[package] owner must be a string or { suite = true }");
+  if (owner_field.is_err()) {
+    return base::make_err(diag::Reported{});
   }
-  base::Result<Version, VersionError> version = parse_version(*version_text);
-  if (version.is_err()) {
-    return semantic_error(bag, filename, "invalid [package] version");
+  const InheritedString owner = std::move(owner_field).unwrap();
+
+  base::Result<InheritedString, diag::Reported> license_field =
+      inherited_string(
+          bag, filename, arena, *pkg_table, "license",
+          "[package] license must be a string or { suite = true }");
+  if (license_field.is_err()) {
+    return base::make_err(diag::Reported{});
   }
+  const InheritedString license = std::move(license_field).unwrap();
 
   std::string_view edition;
   const auto edition_it = pkg_table->find("edition");
@@ -859,8 +1039,14 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
 
   return base::make_ok(PackageManifest{
       .name = copy_str(arena, *name),
-      .version = std::move(version).unwrap(),
+      .version = version.version,
+      .has_version = version.present,
+      .version_from_suite = version.from_suite,
       .edition = edition,
+      .owner = owner.text,
+      .owner_from_suite = owner.from_suite,
+      .license = license.text,
+      .license_from_suite = license.from_suite,
       .dependencies = dependencies,
       .dependency_count = dependency_count,
       .bins = bins,
@@ -894,14 +1080,41 @@ base::Result<SuiteManifest, diag::Reported> parse_suite_manifest(
   }
   const toml::table* const suite_table = suite_it->second.as_table();
 
-  const auto owner_it = suite_table->find("owner");
-  if (owner_it == suite_table->end()) {
-    return suite_semantic_error(bag, filename, "missing [suite] owner");
+  base::Result<InheritedString, diag::Reported> owner_field =
+      inherited_string(bag, filename, arena, *suite_table, "owner",
+                       "[suite] owner must be a string");
+  if (owner_field.is_err()) {
+    return base::make_err(diag::Reported{});
   }
-  const auto owner = owner_it->second.value<std::string_view>();
-  if (!owner.has_value() || owner->empty()) {
+  const InheritedString owner = std::move(owner_field).unwrap();
+  if (owner.from_suite) {
     return suite_semantic_error(bag, filename,
-                                "[suite] owner must be a string");
+                                "[suite] owner cannot be inherited");
+  }
+
+  base::Result<ManifestVersionField, diag::Reported> version_field =
+      manifest_version(bag, filename, *suite_table,
+                       "[suite] version must be a string",
+                       "[suite] version is not a version");
+  if (version_field.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  const ManifestVersionField version = std::move(version_field).unwrap();
+  if (version.from_suite) {
+    return suite_semantic_error(bag, filename,
+                                "[suite] version cannot be inherited");
+  }
+
+  base::Result<InheritedString, diag::Reported> license_field =
+      inherited_string(bag, filename, arena, *suite_table, "license",
+                       "[suite] license must be a string");
+  if (license_field.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  const InheritedString license = std::move(license_field).unwrap();
+  if (license.from_suite) {
+    return suite_semantic_error(bag, filename,
+                                "[suite] license cannot be inherited");
   }
 
   const auto name_it = suite_table->find("name");
@@ -923,11 +1136,11 @@ base::Result<SuiteManifest, diag::Reported> parse_suite_manifest(
   }
   const toml::array* const packages_array = packages_it->second.as_array();
   const u32 package_count = static_cast<u32>(packages_array->size());
-  if (package_count == 0) {
-    return suite_semantic_error(bag, filename, "[suite] declares no packages");
-  }
-  std::string_view* const packages = static_cast<std::string_view*>(arena.alloc(
-      sizeof(std::string_view) * package_count, alignof(std::string_view)));
+  std::string_view* const packages =
+      package_count > 0 ? static_cast<std::string_view*>(arena.alloc(
+                              sizeof(std::string_view) * package_count,
+                              alignof(std::string_view)))
+                        : nullptr;
   u32 filled = 0;
   for (const toml::node& node : *packages_array) {
     const auto entry = node.value<std::string_view>();
@@ -945,8 +1158,11 @@ base::Result<SuiteManifest, diag::Reported> parse_suite_manifest(
   }
 
   return base::make_ok(SuiteManifest{
-      .owner = copy_str(arena, *owner),
+      .owner = owner.text,
       .name = copy_str(arena, *name),
+      .version = version.version,
+      .has_version = version.present,
+      .license = license.text,
       .packages = packages,
       .package_count = filled,
   });
