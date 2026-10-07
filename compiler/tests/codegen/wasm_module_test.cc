@@ -174,7 +174,8 @@ TEST_CASE("A module lays its sections in the format's order") {
     CHECK(payload.size() == size);
     CHECK(read_u32(payload) == 0);  // No locals; the parameter is local 0.
     CHECK(payload[0] == 0x20);      // local.get 0
-    CHECK(payload[6] == 0x0B);      // The builder's closing end.
+    CHECK(payload.size() == 6);
+    CHECK(payload[5] == 0x0B);  // The builder's closing end.
   }
   {
     std::span<const u8> payload = sections[8].payload;
