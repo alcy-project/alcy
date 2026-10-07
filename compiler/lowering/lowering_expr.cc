@@ -3683,7 +3683,7 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
   switch (node.kind) {
     case ast::StmtKind::Decl: {
       const ast::StmtDecl& decl = node.payload.get<ast::StmtDecl>();
-      if (decl.is_comp) {
+      if (decl.is_const) {
         CompVal evaluated;
         if (!comp_evaluate(module, decl.init, evaluated)) {
           return;

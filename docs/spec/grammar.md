@@ -165,6 +165,10 @@ Declaration left-hand sides use this grammar with `:=`
   `,` and `;` as separators.
 - `x = v` assigns, and so does `x += v` and each of the other compound
   forms the operator set defines. A declaration always spells `:=`.
+- `const x := expr` (or `const x: T := expr`) declares a compile-time
+  value: the initializer is evaluated during compilation and the
+  binding is immutable. `comp` marks parameters and blocks only, so
+  `comp x := ...` is a spelling diagnostic pointing at `const`.
 - The left side of an assignment is read as an ordinary expression, and
   whether it names a place is decided after the whole line is read. So
   `g() = 1` is a diagnostic about the place rather than a syntax error,

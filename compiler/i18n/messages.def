@@ -56,7 +56,8 @@
   F(ParserArrayLengthNotDecimal, "Array length must be decimal") \
   F(ParserArrayLengthTooLarge, "Array length is too large") \
   F(ParserBlockBraceOnHeader, "A block's `{{` must stay on its header line") \
-  F(ParserCompOnlyOnBindings, "Comp evaluation is only allowed on parameters, declarations, and blocks") \
+  F(ParserCompDeclarationSpelling, "`comp` marks parameters and blocks; write the declaration as `const x := ...`") \
+  F(ParserCompOnlyOnBindings, "Comp evaluation is only allowed on parameters and blocks") \
   F(ParserDuplicateTypeParameter, "Duplicate type parameter '{}'") \
   F(ParserExpectedFound, "Expected {}, found `{}`") \
   F(ParserExpectedFoundEndOfFile, "Expected {}, found end of file") \
@@ -117,17 +118,17 @@
   F(AnalyzerCompArgument, "Comp evaluation argument must be comp-known") \
   F(AnalyzerCompAssignPlace, "Comp assignment place is not comp-known") \
   F(AnalyzerCompAssignValue, "Comp assignment value is not comp-known") \
-  F(AnalyzerCompBindingReassigned, "Cannot reassign a comp binding at runtime") \
   F(AnalyzerCompBlockValue, "Comp block value is not comp-known") \
   F(AnalyzerCompCondition, "Comp condition is not comp-known") \
   F(AnalyzerCompConditionInitializer, "Comp condition initializer is not comp-known") \
-  F(AnalyzerCompDeclarationInitializer, "Comp declaration initializer is not comp-known") \
   F(AnalyzerCompMatchScrutinee, "Comp match scrutinee is not comp-known") \
   F(AnalyzerCompParameterArgument, "Argument for `comp` parameter must be comp-known") \
   F(AnalyzerCompParameterOnIntrinsic, "Comp parameters on intrinsics are not supported") \
   F(AnalyzerCompoundAssignNeedsNumeric, "Compound assignment needs a numeric place") \
   F(AnalyzerConflictingSpecImpl, "Conflicting implementation of '{}' for '{}'") \
   F(AnalyzerConflictsWithLocalItem, "Import `{}` conflicts with a local item") \
+  F(AnalyzerConstBindingReassigned, "Cannot reassign a const value") \
+  F(AnalyzerConstDeclarationInitializer, "Const declaration initializer is not comp-known") \
   F(AnalyzerContinueOutsideLoop, "Continue outside of a loop") \
   F(AnalyzerCopyTypeCannotHaveDestructor, "Type is Copy because all of its fields are, so it cannot have a destructor") \
   F(AnalyzerDuplicateDefinition, "Duplicate definition of '{}'") \

@@ -3133,7 +3133,7 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
         expected = &ascribed;
       }
       bool entered_comp = false;
-      if (decl.is_comp) {
+      if (decl.is_const) {
         ++comp_depth;
         entered_comp = true;
       }
@@ -3141,16 +3141,16 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
       if (expected != nullptr) {
         unify(*expected, init, ast.exprs[decl.init].span, "declaration");
       }
-      if ((decl.is_comp || verify_comp_known) &&
+      if ((decl.is_const || verify_comp_known) &&
           !comp_checked_in_scope(decl.init) &&
           !expr_comp_known(module, decl.init)) {
         const u32 index =
-            bag.emit<i18n::Key::AnalyzerCompDeclarationInitializer>(
+            bag.emit<i18n::Key::AnalyzerConstDeclarationInitializer>(
                 diag::Severity::Error, diag::Stage::Analyzer,
                 DiagCode::NotCompKnown, ast.exprs[decl.init].span);
         (void)index;
       }
-      bind_comp_known = decl.is_comp;
+      bind_comp_known = decl.is_const;
       const bool refutable = bind_pattern(module, decl.pattern, init);
       bind_comp_known = false;
       if (entered_comp) {
@@ -3176,7 +3176,7 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
           if (const Local* local = lookup_local(segments[0].name)) {
             if (local->comp_known) {
               const u32 index =
-                  bag.emit<i18n::Key::AnalyzerCompBindingReassigned>(
+                  bag.emit<i18n::Key::AnalyzerConstBindingReassigned>(
                       diag::Severity::Error, diag::Stage::Analyzer,
                       DiagCode::InvalidComp, node.span);
               (void)index;

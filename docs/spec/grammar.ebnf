@@ -185,9 +185,10 @@ unsafe_block  = "unsafe" , block ;
 
 block       = "{" , { statement } , [ expr ] , "}" ;
 statement   = decl_stmt | reassign_stmt | expr_stmt ;
-decl_stmt   = [ "comp" ] , pattern , [ ":" , type ] , ":=" , expr ;
+decl_stmt   = [ "const" ] , pattern , [ ":" , type ] , ":=" , expr ;
               (* `mut` in declaration position folds into the pattern
-                 (`mut` ident); only `comp` is a decl-level modifier. *)
+                 (`mut` ident); `const` is the one decl-level modifier,
+                 and its initializer is a compile-time value. *)
 reassign_stmt = expr , assign_op , expr ;
 assign_op     = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "**=" | "&="
               | "|=" | "^=" | "<<=" | ">>=" ;
@@ -235,8 +236,8 @@ DOC_COMMENT   = "///" , { ANY_BUT_NEWLINE } ;
  * Reserved: async await union register where dyn
  *   i128 u128
  * Contextual, and a keyword rather than a reserved word because it only
- *   has a meaning in one position: `comp` in signatures, declarations, and
- *   blocks; `intrinsic` in item position; `spec` in item position; `for`
+ *   has a meaning in one position: `comp` in signatures and blocks;
+ *   `intrinsic` in item position; `spec` in item position; `for`
  *   in a loop head and in an `impl` header; `in` in a `for` head. Using
  *   one outside its position is an ordinary parse error rather than a
  *   reserved-name diagnostic. See docs/spec/keywords.md.

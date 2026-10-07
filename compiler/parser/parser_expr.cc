@@ -1209,7 +1209,7 @@ ast::ExprIdx Parser::parse_for() {
       .pattern = cursor,
       .type = ast::TypeIdx::invalid(),
       .init = iterator,
-      .is_comp = false,
+      .is_const = false,
   });
   const ast::StmtIdx iterator_decl = ast_.stmts.push_back(decl);
 

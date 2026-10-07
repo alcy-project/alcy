@@ -1320,7 +1320,18 @@ ast::StmtIdx Parser::parse_stmt() {
     default: break;
   }
   if (lead == StmtLead::Decl) {
-    const bool is_comp = match(lexer::TokenKind::Comp);
+    // `comp` never declares a value (ADR-0054). Parse the line as the
+    // const declaration it should have been, so the report is the
+    // spelling and not a cascade.
+    const lexer::Token comp_token = peek();
+    const bool comp_decl = match(lexer::TokenKind::Comp);
+    if (comp_decl) {
+      const u32 index = bag_.emit<i18n::Key::ParserCompDeclarationSpelling>(
+          diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+          comp_token.span);
+      (void)index;
+    }
+    const bool is_const = match(lexer::TokenKind::Const) || comp_decl;
     const ast::PatternIdx pattern = parse_pattern();
     if (!pattern.is_valid()) {
       return ast::StmtIdx::invalid();
@@ -1346,7 +1357,7 @@ ast::StmtIdx Parser::parse_stmt() {
         .pattern = pattern,
         .type = type,
         .init = init,
-        .is_comp = is_comp,
+        .is_const = is_const,
     });
     return ast_.stmts.push_back(node);
   }

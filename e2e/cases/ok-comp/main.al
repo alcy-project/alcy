@@ -3,7 +3,7 @@ fn double(comp n: i32) -> i32 {
 }
 
 fn main() {
-  comp k := 21
+  const k := 21
   _ := double(k)
   _ := comp { 1 + 2 }
 }

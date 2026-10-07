@@ -1917,14 +1917,14 @@ TEST_CASE("Check borrow expressions") {
   }
 }
 
-TEST_CASE("Check accepts comp declarations and blocks") {
+TEST_CASE("Check accepts const declarations and comp blocks") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn double(comp n: i32) -> i32 {\n"
                                       "  ret n * 2\n"
                                       "}\n"
                                       "fn main() {\n"
-                                      "  comp k := 21\n"
+                                      "  const k := 21\n"
                                       "  _ := double(k)\n"
                                       "  _ := comp { 1 + 2 }\n"
                                       "}\n"}});
@@ -1957,12 +1957,12 @@ TEST_CASE("Check rejects runtime arguments for comp parameters") {
   CHECK(f.bag.has_errors());
 }
 
-TEST_CASE("Check rejects non-comp-known comp initializers") {
+TEST_CASE("Check rejects non-comp-known const initializers") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
                                       "  x := 1\n"
-                                      "  comp k := x\n"
+                                      "  const k := x\n"
                                       "  _ := k\n"
                                       "}\n"}});
   CHECK(setup);

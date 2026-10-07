@@ -767,7 +767,9 @@ struct StmtDecl {
   PatternIdx pattern = PatternIdx::invalid();
   TypeIdx type = TypeIdx::invalid();
   ExprIdx init = ExprIdx::invalid();
-  bool is_comp = false;
+  // `const x := expr`: the initializer is a compile-time value and the
+  // binding is immutable (ADR-0054).
+  bool is_const = false;
 };
 
 struct StmtReassign {

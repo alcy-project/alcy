@@ -3,34 +3,44 @@
 `comp` marks code that MUST be evaluated during compilation. Its first
 client is `fmt`: format strings are parsed at compile time and expand
 to copy sequences (see the fmt API design). This document covers the
-minimal stage: three annotation sites with a bounded evaluation
-domain. It extends `grammar.md` (which covers MVP only).
+stage where `comp` marks parameters and blocks; a compile-time value
+in a declaration or an item is a `const` (see `items.md`). It extends
+`grammar.md` (which covers MVP only).
 
 ## Syntax
 
-`comp` annotates three positions:
+`comp` annotates two positions:
 
 ```text
-params    := (("comp")? pattern ":" type ("," ...)* ","?)?
-decl_stmt := ("comp")? pattern (":" type)? ":=" expr
-primary   := ... | comp_block
+params     := (("comp")? pattern ":" type ("," ...)* ","?)?
+primary    := ... | comp_block
 comp_block := "comp" block
 ```
 
 - `fn repeat(comp n: usize, x: i32)` declares a compile-time parameter.
-- `comp count := 3` declares a compile-time variable. `mut` in
-  declaration position folds into the pattern, so `comp mut x := 3`
-  declares a mutable compile-time variable.
 - `comp { ... }` is an expression evaluated at compile time; its value
   splices into the surrounding runtime code.
 - Brace placement follows the Go-style rule in `grammar.md`: the `{`
   stays on the header line.
 
+A local compile-time value is a `const` declaration:
+
+```text
+decl_stmt := "const" pattern [ ":" type ] ":=" expr
+```
+
+- The initializer is evaluated during compilation and the binding is
+  immutable; `mut` in declaration position folds into the pattern but
+  does not survive the const rule.
+- `comp` marks parameters and blocks only. A `comp` in declaration
+  position is a spelling diagnostic pointing at `const`, because
+  `comp` says when code runs and `const` says what a value is.
+
 ## Comp-known values
 
 A value is comp-known when the compiler can produce it during
-compilation: literals, `const` items, `comp` parameters (per call-site
-specialization), and `comp` variables. Types admitting comp-known
+compilation: literals, `const` items and bindings, and `comp`
+parameters (per call-site specialization). Types admitting comp-known
 values are integers, `bool`, `str`, and tuples, structs, and fixed
 arrays composed of comp-known values.
 
@@ -43,7 +53,7 @@ arrays composed of comp-known values.
   contract is promised).
 - No `comp fn` marker exists at this stage (see Deferred).
 
-## Blocks and variables
+## Blocks
 
 - A `comp` block evaluates its body during compilation; the body's
   value MUST be comp-known and becomes the block's spliced value.

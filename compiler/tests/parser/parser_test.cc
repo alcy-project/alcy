@@ -929,9 +929,9 @@ TEST_CASE("Parser accepts comp parameters") {
   CHECK(!fn.params[1].is_comp);
 }
 
-TEST_CASE("Parser accepts comp declarations") {
+TEST_CASE("Parser reads const declarations") {
   Fixture f;
-  const ParseResult result = parse("fn f() { comp n := 3\n _ := n }", f);
+  const ParseResult result = parse("fn f() { const n := 3\n _ := n }", f);
   CHECK(result.ok);
   if (!result.ok || result.items.size() != 1) {
     return;
@@ -941,7 +941,14 @@ TEST_CASE("Parser accepts comp declarations") {
   CHECK(block.statements.size() == 2);
   const ast::StmtNode& stmt = f.ast.stmts[block.statements[0]];
   CHECK(stmt.kind == ast::StmtKind::Decl);
-  CHECK(stmt.payload.get<ast::StmtDecl>().is_comp);
+  CHECK(stmt.payload.get<ast::StmtDecl>().is_const);
+}
+
+TEST_CASE("Parser reports a comp declaration") {
+  Fixture f;
+  const ParseResult result = parse("fn f() { comp n := 3\n _ := n }", f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
 }
 
 TEST_CASE("Parser accepts comp blocks") {

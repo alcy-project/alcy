@@ -15,6 +15,6 @@ fn sum_to(comp n: i32) -> i32 {
 }
 
 fn main() -> i32 {
-  comp k := 21
+  const k := 21
   ret double(k) + sum_to(4) - comp { 1 + 2 }
 }

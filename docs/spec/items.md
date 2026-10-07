@@ -40,8 +40,8 @@
   `const X: T = ...` items are compile-time values: the initializer is
   evaluated during compilation, must terminate within the evaluation
   bound, and is pure (no runtime storage or I/O). A const value is
-  immutable and readable wherever a value is; see `comp.md`.
-  Binding-position `const` does not exist yet.
+  immutable and readable wherever a value is; `const x := expr` in
+  declaration position is the same thing for a local. See `comp.md`.
 
 ## Intrinsic declarations (Bootstrap)
 
