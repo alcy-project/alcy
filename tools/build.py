@@ -53,6 +53,7 @@ def build(
     fast: bool = False,
     gn_args_extra: str = "",
     llvm_dir: str = "",
+    debug_info: str = "line",
 ) -> int:
     out_dir = project_root_dir / "out"
     build_dir = out_dir / build_subdir
@@ -60,6 +61,10 @@ def build(
     is_debug = "true" if mode == "debug" else "false"
 
     gn_args = f"is_debug={is_debug} is_clang={is_clang} use_lld={use_lld}"
+    # Forwarded even in release, where the mode decides the flags and the
+    # argument is inert: one spelling keeps a build directory's recorded
+    # arguments honest about what it was configured with.
+    gn_args += f' alcy_debug_info="{debug_info}"'
     if llvm_dir:
         # A preinstalled LLVM prefix instead of the tag artifact.
         # Absolute, because gn resolves it from the build directory.
@@ -166,6 +171,13 @@ def main():
         "instead of downloading the fork's tag artifact",
     )
     parser.add_argument(
+        "--debug-info",
+        default="line",
+        choices=["line", "full"],
+        help="Debug information in a debug build: line tables (default) "
+        "or the full macro and type detail -g3 carries",
+    )
+    parser.add_argument(
         "--gn-arg",
         dest="gn_args_extra",
         default="",
@@ -196,6 +208,7 @@ def main():
         args.fast,
         args.gn_args_extra,
         args.llvm_dir,
+        debug_info=args.debug_info,
     )
 
 

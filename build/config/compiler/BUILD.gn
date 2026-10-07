@@ -217,10 +217,17 @@ config("coverage") {
 
 config("debug") {
   defines = [ "_DEBUG" ]
-  cflags = [
-    "-g3",
-    "-fno-omit-frame-pointer",
-  ]
+  cflags = [ "-fno-omit-frame-pointer" ]
+
+  # `-g3` also emits every type and macro definition, which measured about
+  # twice the compile time of line tables on the analyzer's largest
+  # translation unit. What it buys is a debugger's view of a template
+  # expansion, so it is opt-in rather than the default.
+  if (alcy_debug_info == "full") {
+    cflags += [ "-g3" ]
+  } else {
+    cflags += [ "-g1" ]
+  }
 
   if (is_win) {
     cflags += [ "-O0" ]

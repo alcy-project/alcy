@@ -83,6 +83,18 @@ declare_args() {
   perf_symbols = false
 }
 
+# How much debug information a debug build carries. "line" emits line
+# tables, which is what a stack trace, a sanitizer report, and a debugger
+# stepping at statement granularity need; "full" adds the type and macro
+# detail. The macro tables are most of the difference in compile time, so
+# the cheap profile is the default and a session that needs to step into a
+# template asks for `--debug-info=full`. See //tools/build_time.py.
+declare_args() {
+  alcy_debug_info = "line"
+}
+assert(alcy_debug_info == "line" || alcy_debug_info == "full",
+       "alcy_debug_info must be \"line\" or \"full\"")
+
 if (!is_win && !is_mac && !is_ios) {
   declare_args() {
     use_mold =
