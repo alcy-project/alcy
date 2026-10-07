@@ -3,6 +3,7 @@
 
 config("toml_config") {
   include_dirs = [ "src/include" ]
+
   # The same directory as a system include, for the reason the LLVM
   # install does it: warnings inside vendored headers do not fail the
   # build, while `gn check` still reads the include dir above. The

@@ -33,6 +33,7 @@ if (llvm_install_dir == "") {
 
 config("llvm_config") {
   include_dirs = [ "$install_dir/include" ]
+
   # The same directory as a system include: warnings inside vendored
   # headers do not fail the build (a release one trips an assert-only
   # parameter in SmallVector), while `gn check` still reads the include
@@ -50,6 +51,7 @@ config("llvm_config") {
 
 source_set("llvm") {
   public_configs = [ ":llvm_config" ]
+
   # The ELF driver comes first: lld references the LLVM libraries and not
   # the other way around. Only the format the compiler links through is
   # embedded; another one would take its own driver library.
@@ -59,6 +61,7 @@ source_set("llvm") {
       "lldELF",
       "lldCommon",
     ]
+
     # What the driver references beyond the compiler's own set; a
     # duplicate name is harmless, and keeping both lists whole is what
     # makes each one readable.
