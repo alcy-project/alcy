@@ -6,7 +6,7 @@
 // optional suffix, kept as keys so a language switch re-renders it.
 
 import { elements } from "./elements.js";
-import { t } from "./language.js";
+import { t } from "../shared/site.js";
 import { state } from "./state.js";
 import type { TextRef } from "./types.js";
 

@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noEmitOnError": true,
+    "sourceMap": true,
+    "inlineSources": true,
+    "rootDir": ".",
+    "outDir": "build",
+    "newLine": "lf"
+  },
+  "include": ["playground/**/*.ts", "shared/**/*.ts"],
+  "exclude": [
+    "playground/compiler.worker.ts",
+    "playground/runner.worker.ts",
+    "playground/wasm-api.ts",
+    "playground/wasi.ts"
+  ]
+}

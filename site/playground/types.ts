@@ -5,7 +5,7 @@
 // counts, the messages the two workers exchange, and the text references
 // the status line and run meta keep for a language switch.
 
-import type { MessageKey, MessageParams } from "./i18n.js";
+import type { MessageKey, MessageParams } from "../shared/i18n.js";
 
 export type Severity = "error" | "warning" | "note";
 

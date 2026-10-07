@@ -10,30 +10,16 @@
       content="A browser wasm playground for the alcy programming language: edit, check, and run alcy without a server."
     />
     <title>alcy playground</title>
-    <script>
-      // The theme is resolved before first paint so the page never flashes
-      // the wrong one; app.js owns the picker and keeps this in step.
-      (() => {
-        let stored = "auto";
-        try {
-          stored = localStorage.getItem("alcy-playground-theme") ?? "auto";
-        } catch {
-          // Storage can be denied; the system preference is the fallback.
-        }
-        const dark =
-          stored === "dark" ||
-          (stored === "auto" &&
-            window.matchMedia("(prefers-color-scheme: dark)").matches);
-        document.documentElement.dataset.theme = dark ? "dark" : "light";
-      })();
-    </script>
+    <script src="../shared/boot.js"></script>
+    <link rel="stylesheet" href="../shared/site.css" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <header class="topbar">
       <div class="brand">
-        <span class="wordmark">alcy</span>
+        <a class="wordmark" href="../">alcy</a>
         <span class="subtitle">playground</span>
+        <a class="guide-link" href="../guide/introduction.html" data-i18n="site.guide">Guide</a>
       </div>
       <div class="toolbar">
         <div class="toolbar-controls">

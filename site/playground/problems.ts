@@ -7,7 +7,7 @@
 
 import { elements } from "./elements.js";
 import { syncScroll } from "./editor.js";
-import { t } from "./language.js";
+import { t } from "../shared/site.js";
 import { state } from "./state.js";
 import { byteToUtf16Map, utf16IndexAtByte } from "./textutil.js";
 import type { Diagnostic, DiagnosticCode, Severity, SourceSpan } from "./types.js";

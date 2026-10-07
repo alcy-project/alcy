@@ -5,9 +5,10 @@
 // callbacks, and start the flows. Everything else lives in the feature
 // modules next to this file.
 
+import { initLanguage, initTheme, LANGUAGE_CHANGED } from "../shared/site.js";
+
 import { elements } from "./elements.js";
 import * as editor from "./editor.js";
-import * as language from "./language.js";
 import * as output from "./output.js";
 import * as problems from "./problems.js";
 import * as runtime from "./runtime.js";
@@ -17,7 +18,6 @@ import * as splitter from "./splitter.js";
 import { state } from "./state.js";
 import * as status from "./status.js";
 import * as tabs from "./tabs.js";
-import * as theme from "./theme.js";
 
 // Everything that keeps its own rendered state is redrawn from the state
 // it came from, so switching the language never leaves a mixed page.
@@ -39,8 +39,8 @@ function onInput(): void {
 }
 
 function init(): void {
-  theme.initTheme();
-  language.applyLanguage(language.storedLanguage());
+  initTheme(elements.theme);
+  initLanguage(elements.language);
   splitter.initSplitter();
   tabs.initTabs();
   status.renderStatus();
@@ -57,12 +57,7 @@ function init(): void {
   elements.check.addEventListener("click", () => {
     void runtime.runCheck({ automatic: false });
   });
-  elements.language.addEventListener("change", () => {
-    const preference = elements.language.value;
-    language.persistLanguage(preference);
-    language.applyLanguage(preference);
-    renderForLanguage();
-  });
+  document.addEventListener(LANGUAGE_CHANGED, renderForLanguage);
 
   // A reload or a tab switch right after a keystroke must not lose it:
   // both events flush the pending debounced save.

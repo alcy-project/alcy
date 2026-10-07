@@ -7,7 +7,7 @@
 // keeps the three in step.
 
 import { elements } from "./elements.js";
-import type { MessageKey, MessageParams } from "./i18n.js";
+import type { MessageKey, MessageParams } from "../shared/i18n.js";
 import { state } from "./state.js";
 
 export const FALLBACK_SOURCE = `fn main() {\n  println("Hello, alcy!")\n}\n`;

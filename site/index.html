@@ -1,0 +1,71 @@
+<!doctype html>
+<!-- Copyright 2026 The Alcy Project Authors -->
+<!-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="alcy: an experimental statically-typed programming language, with a browser playground and a guide."
+    />
+    <title>alcy</title>
+    <script src="shared/boot.js"></script>
+    <link rel="stylesheet" href="shared/site.css" />
+  </head>
+  <body class="site">
+    <header class="site-header">
+      <a class="site-brand" href="./">alcy</a>
+      <nav class="site-nav">
+        <a href="guide/introduction.html" data-i18n="site.guide">Guide</a>
+        <a href="playground/" data-i18n="site.playground">Playground</a>
+        <a href="https://github.com/alcy-project/alcy" rel="noopener">GitHub</a>
+      </nav>
+      <div class="site-controls">
+        <label class="control">
+          <span class="control-label" data-i18n="label.theme">Theme</span>
+          <select id="theme" aria-label="Color theme" data-i18n-aria="label.theme">
+            <option value="auto" data-i18n="theme.auto">Auto</option>
+            <option value="light" data-i18n="theme.light">Light</option>
+            <option value="dark" data-i18n="theme.dark">Dark</option>
+          </select>
+        </label>
+        <label class="control">
+          <span class="control-label" data-i18n="label.language">Language</span>
+          <select id="language" aria-label="Language" data-i18n-aria="label.language">
+            <option value="auto" data-i18n="language.auto">Auto</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+          </select>
+        </label>
+      </div>
+    </header>
+
+    <main class="site-main">
+      <h1>alcy</h1>
+      <p class="tagline">An experimental statically-typed programming language.</p>
+      <p>
+        The project is in early development and not yet usable: the language,
+        its standard library, and the compiler are still being designed. The
+        compiler is written in C++20 and targets native code through LLVM and
+        WebAssembly through a direct back end, which is what lets the
+        playground compile and run programs in the browser.
+      </p>
+      <div class="actions">
+        <a class="primary" href="playground/">Open the playground</a>
+        <a href="guide/introduction.html">Read the guide</a>
+      </div>
+      <p>
+        The guide describes the language as it exists today, and every example
+        in it is compiled when the site is built.
+      </p>
+    </main>
+
+    <footer class="site-footer">
+      <span>alcy · pre-MVP</span>
+      <a href="https://github.com/alcy-project/alcy" rel="noopener">GitHub</a>
+    </footer>
+
+    <script type="module" src="shared/shell.js"></script>
+  </body>
+</html>

@@ -5,7 +5,7 @@
 // module needs to know about another module's work is a field here, so a
 // reader can see the whole surface in one place.
 
-import type { MessageKey, MessageParams, Language } from "./i18n.js";
+import type { MessageKey, MessageParams } from "../shared/i18n.js";
 import type {
   CompilerResponse,
   CompilerStatusName,
@@ -46,7 +46,6 @@ export interface PageState {
   running: boolean;
   runner: Worker | null;
   runnerTimer: number | undefined;
-  language: Language;
   status: StatusRef;
   runMeta: RunMeta | null;
   lastDiagnostics: Diagnostic[];
@@ -70,7 +69,6 @@ export const state: PageState = {
   running: false,
   runner: null,
   runnerTimer: undefined,
-  language: "en",
   status: { key: "status.ready" },
   runMeta: null,
   lastDiagnostics: [],

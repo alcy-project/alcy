@@ -46,11 +46,12 @@ from build import build
 
 SITE_DIR = project_root_dir / "site"
 PLAYGROUND_DIR = SITE_DIR / "playground"
+SHARED_DIR = SITE_DIR / "shared"
 DEFAULT_DIST_DIR = SITE_DIR / "dist"
 # Where the playground page lives inside the assembled site.
 PAGE_SUBDIR = "playground"
-# The JavaScript the page loads, as emitted by `tsc`.
-BUILD_DIR = PLAYGROUND_DIR / "build"
+# The JavaScript the site loads, as emitted by `tsc`.
+BUILD_DIR = SITE_DIR / "build"
 GRAMMAR_DIR = project_root_dir / "treesitter"
 DEFAULT_BUILD_SUBDIR = "playground"
 DEFAULT_WASM_TARGET = "playground"
@@ -61,17 +62,15 @@ CACHE_DIR = project_root_dir / "out" / "site-cache"
 DEPS_DIR = CACHE_DIR / "deps"
 STORE_DIR = CACHE_DIR / "pnpm-store"
 
-# The page's modules, compiled from `site/playground/*.ts` into its
-# `build/`. `types` carries only types and emits nothing the page loads,
-# so it is not here.
+# The page's modules, compiled from `site/playground/*.ts` into `build/`.
+# `types` carries only types and emits nothing the page loads, so it is
+# not here.
 TYPESCRIPT_MODULES = [
     "app",
     "compiler.worker",
     "editor",
     "elements",
     "highlight",
-    "i18n",
-    "language",
     "output",
     "problems",
     "runner.worker",
@@ -83,12 +82,15 @@ TYPESCRIPT_MODULES = [
     "status",
     "tabs",
     "textutil",
-    "theme",
     "wasm-api",
     "wasi",
 ]
 
 PLAIN_FILES = ["index.html", "style.css"]
+
+# The shared shell: the plain files are copied as they are, and everything
+# under `build/shared/` was compiled from `site/shared/*.ts`.
+SHARED_PLAIN_FILES = ["boot.js", "site.css"]
 
 
 @dataclass(frozen=True)
@@ -193,7 +195,7 @@ def build_typescript(modules: Path) -> None:
         subprocess.run(
             [node, str(tsc), "-p", config],
             check=True,
-            cwd=PLAYGROUND_DIR,
+            cwd=SITE_DIR,
         )
     log(f"typescript: {BUILD_DIR}")
 
@@ -207,13 +209,35 @@ def copy_static(dist_dir: Path) -> None:
             raise FileNotFoundError(f"{source} is missing")
         shutil.copy2(source, target / name)
     for module in TYPESCRIPT_MODULES:
-        source = BUILD_DIR / f"{module}.js"
+        source = BUILD_DIR / PAGE_SUBDIR / f"{module}.js"
         if not source.is_file():
             raise FileNotFoundError(f"{source} is missing; run the TypeScript build")
         shutil.copy2(source, target / source.name)
-        source_map = BUILD_DIR / f"{module}.js.map"
+        source_map = source.parent / f"{module}.js.map"
         if source_map.is_file():
             shutil.copy2(source_map, target / source_map.name)
+
+
+def copy_shared(dist_dir: Path) -> None:
+    target = dist_dir / "shared"
+    target.mkdir(parents=True, exist_ok=True)
+    for name in SHARED_PLAIN_FILES:
+        source = SHARED_DIR / name
+        if not source.is_file():
+            raise FileNotFoundError(f"{source} is missing")
+        shutil.copy2(source, target / name)
+    for source in sorted((BUILD_DIR / "shared").glob("*.js")):
+        shutil.copy2(source, target / source.name)
+        source_map = source.with_suffix(".js.map")
+        if source_map.is_file():
+            shutil.copy2(source_map, target / source_map.name)
+
+
+def copy_landing(dist_dir: Path) -> None:
+    source = SITE_DIR / "index.html"
+    if not source.is_file():
+        raise FileNotFoundError(f"{source} is missing")
+    shutil.copy2(source, dist_dir / "index.html")
 
 
 def copy_samples(dist_dir: Path) -> None:
@@ -333,7 +357,9 @@ def command_build(args: argparse.Namespace) -> int:
         shutil.rmtree(dist_dir)
     dist_dir.mkdir(parents=True)
 
+    copy_landing(dist_dir)
     copy_static(dist_dir)
+    copy_shared(dist_dir)
     copy_samples(dist_dir)
 
     if not args.skip_grammar:

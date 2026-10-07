@@ -6,7 +6,7 @@
 
 import { elements } from "./elements.js";
 import { normalizedSource } from "./editor.js";
-import { t } from "./language.js";
+import { t } from "../shared/site.js";
 import { setRunMeta, setRunMetaSuffix } from "./output.js";
 import { renderDiagnostics } from "./problems.js";
 import { state } from "./state.js";

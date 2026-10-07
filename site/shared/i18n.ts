@@ -1,15 +1,20 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// The page's own strings. Compiler diagnostics arrive from the compiler's
-// catalogs and keep whatever language the compiler was built for; these
-// cover the chrome around them.
+// The site's own strings: the playground's chrome, the shell that every
+// page shares, and the guide's navigation labels. Compiler diagnostics
+// arrive from the compiler's catalogs and keep whatever language the
+// compiler was built for; these cover everything around them.
 //
 // Adding a language means one catalog here and one entry in `LANGUAGES`;
-// `data-i18n` attributes in index.html and `t()` calls in app.js are the
-// only consumers.
+// `data-i18n` attributes in the pages and `t()` calls in the scripts are
+// the only consumers.
 
 const en = {
+  "site.guide": "Guide",
+  "site.playground": "Playground",
+  "site.previous": "Previous",
+  "site.next": "Next",
   "label.example": "Example",
   "label.theme": "Theme",
   "label.language": "Language",
@@ -64,7 +69,7 @@ const en = {
   "meta.notRunnable": "not runnable",
   "program.timedOut": "program did not finish within {seconds} s and was terminated",
   "compiler.missing":
-    "the compiler wasm module could not be loaded{detail}. Build it with `uv run ./tools/playground.py build` and serve the result.",
+    "the compiler wasm module could not be loaded{detail}. Build it with `uv run ./tools/site.py build` and serve the result.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -72,6 +77,10 @@ export type MessageParams = Record<string, string | number>;
 
 const ja: Record<MessageKey, string> = {
   "label.example": "例",
+  "site.guide": "ガイド",
+  "site.playground": "プレイグラウンド",
+  "site.previous": "前へ",
+  "site.next": "次へ",
   "label.theme": "テーマ",
   "label.language": "言語",
   "language.auto": "自動",
@@ -125,7 +134,7 @@ const ja: Record<MessageKey, string> = {
   "meta.notRunnable": "実行不可",
   "program.timedOut": "プログラムが {seconds} 秒以内に終了しなかったため停止しました",
   "compiler.missing":
-    "コンパイラの wasm モジュールを読み込めませんでした{detail}。`uv run ./tools/playground.py build` でビルドしてから配信してください。",
+    "コンパイラの wasm モジュールを読み込めませんでした{detail}。`uv run ./tools/site.py build` でビルドしてから配信してください。",
 };
 
 export type Language = "en" | "ja";

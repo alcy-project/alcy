@@ -1,10 +1,12 @@
 # The alcy playground
 
 A browser playground for alcy: edit a program, have it checked, and run it,
-with no server behind the page. The site is plain HTML, CSS, and
-JavaScript; the compiler is the project's own wasm module, built without
-LLVM through the direct wasm backend described in
+with no server behind the page. The page is plain HTML, CSS, and
+TypeScript, and the compiler is the project's own wasm module, built
+without LLVM through the direct wasm backend described in
 [ADR-0049](../../docs/adr/0049-the-direct-backends-and-the-playground.md).
+It is one page of the site under `site/`; the theme, the language, and
+the shell around the pages live in `site/shared/`.
 
 The built site is deployed to GitHub Pages by
 [`.github/workflows/site.yaml`](../../.github/workflows/site.yaml).
@@ -27,15 +29,11 @@ The built site is deployed to GitHub Pages by
 - `session.ts` - the buffer and selected example kept in `localStorage`.
 - `status.ts` - the status line, the compiler indicator, and the Run
   button's busy state.
-- `tabs.ts`, `splitter.ts`, `theme.ts`, `language.ts` - the side panel's
-  tabs, the pane divider, the color theme, and the language.
+- `tabs.ts`, `splitter.ts` - the side panel's tabs and the pane divider.
 - `elements.ts`, `state.ts`, `types.ts` - the page's elements, its shared
   state, and the shapes that cross module boundaries.
 - `highlight.ts` - tree-sitter highlighting through `web-tree-sitter`.
 - `textutil.ts` - byte-offset to UTF-16 conversion for diagnostics.
-- `i18n.ts` - the page's own strings, in English and Japanese. Adding a
-  language is one catalog there; the `data-i18n` attributes and `t()`
-  calls are the only consumers.
 - `wasm-api.ts` - the JavaScript side of the compiler's C ABI.
 - `compiler.worker.ts` - owns the compiler wasm module (expensive to load,
   reused across requests).
@@ -47,10 +45,11 @@ The built site is deployed to GitHub Pages by
   them. An entry either names a file here or points at a program under the
   repository's `samples/` suite, which is copied under its site name.
 
-The sources are TypeScript. `tools/site.py build` compiles them to
-`site/playground/build/` with the pinned `tsc` and copies the JavaScript
+The sources are TypeScript. `tools/site.py build` compiles the whole site
+at once to `site/build/` with the pinned `tsc` and copies the JavaScript
 and its source maps into `site/dist/playground/` next to the generated
-pieces. The build output and the vendored binding types are not committed.
+pieces (`site/shared/*.ts` lands in `site/dist/shared/`). The build output
+and the vendored binding types are not committed.
 
 ## Building and serving
 
@@ -82,19 +81,22 @@ first; `--compiler-dir` points it at artifacts somewhere else.
 The assembled page is:
 
 ```text
-site/dist/playground/
-  index.html, style.css, app.js, app.js.map, ...
-  compiler/   alcy_playground.js, alcy_playground.wasm
-  vendor/     web-tree-sitter.js, web-tree-sitter.wasm
-  grammar/    tree-sitter-alcy.wasm, highlights.scm
-  samples/    index.json and the example programs
+site/dist/
+  index.html                          the landing page
+  shared/     boot.js, site.css, site.js, shell.js
+  playground/
+    index.html, style.css, app.js, app.js.map, ...
+    compiler/   alcy_playground.js, alcy_playground.wasm
+    vendor/     web-tree-sitter.js, web-tree-sitter.wasm
+    grammar/    tree-sitter-alcy.wasm, highlights.scm
+    samples/    index.json and the example programs
 ```
 
 ## What the page expects from the compiler module
 
 The module's C ABI is `AlcyResult`, `alcy_check`, `alcy_compile`, and
 `alcy_release`, defined in `compiler/playground/playground.h`;
-`wasm-api.js` carries the site's copy of the struct layout (wasm32:
+`wasm-api.ts` carries the site's copy of the struct layout (wasm32:
 four-byte pointers, no padding) and is the file to touch if the header
 changes. `alcy_compile` returns the program as a final wasm module, not an
 object, and `diagnostics` is the `--json` envelope's diagnostic array as
