@@ -1,6 +1,7 @@
 # ir
 
-Intermediate representation: storage, builder, and verifier.
+Intermediate representation: storage, builder, verifier, and the name
+table the storage's `StringPoolId`s resolve in.
 
 `Storage` is dense index-addressed tables (functions, blocks,
 instructions, operands, registers, types and composite metadata).
@@ -19,6 +20,11 @@ is the structural checker both build-time and test-time use.
   consumers that require valid IR (`LoweredPackage::storage`, the
   emitter) hold the proof instead of re-verifying. `unwrap()` moves
   the storage out and consumes the proof.
+- `SymbolTable::try_intern(name)` -> the handle for a name whose bytes
+  outlive the table; `intern_copied` for one whose bytes do not;
+  `get(id)` reads a name back. A name parsed out of a source is held
+  as a view of the bytes that spell it, and a table that reaches its
+  name budget is reported rather than left to exhaust memory.
 
 ## Input requirements
 

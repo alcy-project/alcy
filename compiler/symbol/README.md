@@ -1,7 +1,6 @@
 # symbol
 
-Symbol names: the table a run interns them in, and the mangling of
-linker-visible ones.
+Symbol mangling for linker-visible names.
 
 Every symbol the compiler defines is encoded deterministically
 (`_A` + version + kind + path + generics), so a source name can

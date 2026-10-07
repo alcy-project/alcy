@@ -280,9 +280,13 @@ allocation behavior predictable.
 - **Arenas & bump allocators**: AST/IR nodes, symbols, and instruction
   structures are allocated sequentially within fixed-size, chunked bump
   arenas (`core::bump_arena`) rather than by individual `new`/`delete`.
-- **Identifier interning**: String literals and symbol names are interned
-  during lexing into the compiler's string storage and referenced elsewhere
-  through 32-bit `SymbolId` handles.
+- **Identifier interning**: A run interns each distinct name once in the
+  IR's name table (`ir::SymbolTable`) and refers to it through a 32-bit
+  `str::StringPoolId`. A name parsed from a source is held as a view of
+  the bytes that spell it; only names whose bytes do not outlive the call
+  -- a decoded string literal, a synthesized message -- are copied. The
+  empty name has the id default-constructed handles carry, and a table
+  that reaches its budget is reported rather than left to exhaust memory.
 - **Per-file lifetime resets**: The pipeline clears the underlying bump arena
   at defined phase boundaries between files, eliminating individual node
   deallocation.
@@ -387,7 +391,7 @@ that happens to read them.
 3. **Semantic analysis** - `analyzer` resolves names and checks types on
    the attributed AST:
 
-   - **Name resolution**: mapping interned `SymbolId`s to declarations.
+   - **Name resolution**: mapping names to declarations.
    - **Type checking**: computing and verifying type signatures.
 
 4. **Lowering** - `lowering` turns the checked package into IR, consuming
