@@ -89,3 +89,23 @@ impl String {
     unsafe { dealloc(self.buf, self.cap) }
   }
 }
+
+// `s[i]` reads a byte and `s[i] = b` writes one, panicking past the
+// end the way array indexing does.
+impl Index<usize, u8> for String {
+  fn index(self: &Self, i: usize) -> &u8 {
+    if i >= self.len {
+      panic("String index out of bounds")
+    }
+    ret uninit_ref(unsafe { elem_ref(self.buf, i) })
+  }
+}
+
+impl IndexMut<usize, u8> for String {
+  fn index_mut(mut self: &mut Self, i: usize) -> &mut u8 {
+    if i >= self.len {
+      panic("String index out of bounds")
+    }
+    ret unsafe { uninit_assume(elem_ptr(self.buf, i)) }
+  }
+}

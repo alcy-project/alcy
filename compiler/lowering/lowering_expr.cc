@@ -344,6 +344,10 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
     }
     case ast::ExprKind::Index: {
       const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
+      if (const analyzer::CheckedModule::CallTarget* target = call_target(expr);
+          target != nullptr) {
+        return lower_spec_index(expr, target, true);
+      }
       Val base = place_addr(index.receiver);
       if (failed) {
         return base;
@@ -2424,6 +2428,57 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   return Val{to_operand(dst, info.ret), info.ret, false, false};
 }
 
+Val Lowerer::lower_spec_index(ast::ExprIdx expr,
+                              const analyzer::CheckedModule::CallTarget* target,
+                              bool as_place) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
+  const analyzer::CheckedModule& def = pkg.modules[target->module];
+  const analyzer::CheckedModule::MethodInfo& info = def.methods[target->index];
+  // The canonical declaration has no comp parameter, so the call is an
+  // ordinary one.
+  if (!comp_positions(info.item).empty()) {
+    internal(node.span, "comp index method");
+    return Val{size_one, error_type(), as_place, false};
+  }
+  // A reference receiver borrows the place it names; anything else
+  // evaluates to a value first, exactly like a method call.
+  Val receiver =
+      is_ref_tag(tag_of(info.params[0])) && is_rooted_place(index.receiver)
+          ? place_addr(index.receiver)
+          : lower_expr(index.receiver, nullptr);
+  if (failed) {
+    return Val{size_one, error_type(), as_place, false};
+  }
+  const ir::FunctionIdx fn = fn_index(
+      target->module, info.item, info.name, info.params, info.ret,
+      callee_inst(target), std::vector<CompVal>{}, ir::SymbolKind::Method);
+  if (!fn.is_valid()) {
+    return Val{size_one, error_type(), as_place, false};
+  }
+  Val arg = lower_expr(index.index, &info.params[1]);
+  if (failed) {
+    return Val{size_one, error_type(), as_place, false};
+  }
+  std::vector<ir::OperandIdx> ops;
+  ops.push_back(builder.operand(ir::Operand::from_function(
+      fn, builder.primitive(ir::TypeTag::Function))));
+  ops.push_back(arg_for(receiver, info.params[0]));
+  ops.push_back(arg_for(arg, info.params[1]));
+  const ir::RegisterIdx dst = emit(ir::Opcode::Call, info.ret, ops);
+  const ir::TypeTag ret_tag = tag_of(info.ret);
+  if (ret_tag != ir::TypeTag::Ref && ret_tag != ir::TypeTag::MutRef) {
+    internal(node.span, "index method without a reference result");
+    return Val{size_one, error_type(), as_place, false};
+  }
+  // The returned reference is the element's address, the way a
+  // dereference names the place a pointer points at.
+  const ir::TypeIdx element =
+      builder.ref_types()[builder.types()[info.ret.idx].as_ref()].pointee;
+  const Val place{to_operand(dst, info.ret), element, true, true};
+  return as_place ? place : materialize(place);
+}
+
 // Address of `base.name`: sees through references to the nominal
 // carrying the field. Works for values and places alike.
 Val Lowerer::field_addr(Val base, std::string_view name, diag::Span span) {
@@ -3465,6 +3520,10 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     case ast::ExprKind::Index: {
       const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
+      if (const analyzer::CheckedModule::CallTarget* target = call_target(expr);
+          target != nullptr) {
+        return lower_spec_index(expr, target, false);
+      }
       if (is_range_type(expr_type(index.index))) {
         Val base = lower_expr(index.receiver, nullptr);
         if (failed) {

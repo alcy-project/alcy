@@ -84,6 +84,9 @@ enum class DiagCode : u8 {
   // An implementation of a spec has no implementation of one of its
   // super-specs for the same target.
   SpecSuperMissing = 41,
+  // A staged declaration of a compiler-owned operator spec does not
+  // match the canonical shape the operator's meaning fixes.
+  SpecCanonicalShape = 42,
 };
 
 }  // namespace analyzer

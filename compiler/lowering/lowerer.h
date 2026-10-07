@@ -415,6 +415,13 @@ class Lowerer {
   void emit_panic(ir::OperandIdx message);
   ir::OperandIdx str_operand(std::string_view message);
   Val lower_method_call(ast::ExprIdx expr);
+  // `a[i]` where the checker resolved an `Index`/`IndexMut` impl: the
+  // recorded call becomes a method call whose result reference is the
+  // place of the element. `as_place` keeps that place; otherwise the
+  // element is loaded.
+  Val lower_spec_index(ast::ExprIdx expr,
+                       const analyzer::CheckedModule::CallTarget* target,
+                       bool as_place);
   Val field_addr(Val base, std::string_view name, diag::Span span);
   Val lower_struct(ast::ExprIdx expr);
   Val lower_tuple(ast::ExprIdx expr);

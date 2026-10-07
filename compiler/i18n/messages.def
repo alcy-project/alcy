@@ -151,6 +151,7 @@
   F(AnalyzerGenericImplUnsupported, "Generic impl blocks are not supported") \
   F(AnalyzerIfWithoutElse, "If without else yields '()'") \
   F(AnalyzerImportNotQualified, "Imports must be module-qualified (`self::foo`)") \
+  F(AnalyzerIndexMissingImpl, "Type does not implement the '{}' spec") \
   F(AnalyzerInherentImplNeedsNominalType, "Inherent impl requires a nominal type") \
   F(AnalyzerIntegerSuffixOnFloat, "Integer suffix on a float literal") \
   F(AnalyzerIntrinsicMissingUnsafe, "Intrinsic '{}' is unsafe; declare it `unsafe`") \
@@ -197,6 +198,7 @@
   F(AnalyzerRootModuleHasNoParent, "The root module has no parent") \
   F(AnalyzerSelfOutsideImpl, "Self outside of an impl block") \
   F(AnalyzerSourceFileHasNoModule, "Source file '{}' has no module") \
+  F(AnalyzerSpecCanonicalShape, "Spec '{}' must keep the compiler's operator shape") \
   F(AnalyzerSpecMethodTypeParameters, "Spec method '{}' must not declare type parameters") \
   F(AnalyzerSpecRequiresNominalTarget, "Spec implementation requires a nominal type") \
   F(AnalyzerSpecSealed, "Spec '{}' is sealed by package '{}'; implementing it from outside needs the [spec] implement key, which is not accepted yet") \

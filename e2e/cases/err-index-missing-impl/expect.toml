@@ -1,0 +1,4 @@
+# A nominal type indexes only through an `Index` implementation, and
+# `Grid` has none; a type without one is not indexable (ADR-0053).
+exit = 4
+contains = ["Type does not implement the 'Index' spec"]

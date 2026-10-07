@@ -1866,6 +1866,10 @@ ir::TypeIdx Checker::check_index(u32 module,
     }
     return run;
   }
+  if (!is_error(index_nominal(receiver))) {
+    return check_spec_index(module, expr, receiver, position, index.index,
+                            expected, false);
+  }
   return check_element_index(receiver, position, index.index, expected,
                              node.span);
 }
@@ -1908,6 +1912,65 @@ ir::TypeIdx Checker::check_element_index(ir::TypeIdx receiver,
       span, pretty_tag(tag_of(receiver)));
   (void)diag;
   return error_type();
+}
+
+ir::TypeIdx Checker::check_spec_index(u32 module,
+                                      ast::ExprIdx expr,
+                                      ir::TypeIdx receiver,
+                                      ir::TypeIdx position,
+                                      ast::ExprIdx index_expr,
+                                      const ir::TypeIdx* expected,
+                                      bool mutating) {
+  const ir::TypeIdx nominal = index_nominal(receiver);
+  if (is_error(nominal)) {
+    return error_type();
+  }
+  // The operator reaches the compiler's spec by identity, so it does
+  // not need `Index` in scope; the spec only exists when the standard
+  // library is staged.
+  const std::string_view spec_name = mutating ? "IndexMut" : "Index";
+  const std::string_view method_name = mutating ? "index_mut" : "index";
+  const u32 spec = operator_spec(spec_name);
+  const CheckedModule::MethodInfo* method =
+      spec == U32_MAX ? nullptr
+                      : lookup_method(nominal, method_name, module,
+                                      ast.exprs[expr].span, true, spec);
+  if (method == nullptr ||
+      method->receiver == CheckedModule::ReceiverKind::None ||
+      method->params.size() != 2) {
+    const u32 diag = bag.emit<i18n::Key::AnalyzerIndexMissingImpl>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::InvalidOperation, ast.exprs[index_expr].span, spec_name);
+    (void)diag;
+    return error_type();
+  }
+  // The spec fixes the index type, so a bare literal adopts it rather
+  // than keeping the default it was checked with.
+  if (!types_equal(method->params[1], position) &&
+      is_integer_tag(tag_of(method->params[1])) &&
+      is_bare_int_literal(index_expr)) {
+    position = check_expr(module, index_expr, &method->params[1]);
+    if (is_error(position)) {
+      return error_type();
+    }
+  }
+  if (is_error(unify(method->params[1], position, ast.exprs[index_expr].span,
+                     "index"))) {
+    return error_type();
+  }
+  const ir::TypeTag ret_tag = tag_of(method->ret);
+  if (ret_tag != ir::TypeTag::Ref && ret_tag != ir::TypeTag::MutRef) {
+    return error_type();
+  }
+  // The operator names the element, the way `a[i]` over an array does;
+  // the implementation's reference is the place behind it.
+  const ir::TypeIdx element =
+      builder.ref_types()[builder.types()[method->ret.idx].as_ref()].pointee;
+  record_call(module, expr, method);
+  if (expected != nullptr) {
+    return unify(*expected, element, ast.exprs[expr].span, "index");
+  }
+  return element;
 }
 
 ir::TypeIdx Checker::check_run_index(ir::TypeIdx receiver,
@@ -2076,10 +2139,18 @@ ir::TypeIdx Checker::check_borrow_of_index(u32 module,
       return error_type();
     }
   } else {
-    pointee =
-        check_element_index(receiver, position, index.index, nullptr, span);
-    if (is_error(pointee)) {
-      return error_type();
+    if (!is_error(index_nominal(receiver))) {
+      pointee = check_spec_index(module, borrow.inner, receiver, position,
+                                 index.index, nullptr, borrow.is_mut);
+      if (is_error(pointee)) {
+        return error_type();
+      }
+    } else {
+      pointee =
+          check_element_index(receiver, position, index.index, nullptr, span);
+      if (is_error(pointee)) {
+        return error_type();
+      }
     }
   }
   // The operands were checked here rather than through `check_expr` on
@@ -2980,6 +3051,10 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
             DiagCode::BadAssignment, node.span);
         (void)diag;
         return error_type();
+      }
+      if (!is_error(index_nominal(receiver))) {
+        return check_spec_index(module, place, receiver, position, index.index,
+                                nullptr, true);
       }
       return check_element_index(receiver, position, index.index, nullptr,
                                  node.span);

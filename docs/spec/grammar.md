@@ -119,7 +119,9 @@ Declaration left-hand sides use this grammar with `:=`
   so in prefix position the pair is two dereferences.
 - A turbofish supplies explicit type arguments to a generic call;
   without one, the parameters bind from the argument types.
-- Array indexing is builtin with panic-on-out-of-bounds semantics.
+- Array indexing is builtin with panic-on-out-of-bounds semantics;
+  indexing a nominal type resolves through the sealed `Index` and
+  `IndexMut` specs (see `types.md`).
 - Calls to `panic(...)` diverge with type `!`.
 - `unsafe { ... }` opens the gate for the operations inside and
   evaluates to the block's value; everything inside is checked as

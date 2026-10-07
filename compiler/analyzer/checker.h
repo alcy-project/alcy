@@ -251,6 +251,9 @@ class Checker {
   // in the same module, duplicate methods, and method-level type
   // parameters, which arrive with bounds.
   void register_spec(u32 module, ast::ItemIdx item);
+  // Verifies a staged operator spec against the compiler's canonical
+  // table (ADR-0053); true for every other spec.
+  bool check_operator_spec(const ast::ItemSpec& declaration);
   // Registers one `impl S for T`: resolves the spec and the target,
   // enforces coherence, and checks the methods against the declared
   // signatures. Generic targets defer bodies to call-site
@@ -465,7 +468,14 @@ class Checker {
                                                  std::string_view name,
                                                  u32 module,
                                                  diag::Span span,
-                                                 bool spec_only);
+                                                 bool spec_only,
+                                                 u32 spec_filter = U32_MAX);
+  // The compiler-owned operator spec `name` declared in staged core, or
+  // U32_MAX when the standard library is not staged or declares none.
+  u32 operator_spec(std::string_view name) const;
+  // The nominal an index receiver names, looking through one reference,
+  // or an error type when the receiver is no nominal.
+  ir::TypeIdx index_nominal(ir::TypeIdx receiver);
   const CheckedModule::MethodInfo* instantiate_method(
       u32 impl_module,
       ir::TypeIdx self_type,
@@ -684,6 +694,17 @@ class Checker {
   ir::TypeIdx check_index(u32 module,
                           ast::ExprIdx expr,
                           const ir::TypeIdx* expected);
+  // `a[i]` where the receiver is a nominal type: resolves the `Index`
+  // or `IndexMut` spec implementation, checks the index argument
+  // against the spec's parameter, and records the call lowering emits.
+  // `mutating` selects the spec, which is what a place position needs.
+  ir::TypeIdx check_spec_index(u32 module,
+                               ast::ExprIdx expr,
+                               ir::TypeIdx receiver,
+                               ir::TypeIdx position,
+                               ast::ExprIdx index_expr,
+                               const ir::TypeIdx* expected,
+                               bool mutating);
   // Element access: `receiver[integer]`, already checked. The expected
   // type, when given, is the element type.
   ir::TypeIdx check_element_index(ir::TypeIdx receiver,

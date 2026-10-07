@@ -204,6 +204,115 @@ bool Checker::spec_in_scope(u32 module, const SpecEntry& spec) {
   return false;
 }
 
+// A bare path `Name`, or empty when `type` is anything else.
+static std::string_view bare_path_name(const ast::AstArena& ast,
+                                       ast::TypeIdx type) {
+  if (!type.is_valid()) {
+    return {};
+  }
+  const ast::TypeNode& node = ast.types[type];
+  if (node.kind != ast::TypeKind::Path) {
+    return {};
+  }
+  const ast::TypePath& path = node.payload.get<ast::TypePath>();
+  const std::span<const ast::Ident> segments = ast.paths[path.path].segments;
+  if (segments.size() != 1 || !path.args.empty()) {
+    return {};
+  }
+  return segments[0].name;
+}
+
+// Whether `type` is `&T` or `&mut T` over the bare path `name`.
+static bool is_ref_to(const ast::AstArena& ast,
+                      ast::TypeIdx type,
+                      bool is_mut,
+                      std::string_view name) {
+  if (!type.is_valid()) {
+    return false;
+  }
+  const ast::TypeNode& node = ast.types[type];
+  if (node.kind != ast::TypeKind::Ref) {
+    return false;
+  }
+  const ast::TypeRef& ref = node.payload.get<ast::TypeRef>();
+  return ref.is_mut == is_mut && bare_path_name(ast, ref.inner) == name;
+}
+
+bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
+  // The compiler owns the operator specs (ADR-0053): their declared
+  // shape is part of the operator's meaning, so a staged declaration
+  // that does not match the canonical shape is an error rather than a
+  // different operator.
+  struct Canonical {
+    std::string_view spec;
+    std::string_view method;
+    bool mut_receiver;
+  };
+  static constexpr Canonical CANONICAL[] = {
+      {"Index", "index", false},
+      {"IndexMut", "index_mut", true},
+  };
+  const Canonical* canonical = nullptr;
+  for (const Canonical& candidate : CANONICAL) {
+    if (candidate.spec == declaration.name.name) {
+      canonical = &candidate;
+      break;
+    }
+  }
+  if (canonical == nullptr) {
+    return true;
+  }
+  const auto wrong = [&]() {
+    const u32 index = bag.emit<i18n::Key::AnalyzerSpecCanonicalShape>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::SpecCanonicalShape, declaration.name.span,
+        declaration.name.name);
+    (void)index;
+    return false;
+  };
+  // `<I, O>` with one method taking `&Self` and `I` and returning
+  // `&O` (`&mut` on receiver and result for the mutating form).
+  if (declaration.params.size() != 2 || declaration.methods.size() != 1) {
+    return wrong();
+  }
+  const ast::SpecMethod& method = declaration.methods[0];
+  if (method.name.name != canonical->method || method.is_unsafe ||
+      !method.generic.empty() || method.params.size() != 2) {
+    return wrong();
+  }
+  if (!is_ref_to(ast, method.params[0].type, canonical->mut_receiver, "Self")) {
+    return wrong();
+  }
+  if (bare_path_name(ast, method.params[1].type) !=
+      declaration.params[0].name) {
+    return wrong();
+  }
+  return is_ref_to(ast, method.return_type, canonical->mut_receiver,
+                   declaration.params[1].name);
+}
+
+u32 Checker::operator_spec(std::string_view name) const {
+  for (u32 i = 0; i < static_cast<u32>(specs.size()); ++i) {
+    if (specs[i].name == name && tree.is_staged_item("core", specs[i].item)) {
+      return i;
+    }
+  }
+  return U32_MAX;
+}
+
+ir::TypeIdx Checker::index_nominal(ir::TypeIdx receiver) {
+  ir::TypeIdx inner = receiver;
+  const ir::TypeTag tag = tag_of(inner);
+  if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
+    inner = builder.ref_types()[builder.types()[inner.idx].as_ref()].pointee;
+  }
+  const ir::TypeTag inner_tag = tag_of(inner);
+  if (inner_tag != ir::TypeTag::Struct && inner_tag != ir::TypeTag::Enum) {
+    return error_type();
+  }
+  return inner;
+}
+
 void Checker::register_spec(u32 module, ast::ItemIdx item) {
   const ast::ItemNode& node = ast.items[item];
   const ast::ItemSpec& spec = node.payload.get<ast::ItemSpec>();
@@ -251,6 +360,13 @@ void Checker::register_spec(u32 module, ast::ItemIdx item) {
   }
   specs.push_back(SpecEntry{module, spec.name.name, item, node.span});
   specs_of_module[module].push_back(static_cast<u32>(specs.size() - 1));
+  // The compiler owns the operator specs (ADR-0053): a staged core
+  // declaration must keep the canonical shape. It still registers, so
+  // a wrong shape is one diagnostic rather than a flood of unresolved
+  // names at every use.
+  if (tree.is_staged_item("core", item)) {
+    (void)check_operator_spec(spec);
+  }
 }
 
 bool Checker::spec_method_sig(u32 spec,
@@ -3210,7 +3326,8 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
                                                         std::string_view name,
                                                         u32 module,
                                                         diag::Span span,
-                                                        bool spec_only) {
+                                                        bool spec_only,
+                                                        u32 spec_filter) {
   if (!spec_only) {
     if (const CheckedModule::MethodInfo* inherent =
             lookup_inherent_method(self, name)) {
@@ -3253,7 +3370,12 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
     if (!shape_ok) {
       continue;
     }
-    if (!spec_in_scope(module, specs[entry.spec])) {
+    if (spec_filter != U32_MAX && entry.spec != spec_filter) {
+      continue;
+    }
+    // An operator reaches the compiler's spec by identity, so it needs
+    // no `use`; every other spec lookup follows scope.
+    if (spec_filter == U32_MAX && !spec_in_scope(module, specs[entry.spec])) {
       continue;
     }
     const CheckedModule::MethodInfo* candidate = nullptr;

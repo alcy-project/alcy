@@ -274,3 +274,17 @@ impl<V> Map<V> {
     unsafe { dealloc(self.states, self.cap) }
   }
 }
+
+// `m[key]` reads and writes the value under `key`, panicking when the
+// key is absent.
+impl<V> Index<str, V> for Map<V> {
+  fn index(self: &Self, i: str) -> &V {
+    ret self.get(i).unwrap()
+  }
+}
+
+impl<V> IndexMut<str, V> for Map<V> {
+  fn index_mut(mut self: &mut Self, i: str) -> &mut V {
+    ret self.get_mut(i).unwrap()
+  }
+}

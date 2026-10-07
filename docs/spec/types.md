@@ -47,6 +47,21 @@
   bounds-checked and the run must be ordered, else the program panics
   with "slice out of bounds".
 
+## Indexing over specs
+
+- `a[i]` over a nominal type resolves through the sealed `Index` spec:
+  the implementation picks the index and element types, the element is
+  the value the expression names, and a miss panics the way array
+  indexing does. `a[i] = v` and `&mut a[i]` resolve through
+  `IndexMut`; `&a[i]` reads through `Index`. Arrays and slices keep
+  their builtin indexing, and a nominal type with no implementation is
+  not indexable. See `docs/adr/0053-operators-are-sealed-specs.md`.
+- The standard containers implement the pair: `Vec<T>` with `usize`
+  and `T`, `String` with `usize` and `u8`, and `Map<V>` with `str` and
+  `V`. The specs are sealed to the `alcy/std` suite, so the operator
+  covers these types and no others until the implementing-side
+  manifest key ships (see `deferred.md`).
+
 ## Text (staged)
 
 - The compiler-known text type is `str`: byte sequences backing
