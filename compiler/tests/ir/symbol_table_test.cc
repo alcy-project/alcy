@@ -81,4 +81,67 @@ TEST_CASE("An id this table did not mint reads as no name") {
   CHECK(table.get(str::StringPoolId{1000}).empty());
 }
 
+TEST_CASE("A grown table keeps every handle and the views behind them") {
+  SymbolTable table;
+  // A view interned before the growth; growing moves slots, not names,
+  // so its bytes must still be the buffer's own.
+  static constexpr std::string_view VIEW_NAME = "before_the_growth";
+  const auto view_id = table.try_intern(VIEW_NAME);
+  CHECK(view_id.has_value());
+
+  // Four thousand names cannot fit sixty-four shards of sixteen slots
+  // without some shard passing its half-full mark, whatever the hash
+  // spreads them over, so the rehash path runs here.
+  constexpr u32 NAME_COUNT = 4096;
+  std::vector<std::string> names;
+  names.reserve(NAME_COUNT);
+  for (u32 i = 0; i < NAME_COUNT; ++i) {
+    names.push_back("grown_" + std::to_string(i));
+  }
+  std::vector<str::StringPoolId> ids;
+  ids.reserve(NAME_COUNT);
+  for (const std::string& name : names) {
+    const auto id = table.intern_copied(name);
+    CHECK(id.has_value());
+    ids.push_back(id.value_or(NO_ID));
+  }
+
+  CHECK(table.count() == NAME_COUNT + 2);
+  for (u32 i = 0; i < NAME_COUNT; ++i) {
+    CHECK(table.get(ids[i]) == names[i]);
+    // A lookup that probed through the grown slots answers with the
+    // handle the insert returned.
+    CHECK(table.try_intern(names[i]).value_or(NO_ID) == ids[i]);
+  }
+  CHECK(table.get(view_id.value_or(NO_ID)) == VIEW_NAME);
+  CHECK(table.get(view_id.value_or(NO_ID)).data() == VIEW_NAME.data());
+}
+
+TEST_CASE("A table at its limit refuses the next name") {
+  // The empty name holds one of the four slots, so three are left.
+  SymbolTable table(4);
+  const auto a = table.try_intern("a");
+  const auto b = table.intern_copied("b");
+  const auto c = table.try_intern("c");
+  CHECK(a.has_value());
+  CHECK(b.has_value());
+  CHECK(c.has_value());
+  // Neither path takes a name past the limit, and a refused name leaves
+  // the table as it was.
+  CHECK(!table.try_intern("d").has_value());
+  CHECK(!table.intern_copied("d").has_value());
+  CHECK(table.count() == 4);
+  CHECK(table.get(a.value_or(NO_ID)) == "a");
+  CHECK(table.get(b.value_or(NO_ID)) == "b");
+  CHECK(table.get(c.value_or(NO_ID)) == "c");
+  CHECK(table.get(str::EMPTY_STRING_ID).empty());
+}
+
+TEST_CASE("A table sized for the empty name alone holds nothing else") {
+  SymbolTable table(1);
+  CHECK(table.count() == 1);
+  CHECK(!table.try_intern("a").has_value());
+  CHECK(table.get(str::EMPTY_STRING_ID).empty());
+}
+
 }  // namespace
