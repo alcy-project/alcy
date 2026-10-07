@@ -6,8 +6,6 @@ replaced. The foundations are in `roadmap.md`.
 ## Open
 
 - [ ] Doc-comment collection in the parser (the SSG itself waits).
-- [ ] alcy IR text format: define, serialize, deserialize; ahead of
-  `--emit=ir` and any cache.
 - [ ] Link-time measurement: a benchmark reporting where a link goes —
   driver startup, the object write, the linker — and asserting nothing
   about wall time.
@@ -130,3 +128,7 @@ replaced. The foundations are in `roadmap.md`.
   Designed in `docs/adr/0050-unsafe-is-a-gate-on-operations.md`,
   `docs/adr/0051-extern-c-for-a-minimal-abi.md`, and
   `docs/adr/0052-freestanding-is-a-link-mode.md`.
+- [x] alcy IR format: define, serialize, deserialize; ahead of
+  `--emit=ir` and any cache. The text form is write-only by decision
+  (`docs/adr/0056-the-ir-has-a-text-and-a-binary-form.md`) and the
+  binary form round-trips byte for byte; the cache is still to come.
