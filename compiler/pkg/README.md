@@ -3,10 +3,21 @@
 Package model: the manifest and the toolchain file, and nothing a build
 does with them.
 
-- `manifest` parses `alcy.toml`-style manifests. Parsing reports
-  through the bag; `verify_manifest` is the pure structural check
-  (name present and valid, version parseable, targets well-formed)
-  that every entry point runs before trusting a manifest.
+- `manifest` parses `alcy.toml`-style manifests, package and suite
+  alike. A package declares `name`, `version`, `license`, and an
+  optional `owner`; a suite declares `name`, an optional `owner`,
+  an optional `version`, `license`, and its member paths. Identity
+  travels between manifests only when spelled: `version.suite = true`
+  (and the same for `owner` and `license`) takes the suite's value,
+  and `inherit_from_suite` fills those markers before
+  `verify_manifest` runs (ADR-0057). Parsing reports through the bag;
+  `verify_manifest` and `verify_suite_manifest` are the pure
+  structural checks (names present and valid, a resolved version,
+  targets well-formed, unique member paths and names) that every
+  entry point runs before trusting a manifest.
+- `version` and `version_req` parse strict `X.Y.Z` spellings and
+  dependency requirements (`1.2.x`, `1.x`, comparisons, comma
+  conjunction); the requirements expand to bounds at parse time.
 - `toolchain` parses `.alcy/toolchain.toml`: which driver links a
   binary and what arguments it is given.
 
@@ -32,10 +43,20 @@ fetcher that uses them.
 ## Entry points
 
 - `parse_manifest(bytes, file, bag)` ->
-  `base::Result<PackageManifest, diag::Reported>`.
+  `base::Result<PackageManifest, diag::Reported>` and
+  `parse_suite_manifest` for the suite shape.
 - `verify_manifest(manifest)` ->
   `base::Result<void, ManifestError>` (pure) with
-  `report_manifest_error` converting failures to bag diagnostics.
+  `report_manifest_error` converting failures to bag diagnostics;
+  `verify_suite_manifest` / `report_suite_error` are the same pair
+  for suites.
+- `inherit_from_suite(member, suite)` fills the `X.suite = true`
+  keys; `probe_manifest_kind(bytes)` says which shape a file opens
+  with, for a caller that has to choose a parser;
+  `suite_member_name(path)` is the name a member path is addressed
+  by.
+- `parse_version_req(text)` -> `base::Result<VersionReq, VersionReqError>`,
+  with each wildcard already expanded to the bounds it stands for.
 - `parse_toolchain(bytes, bag)` -> `base::Result<Toolchain, diag::Reported>`.
 - `parse_dependency_flag(bag, arena, "alcy/std/core")` parses one
   dependency the way the manifest grammar would, for `--deps`.
@@ -43,5 +64,11 @@ fetcher that uses them.
 ## Input requirements
 
 - Never trust a parsed or caller-built manifest without
-  `verify_manifest`: empty names, bad versions, and malformed
-  targets are rejected there, not at first use.
+  `verify_manifest`: empty names, missing versions, unresolved
+  inheritance, and malformed targets are rejected there, not at first
+  use. `license` is required but may be empty, which is how a package
+  grants nothing.
+- A manifest that spells `X.suite = true` must have a suite to
+  resolve against before verification; the caller that has the suite
+  calls `inherit_from_suite` first and reports through
+  `report_inherit_error`.

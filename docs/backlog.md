@@ -6,6 +6,9 @@ replaced. The foundations are in `roadmap.md`.
 ## Open
 
 - [ ] Doc-comment collection in the parser (the SSG itself waits).
+- [ ] Manifest lint: flag `0.x` dependency requirements. The grammar
+  accepts them, but a pre-1.0 minor may break, so the advice belongs
+  to a lint rather than to the parser (ADR-0057).
 - [ ] Link-time measurement: a benchmark reporting where a link goes —
   driver startup, the object write, the linker — and asserting nothing
   about wall time.
