@@ -143,6 +143,37 @@ TEST_CASE("A trace report keeps equal intervals as siblings") {
   CHECK(report.roots.size() == 2);
 }
 
+// Two intervals that can start in the same nanosecond nest one inside the
+// other, and the wider one is the container: a parent's start is stamped
+// before its child's, so a tie is the clock's, not the nesting's. Record
+// order is finish order, so the child is recorded first here.
+TEST_CASE("A trace report nests an interval that starts with its child") {
+  Recorded recorded;
+  add_event(recorded, "inner", "frontend", 10, 5);
+  add_event(recorded, "outer", "frontend", 10, 20);
+  add_event(recorded, "deepest", "frontend", 12, 2);
+
+  recorded.trace.events = recorded.events;
+  const TraceReport report = build_trace_report(recorded.trace);
+  CHECK(report.roots.size() == 1);
+  if (report.roots.size() != 1) {
+    return;
+  }
+  CHECK(recorded.profiler.name(report.roots[0].event.name) == "outer");
+  CHECK(report.roots[0].children.size() == 1);
+  if (report.roots[0].children.size() != 1) {
+    return;
+  }
+  CHECK(recorded.profiler.name(report.roots[0].children[0].event.name) ==
+        "inner");
+  CHECK(report.roots[0].children[0].children.size() == 1);
+  if (report.roots[0].children[0].children.size() != 1) {
+    return;
+  }
+  CHECK(recorded.profiler.name(
+            report.roots[0].children[0].children[0].event.name) == "deepest");
+}
+
 // The header names the amount of input the rows were pruned from, so a
 // reader can tell a quiet run from a pruned one.
 TEST_CASE("A trace report says how many events it read") {
