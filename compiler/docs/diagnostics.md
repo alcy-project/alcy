@@ -34,16 +34,16 @@ order. The first letters go to the components that report most, and a
 component that gains its first error does not renumber: `A` is the lexer
 partly because UTF-8 validation is coming and it should not have to move.
 
-| Letter | Component | Directory | Checks |
+| Letter | Component | Directory | Notes |
 | --- | --- | --- | --- |
-| `A` | lexer | `compiler/lexer` | 6 |
-| `B` | parser | `compiler/parser` | 8 |
-| `C` | analyzer | `compiler/analyzer` | 41 |
-| `D` | lowering | `compiler/lowering` | 7 |
-| `F` | borrow | `compiler/borrow` | 5 |
+| `A` | lexer | `compiler/lexer` | |
+| `B` | parser | `compiler/parser` | |
+| `C` | analyzer | `compiler/analyzer` | |
+| `D` | lowering | `compiler/lowering` | |
+| `F` | borrow | `compiler/borrow` | |
 | `G` | ir | `compiler/ir` | one per `VerificationErrorKind` |
-| `H` | pkg | `compiler/pkg` | 4 |
-| `I` | pipeline | `compiler/pipeline` | 16 |
+| `H` | pkg | `compiler/pkg` | |
+| `I` | pipeline | `compiler/pipeline` | |
 | `J` | codegen_llvm | `compiler/codegen_llvm` | reserved |
 | `K` | codegen | reserved for the native backend | reserved |
 
@@ -59,8 +59,8 @@ Each component counts its own from 1. Zero is never a check, so a
 diagnostic with no code is not a diagnostic with code zero. The width is
 fixed at three digits so codes sort in the order they were assigned,
 which is the order a report lists them in. 255 is the ceiling, which is
-what a `u8` id gives, and the widest component has 41; a component near
-the ceiling wants its checks split rather than a wider field.
+what a `u8` id gives; a component near it wants its checks split rather
+than a wider field.
 
 `ir` is the one component with no enum of its own. A code there is the
 `VerificationErrorKind`'s ordinal shifted by one, so a kind and its code
