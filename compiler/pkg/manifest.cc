@@ -126,31 +126,6 @@ base::Result<std::string_view, diag::Reported> dep_string(
   return base::make_ok(*value);
 }
 
-// A registry requirement is `=1.2.3`, `1.2`, or `1`: an optional `=`
-// followed by one to three dot-separated numbers. Anything else is a
-// range the resolver does not speak yet.
-bool valid_version_req(std::string_view text) {
-  usize at = 0;
-  if (at < text.size() && text[at] == '=') {
-    ++at;
-  }
-  for (u32 part = 0;; ++part) {
-    if (at >= text.size() || text[at] < '0' || text[at] > '9') {
-      return false;
-    }
-    while (at < text.size() && text[at] >= '0' && text[at] <= '9') {
-      ++at;
-    }
-    if (at == text.size()) {
-      return part <= 2;
-    }
-    if (text[at] != '.' || part >= 2) {
-      return false;
-    }
-    ++at;
-  }
-}
-
 base::Result<Dependency, diag::Reported> parse_dependency(
     diag::DiagBag& bag,
     std::string_view filename,
@@ -220,6 +195,7 @@ base::Result<Dependency, diag::Reported> parse_dependency(
         .source = DependencySource::Path,
         .path = copy_str(arena, std::move(path).unwrap()),
         .version = {},
+        .version_req = {},
         .git = {},
         .git_ref_kind = {},
         .git_ref = {},
@@ -293,11 +269,17 @@ base::Result<Dependency, diag::Reported> parse_dependency(
         DiagCode::ManifestSemanticError, filename, spec);
     return base::make_err(diag::Reported{});
   }
-  if (has_version && !valid_version_req(version_text)) {
-    bag.emit<i18n::Key::PkgDependencyBadVersion>(
-        diag::Severity::Error, diag::Stage::Pkg,
-        DiagCode::ManifestSemanticError, filename, spec);
-    return base::make_err(diag::Reported{});
+  VersionReq version_req;
+  if (has_version) {
+    base::Result<VersionReq, VersionReqError> parsed =
+        parse_version_req(version_text);
+    if (parsed.is_err()) {
+      bag.emit<i18n::Key::PkgDependencyBadVersion>(
+          diag::Severity::Error, diag::Stage::Pkg,
+          DiagCode::ManifestSemanticError, filename, spec);
+      return base::make_err(diag::Reported{});
+    }
+    version_req = std::move(parsed).unwrap();
   }
   Dependency dep{
       .spec = copy_str(arena, spec),
@@ -308,6 +290,7 @@ base::Result<Dependency, diag::Reported> parse_dependency(
       .source = DependencySource::Unspecified,
       .path = {},
       .version = {},
+      .version_req = version_req,
       .git = {},
       .git_ref_kind = {},
       .git_ref = {},

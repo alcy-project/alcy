@@ -158,7 +158,7 @@ TEST_CASE("Selection rejects sources it cannot fetch") {
     Fixture f;
     std::string bytes =
         "[package]\nname = \"x\"\nversion = \"0.1.0\"\n[dependencies]\n"
-        "\"acme/json\" = { version = \"1\" }\n";
+        "\"acme/json\" = { version = \"1.x\" }\n";
     base::Result<pkg::PackageManifest, diag::Reported> parsed =
         pkg::parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag,
                             f.arena);

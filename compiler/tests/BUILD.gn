@@ -60,6 +60,7 @@ executable("tests") {
     "pipeline/std_stage_test.cc",
     "pkg/manifest_test.cc",
     "pkg/toolchain_test.cc",
+    "pkg/version_req_test.cc",
     "playground/playground_test.cc",
     "property/mangle_property_test.cc",
     "source/source_test.cc",

@@ -10,6 +10,10 @@ source_set("pkg") {
     "manifest.h",
     "toolchain.cc",
     "toolchain.h",
+    "version.cc",
+    "version.h",
+    "version_req.cc",
+    "version_req.h",
   ]
   deps = [
     "//compiler:base_modules",

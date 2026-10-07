@@ -479,7 +479,13 @@ TEST_CASE("Manifest semantic errors are diagnosed") {
   CHECK(parse_manifest(registry_dep, "alcy.toml", source::UNKNOWN_FILE, f.bag,
                        f.arena)
             .is_err());
-  CHECK(f.bag.error_count() == 4);
+  constexpr std::string_view bad_req =
+      "[package]\nname = \"x\"\nversion = \"0.1.0\"\n"
+      "[dependencies]\nfoo = { version = \"1.2\" }\n";
+  CHECK(
+      parse_manifest(bad_req, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena)
+          .is_err());
+  CHECK(f.bag.error_count() == 5);
 }
 
 namespace {
@@ -530,7 +536,7 @@ TEST_CASE("Manifest parses registry and git sources") {
   Fixture f;
   constexpr std::string_view bytes =
       "[package]\nname = \"x\"\nversion = \"0.1.0\"\n[dependencies]\n"
-      "\"acme/json\" = { version = \"1\" }\n"
+      "\"acme/json\" = { version = \"1.x\" }\n"
       "\"acme/exact\" = { version = \"=2.3.4\" }\n"
       "\"acme/tool\" = { git = \"https://example.com/t.git\", "
       "path = \"pkg/tool\" }\n"
@@ -545,7 +551,20 @@ TEST_CASE("Manifest parses registry and git sources") {
   // Key-sorted: exact, json, local, pinned, tool.
   CHECK(manifest.dependencies[0].source == DependencySource::Registry);
   CHECK(manifest.dependencies[0].version == "=2.3.4");
-  CHECK(manifest.dependencies[1].version == "1");
+  CHECK(manifest.dependencies[0].version_req.count == 1);
+  CHECK(manifest.dependencies[0].version_req.bounds[0].op == VersionOp::Equal);
+  CHECK(manifest.dependencies[0].version_req.bounds[0].version ==
+        Version{2, 3, 4});
+  CHECK(manifest.dependencies[1].version == "1.x");
+  // A wildcard reaches the parser as the two bounds it stands for.
+  CHECK(manifest.dependencies[1].version_req.count == 2);
+  CHECK(manifest.dependencies[1].version_req.bounds[0].op ==
+        VersionOp::GreaterEqual);
+  CHECK(manifest.dependencies[1].version_req.bounds[0].version ==
+        Version{1, 0, 0});
+  CHECK(manifest.dependencies[1].version_req.bounds[1].op == VersionOp::Less);
+  CHECK(manifest.dependencies[1].version_req.bounds[1].version ==
+        Version{2, 0, 0});
   CHECK(manifest.dependencies[1].registry.empty());
   CHECK(manifest.dependencies[2].source == DependencySource::Path);
   CHECK(manifest.dependencies[2].path == "../local");
@@ -565,14 +584,15 @@ TEST_CASE("Manifest parses --deps fragments like manifest entries") {
   if (bare.is_ok()) {
     CHECK(std::move(bare).unwrap().suite_glob);
   }
-  base::Result<Dependency, diag::Reported> valued =
-      parse_dependency_flag(f.bag, f.arena, "acme/json = { version = \"1\" }");
+  base::Result<Dependency, diag::Reported> valued = parse_dependency_flag(
+      f.bag, f.arena, "acme/json = { version = \"1.x\" }");
   CHECK(valued.is_ok());
   if (valued.is_ok()) {
     const Dependency dep = std::move(valued).unwrap();
     CHECK(dep.owner == "acme");
     CHECK(dep.source == DependencySource::Registry);
-    CHECK(dep.version == "1");
+    CHECK(dep.version == "1.x");
+    CHECK(dep.version_req.count == 2);
   }
   CHECK(parse_dependency_flag(f.bag, f.arena, "acme/x = { frobnicate = 1 }")
             .is_err());
@@ -589,9 +609,9 @@ TEST_CASE("Manifest rejects malformed specifiers and sources") {
       {"\"a//b\" = {}\n"},
       {"\"a/*/b\" = {}\n"},
       {"\"*\" = {}\n"},
-      {"\"acme/x\" = { version = \"1\", git = \"https://e.com/r.git\" }\n"},
-      {"\"acme/x\" = { version = \"1\", path = \"../x\" }\n"},
-      {"\"acme/x\" = { version = \"^1\" }\n"},
+      {"\"acme/x\" = { version = \"1.x\", git = \"https://e.com/r.git\" }\n"},
+      {"\"acme/x\" = { version = \"1.x\", path = \"../x\" }\n"},
+      {"\"acme/x\" = { version = \"^1.2.3\" }\n"},
       {"\"acme/x\" = { version = \"1.2.3.4\" }\n"},
       {"\"acme/x\" = { branch = \"main\" }\n"},
       {"\"acme/x\" = { git = \"https://e.com/r.git\", branch = \"a\", "
