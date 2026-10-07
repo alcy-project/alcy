@@ -40,6 +40,7 @@ enum class Outcome : u8 {
   Checked,
   Ran,
   CreatedPackage,
+  CreatedSuite,
 };
 
 // Whether the command did what it was asked to do. A command sets it
@@ -76,6 +77,9 @@ struct Envelope {
   // What a scaffold created, and where. Only set by `new` and `init`.
   std::string package_name;
   std::string package_dir;
+  // The suite a scaffold joined or made, spelled `owner/name` or
+  // `name`. Empty for everything else.
+  std::string suite_name;
   // Counts worth reporting. Zero means the command has no such
   // measurement, which is why they are not optional: a package with no
   // files and a package that was not counted read the same, and only one

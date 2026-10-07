@@ -134,6 +134,35 @@ TEST_CASE("A scaffold reports its own shape, not a padded column") {
   CHECK(line == "Created package 'demo' in demo  (1.00 us)\n");
 }
 
+TEST_CASE("A member's scaffold says which suite it joined") {
+  Envelope envelope;
+  envelope.command = "new";
+  envelope.status = Status::Ok;
+  envelope.outcome = Outcome::CreatedPackage;
+  envelope.package_name = "cli";
+  envelope.package_dir = "first-party/cli";
+  envelope.suite_name = "acme/tools";
+  envelope.wall_ns = 1000;
+
+  const std::string line = text(envelope);
+  CHECK(line ==
+        "Created package 'cli' in first-party/cli (added to suite "
+        "acme/tools)  (1.00 us)\n");
+}
+
+TEST_CASE("A suite scaffold has its own verb") {
+  Envelope envelope;
+  envelope.command = "new";
+  envelope.status = Status::Ok;
+  envelope.outcome = Outcome::CreatedSuite;
+  envelope.package_name = "tools";
+  envelope.package_dir = "tools";
+  envelope.wall_ns = 1000;
+
+  const std::string line = text(envelope);
+  CHECK(line == "Created suite 'tools' in tools  (1.00 us)\n");
+}
+
 TEST_CASE("A check pluralizes its counts") {
   Envelope one;
   one.command = "check";

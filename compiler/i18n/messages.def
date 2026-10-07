@@ -311,6 +311,8 @@
   F(PipelineCannotCreateDirectory, "Cannot create directory '{}'") \
   F(PipelineCannotCreatePackage, "Cannot create package '{}'") \
   F(PipelineCannotCreatePackageFiles, "Cannot create package files: '{}'") \
+  F(PipelineCannotCreateSuite, "Cannot create suite '{}'") \
+  F(PipelineCannotCreateSuiteFiles, "Cannot create suite files: '{}'") \
   F(PipelineCannotDeriveOutput, "Cannot name the output for '{}'; pass -o") \
   F(PipelineCannotDerivePackageName, "Cannot derive a package name from '{}'; use [A-Za-z0-9_-] only") \
   F(PipelineCannotEmitModule, "Cannot emit module '{}'") \
@@ -322,6 +324,7 @@
   F(PipelineCannotReadSource, "Cannot read source file '{}'") \
   F(PipelineCannotReadStandardInput, "Cannot read standard input") \
   F(PipelineCannotRunSystemCompiler, "Cannot run the system compiler") \
+  F(PipelineCannotUpdateSuiteManifest, "Cannot add member '{}' to '{}'; add it to [suite] packages by hand") \
   F(PipelineCannotWrite, "Cannot write {} '{}'") \
   F(PipelineDependencyBadName, "Dependency '{}' is named '{}', which is not one module path") \
   F(PipelineDependencyClashesWithDependency, "Two dependencies are named '{}'; rename one of them") \
@@ -342,6 +345,7 @@
   F(PipelineInvalidPackageName, "Invalid package name '{}'; use [A-Za-z0-9_-] only") \
   F(PipelineInvalidSourceDirectory, "Invalid source directory '{}'") \
   F(PipelineInvalidSourcePath, "Invalid source path for file") \
+  F(PipelineInvalidSuiteName, "Invalid suite name '{}'; write <name> or <owner>/<name>") \
   F(PipelineInvalidTarget, "Invalid target '{}'") \
   F(PipelineIrNotOptimized, "The '{}' output is written unoptimized; build without --release") \
   F(PipelineLibTargetNotDiscovered, "Lib target '{}' was not discovered") \
@@ -368,6 +372,8 @@
   F(PipelineSourceDirectoryInaccessible, "Source directory '{}' is not accessible") \
   F(PipelineStdIsASuite, "The 'alcy/std' path is a suite, not a package; write \"alcy/std/*\" for every member or \"alcy/std/<package>\" for one") \
   F(PipelineStdPackageRequiresSuite, "Package 'alcy/std/{}' requires alcy/std/{}; add it to [dependencies]") \
+  F(PipelineSuiteAlreadyHasMember, "Suite '{}' already lists member '{}'") \
+  F(PipelineSuiteHasMemberNamed, "Suite '{}' already has a member named '{}'") \
   F(PipelineTargetOutputsCollide, "Bin target '{}' and lib target '{}' both write to '{}'; name one of them") \
   F(PipelineNoBackend, "This build of the compiler has no code generation backend") \
   F(PipelineUnknownTarget, "Cannot build for target '{}'; the compiler was not built with that backend") \
@@ -411,6 +417,7 @@
   F(CliNewAbout, "Create a new package") \
   F(CliNoStdHelp, "Start with no standard library instead of the default suite. Add back with --deps.") \
   F(CliNoSubcommand, "No subcommand given") \
+  F(CliPackageAddedToSuite, " (added to suite {})") \
   F(CliPackageCreatedAt, "'{}' in {}") \
   F(CliProgramArgsOnlyForRun, "Program arguments are only accepted by `run`") \
   F(CliReleaseHelp, "Build with optimizations.") \
@@ -419,6 +426,7 @@
   F(CliStdinHelp, "Read the program from standard input instead of a file, and report against the name <stdin>. For an editor buffer that has never been saved.") \
   F(CliStdinNeedsOutput, "Compiling from standard input needs `-o` to name the output") \
   F(CliStdinTakesNoTarget, "The `--stdin` flag takes no target") \
+  F(CliSuiteHelp, "Create a suite instead of a package. The value is <name> or <owner>/<name>.") \
   F(CliTargetHelp, "The machine to build for: host (the default) or wasm32-unknown-emscripten. --emit chooses the artifact's kind, not this.") \
   F(CliTimeTraceHelp, "Time the compilation phases and report where the run went. With --json the phases are embedded in the document; on their own they are a pruned call tree.") \
   F(CliUnknownSubcommand, "Unknown subcommand '{}'; see '{} --help'") \
@@ -427,6 +435,7 @@
   F(CliVerbChecked, "Checked") \
   F(CliVerbCompiled, "Compiled") \
   F(CliVerbCreatedPackage, "Created package") \
+  F(CliVerbCreatedSuite, "Created suite") \
   F(CliVerbFailed, "Failed") \
   F(CliVerbRan, "Ran") \
   /* diagnostic renderer */ \

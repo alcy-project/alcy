@@ -83,6 +83,11 @@ struct CliConfig {
   // that is the version control most packages are kept in, and the
   // choice only selects a file: no repository is created either way.
   pipeline::Vcs vcs = pipeline::Vcs::Git;
+  // `--suite` for `new` and `init`: `<name>` or `<owner>/<name>`
+  // scaffolds a suite, and an empty value scaffolds a package (which
+  // joins an enclosing suite when one is found). Borrows argv storage
+  // like target_dir.
+  std::string_view suite = {};
   // Emit the result as one JSON document on standard output instead of
   // the text report, for an editor or another tool reading it.
   bool json = false;

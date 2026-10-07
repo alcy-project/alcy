@@ -567,6 +567,26 @@ void report_manifest_error(ManifestError error,
   (void)index;
 }
 
+ManifestKind probe_manifest_kind(std::string_view bytes) {
+  const toml::parse_result result = toml::parse(bytes);
+  if (!result) {
+    return ManifestKind::Unknown;
+  }
+  const toml::table& root = result.table();
+  if (root.find("package") != root.end()) {
+    return ManifestKind::Package;
+  }
+  if (root.find("suite") != root.end()) {
+    return ManifestKind::Suite;
+  }
+  return ManifestKind::Unknown;
+}
+
+std::string_view suite_member_name(std::string_view path) {
+  const usize slash = path.rfind('/');
+  return slash == std::string_view::npos ? path : path.substr(slash + 1);
+}
+
 base::Result<void, SuiteError> verify_suite_manifest(
     const SuiteManifest& manifest) {
   if (manifest.name.empty()) {
@@ -583,9 +603,7 @@ base::Result<void, SuiteError> verify_suite_manifest(
     if (path.empty()) {
       return base::make_err(SuiteError::EmptyPackageEntry);
     }
-    const usize slash = path.rfind('/');
-    const std::string_view name =
-        slash == std::string_view::npos ? path : path.substr(slash + 1);
+    const std::string_view name = suite_member_name(path);
     if (name.empty()) {
       return base::make_err(SuiteError::BadPackageEntry);
     }
@@ -593,12 +611,7 @@ base::Result<void, SuiteError> verify_suite_manifest(
       if (manifest.packages[j] == path) {
         return base::make_err(SuiteError::DuplicatePackageEntry);
       }
-      const std::string_view other = manifest.packages[j];
-      const usize other_slash = other.rfind('/');
-      const std::string_view other_name = other_slash == std::string_view::npos
-                                              ? other
-                                              : other.substr(other_slash + 1);
-      if (other_name == name) {
+      if (suite_member_name(manifest.packages[j]) == name) {
         return base::make_err(SuiteError::DuplicatePackageName);
       }
     }

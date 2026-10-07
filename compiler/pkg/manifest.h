@@ -253,6 +253,24 @@ void report_suite_error(SuiteError error,
                         std::string_view name,
                         diag::DiagBag& bag);
 
+// What an `alcy.toml`-shaped file opens with, for callers that have
+// to choose a parser before running one, or to decide whether a
+// manifest is theirs at all. `Unknown` covers a syntax error and a
+// file with neither identity table; the parser reports the detail
+// when the caller runs one.
+enum class ManifestKind : u8 {
+  Package,
+  Suite,
+  Unknown,
+};
+
+ManifestKind probe_manifest_kind(std::string_view bytes);
+
+// The name a suite member is addressed by: the last segment of its
+// suite-relative path, which is also the name its own manifest must
+// carry (ADR-0057). Pure.
+std::string_view suite_member_name(std::string_view path);
+
 // Parses suite manifest bytes; all strings reference arena copies.
 // `file` backs spans for syntax errors (pass source::UNKNOWN_FILE when
 // unknown). A manifest holding [package] is rejected as the wrong kind,

@@ -20,14 +20,20 @@ ResultCode run_new(const CliConfig& config,
                    Envelope& envelope) {
   const std::string_view target =
       config.target_dir.empty() ? "." : config.target_dir;
+  const bool creates_suite = !config.suite.empty();
   pipeline::NewResult result =
-      pipeline::create_new_package(ctx, target, config.vcs);
+      creates_suite
+          ? pipeline::create_new_suite(ctx, target, config.suite, config.vcs)
+          : pipeline::create_new_package(ctx, target, config.vcs);
   envelope.bag = &ctx.bag;
   envelope.sources = &ctx.sources;
   if (result.is_ok() && !ctx.bag.has_errors()) {
+    const pipeline::ScaffoldResult created = std::move(result).unwrap();
     envelope.status = Status::Ok;
-    envelope.outcome = Outcome::CreatedPackage;
-    envelope.package_name = std::move(result).unwrap();
+    envelope.outcome =
+        creates_suite ? Outcome::CreatedSuite : Outcome::CreatedPackage;
+    envelope.package_name = created.name;
+    envelope.suite_name = created.suite;
     envelope.package_dir = std::string(target);
     return ResultCode::Success;
   }

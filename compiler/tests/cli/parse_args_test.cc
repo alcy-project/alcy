@@ -74,6 +74,15 @@ TEST_CASE("Parse compile standard library flags") {
   CHECK(config.deps[1] == "acme/json = { version = \"1\" }");
 }
 
+TEST_CASE("Parse new suite flag") {
+  const std::string_view args[] = {"alcy", "new", "--suite", "acme/tools",
+                                   "my-tools"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.subcommand == Subcommand::New);
+  CHECK(config.suite == "acme/tools");
+  CHECK(config.target_dir == "my-tools");
+}
+
 TEST_CASE("Parse build output flag") {
   const std::string_view args[] = {"alcy", "build", "main.al", "-o", "main.o"};
   const CliConfig config = parse_ok(args);

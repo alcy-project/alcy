@@ -146,6 +146,8 @@ std::string_view verb_for(Outcome outcome, i18n::Language language) {
     case Outcome::Ran: return i18n::text<Key::CliVerbRan>(language);
     case Outcome::CreatedPackage:
       return i18n::text<Key::CliVerbCreatedPackage>(language);
+    case Outcome::CreatedSuite:
+      return i18n::text<Key::CliVerbCreatedSuite>(language);
   }
   return i18n::text<Key::CliVerbFailed>(language);
 }
@@ -160,6 +162,7 @@ const char* outcome_name(Outcome outcome) {
     case Outcome::Checked: return "checked";
     case Outcome::Ran: return "ran";
     case Outcome::CreatedPackage: return "created-package";
+    case Outcome::CreatedSuite: return "created-suite";
   }
   return "failed";
 }
@@ -244,7 +247,16 @@ std::string result_subject(const Envelope& envelope, i18n::Language language) {
   using i18n::Key;
   switch (envelope.outcome) {
     case Outcome::Failed: return {};
-    case Outcome::CreatedPackage:
+    case Outcome::CreatedPackage: {
+      std::string subject = i18n::format<Key::CliPackageCreatedAt>(
+          language, envelope.package_name, envelope.package_dir);
+      if (!envelope.suite_name.empty()) {
+        subject += i18n::format<Key::CliPackageAddedToSuite>(
+            language, envelope.suite_name);
+      }
+      return subject;
+    }
+    case Outcome::CreatedSuite:
       return i18n::format<Key::CliPackageCreatedAt>(
           language, envelope.package_name, envelope.package_dir);
     case Outcome::Checked: {
@@ -347,8 +359,9 @@ void render_result_line(std::string& out,
                         i18n::Language language) {
   const std::string_view verb = verb_for(envelope.outcome, language);
   const std::string subject = result_subject(envelope, language);
-  render_labelled(out, verb, subject,
-                  envelope.outcome != Outcome::CreatedPackage, color, false);
+  const bool scaffolds = envelope.outcome == Outcome::CreatedPackage ||
+                         envelope.outcome == Outcome::CreatedSuite;
+  render_labelled(out, verb, subject, !scaffolds, color, false);
 
   if (note_has_size(envelope) || note_has_duration(envelope)) {
     out.append("  ");

@@ -100,6 +100,8 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
   // `vcs` is declared on the two scaffolding verbs only, so the default
   // stands wherever it is absent.
   c.vcs = matches.get<pipeline::Vcs>("vcs").unwrap_or(c.vcs);
+  // `suite` is declared on the two scaffolding verbs only, like `vcs`.
+  c.suite = matches.get<std::string_view>("suite").unwrap_or(c.suite);
   if (auto deps = matches.get_all<std::string_view>("deps"); deps.is_ok()) {
     for (std::string_view fragment : std::move(deps).unwrap()) {
       if (!fragment.empty()) {
@@ -171,6 +173,13 @@ arg::Arg vcs_arg(const UsageText& usage) {
       .help(usage.text(i18n::Key::CliVcsHelp))
       .choices({"git", "none"})
       .default_value("git")
+      .build();
+}
+
+arg::Arg suite_arg(const UsageText& usage) {
+  return arg::ArgBuilder("suite")
+      .help(usage.text(i18n::Key::CliSuiteHelp))
+      .default_value("")
       .build();
 }
 
@@ -321,10 +330,12 @@ arg::Parser build_parser(i18n::Language language) {
   builder.add_subcommand(
       build_subcommand("new", std::string(usage.text(i18n::Key::CliNewAbout)))
           .add_arg(vcs_arg(usage))
+          .add_arg(suite_arg(usage))
           .build());
   builder.add_subcommand(
       build_subcommand("init", std::string(usage.text(i18n::Key::CliInitAbout)))
           .add_arg(vcs_arg(usage))
+          .add_arg(suite_arg(usage))
           .build());
   builder.add_subcommand(
       build_subcommand("check",

@@ -71,13 +71,6 @@ bool is_module_segment(std::string_view name) {
          name.find("::") == std::string_view::npos;
 }
 
-// The name a suite member is addressed by: the last segment of its
-// suite-relative path (ADR-0057).
-std::string_view member_name(std::string_view path) {
-  const usize slash = path.rfind('/');
-  return slash == std::string_view::npos ? path : path.substr(slash + 1);
-}
-
 // Reads the manifest of the package at `dir`, which the
 // caller has established names a package.
 base::Result<pkg::PackageManifest, diag::Reported> read_manifest(
@@ -288,7 +281,7 @@ bool load_suite_members(PipelineContext& ctx,
     // lists is found by its last segment.
     std::string_view listed;
     for (u32 i = 0; i < suite.package_count; ++i) {
-      if (member_name(suite.packages[i]) == dep.member) {
+      if (pkg::suite_member_name(suite.packages[i]) == dep.member) {
         listed = suite.packages[i];
         break;
       }
@@ -324,7 +317,8 @@ bool load_suite_members(PipelineContext& ctx,
       member_spec += std::string(member);
     }
     if (!load_dependency(ctx, dir.join(member), member_spec, member_suite,
-                         member_name(member), visited, loaded, staged)) {
+                         pkg::suite_member_name(member), visited, loaded,
+                         staged)) {
       return false;
     }
   }
