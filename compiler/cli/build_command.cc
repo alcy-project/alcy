@@ -3,6 +3,7 @@
 
 #include "cli/build_command.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -17,6 +18,7 @@
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/target.h"
+#include "pkg/manifest.h"
 #include "pkg/toolchain.h"
 
 namespace cli {
@@ -47,9 +49,20 @@ ResultCode run_build(const CliConfig& config,
   const pkg::Toolchain tool = std::move(toolchain).unwrap();
   ctx.freestanding = tool.freestanding;
   const pipeline::LinkOptions link = resolve_link_options(config, tool);
-  base::Result<std::string, diag::Reported> res = pipeline::build_package(
-      ctx, found.root, found.manifest, found.manifest_name, config.output,
-      config.release, link, config.emit);
+  // A suite directory builds every member; a package directory builds
+  // itself (ADR-0057).
+  const std::optional<std::string_view> manifest_bytes =
+      ctx.sources.bytes(found.manifest);
+  const bool suite = manifest_bytes.has_value() &&
+                     pkg::probe_manifest_kind(*manifest_bytes) ==
+                         pkg::ManifestKind::Suite;
+  base::Result<std::string, diag::Reported> res =
+      suite ? pipeline::build_suite(ctx, found.root, found.manifest,
+                                    found.manifest_name, config.output,
+                                    config.release, link, config.emit)
+            : pipeline::build_package(ctx, found.root, found.manifest,
+                                      found.manifest_name, config.output,
+                                      config.release, link, config.emit);
   envelope.trace = trace.take_events();
   if (res.is_err() || ctx.bag.has_errors()) {
     return failed;

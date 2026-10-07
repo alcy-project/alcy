@@ -38,6 +38,7 @@
 #include "pipeline/spawn.h"
 #include "pipeline/std_select.h"
 #include "pipeline/target.h"
+#include "pkg/manifest.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -584,10 +585,6 @@ base::Result<std::string, diag::Reported> build_package(
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  // An executable goes where the manifest says builds go; the other two
-  // are inspection outputs, so they land beside the manifest unless the
-  // caller named a path.
-  const path::Path out_dir = root.join(path::DEFAULT_OUT_DIR);
   struct PlannedTarget {
     PackageTarget* target;
     EmitMode mode;
@@ -602,11 +599,15 @@ base::Result<std::string, diag::Reported> build_package(
         target.is_lib && mode == EmitMode::Executable ? EmitMode::Object : mode;
     std::string output_path;
     if (output.empty()) {
-      // Everything a package build writes goes to the directory the
-      // scaffold's own `.gitignore` names, whatever the mode. An object or
-      // a module beside the manifest landed outside the one region the
-      // compiler told git to ignore, so `git status` reported the build's
-      // own output as untracked.
+      // Everything a build writes goes to the out/ the scaffold's own
+      // `.gitignore` names, whatever the mode: the package's own, or
+      // the member's directory under its suite's. An object or a
+      // module beside the manifest landed outside the one region the
+      // compiler told git to ignore, so `git status` reported the
+      // build's own output as untracked.
+      const path::Path out_dir =
+          target.output_dir.has_value() ? *target.output_dir
+                                        : root.join(path::DEFAULT_OUT_DIR);
       output_path = out_dir
                         .join(std::string(target.name) +
                               suffix_for(ctx.target, target_mode))
@@ -667,6 +668,75 @@ base::Result<std::string, diag::Reported> build_package(
     return base::make_err(diag::Reported{});
   }
   return base::make_ok(first_output);
+}
+
+base::Result<std::string, diag::Reported> build_suite(
+    PipelineContext& ctx,
+    const path::Path& root,
+    source::FileId manifest_file,
+    std::string_view manifest_name,
+    std::string_view output,
+    bool optimize,
+    LinkOptions link,
+    EmitMode mode) {
+  const std::optional<std::string_view> bytes =
+      ctx.sources.bytes(manifest_file);
+  if (!bytes.has_value()) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNotLoaded>(
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
+        manifest_name);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  base::Result<pkg::SuiteManifest, diag::Reported> parsed =
+      pkg::parse_suite_manifest(*bytes, manifest_name, manifest_file, ctx.bag,
+                                ctx.arena);
+  if (parsed.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  const pkg::SuiteManifest suite = std::move(parsed).unwrap();
+  base::Result<void, pkg::SuiteError> verified =
+      pkg::verify_suite_manifest(suite);
+  if (verified.is_err()) {
+    pkg::report_suite_error(std::move(verified).unwrap_err(), manifest_name,
+                            ctx.bag);
+    return base::make_err(diag::Reported{});
+  }
+  if (suite.package_count == 0) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineSuiteEmpty>(
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
+        manifest_name);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  if (!output.empty()) {
+    // One `-o` cannot name every member's artifact.
+    const u32 index =
+        ctx.bag.emit<i18n::Key::PipelineMultipleTargetsWithOutput>(
+            diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
+            output);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  for (u32 i = 0; i < suite.package_count; ++i) {
+    base::Result<ManifestProbe, diag::Reported> probe =
+        require_package_manifest(ctx, root.join(suite.packages[i]).as_view(),
+                                 false);
+    if (probe.is_err()) {
+      return base::make_err(diag::Reported{});
+    }
+    ManifestProbe member = std::move(probe).unwrap();
+    base::Result<std::string, diag::Reported> built =
+        build_package(ctx, member.root, member.manifest, member.manifest_name,
+                      {}, optimize, link, mode);
+    if (built.is_err()) {
+      return base::make_err(diag::Reported{});
+    }
+  }
+  // A member is not more the build than its siblings, so the suite
+  // reports the one directory its artifacts share.
+  return base::make_ok(
+      std::string(root.join(path::DEFAULT_OUT_DIR).as_view()));
 }
 
 }  // namespace pipeline

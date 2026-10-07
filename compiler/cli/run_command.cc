@@ -3,6 +3,7 @@
 
 #include "cli/run_command.h"
 
+#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -22,6 +23,9 @@
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/run.h"
+#include "i18n/messages.h"
+#include "pipeline/diag_code.h"
+#include "pkg/manifest.h"
 #include "pipeline/target.h"
 #include "pkg/toolchain.h"
 
@@ -64,6 +68,18 @@ i32 run_run(const CliConfig& config,
     return failed;
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
+  // A suite names several programs and no single entry point, so it is
+  // not something run can execute (ADR-0057).
+  const std::optional<std::string_view> manifest_bytes =
+      ctx.sources.bytes(found.manifest);
+  if (manifest_bytes.has_value() &&
+      pkg::probe_manifest_kind(*manifest_bytes) == pkg::ManifestKind::Suite) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineSuiteIsNotAProgram>(
+        diag::Severity::Error, diag::Stage::Pipeline,
+        pipeline::DiagCode::NoTargets, found.manifest_name);
+    (void)index;
+    return failed;
+  }
   base::Result<pkg::Toolchain, diag::Reported> toolchain =
       pipeline::load_toolchain(ctx, found.root);
   if (toolchain.is_err()) {

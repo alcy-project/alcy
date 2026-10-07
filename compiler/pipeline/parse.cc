@@ -155,12 +155,16 @@ base::Result<ParsedFiles, diag::Reported> parse_files(
   // a lane it cuts is room no parser can reach: a single-file compile asked
   // for eight parsers would cut eight lanes and use one, and that one reads a
   // third of the table.
-  const u32 workers =
+  const u32 wanted =
       std::min(ctx.parse_jobs(), static_cast<u32>(parsed.files.size()));
-
-  // Every append leaves room for the appends that may race with it, so
-  // the slot count is what the arena is told before parsing begins.
-  ctx.ast.set_parallel_slots(workers);
+  if (ctx.parse_lanes == 0) {
+    // Every append leaves room for the appends that may race with it,
+    // so the slot count is what the arena is told before parsing
+    // begins, and only the first parse gets to cut it.
+    ctx.parse_lanes = wanted;
+    ctx.ast.set_parallel_slots(wanted);
+  }
+  const u32 workers = std::min(wanted, ctx.parse_lanes);
 
   // Several threads need a bag per file; one thread writes into the run's
   // own bag in the same order, so both paths report the same thing. The syntax

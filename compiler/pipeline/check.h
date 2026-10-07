@@ -51,4 +51,13 @@ base::Result<CheckOutcome, diag::Reported> check_package(
     source::FileId manifest_file,
     std::string_view manifest_name);
 
+// Checks every member of the suite at `root`, each through its own
+// manifest. The counts sum the members', which a shared dependency
+// may count once per member; success means every member checked.
+base::Result<CheckOutcome, diag::Reported> check_suite(
+    PipelineContext& ctx,
+    const path::Path& root,
+    source::FileId manifest_file,
+    std::string_view manifest_name);
+
 }  // namespace pipeline

@@ -121,4 +121,18 @@ base::Result<std::string, diag::Reported> build_package(
     LinkOptions link,
     EmitMode mode);
 
+// Builds every member of the suite at `root`, each through its own
+// manifest and into its own directory under the suite's `out/`
+// (ADR-0057). Success names that directory; `-o` is refused because it
+// cannot name more than one member's artifact.
+base::Result<std::string, diag::Reported> build_suite(
+    PipelineContext& ctx,
+    const path::Path& root,
+    source::FileId manifest_file,
+    std::string_view manifest_name,
+    std::string_view output,
+    bool optimize,
+    LinkOptions link,
+    EmitMode mode);
+
 }  // namespace pipeline

@@ -12,7 +12,14 @@
 #include <utility>
 #include <vector>
 
+#if BUILD_FLAG(IS_OS_WIN)
+#include <direct.h>
+#else
+#include <unistd.h>
+#endif
+
 #include "analyzer/resolve.h"
+#include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -20,6 +27,8 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
+#include "fpag/io/file_handle.h"
+#include "fpag/io/io_util.h"
 #include "i18n/messages.h"
 #include "path/path.h"
 #include "pipeline/dependencies.h"
@@ -89,6 +98,120 @@ base::Result<ManifestProbe, diag::Reported> require_package_manifest(
   const source::FileId loaded = std::move(manifest).unwrap();
   return base::make_ok(ManifestProbe{true, std::move(root), loaded,
                                      std::string(manifest_path.as_view())});
+}
+
+namespace {
+
+bool suite_file_exists(std::string_view path) {
+  io::FileHandle probe;
+  return probe.open(path, io::FileAccess::Read);
+}
+
+// The process's own directory, absolute. Empty when it cannot be
+// read.
+std::string suite_current_dir_path() {
+  char buffer[4096];
+#if BUILD_FLAG(IS_OS_WIN)
+  if (::_getcwd(buffer, sizeof(buffer)) == nullptr) {
+    return {};
+  }
+#else
+  if (::getcwd(buffer, sizeof(buffer)) == nullptr) {
+    return {};
+  }
+#endif
+  return std::string(buffer);
+}
+
+// Last segment of a path spelling, for the member path. Empty for
+// roots and ".".
+std::string_view suite_dir_basename(std::string_view dir) {
+  if (dir.empty() || dir == "." || dir == "..") {
+    return {};
+  }
+  const usize slash = dir.rfind(path::DEFAULT_PATH_SEPARATOR);
+  if (slash == std::string_view::npos) {
+    return dir;
+  }
+  return dir.substr(slash + 1);
+}
+
+}  // namespace
+
+std::string suite_spelling(const pkg::SuiteManifest& suite) {
+  if (suite.owner.empty()) {
+    return std::string(suite.name);
+  }
+  return std::string(suite.owner) + "/" + std::string(suite.name);
+}
+
+bool suite_lists_member(const pkg::SuiteManifest& suite,
+                        std::string_view member) {
+  for (u32 i = 0; i < suite.package_count; ++i) {
+    if (suite.packages[i] == member) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::optional<EnclosingSuite> find_enclosing_suite(
+    PipelineContext& ctx, const path::Path& package_dir) {
+  path::Path at = package_dir;
+  std::string member(suite_dir_basename(at.as_view()));
+  if (member.empty()) {
+    // "." has no basename in its spelling; the process's own directory
+    // is where it is, and it anchors the walk.
+    base::Result<path::Path, path::PathError> cwd =
+        path::Path::from_native(suite_current_dir_path());
+    if (cwd.is_err()) {
+      return std::nullopt;
+    }
+    at = std::move(cwd).unwrap();
+    member = std::string(suite_dir_basename(at.as_view()));
+  }
+  at = at.parent();
+  while (true) {
+    const path::Path manifest_path = at.join(pkg::MANIFEST_FILE_NAME);
+    if (suite_file_exists(manifest_path.as_view())) {
+      const std::string bytes = io::read_file(std::string(manifest_path.as_view()));
+      switch (pkg::probe_manifest_kind(bytes)) {
+        case pkg::ManifestKind::Suite: {
+          base::Result<pkg::SuiteManifest, diag::Reported> parsed =
+              pkg::parse_suite_manifest(bytes, manifest_path.as_view(),
+                                        source::UNKNOWN_FILE, ctx.bag,
+                                        ctx.arena);
+          if (parsed.is_err()) {
+            return std::nullopt;
+          }
+          pkg::SuiteManifest suite = std::move(parsed).unwrap();
+          base::Result<void, pkg::SuiteError> verified =
+              pkg::verify_suite_manifest(suite);
+          if (verified.is_err()) {
+            pkg::report_suite_error(std::move(verified).unwrap_err(),
+                                    manifest_path.as_view(), ctx.bag);
+            return std::nullopt;
+          }
+          return EnclosingSuite{std::move(at), suite, std::move(member)};
+        }
+        case pkg::ManifestKind::Package:
+          return std::nullopt;
+        case pkg::ManifestKind::Unknown:
+          // Report through the suite parser: the nearest manifest is
+          // the one the walk would have joined.
+          (void)pkg::parse_suite_manifest(bytes, manifest_path.as_view(),
+                                          source::UNKNOWN_FILE, ctx.bag,
+                                          ctx.arena);
+          return std::nullopt;
+      }
+    }
+    const path::Path parent = at.parent();
+    if (parent == at) {
+      return std::nullopt;
+    }
+    member = std::string(suite_dir_basename(at.as_view())) + "/" + member;
+    at = parent;
+  }
 }
 
 namespace {
@@ -458,7 +581,33 @@ resolve_package_targets(PipelineContext& ctx,
   if (parsed.is_err()) {
     return base::make_err(diag::Reported{});
   }
-  const pkg::PackageManifest manifest = std::move(parsed).unwrap();
+  pkg::PackageManifest manifest = std::move(parsed).unwrap();
+  // A package that sits inside a suite takes the keys it spelled from
+  // it; one that is not listed is standalone, and a marker with no
+  // suite to resolve against is an error rather than a silent {0,0,0}.
+  const std::optional<EnclosingSuite> suite =
+      find_enclosing_suite(ctx, root);
+  if (!suite.has_value() && ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  const bool member =
+      suite.has_value() && suite_lists_member(suite->manifest, suite->member);
+  if (member) {
+    base::Result<void, pkg::InheritError> inherited =
+        pkg::inherit_from_suite(manifest, suite->manifest);
+    if (inherited.is_err()) {
+      pkg::report_inherit_error(std::move(inherited).unwrap_err(),
+                                manifest_name, ctx.bag);
+      return base::make_err(diag::Reported{});
+    }
+  } else if (manifest.version_from_suite || manifest.owner_from_suite ||
+             manifest.license_from_suite) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineInheritsWithoutSuite>(
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoManifest,
+        manifest_name);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
   base::Result<void, pkg::ManifestError> verified =
       pkg::verify_manifest(manifest);
   if (verified.is_err()) {
@@ -514,6 +663,14 @@ resolve_package_targets(PipelineContext& ctx,
     if (added.is_err()) {
       return base::make_err(diag::Reported{});
     }
+  }
+  // A member's artifacts belong to the suite: one out/ for the whole
+  // suite, one directory per member (ADR-0057).
+  const path::Path output_dir =
+      member ? suite->root.join(path::DEFAULT_OUT_DIR).join(suite->member)
+             : root.join(path::DEFAULT_OUT_DIR);
+  for (PackageTarget& target : targets) {
+    target.output_dir = output_dir;
   }
   return base::make_ok(targets);
 }

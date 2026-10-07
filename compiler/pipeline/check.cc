@@ -21,6 +21,7 @@
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
 #include "pipeline/target.h"
+#include "pkg/manifest.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -124,6 +125,63 @@ base::Result<CheckOutcome, diag::Reported> check_package(
     return fail();
   }
   return base::make_ok(outcome);
+}
+
+base::Result<CheckOutcome, diag::Reported> check_suite(
+    PipelineContext& ctx,
+    const path::Path& root,
+    source::FileId manifest_file,
+    std::string_view manifest_name) {
+  const std::optional<std::string_view> bytes =
+      ctx.sources.bytes(manifest_file);
+  if (!bytes.has_value()) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNotLoaded>(
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
+        manifest_name);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  base::Result<pkg::SuiteManifest, diag::Reported> parsed =
+      pkg::parse_suite_manifest(*bytes, manifest_name, manifest_file, ctx.bag,
+                                ctx.arena);
+  if (parsed.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  const pkg::SuiteManifest suite = std::move(parsed).unwrap();
+  base::Result<void, pkg::SuiteError> verified =
+      pkg::verify_suite_manifest(suite);
+  if (verified.is_err()) {
+    pkg::report_suite_error(std::move(verified).unwrap_err(), manifest_name,
+                            ctx.bag);
+    return base::make_err(diag::Reported{});
+  }
+  if (suite.package_count == 0) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineSuiteEmpty>(
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
+        manifest_name);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  CheckOutcome total{0, 0, 0};
+  for (u32 i = 0; i < suite.package_count; ++i) {
+    base::Result<ManifestProbe, diag::Reported> probe =
+        require_package_manifest(ctx, root.join(suite.packages[i]).as_view(),
+                                 false);
+    if (probe.is_err()) {
+      return base::make_err(diag::Reported{});
+    }
+    ManifestProbe member = std::move(probe).unwrap();
+    base::Result<CheckOutcome, diag::Reported> one = check_package(
+        ctx, member.root, member.manifest, member.manifest_name);
+    if (one.is_err() || ctx.bag.has_errors()) {
+      return base::make_err(diag::Reported{});
+    }
+    const CheckOutcome counted = std::move(one).unwrap();
+    total.file_count += counted.file_count;
+    total.module_count += counted.module_count;
+    total.function_count += counted.function_count;
+  }
+  return base::make_ok(total);
 }
 
 }  // namespace pipeline

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -13,6 +14,7 @@
 #include "fpag/base/result.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
+#include "pkg/manifest.h"
 #include "pkg/toolchain.h"
 #include "source/source.h"
 
@@ -29,7 +31,34 @@ struct PackageTarget {
   usize file_count = 0;
   std::string_view name;
   bool is_lib = false;
+  // Where a default build writes: the suite member's directory under
+  // the suite's `out/`, or the package's own `out/` (ADR-0057). Set by
+  // resolve_package_targets.
+  std::optional<path::Path> output_dir;
 };
+
+// The suite a package sits inside: its root, its manifest, and the
+// suite-relative path the package's directory has there.
+struct EnclosingSuite {
+  path::Path root;
+  pkg::SuiteManifest manifest;
+  std::string member;
+};
+
+// `owner/name`, or `name` when the suite declares no owner.
+std::string suite_spelling(const pkg::SuiteManifest& suite);
+
+// Whether the suite lists that member path.
+bool suite_lists_member(const pkg::SuiteManifest& suite,
+                        std::string_view member);
+
+// Walks from the package directory's parent to the filesystem root,
+// looking for the nearest manifest. A suite manifest is returned; a
+// package manifest ends the walk, because a package is not a suite.
+// Diagnostics go to the bag; no value means the package is standalone,
+// or that the walk reported an error.
+std::optional<EnclosingSuite> find_enclosing_suite(
+    PipelineContext& ctx, const path::Path& package_dir);
 
 // A manifest probe result: `found` with a loaded manifest, or absent
 // when the raw target has no alcy.toml. Path errors are emitted to the

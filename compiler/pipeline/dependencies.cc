@@ -76,7 +76,8 @@ bool is_module_segment(std::string_view name) {
 base::Result<pkg::PackageManifest, diag::Reported> read_manifest(
     PipelineContext& ctx,
     const path::Path& dir,
-    const path::Path& manifest_path) {
+    const path::Path& manifest_path,
+    const pkg::SuiteManifest* suite) {
   base::Result<ManifestBytes, diag::Reported> loaded_bytes =
       load_manifest_bytes(ctx, dir, manifest_path);
   if (loaded_bytes.is_err()) {
@@ -90,6 +91,17 @@ base::Result<pkg::PackageManifest, diag::Reported> read_manifest(
     return base::make_err(diag::Reported{});
   }
   pkg::PackageManifest manifest = std::move(parsed).unwrap();
+  // A member takes the identity keys it spelled from its suite before
+  // the verifier sees it (ADR-0057).
+  if (suite != nullptr) {
+    base::Result<void, pkg::InheritError> inherited =
+        pkg::inherit_from_suite(manifest, *suite);
+    if (inherited.is_err()) {
+      pkg::report_inherit_error(std::move(inherited).unwrap_err(),
+                                manifest_path.as_view(), ctx.bag);
+      return base::make_err(diag::Reported{});
+    }
+  }
   base::Result<void, pkg::ManifestError> verified =
       pkg::verify_manifest(manifest);
   if (verified.is_err()) {
@@ -148,6 +160,7 @@ bool load_dependency(PipelineContext& ctx,
                      std::string_view spec,
                      std::string_view suite,
                      std::string_view expected_name,
+                     const pkg::SuiteManifest* suite_manifest,
                      std::vector<path::Path>& visited,
                      std::vector<path::Path>& loaded,
                      std::vector<LoadedDependency>& staged) {
@@ -169,7 +182,7 @@ bool load_dependency(PipelineContext& ctx,
 
   const path::Path manifest_path = dir.join(pkg::MANIFEST_FILE_NAME);
   base::Result<pkg::PackageManifest, diag::Reported> read =
-      read_manifest(ctx, dir, manifest_path);
+      read_manifest(ctx, dir, manifest_path, suite_manifest);
   if (read.is_err()) {
     return false;
   }
@@ -317,8 +330,8 @@ bool load_suite_members(PipelineContext& ctx,
       member_spec += std::string(member);
     }
     if (!load_dependency(ctx, dir.join(member), member_spec, member_suite,
-                         pkg::suite_member_name(member), visited, loaded,
-                         staged)) {
+                         pkg::suite_member_name(member), &suite, visited,
+                         loaded, staged)) {
       return false;
     }
   }
@@ -343,7 +356,8 @@ bool load_path_edge(PipelineContext& ctx,
   if (dep.suite_glob || !dep.suite.empty()) {
     return load_suite_members(ctx, dir, dep, visited, loaded, staged);
   }
-  return load_dependency(ctx, dir, dep.spec, {}, {}, visited, loaded, staged);
+  return load_dependency(ctx, dir, dep.spec, {}, {}, nullptr, visited,
+                         loaded, staged);
 }
 
 }  // namespace

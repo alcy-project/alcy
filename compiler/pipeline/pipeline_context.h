@@ -24,6 +24,12 @@ namespace pipeline {
 struct PipelineContext {
   mem::Arena arena;
   ast::AstArena ast;
+  // The parser lanes the syntax arena was cut into, zero before the
+  // first parse. A run that parses twice -- a suite's members, one
+  // after another -- keeps the first cut: the arena cannot be recut
+  // once it has handed out a node, so a later parse uses at most this
+  // many parsers.
+  u32 parse_lanes = 0;
   source::SourceManager sources;
   diag::DiagBag bag;
   // Long-lived string pool for lowering and codegen (function names,

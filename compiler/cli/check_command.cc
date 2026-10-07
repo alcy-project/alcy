@@ -3,6 +3,7 @@
 
 #include "cli/check_command.h"
 
+#include <optional>
 #include <string_view>
 #include <utility>
 
@@ -15,6 +16,7 @@
 #include "pipeline/check.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/target.h"
+#include "pkg/manifest.h"
 
 namespace cli {
 
@@ -59,9 +61,16 @@ ResultCode run_check(const CliConfig& config,
     return failed;
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
+  const std::optional<std::string_view> manifest_bytes =
+      ctx.sources.bytes(found.manifest);
+  const bool suite = manifest_bytes.has_value() &&
+                     pkg::probe_manifest_kind(*manifest_bytes) ==
+                         pkg::ManifestKind::Suite;
   base::Result<pipeline::CheckOutcome, diag::Reported> result =
-      pipeline::check_package(ctx, found.root, found.manifest,
-                              found.manifest_name);
+      suite ? pipeline::check_suite(ctx, found.root, found.manifest,
+                                    found.manifest_name)
+            : pipeline::check_package(ctx, found.root, found.manifest,
+                                      found.manifest_name);
   envelope.trace = trace.take_events();
   if (result.is_err()) {
     return failed;

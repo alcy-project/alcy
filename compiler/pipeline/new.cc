@@ -22,6 +22,7 @@
 #include "path/path.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/target.h"
 #include "pipeline/vcs.h"
 #include "pkg/manifest.h"
 
@@ -54,11 +55,6 @@ std::string read_text_file(std::string_view path) {
   return io::read_file(std::string(path));
 }
 
-bool file_exists(std::string_view path) {
-  io::FileHandle probe;
-  return probe.open(path, io::FileAccess::Read);
-}
-
 // Last canonical segment, for package naming. Empty for roots and ".".
 std::string_view dir_basename(std::string_view dir) {
   if (dir.empty() || dir == "." || dir == "..") {
@@ -84,74 +80,6 @@ std::string current_dir_path() {
   }
 #endif
   return std::string(buffer);
-}
-
-// The suite a new package would join: its root, its manifest, and the
-// suite-relative path the package enters under.
-struct EnclosingSuite {
-  path::Path root;
-  pkg::SuiteManifest manifest;
-  std::string member;
-};
-
-// `owner/name`, or `name` when the suite declares no owner.
-std::string suite_spelling(const pkg::SuiteManifest& suite) {
-  if (suite.owner.empty()) {
-    return std::string(suite.name);
-  }
-  return fmt::format("{}/{}", suite.owner, suite.name);
-}
-
-// Walks from the package directory's parent to the filesystem root,
-// looking for the nearest manifest. A suite manifest claims the
-// package as a member; a package manifest ends the walk, because a
-// package is not a suite. Diagnostics go to the bag; no value means
-// the package is standalone, or that the walk reported an error.
-std::optional<EnclosingSuite> find_enclosing_suite(
-    PipelineContext& ctx,
-    const path::Path& package_dir) {
-  path::Path at = package_dir.parent();
-  std::string member(dir_basename(package_dir.as_view()));
-  while (true) {
-    const path::Path manifest_path = at.join(pkg::MANIFEST_FILE_NAME);
-    if (file_exists(manifest_path.as_view())) {
-      const std::string bytes = read_text_file(manifest_path.as_view());
-      switch (pkg::probe_manifest_kind(bytes)) {
-        case pkg::ManifestKind::Suite: {
-          base::Result<pkg::SuiteManifest, diag::Reported> parsed =
-              pkg::parse_suite_manifest(bytes, manifest_path.as_view(),
-                                        source::UNKNOWN_FILE, ctx.bag,
-                                        ctx.arena);
-          if (parsed.is_err()) {
-            return std::nullopt;
-          }
-          pkg::SuiteManifest suite = std::move(parsed).unwrap();
-          base::Result<void, pkg::SuiteError> verified =
-              pkg::verify_suite_manifest(suite);
-          if (verified.is_err()) {
-            pkg::report_suite_error(std::move(verified).unwrap_err(),
-                                    manifest_path.as_view(), ctx.bag);
-            return std::nullopt;
-          }
-          return EnclosingSuite{std::move(at), suite, std::move(member)};
-        }
-        case pkg::ManifestKind::Package: return std::nullopt;
-        case pkg::ManifestKind::Unknown:
-          // Report through the suite parser: the nearest manifest is
-          // the one the scaffold would have joined.
-          (void)pkg::parse_suite_manifest(bytes, manifest_path.as_view(),
-                                          source::UNKNOWN_FILE, ctx.bag,
-                                          ctx.arena);
-          return std::nullopt;
-      }
-    }
-    const path::Path parent = at.parent();
-    if (parent == at) {
-      return std::nullopt;
-    }
-    member = std::string(dir_basename(at.as_view())) + "/" + member;
-    at = parent;
-  }
 }
 
 // Inserts `member` into the `packages` array of a suite manifest,

@@ -341,6 +341,7 @@
   F(PipelineDependencyOverlaps, "Dependency '{}' overlaps '{}'; name every member or glob the suite, not both") \
   F(PipelineDependencySuiteMismatch, "Dependency '{}' names suite '{}/{}', but '{}' holds suite '{}/{}'") \
   F(PipelineFreestandingTarget, "A freestanding build is not implemented for target '{}' yet") \
+  F(PipelineInheritsWithoutSuite, "Manifest '{}' inherits from a suite, but no suite encloses it") \
   F(PipelineInvalidOutputPath, "Invalid output path '{}'") \
   F(PipelineInvalidPackageName, "Invalid package name '{}'; use [A-Za-z0-9_-] only") \
   F(PipelineInvalidSourceDirectory, "Invalid source directory '{}'") \
@@ -372,6 +373,8 @@
   F(PipelineSourceDirectoryInaccessible, "Source directory '{}' is not accessible") \
   F(PipelineStdIsASuite, "The 'alcy/std' path is a suite, not a package; write \"alcy/std/*\" for every member or \"alcy/std/<package>\" for one") \
   F(PipelineStdPackageRequiresSuite, "Package 'alcy/std/{}' requires alcy/std/{}; add it to [dependencies]") \
+  F(PipelineSuiteEmpty, "Suite '{}' lists no members") \
+  F(PipelineSuiteIsNotAProgram, "Suite '{}' names several programs; run one member") \
   F(PipelineSuiteAlreadyHasMember, "Suite '{}' already lists member '{}'") \
   F(PipelineSuiteHasMemberNamed, "Suite '{}' already has a member named '{}'") \
   F(PipelineTargetOutputsCollide, "Bin target '{}' and lib target '{}' both write to '{}'; name one of them") \
