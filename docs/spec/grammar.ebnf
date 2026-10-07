@@ -73,7 +73,7 @@ spec_method = [ "unsafe" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] ,
                  `unsafe` method marker parses and is refused for
                  now; see docs/spec/ffi.md. *)
 static_item = "static" , IDENT , ":" , type , "=" , expr ;
-const_item  = "const" , IDENT , ":" , type , "=" , literal ;
+const_item  = "const" , IDENT , ":" , type , "=" , expr ;
 use_item    = "use" , path , [ "as" , IDENT ] , ";" ;
 
 (* Types *)
