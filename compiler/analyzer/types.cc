@@ -1088,8 +1088,6 @@ ir::TypeIdx Checker::uninit_payload(ir::TypeIdx type) const {
   return shape.fields.size() == 1 ? shape.fields[0] : ir::TypeIdx::invalid();
 }
 
-// Interns a registered nominal, reserving its index first so recursive
-// references resolve to it. A post-pass rejects uninhabited cycles.
 // Interns a name, or reports the shared table as spent once and returns an
 // invalid id. The table is shared with lowering and codegen, so one report
 // covers the run; the sweep that saw it stops rather than interning more
@@ -1109,6 +1107,8 @@ str::StringPoolId Checker::intern_name(std::string_view name) {
   return str::INVALID_STRING_POOL_ID;
 }
 
+// Interns a registered nominal, reserving its index first so recursive
+// references resolve to it. A post-pass rejects uninhabited cycles.
 ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
   if (entry.complete || entry.started) {
     return entry.type;
