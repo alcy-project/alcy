@@ -37,7 +37,9 @@ relied upon by MVP programs or by the MVP compiler implementation.
 - `spec` (trait) bounds on type parameters, `where` clauses, and
   monomorphization beyond per-instantiation enum, struct, and method
   specialization. Declarations, implementations, dispatch, and
-  coherence are settled (see `items.md` and `grammar.md`).
+  coherence are settled (see `items.md` and `grammar.md`); a bound
+  admitting a super-spec's methods, and generic super-specs, arrive
+  with this work.
 - The implementing-side manifest key that would let a package outside a
   seal opt in to a suite-only spec; seals are one-way until it ships
   (see `modules.md`).

@@ -408,6 +408,9 @@ bool verify_item_children(const ItemNode& node, const AstArena& arena) {
     }
     case ItemKind::Spec: {
       const ItemSpec spec = node.payload.get<ItemSpec>();
+      if (spec.super.is_valid() && !bound(spec.super, arena.types)) {
+        return false;
+      }
       for (const SpecMethod& method : spec.methods) {
         for (const ItemFnParam& param : method.params) {
           if (!verify_param_children(param, arena)) {

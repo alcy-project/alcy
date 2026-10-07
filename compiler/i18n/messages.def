@@ -202,6 +202,10 @@
   F(AnalyzerSpecSealed, "Spec '{}' is sealed by package '{}'; implementing it from outside needs the [spec] implement key, which is not accepted yet") \
   F(AnalyzerSpecSealUnknown, "Manifest seals spec '{}', which package '{}' does not declare") \
   F(AnalyzerSpecSignatureMismatch, "Method '{}' does not match the declaration in '{}'") \
+  F(AnalyzerSpecSuperArguments, "Super-spec of '{}' takes arguments; generic supers are not supported yet") \
+  F(AnalyzerSpecSuperCycle, "Super-spec chain of '{}' forms a cycle") \
+  F(AnalyzerSpecSuperMissing, "Implementing '{}' needs an implementation of '{}'") \
+  F(AnalyzerSpecSuperUnknown, "Super-spec '{}' must name a spec in scope") \
   F(AnalyzerSpecTargetNotDirect, "Spec implementation target must name its type parameters directly") \
   F(AnalyzerSpecUnknownMethod, "Method '{}' is not one of '{}'") \
   F(AnalyzerStaticHoldsMutableRef, "Static '{}' must not contain '&mut'") \

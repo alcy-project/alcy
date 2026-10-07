@@ -315,6 +315,142 @@ bool Checker::spec_targets_overlap(const SpecTarget& a, const SpecTarget& b) {
   return true;
 }
 
+bool Checker::spec_target_shapes_match(const SpecImplEntry& a,
+                                       const SpecImplEntry& b) {
+  if (a.target.nominal != b.target.nominal ||
+      a.target.args.size() != b.target.args.size()) {
+    return false;
+  }
+  // A generic impl may name its parameters differently from another, so
+  // a parameter stands for the first argument position that names it:
+  // `Vec<T>` and `Vec<U>` are the same shape, `Map<U, U>` and
+  // `Map<U, V>` are not. Concrete arguments compare as types.
+  const auto occurrence = [](const SpecTarget& target, usize at) -> usize {
+    for (usize i = 0; i < at; ++i) {
+      if (target.args[i].is_param &&
+          target.args[i].param == target.args[at].param) {
+        return i;
+      }
+    }
+    return at;
+  };
+  for (usize i = 0; i < a.target.args.size(); ++i) {
+    const SpecTarget::Arg& left = a.target.args[i];
+    const SpecTarget::Arg& right = b.target.args[i];
+    if (left.is_param != right.is_param) {
+      return false;
+    }
+    if (!left.is_param) {
+      if (!types_equal(left.type, right.type)) {
+        return false;
+      }
+      continue;
+    }
+    if (occurrence(a.target, i) != occurrence(b.target, i)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void Checker::check_superspecs() {
+  constexpr u32 NO_SUPER = U32_MAX;
+  std::vector<u32> super_of(specs.size(), NO_SUPER);
+  for (u32 i = 0; i < static_cast<u32>(specs.size()); ++i) {
+    const SpecEntry& entry = specs[i];
+    const ast::ItemSpec& declaration =
+        ast.items[entry.item].payload.get<ast::ItemSpec>();
+    if (!declaration.super.is_valid()) {
+      continue;
+    }
+    const ast::TypeNode& super_node = ast.types[declaration.super];
+    SpecEntry* target = nullptr;
+    std::string_view spelling;
+    if (super_node.kind == ast::TypeKind::Path) {
+      const ast::TypePath& super_path = super_node.payload.get<ast::TypePath>();
+      const std::span<const ast::Ident> segments =
+          ast.paths[super_path.path].segments;
+      if (!segments.empty()) {
+        spelling = segments.back().name;
+        if (!super_path.args.empty()) {
+          const u32 index = bag.emit<i18n::Key::AnalyzerSpecSuperArguments>(
+              diag::Severity::Error, diag::Stage::Analyzer,
+              DiagCode::SpecSuperBadTarget, super_node.span, entry.name);
+          (void)index;
+          continue;
+        }
+        if (segments.size() == 1) {
+          target = find_spec_in_scope(entry.module, spelling);
+        } else {
+          u32 super_module = NO_MODULE;
+          std::string_view super_name;
+          if (resolve_type_path(entry.module, super_path.path, super_module,
+                                super_name)) {
+            target = find_spec(super_module, super_name);
+          }
+        }
+      }
+    }
+    if (target == nullptr) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerSpecSuperUnknown>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::SpecSuperBadTarget, super_node.span, spelling);
+      (void)index;
+      continue;
+    }
+    super_of[i] = static_cast<u32>(target - specs.data());
+  }
+  // The super graph is functional, so a cycle is a walk that returns to
+  // a spec already on its path; each closed walk reports once, for the
+  // spec the back edge points at.
+  std::vector<u8> state(specs.size(), 0);
+  for (u32 start = 0; start < static_cast<u32>(specs.size()); ++start) {
+    if (state[start] != 0) {
+      continue;
+    }
+    std::vector<u32> path;
+    u32 node = start;
+    while (node != NO_SUPER && state[node] == 0) {
+      state[node] = 1;
+      path.push_back(node);
+      node = super_of[node];
+    }
+    if (node != NO_SUPER && state[node] == 1) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerSpecSuperCycle>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::SpecSuperCycle, specs[node].span, specs[node].name);
+      (void)index;
+    }
+    for (u32 on_path : path) {
+      state[on_path] = 2;
+    }
+  }
+  // Every implementation needs an implementation of its spec's direct
+  // super for the same target; the chain holds because each super's own
+  // implementation owes the next.
+  for (const SpecImplEntry& entry : spec_impls) {
+    const u32 super = super_of[entry.spec];
+    if (super == NO_SUPER) {
+      continue;
+    }
+    bool satisfied = false;
+    for (const SpecImplEntry& candidate : spec_impls) {
+      if (candidate.spec == super &&
+          spec_target_shapes_match(candidate, entry)) {
+        satisfied = true;
+        break;
+      }
+    }
+    if (!satisfied) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerSpecSuperMissing>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::SpecSuperMissing, entry.span, specs[entry.spec].name,
+          specs[super].name);
+      (void)index;
+    }
+  }
+}
+
 // A declaration recognized by its reserved name rather than by path.
 // Range and Bound are reserved, so a tree holds at most one of each.
 NominalEntry* Checker::builtin_nominal(std::string_view name) {
@@ -4489,6 +4625,10 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   if (checker.name_table_exhausted_) {
     return base::make_err(diag::Reported{});
   }
+  // ADR-0053: super-specs resolve, form no cycle, and every
+  // implementation owes an implementation of its super for the same
+  // target.
+  checker.check_superspecs();
   // ADR-0053: every name a manifest seals must resolve to a spec its
   // package declares; a name that resolves to nothing would seal
   // nothing, which is what the list exists to prevent.

@@ -968,6 +968,16 @@ ast::ItemIdx Parser::parse_spec(bool is_pub) {
   if (!parse_generic_params(params)) {
     return ast::ItemIdx::invalid();
   }
+  // `spec Eq: PartialEq` refines a super-spec (ADR-0053): a path the
+  // checker resolves to another spec, whose implementation every
+  // implementation of this one then requires.
+  ast::TypeIdx super = ast::TypeIdx::invalid();
+  if (match(lexer::TokenKind::Colon)) {
+    super = parse_closed_type();
+    if (!super.is_valid()) {
+      return ast::ItemIdx::invalid();
+    }
+  }
   if (!expect_header_lbrace()) {
     return ast::ItemIdx::invalid();
   }
@@ -997,6 +1007,7 @@ ast::ItemIdx Parser::parse_spec(bool is_pub) {
   node.payload.set(ast::ItemSpec{
       .name = std::move(name).unwrap(),
       .params = ast::copy_to_arena(ast_.spans, params),
+      .super = super,
       .methods = ast::copy_to_arena(ast_.spans, methods),
   });
   return ast_.items.push_back(node);

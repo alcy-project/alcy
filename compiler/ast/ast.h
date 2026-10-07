@@ -930,6 +930,9 @@ struct SpecMethod {
 struct ItemSpec {
   Ident name;
   std::span<const Ident> params;
+  // The super-spec this one refines (`spec Eq: PartialEq`), as a path
+  // type, or an invalid index when absent. ADR-0053.
+  TypeIdx super = TypeIdx::invalid();
   std::span<const SpecMethod> methods;
 };
 

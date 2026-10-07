@@ -1134,6 +1134,43 @@ TEST_CASE("Parser rejects spec method bodies") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Parser reads a super-spec path") {
+  Fixture f;
+  const ParseResult result = parse(
+      "spec Eq: PartialEq {\n"
+      "}\n"
+      "spec PartialEq {\n"
+      "  fn eq(self: &Self, other: &Self) -> bool;\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 2) {
+    return;
+  }
+  const ast::ItemSpec eq = as_spec(result.items[0], f);
+  CHECK(eq.super.is_valid());
+  if (!eq.super.is_valid()) {
+    return;
+  }
+  const ast::TypeNode& super = f.ast.types[eq.super];
+  CHECK(super.kind == ast::TypeKind::Path);
+  const ast::TypePath& path = super.payload.get<ast::TypePath>();
+  const std::span<const ast::Ident> segments = f.ast.paths[path.path].segments;
+  CHECK(segments.size() == 1);
+  if (segments.size() == 1) {
+    CHECK(segments[0].name == "PartialEq");
+  }
+  const ast::ItemSpec plain = as_spec(result.items[1], f);
+  CHECK(!plain.super.is_valid());
+}
+
+TEST_CASE("Parser rejects a super-spec without a name") {
+  Fixture f;
+  const ParseResult result = parse("spec Eq: {\n}\n", f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Parser reads a closure with captures and typed params") {
   Fixture f;
   const ast::ExprIdx value =

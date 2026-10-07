@@ -56,7 +56,11 @@ spec's own type inside `spec` declarations. An omitted
 return type means `()`; only free functions take type parameters.
 
 A `spec` declares a named capability as `;`-terminated method
-signatures, with no bodies. `impl S for T` implements every
+signatures, with no bodies. A spec may refine another: `spec Eq:
+PartialEq` says every implementation of `Eq` also needs an
+implementation of `PartialEq` for the same target, the super must
+resolve to a spec in scope, and the chain must not cycle. Generic
+super-specs are not supported yet. `impl S for T` implements every
 declared method for one type; a missing or extra method, or a
 signature that differs after substituting the target for `Self`,
 is an error where the impl is written. The tree holds at most one

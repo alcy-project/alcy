@@ -278,6 +278,15 @@ class Checker {
   // pairwise equal or a bare impl parameter. Concrete types never
   // overlap each other, so coherence needs no solver.
   bool spec_targets_overlap(const SpecTarget& a, const SpecTarget& b);
+  // Whether two impl records carry the same target: the same nominal
+  // with alpha-equivalent arguments. The super-spec requirement needs
+  // the identical shape, which overlap is too weak to state.
+  bool spec_target_shapes_match(const SpecImplEntry& a, const SpecImplEntry& b);
+  // Resolves every declared super-spec, rejects cycles, and requires an
+  // implementation of each ancestor beside every implementation of a
+  // spec (ADR-0053). Runs after every module's signatures registered,
+  // so a super declared later still resolves.
+  void check_superspecs();
   // Synthesizes one spec method entry for a generic instantiation
   // and checks its body under the substitution, mirroring
   // `instantiate_method` with the declared signature as the check.

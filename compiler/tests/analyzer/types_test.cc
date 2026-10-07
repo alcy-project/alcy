@@ -3629,4 +3629,144 @@ TEST_CASE("Check reports a seal that names no declared spec") {
         "declare");
 }
 
+// ADR-0053: a super-spec is resolved after every declaration is in, so
+// a forward reference works, and an implementation owes an
+// implementation of the super for the same target.
+TEST_CASE("Check requires a super-spec implementation for the same target") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "spec B: A {\n  fn b(self: &Self) -> i32;\n}\n"
+                       "spec A {\n  fn a(self: &Self) -> i32;\n}\n"
+                       "struct Tag {\n  n: i32,\n}\n"
+                       "impl B for Tag {\n"
+                       "  fn b(self: &Self) -> i32 {\n    ret self.n\n  }\n}\n"
+                       "impl A for Tag {\n"
+                       "  fn a(self: &Self) -> i32 {\n    ret self.n\n  }\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check reports an implementation missing its super-spec") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "spec A {\n  fn a(self: &Self) -> i32;\n}\n"
+                       "spec B: A {\n  fn b(self: &Self) -> i32;\n}\n"
+                       "struct Tag {\n  n: i32,\n}\n"
+                       "impl B for Tag {\n"
+                       "  fn b(self: &Self) -> i32 {\n    ret self.n\n  }\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(f.bag.size() == 1);
+  if (f.bag.size() != 1) {
+    return;
+  }
+  CHECK(f.bag.at(0)->message ==
+        "Implementing 'B' needs an implementation of 'A'");
+}
+
+TEST_CASE("Check matches a generic super-spec implementation by shape") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "spec A {\n  fn a(self: &Self) -> i32;\n}\n"
+                       "spec B: A {\n  fn b(self: &Self) -> i32;\n}\n"
+                       "struct Box<T> {\n  v: T,\n}\n"
+                       "impl<T> B for Box<T> {\n"
+                       "  fn b(self: &Self) -> i32 {\n    ret 0\n  }\n}\n"
+                       "impl<U> A for Box<U> {\n"
+                       "  fn a(self: &Self) -> i32 {\n    ret 0\n  }\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check reports a super-spec that is out of scope") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "spec B: Nope {\n  fn b(self: &Self) -> i32;\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(f.bag.size() == 1);
+  if (f.bag.size() != 1) {
+    return;
+  }
+  CHECK(f.bag.at(0)->message == "Super-spec 'Nope' must name a spec in scope");
+}
+
+TEST_CASE("Check reports a super-spec cycle") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "spec A: B {\n  fn a(self: &Self) -> i32;\n}\n"
+                       "spec B: A {\n  fn b(self: &Self) -> i32;\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(f.bag.size() == 1);
+  if (f.bag.size() != 1) {
+    return;
+  }
+  CHECK(f.bag.at(0)->message == "Super-spec chain of 'A' forms a cycle");
+}
+
+TEST_CASE("Check reports an argument-bearing super-spec") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "spec A<T> {\n  fn a(self: &Self) -> i32;\n}\n"
+                       "spec B: A<i32> {\n  fn b(self: &Self) -> i32;\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(f.bag.size() == 1);
+  if (f.bag.size() != 1) {
+    return;
+  }
+  CHECK(f.bag.at(0)->message ==
+        "Super-spec of 'B' takes arguments; generic supers are not supported "
+        "yet");
+}
+
 }  // namespace analyzer

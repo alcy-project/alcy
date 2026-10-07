@@ -31,6 +31,11 @@
   of its suite may then implement it. A spec the list does not name
   stays open, and an outside implementation is an error until the
   implementing-side manifest key ships. See `modules.md`.
+- A spec may name a super-spec (`spec Eq: PartialEq`): every
+  implementation of the spec requires an implementation of the super
+  for the same target shape, the super must resolve to a spec in
+  scope, and the chain must not cycle. A generic super-spec is
+  deferred, as is a bound admitting the super's methods.
 - `static` items have storage and MUST NOT contain `&mut`.
   `const X: T = ...` items are inline constants restricted to literal
   expressions in MVP (full const evaluation arrives with `comp fn`,

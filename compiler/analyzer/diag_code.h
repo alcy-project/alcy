@@ -76,6 +76,14 @@ enum class DiagCode : u8 {
   // A package's manifest seals a name that is not a spec the package
   // declares, so the seal would cover nothing.
   SpecSealUnknown = 38,
+  // A declared super-spec does not name a spec in scope, or names one
+  // with arguments, which supers do not support yet.
+  SpecSuperBadTarget = 39,
+  // A chain of super-specs returns to where it started.
+  SpecSuperCycle = 40,
+  // An implementation of a spec has no implementation of one of its
+  // super-specs for the same target.
+  SpecSuperMissing = 41,
 };
 
 }  // namespace analyzer

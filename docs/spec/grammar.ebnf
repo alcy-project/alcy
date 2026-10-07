@@ -58,8 +58,14 @@ impl_item   = "impl" , [ type_params ] , type , [ "for" , type ] , "{"
               (* Without "for" the block is inherent. With it the first
                  type is the implemented spec as a path, optionally with
                  arguments, and the second is the target. *)
-spec_item   = "spec" , IDENT , [ type_params ] , "{"
+spec_item   = "spec" , IDENT , [ type_params ] , [ ":" , path_type ] , "{"
             , { [ vis ] , spec_method } , "}" ;
+              (* The optional path names a super-spec: every
+                 implementation of this spec then also requires an
+                 implementation of the super for the same target, and
+                 the chain must not cycle. Generic super-specs are not
+                 supported yet. See
+                 docs/adr/0053-operators-are-sealed-specs.md. *)
 spec_method = [ "unsafe" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
             , [ "->" , type ] , ";" ;
               (* Signatures only: a body here is an error, and every
