@@ -171,6 +171,40 @@ from the idea.
   need per-module storage merged in module order, which is a design of its own
   rather than a loop to mark parallel.
 
+## Tracing
+
+`alcy check --time-trace` (and `build`) records what the compiler's scopes did
+and prints the tree under the result line; with `--json` the same events go out
+as `traceEvents` for a viewer. A scope whose name already exists as a view - a
+module path, an interned name - costs a null check when tracing is off, which
+is what makes instrumentation cheap enough to leave in: the question is only
+what to name.
+
+- **The category is the phase, the name is the unit.** `frontend`, `analyze`,
+  `lower-fn`, `borrow-fn`, `backend`, and `emit-fn` name phases; within one,
+  the row names what spent the time: a step (`nominals`, `signatures`,
+  `bodies`, `drops`, `discover`, `resolve-target`, `build-tree`,
+  `collect-locals`, `resolve-exports`), a module path, or a function. The
+  renderer prints a category only where it differs from its parent's and
+  collapses every child past the reader's share into one row, so a hundred
+  unit rows still read as a summary.
+- **Unit granularity, never per instruction.** A traced `plain1200` carries
+  about 23k events and costs 0.89G instructions against 0.82G untraced; one
+  scope per instruction would cost the run again.
+- **A name must be a view.** The name is interned when the scope is
+  constructed, and the macro evaluates its argument before that, so a name
+  built with `fmt::format` pays even when no profiler is attached. Pass what
+  the work already holds.
+- **A region spread over threads passes no profiler.** Recording takes a mutex
+  per event, so the workers would contend and interleave; they pass null and
+  the region keeps one scope on the calling thread. Per-thread recording is
+  what would let a spread region be traced.
+
+Reading the tree is the localization step: `signatures` carrying one module
+row that is most of the sweep says the sweep is fine and that module is not,
+and `resolve-tree` splitting into `build-tree` and `collect-locals` says which
+half of the walk to read next.
+
 ## Tools
 
 | command | what it does |
