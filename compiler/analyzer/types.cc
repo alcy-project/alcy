@@ -121,13 +121,13 @@ void Checker::register_nominals() {
 // previously registered nominal, so this runs with the whole table
 // filled.
 void Checker::validate_value_parameter_types() {
-  for (const NominalEntry& entry : nominals) {
-    for (const ast::GenericParam& param : nominal_params(entry)) {
+  const auto check = [&](u32 module,
+                         std::span<const ast::GenericParam> params) {
+    for (const ast::GenericParam& param : params) {
       if (!param.type.is_valid()) {
         continue;
       }
-      const ir::TypeIdx annotation =
-          resolve_type(entry.module, param.type, nullptr);
+      const ir::TypeIdx annotation = resolve_type(module, param.type, nullptr);
       if (is_error(annotation) || is_integer_tag(tag_of(annotation))) {
         continue;
       }
@@ -136,6 +136,37 @@ void Checker::validate_value_parameter_types() {
               diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::TypeMismatch, param.name.span, param.name.name);
       (void)index;
+    }
+  };
+  for (const NominalEntry& entry : nominals) {
+    check(entry.module, nominal_params(entry));
+  }
+  // Every declaration that may spell a value parameter owes the same
+  // rule; a function's or impl's annotation is no less a type.
+  for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
+    for (ast::ItemIdx item : tree.modules[m]->items) {
+      const ast::ItemNode& node = ast.items[item];
+      switch (node.kind) {
+        case ast::ItemKind::Fn:
+          check(m, node.payload.get<ast::ItemFn>().generic);
+          break;
+        case ast::ItemKind::Intrinsic:
+          check(m, node.payload.get<ast::ItemIntrinsic>().generic);
+          break;
+        case ast::ItemKind::Extern:
+          for (const ast::ItemExternFn& fn :
+               node.payload.get<ast::ItemExtern>().fns) {
+            check(m, fn.generic);
+          }
+          break;
+        case ast::ItemKind::Impl:
+          check(m, node.payload.get<ast::ItemImpl>().params);
+          break;
+        case ast::ItemKind::Spec:
+          check(m, node.payload.get<ast::ItemSpec>().params);
+          break;
+        default: break;
+      }
     }
   }
 }

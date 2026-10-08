@@ -4374,6 +4374,65 @@ TEST_CASE("Check rejects a non-integer value parameter annotation") {
   CHECK(has_message(f.bag, "Value parameter 'N' must have an integer type"));
 }
 
+TEST_CASE("Check rejects a non-integer annotation on a function") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn f<T, N: bool>() -> i32 {\n"
+                                      "  ret 0\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Value parameter 'N' must have an integer type"));
+}
+
+TEST_CASE("Check rejects a non-integer annotation on an impl") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct Bar<T, N: usize> { x: [T; N] }\n"
+                                      "impl<T, N: bool> Bar<T, N> {}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Value parameter 'N' must have an integer type"));
+}
+
+TEST_CASE("Check rejects a non-integer annotation on a spec") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "spec Sp<N: bool> {\n"
+                                      "  fn show(self: &Self) -> i32;\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Value parameter 'N' must have an integer type"));
+}
+
 TEST_CASE("Check rejects an arity mismatch on value parameters") {
   VirtualDir dir;
   const bool setup =
