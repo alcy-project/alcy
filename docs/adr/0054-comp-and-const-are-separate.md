@@ -63,6 +63,15 @@ instantiation and comp arguments, and allocates only to materialize
 constant data; I/O, `panic`, and reads of `static` are compile-time
 errors, as they are today.
 
+Amended at the AST engine's landing: the engine lives in the analyzer
+(`analyzer::CompEvaluator`), not in a module of its own. Both readers
+sit at or above the analyzer, and the checked tables the engine reads
+are exactly what a separate module would have to be handed through an
+interface; the value types live in the `comp` module, and the engine
+moves behind an interface when a host outside the analyzer needs one.
+The step bound is a fixed branch quota: a call and a loop back edge
+spend one unit of a million, and nothing raises it yet.
+
 ## Consequences
 
 `comp.md` is rewritten at implementation; the grammar gains local

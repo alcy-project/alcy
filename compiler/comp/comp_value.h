@@ -42,6 +42,14 @@ struct CompVal {
   ir::TypeIdx type = ir::TypeIdx(base::INVALID_IDX);
 };
 
+// What an evaluated block did: produced a value, or left through
+// break, continue, or return.
+struct CompFlow {
+  enum class Kind : u8 { Value, Break, Continue, Return };
+  Kind kind = Kind::Value;
+  CompVal value;
+};
+
 // Lexical comp bindings: persistent per-function bindings plus
 // evaluation-local frames.
 struct CompScope {

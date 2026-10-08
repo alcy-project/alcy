@@ -5,6 +5,8 @@ source_set("analyzer") {
   sources = [
     "checker.cc",
     "checker.h",
+    "comp_evaluator.cc",
+    "comp_evaluator.h",
     "diag_code.h",
     "fmt.cc",
     "fmt.h",
@@ -17,6 +19,7 @@ source_set("analyzer") {
   deps = [
     "//compiler:base_modules",
     "//compiler/ast",
+    "//compiler/comp",
     "//compiler/diag",
     "//compiler/i18n",
     "//compiler/ir",

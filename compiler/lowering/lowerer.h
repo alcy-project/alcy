@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/comp_evaluator.h"
 #include "analyzer/fmt.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
@@ -125,18 +126,14 @@ class Lowerer {
   std::vector<usize> worklist_;
   // Per-function comp bindings (comp parameters); cleared per body.
   std::vector<std::pair<std::string_view, CompVal>> comp_scope_;
+  // The AST engine of compile-time evaluation; the entry points below
+  // delegate to it.
+  analyzer::CompEvaluator comp_;
   // Lowered prelude functions, excluded from reported counts.
   usize prelude_functions_ = 0;
-  // Step budget per top-level comp evaluation; recursion depth guard.
-  // Compile-time budget: a call or a loop back edge spends one unit,
-  // and the evaluation stops when the units run out. The default is
-  // fixed; nothing raises it yet.
-  u64 comp_quota_ = 0;
-  u32 comp_call_depth_ = 0;
-  // Instantiation under lowering (runtime) and under comp
-  // evaluation; side-table lookups match these contexts.
+  // Instantiation under lowering; the comp evaluator is seeded with it
+  // and side-table lookups match this context.
   u32 cur_inst_ = analyzer::NO_INST;
-  u32 comp_inst_ = analyzer::NO_INST;
 
   struct ExtEntry {
     std::string_view name;
@@ -453,99 +450,24 @@ class Lowerer {
   Val lower_while(ast::ExprIdx expr);
   Val lower_question(ast::ExprIdx expr);
 
-  // Compile-time evaluation
-
-  static constexpr u64 COMP_BRANCH_QUOTA = 1'000'000;
-  static constexpr u32 COMP_MAX_CALL_DEPTH = 64;
-  bool comp_fail(diag::Span span, std::string_view what);
-  // Spends one quota unit; false once the quota is exhausted.
-  bool comp_spend(diag::Span span);
-  ir::TypeIdx expr_type_in(u32 mod, ast::ExprIdx expr);
-  const analyzer::CheckedModule::CallTarget* call_target_in(
-      u32 mod,
-      ast::ExprIdx callee) const;
-  bool comp_eval_literal(u32 mod, ast::ExprIdx expr, CompVal& out);
-
-  struct CompFlow {
-    enum class Kind : u8 { Value, Break, Continue, Return };
-    Kind kind = Kind::Value;
-    CompVal value;
-  };
+  // Compile-time evaluation: the AST engine lives in the analyzer, and
+  // the lowerer keeps the entry points, the persistent comp bindings
+  // the evaluator reads through, and the reporting back into its own
+  // diagnostic stage.
+  using CompFlow = comp::CompFlow;
+  bool comp_evaluate(u32 mod, ast::ExprIdx expr, CompVal& out);
+  // One const item's initializer, evaluated at a use site: item scope,
+  // so no comp binding of the caller is visible.
+  bool comp_evaluate_item(u32 mod, ast::ExprIdx init, CompVal& out);
+  // Binds one evaluated comp value to a pattern while the lowering
+  // publishes comp arguments and declarations.
   bool comp_bind_pattern(u32 mod,
                          ast::PatternIdx pattern,
                          const CompVal& value,
                          CompScope& scope,
                          diag::Span span);
-  bool comp_match_pattern(u32 mod,
-                          ast::PatternIdx pattern,
-                          const CompVal& value,
-                          CompScope& scope,
-                          diag::Span span);
-  bool comp_eval_struct(u32 mod,
-                        ast::ExprIdx expr,
-                        CompScope& scope,
-                        CompVal& out);
-  bool comp_eval_block(u32 mod,
-                       ast::BlockIdx block,
-                       CompScope& scope,
-                       CompFlow& out);
-  bool comp_eval_stmt(u32 mod,
-                      ast::StmtIdx stmt,
-                      CompScope& scope,
-                      CompFlow& out);
-  bool comp_eval_loop(u32 mod,
-                      ast::BlockIdx body,
-                      CompScope& scope,
-                      CompFlow& out,
-                      bool always,
-                      diag::Span span,
-                      ast::ExprIdx cond);
-  bool comp_run_fn(u32 def_module,
-                   ast::ItemIdx item,
-                   const std::vector<ir::TypeIdx>& params,
-                   ir::TypeIdx ret,
-                   u32 inst,
-                   u32 caller_module,
-                   const std::span<const ast::ExprIdx>& args,
-                   CompScope& caller_scope,
-                   diag::Span span,
-                   CompVal& out);
-  bool comp_eval_assoc_call(u32 mod,
-                            ast::ExprIdx expr,
-                            CompScope& scope,
-                            CompVal& out,
-                            const analyzer::CheckedModule::CallTarget* target);
-  bool comp_eval_intrinsic(u32 mod,
-                           const analyzer::CheckedModule::FnSig& sig,
-                           const std::span<const ast::ExprIdx>& args,
-                           CompScope& scope,
-                           diag::Span span,
-                           CompVal& out);
-  bool comp_eval_call(u32 mod,
-                      ast::ExprIdx expr,
-                      CompScope& scope,
-                      CompVal& out);
-  bool comp_eval_method_call(u32 mod,
-                             ast::ExprIdx expr,
-                             CompScope& scope,
-                             CompVal& out);
+  void report_comp_failure();
   Val materialize_comp_value(const CompVal& value, diag::Span span);
-  bool comp_evaluate(u32 mod, ast::ExprIdx expr, CompVal& out);
-  // One const item's initializer, evaluated at a use site: item scope,
-  // so no comp binding of the caller is visible, with the evaluation
-  // budget reset for the run.
-  bool comp_evaluate_item(u32 mod, ast::ExprIdx init, CompVal& out);
-  // The same, from inside an evaluation already running: the budget is
-  // shared and the recursion depth counts against the call limit.
-  bool comp_eval_const_item(u32 mod, ast::ExprIdx init, CompVal& out);
-  bool comp_eval_expr(u32 mod,
-                      ast::ExprIdx expr,
-                      CompScope& scope,
-                      CompVal& out);
-  bool comp_eval_binary(u32 mod,
-                        ast::ExprIdx expr,
-                        CompScope& scope,
-                        CompVal& out);
   struct FmtState {
     ir::RegisterIdx off_addr = ir::RegisterIdx::invalid();
     ir::RegisterIdx tot_addr = ir::RegisterIdx::invalid();

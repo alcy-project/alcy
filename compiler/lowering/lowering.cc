@@ -96,7 +96,8 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
       ast(ast),
       strings(strings),
       bag(bag),
-      profiler(profiler) {
+      profiler(profiler),
+      comp_(pkg, ast, builder, width) {
   mark_drops();
   index_origins();
   index_structs();
@@ -755,7 +756,6 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   const u32 mod = entry.mod;
   module = mod;
   cur_inst_ = entry.inst;
-  comp_inst_ = entry.inst;
   locals.clear();
   comp_scope_.clear();
   fn_blocks_.clear();
@@ -878,7 +878,6 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
   const u32 mod = entry.mod;
   module = mod;
   cur_inst_ = entry.inst;
-  comp_inst_ = entry.inst;
   locals.clear();
   comp_scope_.clear();
   fn_blocks_.clear();
