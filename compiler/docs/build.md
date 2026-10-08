@@ -72,7 +72,7 @@ the updated prebuilt release.
   `libcxx` GN config is excluded). Always use a dedicated output directory
   (e.g. `--build-subdir=build_wasm --target-os=emscripten`); reusing a native
   output directory leaves stale artifacts behind. Test binaries run under
-  `bun` (falls back to `node` if `bun` not found. `run.py` handles this automatically).
+  `bun`, which must be on `PATH` (`run.py` uses it directly).
 
 ### Windows CRT details
 

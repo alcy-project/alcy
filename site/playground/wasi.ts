@@ -3,8 +3,8 @@
 
 // The WASI preview1 host side for one compiled program, as a classic
 // script so the runner worker can load it with `importScripts`. Keeping
-// it separate from the worker also keeps it runnable under node, which
-// is how it is smoke-tested.
+// it separate from the worker also keeps it runnable outside a worker,
+// which is how it is smoke-tested.
 //
 // The module contract is fixed by `compiler/playground/`: the program
 // exports `_start` and its memory, and imports `fd_write` and `proc_exit`

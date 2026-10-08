@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // The build-time highlighter: the same rendering as the playground's
-// editor (`shared/highlight.ts`), loaded against the node copy of the
+// editor (`shared/highlight.ts`), loaded against the runtime's copy of the
 // tree-sitter binding instead of the vendored browser bundle. The
 // binding, the grammar, and the query are named by the build tool.
 

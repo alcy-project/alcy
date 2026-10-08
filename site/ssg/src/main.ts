@@ -9,7 +9,7 @@
 // page are templates under `site/`; the generator stamps them into each
 // tree too, so a page never renders in the wrong language first.
 //
-//     node site/build/ssg/src/main.js \
+//     bun site/build/ssg/src/main.js \
 //       --docs docs/guide --dist site/dist --site site --repo-root . \
 //       --alcy compiler/playground/js/alcy.mjs \
 //       --glue site/dist/playground/compiler/alcy_playground.js \

@@ -108,8 +108,8 @@ files the compiler rejects for a reason an editor has no use for.
 ## Generated sources
 
 `src/` is committed, apart from `src/scanner.c`, so that a consumer links
-the parser without running Node. Everything else in it comes from
-`grammar.js`, and the drift check is what keeps the two in step.
+the parser without running the generator. Everything else in it comes
+from `grammar.js`, and the drift check is what keeps the two in step.
 
 ## Using it in an editor
 

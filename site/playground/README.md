@@ -59,13 +59,13 @@ and the vendored binding types are not committed.
 
 ## Building and serving
 
-Prerequisites: `pnpm` and `tree-sitter` on `PATH`, Node for `tsc`,
-Emscripten (`emcc`) for the compiler module, and `uv` as everywhere else
-in the repository. `config.toml` pins the tree-sitter CLI, the
-web-tree-sitter binding, the TypeScript compiler, and pnpm. The CLI must
-already be on `PATH`; the binding and the compiler are installed with the
-pinned pnpm into `out/site-cache/`. Install pnpm at the pinned
-series with `corepack enable pnpm` or a standalone install.
+Prerequisites: `bun` and `tree-sitter` on `PATH`, Emscripten (`emcc`)
+for the compiler module, and `uv` as everywhere else in the repository.
+`config.toml` pins the tree-sitter CLI, the web-tree-sitter binding, the
+TypeScript compiler, and bun. The CLI must already be on `PATH`; the
+binding and the compiler are installed with the pinned bun into
+`out/site-cache/`. Install bun at the pinned series with its install
+script or a package manager.
 
 ```sh
 # Highlighting only; the compiler module is missing and Check/Run stay off.
@@ -119,12 +119,12 @@ The module must be the Emscripten `MODULARIZE` build from
 `compiler/playground/BUILD.gn`, whose factory is the global
 `createAlcyPlayground` (classic glue, not `EXPORT_ES6`), with the sidecar
 `.wasm` next to the glue script, built with `-sENVIRONMENT=web,worker,node`
-so the same artifact runs in the page's worker and in node's smoke test.
+so the same artifact runs in the page's worker and in the bun smoke test.
 
 The compiled program speaks WASI preview1: it exports `_start` and its
 memory, and imports `fd_write` and `proc_exit` from
 `wasi_snapshot_preview1`. `wasi.ts` supplies those two imports, so the
-same module also runs under `node` and `wasmtime`.
+same module also runs under `bun` and `wasmtime`.
 
 ## Deploying
 

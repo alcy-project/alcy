@@ -133,7 +133,7 @@ config("linker") {
 
 config("emscripten") {
   # Keep in sync with the project-wide -fno-exceptions policy and make test
-  # binaries runnable under node with a growable heap (StringPool reserves
+  # binaries runnable under bun with a growable heap (StringPool reserves
   # address space up front on native builds; see S2 notes in the wasm plan).
   ldflags = [
     "-sWASM=1",

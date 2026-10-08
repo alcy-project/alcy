@@ -30,7 +30,7 @@ site is shaped this way.
   highlighter, and the template stamper. Its tests are in `ssg/test/`.
 - `tsconfig.json`, `tsconfig.workers.json`, `tsconfig.ssg.json` - the
   three builds: the pages (DOM), the playground's two workers
-  (WebWorker), and the generator (node).
+  (WebWorker), and the generator (Bun).
 
 The guide's sources live outside the site, under `docs/guide/`, named
 `NN-slug.md`: the number is the reading order, the `# heading` is the
@@ -55,7 +55,7 @@ uv run ./tools/site.py test           # run the generator's tests
 uv run ./tools/site.py serve          # http://127.0.0.1:8000/
 ```
 
-`build` needs `pnpm` and `tree-sitter` on `PATH` (the versions in
+`build` needs `bun` and `tree-sitter` on `PATH` (the versions in
 `config.toml` are installed into `out/site-cache/`). Every `alcy` fence
 in the guide is compiled with the playground's wasm module and every
 link is audited; a fence that does not compile or a link that goes

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 // The playground's smoke test, run by tools/check_playground.py under
-// node: compile a program, run the module it produced, and check that a
+// bun: compile a program, run the module it produced, and check that a
 // rejected source comes back with diagnostics rather than a module. The
 // program's own output is forwarded to stdout so the runner can compare
 // it, and the process exits with the module's status.

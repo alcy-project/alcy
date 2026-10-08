@@ -5,7 +5,7 @@
 - A C++20 toolchain: Clang, LLD, and libc++ (see [compiler/docs/build.md](compiler/docs/build.md)).
 - GN and Ninja.
 - Python via `uv` (`uv sync` sets up the environment; `uv run` prefixes commands).
-- The tree-sitter CLI and Node, for the language's grammar (see [treesitter/README.md](treesitter/README.md)).
+- The tree-sitter CLI and Bun, for the language's grammar (see [treesitter/README.md](treesitter/README.md)).
 - Alternatively, Nix provides the whole toolchain: `nix develop`.
 
 ## Workflow
@@ -25,7 +25,7 @@ uv run ./tools/lint.py
 uv run ./tools/format.py --dry-run
 uv run ./tools/verify_static_linkage.py --build-dir=out/build
 
-# The grammar needs no toolchain but the tree-sitter CLI and Node:
+# The grammar needs no toolchain but the tree-sitter CLI and Bun:
 uv run ./tools/check_treesitter.py --grammar
 
 # Or run all of the above commands at once, which is what CI runs:
@@ -94,10 +94,10 @@ regardless.
 Please make sure the CI pass before requesting a review.
 
 `./tools/check.sh` runs every gate, including the WebAssembly tests and
-the playground smoke, which need `emcc` and `node` on `PATH`.
+the playground smoke, which need `emcc` and `bun` on `PATH`.
 
 ```bash
-# Everything (requires emcc and node on PATH):
+# Everything (requires emcc and bun on PATH):
 ./tools/check.sh
 
 # Skip the wasm gates:
