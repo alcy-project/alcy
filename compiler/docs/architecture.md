@@ -143,7 +143,7 @@ what implements it lives in `compiler/`.
   per language. `tools/site.py` builds it into `site/dist/`, combining
   those sources with the grammar and the compiler's wasm module;
   `.github/workflows/site.yaml` deploys that directory to GitHub Pages.
-  See `docs/adr/0057-the-site-its-generator-and-the-guide.md`.
+  See `docs/adr/0058-the-site-its-generator-and-the-guide.md`.
 
 ## Compiler modules
 

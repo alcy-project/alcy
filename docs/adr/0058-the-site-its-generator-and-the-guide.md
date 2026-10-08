@@ -1,4 +1,4 @@
-# ADR-0057: The site, its generator, and the guide
+# ADR-0058: The site, its generator, and the guide
 
 - Subject: the compiler
 - Status: Accepted
