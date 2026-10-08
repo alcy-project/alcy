@@ -171,8 +171,6 @@ a one-element tuple rather than a parenthesized expression.
 - [The principles](../principles.md) describe where the language is
   going and what decides design questions.
 - [The specification](../spec/overview.md) is the normative description.
-- [The ADRs](../adr/0057-the-site-its-generator-and-the-guide.md) record
-  the decisions the compiler embodies.
 - [The architecture](../../compiler/docs/architecture.md) describes the
   compiler's design.
 

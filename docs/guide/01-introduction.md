@@ -15,9 +15,8 @@ was compiled with the same module when the site was built.
 Two ideas show up everywhere in the language's design: abstractions are
 meant to compile away, and the programmer is meant to be able to see what
 the compiler decided. [The principles](../principles.md) spell out where
-the language is going, [the specification](../spec/overview.md) is its
-normative description, and [the ADRs](../adr/0057-the-site-its-generator-and-the-guide.md)
-record the decisions behind the compiler.
+the language is going, and [the specification](../spec/overview.md) is
+its normative description.
 
 - [Getting started](02-getting-started.md) builds the compiler and runs a
   first program.
