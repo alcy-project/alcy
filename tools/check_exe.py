@@ -298,12 +298,20 @@ def main():
         if args.cases
         else None
     )
+    # A freestanding program is Linux's syscall ABI and an `_start` the
+    # kernel enters; another host's pipeline refuses the target, which is
+    # the compiler working rather than the case failing.
+    runs_freestanding = sys.platform.startswith("linux")
     failures = 0
     ran = 0
+    skipped = 0
     for case_dir in sorted(cases_root.iterdir()):
         if not case_dir.is_dir():
             continue
         if selected is not None and case_dir.name not in selected:
+            continue
+        if not runs_freestanding and is_freestanding(case_dir):
+            skipped += 1
             continue
         ran += 1
         ok, detail = run_case(alcy, case_dir, args.sanitize)
@@ -311,6 +319,11 @@ def main():
         if not ok:
             failures += 1
             print(detail)
+    if skipped:
+        print(
+            f"note: {skipped} freestanding case(s) skipped: "
+            f"{sys.platform} is not a Linux syscall host"
+        )
     print(f"exe: {ran - failures}/{ran} passed")
     return 1 if failures else 0
 
