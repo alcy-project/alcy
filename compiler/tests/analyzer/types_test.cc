@@ -4155,6 +4155,137 @@ TEST_CASE("Check interns value arguments by their values") {
   CHECK(types.layout_of(wide->params[0], ir::PointerWidth::W64).size == 40);
 }
 
+TEST_CASE("Check accepts generic functions with value parameters") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn first<T, N: usize>(a: [T; N]) -> T {\n"
+                       "  ret a[0]\n"
+                       "}\n"
+                       "fn tag<T, N: usize>(x: T) -> T {\n"
+                       "  ret x\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  a := first::<i32, 3>([1, 2, 3])\n"
+                       "  b := first::<i32, 5>([1, 2, 3, 4, 5])\n"
+                       "  ret a + b + tag::<i32, 7>(1i32)\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  // The two turbofish counts mint distinct instances, each with an
+  // array of its own count and the element type as its result.
+  std::vector<const CheckedModule::FnSig*> firsts;
+  for (const CheckedModule::FnSig& fn : root->functions) {
+    if (fn.name == "first") {
+      firsts.push_back(&fn);
+    }
+  }
+  CHECK(firsts.size() == 2);
+  if (firsts.size() != 2) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  u64 counts[2] = {0, 0};
+  for (usize i = 0; i < firsts.size(); ++i) {
+    CHECK(types.types()[firsts[i]->params[0]].tag == ir::TypeTag::Array);
+    CHECK(types.types()[firsts[i]->ret].tag == ir::TypeTag::I32);
+    if (types.types()[firsts[i]->params[0]].tag != ir::TypeTag::Array) {
+      continue;
+    }
+    const ir::ArrayType& array =
+        types.array_types()[types.types()[firsts[i]->params[0]].as_array()];
+    CHECK(types.types()[array.element].tag == ir::TypeTag::I32);
+    counts[i] = array.count;
+  }
+  CHECK(firsts[0]->params[0].idx != firsts[1]->params[0].idx);
+  const bool both_counts =
+      (counts[0] == 3 && counts[1] == 5) || (counts[0] == 5 && counts[1] == 3);
+  CHECK(both_counts);
+}
+
+TEST_CASE("Check rejects a type argument in a function value slot") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn first<T, N: usize>(a: [T; N]) -> T {\n"
+                       "  ret a[0]\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  ret first::<i32, i32>([1, 2, 3])\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Expected a value argument for parameter 'N'"));
+}
+
+TEST_CASE("Check rejects an uninferable function value argument") {
+  // The type parameter infers from the first argument; the value
+  // parameter never does, and an array length is not a guess.
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn pick<T, N: usize>(x: T, a: [T; N]) -> T {\n"
+                       "  ret x\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  ret pick(1i32, [1, 2, 3])\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(
+      f.bag,
+      "Cannot infer the value argument for parameter 'N' of 'pick'; add it "
+      "with 'pick::<...>(...)'"));
+}
+
+TEST_CASE("Check rejects a runtime function value argument") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn first<T, N: usize>(a: [T; N]) -> T {\n"
+                       "  ret a[0]\n"
+                       "}\n"
+                       "static n: usize = 3\n"
+                       "fn main() -> i32 {\n"
+                       "  ret first::<i32, n>([1, 2, 3])\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(
+      f.bag, "Value argument must be a non-negative constant integer value"));
+}
+
 TEST_CASE("Check instantiates an enum with a value argument") {
   VirtualDir dir;
   const bool setup =

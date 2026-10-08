@@ -4265,6 +4265,7 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
   value_params.clear();
   for (usize i = 0; i < params.size() && i < args.size(); ++i) {
     if (params[i].type.is_valid()) {
+      value_params.emplace_back(params[i].name.name, const_type_value(args[i]));
       continue;
     }
     type_params.emplace_back(params[i].name.name, args[i]);
@@ -4341,12 +4342,25 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   }
   std::vector<ir::TypeIdx> bound(params.size(), ir::TypeIdx(base::INVALID_IDX));
   for (usize i = 0; i < explicit_args.size(); ++i) {
+    if (params[i].type.is_valid()) {
+      u64 value = 0;
+      if (!resolve_value_argument(module, explicit_args[i], params[i].name.name,
+                                  span, value)) {
+        return nullptr;
+      }
+      bound[i] = builder.const_type(value);
+      continue;
+    }
     bound[i] = resolve_type(module, explicit_args[i], nullptr);
   }
   for (usize i = 0; i < fn_params(item).size() && i < args.size(); ++i) {
     const DeclaredBinding declared =
         declared_binding(params, ast.types[fn_params(item)[i].type]);
-    if (declared.slot >= params.size() || bound[declared.slot].is_valid()) {
+    // Only a type slot binds from an argument's type; a value slot is
+    // never inferred and waits for its turbofish argument.
+    if (declared.slot >= params.size() ||
+        params[declared.slot].type.is_valid() ||
+        bound[declared.slot].is_valid()) {
       continue;
     }
     const ir::TypeIdx actual = check_expr(module, args[i], nullptr);
@@ -4409,6 +4423,22 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
     // A wrapper's payload and a slice's element are storage copies;
     // the parameter binds the declared type behind them.
     bound[declared.slot] = type_origin(bound_type);
+  }
+  // A value slot never infers, so an unfilled one is named first: the
+  // type message below would suggest spelling only a type argument.
+  for (usize i = 0; i < bound.size(); ++i) {
+    if (!params[i].type.is_valid()) {
+      continue;
+    }
+    if (bound[i].is_valid() && tag_of(bound[i]) == ir::TypeTag::Const) {
+      continue;
+    }
+    const u32 index = bag.emit<i18n::Key::AnalyzerCannotInferValueArgument>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::InvalidOperation, span, params[i].name.name, fn_name(item),
+        fn_name(item));
+    (void)index;
+    return nullptr;
   }
   for (const ir::TypeIdx arg : bound) {
     if (!arg.is_valid()) {
