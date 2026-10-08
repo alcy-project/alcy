@@ -76,7 +76,11 @@ function footer(): string {
     </footer>`;
 }
 
-function blockHtml(block: Block, options: PageOptions): string {
+function blockHtml(
+  block: Block,
+  options: PageOptions,
+  t: (key: MessageKey) => string,
+): string {
   switch (block.type) {
     case "heading":
       return `<h${block.level}>${renderInline(block.text, options.resolveLink)}</h${block.level}>`;
@@ -85,7 +89,12 @@ function blockHtml(block: Block, options: PageOptions): string {
     case "code": {
       const code =
         block.language === "alcy" ? options.highlight(block.text) : escapeHtml(block.text);
-      return `<pre><code>${code}</code></pre>`;
+      return `<div class="code-block">
+        <pre><code>${code}</code></pre>
+        <div class="code-actions" hidden>
+          <button type="button" data-action="copy">${t("guide.copy")}</button>
+        </div>
+      </div>`;
     }
     case "list": {
       const tag = block.ordered ? "ol" : "ul";
@@ -138,7 +147,16 @@ function pager(page: GuidePage, options: PageOptions): string {
 export function renderGuidePage(page: GuidePage, options: PageOptions): string {
   const assets = assetPrefix(page.route);
   const t = (key: MessageKey): string => translate(page.language, key);
-  const article = page.blocks.map((block) => blockHtml(block, options)).join("\n      ");
+  const hasCode = page.blocks.some((block) => block.type === "code");
+  const guideCss = hasCode
+    ? `\n    <link rel="stylesheet" href="${assets}shared/guide.css" />`
+    : "";
+  const guideJs = hasCode
+    ? `\n    <script type="module" src="${assets}shared/guide.js"></script>`
+    : "";
+  const article = page.blocks
+    .map((block) => blockHtml(block, options, t))
+    .join("\n      ");
   return `<!doctype html>
 <!-- Copyright 2026 The Alcy Project Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception -->
@@ -149,7 +167,7 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
     <meta name="description" content="${escapeHtml(page.title)} · ${escapeHtml(t("meta.guide"))}" />
     <title>${escapeHtml(page.title)} · alcy</title>
     <script src="${assets}shared/boot.js"></script>
-    <link rel="stylesheet" href="${assets}shared/site.css" />
+    <link rel="stylesheet" href="${assets}shared/site.css" />${guideCss}
   </head>
   <body class="site">
     ${header(page.route, page.language, page.path)}
@@ -165,7 +183,7 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
 
     ${footer()}
 
-    <script type="module" src="${assets}shared/shell.js"></script>
+    <script type="module" src="${assets}shared/shell.js"></script>${guideJs}
   </body>
 </html>
 `;

@@ -1,0 +1,52 @@
+/* Copyright 2026 The Alcy Project Authors */
+/* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception */
+
+/* The guide's code blocks: the buttons the generator stamps and
+   `guide.js` reveals, and the run output under an `alcy` block. Only
+   guide pages load this sheet. */
+
+.code-block {
+  position: relative;
+  margin: 16px 0;
+}
+
+.code-block pre {
+  margin: 0;
+}
+
+/* The generator leaves the row hidden until `guide.js` wires it; the
+   author display rule would otherwise beat the UA's `[hidden]`. */
+.code-actions[hidden],
+.code-output[hidden] {
+  display: none;
+}
+
+.code-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: flex;
+  gap: 4px;
+}
+
+.code-actions button {
+  font: inherit;
+  font-size: 11.5px;
+  padding: 2px 8px;
+  color: var(--fg-soft);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.code-actions button:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: var(--fg-faint);
+}
+
+.code-actions button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

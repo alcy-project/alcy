@@ -97,7 +97,7 @@ PLAIN_FILES = ["style.css"]
 
 # The shared shell: the plain files are copied as they are, and everything
 # under `build/shared/` was compiled from `site/shared/*.ts`.
-SHARED_PLAIN_FILES = ["boot.js", "site.css"]
+SHARED_PLAIN_FILES = ["boot.js", "guide.css", "site.css"]
 
 
 @dataclass(frozen=True)

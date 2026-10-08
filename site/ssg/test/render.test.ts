@@ -1,0 +1,52 @@
+// Copyright 2026 The Alcy Project Authors
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+import { equal, match } from "node:assert/strict";
+import { test } from "node:test";
+
+import type { GuidePage } from "../src/guide.js";
+import type { Block } from "../src/markdown.js";
+import { renderGuidePage } from "../src/render.js";
+
+function page(language: "en" | "ja", blocks: Block[]): GuidePage {
+  return {
+    sourceRel: "01-x.md",
+    path: "guide/x.html",
+    route: language === "en" ? "guide/x.html" : "ja/guide/x.html",
+    language,
+    order: 1,
+    title: "Title",
+    blocks,
+  };
+}
+
+function render(language: "en" | "ja", blocks: Block[]): string {
+  const target = page(language, blocks);
+  return renderGuidePage(target, {
+    pages: [target],
+    highlight: (code) => code,
+    resolveLink: (url) => url,
+  });
+}
+
+const sh: Block = { type: "code", language: "sh", text: "echo hi", line: 1 };
+const alcy: Block = { type: "code", language: "alcy", text: "fn main() {}", line: 1 };
+const prose: Block = { type: "paragraph", text: "hello", line: 1 };
+
+test("a code block gains a copy button, hidden until a script reveals it", () => {
+  const html = render("en", [sh]);
+  match(html, /<div class="code-block">/);
+  match(html, /<div class="code-actions" hidden>/);
+  match(html, /data-action="copy">Copy</);
+});
+
+test("the copy label is stamped in the page's language", () => {
+  match(render("ja", [sh]), /data-action="copy">コピー</);
+});
+
+test("the guide's assets load only when a page has code", () => {
+  const withCode = render("en", [alcy]);
+  match(withCode, /shared\/guide\.css/);
+  match(withCode, /shared\/guide\.js/);
+  equal(render("en", [prose]).includes("shared/guide."), false);
+});

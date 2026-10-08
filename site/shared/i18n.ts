@@ -18,6 +18,8 @@ const en = {
   "site.previous": "Previous",
   "site.next": "Next",
   "label.settings": "Settings",
+  "guide.copy": "Copy",
+  "guide.copied": "Copied",
   "meta.guide": "the alcy guide",
   "noscript.playground": "The playground needs JavaScript to run.",
   "meta.playground":
@@ -88,6 +90,8 @@ const ja: Record<MessageKey, string> = {
   "site.previous": "前へ",
   "site.next": "次へ",
   "label.settings": "設定",
+  "guide.copy": "コピー",
+  "guide.copied": "コピーしました",
   "meta.guide": "alcy ガイド",
   "noscript.playground": "プレイグラウンドの実行には JavaScript が必要です。",
   "meta.playground":
