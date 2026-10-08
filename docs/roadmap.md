@@ -36,7 +36,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   `docs/adr/0050-unsafe-is-a-gate-on-operations.md`,
   `docs/adr/0051-extern-c-for-a-minimal-abi.md`, and
   `docs/adr/0052-freestanding-is-a-link-mode.md`.
-- [ ] Operator specs: `Index`/`IndexMut` and `PartialEq`/`Eq`.
+- [x] Operator specs: `Index`/`IndexMut` and `PartialEq`/`Eq`.
 
   Operators name specs the standard library owns: `a[i]` dispatches
   to `Index`, assignment through it to `IndexMut`, and `==` to
