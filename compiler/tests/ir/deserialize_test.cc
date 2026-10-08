@@ -14,8 +14,10 @@
 #include "fpag/base/result.h"
 #include "ir/binary_format.h"
 #include "ir/common.h"
+#include "ir/seq_builder.h"
 #include "ir/serialize.h"
 #include "ir/storage.h"
+#include "ir/storage_builder.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/write_input.h"
@@ -92,6 +94,52 @@ TEST_CASE("A serialized package reads back as the same bytes") {
   // Reading and writing again produces the bytes it read.
   LoadedInput input(package);
   CHECK(serialize(input.input) == bytes);
+}
+
+TEST_CASE("A const argument survives the binary form") {
+  StorageBuilder builder;
+  ir::SymbolTable strings{16};
+  const TypeIdx i32 = builder.primitive(TypeTag::I32);
+  const TypeIdx four = builder.const_type(4);
+  const TypeIdx eight = builder.const_type(8);
+
+  TypeSeq params;
+  params.push(builder.ref_type(i32));
+  params.push(builder.ref_type(four));
+  params.push(builder.ref_type(eight));
+  (void)builder.struct_type(strings.intern("ArrayVec"), TypeIdxRange{},
+                            params.finish());
+
+  const Storage storage = std::move(builder).build().unwrap().unwrap();
+  const WriteInput input{
+      .storage = &storage,
+      .strings = &strings,
+      .instr_spans = {},
+      .files = {},
+      .addr_names = {},
+      .prelude_functions = 0,
+      .width = PointerWidth::W64,
+      .compiler_version = "0.0.0-test",
+  };
+  const std::vector<u8> bytes = serialize(input);
+
+  base::Result<LoadedIr, IrLoadError> loaded = deserialize(bytes);
+  CHECK(loaded.is_ok());
+  if (loaded.is_err()) {
+    return;
+  }
+  LoadedIr package = std::move(loaded).unwrap();
+  const Storage& read = *package.storage;
+  // Both values came back, and stayed apart: one row per distinct
+  // argument, in the order they were interned.
+  CHECK(read.const_types().size() == 2);
+  if (read.const_types().size() == 2) {
+    CHECK(read.const_types()[ConstTypeIdx(0)].value == 4);
+    CHECK(read.const_types()[ConstTypeIdx(1)].value == 8);
+  }
+
+  LoadedInput reinput(package);
+  CHECK(serialize(reinput.input) == bytes);
 }
 
 TEST_CASE("A corrupt binary form is refused") {

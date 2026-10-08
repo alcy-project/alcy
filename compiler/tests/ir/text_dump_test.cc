@@ -303,4 +303,37 @@ TEST_CASE("The preamble declares composites and externs") {
   CHECK(text == want);
 }
 
+TEST_CASE("The text view prints a const argument") {
+  StorageBuilder builder;
+  ir::SymbolTable strings;
+  const TypeIdx i32 = builder.primitive(TypeTag::I32);
+  const TypeIdx four = builder.const_type(4);
+
+  TypeSeq params;
+  params.push(builder.ref_type(i32));
+  params.push(builder.ref_type(four));
+  const TypeIdx array_vec = builder.struct_type(
+      strings.intern("ArrayVec"), TypeIdxRange{}, params.finish());
+
+  const Storage storage = std::move(builder).build().unwrap().unwrap();
+  const WriteInput input{
+      .storage = &storage,
+      .strings = &strings,
+      .instr_spans = {},
+      .files = {},
+      .addr_names = {},
+      .prelude_functions = 0,
+      .width = PointerWidth::W64,
+      .compiler_version = {},
+  };
+  const std::string text = write_text(input);
+  const std::string want = fmt::format(
+      "// alcy ir, format 1, pointer width 64\n"
+      "\n"
+      "struct ArrayVec<i32, const 4>()  // #{}\n"
+      "\n",
+      array_vec.idx);
+  CHECK(text == want);
+}
+
 }  // namespace ir

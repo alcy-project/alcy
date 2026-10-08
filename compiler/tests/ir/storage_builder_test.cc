@@ -3,6 +3,8 @@
 
 #include "ir/storage_builder.h"
 
+#include <string>
+
 #include "doctest/doctest.h"
 #include "ir/common.h"
 #include "ir/type.h"
@@ -48,6 +50,20 @@ TEST_CASE("A reference shape is interned once") {
   CHECK(builder.types()[shared].tag == TypeTag::Ref);
   CHECK(builder.types()[mutable_ref].tag == TypeTag::MutRef);
   CHECK(shared != mutable_ref);
+}
+
+TEST_CASE("A const argument is interned by value") {
+  StorageBuilder builder;
+  const TypeIdx four = builder.const_type(4);
+  const TypeIdx eight = builder.const_type(8);
+  CHECK(builder.types()[four].tag == TypeTag::Const);
+  // One definition interned for 4 cannot serve 8, so the two arguments
+  // must stay distinct types the way two different field lists do.
+  CHECK(builder.const_type(4) == four);
+  CHECK(four != eight);
+  CHECK(builder.const_types()[builder.types()[four].as_const()].value == 4);
+  CHECK(builder.const_types()[builder.types()[eight].as_const()].value == 8);
+  CHECK(std::string(type_to_str(TypeTag::Const)) == "const");
 }
 
 }  // namespace

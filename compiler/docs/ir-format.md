@@ -120,6 +120,7 @@ A type prints as one of:
 | `RawMutPtr(T)` | `*mut T` |
 | `Slice(T)` | `[T]` |
 | `Array(T, N)` | `[T; N]` |
+| `Const(v)` | `const v` |
 | `Tuple(A, B)` | `(A, B)`, one element `(A,)`, none `()` |
 | `Struct` | the declaration's name and generic arguments |
 | `Enum` | the declaration's name and generic arguments |
@@ -294,6 +295,9 @@ The section is absent or empty when the package carries no spans.
 
 **PRELUDE**: one `u32`, the package's prelude count. The section is
 absent when the count is zero.
+
+**CONSTS**: `count` × `{ value u64 }`, one row per compile-time value
+argument in the type table. The section is absent when there are none.
 
 ### 3.5 Reading
 

@@ -78,4 +78,7 @@ using TupleTypeIdx = details::Idx<TupleType>;
 struct FuncType;
 using FuncTypeIdx = details::Idx<FuncType>;
 
+struct ConstType;
+using ConstTypeIdx = details::Idx<ConstType>;
+
 }  // namespace ir

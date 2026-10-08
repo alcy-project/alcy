@@ -19,6 +19,7 @@
 #include "ast/verify.h"
 #include "base/nesting.h"
 #include "comp/comp_value.h"
+#include "debug/fatal.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -2825,6 +2826,14 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
       }
       return types_equal_inner(fa.ret, fb.ret, seen);
     }
+    case ir::TypeTag::Const: {
+      // Equal tags do not make equal arguments: the value is the type.
+      const u64 left =
+          builder.const_types()[builder.types()[a].as_const()].value;
+      const u64 right =
+          builder.const_types()[builder.types()[b].as_const()].value;
+      return left == right;
+    }
     case ir::TypeTag::Struct:
     case ir::TypeTag::Enum: return false;
     default: return true;
@@ -4848,6 +4857,9 @@ bool Checker::capture_is_copy(ir::TypeIdx idx, std::vector<u32>& visited) {
   switch (node.tag) {
     case ir::TypeTag::MutRef: return false;
     case ir::TypeTag::Error: return true;
+    // A const argument is never a value, so no value of it is captured;
+    // a reachable call is a bug, as in ir::is_copy_type.
+    case ir::TypeTag::Const: UNREACHABLE();
     case ir::TypeTag::Ref:
     case ir::TypeTag::Void:
     case ir::TypeTag::Never:

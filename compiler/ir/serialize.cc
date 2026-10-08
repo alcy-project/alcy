@@ -139,6 +139,9 @@ class Serializer {
       prelude.put_u32(static_cast<u32>(input_.prelude_functions));
       sections.push_back({Section::Prelude, std::move(prelude)});
     }
+    if (!state_.const_types.empty()) {
+      sections.push_back({Section::Consts, consts_section()});
+    }
 
     // The header and the table come first, so an offset depends on the
     // table's own size; compute them before writing anything.
@@ -303,6 +306,7 @@ class Serializer {
       case TypeTag::RawMutPtr: return node.as_ref().idx;
       case TypeTag::Tuple: return node.as_tuple().idx;
       case TypeTag::Func: return node.as_func().idx;
+      case TypeTag::Const: return node.as_const().idx;
       default: return 0;
     }
   }
@@ -539,6 +543,15 @@ class Serializer {
       out.put_u32(find_name(files_.names[i]));
       out.put_u32(0);
       out.put_u64(files_.hash_of(i));
+    }
+    return out;
+  }
+
+  ByteWriter consts_section() const {
+    ByteWriter out;
+    out.put_u32(static_cast<u32>(state_.const_types.size()));
+    for (const ConstType& konst : state_.const_types) {
+      out.put_u64(konst.value);
     }
     return out;
   }

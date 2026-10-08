@@ -163,6 +163,36 @@ TEST_CASE("Mangle leaves a foreign name alone") {
   CHECK(symbol::mangle(foreign, types, f.strings) == "alcy_alloc");
 }
 
+TEST_CASE("Mangle keeps const arguments distinct") {
+  Fixture f;
+  const TypeIdx four = f.builder.const_type(4);
+  const TypeIdx eight = f.builder.const_type(8);
+  symbol::Signature a = signature("m", "get", symbol::Signature::Kind::Free);
+  a.generics = {four};
+  symbol::Signature b = signature("m", "get", symbol::Signature::Kind::Free);
+  b.generics = {eight};
+  const ir::Storage types = f.build();
+
+  // The value is part of the instantiation's identity: one symbol for
+  // both arguments would name two definitions alike.
+  CHECK(symbol::mangle(a, types, f.strings) !=
+        symbol::mangle(b, types, f.strings));
+
+  base::Result<symbol::Demangled, symbol::DemangleError> decoded =
+      symbol::demangle(symbol::mangle(a, types, f.strings));
+  CHECK(decoded.is_ok());
+  if (decoded.is_err()) {
+    return;
+  }
+  const symbol::Demangled back = std::move(decoded).unwrap();
+  CHECK(back.generics.size() == 1);
+  if (back.generics.size() == 1) {
+    CHECK(back.generics[0].kind == symbol::DecodedType::Kind::Const);
+    CHECK(back.generics[0].count == 4);
+    CHECK(symbol::display(back.generics[0]) == "4");
+  }
+}
+
 TEST_CASE("Demangle recovers a signature") {
   Fixture f;
   symbol::Signature sig =

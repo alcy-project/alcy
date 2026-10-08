@@ -138,6 +138,9 @@ class StorageBuilder {
   const StorageState::FuncTypes& func_types() const {
     return state_.func_types;
   }
+  const StorageState::ConstTypes& const_types() const {
+    return state_.const_types;
+  }
   // Raw state for passes that query (never mutate) pre-build tables.
   const StorageState& state() const { return state_; }
   ExternalFunctionIdx external_function(ExternalFunction external_function) {
@@ -147,13 +150,14 @@ class StorageBuilder {
     return state_.operands.emplace_back(std::move(operand));
   }
   // Returns the pre-interned node for a non-composite tag. O(1), no
-  // allocation. Struct, Array, Enum, Never, Tuple, and Error nodes are
-  // created via their factories instead.
+  // allocation. Struct, Array, Enum, Never, Tuple, Error, and Const
+  // nodes are created via their factories instead.
   TypeIdx primitive(TypeTag tag) const {
     DCHECK(tag != TypeTag::Struct && tag != TypeTag::Array &&
            tag != TypeTag::Enum && tag != TypeTag::Never &&
            tag != TypeTag::Tuple && tag != TypeTag::Error &&
-           tag != TypeTag::Slice && tag != TypeTag::Func);
+           tag != TypeTag::Slice && tag != TypeTag::Func &&
+           tag != TypeTag::Const);
     return primitive_idx(tag);
   }
 
@@ -227,6 +231,28 @@ class StorageBuilder {
     node.tag = TypeTag::Array;
     node.data.set(state_.array_types.emplace_back(
         ArrayType{.element = element, .count = count}));
+    return state_.types.emplace_back(node);
+  }
+
+  // A compile-time value argument, interned by value so identical
+  // arguments share one type index and type equality stays index
+  // equality for the generic argument lists that hold them.
+  TypeIdx const_type(u64 value) {
+    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
+         ++idx) {
+      const TypeNode& node = state_.types[idx];
+      if (node.tag != TypeTag::Const) {
+        continue;
+      }
+      const ConstTypeIdx cidx = node.data.get<ConstTypeIdx>();
+      if (cidx.idx < state_.const_types.size() &&
+          state_.const_types[cidx].value == value) {
+        return idx;
+      }
+    }
+    TypeNode node{};
+    node.tag = TypeTag::Const;
+    node.data.set(state_.const_types.emplace_back(ConstType{.value = value}));
     return state_.types.emplace_back(node);
   }
 

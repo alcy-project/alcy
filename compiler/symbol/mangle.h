@@ -61,13 +61,15 @@ struct DecodedType {
     Array,
     Tuple,
     Nominal,
+    // A compile-time value argument; `count` carries the value.
+    Const,
   };
   Kind kind = Kind::Prim;
   std::string spelling;
   // Ref, MutRef, RawPtr, and RawMutPtr: the pointee. Array: the
   // element.
   std::vector<DecodedType> parts;
-  // Array length, or pointer width in bits.
+  // Array length, pointer width in bits, or a const argument's value.
   u64 count = 0;
   // Nominal: its module path segments, then its type arguments.
   std::vector<std::string> path;

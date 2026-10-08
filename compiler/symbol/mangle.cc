@@ -33,6 +33,7 @@ namespace {
 //            | "y" DIGITS type
 //            | "u" DIGITS { type }
 //            | "n" seglist DIGITS { type }
+//            | "c" LENGTH
 //   prim     = one character from the table below
 //
 // A list of segments ends at a ".", because the item that follows a
@@ -77,6 +78,8 @@ constexpr char TAG_ARRAY = 'y';
 constexpr char TAG_SLICE = 'v';
 constexpr char TAG_TUPLE = 'u';
 constexpr char TAG_NOMINAL = 'n';
+// A compile-time value argument; its LENGTH is the value itself.
+constexpr char TAG_CONST = 'c';
 
 struct Primitive {
   char tag;
@@ -210,6 +213,12 @@ class Encoder {
         out_.push_back(TAG_ARRAY);
         append_length(out_, array.count);
         encode_type(array.element);
+        return;
+      }
+      case ir::TypeTag::Const: {
+        const ir::ConstType& konst = types_.const_types()[node.as_const()];
+        out_.push_back(TAG_CONST);
+        append_length(out_, konst.value);
         return;
       }
       case ir::TypeTag::Tuple: {
@@ -375,6 +384,10 @@ class Decoder {
         out.parts.resize(1);
         return decode_type(out.parts[0]);
       }
+      case TAG_CONST: {
+        out.kind = DecodedType::Kind::Const;
+        return read_length(out.count);
+      }
       case TAG_TUPLE: {
         out.kind = DecodedType::Kind::Tuple;
         u64 count = 0;
@@ -493,6 +506,8 @@ std::string display(const DecodedType& type) {
     case DecodedType::Kind::Array:
       return "[" + display(type.parts.at(0)) + "; " +
              std::to_string(type.count) + "]";
+    // A const argument is spelled as the bare value it carries.
+    case DecodedType::Kind::Const: return std::to_string(type.count);
     case DecodedType::Kind::Tuple: {
       std::string out = "(";
       for (usize i = 0; i < type.parts.size(); ++i) {

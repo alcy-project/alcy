@@ -54,6 +54,12 @@ enum class TypeTag : u8 {
   // value itself is always code plus environment, so one layout fits
   // every signature.
   Func,
+  // A compile-time value argument, for generic argument lists that
+  // carry values (`ArrayVec<T, N>`). It is never a value of the
+  // language: no register, field, or operand has this type, and only
+  // const_type creates one. It sits after the pre-interned tags so
+  // their table positions stay stable.
+  Const,
 };
 
 // Target pointer width: selects the mapping of isize/usize. Passed
@@ -134,17 +140,25 @@ struct FuncType {
   TypeIdx ret = TypeIdx::invalid();
 };
 
+// A compile-time value argument. The u64 is the whole payload: nothing
+// produces a runtime value of this type, and it only takes part in
+// generic argument lists, so no layout exists for it.
+struct ConstType {
+  u64 value;
+};
+
 struct TypeNode {
   TypeTag tag;
   // Meaningful only for Struct/Array/Slice/Enum/Ref/MutRef/RawPtr/
-  // RawMutPtr/Tuple/Func tags.
+  // RawMutPtr/Tuple/Func/Const tags.
   base::Union<StructTypeIdx,
               ArrayTypeIdx,
               SliceTypeIdx,
               EnumTypeIdx,
               RefTypeIdx,
               TupleTypeIdx,
-              FuncTypeIdx>
+              FuncTypeIdx,
+              ConstTypeIdx>
       data;
 
   inline StructTypeIdx as_struct() const {
@@ -184,6 +198,11 @@ struct TypeNode {
     DCHECK_MSG(tag == TypeTag::Func, "type node is not a function type");
     return data.get<FuncTypeIdx>();
   }
+
+  inline ConstTypeIdx as_const() const {
+    DCHECK_MSG(tag == TypeTag::Const, "type node is not a const argument");
+    return data.get<ConstTypeIdx>();
+  }
 };
 
 constexpr const char* type_to_str(TypeTag tag) {
@@ -221,6 +240,7 @@ constexpr const char* type_to_str(TypeTag tag) {
     case T::Never: return "never";
     case T::Tuple: return "tuple";
     case T::Error: return "error";
+    case T::Const: return "const";
     default: UNREACHABLE();
   }
 }

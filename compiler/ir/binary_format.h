@@ -12,7 +12,7 @@ namespace ir::binary {
 // deserialize.h and names the same constants.
 inline constexpr u8 MAGIC[4] = {'A', 'L', 'I', 'R'};
 inline constexpr u16 MAJOR = 1;
-inline constexpr u16 MINOR = 0;
+inline constexpr u16 MINOR = 1;
 // Bit 0: the payload is little-endian. Always set; a reader rejects a
 // file that clears it.
 inline constexpr u32 FLAG_LITTLE_ENDIAN = 1;
@@ -45,6 +45,8 @@ enum class Section : u8 {
   AddrNames = 21,
   // The package's prelude count, a single u32. Absent means zero.
   Prelude = 22,
+  // Compile-time value arguments; one u64 per row. Absent means none.
+  Consts = 23,
 };
 
 }  // namespace ir::binary

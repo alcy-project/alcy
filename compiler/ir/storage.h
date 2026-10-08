@@ -49,6 +49,7 @@ struct StorageState {
   using RefTypes = base::Vec<RefType, RefTypeIdx, Alloc<RefType>>;
   using TupleTypes = base::Vec<TupleType, TupleTypeIdx, Alloc<TupleType>>;
   using FuncTypes = base::Vec<FuncType, FuncTypeIdx, Alloc<FuncType>>;
+  using ConstTypes = base::Vec<ConstType, ConstTypeIdx, Alloc<ConstType>>;
 
   Functions functions;
   Blocks blocks;
@@ -67,6 +68,7 @@ struct StorageState {
   RefTypes ref_types;
   TupleTypes tuple_types;
   FuncTypes func_types;
+  ConstTypes const_types;
 };
 
 // Size and alignment of a type on a target, in bytes.
@@ -233,6 +235,9 @@ inline TypeLayout type_layout(const StorageState& state,
       const u64 payload_start = align_up(DISC, area.align);
       return {align_up(payload_start + area.size, align), align};
     }
+    // A const argument is never a value, so no layout exists for it; a
+    // reachable call would mean one leaked into a value position.
+    case TypeTag::Const: UNREACHABLE();
   }
   UNREACHABLE();
 }
@@ -245,6 +250,9 @@ inline bool is_copy_type(const StorageState& state, TypeIdx idx) {
   switch (node.tag) {
     case TypeTag::MutRef: return false;
     case TypeTag::Error: return true;
+    // A const argument is never a value, so the question does not apply
+    // to it; a reachable call is a bug, as in type_layout.
+    case TypeTag::Const: UNREACHABLE();
     case TypeTag::Ref:
     case TypeTag::Void:
     case TypeTag::Never:
@@ -365,6 +373,9 @@ class Storage {
   }
   const StorageState::FuncTypes& func_types() const {
     return state_.func_types;
+  }
+  const StorageState::ConstTypes& const_types() const {
+    return state_.const_types;
   }
 
   // Copy-ability of a fully interned type. Must only run on cycle-free

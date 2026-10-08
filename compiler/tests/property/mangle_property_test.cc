@@ -152,6 +152,7 @@ TEST_CASE("Property: mangled type arguments decode back") {
   const TypeIdx slice = f.builder.slice_type(f.u8);
   const TypeIdx array = f.builder.array_type(f.i32, 3);
   const TypeIdx ref = f.builder.reference_type(f.str, false);
+  const TypeIdx konst = f.builder.const_type(4);
   // A tuple's elements are a range, so they have to be adjacent: copies
   // of the two primitives give two consecutive entries.
   ir::TypeSeq tuple_seq;
@@ -160,7 +161,7 @@ TEST_CASE("Property: mangled type arguments decode back") {
   const TypeIdx tuple = f.builder.tuple_type(tuple_seq.finish());
   symbol::Signature signature =
       sig("m::n", "get", symbol::Signature::Kind::Free);
-  signature.generics = {slice, array, ref, tuple};
+  signature.generics = {slice, array, ref, tuple, konst};
   const ir::Storage types = f.build();
 
   const std::string encoded = symbol::mangle(signature, types, f.strings);
@@ -171,14 +172,16 @@ TEST_CASE("Property: mangled type arguments decode back") {
     return;
   }
   const symbol::Demangled back = std::move(decoded).unwrap();
-  CHECK(back.generics.size() == 4);
-  if (back.generics.size() == 4) {
+  CHECK(back.generics.size() == 5);
+  if (back.generics.size() == 5) {
     CHECK(back.generics[0].kind == symbol::DecodedType::Kind::Slice);
     CHECK(back.generics[1].kind == symbol::DecodedType::Kind::Array);
     CHECK(back.generics[1].count == 3);
     CHECK(back.generics[2].kind == symbol::DecodedType::Kind::Ref);
     CHECK(back.generics[3].kind == symbol::DecodedType::Kind::Tuple);
     CHECK(back.generics[3].parts.size() == 2);
+    CHECK(back.generics[4].kind == symbol::DecodedType::Kind::Const);
+    CHECK(back.generics[4].count == 4);
   }
 }
 

@@ -44,7 +44,7 @@ LoadedIr::LoadedIr(VerifiedStorage storage) : storage(std::move(storage)) {}
 namespace {
 
 constexpr u32 NONE = U32_MAX;
-// Kinds 1..Prelude must fit this; a larger kind is unknown and skipped.
+// Kinds 1..Consts must fit this; a larger kind is unknown and skipped.
 constexpr usize MAX_SECTIONS = 32;
 
 // A bounds-checked little-endian reader over the file bytes.
@@ -253,6 +253,7 @@ bool read_types(Parsed& parsed, std::span<const u8> payload) {
       case TypeTag::RawMutPtr: node.data.set(RefTypeIdx(value)); break;
       case TypeTag::Tuple: node.data.set(TupleTypeIdx(value)); break;
       case TypeTag::Func: node.data.set(FuncTypeIdx(value)); break;
+      case TypeTag::Const: node.data.set(ConstTypeIdx(value)); break;
       default: break;
     }
     parsed.state.types.emplace_back(node);
@@ -793,6 +794,26 @@ bool read_files(Parsed& parsed, std::span<const u8> payload) {
   return true;
 }
 
+bool read_consts(Parsed& parsed, std::span<const u8> payload) {
+  const u32 count = record_count(payload.size(), 8);
+  if (count == NONE) {
+    return false;
+  }
+  Cursor cursor(payload);
+  u32 read = 0;
+  if (!cursor.read_u32(read) || read != count) {
+    return false;
+  }
+  for (u32 i = 0; i < count; ++i) {
+    u64 value = 0;
+    if (!cursor.read_u64(value)) {
+      return false;
+    }
+    parsed.state.const_types.emplace_back(ConstType{.value = value});
+  }
+  return true;
+}
+
 bool read_spans(Parsed& parsed, std::span<const u8> payload) {
   const u32 count = record_count(payload.size(), 12);
   if (count == NONE) {
@@ -900,13 +921,14 @@ bool read_section(Parsed& parsed, Section kind, std::span<const u8> payload) {
     case Section::Spans: return read_spans(parsed, payload);
     case Section::AddrNames: return read_addr_names(parsed, payload);
     case Section::Prelude: return read_prelude(parsed, payload);
+    case Section::Consts: return read_consts(parsed, payload);
   }
   return true;
 }
 
 bool known_kind(u32 kind) {
   return kind >= static_cast<u32>(Section::Strings) &&
-         kind <= static_cast<u32>(Section::Prelude);
+         kind <= static_cast<u32>(Section::Consts);
 }
 
 base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
@@ -1013,7 +1035,7 @@ base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
   }
 
   for (u32 kind = static_cast<u32>(Section::Strings);
-       kind <= static_cast<u32>(Section::Prelude); ++kind) {
+       kind <= static_cast<u32>(Section::Consts); ++kind) {
     if (!sections[kind].present) {
       continue;
     }

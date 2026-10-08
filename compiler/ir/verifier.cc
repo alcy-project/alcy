@@ -116,6 +116,10 @@ VerificationResult verify_storage(const Storage& storage) {
       if (func.ret.idx >= storage.types().size()) {
         return err(VerificationErrorKind::TypeIdxOutOfRange, tidx.idx);
       }
+    } else if (node.tag == TypeTag::Const) {
+      if (node.as_const().idx >= storage.const_types().size()) {
+        return err(VerificationErrorKind::TypeMetadataOutOfRange, tidx.idx);
+      }
     }
   }
 

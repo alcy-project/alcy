@@ -20,6 +20,9 @@ block parameters, immediates) holds a `TypeIdx`, never a bare tag.
   passed as `{ptr, len}` by value.
 - Reuse: `builder.ref_type(idx)` appends a copy of an existing entry
   (needed for field/parameter lists that mention one type twice).
+- Const arguments: `builder.const_type(value)` interns a compile-time
+  value by value. The node only takes part in generic argument lists
+  (`ArrayVec<T, N>`); it is never a value type.
 
 ## Operands
 

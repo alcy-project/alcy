@@ -210,6 +210,10 @@ class TextWriter {
         fmt::format_to(std::back_inserter(out_), "; {}]", array.count);
         break;
       }
+      case TypeTag::Const:
+        fmt::format_to(std::back_inserter(out_), "const {}",
+                       state_.const_types[node.as_const()].value);
+        break;
       case TypeTag::Tuple: {
         const TypeIdxRange elements =
             state_.tuple_types[node.as_tuple()].elements;
