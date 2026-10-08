@@ -86,6 +86,7 @@
   F(AnalyzerArityMismatch, "The call to '{}' expects {} argument{}") \
   F(AnalyzerArrayArity, "Array expects {} elements, found {}") \
   F(AnalyzerArrayIndexNotInteger, "Array index must be an integer") \
+  F(AnalyzerArrayLengthNotConst, "Array length must be a constant integer value") \
   F(AnalyzerArrayLiteralWithoutCount, "Array literal needs elements or a repeat count") \
   F(AnalyzerArrayRepeatArity, "Array expects {} elements, found repeat of {}") \
   F(AnalyzerArrayRepeatTooLarge, "Array repeat count {} exceeds the limit of {}") \

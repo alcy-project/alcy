@@ -186,15 +186,21 @@ ast::TypeIdx Parser::parse_type() {
       if (!expect(T::Semicolon, "`;`")) {
         return ast::TypeIdx::invalid();
       }
-      if (peek_kind() != T::Integer) {
-        expect(T::Integer, "array length");
-        return ast::TypeIdx::invalid();
-      }
+      // The length is a literal or a path to a `const` integer value
+      // (ADR-0054); the analyzer resolves the path.
       u64 count = 0;
-      if (!parse_decimal_u64(&count)) {
-        return ast::TypeIdx::invalid();
+      ast::PathIdx length_path = ast::PathIdx::invalid();
+      if (peek_kind() == T::Integer) {
+        if (!parse_decimal_u64(&count)) {
+          return ast::TypeIdx::invalid();
+        }
+        advance();
+      } else {
+        length_path = parse_path();
+        if (!length_path.is_valid()) {
+          return ast::TypeIdx::invalid();
+        }
       }
-      advance();
       if (!expect(T::RBracket, "`]`")) {
         return ast::TypeIdx::invalid();
       }
@@ -204,6 +210,7 @@ ast::TypeIdx Parser::parse_type() {
       node.payload.set(ast::TypeArray{
           .element = element,
           .count = count,
+          .length_path = length_path,
       });
       return ast_.types.push_back(node);
     }

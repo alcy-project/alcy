@@ -144,6 +144,9 @@ struct TypeTuple {
 struct TypeArray {
   TypeIdx element = TypeIdx::invalid();
   u64 count = 0;
+  // A named length: a path to a `const` integer value. Exactly one of
+  // `count` (a literal) and `length_path` is set.
+  PathIdx length_path = PathIdx::invalid();
 };
 
 struct TypeSlice {

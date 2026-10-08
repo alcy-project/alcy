@@ -17,6 +17,7 @@
 #include "ast/ast.h"
 #include "ast/verify.h"
 #include "base/nesting.h"
+#include "comp/comp_value.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -1602,7 +1603,12 @@ ir::TypeIdx Checker::resolve_type(u32 module,
     case ast::TypeKind::Array: {
       const ast::TypeArray& array = node.payload.get<ast::TypeArray>();
       const ir::TypeIdx element = resolve_type(module, array.element, self);
-      return builder.array_type(element, array.count);
+      u64 count = array.count;
+      if (array.length_path.is_valid() &&
+          !const_array_length(module, array, node.span, count)) {
+        return error_type();
+      }
+      return builder.array_type(element, count);
     }
     case ast::TypeKind::Ref: {
       ir::TypeIdx pointee = resolve_type(
@@ -3104,6 +3110,37 @@ void Checker::validate_cycles(const ir::Storage& storage) {
 }
 
 // Value namespace
+
+bool Checker::const_array_length(u32 module,
+                                 const ast::TypeArray& array,
+                                 diag::Span span,
+                                 u64& out) {
+  // A named length resolves to a const item whose value is an integer
+  // literal; general const expressions arrive with the checker's
+  // evaluation pre-pass.
+  const std::span<const ast::Ident> segments =
+      ast.paths[array.length_path].segments;
+  const CheckedModule::StaticInfo* info = nullptr;
+  if (segments.size() == 1) {
+    info = lookup_static(module, segments[0].name);
+  }
+  if (info != nullptr && info->is_const && info->init.is_valid()) {
+    const ast::ExprNode& init = ast.exprs[info->init];
+    if (init.kind == ast::ExprKind::Literal) {
+      const ast::Literal& lit =
+          ast.literals[init.payload.get<ast::ExprLiteral>().value];
+      if (lit.kind == ast::LiteralKind::Integer && !lit.is_negative) {
+        out = comp::parse_numeric_value(lit.spelling);
+        return true;
+      }
+    }
+  }
+  const u32 index = bag.emit<i18n::Key::AnalyzerArrayLengthNotConst>(
+      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::InvalidOperation,
+      span);
+  (void)index;
+  return false;
+}
 
 const CheckedModule::StaticInfo* Checker::lookup_static(
     u32 module,

@@ -3945,4 +3945,52 @@ TEST_CASE("Check rejects a core index spec with a non-reference result") {
         "Spec 'Index' must keep the compiler's operator shape");
 }
 
+TEST_CASE("Check reads an array length from a const item") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "const N: usize = 4\n"
+                       "\n"
+                       "struct Buf {\n  data: [u8; N],\n}\n"
+                       "\n"
+                       "fn first(a: [i32; N]) -> i32 {\n  ret a[0]\n}\n"
+                       "\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a non-literal const array length") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "const M: i32 = 1 + 2\n"
+                                      "\n"
+                                      "fn g(b: [i32; M]) -> i32 {\n  ret 0\n}\n"
+                                      "\n"
+                                      "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  bool reported = false;
+  for (u32 i = 0; i < f.bag.size(); ++i) {
+    const diag::Diagnostic* const diag = f.bag.at(i);
+    if (diag != nullptr &&
+        diag->message == "Array length must be a constant integer value") {
+      reported = true;
+    }
+  }
+  CHECK(reported);
+}
+
 }  // namespace analyzer

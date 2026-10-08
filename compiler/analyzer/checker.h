@@ -437,6 +437,12 @@ class Checker {
   void validate_cycles(const ir::Storage& storage);
   const CheckedModule::StaticInfo* lookup_static(u32 module,
                                                  std::string_view name) const;
+  // An array length named by a path: the const item's integer literal
+  // value, until the const evaluation pre-pass reads the evaluator.
+  bool const_array_length(u32 module,
+                          const ast::TypeArray& array,
+                          diag::Span span,
+                          u64& out);
   const CheckedModule::FnSig* lookup_function(u32 module,
                                               std::string_view name) const;
   // Generic free function item in scope, by name; invalid if absent.
