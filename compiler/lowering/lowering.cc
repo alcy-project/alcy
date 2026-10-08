@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/comp_evaluator.h"
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"

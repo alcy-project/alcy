@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "comp/comp_value.h"
