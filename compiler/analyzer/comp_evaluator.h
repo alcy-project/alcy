@@ -28,6 +28,18 @@ constexpr u64 COMP_BRANCH_QUOTA = 1'000'000;
 // machine stack, which the quota alone would not prevent.
 constexpr u32 COMP_MAX_CALL_DEPTH = 64;
 
+// The checked data the evaluator reads. The lowering passes the
+// finished package's fields; the checker passes its in-progress
+// tables, which is why nothing here owns anything and why the
+// evaluator can be constructed before the package is complete.
+struct CompInputs {
+  const ModuleTree& tree;
+  std::span<const CheckedModule> modules;
+  std::span<const ir::TypeIdx> generic_insts;
+  // (copy, origin) pairs, newest last.
+  std::span<const std::pair<ir::TypeIdx, ir::TypeIdx>> type_origins;
+};
+
 // The AST engine of compile-time evaluation (ADR-0054): it interprets
 // the checked AST, and both readers - the checker for the const values
 // types need, the lowering for comp blocks and specialization - ask it
@@ -41,7 +53,7 @@ constexpr u32 COMP_MAX_CALL_DEPTH = 64;
 // stages.
 class CompEvaluator {
  public:
-  CompEvaluator(const CheckedPackage& pkg,
+  CompEvaluator(CompInputs inputs,
                 const ast::AstArena& ast,
                 ir::StorageBuilder& builder,
                 ir::PointerWidth width);
@@ -187,7 +199,7 @@ class CompEvaluator {
                         CompScope& scope,
                         CompVal& out);
 
-  const CheckedPackage& pkg;
+  CompInputs inputs_;
   const ast::AstArena& ast;
   ir::StorageBuilder& builder;
   ir::PointerWidth width;

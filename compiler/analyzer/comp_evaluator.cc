@@ -21,21 +21,21 @@
 
 namespace analyzer {
 
-CompEvaluator::CompEvaluator(const CheckedPackage& pkg,
+CompEvaluator::CompEvaluator(CompInputs inputs,
                              const ast::AstArena& ast,
                              ir::StorageBuilder& builder,
                              ir::PointerWidth width)
-    : pkg(pkg), ast(ast), builder(builder), width(width) {
-  generic_insts_.reserve(pkg.generic_insts.size());
-  for (u32 i = 0; i < static_cast<u32>(pkg.generic_insts.size()); ++i) {
-    generic_insts_.emplace(pkg.generic_insts[i].idx, i);
+    : inputs_(inputs), ast(ast), builder(builder), width(width) {
+  generic_insts_.reserve(inputs_.generic_insts.size());
+  for (u32 i = 0; i < static_cast<u32>(inputs_.generic_insts.size()); ++i) {
+    generic_insts_.emplace(inputs_.generic_insts[i].idx, i);
   }
-  type_origins_.reserve(pkg.type_origins.size());
-  for (usize i = pkg.type_origins.size(); i > 0; --i) {
-    type_origins_.emplace(pkg.type_origins[i - 1].first.idx,
-                          pkg.type_origins[i - 1].second.idx);
+  type_origins_.reserve(inputs_.type_origins.size());
+  for (usize i = inputs_.type_origins.size(); i > 0; --i) {
+    type_origins_.emplace(inputs_.type_origins[i - 1].first.idx,
+                          inputs_.type_origins[i - 1].second.idx);
   }
-  for (const CheckedModule& checked : pkg.modules) {
+  for (const CheckedModule& checked : inputs_.modules) {
     for (const CheckedModule::StructInfo& info : checked.structs) {
       structs_.emplace(info.type.idx, &info);
     }
@@ -164,16 +164,16 @@ void CompEvaluator::clear_failure() {
 const CheckedModule::StaticInfo* CompEvaluator::lookup_static_in(
     u32 mod,
     std::string_view name) const {
-  for (const auto& info : pkg.modules[mod].statics) {
+  for (const auto& info : inputs_.modules[mod].statics) {
     if (info.name == name) {
       return &info;
     }
   }
-  for (const Import& import : pkg.tree.modules[mod]->imports) {
+  for (const Import& import : inputs_.tree.modules[mod]->imports) {
     if (import.ns != Namespace::Value || import.name != name) {
       continue;
     }
-    for (const auto& info : pkg.modules[import.target_module].statics) {
+    for (const auto& info : inputs_.modules[import.target_module].statics) {
       if (info.name == import.member) {
         return &info;
       }
@@ -214,13 +214,13 @@ u32 CompEvaluator::callee_inst(const CheckedModule::CallTarget* target) const {
     return NO_INST;
   }
   if (target->is_method) {
-    const CheckedModule& def = pkg.modules[target->module];
+    const CheckedModule& def = inputs_.modules[target->module];
     if (target->index >= def.methods.size()) {
       return NO_INST;
     }
     return generic_inst_index(def.methods[target->index].self_type);
   }
-  const CheckedModule& def = pkg.modules[target->module];
+  const CheckedModule& def = inputs_.modules[target->module];
   if (target->index >= def.functions.size()) {
     return NO_INST;
   }
@@ -253,7 +253,7 @@ bool CompEvaluator::evaluate_item(u32 module,
 }
 
 ir::TypeIdx CompEvaluator::expr_type_in(u32 mod, ast::ExprIdx expr) {
-  for (const auto& entry : pkg.modules[mod].expr_types) {
+  for (const auto& entry : inputs_.modules[mod].expr_types) {
     if (entry.expr == expr && entry.inst == inst_) {
       return entry.type;
     }
@@ -264,7 +264,7 @@ ir::TypeIdx CompEvaluator::expr_type_in(u32 mod, ast::ExprIdx expr) {
 const analyzer::CheckedModule::CallTarget* CompEvaluator::call_target_in(
     u32 mod,
     ast::ExprIdx callee) const {
-  const analyzer::CheckedModule& checked = pkg.modules[mod];
+  const analyzer::CheckedModule& checked = inputs_.modules[mod];
   const auto found = checked.call_target_by_key.find(
       analyzer::CheckedModule::call_target_key(callee, inst_));
   return found == checked.call_target_by_key.end()
@@ -849,7 +849,7 @@ bool CompEvaluator::comp_eval_assoc_call(
     const analyzer::CheckedModule::CallTarget* target) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-  const analyzer::CheckedModule& def = pkg.modules[target->module];
+  const analyzer::CheckedModule& def = inputs_.modules[target->module];
   if (target->index >= def.methods.size()) {
     return fail(node.span, "callee without target");
   }
@@ -974,7 +974,7 @@ bool CompEvaluator::comp_eval_call(u32 mod,
   if (target->is_method) {
     return comp_eval_assoc_call(mod, expr, scope, out, target);
   }
-  const analyzer::CheckedModule& def = pkg.modules[target->module];
+  const analyzer::CheckedModule& def = inputs_.modules[target->module];
   if (target->index >= def.functions.size()) {
     return fail(node.span, "callee without target");
   }
@@ -1005,7 +1005,7 @@ bool CompEvaluator::comp_eval_method_call(u32 mod,
   if (target == nullptr || !target->is_method) {
     return fail(node.span, "method without target");
   }
-  const analyzer::CheckedModule& def = pkg.modules[target->module];
+  const analyzer::CheckedModule& def = inputs_.modules[target->module];
   if (target->index >= def.methods.size()) {
     return fail(node.span, "method without target");
   }

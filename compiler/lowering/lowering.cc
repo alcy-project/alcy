@@ -97,7 +97,11 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
       strings(strings),
       bag(bag),
       profiler(profiler),
-      comp_(pkg, ast, builder, width) {
+      comp_(analyzer::CompInputs{pkg.tree, pkg.modules, pkg.generic_insts,
+                                 pkg.type_origins},
+            ast,
+            builder,
+            width) {
   mark_drops();
   index_origins();
   index_structs();
