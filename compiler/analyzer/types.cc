@@ -336,11 +336,11 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
     return wrong();
   }
   if (bare_path_name(ast, method.params[1].type) !=
-      declaration.params[0].name) {
+      declaration.params[0].name.name) {
     return wrong();
   }
   if (!is_ref_to(ast, method.return_type, mut_receiver,
-                 declaration.params[1].name)) {
+                 declaration.params[1].name.name)) {
     return wrong();
   }
   return true;
@@ -449,7 +449,7 @@ bool Checker::spec_method_sig(u32 spec,
     }
     const usize pushed = type_params.size();
     for (usize i = 0; i < declaration.params.size(); ++i) {
-      type_params.emplace_back(declaration.params[i].name, spec_args[i]);
+      type_params.emplace_back(declaration.params[i].name.name, spec_args[i]);
     }
     params_out.clear();
     for (const ast::ItemFnParam& param : method.params) {
@@ -759,10 +759,10 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
               ast.paths[arg_node.payload.get<ast::TypePath>().path];
           if (path.segments.size() == 1 &&
               arg_node.payload.get<ast::TypePath>().args.empty()) {
-            for (const ast::Ident& candidate : impl.params) {
-              if (candidate.name == path.segments[0].name) {
+            for (const ast::GenericParam& candidate : impl.params) {
+              if (candidate.name.name == path.segments[0].name) {
                 direct = true;
-                param = candidate.name;
+                param = candidate.name.name;
                 break;
               }
             }
@@ -882,10 +882,10 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
               ast.paths[arg_node.payload.get<ast::TypePath>().path];
           if (path.segments.size() == 1 &&
               arg_node.payload.get<ast::TypePath>().args.empty()) {
-            for (const ast::Ident& candidate : impl.params) {
-              if (candidate.name == path.segments[0].name) {
+            for (const ast::GenericParam& candidate : impl.params) {
+              if (candidate.name.name == path.segments[0].name) {
                 direct = true;
-                param = candidate.name;
+                param = candidate.name.name;
                 break;
               }
             }
@@ -1292,7 +1292,8 @@ ir::TypeIdx Checker::type_origin(ir::TypeIdx type) const {
   return current;
 }
 
-std::span<const ast::Ident> Checker::nominal_params(const NominalEntry& entry) {
+std::span<const ast::GenericParam> Checker::nominal_params(
+    const NominalEntry& entry) {
   const ast::ItemNode& node = ast.items[entry.item];
   if (node.kind == ast::ItemKind::Struct) {
     return node.payload.get<ast::ItemStruct>().params;
@@ -1302,10 +1303,10 @@ std::span<const ast::Ident> Checker::nominal_params(const NominalEntry& entry) {
 
 usize Checker::push_generic_scope(const GenericInstance& instance) {
   const usize kept = type_params.size();
-  const std::span<const ast::Ident> params =
+  const std::span<const ast::GenericParam> params =
       nominal_params(nominals[instance.nominal]);
   for (usize i = 0; i < params.size(); ++i) {
-    type_params.emplace_back(params[i].name, instance.args[i]);
+    type_params.emplace_back(params[i].name.name, instance.args[i]);
   }
   return kept;
 }
@@ -1351,7 +1352,7 @@ const GenericInstance* Checker::infer_from_payload_args(
     }
     u32 slot = decl.params.size();
     for (u32 p = 0; p < decl.params.size(); ++p) {
-      if (decl.params[p].name == path.segments[0].name) {
+      if (decl.params[p].name.name == path.segments[0].name) {
         slot = p;
         break;
       }
@@ -1386,7 +1387,8 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
                                          diag::Span span) {
   // The declaration's parameters are indexed below; a bad turbofish
   // reaches here from a value path, which has no arity check of its own.
-  const std::span<const ast::Ident> params = nominal_params(nominals[nominal]);
+  const std::span<const ast::GenericParam> params =
+      nominal_params(nominals[nominal]);
   if (args.size() != params.size()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
         diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityMismatch,
@@ -1480,10 +1482,10 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   }
   const usize pushed = type_params.size();
   if (is_struct) {
-    const std::span<const ast::Ident> params =
+    const std::span<const ast::GenericParam> params =
         node.payload.get<ast::ItemStruct>().params;
     for (usize i = 0; i < params.size(); ++i) {
-      type_params.emplace_back(params[i].name, args[i]);
+      type_params.emplace_back(params[i].name.name, args[i]);
     }
     std::vector<ir::TypeIdx> fields;
     fields.reserve(node.payload.get<ast::ItemStruct>().fields.size());
@@ -1501,7 +1503,7 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   } else {
     const ast::ItemEnum& decl = node.payload.get<ast::ItemEnum>();
     for (usize i = 0; i < decl.params.size(); ++i) {
-      type_params.emplace_back(decl.params[i].name, args[i]);
+      type_params.emplace_back(decl.params[i].name.name, args[i]);
     }
     // Payloads resolve first so variant nodes append back-to-back.
     std::vector<std::vector<ir::TypeIdx>> payloads;
@@ -2194,8 +2196,8 @@ void Checker::process_module(u32 module) {
           const std::vector<std::pair<std::string_view, ir::TypeIdx>> kept =
               type_params;
           type_params.clear();
-          for (const ast::Ident& param : intrinsic.generic) {
-            type_params.emplace_back(param.name,
+          for (const ast::GenericParam& param : intrinsic.generic) {
+            type_params.emplace_back(param.name.name,
                                      builder.primitive(ir::TypeTag::U8));
           }
           std::vector<ir::TypeIdx> shape_params;
@@ -3729,9 +3731,9 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
           break;
         }
         bool found = false;
-        for (const auto& param : impl.params) {
-          if (param.name == path.segments[0].name) {
-            scope.emplace_back(param.name, args[i]);
+        for (const ast::GenericParam& param : impl.params) {
+          if (param.name.name == path.segments[0].name) {
+            scope.emplace_back(param.name.name, args[i]);
             found = true;
             break;
           }
@@ -3919,7 +3921,7 @@ bool Checker::fn_is_comp(ast::ItemIdx item) const {
          node.payload.get<ast::ItemFn>().is_comp;
 }
 
-std::span<const ast::Ident> Checker::fn_generic_params(
+std::span<const ast::GenericParam> Checker::fn_generic_params(
     ast::ItemIdx item) const {
   const ast::ItemNode& node = ast.items[item];
   if (node.kind == ast::ItemKind::Fn) {
@@ -3955,10 +3957,10 @@ ast::TypeIdx Checker::fn_return_type(ast::ItemIdx item) const {
 
 // Index of a type parameter in a declaration's parameter list, or the
 // parameter count when the name is not a parameter.
-static u32 param_slot(std::span<const ast::Ident> params,
+static u32 param_slot(std::span<const ast::GenericParam> params,
                       std::string_view name) {
   for (u32 i = 0; i < static_cast<u32>(params.size()); ++i) {
-    if (params[i].name == name) {
+    if (params[i].name.name == name) {
       return i;
     }
   }
@@ -3966,7 +3968,7 @@ static u32 param_slot(std::span<const ast::Ident> params,
 }
 
 Checker::DeclaredBinding Checker::declared_binding(
-    std::span<const ast::Ident> params,
+    std::span<const ast::GenericParam> params,
     const ast::TypeNode& declared) const {
   const DeclaredBinding none{static_cast<u32>(params.size()), false, false,
                              false};
@@ -4031,12 +4033,12 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
     }
   }
   const bool is_intrinsic = ast.items[item].kind == ast::ItemKind::Intrinsic;
-  const std::span<const ast::Ident> params = fn_generic_params(item);
+  const std::span<const ast::GenericParam> params = fn_generic_params(item);
   const std::vector<std::pair<std::string_view, ir::TypeIdx>> kept_outer =
       type_params;
   type_params.clear();
   for (usize i = 0; i < params.size() && i < args.size(); ++i) {
-    type_params.emplace_back(params[i].name, args[i]);
+    type_params.emplace_back(params[i].name.name, args[i]);
   }
   std::vector<ir::TypeIdx> sig_params;
   for (const ast::ItemFnParam& param : fn_params(item)) {
@@ -4098,7 +4100,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
     const std::span<const ast::ExprIdx>& args,
     const std::span<const ast::TypeIdx>& explicit_args,
     diag::Span span) {
-  const std::span<const ast::Ident> params = fn_generic_params(item);
+  const std::span<const ast::GenericParam> params = fn_generic_params(item);
   if (explicit_args.size() != params.size() && !explicit_args.empty()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
         diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityMismatch,

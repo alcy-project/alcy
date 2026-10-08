@@ -45,7 +45,12 @@ extern_fn   = "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
               (* Bodyless declarations whose names are the symbols the
                  linker resolves; only "C" is accepted, and calling
                  one needs the gate. See docs/spec/ffi.md. *)
-type_params = "<" , IDENT , { "," , IDENT } , ">" ;
+type_param  = IDENT , [ ":" , integer_type ] ;
+type_params = "<" , type_param , { "," , type_param } , ">" ;
+              (* A parameter may carry an annotation naming its type:
+                 `ArrayVec<T, N: usize>` fixes the kind at the
+                 parameter, a value rather than a type. See
+                 docs/adr/0054-*. *)
 params      = [ [ "comp" ] , pattern , ":" , type ,
                 { "," , [ "comp" ] , pattern , ":" , type } , [ "," ] ] ;
               (* "comp" marks a compile-time parameter; plain functions

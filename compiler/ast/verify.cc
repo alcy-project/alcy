@@ -3,6 +3,7 @@
 
 #include "ast/verify.h"
 
+#include <span>
 #include <string_view>
 #include <utility>
 
@@ -337,10 +338,23 @@ bool verify_param_children(const ItemFnParam& param, const AstArena& arena) {
   return bound(param.pattern, arena.patterns) && bound(param.type, arena.types);
 }
 
+bool verify_generic_children(std::span<const GenericParam> params,
+                             const AstArena& arena) {
+  for (const GenericParam& param : params) {
+    if (!bound(param.type, arena.types)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool verify_item_children(const ItemNode& node, const AstArena& arena) {
   switch (node.kind) {
     case ItemKind::Fn: {
       const ItemFn fn = node.payload.get<ItemFn>();
+      if (!verify_generic_children(fn.generic, arena)) {
+        return false;
+      }
       for (const ItemFnParam& param : fn.params) {
         if (!verify_param_children(param, arena)) {
           return false;
@@ -350,6 +364,9 @@ bool verify_item_children(const ItemNode& node, const AstArena& arena) {
     }
     case ItemKind::Intrinsic: {
       const ItemIntrinsic intrinsic = node.payload.get<ItemIntrinsic>();
+      if (!verify_generic_children(intrinsic.generic, arena)) {
+        return false;
+      }
       for (const ItemFnParam& param : intrinsic.params) {
         if (!verify_param_children(param, arena)) {
           return false;
@@ -360,6 +377,9 @@ bool verify_item_children(const ItemNode& node, const AstArena& arena) {
     case ItemKind::Extern: {
       const ItemExtern block = node.payload.get<ItemExtern>();
       for (const ItemExternFn& fn : block.fns) {
+        if (!verify_generic_children(fn.generic, arena)) {
+          return false;
+        }
         for (const ItemFnParam& param : fn.params) {
           if (!verify_param_children(param, arena)) {
             return false;
@@ -373,6 +393,9 @@ bool verify_item_children(const ItemNode& node, const AstArena& arena) {
     }
     case ItemKind::Struct: {
       const ItemStruct strukt = node.payload.get<ItemStruct>();
+      if (!verify_generic_children(strukt.params, arena)) {
+        return false;
+      }
       for (const ItemStructField& field : strukt.fields) {
         if (!bound(field.type, arena.types)) {
           return false;
@@ -382,6 +405,9 @@ bool verify_item_children(const ItemNode& node, const AstArena& arena) {
     }
     case ItemKind::Enum: {
       const ItemEnum enum_item = node.payload.get<ItemEnum>();
+      if (!verify_generic_children(enum_item.params, arena)) {
+        return false;
+      }
       for (const ItemEnumVariant& variant : enum_item.variants) {
         for (const TypeIdx field : variant.fields) {
           if (!bound(field, arena.types)) {
@@ -393,6 +419,9 @@ bool verify_item_children(const ItemNode& node, const AstArena& arena) {
     }
     case ItemKind::Impl: {
       const ItemImpl impl = node.payload.get<ItemImpl>();
+      if (!verify_generic_children(impl.params, arena)) {
+        return false;
+      }
       if (!bound(impl.type, arena.types)) {
         return false;
       }
@@ -408,10 +437,16 @@ bool verify_item_children(const ItemNode& node, const AstArena& arena) {
     }
     case ItemKind::Spec: {
       const ItemSpec spec = node.payload.get<ItemSpec>();
+      if (!verify_generic_children(spec.params, arena)) {
+        return false;
+      }
       if (spec.super.is_valid() && !bound(spec.super, arena.types)) {
         return false;
       }
       for (const SpecMethod& method : spec.methods) {
+        if (!verify_generic_children(method.generic, arena)) {
+          return false;
+        }
         for (const ItemFnParam& param : method.params) {
           if (!verify_param_children(param, arena)) {
             return false;

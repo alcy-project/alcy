@@ -648,7 +648,7 @@ ast::ItemIdx Parser::parse_intrinsic_fn(bool is_pub, bool is_unsafe) {
   if (name.is_err()) {
     return ast::ItemIdx::invalid();
   }
-  std::vector<ast::Ident> generic;
+  std::vector<ast::GenericParam> generic;
   if (!parse_generic_params(generic)) {
     return ast::ItemIdx::invalid();
   }
@@ -758,7 +758,7 @@ ast::ItemIdx Parser::parse_struct(bool is_pub) {
   if (name.is_err()) {
     return ast::ItemIdx::invalid();
   }
-  std::vector<ast::Ident> params;
+  std::vector<ast::GenericParam> params;
   if (!parse_generic_params(params)) {
     return ast::ItemIdx::invalid();
   }
@@ -809,7 +809,7 @@ ast::ItemIdx Parser::parse_enum(bool is_pub) {
   if (name.is_err()) {
     return ast::ItemIdx::invalid();
   }
-  std::vector<ast::Ident> params;
+  std::vector<ast::GenericParam> params;
   if (!parse_generic_params(params)) {
     return ast::ItemIdx::invalid();
   }
@@ -866,10 +866,11 @@ ast::ItemIdx Parser::parse_enum(bool is_pub) {
   return ast_.items.push_back(node);
 }
 
-bool Parser::parse_generic_params(std::vector<ast::Ident>& params) {
+bool Parser::parse_generic_params(std::vector<ast::GenericParam>& params) {
   if (!match(lexer::TokenKind::Less)) {
     return true;
   }
+  bool closed = false;
   while (!check(lexer::TokenKind::Greater) && !at_end()) {
     base::Result<ast::Ident, diag::Reported> param =
         parse_ident("type parameter");
@@ -877,8 +878,8 @@ bool Parser::parse_generic_params(std::vector<ast::Ident>& params) {
       return false;
     }
     ast::Ident name = std::move(param).unwrap();
-    for (const ast::Ident& existing : params) {
-      if (existing.name == name.name) {
+    for (const ast::GenericParam& existing : params) {
+      if (existing.name.name == name.name) {
         const u32 index = bag_.emit<i18n::Key::ParserDuplicateTypeParameter>(
             diag::Severity::Error, diag::Stage::Parser,
             DiagCode::UnexpectedToken, name.span, name.name);
@@ -886,12 +887,26 @@ bool Parser::parse_generic_params(std::vector<ast::Ident>& params) {
         return false;
       }
     }
-    params.emplace_back(name);
+    ast::TypeIdx type = ast::TypeIdx::invalid();
+    if (match(lexer::TokenKind::Colon)) {
+      type = parse_type();
+      if (!type.is_valid()) {
+        return false;
+      }
+    }
+    params.push_back(ast::GenericParam{name, type});
+    // A nested generic annotation absorbs the `>` that closes the list
+    // as part of its own `>>`; the banked half is that closer.
+    if (banked_gt_ > 0) {
+      consume_gt();
+      closed = true;
+      break;
+    }
     if (!match(lexer::TokenKind::Comma)) {
       break;
     }
   }
-  if (!expect(lexer::TokenKind::Greater, "`>`")) {
+  if (!closed && !expect(lexer::TokenKind::Greater, "`>`")) {
     return false;
   }
   return true;
@@ -902,7 +917,7 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
   if (!expect(lexer::TokenKind::Impl, "impl")) {
     return ast::ItemIdx::invalid();
   }
-  std::vector<ast::Ident> params;
+  std::vector<ast::GenericParam> params;
   if (!parse_generic_params(params)) {
     return ast::ItemIdx::invalid();
   }
@@ -991,7 +1006,7 @@ ast::ItemIdx Parser::parse_spec(bool is_pub) {
   if (name.is_err()) {
     return ast::ItemIdx::invalid();
   }
-  std::vector<ast::Ident> params;
+  std::vector<ast::GenericParam> params;
   if (!parse_generic_params(params)) {
     return ast::ItemIdx::invalid();
   }

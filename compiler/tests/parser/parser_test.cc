@@ -275,14 +275,14 @@ TEST_CASE("Parser builds generic enum and impl params") {
   if (option.params.size() != 1) {
     return;
   }
-  CHECK(option.params[0].name == "T");
+  CHECK(option.params[0].name.name == "T");
   CHECK(option.variants.size() == 2);
   const ast::ItemImpl impl = as_impl(result.items[1], f);
   CHECK(impl.params.size() == 1);
   if (impl.params.size() != 1) {
     return;
   }
-  CHECK(impl.params[0].name == "T");
+  CHECK(impl.params[0].name.name == "T");
   CHECK(impl.methods.size() == 1);
 }
 
@@ -298,9 +298,74 @@ TEST_CASE("Parser builds generic struct params") {
   if (pair.params.size() != 2) {
     return;
   }
-  CHECK(pair.params[0].name == "A");
-  CHECK(pair.params[1].name == "B");
+  CHECK(pair.params[0].name.name == "A");
+  CHECK(pair.params[1].name.name == "B");
   CHECK(pair.fields.size() == 2);
+}
+
+TEST_CASE("Parser builds value parameter annotations") {
+  Fixture f;
+  const ParseResult result =
+      parse("struct ArrayVec<T, N: usize> { len: usize }\n", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemStruct array_vec = as_struct(result.items[0], f);
+  CHECK(array_vec.params.size() == 2);
+  if (array_vec.params.size() != 2) {
+    return;
+  }
+  CHECK(array_vec.params[0].name.name == "T");
+  CHECK(!array_vec.params[0].type.is_valid());
+  CHECK(array_vec.params[1].name.name == "N");
+  CHECK(array_vec.params[1].type.is_valid());
+  if (!array_vec.params[1].type.is_valid()) {
+    return;
+  }
+  const ast::TypeNode& annotation = f.ast.types[array_vec.params[1].type];
+  CHECK(annotation.kind == ast::TypeKind::Primitive);
+  if (annotation.kind == ast::TypeKind::Primitive) {
+    CHECK(annotation.payload.get<ast::TypePrimitive>().primitive ==
+          ast::PrimitiveKind::Usize);
+  }
+}
+
+TEST_CASE("Parser builds annotated function and impl parameter lists") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn fill<T, N: usize>() -> i32 { ret 0 }\n"
+      "impl<T, N: usize> ArrayVec<T, N> {}\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 2) {
+    return;
+  }
+  const ast::ItemFn& fill = as_fn(result.items[0], f);
+  CHECK(fill.generic.size() == 2);
+  if (fill.generic.size() != 2) {
+    return;
+  }
+  CHECK(fill.generic[1].name.name == "N");
+  CHECK(fill.generic[1].type.is_valid());
+  const ast::ItemImpl impl = as_impl(result.items[1], f);
+  CHECK(impl.params.size() == 2);
+  if (impl.params.size() != 2) {
+    return;
+  }
+  CHECK(impl.params[1].name.name == "N");
+  CHECK(impl.params[1].type.is_valid());
+}
+
+TEST_CASE("Parser rejects malformed value parameter annotations") {
+  Fixture f;
+  const ParseResult missing = parse("struct Foo<T: > {}\n", f);
+  CHECK(!missing.ok);
+  CHECK(f.bag.has_errors());
+  Fixture g;
+  const ParseResult literal = parse("struct Foo<T: 4> {}\n", g);
+  CHECK(!literal.ok);
+  CHECK(g.bag.has_errors());
 }
 
 TEST_CASE("Parser rejects duplicate type parameters") {

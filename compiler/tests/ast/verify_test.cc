@@ -3,6 +3,7 @@
 
 #include "ast/verify.h"
 
+#include <span>
 #include <utility>
 
 #include "ast/ast.h"
@@ -114,6 +115,49 @@ TEST_CASE("Verification rejects a dangling type edge") {
   CHECK(result.is_err());
   if (result.is_err()) {
     CHECK(std::move(result).unwrap_err() == VerificationError::DanglingType);
+  }
+}
+
+TEST_CASE("Verification accepts a value parameter annotation") {
+  Fixture f;
+  TypeNode annotation;
+  annotation.kind = TypeKind::Primitive;
+  annotation.span = test_span();
+  annotation.payload.set(TypePrimitive{.primitive = PrimitiveKind::Usize});
+  const TypeIdx annotation_idx = f.ast.types.emplace_back(annotation);
+  const GenericParam param{.name = {.name = "N", .span = test_span()},
+                           .type = annotation_idx};
+  ItemNode item;
+  item.kind = ItemKind::Fn;
+  item.span = test_span();
+  item.is_pub = false;
+  item.payload.set(ItemFn{.name = {.name = "fill", .span = test_span()},
+                          .generic = std::span<const GenericParam>(&param, 1),
+                          .params = {},
+                          .return_type = TypeIdx::invalid(),
+                          .body = BlockIdx::invalid()});
+  f.ast.items.emplace_back(item);
+  CHECK(verify_file(f.ast).is_ok());
+}
+
+TEST_CASE("Verification rejects a dangling value parameter annotation") {
+  Fixture f;
+  const GenericParam param{.name = {.name = "N", .span = test_span()},
+                           .type = TypeIdx(6)};
+  ItemNode item;
+  item.kind = ItemKind::Fn;
+  item.span = test_span();
+  item.is_pub = false;
+  item.payload.set(ItemFn{.name = {.name = "fill", .span = test_span()},
+                          .generic = std::span<const GenericParam>(&param, 1),
+                          .params = {},
+                          .return_type = TypeIdx::invalid(),
+                          .body = BlockIdx::invalid()});
+  f.ast.items.emplace_back(item);
+  base::Result<void, VerificationError> result = verify_file(f.ast);
+  CHECK(result.is_err());
+  if (result.is_err()) {
+    CHECK(std::move(result).unwrap_err() == VerificationError::DanglingItem);
   }
 }
 

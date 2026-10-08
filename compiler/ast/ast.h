@@ -836,6 +836,13 @@ struct Item {
   bool is_pub;
 };
 
+// One generic parameter: a type parameter, or a value parameter when
+// the declaration annotates it (`N: usize`).
+struct GenericParam {
+  Ident name;
+  TypeIdx type = TypeIdx::invalid();
+};
+
 struct ItemFnParam {
   PatternIdx pattern = PatternIdx::invalid();
   TypeIdx type = TypeIdx::invalid();
@@ -844,8 +851,8 @@ struct ItemFnParam {
 
 struct ItemFn {
   Ident name;
-  // Type parameters; empty for a non-generic function.
-  std::span<const Ident> generic;
+  // Generic parameters; empty for a non-generic function.
+  std::span<const GenericParam> generic;
   std::span<const ItemFnParam> params;
   TypeIdx return_type = TypeIdx::invalid();
   BlockIdx body = BlockIdx::invalid();
@@ -861,10 +868,10 @@ struct ItemFn {
 // hooks or IR operations.
 struct ItemIntrinsic {
   Ident name;
-  // Type parameters; empty for a non-generic intrinsic. A generic
+  // Generic parameters; empty for a non-generic intrinsic. A generic
   // intrinsic must admit exactly one binding per call, so its
   // parameters are recoverable from the argument types alone.
-  std::span<const Ident> generic;
+  std::span<const GenericParam> generic;
   std::span<const ItemFnParam> params;
   TypeIdx return_type = TypeIdx::invalid();
   // The precondition the compiler cannot check: the checker verifies
@@ -881,9 +888,9 @@ struct ItemStructField {
 // and the name is the symbol the linker resolves.
 struct ItemExternFn {
   Ident name;
-  // Type parameters; the checker refuses them (an extern function is
-  // not generic), so this is carried only for the diagnostic.
-  std::span<const Ident> generic;
+  // Generic parameters; the checker refuses them (an extern function
+  // is not generic), so this is carried only for the diagnostic.
+  std::span<const GenericParam> generic;
   std::span<const ItemFnParam> params;
   TypeIdx return_type = TypeIdx::invalid();
 };
@@ -897,7 +904,7 @@ struct ItemExtern {
 
 struct ItemStruct {
   Ident name;
-  std::span<const Ident> params;
+  std::span<const GenericParam> params;
   std::span<const ItemStructField> fields;
 };
 
@@ -908,12 +915,12 @@ struct ItemEnumVariant {
 
 struct ItemEnum {
   Ident name;
-  std::span<const Ident> params;
+  std::span<const GenericParam> params;
   std::span<const ItemEnumVariant> variants;
 };
 
 struct ItemImpl {
-  std::span<const Ident> params;
+  std::span<const GenericParam> params;
   TypeIdx type = TypeIdx::invalid();
   // The implemented spec, as a type path with arguments; invalid for
   // an inherent impl. `impl Display for Point` parses the spec side
@@ -927,7 +934,7 @@ struct ItemImpl {
 // type and are checked against these under the target.
 struct SpecMethod {
   Ident name;
-  std::span<const Ident> generic;
+  std::span<const GenericParam> generic;
   std::span<const ItemFnParam> params;
   TypeIdx return_type = TypeIdx::invalid();
   bool is_unsafe = false;
@@ -937,7 +944,7 @@ struct SpecMethod {
 // signatures are data, not items, so no pass visits them as bodies.
 struct ItemSpec {
   Ident name;
-  std::span<const Ident> params;
+  std::span<const GenericParam> params;
   // The super-spec this one refines (`spec Eq: PartialEq`), as a path
   // type, or an invalid index when absent. ADR-0053.
   TypeIdx super = TypeIdx::invalid();

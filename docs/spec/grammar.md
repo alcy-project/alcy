@@ -53,7 +53,9 @@ are rejected with guidance diagnostics.
 Methods take explicit receivers: `self`, `&self`, `&mut self`.
 `Self` denotes the implementing type inside `impl` blocks, and the
 spec's own type inside `spec` declarations. An omitted
-return type means `()`; only free functions take type parameters.
+return type means `()`; only free functions take type parameters, and
+a parameter annotated with an integer type (`N: usize`) is a value
+parameter.
 
 A `spec` declares a named capability as `;`-terminated method
 signatures, with no bodies. A spec may refine another: `spec Eq:

@@ -22,7 +22,7 @@ namespace parser {
 // spec method signatures (`fn f(...) -> T;`).
 struct FnSignature {
   ast::Ident name;
-  std::vector<ast::Ident> generic;
+  std::vector<ast::GenericParam> generic;
   std::vector<ast::ItemFnParam> params;
   ast::TypeIdx return_type = ast::TypeIdx::invalid();
 };
@@ -109,8 +109,9 @@ class Parser {
   ast::ItemIdx parse_spec(bool is_pub);
   bool parse_fn_signature(FnSignature& signature);
   bool parse_spec_method(ast::SpecMethod& method);
-  // Parses an optional `<T, ...>` parameter list; empty when absent.
-  bool parse_generic_params(std::vector<ast::Ident>& params);
+  // Parses an optional `<T, N: usize, ...>` parameter list; empty when
+  // absent. A parameter with an annotation is a value parameter.
+  bool parse_generic_params(std::vector<ast::GenericParam>& params);
   ast::ItemIdx parse_static(bool is_pub);
   ast::ItemIdx parse_const(bool is_pub);
   ast::ItemIdx parse_use(bool is_pub);

@@ -72,6 +72,11 @@ moves behind an interface when a host outside the analyzer needs one.
 The step bound is a fixed branch quota: a call and a loop back edge
 spend one unit of a million, and nothing raises it yet.
 
+Amended at the value parameter's landing: a value parameter is
+annotated where the declaration spells it (`struct ArrayVec<T, N:
+usize>`), because a declaration fixes each parameter's kind at the
+parameter itself.
+
 ## Consequences
 
 `comp.md` is rewritten at implementation; the grammar gains local

@@ -339,7 +339,7 @@ class Checker {
   // lowering side tables use; NO_INST for a non-instantiation.
   u32 inst_index(ir::TypeIdx type) const;
   // Declared type parameters of a function or method item.
-  std::span<const ast::Ident> fn_generic_params(ast::ItemIdx item) const;
+  std::span<const ast::GenericParam> fn_generic_params(ast::ItemIdx item) const;
   // Item name for diagnostics.
   std::string_view fn_name(ast::ItemIdx item) const;
   // Whether calling the function or intrinsic item is an operation
@@ -360,7 +360,7 @@ class Checker {
     bool through_slice = false;
     bool through_raw = false;
   };
-  DeclaredBinding declared_binding(std::span<const ast::Ident> params,
+  DeclaredBinding declared_binding(std::span<const ast::GenericParam> params,
                                    const ast::TypeNode& declared) const;
   // Declared parameters of a function or intrinsic item.
   std::span<const ast::ItemFnParam> fn_params(ast::ItemIdx item) const;
@@ -392,7 +392,7 @@ class Checker {
   usize push_generic_scope(const GenericInstance& instance);
   void pop_generic_scope(usize kept);
   // Parameter names of a nominal declaration, whether struct or enum.
-  std::span<const ast::Ident> nominal_params(const NominalEntry& entry);
+  std::span<const ast::GenericParam> nominal_params(const NominalEntry& entry);
   // Appends a storage copy of `type` and records its origin.
   ir::TypeIdx storage_copy(ir::TypeIdx type);
   // Follows storage copies back to the type they were made from.
