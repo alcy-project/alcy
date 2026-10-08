@@ -7,6 +7,8 @@
 import { assetBase } from "./assets.js";
 import { elements } from "./elements.js";
 import { normalizedSource } from "./editor.js";
+import { openCompiler, runProgram } from "../shared/compiler-client.js";
+import type { CompilerClient } from "../shared/compiler-client.js";
 import { t } from "../shared/site.js";
 import { setRunMeta, setRunMetaSuffix } from "./output.js";
 import { renderDiagnostics } from "./problems.js";
@@ -18,64 +20,23 @@ import {
   showCompilerError,
 } from "./status.js";
 import { showTab } from "./tabs.js";
-import type {
-  CompilerMessage,
-  CompilerResponse,
-  CompilerStatusName,
-  RunnerMessage,
-} from "./types.js";
+import type { CompilerResponse, CompilerStatusName } from "./types.js";
 
 const CHECK_DEBOUNCE_MS = 500;
 const RUN_TIMEOUT_MS = 5000;
 
-function ensureCompilerWorker(): Worker {
-  if (state.compiler !== null) {
-    return state.compiler;
-  }
-  const worker = new Worker(new URL("compiler.worker.js", assetBase));
-  worker.addEventListener("message", (event: MessageEvent<CompilerMessage>) => {
-    const message = event.data;
-    if (message.type === "status") {
-      applyCompilerState(message.status, message.detail);
-      return;
-    }
-    const pending = state.requests.get(message.id);
-    if (pending === undefined) {
-      return;
-    }
-    state.requests.delete(message.id);
-    pending.resolve(message);
-  });
-  worker.addEventListener("error", (event) => {
-    failAllRequests(event.message || "the compiler worker stopped");
-    worker.terminate();
-    state.compiler = null;
-    applyCompilerState("error", event.message || "");
-  });
-  worker.addEventListener("messageerror", () => {
-    failAllRequests("the compiler worker sent an unreadable message");
-  });
-  state.compiler = worker;
-  return worker;
-}
+let compilerClient: CompilerClient | null = null;
 
-function failAllRequests(message: string): void {
-  for (const pending of state.requests.values()) {
-    pending.reject(new Error(message));
-  }
-  state.requests.clear();
-}
-
+// The client creates the worker on the first request and keeps it for the
+// page; `applyCompilerState` hears every load status in between.
 function callCompiler(
   op: "check" | "compile",
   source: string,
 ): Promise<CompilerResponse> {
-  const worker = ensureCompilerWorker();
-  const id = ++state.requestSeq;
-  return new Promise((resolve, reject) => {
-    state.requests.set(id, { resolve, reject });
-    worker.postMessage({ type: "request", id, op, source });
-  });
+  if (compilerClient === null) {
+    compilerClient = openCompiler({ base: assetBase, onStatus: applyCompilerState });
+  }
+  return compilerClient.request(op, source);
 }
 
 // What a compiler state change means for the page: a ready worker gets a
@@ -146,54 +107,37 @@ export async function runCheck({
   }
 }
 
-function execute(wasmBuffer: ArrayBuffer): Promise<void> {
-  return new Promise((resolve) => {
-    state.runner?.terminate();
-    const runner = new Worker(new URL("runner.worker.js", assetBase));
-    state.runner = runner;
-    state.runnerTimer = window.setTimeout(() => {
-      runner.terminate();
-      state.runner = null;
+async function execute(wasmBuffer: ArrayBuffer): Promise<void> {
+  const outcome = await runProgram({
+    base: assetBase,
+    wasm: wasmBuffer,
+    timeoutMs: RUN_TIMEOUT_MS,
+  });
+  switch (outcome.type) {
+    case "result": {
+      elements.stdout.textContent = outcome.stdout;
+      elements.stderr.textContent = outcome.stderr;
+      setRunMetaSuffix({ key: "meta.exitCode", params: { code: outcome.exitCode } });
+      const ms = outcome.ms.toFixed(1);
+      if (outcome.exitCode === 0) {
+        setStatus("status.runFinished", { ms });
+      } else {
+        setStatus("status.exited", { code: outcome.exitCode, ms });
+      }
+      return;
+    }
+    case "timeout":
       elements.stderr.textContent = t("program.timedOut", {
         seconds: RUN_TIMEOUT_MS / 1000,
       });
       setRunMetaSuffix({ key: "meta.timedOut" });
       setStatus("status.timedOut");
-      resolve();
-    }, RUN_TIMEOUT_MS);
-
-    runner.addEventListener("message", (event: MessageEvent<RunnerMessage>) => {
-      const message = event.data;
-      window.clearTimeout(state.runnerTimer);
-      runner.terminate();
-      state.runner = null;
-      if (message.type === "result") {
-        elements.stdout.textContent = message.stdout;
-        elements.stderr.textContent = message.stderr;
-        setRunMetaSuffix({ key: "meta.exitCode", params: { code: message.exitCode } });
-        const ms = message.ms.toFixed(1);
-        if (message.exitCode === 0) {
-          setStatus("status.runFinished", { ms });
-        } else {
-          setStatus("status.exited", { code: message.exitCode, ms });
-        }
-      } else {
-        elements.stderr.textContent = message.message;
-        setRunMetaSuffix({ key: "meta.notRunnable" });
-        setStatus("status.runFailed");
-      }
-      resolve();
-    });
-
-    runner.addEventListener("error", (event) => {
-      window.clearTimeout(state.runnerTimer);
-      elements.stderr.textContent = event.message || "the run worker stopped";
+      return;
+    case "error":
+      elements.stderr.textContent = outcome.message;
+      setRunMetaSuffix({ key: "meta.notRunnable" });
       setStatus("status.runFailed");
-      resolve();
-    });
-
-    runner.postMessage({ type: "run", wasm: wasmBuffer }, [wasmBuffer]);
-  });
+  }
 }
 
 export async function run(): Promise<void> {

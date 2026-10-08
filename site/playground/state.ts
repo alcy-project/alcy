@@ -6,21 +6,11 @@
 // reader can see the whole surface in one place.
 
 import type { MessageKey, MessageParams } from "../shared/i18n.js";
-import type {
-  CompilerResponse,
-  CompilerStatusName,
-  Diagnostic,
-  RunMeta,
-} from "./types.js";
+import type { CompilerStatusName, Diagnostic, RunMeta } from "./types.js";
 
 export interface Highlighter {
   highlight(text: string): string;
   dispose(): void;
-}
-
-export interface PendingRequest {
-  resolve: (response: CompilerResponse) => void;
-  reject: (error: Error) => void;
 }
 
 export interface StatusRef {
@@ -30,11 +20,8 @@ export interface StatusRef {
 
 export interface PageState {
   highlighter: Highlighter | null;
-  compiler: Worker | null;
   compilerStatus: CompilerStatusName;
   compilerDetail: string;
-  requests: Map<number, PendingRequest>;
-  requestSeq: number;
   checkSeq: number;
   highlightFrame: number | null;
   highlightedText: string | null;
@@ -44,8 +31,6 @@ export interface PageState {
   codeSaveTimer: number | undefined;
   checkTimer: number | undefined;
   running: boolean;
-  runner: Worker | null;
-  runnerTimer: number | undefined;
   status: StatusRef;
   runMeta: RunMeta | null;
   lastDiagnostics: Diagnostic[];
@@ -54,11 +39,8 @@ export interface PageState {
 
 export const state: PageState = {
   highlighter: null,
-  compiler: null,
   compilerStatus: "idle",
   compilerDetail: "",
-  requests: new Map(),
-  requestSeq: 0,
   checkSeq: 0,
   highlightFrame: null,
   highlightedText: null,
@@ -67,8 +49,6 @@ export const state: PageState = {
   codeSaveTimer: undefined,
   checkTimer: undefined,
   running: false,
-  runner: null,
-  runnerTimer: undefined,
   status: { key: "status.ready" },
   runMeta: null,
   lastDiagnostics: [],
