@@ -50,3 +50,26 @@ test("the guide's assets load only when a page has code", () => {
   match(withCode, /shared\/guide\.js/);
   equal(render("en", [prose]).includes("shared/guide."), false);
 });
+
+test("an alcy block gains edit, run, and an output panel", () => {
+  const html = render("en", [alcy]);
+  match(html, /<div class="code-block" data-language="alcy">/);
+  match(html, /data-action="edit" aria-pressed="false">Edit</);
+  match(html, /data-action="reset" hidden>Reset</);
+  match(html, /data-action="run">Run</);
+  match(html, /<div class="code-output" hidden><\/div>/);
+});
+
+test("a non-alcy block stays copy-only", () => {
+  const html = render("en", [sh]);
+  equal(html.includes('data-action="edit"'), false);
+  equal(html.includes('data-action="run"'), false);
+  equal(html.includes("code-output"), false);
+  equal(html.includes("data-language"), false);
+});
+
+test("the alcy labels are stamped in the page's language", () => {
+  const html = render("ja", [alcy]);
+  match(html, /data-action="edit" aria-pressed="false">編集</);
+  match(html, /data-action="run">実行</);
+});

@@ -87,13 +87,25 @@ function blockHtml(
     case "paragraph":
       return `<p>${renderInline(block.text, options.resolveLink)}</p>`;
     case "code": {
-      const code =
-        block.language === "alcy" ? options.highlight(block.text) : escapeHtml(block.text);
-      return `<div class="code-block">
+      const isAlcy = block.language === "alcy";
+      const code = isAlcy ? options.highlight(block.text) : escapeHtml(block.text);
+      const actions = [
+        `<button type="button" data-action="copy">${t("guide.copy")}</button>`,
+        ...(isAlcy
+          ? [
+              `<button type="button" data-action="edit" aria-pressed="false">${t("guide.edit")}</button>`,
+              `<button type="button" data-action="reset" hidden>${t("guide.reset")}</button>`,
+              `<button type="button" data-action="run">${t("button.run")}</button>`,
+            ]
+          : []),
+      ].join("\n          ");
+      const output = isAlcy ? `\n        <div class="code-output" hidden></div>` : "";
+      const language = isAlcy ? ` data-language="alcy"` : "";
+      return `<div class="code-block"${language}>
         <pre><code>${code}</code></pre>
         <div class="code-actions" hidden>
-          <button type="button" data-action="copy">${t("guide.copy")}</button>
-        </div>
+          ${actions}
+        </div>${output}
       </div>`;
     }
     case "list": {
