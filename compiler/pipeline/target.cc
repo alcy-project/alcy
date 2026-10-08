@@ -210,7 +210,8 @@ std::optional<EnclosingSuite> find_enclosing_suite(
     if (parent == at) {
       return std::nullopt;
     }
-    member = std::string(suite_dir_basename(at.as_view())) + "/" + member;
+    member.insert(0, "/");
+    member.insert(0, suite_dir_basename(at.as_view()));
     at = parent;
   }
 }
