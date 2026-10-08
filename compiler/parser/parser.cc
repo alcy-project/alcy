@@ -532,7 +532,7 @@ ast::PathIdx Parser::parse_path(std::vector<ast::TypeIdx>* type_args) {
 bool Parser::parse_turbofish(std::vector<ast::TypeIdx>& type_args) {
   while (!check(lexer::TokenKind::Greater) &&
          !check(lexer::TokenKind::GreaterGreater) && !at_end()) {
-    ast::TypeIdx arg = parse_type();
+    ast::TypeIdx arg = parse_type_arg();
     if (!arg.is_valid()) {
       return false;
     }

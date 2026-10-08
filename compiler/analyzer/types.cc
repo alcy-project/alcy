@@ -116,6 +116,30 @@ void Checker::register_nominals() {
   }
 }
 
+// A value parameter's annotation fixes the kind of value its arguments
+// carry, so it must name an integer type. The annotation may name a
+// previously registered nominal, so this runs with the whole table
+// filled.
+void Checker::validate_value_parameter_types() {
+  for (const NominalEntry& entry : nominals) {
+    for (const ast::GenericParam& param : nominal_params(entry)) {
+      if (!param.type.is_valid()) {
+        continue;
+      }
+      const ir::TypeIdx annotation =
+          resolve_type(entry.module, param.type, nullptr);
+      if (is_error(annotation) || is_integer_tag(tag_of(annotation))) {
+        continue;
+      }
+      const u32 index =
+          bag.emit<i18n::Key::AnalyzerValueParameterTypeNotInteger>(
+              diag::Severity::Error, diag::Stage::Analyzer,
+              DiagCode::TypeMismatch, param.name.span, param.name.name);
+      (void)index;
+    }
+  }
+}
+
 NominalEntry* Checker::find_nominal(u32 module, std::string_view name) {
   if (module >= nominals_of_module.size()) {
     return nullptr;
@@ -1301,20 +1325,42 @@ std::span<const ast::GenericParam> Checker::nominal_params(
   return node.payload.get<ast::ItemEnum>().params;
 }
 
-usize Checker::push_generic_scope(const GenericInstance& instance) {
-  const usize kept = type_params.size();
+Checker::GenericScope Checker::push_generic_scope(
+    const GenericInstance& instance) {
+  const GenericScope kept{type_params.size(), value_params.size()};
   const std::span<const ast::GenericParam> params =
       nominal_params(nominals[instance.nominal]);
   for (usize i = 0; i < params.size(); ++i) {
-    type_params.emplace_back(params[i].name.name, instance.args[i]);
+    if (params[i].type.is_valid()) {
+      value_params.emplace_back(params[i].name.name,
+                                const_type_value(instance.args[i]));
+    } else {
+      type_params.emplace_back(params[i].name.name, instance.args[i]);
+    }
   }
   return kept;
 }
 
-void Checker::pop_generic_scope(usize kept) {
-  while (type_params.size() > kept) {
+void Checker::pop_generic_scope(const GenericScope& kept) {
+  while (type_params.size() > kept.type_params) {
     type_params.pop_back();
   }
+  while (value_params.size() > kept.value_params) {
+    value_params.pop_back();
+  }
+}
+
+std::optional<u64> Checker::value_param(std::string_view name) const {
+  for (usize i = value_params.size(); i > 0; --i) {
+    if (value_params[i - 1].first == name) {
+      return value_params[i - 1].second;
+    }
+  }
+  return std::nullopt;
+}
+
+u64 Checker::const_type_value(ir::TypeIdx type) const {
+  return builder.const_types()[builder.types()[type].as_const()].value;
 }
 
 ir::TypeIdx Checker::nominal_owner_type(NominalEntry* entry) {
@@ -1360,6 +1406,11 @@ const GenericInstance* Checker::infer_from_payload_args(
     if (slot == decl.params.size()) {
       continue;
     }
+    if (decl.params[slot].type.is_valid()) {
+      // A value slot binds from a value argument, not from a payload's
+      // type; the annotation path is the one that resolves it.
+      return nullptr;
+    }
     const ir::TypeIdx actual = check_expr(module, args[i], nullptr);
     if (is_error(actual)) {
       return nullptr;
@@ -1396,6 +1447,21 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
         params.size() == 1 ? "" : "s");
     (void)index;
     return error_type();
+  }
+  // A caller that reaches this from a value path resolves arguments
+  // itself, so a value-declared slot must hold the const type a value
+  // was lowered to. Anything else is a type argument in that slot.
+  for (usize i = 0; i < params.size(); ++i) {
+    if (!params[i].type.is_valid()) {
+      continue;
+    }
+    if (is_error(args[i]) || tag_of(args[i]) != ir::TypeTag::Const) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerValueArgumentExpected>(
+          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
+          span, params[i].name.name);
+      (void)index;
+      return error_type();
+    }
   }
   // A function type in a type argument has no symbol encoding yet, so two
   // instantiations that differ only there would share a mangled name.
@@ -1481,12 +1547,19 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
     args_seq.push(builder.ref_type(arg));
   }
   const usize pushed = type_params.size();
-  if (is_struct) {
-    const std::span<const ast::GenericParam> params =
-        node.payload.get<ast::ItemStruct>().params;
-    for (usize i = 0; i < params.size(); ++i) {
-      type_params.emplace_back(params[i].name.name, args[i]);
+  const usize pushed_values = value_params.size();
+  const auto push_bindings = [&](std::span<const ast::GenericParam> declared) {
+    for (usize i = 0; i < declared.size(); ++i) {
+      if (declared[i].type.is_valid()) {
+        value_params.emplace_back(declared[i].name.name,
+                                  const_type_value(args[i]));
+      } else {
+        type_params.emplace_back(declared[i].name.name, args[i]);
+      }
     }
+  };
+  if (is_struct) {
+    push_bindings(node.payload.get<ast::ItemStruct>().params);
     std::vector<ir::TypeIdx> fields;
     fields.reserve(node.payload.get<ast::ItemStruct>().fields.size());
     for (const ast::ItemStructField& field :
@@ -1502,9 +1575,7 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
     builder.fill_struct(reserved, seq.finish(), args_seq.finish());
   } else {
     const ast::ItemEnum& decl = node.payload.get<ast::ItemEnum>();
-    for (usize i = 0; i < decl.params.size(); ++i) {
-      type_params.emplace_back(decl.params[i].name.name, args[i]);
-    }
+    push_bindings(decl.params);
     // Payloads resolve first so variant nodes append back-to-back.
     std::vector<std::vector<ir::TypeIdx>> payloads;
     payloads.reserve(decl.variants.size());
@@ -1529,12 +1600,14 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   while (type_params.size() > pushed) {
     type_params.pop_back();
   }
+  while (value_params.size() > pushed_values) {
+    value_params.pop_back();
+  }
   // A field type can instantiate another generic nominal, which pushes
   // entries of its own; this instance's entry is the one recorded above.
   GenericInstance& instance = generic_instances[instance_index];
   instance.started = true;
   instance.complete = true;
-  (void)span;
   return reserved;
 }
 
@@ -1635,6 +1708,79 @@ bool Checker::resolve_type_path(u32 module,
   return true;
 }
 
+// Resolves one argument at a value-declared generic slot. A literal is
+// its own value; a path names a visible value parameter first, then a
+// `const` item; anything else is a type where the declaration requires
+// a value.
+bool Checker::resolve_value_argument(u32 module,
+                                     ast::TypeIdx arg,
+                                     std::string_view param,
+                                     diag::Span span,
+                                     u64& out) {
+  const auto reject_expected = [&] {
+    const u32 index = bag.emit<i18n::Key::AnalyzerValueArgumentExpected>(
+        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
+        span, param);
+    (void)index;
+    return false;
+  };
+  const ast::TypeNode& node = ast.types[arg];
+  if (node.kind == ast::TypeKind::Value) {
+    const ast::Literal& literal =
+        ast.literals[node.payload.get<ast::TypeValue>().literal];
+    if (literal.is_negative) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerValueArgumentNotInteger>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidOperation, span);
+      (void)index;
+      return false;
+    }
+    out = comp::parse_numeric_value(literal.spelling);
+    return true;
+  }
+  if (node.kind != ast::TypeKind::Path ||
+      !node.payload.get<ast::TypePath>().args.empty()) {
+    return reject_expected();
+  }
+  const ast::PathIdx path_idx = node.payload.get<ast::TypePath>().path;
+  const ast::Path& path = ast.paths[path_idx];
+  if (path.segments.empty()) {
+    return reject_expected();
+  }
+  if (path.segments.size() == 1) {
+    if (const std::optional<u64> bound = value_param(path.segments[0].name)) {
+      out = *bound;
+      return true;
+    }
+  }
+  u32 target = NO_MODULE;
+  if (!walk_module_prefix(module, path_idx, "value", target)) {
+    return false;
+  }
+  const std::string_view member = path.segments.back().name;
+  if (const CheckedModule::StaticInfo* info = lookup_static(target, member)) {
+    if (!info->is_const || !info->init.is_valid()) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerValueArgumentNotInteger>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidOperation, span);
+      (void)index;
+      return false;
+    }
+    return const_int_value<i18n::Key::AnalyzerValueArgumentNotInteger>(
+        target, *info, span, out);
+  }
+  // A single name that is an in-scope type is the case a declaration
+  // spells with a value slot by mistake; name the slot rather than
+  // reporting an unresolved value.
+  if (path.segments.size() == 1 &&
+      find_nominal_in_scope(module, member) != nullptr) {
+    return reject_expected();
+  }
+  emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnknownValue, span,
+                  std_hints, "value", member);
+  return false;
+}
+
 ir::TypeIdx Checker::resolve_type(u32 module,
                                   ast::TypeIdx type,
                                   const ir::TypeIdx* self,
@@ -1646,6 +1792,15 @@ ir::TypeIdx Checker::resolve_type(u32 module,
   const base::NestingScope scope(nesting_);
   const ast::TypeNode& node = ast.types[type];
   switch (node.kind) {
+    case ast::TypeKind::Value: {
+      // A literal is parsed in argument lists only; reaching a type
+      // position means the declaration takes a type there.
+      const u32 index = bag.emit<i18n::Key::AnalyzerValueCannotBeType>(
+          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
+          node.span);
+      (void)index;
+      return error_type();
+    }
     case ast::TypeKind::Primitive: {
       return primitive_type(node.payload.get<ast::TypePrimitive>().primitive,
                             node.span);
@@ -1756,6 +1911,14 @@ ir::TypeIdx Checker::resolve_type(u32 module,
             return type_params[i - 1].second;
           }
         }
+        // A value parameter names no type, whatever else is in scope.
+        if (value_param(name).has_value()) {
+          const u32 index = bag.emit<i18n::Key::AnalyzerValueParameterAsType>(
+              diag::Severity::Error, diag::Stage::Analyzer,
+              DiagCode::UnknownType, node.span, name);
+          (void)index;
+          return error_type();
+        }
         if (name == "MaybeUninit") {
           const auto& args = node.payload.get<ast::TypePath>().args;
           if (args.size() != 1) {
@@ -1827,10 +1990,21 @@ ir::TypeIdx Checker::resolve_type(u32 module,
         (void)index;
         return error_type();
       }
+      const std::span<const ast::GenericParam> params = nominal_params(*entry);
       std::vector<ir::TypeIdx> args;
       args.reserve(arg_count);
-      for (ast::TypeIdx arg : node.payload.get<ast::TypePath>().args) {
-        args.push_back(resolve_type(module, arg, self));
+      for (usize i = 0; i < arg_count; ++i) {
+        const ast::TypeIdx arg = node.payload.get<ast::TypePath>().args[i];
+        if (params[i].type.is_valid()) {
+          u64 value = 0;
+          if (!resolve_value_argument(module, arg, params[i].name.name,
+                                      node.span, value)) {
+            return error_type();
+          }
+          args.push_back(builder.const_type(value));
+        } else {
+          args.push_back(resolve_type(module, arg, self));
+        }
       }
       const u32 nominal = static_cast<u32>(entry - nominals.data());
       return instantiate_generic(nominal, args, node.span);
@@ -2195,7 +2369,10 @@ void Checker::process_module(u32 module) {
         if (!intrinsic.generic.empty()) {
           const std::vector<std::pair<std::string_view, ir::TypeIdx>> kept =
               type_params;
+          const std::vector<std::pair<std::string_view, u64>> kept_values =
+              value_params;
           type_params.clear();
+          value_params.clear();
           for (const ast::GenericParam& param : intrinsic.generic) {
             type_params.emplace_back(param.name.name,
                                      builder.primitive(ir::TypeTag::U8));
@@ -2209,6 +2386,7 @@ void Checker::process_module(u32 module) {
             shape_ret = resolve_type(module, intrinsic.return_type, nullptr);
           }
           type_params = kept;
+          value_params = kept_values;
           check_intrinsic_signature(module, intrinsic, shape_params, shape_ret);
           break;
         }
@@ -3192,6 +3370,14 @@ bool Checker::const_array_length(u32 module,
                                  u64& out) {
   const std::span<const ast::Ident> segments =
       ast.paths[array.length_path].segments;
+  // A value parameter of the enclosing declaration shadows an item of
+  // the same name, exactly as a type parameter does.
+  if (segments.size() == 1) {
+    if (const std::optional<u64> bound = value_param(segments[0].name)) {
+      out = *bound;
+      return true;
+    }
+  }
   const CheckedModule::StaticInfo* info = nullptr;
   if (segments.size() == 1) {
     info = lookup_static(module, segments[0].name);
@@ -3203,9 +3389,11 @@ bool Checker::const_array_length(u32 module,
     (void)index;
     return false;
   }
-  return const_int_value(module, *info, span, out);
+  return const_int_value<i18n::Key::AnalyzerArrayLengthNotConst>(module, *info,
+                                                                 span, out);
 }
 
+template <i18n::Key not_const_key>
 bool Checker::const_int_value(u32 module,
                               const CheckedModule::StaticInfo& info,
                               diag::Span span,
@@ -3216,9 +3404,9 @@ bool Checker::const_int_value(u32 module,
     return true;
   }
   const auto wrong = [&] {
-    const u32 index = bag.emit<i18n::Key::AnalyzerArrayLengthNotConst>(
-        diag::Severity::Error, diag::Stage::Analyzer,
-        DiagCode::InvalidOperation, span);
+    const u32 index =
+        bag.emit<not_const_key>(diag::Severity::Error, diag::Stage::Analyzer,
+                                DiagCode::InvalidOperation, span);
     (void)index;
     return false;
   };
@@ -3478,9 +3666,13 @@ void Checker::precheck_called_fn(u32 module, ast::ExprIdx callee) {
   prechecked_fns_.insert(fn->item.idx);
   std::vector<std::pair<std::string_view, ir::TypeIdx>> saved =
       std::move(type_params);
+  std::vector<std::pair<std::string_view, u64>> saved_values =
+      std::move(value_params);
   type_params.clear();
+  value_params.clear();
   check_fn(module, fn->item, nullptr);
   type_params = std::move(saved);
+  value_params = std::move(saved_values);
 }
 
 const CheckedModule::StaticInfo* Checker::lookup_static(
@@ -4036,8 +4228,14 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
   const std::span<const ast::GenericParam> params = fn_generic_params(item);
   const std::vector<std::pair<std::string_view, ir::TypeIdx>> kept_outer =
       type_params;
+  const std::vector<std::pair<std::string_view, u64>> kept_outer_values =
+      value_params;
   type_params.clear();
+  value_params.clear();
   for (usize i = 0; i < params.size() && i < args.size(); ++i) {
+    if (params[i].type.is_valid()) {
+      continue;
+    }
     type_params.emplace_back(params[i].name.name, args[i]);
   }
   std::vector<ir::TypeIdx> sig_params;
@@ -4054,6 +4252,7 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
           module, ast.items[item].payload.get<ast::ItemIntrinsic>(), sig_params,
           ret)) {
     type_params = kept_outer;
+    value_params = kept_outer_values;
     return nullptr;
   }
   add_function(module, {.name = fn_name(item),
@@ -4088,6 +4287,7 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
     bind_comp_known = saved_bind;
   }
   type_params = kept_outer;
+  value_params = kept_outer_values;
   return &modules[module].functions[sig_index];
 }
 
@@ -4229,7 +4429,10 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     // is hidden so a same-named parameter cannot leak through.
     std::vector<std::pair<std::string_view, ir::TypeIdx>> outer_scope =
         std::move(type_params);
+    std::vector<std::pair<std::string_view, u64>> outer_values =
+        std::move(value_params);
     type_params.clear();
+    value_params.clear();
     for (const auto& binding : scope) {
       type_params.push_back(binding);
     }
@@ -4274,6 +4477,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     in_fn = saved_in_fn;
     bind_comp_known = saved_bind;
     type_params = std::move(outer_scope);
+    value_params = std::move(outer_values);
     return entry;
   }
   return nullptr;
@@ -4311,13 +4515,17 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     // is hidden so a same-named parameter cannot leak through.
     std::vector<std::pair<std::string_view, ir::TypeIdx>> outer_scope =
         std::move(type_params);
+    std::vector<std::pair<std::string_view, u64>> outer_values =
+        std::move(value_params);
     type_params.clear();
+    value_params.clear();
     for (const auto& binding : scope) {
       type_params.push_back(binding);
     }
     if (!spec_method_sig(spec, name, spec_args, self_type, impl_module,
                          declared_params, declared_ret, declared_receiver)) {
       type_params = std::move(outer_scope);
+      value_params = std::move(outer_values);
       return nullptr;
     }
     std::vector<ir::TypeIdx> params;
@@ -4348,6 +4556,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
           method_node.span, name, entry.name);
       (void)index;
       type_params = std::move(outer_scope);
+      value_params = std::move(outer_values);
       return nullptr;
     }
     add_function(impl_module, {method_node.payload.get<ast::ItemFn>().name.name,
@@ -4373,6 +4582,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     bind_comp_known = saved_bind;
     spec_scope.pop_back();
     type_params = std::move(outer_scope);
+    value_params = std::move(outer_values);
     return entry;
   }
   return nullptr;
@@ -4606,9 +4816,22 @@ bool Checker::resolve_value_path(u32 module,
           (void)index;
           return false;
         }
+        const std::span<const ast::GenericParam> params =
+            nominal_params(*nominal);
         std::vector<ir::TypeIdx> args;
-        for (ast::TypeIdx arg : type_args) {
-          args.push_back(resolve_type(module, arg, nullptr));
+        args.reserve(type_args.size());
+        for (usize i = 0; i < type_args.size(); ++i) {
+          if (i < params.size() && params[i].type.is_valid()) {
+            u64 value = 0;
+            if (!resolve_value_argument(module, type_args[i],
+                                        params[i].name.name, node.span,
+                                        value)) {
+              return false;
+            }
+            args.push_back(builder.const_type(value));
+          } else {
+            args.push_back(resolve_type(module, type_args[i], nullptr));
+          }
         }
         self = instantiate_generic(static_cast<u32>(nominal - nominals.data()),
                                    args, node.span);
@@ -5192,6 +5415,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
       checker.root_by_identity_.emplace(tree.package_roots[i].identity, i);
     }
   }
+  checker.validate_value_parameter_types();
   checker.modules.reserve(tree.modules.size());
   {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "signatures",

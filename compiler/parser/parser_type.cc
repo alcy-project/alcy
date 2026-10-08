@@ -17,6 +17,31 @@
 
 namespace parser {
 
+ast::TypeIdx Parser::parse_type_arg() {
+  const usize mark = pos_;
+  const bool signed_integer =
+      peek_kind() == lexer::TokenKind::Minus && pos_ + 1 < tokens_.size() &&
+      tokens_[pos_ + 1].kind == lexer::TokenKind::Integer;
+  if (peek_kind() == lexer::TokenKind::Integer || signed_integer) {
+    if (signed_integer) {
+      advance();
+    }
+    const diag::Span span = peek().span;
+    const ast::LiteralIdx value = ast_.literals.push_back(
+        ast::Literal{.kind = ast::LiteralKind::Integer,
+                     .span = span,
+                     .spelling = bytes_.substr(span.offset, span.length),
+                     .is_negative = signed_integer});
+    advance();
+    ast::TypeNode node;
+    node.kind = ast::TypeKind::Value;
+    node.span = span_from(mark);
+    node.payload.set(ast::TypeValue{.literal = value});
+    return ast_.types.push_back(node);
+  }
+  return parse_type();
+}
+
 ast::TypeIdx Parser::parse_type() {
   if (ast_.exhausted()) {
     return ast::TypeIdx::invalid();
@@ -273,7 +298,7 @@ ast::TypeIdx Parser::parse_type() {
     if (!check(lexer::TokenKind::Greater) &&
         !check(lexer::TokenKind::GreaterGreater) && !at_end()) {
       while (true) {
-        ast::TypeIdx arg = parse_type();
+        ast::TypeIdx arg = parse_type_arg();
         if (!arg.is_valid()) {
           return ast::TypeIdx::invalid();
         }

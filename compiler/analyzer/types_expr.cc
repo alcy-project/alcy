@@ -132,7 +132,7 @@ bool Checker::bind_pattern(u32 module,
             bind_error_idents(module, pattern);
             return true;
           }
-          const usize kept = push_generic_scope(*instance);
+          const GenericScope kept = push_generic_scope(*instance);
           payloads = variant_payloads(resolved, type, node.span);
           pop_generic_scope(kept);
         }
@@ -188,7 +188,7 @@ bool Checker::bind_pattern(u32 module,
         return false;
       }
       ir::TypeIdx struct_type = error_type();
-      usize kept = type_params.size();
+      GenericScope kept{type_params.size(), value_params.size()};
       if (nominal_params(*nominal).empty()) {
         struct_type = intern_nominal(*nominal);
       } else {
@@ -1361,7 +1361,7 @@ ir::TypeIdx Checker::check_call(u32 module,
         }
         return error_type();
       }
-      const usize kept = push_generic_scope(*instance);
+      const GenericScope kept = push_generic_scope(*instance);
       payloads = variant_payloads(resolved, instance->type, span);
       pop_generic_scope(kept);
       enum_type = instance->type;
@@ -1673,8 +1673,10 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
     }
     struct_type = instance->type;
   }
-  const usize kept =
-      instance == nullptr ? type_params.size() : push_generic_scope(*instance);
+  GenericScope kept{type_params.size(), value_params.size()};
+  if (instance != nullptr) {
+    kept = push_generic_scope(*instance);
+  }
   const ast::ItemNode& decl = ast.items[nominal->item];
   const ir::StructType& fields =
       builder.struct_types()[builder.types()[struct_type].as_struct()];

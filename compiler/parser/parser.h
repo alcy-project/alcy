@@ -120,6 +120,10 @@ class Parser {
   // ">" left over from splitting ">>" in nested argument lists.
   ast::TypeIdx parse_type();
   ast::TypeIdx parse_closed_type();
+  // One argument of a `<...>` type-argument list: an integer literal
+  // (optionally signed) becomes a value argument; everything else is a
+  // type. Only argument lists read values, so parse_type stays closed.
+  ast::TypeIdx parse_type_arg();
 
   // Patterns and expressions (null on error, no recovery inside).
   ast::PatternIdx parse_pattern();

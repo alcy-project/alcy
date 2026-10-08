@@ -194,6 +194,27 @@ const CheckedModule::NamedType* find_type(const CheckedModule& module,
   return nullptr;
 }
 
+const CheckedModule::FnSig* find_fn(const CheckedModule& module,
+                                    std::string_view name) {
+  for (const CheckedModule::FnSig& fn : module.functions) {
+    if (fn.name == name) {
+      return &fn;
+    }
+  }
+  return nullptr;
+}
+
+// Whether the bag holds a diagnostic with exactly this text.
+bool has_message(const diag::DiagBag& bag, std::string_view message) {
+  for (u32 i = 0; i < bag.size(); ++i) {
+    const diag::Diagnostic* const diagnostic = bag.at(i);
+    if (diagnostic != nullptr && diagnostic->message == message) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // `Option` and `Result` live in the core prelude since
 // `docs/adr/0009-result-option-library-enums.md`, so
 // tests that mention them inject a matching declaration set.
@@ -4051,15 +4072,327 @@ TEST_CASE("Check rejects a non-integer const array length") {
   const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
-  bool reported = false;
-  for (u32 i = 0; i < f.bag.size(); ++i) {
-    const diag::Diagnostic* const diag = f.bag.at(i);
-    if (diag != nullptr &&
-        diag->message == "Array length must be a constant integer value") {
-      reported = true;
-    }
+  CHECK(has_message(f.bag, "Array length must be a constant integer value"));
+}
+
+TEST_CASE("Check interns value arguments by their values") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct ArrayVec<T, N: usize> { data: [T; N], len: "
+                       "usize }\n"
+                       "const K: usize = 4\n"
+                       "fn take(a: ArrayVec<i32, K>) -> i32 {\n"
+                       "  ret a.data[0]\n"
+                       "}\n"
+                       "fn make(b: ArrayVec<i32, 4>) -> i32 {\n"
+                       "  ret b.data[1]\n"
+                       "}\n"
+                       "fn wide(c: ArrayVec<i32, 8>) -> i32 {\n"
+                       "  ret c.data[2]\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  ret 0\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
   }
-  CHECK(reported);
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const CheckedModule::FnSig* take = find_fn(*root, "take");
+  const CheckedModule::FnSig* make = find_fn(*root, "make");
+  const CheckedModule::FnSig* wide = find_fn(*root, "wide");
+  CHECK(take != nullptr);
+  CHECK(make != nullptr);
+  CHECK(wide != nullptr);
+  if (take == nullptr || make == nullptr || wide == nullptr) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  CHECK(types.types()[take->params[0]].tag == ir::TypeTag::Struct);
+  // `K` evaluates to 4, so the two spellings are one interned type.
+  CHECK(take->params[0].idx == make->params[0].idx);
+  CHECK(wide->params[0].idx != take->params[0].idx);
+  const auto data_array = [&](ir::TypeIdx type) -> const ir::ArrayType* {
+    if (types.types()[type].tag != ir::TypeTag::Struct) {
+      return nullptr;
+    }
+    const ir::StructType& shape =
+        types.struct_types()[types.types()[type].as_struct()];
+    if (shape.fields.size() != 2) {
+      return nullptr;
+    }
+    CHECK(types.types()[shape.fields[1]].tag == ir::TypeTag::U64);
+    const ir::TypeIdx data = shape.fields[0];
+    if (types.types()[data].tag != ir::TypeTag::Array) {
+      return nullptr;
+    }
+    return &types.array_types()[types.types()[data].as_array()];
+  };
+  const ir::ArrayType* four = data_array(take->params[0]);
+  const ir::ArrayType* eight = data_array(wide->params[0]);
+  CHECK(four != nullptr);
+  CHECK(eight != nullptr);
+  if (four != nullptr) {
+    CHECK(four->count == 4);
+    CHECK(types.types()[four->element].tag == ir::TypeTag::I32);
+  }
+  if (eight != nullptr) {
+    CHECK(eight->count == 8);
+  }
+  // Layout follows the array: 4 * i32 + usize, and 8 * i32 + usize.
+  CHECK(types.layout_of(take->params[0], ir::PointerWidth::W64).size == 24);
+  CHECK(types.layout_of(wide->params[0], ir::PointerWidth::W64).size == 40);
+}
+
+TEST_CASE("Check instantiates an enum with a value argument") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "enum Pair<T, N: usize> { Both([T; N]) }\n"
+                       "const K: usize = 2\n"
+                       "fn take(a: Pair<i32, K>) -> i32 {\n  ret 0\n}\n"
+                       "fn make(b: Pair<i32, 2>) -> i32 {\n  ret 0\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const CheckedModule::FnSig* take = find_fn(*root, "take");
+  const CheckedModule::FnSig* make = find_fn(*root, "make");
+  CHECK(take != nullptr);
+  CHECK(make != nullptr);
+  if (take == nullptr || make == nullptr) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  CHECK(types.types()[take->params[0]].tag == ir::TypeTag::Enum);
+  CHECK(take->params[0].idx == make->params[0].idx);
+  const ir::EnumType& shape =
+      types.enum_types()[types.types()[take->params[0]].as_enum()];
+  CHECK(shape.variants.size() == 1);
+  if (shape.variants.size() != 1) {
+    return;
+  }
+  const ir::EnumVariantType& both =
+      types.enum_variant_types()[shape.variants.head()];
+  CHECK(both.fields.size() == 1);
+  if (both.fields.size() != 1) {
+    return;
+  }
+  const ir::TypeIdx payload = both.fields[0];
+  CHECK(types.types()[payload].tag == ir::TypeTag::Array);
+  if (types.types()[payload].tag == ir::TypeTag::Array) {
+    CHECK(types.array_types()[types.types()[payload].as_array()].count == 2);
+  }
+}
+
+TEST_CASE("Check constructs and destructures value-generic types") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct ArrayVec<T, N: usize> { data: [T; N], len: "
+                       "usize }\n"
+                       "enum Pair<T, N: usize> { Both([T; N]) }\n"
+                       "const K: usize = 4\n"
+                       "fn unpack(p: ArrayVec<i32, K>) -> i32 {\n"
+                       "  ArrayVec { data, len } := p\n"
+                       "  ret data[3] + (len as i32)\n"
+                       "}\n"
+                       "fn first(p: Pair<i32, 2>) -> i32 {\n"
+                       "  ret match p { Pair::Both(x) => x[1] }\n"
+                       "}\n"
+                       "fn build() -> i32 {\n"
+                       "  a: ArrayVec<i32, K> := ArrayVec { data: [1, 2, 3, "
+                       "4], len: 0 }\n"
+                       "  ret unpack(a)\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  ret build() - 4 + first(Pair::Both([7, 9])) - 9\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a type argument in a value slot") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct ArrayVec<T, N: usize> { data: [T; N], len: "
+                       "usize }\n"
+                       "fn main() -> i32 {\n"
+                       "  a: ArrayVec<i32, bool> := ArrayVec { data: [1], "
+                       "len: 0 }\n"
+                       "  ret 0\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Expected a value argument for parameter 'N'"));
+}
+
+TEST_CASE("Check rejects a value argument in a type slot") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct ArrayVec<T, N: usize> { data: [T; N], len: "
+                       "usize }\n"
+                       "fn main() -> i32 {\n"
+                       "  a: ArrayVec<4, 4> := ArrayVec { data: [1], len: 0 "
+                       "}\n"
+                       "  ret 0\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "A value argument cannot be used as a type"));
+}
+
+TEST_CASE("Check rejects a non-integer value argument") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct ArrayVec<T, N: usize> { data: [T; N], len: "
+                       "usize }\n"
+                       "const F: bool = true\n"
+                       "fn main() -> i32 {\n"
+                       "  a: ArrayVec<i32, F> := ArrayVec { data: [1], len: 0 "
+                       "}\n"
+                       "  ret 0\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(
+      f.bag, "Value argument must be a non-negative constant integer value"));
+}
+
+TEST_CASE("Check rejects a negative value argument") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct ArrayVec<T, N: usize> { data: [T; N], len: "
+                       "usize }\n"
+                       "fn main() -> i32 {\n"
+                       "  a: ArrayVec<i32, -1> := ArrayVec { data: [1], len: "
+                       "0 }\n"
+                       "  ret 0\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(
+      f.bag, "Value argument must be a non-negative constant integer value"));
+}
+
+TEST_CASE("Check rejects a value parameter used as a type") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct ArrayVec<T, N: usize> { data: [T; N], len: N "
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  a: ArrayVec<i32, 4> := ArrayVec { data: [1, 2, 3, "
+                       "4], len: 0 }\n"
+                       "  ret 0\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Value parameter 'N' cannot be used as a type"));
+}
+
+TEST_CASE("Check rejects a non-integer value parameter annotation") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct ArrayVec<T, N: bool> { data: [T; 1], len: N "
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  ret 0\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Value parameter 'N' must have an integer type"));
+}
+
+TEST_CASE("Check rejects an arity mismatch on value parameters") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct ArrayVec<T, N: usize> { data: [T; N], len: "
+                       "usize }\n"
+                       "fn main() -> i32 {\n"
+                       "  a: ArrayVec<i32> := ArrayVec { data: [1], len: 0 "
+                       "}\n"
+                       "  ret 0\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
 }
 
 }  // namespace analyzer

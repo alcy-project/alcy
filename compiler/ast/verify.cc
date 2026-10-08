@@ -74,6 +74,10 @@ bool verify_type_children(const TypeNode& node, const AstArena& arena) {
       }
       return true;
     }
+    case TypeKind::Value: {
+      const TypeValue value = node.payload.get<TypeValue>();
+      return bound(value.literal, arena.literals);
+    }
     case TypeKind::Ref: {
       const TypeRef ref = node.payload.get<TypeRef>();
       return bound(ref.inner, arena.types);

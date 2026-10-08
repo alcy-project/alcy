@@ -126,6 +126,10 @@ enum class TypeKind : u8 {
   Ref,
   RawPtr,
   Func,
+  // A value argument in a type-argument list (`ArrayVec<T, 4>`). The
+  // parsed node names one literal; the analyzer decides from the
+  // declared slot whether the argument must be a value.
+  Value,
 };
 
 struct Type {
@@ -156,6 +160,13 @@ struct TypeSlice {
 struct TypePath {
   PathIdx path = PathIdx::invalid();
   std::span<const TypeIdx> args;
+};
+
+// A literal in a type-argument list. The analyzer resolves the literal
+// against the declared slot; a leading `-` is kept out of `spelling`
+// so the magnitude reads the same either way.
+struct TypeValue {
+  LiteralIdx literal = LiteralIdx::invalid();
 };
 
 struct TypeRef {
@@ -191,7 +202,8 @@ struct TypeNode {
                                   TypePath,
                                   TypeRef,
                                   TypeRawPtr,
-                                  TypeFunc>;
+                                  TypeFunc,
+                                  TypeValue>;
   TypePayload payload;
 };
 

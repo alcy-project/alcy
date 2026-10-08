@@ -368,6 +368,109 @@ TEST_CASE("Parser rejects malformed value parameter annotations") {
   CHECK(g.bag.has_errors());
 }
 
+TEST_CASE("Parser builds value arguments in type-argument lists") {
+  Fixture f;
+  const ParseResult result = parse(
+      "struct ArrayVec<T, N: usize> { data: [T; N], len: usize }\n"
+      "fn f(a: ArrayVec<i32, 4>) -> i32 { ret 0 }\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 2) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[1], f);
+  CHECK(fn.params.size() == 1);
+  if (fn.params.empty()) {
+    return;
+  }
+  const ast::TypeNode& annotation = f.ast.types[fn.params[0].type];
+  CHECK(annotation.kind == ast::TypeKind::Path);
+  if (annotation.kind != ast::TypeKind::Path) {
+    return;
+  }
+  const std::span<const ast::TypeIdx> args =
+      annotation.payload.get<ast::TypePath>().args;
+  CHECK(args.size() == 2);
+  if (args.size() != 2) {
+    return;
+  }
+  CHECK(f.ast.types[args[0]].kind == ast::TypeKind::Primitive);
+  const ast::TypeNode& value = f.ast.types[args[1]];
+  CHECK(value.kind == ast::TypeKind::Value);
+  if (value.kind != ast::TypeKind::Value) {
+    return;
+  }
+  const ast::Literal& literal =
+      f.ast.literals[value.payload.get<ast::TypeValue>().literal];
+  CHECK(literal.kind == ast::LiteralKind::Integer);
+  CHECK(literal.spelling == "4");
+  CHECK(!literal.is_negative);
+}
+
+TEST_CASE("Parser builds a signed value argument") {
+  Fixture f;
+  const ParseResult result =
+      parse("fn f(a: ArrayVec<i32, -1>) -> i32 { ret 0 }\n", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  CHECK(fn.params.size() == 1);
+  if (fn.params.empty()) {
+    return;
+  }
+  const ast::TypePath& path =
+      f.ast.types[fn.params[0].type].payload.get<ast::TypePath>();
+  CHECK(path.args.size() == 2);
+  if (path.args.size() != 2) {
+    return;
+  }
+  const ast::TypeNode& value = f.ast.types[path.args[1]];
+  CHECK(value.kind == ast::TypeKind::Value);
+  if (value.kind != ast::TypeKind::Value) {
+    return;
+  }
+  const ast::Literal& literal =
+      f.ast.literals[value.payload.get<ast::TypeValue>().literal];
+  CHECK(literal.spelling == "1");
+  CHECK(literal.is_negative);
+}
+
+TEST_CASE("Parser builds value arguments in a turbofish") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn main() -> i32 {\n"
+      "  x := Vec::<i32, 4>::new()\n"
+      "  ret 0\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  const ast::Block& block = f.ast.blocks[fn.body];
+  CHECK(block.statements.size() == 1);
+  if (block.statements.empty()) {
+    return;
+  }
+  const ast::StmtDecl decl = as_decl(block.statements[0], f);
+  const ast::ExprNode& call = f.ast.exprs[decl.init];
+  CHECK(call.kind == ast::ExprKind::Call);
+  if (call.kind != ast::ExprKind::Call) {
+    return;
+  }
+  const std::span<const ast::TypeIdx> args =
+      call.payload.get<ast::ExprCall>().type_args;
+  CHECK(args.size() == 2);
+  if (args.size() != 2) {
+    return;
+  }
+  CHECK(f.ast.types[args[0]].kind == ast::TypeKind::Primitive);
+  CHECK(f.ast.types[args[1]].kind == ast::TypeKind::Value);
+}
+
 TEST_CASE("Parser rejects duplicate type parameters") {
   Fixture f;
   const ParseResult result = parse("enum Pair<T, T> { Both(T, T) }\n", f);

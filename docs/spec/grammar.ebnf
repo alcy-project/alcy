@@ -101,16 +101,23 @@ func_type   = "(" , [ type , { "," , type } , [ "," ] ] , ")" ,
                  parens is one parameter, so `(A) -> R` is a function
                  type while a bare `(A)` is `A`. *)
 array_type  = "[" , type , ";" , ( INTEGER | path ) , "]" ;
-              (* A path names a `const` integer value; the const's
-                 initializer is evaluated at compile time. See
-                 docs/adr/0054-* and docs/spec/types.md. *)
+              (* A path names a value parameter in scope or a `const`
+                 integer value; the const's initializer is evaluated at
+                 compile time. See docs/adr/0054-* and
+                 docs/spec/types.md. *)
 slice_type  = "[" , type , "]" ;
 ref_type    = "&" , [ "mut" ] , type ;
 raw_ptr_type = "*" , [ "mut" ] , type ;
               (* Thin and Copy, outside the region system. `**T` lexes
                  as the power token, so the pair is read as two stars
                  in a type position; see docs/spec/ffi.md. *)
-path_type   = path , [ "<" , type , { "," , type } , ">" ] ;
+type_arg    = type | [ "-" ] , INTEGER ;
+              (* An argument list may carry a value. The declaration's
+                 parameter kind decides the meaning: a value parameter
+                 takes an integer literal, a value parameter in scope,
+                 or a path naming a `const` integer value, and a
+                 negative value is rejected. See docs/spec/types.md. *)
+path_type   = path , [ "<" , type_arg , { "," , type_arg } , ">" ] ;
 
 (* Patterns *)
 
@@ -150,7 +157,7 @@ unary_expr    = ( "-" | "!" | "~" | "&" , [ "mut" ] | "*" ) , unary_expr ;
 question_expr = postfix_expr , [ "?" ] ;
 postfix_expr  = primary , { call | field | method | index | "?" } ;
 call          = [ turbofish ] , "(" , [ expr , { "," , expr } ] , ")" ;
-turbofish     = "::" , "<" , type , { "," , type } , ">" ;
+turbofish     = "::" , "<" , type_arg , { "," , type_arg } , ">" ;
 field         = "." , ( IDENT | INTEGER ) ;
 method        = "." , IDENT , "(" , [ expr , { "," , expr } ] , ")" ;
 index         = "[" , expr , "]" ;

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <span>
 #include <string_view>
 #include <unordered_map>
@@ -21,6 +22,7 @@
 #include "fpag/debug/profiler/profiler.h"
 #include "fpag/hash/xxh3_hasher.h"
 #include "fpag/str/string_pool_id.h"
+#include "i18n/messages.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
@@ -174,6 +176,10 @@ class Checker {
   // Active type-parameter scope: innermost last. Pushed while
   // instantiating a generic enum or checking its members.
   std::vector<std::pair<std::string_view, ir::TypeIdx>> type_params;
+  // Active value-parameter scope: the parameters a declaration
+  // annotated (`N: usize`) bind their compile-time value here while
+  // the declaration's members resolve.
+  std::vector<std::pair<std::string_view, u64>> value_params;
   // Index into generic_instances while checking an instantiated
   // method body (NO_INST otherwise); keys the lowering side tables.
   u32 cur_inst = NO_INST;
@@ -246,6 +252,9 @@ class Checker {
   bool verify_comp_known = false;
   ir::TypeIdx fn_ret = ir::TypeIdx(0);
   void register_nominals();
+  // Every annotated generic parameter names the type of a compile-time
+  // value, so the annotation must resolve to an integer.
+  void validate_value_parameter_types();
   NominalEntry* find_nominal(u32 module, std::string_view name);
   // A spec declaration by module and name; at most one per module.
   SpecEntry* find_spec(u32 module, std::string_view name);
@@ -389,8 +398,18 @@ class Checker {
   // its substitution while resolving member types, then pop.
   const GenericInstance* generic_instance_for(u32 nominal,
                                               ir::TypeIdx type) const;
-  usize push_generic_scope(const GenericInstance& instance);
-  void pop_generic_scope(usize kept);
+  // Watermarks of both generic scopes, so a pop restores whatever a
+  // push added without knowing which slots the declaration kinds bound.
+  struct GenericScope {
+    usize type_params = 0;
+    usize value_params = 0;
+  };
+  GenericScope push_generic_scope(const GenericInstance& instance);
+  void pop_generic_scope(const GenericScope& kept);
+  // The value a visible value parameter is bound to, or nothing.
+  std::optional<u64> value_param(std::string_view name) const;
+  // The u64 a const type argument carries.
+  u64 const_type_value(ir::TypeIdx type) const;
   // Parameter names of a nominal declaration, whether struct or enum.
   std::span<const ast::GenericParam> nominal_params(const NominalEntry& entry);
   // Appends a storage copy of `type` and records its origin.
@@ -413,6 +432,14 @@ class Checker {
                            ast::TypeIdx type,
                            const ir::TypeIdx* self,
                            bool behind_ref = false);
+  // Resolves one argument at a value-declared generic slot: an integer
+  // literal, a visible value parameter, or a `const` item. `span` is
+  // where a failure is reported and `param` names the slot.
+  bool resolve_value_argument(u32 module,
+                              ast::TypeIdx arg,
+                              std::string_view param,
+                              diag::Span span,
+                              u64& out);
   static bool is_known_intrinsic(std::string_view name);
   bool check_intrinsic_signature(u32 module,
                                  const ast::ItemIntrinsic& intrinsic,
@@ -459,7 +486,10 @@ class Checker {
                           diag::Span span,
                           u64& out);
   // The integer value of a const item, evaluated through the comp
-  // evaluator; `span` is where a failure is reported.
+  // evaluator; `span` is where a failure is reported, and the key
+  // parameter is the wording for a value that is not a non-negative
+  // integer.
+  template <i18n::Key not_const_key>
   bool const_int_value(u32 module,
                        const CheckedModule::StaticInfo& info,
                        diag::Span span,
