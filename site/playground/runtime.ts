@@ -171,10 +171,11 @@ function execute(wasmBuffer: ArrayBuffer): Promise<void> {
         elements.stdout.textContent = message.stdout;
         elements.stderr.textContent = message.stderr;
         setRunMetaSuffix({ key: "meta.exitCode", params: { code: message.exitCode } });
+        const ms = message.ms.toFixed(1);
         if (message.exitCode === 0) {
-          setStatus("status.runFinished");
+          setStatus("status.runFinished", { ms });
         } else {
-          setStatus("status.exited", { code: message.exitCode });
+          setStatus("status.exited", { code: message.exitCode, ms });
         }
       } else {
         elements.stderr.textContent = message.message;

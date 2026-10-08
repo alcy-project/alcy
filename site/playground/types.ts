@@ -68,6 +68,8 @@ export interface RunResultMessage {
   stdout: string;
   stderr: string;
   exitCode: number;
+  // How long the program ran, in milliseconds.
+  ms: number;
 }
 
 export interface RunErrorMessage {

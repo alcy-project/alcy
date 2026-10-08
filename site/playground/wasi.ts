@@ -16,6 +16,9 @@ interface AlcyRunResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+  // How long `_start` ran, in milliseconds; instantiating the module and
+  // collecting the output are not part of it.
+  ms: number;
 }
 
 interface AlcyWasiNamespace {
@@ -108,6 +111,7 @@ interface WorkerGlobalScope {
       throw new Error("the module does not export _start");
     }
     let exitCode = 0;
+    const started = performance.now();
     try {
       (instance.exports._start as () => void)();
     } catch (error) {
@@ -117,10 +121,12 @@ interface WorkerGlobalScope {
         throw error;
       }
     }
+    const ms = performance.now() - started;
     return {
       exitCode,
       stdout: decode(streams.stdout),
       stderr: decode(streams.stderr),
+      ms,
     };
   }
 
