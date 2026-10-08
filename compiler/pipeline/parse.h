@@ -79,7 +79,9 @@ analyzer::ParsedModule parsed_module(const ParsedFiles& parsed,
 // a package's every target does - parses with `parse_files` and calls
 // `analyzer::resolve_modules` per target, so the files are read once.
 // `dependencies` are the path dependencies the package loads from
-// source, whose files parse alongside the inputs'.
+// source, whose files parse alongside the inputs'; `package_policies`
+// are the spec seal rows (ADR-0053) the tree checks implementations
+// against.
 base::Result<analyzer::ModuleTree, diag::Reported> resolve_inputs(
     PipelineContext& ctx,
     source::FileId root,
@@ -87,6 +89,7 @@ base::Result<analyzer::ModuleTree, diag::Reported> resolve_inputs(
     std::string_view package_name,
     std::span<const analyzer::ModuleInput> prelude = {},
     std::span<const analyzer::StdHint> std_hints = {},
-    std::span<const analyzer::DependencyPackage> dependencies = {});
+    std::span<const analyzer::DependencyPackage> dependencies = {},
+    std::span<const analyzer::PackagePolicy> package_policies = {});
 
 }  // namespace pipeline

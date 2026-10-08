@@ -75,4 +75,20 @@ std::span<const analyzer::ModuleInput> std_prelude(
   return std::span<const analyzer::ModuleInput>(ctx.std_inputs);
 }
 
+std::vector<analyzer::PackagePolicy> std_package_policies(
+    const StdSelection& selection) {
+  std::vector<analyzer::PackagePolicy> policies;
+  policies.reserve(selection.members.size());
+  for (std::string_view member : selection.members) {
+    const StdPackageSeals* const seals = std_seals_for(member);
+    policies.push_back(analyzer::PackagePolicy{
+        member, STD_SUITE_IDENTITY,
+        seals == nullptr ? std::span<const std::string_view>{}
+                         : std::span<const std::string_view>(
+                               seals->suite_only,
+                               static_cast<usize>(seals->suite_only_count))});
+  }
+  return policies;
+}
+
 }  // namespace pipeline

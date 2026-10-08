@@ -471,6 +471,12 @@ bool Checker::spec_method_sig(u32 spec,
 }
 
 bool Checker::spec_targets_overlap(const SpecTarget& a, const SpecTarget& b) {
+  // A scalar target carries no arguments: it overlaps only the same
+  // scalar.
+  if (a.is_primitive || b.is_primitive) {
+    return a.is_primitive && b.is_primitive &&
+           types_equal(a.primitive, b.primitive);
+  }
   if (a.nominal != b.nominal || a.args.size() != b.args.size()) {
     return false;
   }
@@ -487,6 +493,11 @@ bool Checker::spec_targets_overlap(const SpecTarget& a, const SpecTarget& b) {
 
 bool Checker::spec_target_shapes_match(const SpecImplEntry& a,
                                        const SpecImplEntry& b) {
+  // A scalar target has one shape: the scalar itself.
+  if (a.target.is_primitive || b.target.is_primitive) {
+    return a.target.is_primitive && b.target.is_primitive &&
+           types_equal(a.target.primitive, b.target.primitive);
+  }
   if (a.target.nominal != b.target.nominal ||
       a.target.args.size() != b.target.args.size()) {
     return false;
@@ -685,11 +696,12 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
   // ADR-0053: a spec its package seals to a suite may be implemented
   // only by that package or by a package of that suite. The manifest
   // name list is the seal; the reserved implementing-side key that
-  // would open it is not accepted yet.
+  // would open it is not accepted yet. A sealed spec is also the only
+  // one a scalar target may name.
+  bool sealed = false;
   if (const PackagePolicy* const declaring =
           policy_of(package_of(spec_entry->module));
       declaring != nullptr) {
-    bool sealed = false;
     for (std::string_view sealed_name : declaring->suite_only) {
       if (sealed_name == spec_entry->name) {
         sealed = true;
@@ -714,7 +726,11 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
   }
   const ast::ItemSpec& declaration =
       ast.items[spec_entry->item].payload.get<ast::ItemSpec>();
-  const bool generic_impl = !impl.params.empty();
+  const ast::TypeNode& target_node = ast.types[impl.type];
+  // A scalar target carries no parameters, so an impl naming any is the
+  // concrete implementation it already is.
+  const bool generic_impl =
+      !impl.params.empty() && target_node.kind != ast::TypeKind::Primitive;
   // Spec arguments bind the spec's parameters; a generic impl names
   // its own parameters directly, exactly like an inherent target.
   // Spec arguments bind the spec's parameters. A generic impl may name
@@ -766,11 +782,54 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       }
     }
   }
-  // The target is a nominal type in scope; v1 never implements a
-  // spec for a compound or reference type.
+  // The target is a nominal type in scope, or one scalar primitive when
+  // the spec is sealed. v1 never implements a spec for a compound,
+  // reference, or `str` target.
   NominalEntry* target_entry = nullptr;
-  const ast::TypeNode& target_node = ast.types[impl.type];
-  if (target_node.kind == ast::TypeKind::Path) {
+  bool primitive_target = false;
+  ir::TypeIdx primitive = ir::TypeIdx::invalid();
+  std::string_view target_display;
+  if (target_node.kind == ast::TypeKind::Primitive) {
+    // Only a sealed spec accepts a scalar: the seal is what keeps
+    // `impl PartialEq for i32` the standard library's own.
+    if (!sealed) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerSpecRequiresNominalTarget>(
+          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
+          target_node.span);
+      (void)index;
+      return;
+    }
+    primitive =
+        primitive_type(target_node.payload.get<ast::TypePrimitive>().primitive,
+                       target_node.span);
+    if (is_error(primitive)) {
+      return;
+    }
+    switch (tag_of(primitive)) {
+      case ir::TypeTag::I1:
+      case ir::TypeTag::I8:
+      case ir::TypeTag::I16:
+      case ir::TypeTag::I32:
+      case ir::TypeTag::I64:
+      case ir::TypeTag::U8:
+      case ir::TypeTag::U16:
+      case ir::TypeTag::U32:
+      case ir::TypeTag::U64:
+      case ir::TypeTag::F32:
+      case ir::TypeTag::F64: break;
+      default: {
+        // `str` parses as a primitive but is not a scalar.
+        const u32 index =
+            bag.emit<i18n::Key::AnalyzerSpecRequiresNominalTarget>(
+                diag::Severity::Error, diag::Stage::Analyzer,
+                DiagCode::UnknownType, target_node.span);
+        (void)index;
+        return;
+      }
+    }
+    primitive_target = true;
+    target_display = pretty_tag(tag_of(primitive));
+  } else if (target_node.kind == ast::TypeKind::Path) {
     const ast::TypePath& target_path = target_node.payload.get<ast::TypePath>();
     const std::span<const ast::Ident> segments =
         ast.paths[target_path.path].segments;
@@ -787,7 +846,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       }
     }
   }
-  if (target_entry == nullptr) {
+  if (target_entry == nullptr && !primitive_target) {
     const u32 index = bag.emit<i18n::Key::AnalyzerSpecRequiresNominalTarget>(
         diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
         target_node.span);
@@ -795,9 +854,13 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     return;
   }
   SpecTarget target;
-  target.nominal = nominal_index(target_entry);
   ir::TypeIdx self_type = error_type();
-  {
+  if (primitive_target) {
+    target.is_primitive = true;
+    target.primitive = primitive;
+    self_type = primitive;
+  } else {
+    target.nominal = nominal_index(target_entry);
     const ast::TypePath& target_path = target_node.payload.get<ast::TypePath>();
     if (target_path.args.size() != nominal_params(*target_entry).size()) {
       const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
@@ -864,7 +927,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       const u32 index = bag.emit<i18n::Key::AnalyzerConflictingSpecImpl>(
           diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::DuplicateDefinition, node.span, spec_entry->name,
-          target_entry->name);
+          target_entry != nullptr ? target_entry->name : target_display);
       (void)index;
       return;
     }
@@ -3697,35 +3760,45 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
   // same name is an ambiguity, not a choice.
   u32 target_nominal = 0;
   std::vector<ir::TypeIdx> target_args;
+  bool has_nominal = false;
   if (const GenericInstance* instance = generic_find(self)) {
     target_nominal = instance->nominal;
     target_args = instance->args;
+    has_nominal = true;
   } else {
     const auto declaring = nominal_by_type_.find(self.idx);
-    if (declaring == nominal_by_type_.end()) {
-      return nullptr;
+    if (declaring != nominal_by_type_.end()) {
+      target_nominal = declaring->second;
+      has_nominal = true;
     }
-    target_nominal = declaring->second;
   }
   const CheckedModule::MethodInfo* match = nullptr;
   for (const SpecImplEntry& entry : spec_impls) {
-    if (entry.target.nominal != target_nominal ||
-        entry.target.args.size() != target_args.size()) {
-      continue;
-    }
     bool generic_record = false;
     std::vector<std::pair<std::string_view, ir::TypeIdx>> scope;
     bool shape_ok = true;
-    for (usize i = 0; i < target_args.size() && shape_ok; ++i) {
-      if (entry.target.args[i].is_param) {
-        generic_record = true;
-        scope.emplace_back(entry.target.args[i].param, target_args[i]);
-      } else if (!types_equal(entry.target.args[i].type, target_args[i])) {
-        shape_ok = false;
+    if (entry.target.is_primitive) {
+      // A scalar target has no arguments and is never generic: the
+      // receiver must be that scalar itself.
+      if (!types_equal(entry.target.primitive, self)) {
+        continue;
       }
-    }
-    if (!shape_ok) {
-      continue;
+    } else {
+      if (!has_nominal || entry.target.nominal != target_nominal ||
+          entry.target.args.size() != target_args.size()) {
+        continue;
+      }
+      for (usize i = 0; i < target_args.size() && shape_ok; ++i) {
+        if (entry.target.args[i].is_param) {
+          generic_record = true;
+          scope.emplace_back(entry.target.args[i].param, target_args[i]);
+        } else if (!types_equal(entry.target.args[i].type, target_args[i])) {
+          shape_ok = false;
+        }
+      }
+      if (!shape_ok) {
+        continue;
+      }
     }
     if (spec_filter != U32_MAX && entry.spec != spec_filter) {
       continue;
@@ -4300,21 +4373,27 @@ void Checker::check_spec_impl_bodies(u32 module, ast::ItemIdx item) {
     if (entry.item != item) {
       continue;
     }
-    std::vector<ir::TypeIdx> args;
-    for (const SpecTarget::Arg& arg : entry.target.args) {
-      if (arg.is_param) {
+    ir::TypeIdx self_type = error_type();
+    if (entry.target.is_primitive) {
+      // A scalar target has no arguments; its methods were registered
+      // against the scalar itself.
+      self_type = entry.target.primitive;
+    } else {
+      std::vector<ir::TypeIdx> args;
+      for (const SpecTarget::Arg& arg : entry.target.args) {
+        if (arg.is_param) {
+          return;
+        }
+        args.push_back(arg.type);
+      }
+      if (args.empty()) {
+        self_type = intern_nominal(nominals[entry.target.nominal]);
+      } else {
+        self_type = instantiate_generic(entry.target.nominal, args, entry.span);
+      }
+      if (is_error(self_type)) {
         return;
       }
-      args.push_back(arg.type);
-    }
-    ir::TypeIdx self_type = error_type();
-    if (args.empty()) {
-      self_type = intern_nominal(nominals[entry.target.nominal]);
-    } else {
-      self_type = instantiate_generic(entry.target.nominal, args, entry.span);
-    }
-    if (is_error(self_type)) {
-      return;
     }
     spec_scope.push_back(entry.spec);
     for (ast::ItemIdx method_item : impl.methods) {

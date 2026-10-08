@@ -49,10 +49,12 @@ struct SpecEntry {
   diag::Span span;
 };
 
-// The target of one `impl S for T`: the nominal with one argument
-// descriptor per parameter. A descriptor is either a concrete type
-// or the name of the impl parameter standing in that position;
-// nested shapes never reach the table, so overlap stays decidable.
+// The target of one `impl S for T`: a nominal with one argument
+// descriptor per parameter, or one scalar primitive. A descriptor is
+// either a concrete type or the name of the impl parameter standing in
+// that position; nested shapes never reach the table, so overlap stays
+// decidable. A primitive target carries no arguments and is never
+// generic; the two forms are mutually exclusive.
 struct SpecTarget {
   u32 nominal = 0;
   struct Arg {
@@ -61,6 +63,8 @@ struct SpecTarget {
     ir::TypeIdx type = ir::TypeIdx::invalid();
   };
   std::vector<Arg> args;
+  bool is_primitive = false;
+  ir::TypeIdx primitive = ir::TypeIdx::invalid();
 };
 
 // One coherence record: spec `spec` implemented for `target` by

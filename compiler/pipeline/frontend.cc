@@ -5,6 +5,7 @@
 
 #include <span>
 #include <utility>
+#include <vector>
 
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
@@ -82,6 +83,11 @@ base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
                                              "frontend");
     return std_prelude(ctx, selection);
   }();
+  // The staged members' seals are policy rows the same way a package
+  // build's are; a single file has no manifest, so they come from the
+  // embedded selection instead.
+  const std::vector<analyzer::PackagePolicy> policies =
+      std_package_policies(selection);
   // The root and every staged prelude source parse in one pass, so the
   // phase covers everything resolution then reads.
   // The resolver names nothing here: a single file has one module, so
@@ -90,7 +96,7 @@ base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve-tree",
                                              "frontend");
     return resolve_inputs(ctx, root, {&single_input, 1}, "", prelude,
-                          std_hints());
+                          std_hints(), {}, policies);
   }();
 }
 

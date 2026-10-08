@@ -4,6 +4,7 @@
 #pragma once
 
 #include <span>
+#include <vector>
 
 #include "analyzer/resolve.h"
 #include "pipeline/pipeline_context.h"
@@ -20,6 +21,13 @@ namespace pipeline {
 // call selects different members.
 std::span<const analyzer::ModuleInput> std_prelude(
     PipelineContext& ctx,
+    const StdSelection& selection);
+
+// The spec policy rows of the selected members (ADR-0053), each in the
+// embedded suite and carrying the seals its manifest declares. A
+// package build reads these from the loaded manifests; a single-file
+// compilation has none, so the rows come from the embedded table.
+std::vector<analyzer::PackagePolicy> std_package_policies(
     const StdSelection& selection);
 
 }  // namespace pipeline

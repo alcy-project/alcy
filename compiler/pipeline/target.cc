@@ -434,14 +434,9 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
   }
   // Every selected staged member has the one embedded suite's identity,
   // so a member's implementation may reach a spec another member seals.
-  for (std::string_view member : selection.members) {
-    const StdPackageSeals* const seals = std_seals_for(member);
-    sources.policies.push_back(analyzer::PackagePolicy{
-        member, STD_SUITE_IDENTITY,
-        seals == nullptr ? std::span<const std::string_view>{}
-                         : std::span<const std::string_view>(
-                               seals->suite_only,
-                               static_cast<usize>(seals->suite_only_count))});
+  for (const analyzer::PackagePolicy& policy :
+       std_package_policies(selection)) {
+    sources.policies.push_back(policy);
   }
   return base::make_ok(std::move(sources));
 }
