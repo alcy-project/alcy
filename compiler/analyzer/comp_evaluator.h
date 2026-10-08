@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -14,6 +15,7 @@
 #include "comp/comp_value.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
+#include "ir/common.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
 
@@ -197,7 +199,7 @@ class CompEvaluator {
   bool failed_ = false;
   bool fail_internal_ = false;
   diag::Span fail_span_{};
-  std::string_view fail_what_{};
+  std::string_view fail_what_;
   // The indexes the evaluator used to walk for: a type's instantiation
   // number, a variant use by path and instantiation, and the same
   // shapes the lowering indexes for its own lookups.

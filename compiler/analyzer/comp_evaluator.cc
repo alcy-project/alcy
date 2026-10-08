@@ -9,7 +9,15 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/resolve.h"
+#include "analyzer/types.h"
+#include "ast/ast.h"
+#include "comp/comp_value.h"
+#include "diag/span.h"
+#include "fpag/base/numeric.h"
+#include "ir/common.h"
 #include "ir/storage.h"
+#include "ir/type.h"
 
 namespace analyzer {
 
