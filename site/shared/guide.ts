@@ -30,6 +30,9 @@ interface CodeBlock {
   actions: HTMLElement;
   output: HTMLElement | null;
   alcy: boolean;
+  // The code as it should be copied or run right now: the published text,
+  // or the reader's working copy.
+  source(): string;
 }
 
 function findBlocks(): CodeBlock[] {
@@ -45,6 +48,7 @@ function findBlocks(): CodeBlock[] {
         actions,
         output: root.querySelector<HTMLElement>(".code-output"),
         alcy: root.dataset.language === "alcy",
+        source: () => code.textContent ?? "",
       });
     }
   }
@@ -77,7 +81,7 @@ async function writeClipboard(text: string): Promise<boolean> {
 }
 
 function copy(block: CodeBlock, button: HTMLButtonElement): void {
-  void writeClipboard(block.code.textContent ?? "").then((copied) => {
+  void writeClipboard(block.source()).then((copied) => {
     if (!copied) {
       return;
     }
@@ -296,25 +300,52 @@ function wireAlcy(block: CodeBlock): void {
     return;
   }
 
-  const original = block.code.textContent ?? "";
+  const published = block.code.textContent ?? "";
+  // The highlighted markup, put back whenever the working copy is the
+  // published text again.
+  const publishedHtml = block.code.innerHTML;
+  let working = published;
   let editor: HTMLTextAreaElement | null = null;
 
+  const modified = (): boolean => working !== published;
+
   const syncReset = (): void => {
-    reset.hidden = editor === null || editor.value === original;
+    reset.hidden = !modified();
   };
+
+  // Done shows the working copy, not the published one: an edit survives
+  // leaving the textarea, and only Reset takes it back. A modified copy
+  // has no highlighting to show -- it was never parsed -- so it reads as
+  // plain text.
+  const showWorking = (): void => {
+    if (modified()) {
+      block.code.textContent = working;
+    } else {
+      block.code.innerHTML = publishedHtml;
+    }
+  };
+
+  // Copy and Run follow the reader, not the published text.
+  block.source = () => (editor === null ? working : editor.value);
 
   edit.addEventListener("click", () => {
     if (editor === null) {
-      editor = createEditor(block, original);
-      editor.addEventListener("input", syncReset);
+      const created = createEditor(block, working);
+      editor = created;
+      created.addEventListener("input", () => {
+        working = created.value;
+        syncReset();
+      });
       block.pre.hidden = true;
-      block.pre.after(editor);
+      block.pre.after(created);
       edit.textContent = t("guide.done");
       edit.setAttribute("aria-pressed", "true");
     } else {
+      working = editor.value;
       editor.remove();
       editor = null;
       block.pre.hidden = false;
+      showWorking();
       edit.textContent = t("guide.edit");
       edit.setAttribute("aria-pressed", "false");
     }
@@ -322,15 +353,18 @@ function wireAlcy(block: CodeBlock): void {
   });
 
   reset.addEventListener("click", () => {
+    working = published;
     if (editor !== null) {
-      editor.value = original;
-      editor.rows = Math.max(2, original.split("\n").length);
-      syncReset();
+      editor.value = published;
+      editor.rows = Math.max(2, published.split("\n").length);
+    } else {
+      showWorking();
     }
+    syncReset();
   });
 
   run.addEventListener("click", () => {
-    void compileAndRun(block, editor === null ? original : editor.value, run);
+    void compileAndRun(block, block.source(), run);
   });
 }
 
