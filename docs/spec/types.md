@@ -24,8 +24,9 @@
   evaluated once); empty literals are rejected.
 - Indexing reads and writes through places with panic-on-out-of-bounds
   semantics. Arrays are `Copy` if and only if their element is. The
-  length is a decimal literal or a path naming a `const` integer value
-  (see `comp.md`).
+  length is a decimal literal or a path naming a `const` integer
+  value, whose initializer is evaluated at compile time (see
+  `comp.md`).
 
 ## Slices
 

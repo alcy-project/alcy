@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "analyzer/checker.h"
+#include "analyzer/comp_evaluator.h"
 #include "analyzer/diag_code.h"
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
@@ -3115,31 +3116,297 @@ bool Checker::const_array_length(u32 module,
                                  const ast::TypeArray& array,
                                  diag::Span span,
                                  u64& out) {
-  // A named length resolves to a const item whose value is an integer
-  // literal; general const expressions arrive with the checker's
-  // evaluation pre-pass.
   const std::span<const ast::Ident> segments =
       ast.paths[array.length_path].segments;
   const CheckedModule::StaticInfo* info = nullptr;
   if (segments.size() == 1) {
     info = lookup_static(module, segments[0].name);
   }
-  if (info != nullptr && info->is_const && info->init.is_valid()) {
-    const ast::ExprNode& init = ast.exprs[info->init];
-    if (init.kind == ast::ExprKind::Literal) {
-      const ast::Literal& lit =
-          ast.literals[init.payload.get<ast::ExprLiteral>().value];
-      if (lit.kind == ast::LiteralKind::Integer && !lit.is_negative) {
-        out = comp::parse_numeric_value(lit.spelling);
-        return true;
+  if (info == nullptr || !info->is_const || !info->init.is_valid()) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerArrayLengthNotConst>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::InvalidOperation, span);
+    (void)index;
+    return false;
+  }
+  return const_int_value(module, *info, span, out);
+}
+
+bool Checker::const_int_value(u32 module,
+                              const CheckedModule::StaticInfo& info,
+                              diag::Span span,
+                              u64& out) {
+  const auto cached = const_int_values_.find(info.init.idx);
+  if (cached != const_int_values_.end()) {
+    out = cached->second;
+    return true;
+  }
+  const auto wrong = [&] {
+    const u32 index = bag.emit<i18n::Key::AnalyzerArrayLengthNotConst>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::InvalidOperation, span);
+    (void)index;
+    return false;
+  };
+  const ir::TypeTag tag = tag_of(info.type);
+  if (!is_integer_tag(tag)) {
+    return wrong();
+  }
+  // The check diagnostics speak for themselves; a value that fails here
+  // after checking is the evaluator's refusal.
+  if (!ensure_const_checked(module, info)) {
+    return false;
+  }
+  comp::CompVal value;
+  CompEvaluator eval(CompInputs{tree, modules, {}, type_origins_}, ast, builder,
+                     width);
+  if (!eval.evaluate_item(module, info.init, cur_inst, value) ||
+      value.value.tag != comp::CompValue::Tag::Int) {
+    return wrong();
+  }
+  // A length is an unsigned count; a signed const that evaluates below
+  // zero has none.
+  if (comp::is_signed(tag) &&
+      comp::sign_extend(value.value.int_value, tag) < 0) {
+    return wrong();
+  }
+  out = value.value.int_value;
+  const_int_values_.emplace(info.init.idx, out);
+  return true;
+}
+
+bool Checker::ensure_const_checked(u32 module,
+                                   const CheckedModule::StaticInfo& info) {
+  const u32 key = info.init.idx;
+  if (const_init_checked_.contains(key)) {
+    return true;
+  }
+  if (const_init_in_progress_.contains(key)) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerConstCycle>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::InvalidOperation, ast.exprs[info.init].span, info.name);
+    (void)index;
+    return false;
+  }
+  const_init_in_progress_.insert(key);
+  bool ok = check_const_dependencies(module, info.init);
+  if (ok && !const_init_checked_.contains(key)) {
+    const ir::TypeIdx want = info.type;
+    const bool saved_in_fn = in_fn;
+    in_fn = false;
+    scopes.emplace_back();
+    ++comp_depth;
+    const ir::TypeIdx actual = check_expr(module, info.init, &want);
+    --comp_depth;
+    scopes.pop_back();
+    in_fn = saved_in_fn;
+    ok = !is_error(actual);
+    const_init_checked_.insert(key);
+  }
+  const_init_in_progress_.erase(key);
+  return ok;
+}
+
+bool Checker::check_const_dependencies(u32 module, ast::ExprIdx expr) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  switch (node.kind) {
+    case ast::ExprKind::Literal: return true;
+    case ast::ExprKind::Path:
+      return check_const_dependency_path(module,
+                                         node.payload.get<ast::ExprPath>().idx);
+    case ast::ExprKind::Unary:
+      return check_const_dependencies(module,
+                                      node.payload.get<ast::ExprUnary>().inner);
+    case ast::ExprKind::Borrow:
+      return check_const_dependencies(
+          module, node.payload.get<ast::ExprBorrow>().inner);
+    case ast::ExprKind::Deref:
+      return check_const_dependencies(module,
+                                      node.payload.get<ast::ExprDeref>().inner);
+    case ast::ExprKind::Binary: {
+      const ast::ExprBinary& binary = node.payload.get<ast::ExprBinary>();
+      return check_const_dependencies(module, binary.lhs) &&
+             check_const_dependencies(module, binary.rhs);
+    }
+    case ast::ExprKind::Cast:
+      return check_const_dependencies(module,
+                                      node.payload.get<ast::ExprCast>().inner);
+    case ast::ExprKind::Tuple: {
+      for (ast::ExprIdx element : node.payload.get<ast::ExprTuple>().elements) {
+        if (!check_const_dependencies(module, element)) {
+          return false;
+        }
       }
+      return true;
+    }
+    case ast::ExprKind::Array: {
+      const ast::ExprArray& array = node.payload.get<ast::ExprArray>();
+      if (array.repeat.is_valid()) {
+        return check_const_dependencies(module, array.repeat);
+      }
+      for (ast::ExprIdx element : array.elements) {
+        if (!check_const_dependencies(module, element)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case ast::ExprKind::Struct: {
+      const ast::ExprStruct& structure = node.payload.get<ast::ExprStruct>();
+      for (const ast::ExprFieldInit& field : structure.init) {
+        if (!check_const_dependencies(module, field.value)) {
+          return false;
+        }
+      }
+      return !structure.base_expr.is_valid() ||
+             check_const_dependencies(module, structure.base_expr);
+    }
+    case ast::ExprKind::Field:
+      return check_const_dependencies(
+          module, node.payload.get<ast::ExprField>().receiver);
+    case ast::ExprKind::Index: {
+      const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
+      return check_const_dependencies(module, index.receiver) &&
+             check_const_dependencies(module, index.index);
+    }
+    case ast::ExprKind::Call: {
+      const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+      precheck_called_fn(module, call.callee);
+      for (ast::ExprIdx arg : call.args) {
+        if (!check_const_dependencies(module, arg)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case ast::ExprKind::MethodCall: {
+      const ast::ExprMethodCall& call = node.payload.get<ast::ExprMethodCall>();
+      if (!check_const_dependencies(module, call.receiver)) {
+        return false;
+      }
+      for (ast::ExprIdx arg : call.args) {
+        if (!check_const_dependencies(module, arg)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case ast::ExprKind::Question:
+      return check_const_dependencies(
+          module, node.payload.get<ast::ExprQuestion>().inner);
+    case ast::ExprKind::If: {
+      const ast::ExprIf& if_node = node.payload.get<ast::ExprIf>();
+      const ast::Cond& cond = ast.conds[if_node.cond];
+      if (!check_const_dependencies(module, cond.value) ||
+          !check_const_dependencies_block(module, if_node.then_block)) {
+        return false;
+      }
+      return !if_node.else_block.is_valid() ||
+             check_const_dependencies_block(module, if_node.else_block);
+    }
+    case ast::ExprKind::Match: {
+      const ast::ExprMatch& match = node.payload.get<ast::ExprMatch>();
+      if (!check_const_dependencies(module, match.scrutinee)) {
+        return false;
+      }
+      for (const ast::ExprMatchArm& arm : match.arms) {
+        if (!check_const_dependencies(module, arm.body)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case ast::ExprKind::Block:
+      return check_const_dependencies_block(
+          module, node.payload.get<ast::ExprBlock>().block);
+    case ast::ExprKind::Loop:
+      return check_const_dependencies_block(
+          module, node.payload.get<ast::ExprLoop>().body);
+    case ast::ExprKind::While: {
+      const ast::ExprWhile& while_node = node.payload.get<ast::ExprWhile>();
+      const ast::Cond& cond = ast.conds[while_node.cond];
+      if (!check_const_dependencies(module, cond.value)) {
+        return false;
+      }
+      return check_const_dependencies_block(module, while_node.body);
+    }
+    case ast::ExprKind::Break:
+    case ast::ExprKind::Continue:
+    case ast::ExprKind::Return:
+    case ast::ExprKind::Range:
+    case ast::ExprKind::Closure: return true;
+  }
+}
+
+bool Checker::check_const_dependencies_block(u32 module, ast::BlockIdx block) {
+  const ast::Block& body = ast.blocks[block];
+  for (ast::StmtIdx stmt : body.statements) {
+    const ast::StmtNode& node = ast.stmts[stmt];
+    switch (node.kind) {
+      case ast::StmtKind::Decl:
+        if (!check_const_dependencies(module,
+                                      node.payload.get<ast::StmtDecl>().init)) {
+          return false;
+        }
+        continue;
+      case ast::StmtKind::Reassign: {
+        const ast::StmtReassign& reassign =
+            node.payload.get<ast::StmtReassign>();
+        if (!check_const_dependencies(module, reassign.place) ||
+            !check_const_dependencies(module, reassign.value)) {
+          return false;
+        }
+        continue;
+      }
+      case ast::StmtKind::Expr:
+        if (!check_const_dependencies(
+                module, node.payload.get<ast::StmtExpr>().value)) {
+          return false;
+        }
+        continue;
     }
   }
-  const u32 index = bag.emit<i18n::Key::AnalyzerArrayLengthNotConst>(
-      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::InvalidOperation,
-      span);
-  (void)index;
-  return false;
+  return !body.value.is_valid() || check_const_dependencies(module, body.value);
+}
+
+bool Checker::check_const_dependency_path(u32 module, ast::PathIdx path) {
+  const std::span<const ast::Ident> segments = ast.paths[path].segments;
+  if (segments.size() != 1) {
+    return true;
+  }
+  const CheckedModule::StaticInfo* info =
+      lookup_static(module, segments[0].name);
+  if (info == nullptr || !info->is_const || !info->init.is_valid()) {
+    return true;
+  }
+  return ensure_const_checked(module, *info);
+}
+
+void Checker::precheck_called_fn(u32 module, ast::ExprIdx callee) {
+  if (ast.exprs[callee].kind != ast::ExprKind::Path) {
+    return;
+  }
+  const ast::PathIdx path = ast.exprs[callee].payload.get<ast::ExprPath>().idx;
+  const std::span<const ast::Ident> segments = ast.paths[path].segments;
+  if (segments.size() != 1) {
+    return;
+  }
+  const CheckedModule::FnSig* fn = lookup_function(module, segments[0].name);
+  if (fn == nullptr || !fn->item.is_valid() ||
+      prechecked_fns_.contains(fn->item.idx)) {
+    return;
+  }
+  const ast::ItemNode& item = ast.items[fn->item];
+  if (item.kind != ast::ItemKind::Fn ||
+      !item.payload.get<ast::ItemFn>().generic.empty()) {
+    return;
+  }
+  prechecked_fns_.insert(fn->item.idx);
+  std::vector<std::pair<std::string_view, ir::TypeIdx>> saved =
+      std::move(type_params);
+  type_params.clear();
+  check_fn(module, fn->item, nullptr);
+  type_params = std::move(saved);
 }
 
 const CheckedModule::StaticInfo* Checker::lookup_static(
@@ -4647,8 +4914,10 @@ void Checker::check_bodies() {
       switch (node.kind) {
         case ast::ItemKind::Fn: {
           // Generic bodies are checked per instantiation at their call
-          // sites, where the type parameters are bound.
-          if (node.payload.get<ast::ItemFn>().generic.empty()) {
+          // sites, where the type parameters are bound. A body the
+          // const pre-pass already checked is not checked twice.
+          if (node.payload.get<ast::ItemFn>().generic.empty() &&
+              !prechecked_fns_.contains(item.idx)) {
             check_fn(m, item, nullptr);
           }
           if (m == tree.root &&

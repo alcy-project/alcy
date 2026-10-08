@@ -96,9 +96,9 @@ func_type   = "(" , [ type , { "," , type } , [ "," ] ] , ")" ,
                  parens is one parameter, so `(A) -> R` is a function
                  type while a bare `(A)` is `A`. *)
 array_type  = "[" , type , ";" , ( INTEGER | path ) , "]" ;
-              (* A path names a `const` integer value; general const
-                 expressions arrive with the checker's evaluation
-                 pre-pass. See docs/adr/0054-* and docs/spec/types.md. *)
+              (* A path names a `const` integer value; the const's
+                 initializer is evaluated at compile time. See
+                 docs/adr/0054-* and docs/spec/types.md. *)
 slice_type  = "[" , type , "]" ;
 ref_type    = "&" , [ "mut" ] , type ;
 raw_ptr_type = "*" , [ "mut" ] , type ;

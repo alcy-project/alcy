@@ -147,6 +147,16 @@ class Checker {
   // same question: a later entry for a copy wins, as walking from the back
   // did.
   std::unordered_map<u32, u32> type_origins_by_index_;
+  // Const integer values the checker resolved for type positions, by
+  // the initializer they came from; the in-progress set catches a
+  // const that reaches itself, and `const_init_checked_` keeps one
+  // initializer from being checked twice.
+  std::unordered_map<u32, u64> const_int_values_;
+  std::unordered_set<u32> const_init_in_progress_;
+  std::unordered_set<u32> const_init_checked_;
+  // Functions whose bodies the const pre-pass already checked, so the
+  // bodies sweep does not check them a second time.
+  std::unordered_set<u32> prechecked_fns_;
   // `MaybeUninit<T>` wrappers interned so far, as (wrapper, payload).
   std::vector<std::pair<ir::TypeIdx, ir::TypeIdx>> uninit_types_;
   // Destructor resolution, aligned with the type table by index.
@@ -437,12 +447,31 @@ class Checker {
   void validate_cycles(const ir::Storage& storage);
   const CheckedModule::StaticInfo* lookup_static(u32 module,
                                                  std::string_view name) const;
-  // An array length named by a path: the const item's integer literal
-  // value, until the const evaluation pre-pass reads the evaluator.
+  // An array length named by a path: the const item's initializer is
+  // evaluated at compile time, through the comp evaluator, once the
+  // initializers of the consts it references are checked.
   bool const_array_length(u32 module,
                           const ast::TypeArray& array,
                           diag::Span span,
                           u64& out);
+  // The integer value of a const item, evaluated through the comp
+  // evaluator; `span` is where a failure is reported.
+  bool const_int_value(u32 module,
+                       const CheckedModule::StaticInfo& info,
+                       diag::Span span,
+                       u64& out);
+  // Ensures the const item's initializer is checked (and its
+  // dependencies', transitively), so the evaluator finds the
+  // expressions it reads typed. A const that reaches itself is a
+  // cycle.
+  bool ensure_const_checked(u32 module, const CheckedModule::StaticInfo& info);
+  bool check_const_dependencies(u32 module, ast::ExprIdx expr);
+  bool check_const_dependencies_block(u32 module, ast::BlockIdx block);
+  bool check_const_dependency_path(u32 module, ast::PathIdx path);
+  // Checks the body of a non-generic function a const initializer
+  // calls, because the evaluator interprets it before the bodies pass
+  // would have typed its expressions.
+  void precheck_called_fn(u32 module, ast::ExprIdx callee);
   const CheckedModule::FnSig* lookup_function(u32 module,
                                               std::string_view name) const;
   // Generic free function item in scope, by name; invalid if absent.

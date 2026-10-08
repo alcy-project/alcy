@@ -3966,12 +3966,81 @@ TEST_CASE("Check reads an array length from a const item") {
   CHECK(!f.bag.has_errors());
 }
 
-TEST_CASE("Check rejects a non-literal const array length") {
+TEST_CASE("Check evaluates a const initializer for an array length") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "const A: usize = 2\n"
+                       "const B: usize = A * 3\n"
+                       "const M: i32 = 1 + 2\n"
+                       "\n"
+                       "fn f(a: [u8; B], b: [i32; M]) -> i32 {\n  ret 0\n}\n"
+                       "\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check evaluates a comp fn call in a const array length") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "comp fn twice(x: usize) -> usize {\n  ret x * 2\n}\n"
+                       "\n"
+                       "const N: usize = twice(2)\n"
+                       "\n"
+                       "fn f(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
+                       "\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check reports a const cycle in an array length") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
-                                      "const M: i32 = 1 + 2\n"
+                                      "const C: usize = C + 1\n"
                                       "\n"
-                                      "fn g(b: [i32; M]) -> i32 {\n  ret 0\n}\n"
+                                      "fn f(a: [i32; C]) -> i32 {\n  ret 0\n}\n"
+                                      "\n"
+                                      "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  bool reported = false;
+  for (u32 i = 0; i < f.bag.size(); ++i) {
+    const diag::Diagnostic* const diag = f.bag.at(i);
+    if (diag != nullptr &&
+        diag->message == "Const 'C' is defined in terms of itself") {
+      reported = true;
+    }
+  }
+  CHECK(reported);
+}
+
+TEST_CASE("Check rejects a non-integer const array length") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "const F: bool = true\n"
+                                      "\n"
+                                      "fn f(a: [i32; F]) -> i32 {\n  ret 0\n}\n"
                                       "\n"
                                       "fn main() -> i32 {\n  ret 0\n}\n"}});
   CHECK(setup);
