@@ -46,5 +46,30 @@ impl<T> Option<T> {
       Option::None => default,
     }
   }
+
+  // The contained value, or `default` when absent.
+  pub fn unwrap_or(self: Self, default: T) -> T {
+    ret self.or(default)
+  }
+
+  // The contained value, or what `f` returns when absent.
+  pub fn or_else(self: Self, f: () -> Option<T>) -> Option<T> {
+    ret match self {
+      Option::Some(v) => Option::Some(v),
+      Option::None => f(),
+    }
+  }
+
+  // Keeps the value when `f` says so, and drops it otherwise.
+  pub fn filter(self: Self, f: (&T) -> bool) -> Option<T> {
+    ret match self {
+      Option::Some(v) => if f(&v) {
+        Option::Some(v)
+      } else {
+        Option::None
+      },
+      Option::None => Option::None,
+    }
+  }
 }
 
