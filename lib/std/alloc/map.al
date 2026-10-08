@@ -288,3 +288,33 @@ impl<V> IndexMut<str, V> for Map<V> {
     ret self.get_mut(i).unwrap()
   }
 }
+
+// `==` compares the live entries: same length, and every key of one
+// map present in the other with an equal value. Keys compare by the
+// byte equality `locate` uses, and values through `PartialEq`.
+impl<V> PartialEq for Map<V> {
+  fn eq(self: &Self, other: &Self) -> bool {
+    if self.len() != other.len() {
+      ret false
+    }
+    mut i := 0 as usize
+    while i < self.cap {
+      if *uninit_ref(unsafe { elem_ref(self.states, i) }) == 1 {
+        key := uninit_ref(unsafe { elem_ref(self.keys, i) }).as_str()
+        mine := uninit_ref(unsafe { elem_ref(self.values, i) })
+        match other.get(key) {
+          Option::Some(v) => {
+            if *v != *mine {
+              ret false
+            }
+          }
+          Option::None => {
+            ret false
+          }
+        }
+      }
+      i = i + 1
+    }
+    ret true
+  }
+}
