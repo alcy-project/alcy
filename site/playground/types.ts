@@ -3,7 +3,7 @@
 
 // The shapes that cross module boundaries: the compiler's diagnostics and
 // counts, the messages the two workers exchange, and the text references
-// the status line and run meta keep for a language switch.
+// the status line and run meta render in the page's language.
 
 import type { MessageKey, MessageParams } from "../shared/i18n.js";
 
@@ -50,6 +50,9 @@ export interface CompilerResponse {
   diagnostics: Diagnostic[];
   stats?: CompilerStats;
   wasm: ArrayBuffer | null;
+  // How long the compiler call itself took, in milliseconds. The first
+  // call's number does not include loading the wasm module.
+  ms?: number;
 }
 
 export interface CompilerStatusMessage {
@@ -74,8 +77,8 @@ export interface RunErrorMessage {
 
 export type RunnerMessage = RunResultMessage | RunErrorMessage;
 
-// A piece of text kept as a catalog key, so re-rendering in another
-// language is a lookup rather than a re-run.
+// A piece of text kept as a catalog key, so the status line and the run
+// meta render in the page's language when they are drawn.
 export interface TextRef {
   key: MessageKey;
   params?: MessageParams;

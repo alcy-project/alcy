@@ -124,7 +124,10 @@ export async function runCheck({
     renderDiagnostics(response.diagnostics);
     if (!automatic) {
       showTab("problems");
-      const ms = (performance.now() - started).toFixed(1);
+      // The worker times the compiler call; the fallback covers a stale
+      // worker that predates the field.
+      const elapsed = performance.now() - started;
+      const ms = (response.ms ?? elapsed).toFixed(1);
       if (response.ok) {
         setStatus("status.checkOk", {
           functions: response.stats?.functionCount ?? 0,
@@ -218,7 +221,8 @@ export async function run(): Promise<void> {
       setStatus("status.compileFailed");
       return;
     }
-    const ms = (performance.now() - started).toFixed(1);
+    const elapsed = performance.now() - started;
+    const ms = (response.ms ?? elapsed).toFixed(1);
     const bytes = response.wasm.byteLength;
     setRunMeta({
       key: "meta.compiled",

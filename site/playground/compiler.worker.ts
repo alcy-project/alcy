@@ -52,11 +52,16 @@ self.addEventListener("message", async (event: MessageEvent<CompilerRequest>) =>
   try {
     const compiler = await loadCompiler();
     const entry = request.op === "check" ? "alcy_check" : "alcy_compile";
+    // Time the call, not the module load: the load happens once, and a
+    // first compile should not look slower than every later one.
+    const started = performance.now();
     const result = compiler.call(entry, request.source);
+    const ms = performance.now() - started;
     const response = {
       type: "response",
       id,
       ok: result.ok,
+      ms,
       returnCode: result.returnCode,
       diagnostics: result.diagnostics,
       stats: {
