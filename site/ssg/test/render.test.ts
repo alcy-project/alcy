@@ -6,7 +6,8 @@ import { test } from "node:test";
 
 import type { GuidePage } from "../src/guide.js";
 import type { Block } from "../src/markdown.js";
-import { renderGuidePage } from "../src/render.js";
+import { renderGuidePage, renderNotFound } from "../src/render.js";
+import { canonicalUrl } from "../src/urls.js";
 
 function page(language: "en" | "ja", blocks: Block[]): GuidePage {
   return {
@@ -72,4 +73,36 @@ test("the alcy labels are stamped in the page's language", () => {
   const html = render("ja", [alcy]);
   match(html, /data-action="edit" aria-pressed="false">編集</);
   match(html, /data-action="run">実行</);
+});
+
+test("a page names its canonical and alternate addresses", () => {
+  const html = render("en", [prose]);
+  match(
+    html,
+    /<link rel="canonical" href="https:\/\/alcy-project\.github\.io\/alcy\/guide\/x\.html" \/>/,
+  );
+  match(
+    html,
+    /<link rel="alternate" hreflang="ja" href="https:\/\/alcy-project\.github\.io\/alcy\/ja\/guide\/x\.html" \/>/,
+  );
+  match(html, /<link rel="icon" href="\.\.\/favicon\.svg" \/>/);
+});
+
+test("an index route is named at its directory", () => {
+  equal(canonicalUrl("index.html"), "https://alcy-project.github.io/alcy/");
+  equal(
+    canonicalUrl("ja/guide/index.html"),
+    "https://alcy-project.github.io/alcy/ja/guide/",
+  );
+  equal(
+    canonicalUrl("guide/x.html"),
+    "https://alcy-project.github.io/alcy/guide/x.html",
+  );
+});
+
+test("the 404 page keeps its links on the deployment root", () => {
+  const html = renderNotFound();
+  match(html, /name="robots" content="noindex"/);
+  match(html, /location\.pathname\.startsWith\("\/alcy\/"\)/);
+  match(html, /href="guide\/"/);
 });

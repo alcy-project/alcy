@@ -461,6 +461,17 @@ def command_serve(args: argparse.Namespace) -> int:
 
         def send_head(self):
             path = self.translate_path(self.path)
+            # GitHub Pages answers a missing path with `404.html` under
+            # the requested URL; the local server does the same, so a
+            # broken link reads here the way it will in production.
+            not_found = dist_dir / "404.html"
+            if not os.path.exists(path) and not_found.is_file():
+                body = not_found.read_bytes()
+                self.send_response(404)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                return io.BytesIO(body)
             if (
                 not os.path.isdir(path)
                 and os.path.splitext(path)[1] in compressible

@@ -36,6 +36,12 @@ The guide's sources live outside the site, under `docs/guide/`, named
 `NN-slug.md`: the number is the reading order, the `# heading` is the
 title, and the slug (number dropped) is the URL.
 
+The generator also writes the site's root files: `404.html`, whose links
+are written from the deployment root because GitHub Pages serves it
+under the path that was asked for; `sitemap.xml` and `robots.txt` from
+the page list; and the icon. Every page carries its own canonical
+address and the opposite language's alternate.
+
 ## Languages
 
 Every page exists once per language. English is the tree at the site

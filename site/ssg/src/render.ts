@@ -17,6 +17,7 @@ import type { Language } from "./languages.js";
 import { renderInline } from "./markdown.js";
 import type { Block } from "./markdown.js";
 import { renderSettings } from "./shell.js";
+import { pageLinks, SITE_PATH } from "./urls.js";
 
 export interface PageOptions {
   pages: readonly GuidePage[];
@@ -180,6 +181,8 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
     <title>${escapeHtml(page.title)} · alcy</title>
     <script src="${assets}shared/boot.js"></script>
     <link rel="stylesheet" href="${assets}shared/site.css" />${guideCss}
+    <link rel="icon" href="${assets}favicon.svg" />
+    ${pageLinks(page.language, page.path)}
   </head>
   <body class="site">
     ${header(page.route, page.language, page.path)}
@@ -227,6 +230,8 @@ export function renderGuideIndex(
     <title>${t("site.guide")} · alcy</title>
     <script src="${assets}shared/boot.js"></script>
     <link rel="stylesheet" href="${assets}shared/site.css" />
+    <link rel="icon" href="${assets}favicon.svg" />
+    ${pageLinks(language, "guide/index.html")}
   </head>
   <body class="site">
     ${header(route, language, "guide/index.html")}
@@ -241,6 +246,61 @@ export function renderGuideIndex(
     ${footer()}
 
     <script type="module" src="${assets}shared/shell.js"></script>
+  </body>
+</html>
+`;
+}
+
+// The page GitHub Pages serves for a path that does not exist. It is one
+// file at the site root, and Pages answers the requested path with its
+// content, so every URL here is written from the deployment root and the
+// script below picks that root: the project's path on Pages, or the
+// server's root when the built directory is served locally.
+export function renderNotFound(): string {
+  return `<!doctype html>
+<!-- Copyright 2026 The Alcy Project Authors -->
+<!-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Page not found · alcy</title>
+    <script>
+      (() => {
+        const base = document.createElement("base");
+        base.href = location.pathname.startsWith("${SITE_PATH}") ? "${SITE_PATH}" : "/";
+        document.head.append(base);
+      })();
+    </script>
+    <script src="shared/boot.js"></script>
+    <link rel="stylesheet" href="shared/site.css" />
+    <link rel="icon" href="favicon.svg" />
+  </head>
+  <body class="site">
+    <header class="site-header">
+      <a class="site-brand" href="./">alcy</a>
+      <nav class="site-nav">
+        <a href="guide/">Guide</a>
+        <a href="playground/">Playground</a>
+        <a href="https://github.com/alcy-project/alcy" rel="noopener">GitHub</a>
+      </nav>
+    </header>
+
+    <main class="site-main">
+      <h1>Page not found</h1>
+      <p>
+        The page you asked for does not exist. It may have moved, or the link
+        that brought you here may be wrong.
+      </p>
+      <div class="actions">
+        <a class="primary" href="./">Go home</a>
+        <a href="guide/">Read the guide</a>
+        <a href="playground/">Open the playground</a>
+      </div>
+    </main>
+
+    ${footer()}
   </body>
 </html>
 `;

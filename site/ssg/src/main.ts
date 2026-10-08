@@ -35,10 +35,11 @@ import type { Highlighter } from "./highlight.js";
 import { otherLanguages, prefixOf } from "./languages.js";
 import type { Language } from "./languages.js";
 import { createLinkChecker } from "./links.js";
-import { renderGuideIndex, renderGuidePage } from "./render.js";
+import { renderGuideIndex, renderGuidePage, renderNotFound } from "./render.js";
 import { renderSettings } from "./shell.js";
 import { stampTemplate } from "./templates.js";
 import type { TemplateValues } from "./templates.js";
+import { canonicalUrl, pageLinks, SITE_URL } from "./urls.js";
 
 interface Options {
   docs: string;
@@ -181,7 +182,8 @@ function siteExists(dist: string, route: string): boolean {
 
 // The values a page template needs for one language: where the shared
 // assets are, where the language tree's root is, the link to the same
-// page in the other language, and the settings menu itself.
+// page in the other language, the settings menu, and the absolute links
+// a crawler reads.
 function templateValues(language: Language, treePath: string): TemplateValues {
   const route = prefixOf(language) + treePath;
   const dir = posix.dirname(route);
@@ -197,6 +199,7 @@ function templateValues(language: Language, treePath: string): TemplateValues {
     home: home === "" ? "./" : `${home}/`,
     switch: switchHref,
     settings: renderSettings({ language, switchHref }),
+    pageLinks: pageLinks(language, treePath),
   };
 }
 
@@ -204,6 +207,37 @@ function writePage(dist: string, route: string, html: string): void {
   const target = join(dist, route);
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, html);
+}
+
+// The files that belong to the site rather than to one page tree: the
+// 404 page, the icon, and the two files crawlers read.
+function writeSiteRootFiles(options: Options, pages: readonly GuidePage[]): void {
+  writeFileSync(join(options.dist, "404.html"), renderNotFound());
+  writeFileSync(
+    join(options.dist, "favicon.svg"),
+    readFileSync(join(options.site, "favicon.svg")),
+  );
+  writeFileSync(
+    join(options.dist, "robots.txt"),
+    `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}sitemap.xml\n`,
+  );
+  const routes = LANGUAGES.flatMap((language) => [
+    `${prefixOf(language)}index.html`,
+    ...pages
+      .filter((page) => page.language === language)
+      .map((page) => page.route),
+    `${prefixOf(language)}guide/index.html`,
+    `${prefixOf(language)}playground/index.html`,
+  ]);
+  const entries = routes
+    .map((route) => `  <url>\n    <loc>${canonicalUrl(route)}</loc>\n  </url>`)
+    .join("\n");
+  writeFileSync(
+    join(options.dist, "sitemap.xml"),
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+      `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+      `${entries}\n</urlset>\n`,
+  );
 }
 
 async function main(): Promise<void> {
@@ -281,6 +315,8 @@ async function main(): Promise<void> {
       );
     }
   }
+
+  writeSiteRootFiles(options, allPages);
 
   const errors = [...fences.errors, ...checker.errors];
   if (errors.length > 0) {
