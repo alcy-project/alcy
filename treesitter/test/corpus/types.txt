@@ -437,3 +437,43 @@ fn f(a: *i32, b: *mut u8, c: **i32, d: **mut u8, e: *mut *i32) {}
           (raw_ptr_type
             (primitive_type)))))
     (block)))
+
+================================================================================
+An array length names a const integer value
+================================================================================
+
+const N: usize = 2 + 2
+
+fn f(a: [i32; N]) -> [i32; N] {
+  ret a
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (const_item
+    (identifier)
+    (primitive_type)
+    (binary_expression
+      (integer)
+      (integer)))
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (array_type
+          (primitive_type)
+          (path
+            (identifier)))))
+    (return_type
+      (array_type
+        (primitive_type)
+        (path
+          (identifier))))
+    (block
+      (return_expression
+        (path_expression
+          (path
+            (identifier)))))))

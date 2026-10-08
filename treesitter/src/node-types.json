@@ -319,6 +319,10 @@
           {
             "type": "integer",
             "named": true
+          },
+          {
+            "type": "path",
+            "named": true
           }
         ]
       }
@@ -1647,7 +1651,7 @@
         "required": true,
         "types": [
           {
-            "type": "_literal",
+            "type": "_expression",
             "named": true
           }
         ]

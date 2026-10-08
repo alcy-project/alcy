@@ -138,13 +138,13 @@ module.exports = grammar({
     visibility: _ => 'pub',
 
     // `unsafe` marks an operation, so it is read only where a function
-    // declares one (ffi.md, "The gate"); the body of an `unsafe fn` is
-    // not an unsafe context implicitly. `comp` marks a free function
-    // whose calls happen during compilation (comp.md, "Functions").
+    // declares one (ffi.md, "The gate"), and `comp` marks a free
+    // function whose calls happen during compilation (comp.md,
+    // "Functions"). The two markers do not combine yet, so at most one
+    // is read.
     function_item: $ => seq(
       optional(field('visibility', $.visibility)),
-      optional('unsafe'),
-      optional('comp'),
+      optional(choice('unsafe', 'comp')),
       'fn',
       field('name', $.identifier),
       optional(field('type_parameters', $.type_parameters)),
@@ -283,7 +283,7 @@ module.exports = grammar({
       ':',
       field('type', $._type),
       '=',
-      field('value', $._literal),
+      field('value', $._expression),
     ),
 
     use_item: $ => seq(
@@ -379,11 +379,13 @@ module.exports = grammar({
       ')',
     ),
 
+    // A length is a literal or a path to a `const` integer value
+    // (types.md; ADR-0054).
     array_type: $ => seq(
       '[',
       field('element', $._type),
       ';',
-      field('length', $.integer),
+      field('length', choice($.integer, $.path)),
       ']',
     ),
 
