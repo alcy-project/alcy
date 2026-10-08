@@ -422,8 +422,13 @@ def command_test(_args: argparse.Namespace) -> int:
     node = shutil.which("node")
     if node is None:
         raise RuntimeError("node is not on PATH; needed to run the tests")
+    # A directory argument is a test file on node 22 and a directory to
+    # search on 26, so the compiled files are named one by one.
+    tests = sorted((BUILD_DIR / "ssg" / "test").glob("*.test.js"))
+    if not tests:
+        raise FileNotFoundError(f"no compiled tests under {BUILD_DIR / 'ssg' / 'test'}")
     subprocess.run(
-        [node, "--test", str(BUILD_DIR / "ssg" / "test")],
+        [node, "--test", *map(str, tests)],
         check=True,
         cwd=project_root_dir,
     )
