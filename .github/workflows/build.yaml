@@ -17,6 +17,10 @@ on:
         description: "Prebuilt LLVM version."
         required: false
         type: string
+      bun_version:
+        description: "Bun series for the JavaScript-side checks."
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -112,20 +116,12 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_e2e.py --build-subdir=build
 
-      # The wasm cases run under bun. The pinned series is the one the
-      # runner is tested against; the runner image's own runtime is not
-      # trusted for them.
-      - name: Read the Pinned Bun
-        id: bun
-        shell: bash
-        run: |
-          VERSION=$(uv run python -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["bun_version"])')
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-
+      # The wasm cases run under bun, at the series the caller read from
+      # `config.toml` (see ci.yaml's load-config).
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: ${{ steps.bun.outputs.version }}
+          bun-version: ${{ inputs.bun_version }}
 
       - name: Run Wasm Acceptance
         shell: bash

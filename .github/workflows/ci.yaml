@@ -47,6 +47,7 @@ jobs:
       llvm_fork_tag: ${{ steps.parse.outputs.llvm_fork_tag }}
       taplo_version: ${{ steps.parse.outputs.taplo_version }}
       tree_sitter_cli_version: ${{ steps.parse.outputs.tree_sitter_cli_version }}
+      bun_version: ${{ steps.parse.outputs.bun_version }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -65,6 +66,8 @@ jobs:
           echo "taplo_version=${taplo_ver}" >> $GITHUB_OUTPUT
           ts_ver=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["tree_sitter_cli_version"])')
           echo "tree_sitter_cli_version=${ts_ver}" >> $GITHUB_OUTPUT
+          bun_ver=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["bun_version"])')
+          echo "bun_version=${bun_ver}" >> $GITHUB_OUTPUT
 
   debug:
     needs: [load-config]
@@ -74,6 +77,7 @@ jobs:
       build_type: debug
       role: ci
       llvm_version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
+      bun_version: ${{ needs.load-config.outputs.bun_version }}
 
   release:
     needs: [load-config]
@@ -83,6 +87,7 @@ jobs:
       build_type: release
       role: ci
       llvm_version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
+      bun_version: ${{ needs.load-config.outputs.bun_version }}
 
   wasm-debug:
     needs: [load-config]
@@ -91,6 +96,7 @@ jobs:
     with:
       build_type: debug
       role: ci
+      bun_version: ${{ needs.load-config.outputs.bun_version }}
 
   wasm-release:
     needs: [load-config]
@@ -99,6 +105,7 @@ jobs:
     with:
       build_type: release
       role: ci
+      bun_version: ${{ needs.load-config.outputs.bun_version }}
 
   # Lint needs a compilation database, which `gn gen` produces and the
   # whole toolchain is needed to produce. It is a minute of clang-tidy

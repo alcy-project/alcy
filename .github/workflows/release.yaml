@@ -10,17 +10,40 @@ permissions:
   contents: read
 
 jobs:
+  load-config:
+    name: Load Config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      bun_version: ${{ steps.parse.outputs.bun_version }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Parse config.toml
+        id: parse
+        run: |
+          bun_ver=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["bun_version"])')
+          echo "bun_version=${bun_ver}" >> $GITHUB_OUTPUT
+
   build-release:
+    needs: [load-config]
     uses: ./.github/workflows/build.yaml
     with:
       build_type: release
       role: release
+      bun_version: ${{ needs.load-config.outputs.bun_version }}
 
   build-wasm:
+    needs: [load-config]
     uses: ./.github/workflows/build-wasm.yaml
     with:
       build_type: release
       role: release
+      bun_version: ${{ needs.load-config.outputs.bun_version }}
 
   publish:
     needs: [build-release, build-wasm]
