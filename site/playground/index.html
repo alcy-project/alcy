@@ -16,20 +16,27 @@
     <link rel="stylesheet" href="{{dist}}playground/style.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div class="brand">
-        <a class="wordmark" href="{{home}}">alcy</a>
-        <span class="subtitle">{{t:site.playground}}</span>
-        <a class="guide-link" href="{{home}}guide/">{{t:site.guide}}</a>
-      </div>
-      <div class="toolbar">
-        <div class="toolbar-controls">
-          <label class="control">
-            <span class="control-label">{{t:label.example}}</span>
-            <select id="samples" aria-label="{{t:label.example}}" disabled>
-              <option>{{t:samples.loading}}</option>
-            </select>
-          </label>
+    <header class="site-header">
+      <a class="site-brand" href="{{home}}">alcy</a>
+      <nav class="site-nav">
+        <a href="{{home}}guide/">{{t:site.guide}}</a>
+        <a href="{{home}}playground/" aria-current="page">{{t:site.playground}}</a>
+        <a href="https://github.com/alcy-project/alcy" rel="noopener">GitHub</a>
+      </nav>
+      {{settings}}
+    </header>
+
+    <div class="toolbar">
+      <label class="control">
+        <span class="control-label">{{t:label.example}}</span>
+        <select id="samples" aria-label="{{t:label.example}}" disabled>
+          <option>{{t:samples.loading}}</option>
+        </select>
+      </label>
+      <div class="toolbar-end">
+        <div class="compiler-state" id="compiler-state" data-state="idle">
+          <span class="dot"></span>
+          <span id="compiler-state-text">{{t:compiler.idle}}</span>
         </div>
         <div class="toolbar-actions">
           <button id="check" type="button" title="{{t:button.checkTitle}}">
@@ -46,13 +53,8 @@
             <span class="run-label run-label-busy" aria-hidden="true">{{t:button.running}}</span>
           </button>
         </div>
-        {{settings}}
       </div>
-      <div class="compiler-state" id="compiler-state" data-state="idle">
-        <span class="dot"></span>
-        <span id="compiler-state-text">{{t:compiler.idle}}</span>
-      </div>
-    </header>
+    </div>
 
     <main class="layout">
       <section class="editor-pane" aria-label="{{t:aria.editor}}">

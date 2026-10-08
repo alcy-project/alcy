@@ -21,49 +21,19 @@ body {
   flex-direction: column;
 }
 
-/* Top bar */
-
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-soft);
-}
-
-.brand {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.wordmark {
-  font-family: var(--mono);
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--fg);
-  text-decoration: none;
-}
-
-.subtitle {
-  color: var(--fg-faint);
-  font-size: 13px;
-}
-
-.guide-link {
-  color: var(--fg-soft);
-  font-size: 13px;
-  text-decoration: none;
-}
-
-.guide-link:hover {
-  color: var(--fg);
-  text-decoration: underline;
-}
+/* The tool row under the site header: the example picker on the left,
+   the compiler state and the actions on the right. */
 
 .toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.toolbar-end {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -71,7 +41,6 @@ body {
   margin-left: auto;
 }
 
-.toolbar-controls,
 .toolbar-actions {
   display: flex;
   align-items: center;
@@ -546,67 +515,9 @@ body.resizing {
 }
 
 /* Narrow screens: the panes stack and the splitter turns horizontal.
-   Keep the 760px breakpoint in step with NARROW_QUERY in app.js. */
+   Keep the 760px breakpoint in step with NARROW_QUERY in splitter.ts. */
 
 @media (max-width: 760px) {
-  .topbar {
-    gap: 10px;
-  }
-
-  /* Brand and compiler state share the first line; the controls and the
-     actions take one row each, so Run never ends up alone on a line. */
-  .brand {
-    order: 1;
-  }
-
-  .compiler-state {
-    order: 2;
-    min-width: 0;
-    margin-left: auto;
-  }
-
-  .toolbar {
-    order: 3;
-    flex: 1 1 100%;
-    flex-direction: column;
-    align-items: stretch;
-    margin-left: 0;
-    gap: 6px;
-  }
-
-  .toolbar-controls {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
-  }
-
-  /* Three selects on one row leave no space for the labels; the selects
-     keep their accessible names through aria-label. */
-  .control-label {
-    display: none;
-  }
-
-  /* The actions keep a comfortable tap size instead of stretching to half
-     the row on a tablet-width screen. */
-  .toolbar-actions {
-    justify-content: flex-end;
-    gap: 6px;
-  }
-
-  .toolbar-actions button {
-    flex: 0 1 140px;
-    min-width: 96px;
-  }
-
-  .control {
-    min-width: 0;
-  }
-
-  .control select {
-    width: 100%;
-    max-width: none;
-  }
-
   .layout {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows:
@@ -635,5 +546,36 @@ body.resizing {
   /* A touch screen has no Ctrl/Cmd+Enter, and the line stays one row. */
   .statusbar .hint {
     display: none;
+  }
+}
+
+/* The tool row folds onto a second line on narrow screens: the picker
+   takes one row, the state and the actions the next. It needs less width
+   than it used to, now that the theme and language live in the header's
+   settings menu. */
+
+@media (max-width: 620px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* The select keeps its accessible name through aria-label. */
+  .control-label {
+    display: none;
+  }
+
+  .control select {
+    width: 100%;
+    max-width: none;
+  }
+
+  .toolbar-end {
+    justify-content: space-between;
+    margin-left: 0;
+  }
+
+  .compiler-state {
+    min-width: 0;
   }
 }

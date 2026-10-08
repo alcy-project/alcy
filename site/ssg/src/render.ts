@@ -61,7 +61,7 @@ function header(route: string, language: Language, treePath: string): string {
   return `<header class="site-header">
       <a class="site-brand" href="${home}">alcy</a>
       <nav class="site-nav">
-        <a href="${home}guide/">${t("site.guide")}</a>
+        <a href="${home}guide/" aria-current="page">${t("site.guide")}</a>
         <a href="${home}playground/">${t("site.playground")}</a>
         <a href="https://github.com/alcy-project/alcy" rel="noopener">GitHub</a>
       </nav>
