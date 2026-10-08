@@ -179,6 +179,10 @@ Declaration left-hand sides use this grammar with `:=`
   which is what lets the diagnostic point at the expression that cannot be
   assigned to.
 - A block's value is its last expression; `{}` evaluates to `()`.
+  A function body is not one of the positions that reads a block's
+  value: a non-`()` body must diverge, ending every path in `ret` or
+  an expression of type `!` (`control.md`). Closure bodies keep the
+  positional value.
 - `if cond block (else (if | block))?` and `if pattern := expr block
   (else (if | block))?`; `while` mirrors `if` (both accept
   pattern-declarations).

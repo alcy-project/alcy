@@ -16,6 +16,11 @@
 - `fn` declares free functions. Signatures carry explicit types;
   bodies infer locals intraprocedurally (integer literals default to
   `i32`, float literals to `f64`).
+- A function with a non-`()` return type must end every path of its
+  body in `ret` or a diverging expression (`panic`, an `if`/`match`
+  whose branches all diverge); the body's tail value is not the
+  return value (`control.md`). A `comp fn` keeps its tail-`ret` form
+  (`comp.md`).
 - Inherent `impl` blocks are MVP. A parameter list (`impl<T> ...`)
   makes the block generic; its methods are checked and specialized per
   receiver instantiation.

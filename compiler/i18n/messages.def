@@ -199,6 +199,7 @@
   F(AnalyzerRefutablePatternInFor, "Refutable pattern in `for`; use `loop`") \
   F(AnalyzerRefutablePatternInParameter, "Refutable pattern in function parameter") \
   F(AnalyzerReturnCrossesCompBlock, "A 'ret' must not cross a comp block boundary") \
+  F(AnalyzerReturnNeedsRet, "A function returning '{}' must end every path with 'ret'") \
   F(AnalyzerReturnOutsideFunction, "A 'ret' outside of a function") \
   F(AnalyzerRootFileNotAModuleInput, "Root file is not among the module inputs") \
   F(AnalyzerRootModuleHasNoParent, "The root module has no parent") \

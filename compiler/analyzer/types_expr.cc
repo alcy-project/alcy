@@ -3029,8 +3029,13 @@ ir::TypeIdx Checker::check_block(u32 module,
   const base::NestingScope scope(nesting_);
   const ast::Block& node = ast.blocks[block];
   scopes.emplace_back();
+  // What the last statement leaves behind: `!` when it diverges
+  // (`ret`, `panic`, an if whose arms all return), void otherwise. A
+  // block with no value expression falls off the end only when that
+  // statement falls through.
+  ir::TypeIdx last_stmt = builder.primitive(ir::TypeTag::Void);
   for (ast::StmtIdx stmt : node.statements) {
-    check_stmt(module, stmt);
+    last_stmt = check_stmt(module, stmt);
   }
   ir::TypeIdx result = builder.primitive(ir::TypeTag::Void);
   if (node.value.is_valid()) {
@@ -3045,8 +3050,16 @@ ir::TypeIdx Checker::check_block(u32 module,
           ast.exprs[node.value].span);
       (void)index;
     }
-  } else if (expected != nullptr) {
-    result = unify(*expected, result, node.span, "block");
+  } else {
+    // A block with no value expression falls off the end unless its
+    // last statement diverges; what else the statement left behind is
+    // the statement's business (the unused-value warning), not the
+    // block's type.
+    result =
+        is_never(last_stmt) ? last_stmt : builder.primitive(ir::TypeTag::Void);
+    if (expected != nullptr) {
+      result = unify(*expected, result, node.span, "block");
+    }
   }
   scopes.pop_back();
   return result;
@@ -3165,7 +3178,7 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
   }
 }
 
-void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
+ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
   const ast::StmtNode& node = ast.stmts[stmt];
   switch (node.kind) {
     case ast::StmtKind::Decl: {
@@ -3207,7 +3220,7 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
                 DiagCode::RefutableLet, ast.patterns[decl.pattern].span);
         (void)index;
       }
-      return;
+      return builder.primitive(ir::TypeTag::Void);
     }
     case ast::StmtKind::Reassign: {
       const ast::StmtReassign& reassign = node.payload.get<ast::StmtReassign>();
@@ -3224,7 +3237,7 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
                       diag::Severity::Error, diag::Stage::Analyzer,
                       DiagCode::InvalidComp, node.span);
               (void)index;
-              return;
+              return builder.primitive(ir::TypeTag::Void);
             }
           }
         }
@@ -3236,7 +3249,7 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
           check_expr(module, node.payload.get<ast::StmtReassign>().value,
                      is_error(place) ? nullptr : &place);
       if (is_error(place)) {
-        return;
+        return builder.primitive(ir::TypeTag::Void);
       }
       if (verify_comp_known &&
           !comp_checked_in_scope(node.payload.get<ast::StmtReassign>().value) &&
@@ -3256,25 +3269,25 @@ void Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
                   diag::Severity::Error, diag::Stage::Analyzer,
                   DiagCode::InvalidOperation, node.span);
           (void)index;
-          return;
+          return builder.primitive(ir::TypeTag::Void);
         }
       }
       unify(place, value,
             ast.exprs[node.payload.get<ast::StmtReassign>().value].span,
             "assignment");
-      return;
+      return builder.primitive(ir::TypeTag::Void);
     }
     case ast::StmtKind::Expr: {
       const ir::TypeIdx type =
           check_expr(module, node.payload.get<ast::StmtExpr>().value, nullptr);
       if (is_void(type) || is_error(type) || is_never(type)) {
-        return;
+        return type;
       }
       const u32 index = bag.emit<i18n::Key::AnalyzerUnusedValue>(
           diag::Severity::Warning, diag::Stage::Analyzer, DiagCode::MustUse,
           ast.exprs[node.payload.get<ast::StmtExpr>().value].span);
       (void)index;
-      return;
+      return type;
     }
   }
 }

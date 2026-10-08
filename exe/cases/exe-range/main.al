@@ -3,9 +3,9 @@
 // endpoints reads every spelling back out.
 fn endpoint(b: Bound<i32>) -> i32 {
   match b {
-    Bound::Included(v) => v,
-    Bound::Excluded(v) => 1000 + v,
-    Bound::Unbounded => -1,
+    Bound::Included(v) => ret v,
+    Bound::Excluded(v) => ret 1000 + v,
+    Bound::Unbounded => ret -1,
   }
 }
 

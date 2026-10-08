@@ -47,5 +47,10 @@
 - `if` without `else` is statement-only; in value position a missing
   `else` behaves as `else { () }` with unification. Loops evaluate
   to `()` (`break` with a value is deferred).
-- `ret expr` returns early from the enclosing function. `if a := b`
-  binds in the then-branch only (see `items.md` for pattern sharing).
+- `ret expr` returns from the enclosing function. A non-`()` function
+  body must end every path in `ret` or an expression of type `!` (a
+  `panic`, an `if`/`match` whose branches all diverge), so the body's
+  tail value is never its return value; a trailing `;` after `ret`
+  leaves the statement diverging all the same. Unit functions need no
+  `ret`. `if a := b` binds in the then-branch only (see `items.md` for
+  pattern sharing).

@@ -5275,7 +5275,24 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
     }
   }
   if (node.payload.get<ast::ItemFn>().body.is_valid()) {
-    check_block(module, node.payload.get<ast::ItemFn>().body, &fn_ret);
+    const ast::BlockIdx body = node.payload.get<ast::ItemFn>().body;
+    // A unit body keeps the expectation, so a non-`()` trailing value
+    // is still the explicit-discard error it was; a value-returning
+    // body gets no expectation, because a non-unit return is spelled,
+    // not inferred, and the body's own type has to diverge (ADR-0059).
+    // `ret` inside unifies against `fn_ret` on its own either way.
+    const ir::TypeIdx type =
+        check_block(module, body, is_void(fn_ret) ? &fn_ret : nullptr);
+    if (!is_void(fn_ret) && !is_error(fn_ret) && !is_never(type) &&
+        !is_error(type)) {
+      const diag::Span span = ast.blocks[body].value.is_valid()
+                                  ? ast.exprs[ast.blocks[body].value].span
+                                  : ast.blocks[body].span;
+      const u32 index = bag.emit<i18n::Key::AnalyzerReturnNeedsRet>(
+          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::BadReturn,
+          span, pretty_tag(tag_of(fn_ret)));
+      (void)index;
+    }
   }
   scopes.pop_back();
   in_fn = false;

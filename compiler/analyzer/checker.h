@@ -854,7 +854,10 @@ class Checker {
                           ast::BlockIdx block,
                           const ir::TypeIdx* expected);
   ir::TypeIdx check_place(u32 module, ast::ExprIdx place);
-  void check_stmt(u32 module, ast::StmtIdx stmt);
+  // Checks one statement and answers the type an expression
+  // statement left behind, void otherwise; a block reads `!` from it
+  // to know the statement does not fall through.
+  ir::TypeIdx check_stmt(u32 module, ast::StmtIdx stmt);
   bool contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited);
   // Whether a value of the type copies, mirroring `ir::is_copy_type`.
   // The checker's own walk so an in-progress recursive type cannot

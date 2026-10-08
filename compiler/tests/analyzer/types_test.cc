@@ -4897,4 +4897,77 @@ TEST_CASE("Check rejects the address of a value parameter") {
   CHECK(has_message(f.bag, "Value parameter 'N' has no address"));
 }
 
+TEST_CASE("Check accepts the ways a non-unit function may end") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn direct() -> i32 {\n"
+                                      "  ret 1\n"
+                                      "}\n"
+                                      "fn semicolon() -> i32 {\n"
+                                      "  ret 2;\n"
+                                      "}\n"
+                                      "fn diverges() -> i32 {\n"
+                                      "  panic(\"x\")\n"
+                                      "}\n"
+                                      "fn branches(c: bool) -> i32 {\n"
+                                      "  if c {\n"
+                                      "    ret 3\n"
+                                      "  } else {\n"
+                                      "    ret 4\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn arms(n: i32) -> i32 {\n"
+                                      "  match n {\n"
+                                      "    0 => ret 5,\n"
+                                      "    _ => ret 6,\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn closure() -> i32 {\n"
+                                      "  f := (x: i32) -> { x + 1 }\n"
+                                      "  ret f(1)\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  _ := direct()\n"
+                                      "  _ := semicolon()\n"
+                                      "  _ := branches(true)\n"
+                                      "  _ := arms(0)\n"
+                                      "  _ := closure()\n"
+                                      "}\n"},
+                                     {"core.al", CORE_PRELUDE}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f,
+                                         ir::PointerWidth::W64, core_prelude());
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check refuses a body whose value is not returned") {
+  const std::string_view bodies[] = {
+      "fn f() -> i32 {\n  1\n}\n",
+      "fn f(c: bool) -> i32 {\n  if c {\n    1\n  } else {\n    2\n  "
+      "}\n}\n",
+      "fn f(n: i32) -> i32 {\n  match n {\n    0 => 10,\n    _ => 20,\n  "
+      "}\n}\n",
+      "fn f() -> i32 {\n}\n",
+  };
+  for (const std::string_view body : bodies) {
+    VirtualDir dir;
+    std::string source(body);
+    source += "fn main() {\n}\n";
+    const bool setup = write_all(dir, {{"main.al", source}});
+    CHECK(setup);
+    if (!setup) {
+      continue;
+    }
+    Fixture f;
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+    CHECK(f.bag.has_errors());
+  }
+}
+
 }  // namespace analyzer

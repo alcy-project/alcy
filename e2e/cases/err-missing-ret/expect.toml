@@ -1,0 +1,4 @@
+# A non-unit function returns with `ret`; its last expression is not
+# the return value (ADR-0059).
+exit = 4
+contains = ["must end every path with 'ret'"]

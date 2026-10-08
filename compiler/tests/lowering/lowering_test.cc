@@ -614,7 +614,7 @@ TEST_CASE("Lower answers an all-terminated match or if with never") {
                    "fn mixed(o: Opt) -> i32 {\n"
                    "  match o {\n"
                    "    Opt::Some(v) => { ret v }\n"
-                   "    Opt::None => 0\n"
+                   "    Opt::None => ret 0\n"
                    "  }\n"
                    "}\n"
                    "fn main() {\n"
