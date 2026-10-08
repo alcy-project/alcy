@@ -545,7 +545,10 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
                                   u32 inst,
                                   std::vector<CompVal> comp_args,
                                   ir::SymbolKind kind) {
-  std::string key = std::to_string(item.idx) + "|";
+  // The signature does not identify an instantiation: two of them can
+  // share parameters and result while differing only inside the body,
+  // as `size_of::<T>()` reads it. The instance index is part of the key.
+  std::string key = std::to_string(item.idx) + "|" + std::to_string(inst) + "|";
   for (ir::TypeIdx param : params) {
     key += std::to_string(param.idx) + ",";
   }
