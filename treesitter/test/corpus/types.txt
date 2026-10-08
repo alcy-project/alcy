@@ -479,3 +479,46 @@ fn f(a: [i32; N]) -> [i32; N] {
         (path_expression
           (path
             (identifier)))))))
+
+================================================================================
+A type argument may carry a value
+================================================================================
+
+fn f(a: ArrayVec<i32, 4>, b: ArrayVec<i32, K>, c: ArrayVec<i32, -1>) {}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type)
+              (integer)))))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type)
+              (path_type
+                (path
+                  (identifier)))))))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)
+            (type_arguments
+              (primitive_type)
+              (integer))))))
+    (block)))

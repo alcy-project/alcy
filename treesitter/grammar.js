@@ -422,10 +422,13 @@ module.exports = grammar({
 
     // A closing `>>` splits into two `>` (grammar.md, "Types"). The lexer
     // gets that for free: a shift operator is not a valid token inside a
-    // type argument list, so only `>` is ever considered there.
+    // type argument list, so only `>` is ever considered there. An
+    // argument may also be a value: the declaration's parameter kind
+    // decides, and an integer literal (optionally signed) reads as one
+    // (grammar.ebnf, `type_arg`).
     type_arguments: $ => seq(
       '<',
-      sepByTrailing($._type, ','),
+      sepByTrailing(choice($._type, seq(optional('-'), $.integer)), ','),
       '>',
     ),
 
