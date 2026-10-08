@@ -289,8 +289,9 @@ TEST_CASE("Suite manifest parses the std suite") {
   // must accept the suite the compiler embeds.
   constexpr std::string_view bytes =
       "[suite]\nname = \"std\"\nlicense = \"\"\nowner = \"alcy\"\n"
-      "packages = [\"core\", \"fmt\", \"alloc\", \"atomic\", \"sync\", "
-      "\"io\", \"network\", \"thread\", \"arch\", \"simd\", \"time\"]\n";
+      "packages = [\"core\", \"fmt\", \"alloc\", \"collections\", \"atomic\", "
+      "\"sync\", \"io\", \"network\", \"thread\", \"arch\", \"simd\", "
+      "\"time\"]\n";
   base::Result<SuiteManifest, diag::Reported> result = parse_suite_manifest(
       bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
   CHECK(result.is_ok());
@@ -301,13 +302,14 @@ TEST_CASE("Suite manifest parses the std suite") {
   CHECK(!f.bag.has_errors());
   CHECK(manifest.owner == "alcy");
   CHECK(manifest.name == "std");
-  CHECK(manifest.package_count == 11);
-  if (manifest.package_count != 11) {
+  CHECK(manifest.package_count == 12);
+  if (manifest.package_count != 12) {
     return;
   }
   CHECK(manifest.packages[0] == "core");
   CHECK(manifest.packages[2] == "alloc");
-  CHECK(manifest.packages[10] == "time");
+  CHECK(manifest.packages[3] == "collections");
+  CHECK(manifest.packages[11] == "time");
   CHECK(verify_suite_manifest(manifest).is_ok());
 
   // A fresh suite has no members and no owner yet (ADR-0057).

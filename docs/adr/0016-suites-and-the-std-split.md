@@ -61,27 +61,30 @@ the thing `"alcy/std/*" = {}` buys over naming packages one by one.
 ### The split
 
 ```text
-core    → nothing
-alloc   → core
-fmt     → core, alloc
-arch    → core
-simd    → core
-atomic  → core, arch
-thread  → core
-sync    → core, thread
-time    → core, arch
-io      → core, alloc, arch
-network → core, io
+core        → nothing
+alloc       → core
+collections → core, alloc
+fmt         → core, alloc
+arch        → core
+simd        → core
+atomic      → core, arch
+thread      → core
+sync        → core, thread
+time        → core, arch
+io          → core, alloc, arch
+network     → core, io
 ```
 
 `MaybeUninit<T>` is a compiler builtin rather than a declaration, so
 `alloc` needs core only for `Option` and `str`.
 
-**`Vec` and `String` belong to `alloc`, not `core`.** They are
-heap-backed, and the heap primitives they use are too. Leaving them in
-core while moving the primitives to `alloc` would make `core` depend on
-`alloc` and `alloc` depend on `core`. Moving them makes `core` the one
-package with no dependencies at all.
+**`String` belongs to `alloc`, and `Vec`, `Map`, `Set` to
+`collections`, not `core`.** They are heap-backed, and the heap
+primitives they use are too. Leaving them in core while moving the
+primitives to `alloc` would make `core` depend on `alloc` and `alloc`
+depend on `core`. Moving them makes `core` the one package with no
+dependencies at all. The containers sit in `collections`, above the
+heap they grow on.
 
 `fmt` sits above `alloc` because `format` returns a `String`.
 

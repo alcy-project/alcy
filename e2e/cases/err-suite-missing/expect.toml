@@ -1,2 +1,2 @@
 exit = 4
-contains = ["add it to [dependencies]", "alcy/std/alloc"]
+contains = ["add it to [dependencies]", "alcy/std/collections"]
