@@ -39,6 +39,12 @@ The published thing is the *site*, and the playground is one page of it.
   wasm module, and every fence is highlighted at build time with the
   existing tree-sitter grammar. The guide cannot show code that does not
   compile, and reading it needs no JavaScript.
+- The generator stamps each code block with its Copy button, and each
+  `alcy` one with Edit and Run too; a small script reveals them and
+  wires them, so without JavaScript the page is exactly the static
+  guide. Run uses the playground's compiler and runner workers, loaded
+  on the first run, and Edit is a plain textarea over a scratch copy:
+  the published example is never changed.
 - The site has one page tree per language. English is the tree at the
   site root; every other language lives under its own prefix
   (`/ja/guide/...`). The landing page and the playground page are

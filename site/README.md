@@ -18,6 +18,9 @@ site is shaped this way.
   toggle, and the page's language. The playground's editor and the
   guide's build-time highlighting share `shared/highlight.ts`, and
   `shared/i18n.ts` is the one catalog the generator stamps from.
+  `guide.ts` wires the guide's code blocks -- Copy everywhere, Run and
+  Edit on the `alcy` ones -- and `compiler-client.ts` is the shared
+  client for the playground's two workers.
 - `playground/` - the browser playground. Its `index.html` is a template
   too; the launch scripts resolve the page's assets against their own
   URL, so a page in another language's tree finds the one set of assets.
@@ -56,7 +59,12 @@ uv run ./tools/site.py serve          # http://127.0.0.1:8000/
 `config.toml` are installed into `out/site-cache/`). Every `alcy` fence
 in the guide is compiled with the playground's wasm module and every
 link is audited; a fence that does not compile or a link that goes
-nowhere fails the build. The compiler module itself is optional for a
-local build so the pages still assemble without it, but the Pages
-workflow always builds it first, so the deployed guide carries compiled
-examples.
+nowhere fails the build.
+
+On the page, every code block can be copied, and the `alcy` ones can be
+run and edited in place. The compiler is the playground's wasm module
+again, loaded from `playground/` the first time a reader runs something;
+a page that is only read downloads none of it. The compiler module
+itself is optional for a local build so the pages still assemble without
+it, but the Pages workflow always builds it first, so the deployed guide
+carries compiled examples.
