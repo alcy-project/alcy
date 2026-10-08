@@ -26,8 +26,8 @@
 (spec_item
   name: (identifier) @name) @definition.interface
 
-(type_parameters
-  (identifier) @name) @definition.type.parameter
+(type_parameter
+  name: (identifier) @name) @definition.type.parameter
 
 (field_declaration
   name: (identifier) @name) @definition.field

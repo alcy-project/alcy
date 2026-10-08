@@ -359,8 +359,10 @@ struct Pair<A, B> {
   (struct_item
     (identifier)
     (type_parameters
-      (identifier)
-      (identifier))
+      (type_parameter
+        (identifier))
+      (type_parameter
+        (identifier)))
     (field_declaration
       (identifier)
       (path_type

@@ -17,7 +17,7 @@
 (enum_item name: (identifier) @type)
 (spec_item name: (identifier) @type)
 (path_type (path (identifier) @type))
-(type_parameters (identifier) @type.parameter)
+(type_parameter name: (identifier) @type.parameter)
 
 (enum_variant name: (identifier) @constructor)
 (field_declaration name: (identifier) @property)
@@ -28,7 +28,7 @@
 (const_item name: (identifier) @constant)
 (use_item alias: (identifier) @namespace)
 
-(type_parameters (identifier) @type.parameter)
+(type_parameter name: (identifier) @type.parameter)
 
 ; Keywords -------------------------------------------------------------------
 

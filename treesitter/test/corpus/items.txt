@@ -71,7 +71,8 @@ fn id<A>(x: A) -> A {
   (function_item
     (identifier)
     (type_parameters
-      (identifier))
+      (type_parameter
+        (identifier)))
     (parameters
       (parameter
         (identifier_pattern
@@ -125,7 +126,8 @@ enum Option<T> {
   (enum_item
     (identifier)
     (type_parameters
-      (identifier))
+      (type_parameter
+        (identifier)))
     (enum_variant
       (identifier)
       (path_type
@@ -195,7 +197,8 @@ impl<T> Wrapper<T> {
 (source_file
   (impl_item
     (type_parameters
-      (identifier))
+      (type_parameter
+        (identifier)))
     (path_type
       (path
         (identifier)
@@ -518,7 +521,8 @@ pub extern "C" {
     (extern_fn_item
       (identifier)
       (type_parameters
-        (identifier))
+        (type_parameter
+          (identifier)))
       (parameters
         (parameter
           (identifier_pattern
@@ -576,3 +580,31 @@ spec Ord: core::cmp::Ord {
                 (self_type))))))
       (return_type
         (primitive_type)))))
+
+================================================================================
+A value parameter is annotated at its declaration
+================================================================================
+
+struct ArrayVec<T, N: usize> {
+  data: [T; N]
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (identifier)
+    (type_parameters
+      (type_parameter
+        (identifier))
+      (type_parameter
+        (identifier)
+        (primitive_type)))
+    (field_declaration
+      (identifier)
+      (array_type
+        (path_type
+          (path
+            (identifier)))
+        (path
+          (identifier))))))

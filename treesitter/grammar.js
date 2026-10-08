@@ -298,8 +298,15 @@ module.exports = grammar({
 
     type_parameters: $ => seq(
       '<',
-      sepByTrailing(field('name', $.identifier), ','),
+      sepByTrailing($.type_parameter, ','),
       '>',
+    ),
+
+    // An annotation names the kind at the declaration: `N: usize` is a
+    // value rather than a type (grammar.ebnf, `type_param`).
+    type_parameter: $ => seq(
+      field('name', $.identifier),
+      optional(seq(':', field('type', $._type))),
     ),
 
     parameters: $ => seq(
