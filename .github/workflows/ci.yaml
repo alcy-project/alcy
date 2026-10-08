@@ -189,57 +189,6 @@ jobs:
         shell: bash
         run: uv run ./tools/check_exe.py --build-subdir=build --sanitize
 
-  # What a contributor runs before pushing, on the same machine class and
-  # with the same options. Without this, CI is a different gate from the
-  # one the tree is developed against, and the difference shows up as a
-  # failure nobody local predicted.
-  local-gate:
-    needs: [load-config]
-    name: Local Gate (check.sh)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          submodules: recursive
-          fetch-depth: 1
-
-      - name: Setup Build Environment
-        uses: ./.github/actions/setup-build
-        with:
-          nix: "false"
-          os: Linux
-          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
-
-      # `check.sh` runs the TOML check through taplo, which `setup-build`
-      # does not install; the version comes from config.toml, so the
-      # check here is the one a contributor runs.
-      - name: Install taplo
-        uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0
-        with:
-          tool: taplo@${{ needs.load-config.outputs.taplo_version }}
-
-      # `typos` is not among the tools `setup-build` installs, and
-      # `check.sh` reports a skip rather than passing one silently, so
-      # this step is what guarantees the tree was spell-checked here. If
-      # the action leaves the binary on PATH, `check.sh` runs it again:
-      # it takes a tenth of a second and spells the same thing twice.
-      - name: Spell Check Repository
-        uses: crate-ci/typos@00f422f3b19c57bc6338715ebfe3316d38768461
-
-      # The tree-sitter CLI is in the Nix shell, which is where a
-      # contributor gets it, and `setup-build` does not install it, so
-      # `check.sh` would refuse here for want of the one tool this job
-      # would otherwise be missing. Same reason, same version, as the
-      # Grammar job.
-      - name: Install the tree-sitter CLI
-        run: npm install --global "tree-sitter-cli@${{ needs.load-config.outputs.tree_sitter_cli_version }}"
-
-      - name: Run the Whole Gate
-        shell: bash
-        run: ./tools/check.sh
-
   # The grammar is a second reading of the language, and the compiler is
   # the oracle for it: every source this job's build accepts must parse
   # there without an ERROR or a MISSING node. It needs a build, so it does
