@@ -551,6 +551,7 @@ class Checker {
       u32 impl_module,
       ir::TypeIdx self_type,
       const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
+      const std::vector<std::pair<std::string_view, u64>>& value_scope,
       const ast::ItemImpl& impl,
       std::string_view name);
   void record_call(u32 module,

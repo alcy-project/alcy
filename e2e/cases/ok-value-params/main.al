@@ -7,6 +7,12 @@ struct ArrayVec<T, N: usize> {
   len: usize
 }
 
+impl<T, N: usize> ArrayVec<T, N> {
+  fn len(self: &Self) -> usize {
+    ret self.len
+  }
+}
+
 enum Chunk<T, N: usize> {
   Full([T; N]),
   Empty
@@ -23,5 +29,8 @@ fn main() -> i32 {
     Chunk::Full(x) => x[0] as i32,
     Chunk::Empty => 0,
   }
-  ret a.data[3] + b.data[0] + c.data[7] + n
+  // One method call on each of the literal and the const-item
+  // instantiations, plus the 8-wide one.
+  ret a.data[3] + b.data[0] + c.data[7] + n + a.len() as i32 + b.len() as i32 +
+    c.len() as i32
 }

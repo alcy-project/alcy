@@ -3937,8 +3937,11 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
       if (target_args.size() != nominal_params(nominals[nominal]).size()) {
         continue;
       }
-      // Target arguments must name impl parameters directly.
+      // Target arguments must name impl parameters directly. A value
+      // parameter binds the const argument at its position; only a
+      // const can carry the count the method's types resolve with.
       std::vector<std::pair<std::string_view, ir::TypeIdx>> scope;
+      std::vector<std::pair<std::string_view, u64>> value_scope;
       bool shape_ok = true;
       for (usize i = 0; i < target_args.size() && shape_ok; ++i) {
         const ast::TypeNode& arg = ast.types[target_args[i]];
@@ -3955,11 +3958,20 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
         }
         bool found = false;
         for (const ast::GenericParam& param : impl.params) {
-          if (param.name.name == path.segments[0].name) {
+          if (param.name.name != path.segments[0].name) {
+            continue;
+          }
+          if (!param.type.is_valid()) {
             scope.emplace_back(param.name.name, args[i]);
             found = true;
             break;
           }
+          if (tag_of(args[i]) == ir::TypeTag::Const) {
+            value_scope.emplace_back(param.name.name,
+                                     const_type_value(args[i]));
+            found = true;
+          }
+          break;
         }
         shape_ok = found;
       }
@@ -3967,7 +3979,7 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
         continue;
       }
       const CheckedModule::MethodInfo* method =
-          instantiate_method(m, self, scope, impl, name);
+          instantiate_method(m, self, scope, value_scope, impl, name);
       if (method != nullptr) {
         return method;
       }
@@ -4472,6 +4484,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     u32 impl_module,
     ir::TypeIdx self_type,
     const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
+    const std::vector<std::pair<std::string_view, u64>>& value_scope,
     const ast::ItemImpl& impl,
     std::string_view name) {
   for (ast::ItemIdx method_item : impl.methods) {
@@ -4496,6 +4509,9 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     value_params.clear();
     for (const auto& binding : scope) {
       type_params.push_back(binding);
+    }
+    for (const auto& binding : value_scope) {
+      value_params.push_back(binding);
     }
     std::vector<ir::TypeIdx> params;
     for (const ast::ItemFnParam& param :

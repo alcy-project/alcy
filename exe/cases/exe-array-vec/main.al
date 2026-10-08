@@ -7,6 +7,21 @@ struct ArrayVec<T, N: usize> {
   len: usize
 }
 
+impl<T, N: usize> ArrayVec<T, N> {
+  fn len(self: &Self) -> usize {
+    ret self.len
+  }
+
+  fn get(self: &Self, i: usize) -> T {
+    ret self.data[i]
+  }
+
+  fn push(mut self: &mut Self, v: T) {
+    self.data[self.len] = v
+    self.len = self.len + 1
+  }
+}
+
 fn main() -> i32 {
   mut v: ArrayVec<i32, 4> := ArrayVec { data: [0, 0, 0, 0], len: 0 }
   v.data[0] = 10
@@ -33,6 +48,35 @@ fn main() -> i32 {
   }
   if z.data[7] != 8 as u8 {
     ret 5
+  }
+
+  // The same methods through the impl: three writes into the four-wide
+  // vector, each method resolving its own count.
+  mut a: ArrayVec<i32, 4> := ArrayVec { data: [0, 0, 0, 0], len: 0 }
+  a.push(10)
+  a.push(20)
+  a.push(30)
+  if a.len() != 3 {
+    ret 6
+  }
+  if a.get(0) != 10 {
+    ret 7
+  }
+  if a.get(2) != 30 {
+    ret 8
+  }
+
+  // A second count in the same program runs as its own instance.
+  mut b: ArrayVec<u8, 8> := ArrayVec {
+    data: [0 as u8, 0 as u8, 0 as u8, 0 as u8, 0 as u8, 0 as u8, 0 as u8, 0 as u8],
+    len: 0,
+  }
+  b.push(8 as u8)
+  if b.len() != 1 {
+    ret 9
+  }
+  if b.get(0) != 8 as u8 {
+    ret 10
   }
   ret 0
 }

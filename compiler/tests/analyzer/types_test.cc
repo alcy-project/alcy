@@ -4585,4 +4585,130 @@ TEST_CASE("Check rejects an arity mismatch on value parameters") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Check instantiates inherent methods over value parameters") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "struct ArrayVec<T, N: usize> { data: [T; N], len: "
+             "usize }\n"
+             "impl<T, N: usize> ArrayVec<T, N> {\n"
+             "  fn len(self: &Self) -> usize {\n    ret self.len\n  "
+             "}\n"
+             "  fn get(self: &Self, i: usize) -> T {\n    ret "
+             "self.data[i]\n  }\n"
+             "  fn set(mut self: &mut Self, i: usize, v: T) {\n    "
+             "self.data[i] = v\n  }\n"
+             "  fn push(mut self: &mut Self, v: T) {\n    "
+             "self.data[self.len] = v\n    self.len = self.len + 1\n  "
+             "}\n"
+             "  fn stored(self: &Self) -> [T; N] {\n    ret "
+             "self.data\n  }\n"
+             "}\n"
+             "fn main() -> i32 {\n"
+             "  mut a: ArrayVec<i32, 4> := ArrayVec { data: [0, 0, 0, "
+             "0], len: 0 }\n"
+             "  a.push(9)\n"
+             "  b := a.get(0)\n"
+             "  a.set(0, 7)\n"
+             "  c: [i32; 4] := a.stored()\n"
+             "  mut d: ArrayVec<i32, 8> := ArrayVec { data: [0, 0, 0, "
+             "0, 0, 0, 0, 0], len: 0 }\n"
+             "  d.push(1)\n"
+             "  e: [i32; 8] := d.stored()\n"
+             "  ret b + c[0] + e[0] + d.get(0) + a.len() as i32\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  std::vector<const CheckedModule::MethodInfo*> gets;
+  std::vector<const CheckedModule::MethodInfo*> pushes;
+  std::vector<const CheckedModule::MethodInfo*> stored;
+  for (const CheckedModule::MethodInfo& method : root->methods) {
+    if (method.name == "get") {
+      gets.push_back(&method);
+    } else if (method.name == "push") {
+      pushes.push_back(&method);
+    } else if (method.name == "stored") {
+      stored.push_back(&method);
+    }
+  }
+  // One instance per count: the 4-wide and 8-wide receivers resolve
+  // their own method, keyed on distinct self types.
+  CHECK(gets.size() == 2);
+  CHECK(pushes.size() == 2);
+  CHECK(stored.size() == 2);
+  if (gets.size() != 2 || pushes.size() != 2 || stored.size() != 2) {
+    return;
+  }
+  CHECK(gets[0]->self_type.idx != gets[1]->self_type.idx);
+  CHECK(stored[0]->self_type.idx != stored[1]->self_type.idx);
+  // `get` returns the receiver's element type through the impl's `T`.
+  for (const CheckedModule::MethodInfo* method : gets) {
+    CHECK(method->receiver == CheckedModule::ReceiverKind::Shared);
+    CHECK(method->params.size() == 2);
+    CHECK(types.types()[method->params[1]].tag == ir::TypeTag::U64);
+    CHECK(types.types()[method->ret].tag == ir::TypeTag::I32);
+  }
+  for (const CheckedModule::MethodInfo* method : pushes) {
+    CHECK(method->receiver == CheckedModule::ReceiverKind::Exclusive);
+    CHECK(types.types()[method->params[0]].tag == ir::TypeTag::MutRef);
+  }
+  // `stored` returns `[T; N]`: the count comes from the receiver's
+  // instance, not from the signature.
+  u64 counts[2] = {0, 0};
+  for (usize i = 0; i < stored.size(); ++i) {
+    CHECK(types.types()[stored[i]->ret].tag == ir::TypeTag::Array);
+    if (types.types()[stored[i]->ret].tag != ir::TypeTag::Array) {
+      continue;
+    }
+    const ir::ArrayType& array =
+        types.array_types()[types.types()[stored[i]->ret].as_array()];
+    CHECK(types.types()[array.element].tag == ir::TypeTag::I32);
+    counts[i] = array.count;
+  }
+  const bool both_counts =
+      (counts[0] == 4 && counts[1] == 8) || (counts[0] == 8 && counts[1] == 4);
+  CHECK(both_counts);
+}
+
+TEST_CASE("Check keeps refusing a value parameter read as a value") {
+  // Reading `N` as an ordinary value waits for its own slice; the
+  // count resolves in type positions only.
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct ArrayVec<T, N: usize> { data: [T; N], len: "
+                       "usize }\n"
+                       "impl<T, N: usize> ArrayVec<T, N> {\n"
+                       "  fn count(self: &Self) -> usize {\n    ret N\n  }\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  v: ArrayVec<i32, 4> := ArrayVec { data: [1, 2, 3, "
+                       "4], len: 4 }\n"
+                       "  ret v.count() as i32\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Unresolved value 'N'"));
+}
+
 }  // namespace analyzer
