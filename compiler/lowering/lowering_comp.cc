@@ -32,11 +32,11 @@ bool Lowerer::comp_fail(diag::Span span, std::string_view what) {
   return false;
 }
 
-bool Lowerer::comp_tick(diag::Span span) {
-  if (comp_budget_ == 0) {
-    return comp_fail(span, "comp evaluation budget exhausted");
+bool Lowerer::comp_spend(diag::Span span) {
+  if (comp_quota_ == 0) {
+    return comp_fail(span, "comp evaluation quota exhausted");
   }
-  --comp_budget_;
+  --comp_quota_;
   return true;
 }
 
@@ -524,6 +524,11 @@ bool Lowerer::comp_eval_loop(
     diag::Span span,
     ast::ExprIdx cond = ast::ExprIdx(base::INVALID_IDX)) {
   while (!failed) {
+    // Every turn of the loop is a backward jump, and the quota counts
+    // it so a comp-known loop cannot run without bound.
+    if (!comp_spend(span)) {
+      return false;
+    }
     if (!always) {
       CompVal test;
       if (!comp_eval_expr(mod, cond, scope, test)) {
@@ -572,6 +577,9 @@ bool Lowerer::comp_run_fn(u32 def_module,
   const ast::ItemFn& fn = ast.items[item].payload.get<ast::ItemFn>();
   if (args.size() != params.size() || args.size() != fn.params.size()) {
     return comp_fail(span, "call arity");
+  }
+  if (!comp_spend(span)) {
+    return false;
   }
   if (comp_call_depth_ >= COMP_MAX_CALL_DEPTH) {
     return comp_fail(span, "comp call depth exhausted");
@@ -649,6 +657,9 @@ bool Lowerer::comp_eval_intrinsic(u32 mod,
                                   CompScope& scope,
                                   diag::Span span,
                                   CompVal& out) {
+  if (!comp_spend(span)) {
+    return false;
+  }
   const ast::ItemIntrinsic& intrinsic =
       ast.items[sig.item].payload.get<ast::ItemIntrinsic>();
   const std::string_view name = intrinsic.name.name;
@@ -767,6 +778,9 @@ bool Lowerer::comp_eval_method_call(u32 mod,
                                     CompScope& scope,
                                     CompVal& out) {
   const ast::ExprNode& node = ast.exprs[expr];
+  if (!comp_spend(node.span)) {
+    return false;
+  }
   const ast::ExprMethodCall& method = node.payload.get<ast::ExprMethodCall>();
   CompVal receiver;
   if (!comp_eval_expr(mod, method.receiver, scope, receiver)) {
@@ -975,13 +989,13 @@ bool Lowerer::comp_evaluate(u32 mod, ast::ExprIdx expr, CompVal& out) {
   CompScope scope;
   scope.outer = &comp_scope_;
   scope.frames.emplace_back();
-  comp_budget_ = COMP_STEP_BUDGET;
+  comp_quota_ = COMP_BRANCH_QUOTA;
   comp_call_depth_ = 0;
   return comp_eval_expr(mod, expr, scope, out);
 }
 
 bool Lowerer::comp_evaluate_item(u32 mod, ast::ExprIdx init, CompVal& out) {
-  comp_budget_ = COMP_STEP_BUDGET;
+  comp_quota_ = COMP_BRANCH_QUOTA;
   comp_call_depth_ = 0;
   return comp_eval_const_item(mod, init, out);
 }
@@ -990,6 +1004,9 @@ bool Lowerer::comp_eval_const_item(u32 mod, ast::ExprIdx init, CompVal& out) {
   // A const initializer sees items, never a caller's comp bindings, so
   // it evaluates in a scope of its own; the depth counts as a call so a
   // const chain cannot recurse without bound.
+  if (!comp_spend(ast.exprs[init].span)) {
+    return false;
+  }
   if (comp_call_depth_ >= COMP_MAX_CALL_DEPTH) {
     return comp_fail(ast.exprs[init].span, "const evaluation is too deep");
   }
@@ -1005,7 +1022,7 @@ bool Lowerer::comp_eval_expr(u32 mod,
                              ast::ExprIdx expr,
                              CompScope& scope,
                              CompVal& out) {
-  if (failed || !comp_tick(ast.exprs[expr].span)) {
+  if (failed) {
     return false;
   }
   const ast::ExprNode& node = ast.exprs[expr];

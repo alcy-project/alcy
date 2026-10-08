@@ -128,7 +128,10 @@ class Lowerer {
   // Lowered prelude functions, excluded from reported counts.
   usize prelude_functions_ = 0;
   // Step budget per top-level comp evaluation; recursion depth guard.
-  usize comp_budget_ = 0;
+  // Compile-time budget: a call or a loop back edge spends one unit,
+  // and the evaluation stops when the units run out. The default is
+  // fixed; nothing raises it yet.
+  u64 comp_quota_ = 0;
   u32 comp_call_depth_ = 0;
   // Instantiation under lowering (runtime) and under comp
   // evaluation; side-table lookups match these contexts.
@@ -452,10 +455,11 @@ class Lowerer {
 
   // Compile-time evaluation
 
-  static constexpr usize COMP_STEP_BUDGET = 1u << 20;
+  static constexpr u64 COMP_BRANCH_QUOTA = 1'000'000;
   static constexpr u32 COMP_MAX_CALL_DEPTH = 64;
   bool comp_fail(diag::Span span, std::string_view what);
-  bool comp_tick(diag::Span span);
+  // Spends one quota unit; false once the quota is exhausted.
+  bool comp_spend(diag::Span span);
   ir::TypeIdx expr_type_in(u32 mod, ast::ExprIdx expr);
   const analyzer::CheckedModule::CallTarget* call_target_in(
       u32 mod,

@@ -94,8 +94,10 @@ The following are compile-time errors inside comp evaluation:
   unrolled.
 - References in the spliced result, except `str` (references may appear
   during evaluation; the compiler materializes them as constant data).
-- Exhausting the evaluation bound. Evaluation is bounded; the bound is
-  implementation-defined but MUST be deterministic for given inputs.
+- Exhausting the evaluation quota. Every function call and every loop
+  back edge spends one unit of a fixed quota (one million at this
+  stage), so evaluation terminates deterministically; the quota cannot
+  be raised yet.
 
 Moves, copies, and borrows inside comp evaluation follow the ordinary
 ownership rules; comp evaluation has no runtime effects.
