@@ -112,6 +112,15 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_e2e.py --build-subdir=build
 
+      # The runner's own node can drift from the libraries it loads: a
+      # macos-26 Homebrew node failed to start at all (dyld could not
+      # find a sqlite symbol), and every wasm case failed with it. The
+      # pinned release is the one the runner is tested against.
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+
       - name: Run Wasm Acceptance
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_wasm.py --build-subdir=build
