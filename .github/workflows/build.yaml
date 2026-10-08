@@ -112,14 +112,20 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_e2e.py --build-subdir=build
 
-      # The runner's own node can drift from the libraries it loads: a
-      # macos-26 Homebrew node failed to start at all (dyld could not
-      # find a sqlite symbol), and every wasm case failed with it. The
-      # pinned release is the one the runner is tested against.
-      - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      # The wasm cases run under bun. The pinned series is the one the
+      # runner is tested against; the runner image's own runtime is not
+      # trusted for them.
+      - name: Read the Pinned Bun
+        id: bun
+        shell: bash
+        run: |
+          VERSION=$(uv run python -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["bun_version"])')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          node-version: 24
+          bun-version: ${{ steps.bun.outputs.version }}
 
       - name: Run Wasm Acceptance
         shell: bash

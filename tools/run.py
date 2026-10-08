@@ -110,13 +110,10 @@ def main():
             print(f"Running '{target_bin.name}'")
             env = run_environment()
             if target_bin.suffix == ".js":
-                # Prefer bun over node for faster startup and TypeScript support
-                bun_path = shutil.which("bun")
-                node_path = shutil.which("node")
-                runtime = bun_path or node_path
+                runtime = shutil.which("bun")
                 if runtime is None:
                     print(
-                        "error: neither 'bun' nor 'node' found; cannot run .js binary",
+                        "error: 'bun' not found; cannot run .js binary",
                         file=sys.stderr,
                     )
                     return 1

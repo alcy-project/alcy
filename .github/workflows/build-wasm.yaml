@@ -36,10 +36,17 @@ jobs:
       - name: Setup Emscripten
         uses: emscripten-core/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984
 
+      - name: Read the Pinned Bun
+        id: bun
+        shell: bash
+        run: |
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["bun_version"])')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: 1.4.2
+          bun-version: ${{ steps.bun.outputs.version }}
 
       - name: Setup GN
         uses: pug523/actions/setup-gn@6a99c1e7020935c77ea80adc3ed0e9365ec8a209

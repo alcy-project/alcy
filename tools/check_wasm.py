@@ -14,14 +14,14 @@ an `expect.toml`:
     not_contains = ["error"]
 
 The compiler builds the case for wasm with `--backend=direct-wasm`, and
-`tools/wasm_run.mjs` runs the module under node's WASI. `exit` is
+`tools/wasm_run.mjs` runs the module under WASI. `exit` is
 required; `stdout` is compared exactly when present, and `contains` and
 `not_contains` are checked against the combined output. An optional
 `args` list is inserted before `compile`.
 """
 
 import argparse
-import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -122,16 +122,14 @@ def run_case(alcy: Path, shim: Path, case_dir: Path):
         )
         if compiled.returncode != 0:
             return False, ("compile failed:\n" + compiled.stdout + compiled.stderr)
-        # The warning the WASI module prints on load is the host's, not the
-        # program's, and would otherwise read as program output.
-        env = dict(os.environ)
-        env["NODE_NO_WARNINGS"] = "1"
+        bun = shutil.which("bun")
+        if bun is None:
+            return False, "bun is not on PATH; needed to run the wasm cases"
         ran = subprocess.run(
-            ["node", str(shim), str(module_path)],
+            [bun, str(shim), str(module_path)],
             capture_output=True,
             text=True,
             encoding="utf-8",
-            env=env,
             timeout=60,
         )
     return compare(ran, expected_exit, stdout, contains, not_contains)

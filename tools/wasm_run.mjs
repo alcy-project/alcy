@@ -18,7 +18,13 @@ const wasi = new WASI({
 });
 
 const module = new WebAssembly.Module(readFileSync(path));
-const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
+// bun's WASI builds the import object from the module and calls the method
+// `getImports`; node's needs no argument and calls it `getImportObject`.
+const imports =
+  typeof wasi.getImportObject === "function"
+    ? wasi.getImportObject()
+    : wasi.getImports(module);
+const instance = await WebAssembly.instantiate(module, imports);
 // The status is set, not exited with: process.exit() can cut buffered
 // stdout or stderr short, and a program's last line is the one a case
 // compares.

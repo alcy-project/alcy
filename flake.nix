@@ -35,7 +35,7 @@
             # version, because the version that generates the parser is the
             # one its output is compared against.
             pkgs.tree-sitter
-            pkgs.nodejs
+            pkgs.bun
           ];
 
           buildInputs = [];

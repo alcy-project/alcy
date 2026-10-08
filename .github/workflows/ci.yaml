@@ -215,7 +215,12 @@ jobs:
           llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
       - name: Install the tree-sitter CLI
-        run: npm install --global "tree-sitter-cli@${{ needs.load-config.outputs.tree_sitter_cli_version }}"
+        run: |
+          curl -fsSL -o tree-sitter-cli.zip \
+            "https://github.com/tree-sitter/tree-sitter/releases/download/v${{ needs.load-config.outputs.tree_sitter_cli_version }}/tree-sitter-cli-linux-x64.zip"
+          unzip -o tree-sitter-cli.zip -d "$HOME/.local/bin" tree-sitter
+          rm tree-sitter-cli.zip
+          tree-sitter --version
 
       - name: Build All
         shell: bash

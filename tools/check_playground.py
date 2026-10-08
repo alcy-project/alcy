@@ -11,7 +11,7 @@ from:
     tools/build.py --target=playground --target-os=emscripten \\
         --build-subdir=playground --gn-arg='alcy_backends=[]'
 
-and runs `compiler/playground/js/smoke.mjs` under node, which loads the
+and runs `compiler/playground/js/smoke.mjs` under bun, which loads the
 launcher, compiles a program through the C ABI, runs the module it
 produced, and checks a rejected source comes back with diagnostics. The
 program's output is compared here, so the whole path -- page wrapper,
@@ -19,7 +19,7 @@ ABI, compiler, emitted module -- is one test.
 """
 
 import argparse
-import os
+import shutil
 import subprocess
 import sys
 
@@ -42,16 +42,18 @@ def main():
         print("build it with tools/build.py --target=playground --target-os=emscripten")
         return -1
 
+    bun = shutil.which("bun")
+    if bun is None:
+        print("bun is not on PATH; needed to run the playground smoke")
+        return 1
+
     smoke = project_root_dir / "compiler" / "playground" / "js" / "smoke.mjs"
-    env = dict(os.environ)
-    env["NODE_NO_WARNINGS"] = "1"
     proc = subprocess.run(
-        ["node", str(smoke), str(launcher)],
+        [bun, str(smoke), str(launcher)],
         capture_output=True,
         text=True,
         encoding="utf-8",
         cwd=project_root_dir,
-        env=env,
         timeout=300,
     )
     if proc.returncode != 0:

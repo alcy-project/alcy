@@ -26,8 +26,8 @@ are none, so the site still works for highlighting alone. Pass
 direct wasm backend and no LLVM (see `compiler/playground/README.md`).
 
 The TypeScript compiler and the tree-sitter web binding are installed
-with pnpm into `out/site-cache/`, at the versions `config.toml` pins;
-`tree-sitter` itself must be on `PATH`.
+with bun into `out/site-cache/`, at the versions `config.toml` pins;
+`bun` and `tree-sitter` must be on `PATH`.
 """
 
 import argparse
@@ -66,7 +66,6 @@ DEFAULT_WASM_TARGET = "playground"
 DEFAULT_GN_ARG = "alcy_backends=[]"
 CACHE_DIR = project_root_dir / "out" / "site-cache"
 DEPS_DIR = CACHE_DIR / "deps"
-STORE_DIR = CACHE_DIR / "pnpm-store"
 
 # The page's modules, compiled from `site/playground/*.ts` into `build/`.
 # `types` carries only types and emits nothing the page loads, so it is
@@ -102,7 +101,7 @@ SHARED_PLAIN_FILES = ["boot.js", "guide.css", "site.css"]
 
 @dataclass(frozen=True)
 class Versions:
-    pnpm: str
+    bun: str
     typescript: str
     web_tree_sitter: str
 
@@ -120,7 +119,7 @@ def load_versions() -> Versions:
     with open(project_root_dir / "config.toml", "rb") as handle:
         config = tomllib.load(handle)
     return Versions(
-        pnpm=config["pnpm_version"],
+        bun=config["bun_version"],
         typescript=config["typescript_version"],
         web_tree_sitter=config["web_tree_sitter_version"],
     )
@@ -130,25 +129,23 @@ def series(version: str) -> str:
     return ".".join(version.split(".")[:2])
 
 
-def ensure_pnpm(pinned: str) -> str:
-    pnpm = shutil.which("pnpm")
-    if pnpm is None:
-        raise RuntimeError(
-            f"pnpm is not on PATH; install {pinned} (see site/playground/README.md)"
-        )
+def ensure_bun(pinned: str) -> str:
+    bun = shutil.which("bun")
+    if bun is None:
+        raise RuntimeError(f"bun is not on PATH; install {pinned} (see site/README.md)")
     found = subprocess.run(
-        [pnpm, "--version"], capture_output=True, text=True, check=True
+        [bun, "--version"], capture_output=True, text=True, check=True
     ).stdout.strip()
     if series(found) != series(pinned):
         raise RuntimeError(
-            f"pnpm {found} is on PATH; this build pins {pinned} "
+            f"bun {found} is on PATH; this build pins {pinned} "
             "(config.toml). Install the pinned series."
         )
-    return pnpm
+    return bun
 
 
 def install_dependencies(versions: Versions) -> Path:
-    pnpm = ensure_pnpm(versions.pnpm)
+    bun = ensure_bun(versions.bun)
     DEPS_DIR.mkdir(parents=True, exist_ok=True)
     manifest = DEPS_DIR / "package.json"
     wanted = json.dumps(
@@ -167,17 +164,13 @@ def install_dependencies(versions: Versions) -> Path:
         manifest.write_text(wanted + "\n", encoding="utf-8")
     subprocess.run(
         [
-            pnpm,
+            bun,
             "install",
-            "--dir",
+            "--cwd",
             str(DEPS_DIR),
-            "--store-dir",
-            str(STORE_DIR),
+            # Nothing here needs a lifecycle script.
             "--ignore-scripts",
-            "--no-frozen-lockfile",
-            "--prefer-offline",
-            "--reporter",
-            "silent",
+            "--silent",
         ],
         check=True,
     )
@@ -190,9 +183,9 @@ def install_dependencies(versions: Versions) -> Path:
 
 
 def build_typescript(modules: Path) -> None:
-    node = shutil.which("node")
-    if node is None:
-        raise RuntimeError("node is not on PATH; needed to run tsc")
+    bun = shutil.which("bun")
+    if bun is None:
+        raise RuntimeError("bun is not on PATH; needed to run tsc")
     tsc = modules / "typescript" / "lib" / "tsc.js"
     if not tsc.is_file():
         raise FileNotFoundError(f"{tsc} is missing")
@@ -200,13 +193,10 @@ def build_typescript(modules: Path) -> None:
         shutil.rmtree(BUILD_DIR)
     for config in ("tsconfig.json", "tsconfig.workers.json", "tsconfig.ssg.json"):
         subprocess.run(
-            [node, str(tsc), "-p", config],
+            [bun, str(tsc), "-p", config],
             check=True,
             cwd=SITE_DIR,
         )
-    # The generator and its tests run under node as ES modules; the marker
-    # is what tells node to read the compiled `.js` files that way.
-    (BUILD_DIR / "package.json").write_text('{"type": "module"}\n', encoding="utf-8")
     log(f"typescript: {BUILD_DIR}")
 
 
@@ -340,11 +330,14 @@ def copy_compiler(dist_dir: Path, build_dir: Path, compiler_dir: Path | None) ->
 
 
 def build_guide(dist_dir: Path) -> None:
+    bun = shutil.which("bun")
+    if bun is None:
+        raise RuntimeError("bun is not on PATH; needed to run the generator")
     generator = BUILD_DIR / "ssg" / "src" / "main.js"
     if not generator.is_file():
         raise FileNotFoundError(f"{generator} is missing; run the TypeScript build")
     command = [
-        "node",
+        bun,
         str(generator),
         "--docs",
         str(GUIDE_DIR),
@@ -419,16 +412,11 @@ def command_test(_args: argparse.Namespace) -> int:
     versions = load_versions()
     modules = install_dependencies(versions)
     build_typescript(modules)
-    node = shutil.which("node")
-    if node is None:
-        raise RuntimeError("node is not on PATH; needed to run the tests")
-    # A directory argument is a test file on node 22 and a directory to
-    # search on 26, so the compiled files are named one by one.
-    tests = sorted((BUILD_DIR / "ssg" / "test").glob("*.test.js"))
-    if not tests:
-        raise FileNotFoundError(f"no compiled tests under {BUILD_DIR / 'ssg' / 'test'}")
+    bun = shutil.which("bun")
+    if bun is None:
+        raise RuntimeError("bun is not on PATH; needed to run the tests")
     subprocess.run(
-        [node, "--test", *map(str, tests)],
+        [bun, "test", str(BUILD_DIR / "ssg" / "test")],
         check=True,
         cwd=project_root_dir,
     )

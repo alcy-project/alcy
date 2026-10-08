@@ -74,19 +74,23 @@ jobs:
         shell: bash
         run: |
           TS_VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["tree_sitter_cli_version"])')
-          npm install --global "tree-sitter-cli@${TS_VERSION}"
+          curl -fsSL -o tree-sitter-cli.zip \
+            "https://github.com/tree-sitter/tree-sitter/releases/download/v${TS_VERSION}/tree-sitter-cli-linux-x64.zip"
+          unzip -o tree-sitter-cli.zip -d "$HOME/.local/bin" tree-sitter
+          rm tree-sitter-cli.zip
+          tree-sitter --version
 
-      - name: Read the Pinned pnpm
-        id: pnpm
+      - name: Read the Pinned Bun
+        id: bun
         shell: bash
         run: |
-          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["pnpm_version"])')
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["bun_version"])')
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          version: ${{ steps.pnpm.outputs.version }}
+          bun-version: ${{ steps.bun.outputs.version }}
 
       - name: Cache the Compiler Build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9

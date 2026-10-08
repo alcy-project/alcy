@@ -23,13 +23,12 @@ tools_dir="$root_dir/tools"
 #
 #   --nix          run all checks in nix develop environment
 #   --no-wasm      skip the WebAssembly builds and the playground smoke
-#                  (needs Emscripten and node)
+#                  (needs Emscripten and bun)
 #   --no-sanitize  skip the sanitized build of the exe cases (needs clang,
 #                  and roughly doubles their runtime)
 #   --no-coverage  skip the coverage ratchet (needs llvm-cov, and rebuilds
 #                  the tests and the compiler with instrumentation)
-#   --no-grammar   skip the tree-sitter checks (needs the tree-sitter CLI
-#                  and node, which build the grammar)
+#   --no-grammar   skip the tree-sitter checks (needs the tree-sitter CLI)
 nix=false
 run_wasm=true
 run_sanitize=true
@@ -53,8 +52,8 @@ if [[ $run_wasm == true ]]; then
     echo "error: emcc not found; install Emscripten first (or pass --no-wasm)" >&2
     exit 1
   }
-  command -v node >/dev/null 2>&1 || {
-    echo "error: node not found; install node first (or pass --no-wasm)" >&2
+  command -v bun >/dev/null 2>&1 || {
+    echo "error: bun not found; install bun first (or pass --no-wasm)" >&2
     exit 1
   }
 fi
