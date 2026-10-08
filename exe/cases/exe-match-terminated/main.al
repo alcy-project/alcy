@@ -1,8 +1,7 @@
 // Every arm here ends the path with `ret`, so no arm falls through to a
-// join and the expression has no value on any path. Written as a trailing
-// expression of a non-`()` function - the natural way to say "match, or
-// return early" - that is the shape whose lowering read a result slot no
-// arm had ever written, which left the block with two terminators.
+// join and the expression has no value on any path. That is the shape
+// whose lowering once read a result slot no arm had ever written, which
+// left the block with two terminators; the case keeps it covered.
 fn classify(opt: Option<i32>) -> i32 {
   match opt {
     Option::Some(v) => { ret v * 2 }
@@ -44,13 +43,16 @@ fn nested(opt: Option<Option<i32>>) -> i32 {
   }
 }
 
-// One arm falls through, so there is a join and a value. This is the
-// case the all-terminated one has to stay distinct from.
+// One arm falls through, so the expression joins the two arms and has
+// a value; the all-terminated `classify` has to stay distinct from it.
+// The join is read through a binding: a function body's tail value is
+// not its return (ADR-0059).
 fn mixed(opt: Option<i32>) -> i32 {
-  match opt {
+  v := match opt {
     Option::Some(v) => { ret v }
     Option::None => 0
   }
+  ret v
 }
 
 fn main() -> i32 {
