@@ -16,7 +16,7 @@ fn main() {
   step := 2
   total = total + 40
   total = total + step
-  print(format("total = {}\n", total).as_str())
+  print("total = {}\n", total)
 }
 ```
 
@@ -35,7 +35,7 @@ fn add(a: i32, b: i32) -> i32 {
 }
 
 fn main() {
-  print(format("add(2, 3) = {}\n", add(2, 3)).as_str())
+  print("add(2, 3) = {}\n", add(2, 3))
 }
 ```
 
@@ -59,7 +59,7 @@ fn sign(x: i32) -> i32 {
 }
 
 fn main() {
-  print(format("{} {} {}\n", sign(-7), sign(0), sign(9)).as_str())
+  print("{} {} {}\n", sign(-7), sign(0), sign(9))
 }
 ```
 
@@ -79,7 +79,7 @@ fn main() {
     sum = sum + n
     n = n + 1
   }
-  print(format("sum = {}\n", sum).as_str())
+  print("sum = {}\n", sum)
 }
 ```
 
@@ -95,7 +95,7 @@ fn divmod(a: i32, b: i32) -> (i32, i32) {
 
 fn main() {
   result := divmod(17, 5)
-  print(format("17 / 5 = {} remainder {}\n", result.0, result.1).as_str())
+  print("17 / 5 = {} remainder {}\n", result.0, result.1)
 }
 ```
 
@@ -110,7 +110,7 @@ fn manhattan(p: Point) -> i32 {
 
 fn main() {
   p := Point { x: 3, y: 4 }
-  print(format("manhattan = {}\n", manhattan(p)).as_str())
+  print("manhattan = {}\n", manhattan(p))
 }
 ```
 
@@ -133,7 +133,7 @@ fn area(s: Shape) -> i32 {
 fn main() {
   a := area(Shape::Circle(2))
   b := area(Shape::Rect(3, 4))
-  print(format("circle = {}, rect = {}\n", a, b).as_str())
+  print("circle = {}, rect = {}\n", a, b)
 }
 ```
 

@@ -15,7 +15,7 @@ fn main() -> i32 {
       print("Buzz\n")
     } else {
       line := format("{}\n", n)
-      print(line.as_str())
+      print("{}", line.as_str())
     }
     n = n + 1
   }
