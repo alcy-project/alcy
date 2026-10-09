@@ -48,7 +48,6 @@ using op::OP_BR_IF;
 using op::OP_BR_TABLE;
 using op::OP_CALL;
 using op::OP_CALL_INDIRECT;
-using op::OP_DROP;
 using op::OP_ELSE;
 using op::OP_END;
 using op::OP_F32_CONST;
@@ -92,6 +91,10 @@ bool is_aggregate_tag(ir::TypeTag tag) {
   return tag == T::Struct || tag == T::Tuple || tag == T::Enum ||
          tag == T::Array;
 }
+
+// What the allocator's failure path reports before it exits: the
+// memory could not grow to satisfy the request.
+constexpr std::string_view ALLOC_FAILURE = "allocation failed";
 
 #if BUILD_FLAG(IS_DEBUG)
 bool is_terminator(ir::Opcode op) {
@@ -187,6 +190,9 @@ base::Result<std::vector<u8>, codegen::EmitError> Emitter::run() {
   if (emit_start().is_err()) {
     return base::make_err(codegen::EmitError::Unsupported);
   }
+  // The allocator's failure message is data like the strings, so it
+  // must be placed before the layout that publishes the heap.
+  alloc_failure_ = data_for(ALLOC_FAILURE);
   add_memory_and_globals();
   emit_runtime_bodies();
   builder_.export_memory("memory");
@@ -1197,7 +1203,9 @@ void Emitter::emit_runtime_bodies() {
     op(OP_SELECT);
     op(OP_I32_ADD);
     local_set(end);
-    // Grow when the cursor runs past the memory that exists.
+    // Grow when the cursor runs past the memory that exists. A failed
+    // grow is an abort with a message: the caller writes through the
+    // pointer it gets back and does not check it.
     local_get(end);
     op(OP_MEMORY_SIZE);
     body_.byte(0x00);
@@ -1217,7 +1225,14 @@ void Emitter::emit_runtime_bodies() {
     op(OP_I32_SHR_U);
     op(OP_MEMORY_GROW);
     body_.byte(0x00);
-    op(OP_DROP);
+    i32_const(-1);
+    op(OP_I32_EQ);
+    if_void();
+    i32_const(static_cast<i32>(alloc_failure_));
+    i32_const(static_cast<i32>(ALLOC_FAILURE.size()));
+    call(PANIC);
+    op(OP_UNREACHABLE);
+    end_op();
     end_op();
     local_get(end);
     global_set(GLOBAL_HEAP);

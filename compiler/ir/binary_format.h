@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <span>
+
 #include "fpag/base/numeric.h"
 
 namespace ir::binary {
@@ -18,6 +20,18 @@ inline constexpr u16 MINOR = 1;
 inline constexpr u32 FLAG_LITTLE_ENDIAN = 1;
 // Sections start on this boundary.
 inline constexpr usize SECTION_ALIGN = 8;
+
+// The trailing footer: the FNV-1a hash of every byte before it. The
+// writer and the reader share this, so a cache that handed back
+// different bytes than were written is refused rather than read.
+inline u64 fnv1a64(std::span<const u8> data) {
+  u64 hash = 0xCBF29CE484222325ULL;
+  for (const u8 byte : data) {
+    hash ^= byte;
+    hash *= 0x100000001B3ULL;
+  }
+  return hash;
+}
 
 // Section kinds, ascending in the order a writer emits them. A kind is
 // never reused for a different meaning.

@@ -165,7 +165,12 @@ Emitter::EmitResult Emitter::emit_compute(const ir::Instruction& instr) {
       if (push_operand(lhs).is_err()) {
         return base::make_err(codegen::EmitError::Unsupported);
       }
-      if (is_wide_int(tag)) {
+      if (tag == ir::TypeTag::I1) {
+        // A bool is one canonical 0/1 word. A complement would turn
+        // `true` into 0xFFFFFFFF, still true to every branch; `i32.eqz`
+        // is the logical not and stays canonical.
+        op(0x45);  // i32.eqz
+      } else if (is_wide_int(tag)) {
         i64_const(-1);
         op(0x85);  // i64.xor
       } else {

@@ -27,12 +27,14 @@ namespace {
 //   segment  = DIGITS name            DIGITS is the byte length of name
 //   name     = DIGITS name
 //   generics = { type }
-//   type     = prim | "z" | "p"
+//   type     = prim | "z" | "p" | "o" | "x" | "e" | "k"
 //            | "v" type
 //            | "r" type | "w" type
+//            | "P" type | "M" type
 //            | "y" DIGITS type
 //            | "u" DIGITS { type }
 //            | "n" seglist DIGITS { type }
+//            | "g" DIGITS { type } type
 //            | "c" LENGTH
 //   prim     = one character from the table below
 //
@@ -80,6 +82,15 @@ constexpr char TAG_TUPLE = 'u';
 constexpr char TAG_NOMINAL = 'n';
 // A compile-time value argument; its LENGTH is the value itself.
 constexpr char TAG_CONST = 'c';
+// Types that are not values of a primitive kind, each kept apart so no
+// two of them encode alike: the unit `()`, the never `!`, the failed
+// resolution `error`, an opaque function value, and a function
+// signature (its parameter count, parameters, then return type).
+constexpr char TAG_VOID = 'o';
+constexpr char TAG_NEVER = 'x';
+constexpr char TAG_ERROR = 'e';
+constexpr char TAG_FUNCTION = 'k';
+constexpr char TAG_FUNC = 'g';
 
 struct Primitive {
   char tag;
@@ -184,6 +195,20 @@ class Encoder {
       return;
     }
     switch (node.tag) {
+      // Encoded by primitive_tag above; listed so the switch stays
+      // exhaustive and a new tag fails the build instead of silently
+      // sharing another type's encoding.
+      case ir::TypeTag::I1:
+      case ir::TypeTag::I8:
+      case ir::TypeTag::I16:
+      case ir::TypeTag::I32:
+      case ir::TypeTag::I64:
+      case ir::TypeTag::U8:
+      case ir::TypeTag::U16:
+      case ir::TypeTag::U32:
+      case ir::TypeTag::U64:
+      case ir::TypeTag::F32:
+      case ir::TypeTag::F64: break;
       case ir::TypeTag::Str: out_.push_back(TAG_STR); return;
       case ir::TypeTag::Ref:
         out_.push_back(TAG_REF);
@@ -233,12 +258,20 @@ class Encoder {
       }
       case ir::TypeTag::Struct:
       case ir::TypeTag::Enum: encode_nominal(node); return;
-      default:
-        // Void, Never, Error, and Function never appear in a signature
-        // the linker sees. Encoding one as `str` keeps the mapping
-        // total; nothing decodes a symbol back into a program.
-        out_.push_back(TAG_STR);
+      case ir::TypeTag::Void: out_.push_back(TAG_VOID); return;
+      case ir::TypeTag::Never: out_.push_back(TAG_NEVER); return;
+      case ir::TypeTag::Error: out_.push_back(TAG_ERROR); return;
+      case ir::TypeTag::Function: out_.push_back(TAG_FUNCTION); return;
+      case ir::TypeTag::Func: {
+        const ir::FuncType& func = types_.func_types()[node.as_func()];
+        out_.push_back(TAG_FUNC);
+        append_length(out_, func.params.size());
+        for (const ir::TypeIdx param : func.params) {
+          encode_type(param);
+        }
+        encode_type(func.ret);
         return;
+      }
     }
   }
 
@@ -388,6 +421,25 @@ class Decoder {
         out.kind = DecodedType::Kind::Const;
         return read_length(out.count);
       }
+      case TAG_VOID: out.kind = DecodedType::Kind::Unit; return true;
+      case TAG_NEVER: out.kind = DecodedType::Kind::Never; return true;
+      case TAG_ERROR: out.kind = DecodedType::Kind::Error; return true;
+      case TAG_FUNCTION: out.kind = DecodedType::Kind::Function; return true;
+      case TAG_FUNC: {
+        out.kind = DecodedType::Kind::Func;
+        u64 count = 0;
+        if (!read_length(count) || !plausible_count(count)) {
+          return false;
+        }
+        // The return type is one more part after the parameters.
+        out.parts.resize(count + 1);
+        for (u64 i = 0; i < count; ++i) {
+          if (!decode_type(out.parts[i])) {
+            return false;
+          }
+        }
+        return decode_type(out.parts[count]);
+      }
       case TAG_TUPLE: {
         out.kind = DecodedType::Kind::Tuple;
         u64 count = 0;
@@ -535,6 +587,25 @@ std::string display(const DecodedType& type) {
         out.append(display(type.args[i]));
       }
       out.push_back('>');
+      return out;
+    }
+    case DecodedType::Kind::Unit: return "()";
+    case DecodedType::Kind::Never: return "!";
+    case DecodedType::Kind::Error: return "error";
+    case DecodedType::Kind::Function: return "fn";
+    case DecodedType::Kind::Func: {
+      if (type.parts.empty()) {
+        return "fn";
+      }
+      std::string out = "fn(";
+      for (usize i = 0; i + 1 < type.parts.size(); ++i) {
+        if (i != 0) {
+          out.push_back(',');
+        }
+        out.append(display(type.parts[i]));
+      }
+      out.append(") -> ");
+      out.append(display(type.parts.back()));
       return out;
     }
   }

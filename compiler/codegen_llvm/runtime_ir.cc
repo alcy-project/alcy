@@ -51,7 +51,11 @@ class RuntimeBuilder {
     // (ADR-0052).
     const bool print = declared("alcy_print");
     const bool println = declared("alcy_println");
-    const bool panic = declared("alcy_panic");
+    const bool alloc = declared("alcy_alloc");
+    // The allocator's failure path is a panic, so asking for the
+    // allocator asks for the panic path too, whether or not the program
+    // named it.
+    const bool panic = declared("alcy_panic") || alloc;
     const bool sys_write = declared("alcy_sys_write");
     if (print || println || panic || sys_write) {
       build_write_all();
@@ -68,7 +72,7 @@ class RuntimeBuilder {
     if (sys_write) {
       build_sys_write();
     }
-    if (declared("alcy_alloc")) {
+    if (alloc) {
       build_alloc();
     }
     if (declared("alcy_dealloc")) {
@@ -437,6 +441,19 @@ class RuntimeBuilder {
     builder_.CreateRetVoid();
   }
 
+  // Allocation failure is a defined abort, matching the panic path:
+  // every caller writes through the returned pointer and has no null to
+  // check.
+  void fail_allocation() {
+    constexpr std::string_view MESSAGE = "allocation failed";
+    llvm::Function* panic_function = module_.getFunction("alcy_panic");
+    DCHECK_MSG(panic_function != nullptr, "allocation failure has no panic");
+    builder_.CreateCall(panic_function,
+                        {text_constant(MESSAGE),
+                         llvm::ConstantInt::get(usize_, MESSAGE.size())});
+    builder_.CreateUnreachable();
+  }
+
   // The requested alignment must be a power of two. POSIX allocators
   // require at least pointer-sized alignment, so small alignments are
   // promoted before `posix_memalign`. A zero-size request still returns
@@ -479,7 +496,7 @@ class RuntimeBuilder {
     builder_.CreateCondBr(invalid, reject, prepare);
 
     builder_.SetInsertPoint(reject);
-    builder_.CreateRet(null_pointer());
+    fail_allocation();
 
     builder_.SetInsertPoint(prepare);
     llvm::Value* effective = align;
@@ -499,13 +516,19 @@ class RuntimeBuilder {
         builder_.CreateSelect(size_is_zero, effective, size, "requested");
 
     if (windows_) {
-      // `_aligned_malloc` returns null on failure, so there is no result
-      // slot to read back and nothing to check.
+      // `_aligned_malloc` returns null on failure, so the result is
+      // checked here rather than read back from a slot.
       llvm::Function* aligned = libc(
           "_aligned_malloc", llvm::FunctionType::get(builder_.getPtrTy(),
                                                      {usize_, usize_}, false));
-      builder_.CreateRet(
-          builder_.CreateCall(aligned, {requested, align}, "block"));
+      llvm::Value* block =
+          builder_.CreateCall(aligned, {requested, align}, "block");
+      llvm::Value* failed =
+          builder_.CreateICmpEQ(block, null_pointer(), "failed");
+      llvm::BasicBlock* ok = llvm::BasicBlock::Create(context, "ok", function);
+      builder_.CreateCondBr(failed, reject, ok);
+      builder_.SetInsertPoint(ok);
+      builder_.CreateRet(block);
       return;
     }
     builder_.CreateStore(null_pointer(), slot);
@@ -597,7 +620,7 @@ class RuntimeBuilder {
     builder_.CreateCondBr(invalid, reject, mapped);
 
     builder_.SetInsertPoint(reject);
-    builder_.CreateRet(null_pointer());
+    fail_allocation();
 
     builder_.SetInsertPoint(mapped);
     llvm::Value* effective =

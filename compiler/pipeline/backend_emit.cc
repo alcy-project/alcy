@@ -9,6 +9,7 @@
 #include "codegen/backend.h"
 #include "codegen/target.h"
 #include "fpag/base/result.h"
+#include "pipeline/emit_mode.h"
 
 // The dispatch names every implementation the build carries and nothing
 // else. Keeping the conditionals here is what lets the rest of the
@@ -41,6 +42,71 @@ bool backend_supports(codegen::Backend backend,
       return codegen::wasm::Wasm::supports(kind, target);
   }
   return false;
+}
+
+bool backend_can_optimize(codegen::Backend backend) {
+  switch (backend) {
+    case codegen::Backend::None: return false;
+    case codegen::Backend::Llvm:
+#if ALCY_BACKEND_LLVM
+      return true;
+#else
+      return false;
+#endif
+    case codegen::Backend::DirectWasm:
+      // No optimizer lives behind the direct emitter; it answers
+      // NoOptimizer rather than emit unoptimized code under --release.
+      return false;
+  }
+  return false;
+}
+
+bool backend_writes_final_module(codegen::Backend backend,
+                                 const codegen::Target& target) {
+  return backend_supports(backend, codegen::OutputKind::Module, target);
+}
+
+codegen::OutputKind output_kind_for(EmitMode mode,
+                                    const codegen::Target& target) {
+  switch (mode) {
+    case EmitMode::Executable:
+      return target.is_wasm() ? codegen::OutputKind::Module
+                              : codegen::OutputKind::Object;
+    case EmitMode::Object: return codegen::OutputKind::Object;
+    case EmitMode::LlvmIr: return codegen::OutputKind::Text;
+    case EmitMode::LlvmBitcode: return codegen::OutputKind::Bitcode;
+    case EmitMode::Ir:
+    case EmitMode::IrBinary:
+      // The pipeline writes these itself and never consults a backend;
+      // the answer only keeps the selection total.
+      return codegen::OutputKind::Object;
+  }
+  return codegen::OutputKind::Object;
+}
+
+codegen::Backend select_backend(const codegen::Target& target,
+                                codegen::OutputKind kind,
+                                bool optimize) {
+  const codegen::Backend preferred = codegen::default_backend(target);
+  const auto usable = [&](codegen::Backend backend) {
+    if (!codegen::backend_available(backend)) {
+      return false;
+    }
+    if (!backend_supports(backend, kind, target)) {
+      return false;
+    }
+    return !optimize || backend_can_optimize(backend);
+  };
+  if (usable(preferred)) {
+    return preferred;
+  }
+  for (const codegen::Backend candidate :
+       {codegen::Backend::Llvm, codegen::Backend::DirectWasm}) {
+    if (candidate != preferred && usable(candidate)) {
+      return candidate;
+    }
+  }
+  return preferred;
 }
 
 base::Result<std::vector<u8>, codegen::EmitError> emit_with_backend(

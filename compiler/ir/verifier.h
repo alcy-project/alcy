@@ -43,6 +43,19 @@ enum class VerificationErrorKind : u8 {
   EnumFieldsOutOfRange,
   TupleFieldsOutOfRange,
   FuncFieldsOutOfRange,
+  // A struct's or enum's generic argument range leaves the type table.
+  StructParamsOutOfRange,
+  EnumParamsOutOfRange,
+  // A function's instantiation argument range leaves the type table.
+  FunctionGenericsOutOfRange,
+  // A symbol kind or calling convention the format does not define.
+  InvalidSymbolKind,
+  InvalidCallingConvention,
+  // An opcode enumerator this compiler does not define: a reader casts a
+  // byte, so `Instruction::op` can hold any value.
+  UnknownOpcode,
+  // An instruction whose operand count cannot belong to its opcode.
+  InstrOperandArity,
 };
 
 struct VerificationError {
@@ -83,6 +96,13 @@ constexpr std::string_view format_as(const VerificationErrorKind kind) {
     case K::EnumFieldsOutOfRange: return "EnumFieldsOutOfRange";
     case K::TupleFieldsOutOfRange: return "TupleFieldsOutOfRange";
     case K::FuncFieldsOutOfRange: return "FuncFieldsOutOfRange";
+    case K::StructParamsOutOfRange: return "StructParamsOutOfRange";
+    case K::EnumParamsOutOfRange: return "EnumParamsOutOfRange";
+    case K::FunctionGenericsOutOfRange: return "FunctionGenericsOutOfRange";
+    case K::InvalidSymbolKind: return "InvalidSymbolKind";
+    case K::InvalidCallingConvention: return "InvalidCallingConvention";
+    case K::UnknownOpcode: return "UnknownOpcode";
+    case K::InstrOperandArity: return "InstrOperandArity";
   }
 }
 

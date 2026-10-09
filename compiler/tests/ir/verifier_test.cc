@@ -996,4 +996,203 @@ TEST_CASE("Verify a type query's measured index") {
                 VerificationErrorKind::InvalidTypeQuery);
 }
 
+// Instantiation arguments feed the mangler and the consumers that walk
+// a nominal's parameters, so a range that leaves the type table is a
+// shape error rather than a read into whatever follows.
+TEST_CASE("Verify struct and enum generic arguments") {
+  {
+    StorageBuilder builder;
+    const TypeIdx i32 = builder.primitive(TypeTag::I32);
+    TypeSeq fields;
+    fields.push(builder.ref_type(i32));
+    (void)builder.struct_type(str::EMPTY_STRING_ID, fields.finish(),
+                              TypeIdxRange{TypeIdx(99999), 1});
+    check_invalid(std::move(builder).build(),
+                  VerificationErrorKind::StructParamsOutOfRange);
+  }
+  {
+    StorageBuilder builder;
+    const EnumVariantTypeIdx variant =
+        builder.enum_variant(str::EMPTY_STRING_ID, TypeIdxRange{});
+    (void)builder.enum_type(str::EMPTY_STRING_ID, {variant, 1},
+                            TypeIdxRange{TypeIdx(99999), 1});
+    check_invalid(std::move(builder).build(),
+                  VerificationErrorKind::EnumParamsOutOfRange);
+  }
+}
+
+TEST_CASE("Verify function instantiation arguments") {
+  StorageBuilder builder;
+  const InstructionIdx ret =
+      builder.instr({.op = Opcode::Ret,
+                     .flags = {},
+                     .dst = RegisterIdx(base::INVALID_IDX),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = {}});
+  const BlockIdx block = builder.block({
+      .instrs = {ret, 1},
+      .block_params = {},
+  });
+  builder.function({
+      .meta = {.return_type = primitive_idx(TypeTag::Void),
+               .param_types = {},
+               .name = str::EMPTY_STRING_ID,
+               .path = str::EMPTY_STRING_ID,
+               .kind = SymbolKind::Free,
+               .generics = TypeIdxRange{TypeIdx(99999), 1}},
+      .blocks = {block, 1},
+  });
+  check_invalid(std::move(builder).build(),
+                VerificationErrorKind::FunctionGenericsOutOfRange);
+}
+
+TEST_CASE("Verify external function metadata") {
+  // `build_external` produces an otherwise valid package whose one
+  // external carries the metadata under test; consumers dereference
+  // every field, so each has to be checked where it enters.
+  const auto build_external = [](ExternalFunction external) {
+    StorageBuilder builder;
+    builder.external_function(external);
+    const InstructionIdx ret =
+        builder.instr({.op = Opcode::Ret,
+                       .flags = {},
+                       .dst = RegisterIdx(base::INVALID_IDX),
+                       .measure = ir::TypeIdx::invalid(),
+                       .operands = {}});
+    const BlockIdx block = builder.block({
+        .instrs = {ret, 1},
+        .block_params = {},
+    });
+    builder.function({
+        .meta = void_meta(),
+        .blocks = {block, 1},
+    });
+    return std::move(builder).build();
+  };
+  const auto external = [](FunctionMeta meta) {
+    return ExternalFunction{.meta = meta, .calling_conv = CallingConvention::C};
+  };
+  const FunctionMeta good{
+      .return_type = primitive_idx(TypeTag::Void),
+      .param_types = {},
+      .name = str::EMPTY_STRING_ID,
+      .path = str::EMPTY_STRING_ID,
+      .kind = SymbolKind::Foreign,
+      .generics = TypeIdxRange{},
+  };
+
+  check_invalid(build_external(external(FunctionMeta{
+                    .return_type = TypeIdx(99999),
+                    .param_types = {},
+                    .name = str::EMPTY_STRING_ID,
+                    .path = str::EMPTY_STRING_ID,
+                    .kind = SymbolKind::Foreign,
+                    .generics = TypeIdxRange{},
+                })),
+                VerificationErrorKind::TypeIdxOutOfRange);
+  check_invalid(build_external(external(FunctionMeta{
+                    .return_type = primitive_idx(TypeTag::Void),
+                    .param_types = TypeIdxRange{TypeIdx(99999), 1},
+                    .name = str::EMPTY_STRING_ID,
+                    .path = str::EMPTY_STRING_ID,
+                    .kind = SymbolKind::Foreign,
+                    .generics = TypeIdxRange{},
+                })),
+                VerificationErrorKind::FunctionParamTypesOutOfRange);
+  check_invalid(build_external(external(FunctionMeta{
+                    .return_type = primitive_idx(TypeTag::Void),
+                    .param_types = {},
+                    .name = str::EMPTY_STRING_ID,
+                    .path = str::EMPTY_STRING_ID,
+                    .kind = SymbolKind::Foreign,
+                    .generics = TypeIdxRange{TypeIdx(99999), 1},
+                })),
+                VerificationErrorKind::FunctionGenericsOutOfRange);
+  check_invalid(build_external(external(FunctionMeta{
+                    .return_type = primitive_idx(TypeTag::Void),
+                    .param_types = {},
+                    .name = str::EMPTY_STRING_ID,
+                    .path = str::EMPTY_STRING_ID,
+                    .kind = static_cast<SymbolKind>(9),
+                    .generics = TypeIdxRange{},
+                })),
+                VerificationErrorKind::InvalidSymbolKind);
+  check_invalid(build_external(ExternalFunction{
+                    .meta = good,
+                    .calling_conv = static_cast<CallingConvention>(3),
+                }),
+                VerificationErrorKind::InvalidCallingConvention);
+}
+
+// Every consumer indexes an instruction's operands by position, so an
+// operand count the opcode cannot carry, or an opcode no enumerator
+// defines, must not pass the verifier.
+TEST_CASE("Verify instruction operand arity") {
+  // `append_ret` adds the block's terminator after `bad`; a terminator
+  // under test is its own last instruction and passes false.
+  const auto build_with = [](Instruction bad, bool append_ret) {
+    StorageBuilder builder;
+    const ImmutableIdx one = builder.immutable(
+        {.type = primitive_idx(TypeTag::I32), .data = {.i32_value = 1}});
+    (void)builder.operand(
+        Operand::from_immutable(one, primitive_idx(TypeTag::I32)));
+    (void)builder.operand(
+        Operand::from_immutable(one, primitive_idx(TypeTag::I32)));
+    builder.reg({.type = primitive_idx(TypeTag::I1),
+                 .def_idx = InstructionIdx(base::INVALID_IDX)});
+    const InstructionIdx bad_at = builder.instr(bad);
+    InstructionIdx last = bad_at;
+    if (append_ret) {
+      last = builder.instr({.op = Opcode::Ret,
+                            .flags = {},
+                            .dst = RegisterIdx(base::INVALID_IDX),
+                            .measure = ir::TypeIdx::invalid(),
+                            .operands = {}});
+    }
+    const BlockIdx block = builder.block({
+        .instrs = {bad_at, last.idx - bad_at.idx + 1},
+        .block_params = {},
+    });
+    builder.function({
+        .meta = void_meta(),
+        .blocks = {block, 1},
+    });
+    return std::move(builder).build();
+  };
+
+  // `Not` takes exactly one operand; zero and two are both shapes no
+  // emitter accepts.
+  check_invalid(build_with({.op = Opcode::Not,
+                            .flags = {},
+                            .dst = RegisterIdx(0),
+                            .measure = ir::TypeIdx::invalid(),
+                            .operands = {}},
+                           /*append_ret=*/true),
+                VerificationErrorKind::InstrOperandArity);
+  check_invalid(build_with({.op = Opcode::Not,
+                            .flags = {},
+                            .dst = RegisterIdx(0),
+                            .measure = ir::TypeIdx::invalid(),
+                            .operands = {OperandIdx(0), 2}},
+                           /*append_ret=*/true),
+                VerificationErrorKind::InstrOperandArity);
+  // A `Ret` carries at most the returned value; it is the terminator, so
+  // it stands alone.
+  check_invalid(build_with({.op = Opcode::Ret,
+                            .flags = {},
+                            .dst = RegisterIdx(base::INVALID_IDX),
+                            .measure = ir::TypeIdx::invalid(),
+                            .operands = {OperandIdx(0), 2}},
+                           /*append_ret=*/false),
+                VerificationErrorKind::InstrOperandArity);
+  // No enumerator has this value; a reader can still produce it.
+  check_invalid(build_with({.op = static_cast<Opcode>(0xFE),
+                            .flags = {},
+                            .dst = RegisterIdx(base::INVALID_IDX),
+                            .measure = ir::TypeIdx::invalid(),
+                            .operands = {}},
+                           /*append_ret=*/true),
+                VerificationErrorKind::UnknownOpcode);
+}
+
 }  // namespace ir

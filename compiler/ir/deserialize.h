@@ -36,6 +36,9 @@ enum class IrLoadError : u8 {
   OutOfRange,
   // A record whose payload does not fit its section.
   BadShape,
+  // The trailing checksum does not match the bytes before it: the file
+  // is not the one that was written.
+  BadChecksum,
   // The rebuilt storage failed the verifier.
   Verification,
 };

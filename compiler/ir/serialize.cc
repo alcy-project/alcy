@@ -78,15 +78,6 @@ struct SectionPayload {
   ByteWriter payload;
 };
 
-u64 fnv1a64(std::span<const u8> data) {
-  u64 hash = 0xCBF29CE484222325ULL;
-  for (const u8 byte : data) {
-    hash ^= byte;
-    hash *= 0x100000001B3ULL;
-  }
-  return hash;
-}
-
 // The id a `U32_MAX` placeholder stands for: an invalid index or an
 // absent entry.
 constexpr u32 NONE = U32_MAX;
@@ -181,7 +172,7 @@ class Serializer {
     if (out.size() < footer_at) {
       out.zeros(footer_at - out.size());
     }
-    out.put_u64(fnv1a64(out.data()));
+    out.put_u64(binary::fnv1a64(out.data()));
     return std::vector<u8>(out.data().begin(), out.data().end());
   }
 

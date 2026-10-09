@@ -1,16 +1,30 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <algorithm>
 #include <array>
 #include <span>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "codegen/backend.h"
+#include "codegen/target.h"
+#include "codegen/wasm/emit.h"
 #include "codegen/wasm/module.h"
 #include "codegen/wasm/writer.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
+#include "fpag/str/string_pool_id.h"
+#include "ir/common.h"
+#include "ir/function.h"
+#include "ir/opcode.h"
+#include "ir/operand.h"
+#include "ir/storage.h"
+#include "ir/storage_builder.h"
+#include "ir/symbol_table.h"
+#include "ir/type.h"
 
 namespace codegen::wasm {
 
@@ -72,6 +86,122 @@ FuncBody add_one_body() {
   body.code.i32_leb(1);
   body.code.byte(0x6A);  // i32.add
   return body;
+}
+
+// The nth body in the code section. The section lists one body per
+// defined function in wasm index order; the two WASI imports take no
+// body, so the seven runtime functions come first and a module's own
+// functions follow them.
+std::span<const u8> code_body_at(const std::vector<u8>& module, u32 index) {
+  for (const Section& section : read_sections(module)) {
+    if (section.id != 10) {
+      continue;
+    }
+    std::span<const u8> payload = section.payload;
+    const u32 count = read_u32(payload);
+    for (u32 i = 0; i <= index && i < count; ++i) {
+      const u32 size = read_u32(payload);
+      if (i == index) {
+        return payload.first(size);
+      }
+      payload = payload.subspan(size);
+    }
+    return {};
+  }
+  return {};
+}
+
+// The seven defined runtime functions occupy the first bodies; a module
+// with one own function finds that body here. Pinning the number keeps
+// the test honest if the runtime's function count moves.
+constexpr u32 FIRST_PROGRAM_BODY = 7;
+
+// One verified free function: `fn not_bool() -> bool { ret !true }`.
+// The operand is a literal, so the logical-not sequence is the only one
+// the body can hold and the bytes the test looks for cannot belong to
+// something else.
+ir::VerifiedStorage not_bool_storage(ir::SymbolTable& strings) {
+  ir::StorageBuilder builder;
+  const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
+  const ir::ImmutableIdx on =
+      builder.immutable({.type = i1, .data = {.i1_value = true}});
+  const ir::OperandIdx arg =
+      builder.operand(ir::Operand::from_immutable(on, i1));
+  const ir::RegisterIdx result(0);
+  const ir::InstructionIdx not_instr = builder.instr({
+      .op = ir::Opcode::Not,
+      .flags = {},
+      .dst = result,
+      .measure = ir::TypeIdx::invalid(),
+      .operands = {arg, 1},
+  });
+  builder.reg({.type = i1, .def_idx = not_instr});
+  const ir::OperandIdx ret_arg =
+      builder.operand(ir::Operand::from_register(result, i1));
+  (void)builder.instr({
+      .op = ir::Opcode::Ret,
+      .flags = {},
+      .dst = ir::RegisterIdx::invalid(),
+      .measure = ir::TypeIdx::invalid(),
+      .operands = {ret_arg, 1},
+  });
+  const ir::BlockIdx block = builder.block({
+      .instrs = ir::InstructionIdxRange{not_instr, 2},
+      .block_params = {},
+  });
+  builder.function({
+      .meta = {.return_type = i1,
+               .param_types = {},
+               .name = strings.intern("not_bool"),
+               .path = str::EMPTY_STRING_ID,
+               .kind = ir::SymbolKind::Free,
+               .generics = {}},
+      .blocks = {block, 1},
+  });
+  return std::move(builder).build().unwrap();
+}
+
+// Runs the whole backend on a wasm target, so a case checks the module
+// the compiler would write rather than one the test assembles.
+base::Result<std::vector<u8>, codegen::EmitError> emit_test_module(
+    ir::VerifiedStorage storage,
+    ir::SymbolTable& strings) {
+  codegen::EmitRequest request{
+      .storage = std::move(storage),
+      .instr_spans = {},
+      .strings = &strings,
+      .bag = nullptr,
+      .target =
+          codegen::Target{"wasm32-unknown-emscripten", ir::PointerWidth::W32},
+      .emit_entry = false,
+      .freestanding = false,
+      .optimize = false,
+      .kind = codegen::OutputKind::Module,
+      .profiler = nullptr,
+  };
+  return emit_module(std::move(request));
+}
+
+// Whether any function body in the code section holds `needle`.
+bool any_body_contains(const std::vector<u8>& module,
+                       std::span<const u8> needle) {
+  for (const Section& section : read_sections(module)) {
+    if (section.id != 10) {
+      continue;
+    }
+    std::span<const u8> payload = section.payload;
+    const u32 count = read_u32(payload);
+    for (u32 i = 0; i < count; ++i) {
+      const u32 size = read_u32(payload);
+      const std::span<const u8> body = payload.first(size);
+      if (std::search(body.begin(), body.end(), needle.begin(), needle.end()) !=
+          body.end()) {
+        return true;
+      }
+      payload = payload.subspan(size);
+    }
+  }
+  return false;
 }
 
 }  // namespace
@@ -268,6 +398,56 @@ TEST_CASE("Data segments are aligned and keep their offsets") {
   CHECK(read_u32(payload) == 2);
   payload = payload.subspan(4);  // Active segment, i32.const 0, end.
   CHECK(read_u32(payload) == 5);
+}
+
+TEST_CASE("A bool complement is the logical not") {
+  // A canonical bool is one 0/1 word. Emitting `~x` as an all-ones
+  // complement left `!true` as 0xFFFFFFFF, which every branch still read
+  // as true; the emitter has to write the logical not instead.
+  ir::SymbolTable strings{16};
+  base::Result<std::vector<u8>, codegen::EmitError> emitted =
+      emit_test_module(not_bool_storage(strings), strings);
+  CHECK(emitted.is_ok());
+  if (emitted.is_err()) {
+    return;
+  }
+  const std::vector<u8> module = std::move(emitted).unwrap();
+  const std::span<const u8> body = code_body_at(module, FIRST_PROGRAM_BODY);
+  CHECK(!body.empty());
+  // `i32.const 1; i32.eqz`: the true operand and the logical not.
+  const std::array<u8, 3> logical_not{0x41, 0x01, 0x45};
+  CHECK(std::search(body.begin(), body.end(), logical_not.begin(),
+                    logical_not.end()) != body.end());
+  // `i32.const -1; i32.xor`: the complement this case exists to reject.
+  const std::array<u8, 3> complement{0x41, 0x7F, 0x73};
+  CHECK(std::search(body.begin(), body.end(), complement.begin(),
+                    complement.end()) == body.end());
+}
+
+TEST_CASE("A failed wasm allocation panics instead of trapping") {
+  // The bump allocator grows the memory and used to drop the result: a
+  // failed grow still returned the block, and the caller's first write
+  // trapped somewhere else. The result is checked and reported now.
+  ir::SymbolTable strings{16};
+  base::Result<std::vector<u8>, codegen::EmitError> emitted =
+      emit_test_module(not_bool_storage(strings), strings);
+  CHECK(emitted.is_ok());
+  if (emitted.is_err()) {
+    return;
+  }
+  const std::vector<u8> module = std::move(emitted).unwrap();
+  // `memory.grow 0; i32.const -1; i32.eq`: grow reports failure as -1.
+  const std::array<u8, 5> grow_check{0x40, 0x00, 0x41, 0x7F, 0x46};
+  CHECK(any_body_contains(module, grow_check));
+  // `call 5` is the runtime's panic and `unreachable` ends the branch.
+  const std::array<u8, 3> panic_call{0x10, 0x05, 0x00};
+  CHECK(any_body_contains(module, panic_call));
+  // And the message the panic writes is part of the module's data.
+  constexpr std::string_view MESSAGE = "allocation failed";
+  const std::span<const u8> message(reinterpret_cast<const u8*>(MESSAGE.data()),
+                                    MESSAGE.size());
+  CHECK(std::search(module.begin(), module.end(), message.begin(),
+                    message.end()) != module.end());
 }
 
 }  // namespace codegen::wasm

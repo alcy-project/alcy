@@ -10,6 +10,7 @@
 #include "fpag/debug/profiler/profile_scope.h"
 #include "ir/block.h"
 #include "ir/common.h"
+#include "ir/external_function.h"
 #include "ir/function.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
@@ -37,6 +38,111 @@ VerificationResult err(const VerificationErrorKind kind, const u32 index) {
   return base::make_err(VerificationError{.kind = kind, .index = index});
 }
 
+// The operand count a well-formed instruction of an opcode takes. `max`
+// is ANY_OPERANDS where the shape depends on a target block's parameters
+// or on the callee's signature; those shapes have their own checks.
+// `known` is false for a value no enumerator defines, which only a
+// reader can produce: it casts a byte out of a file.
+struct OperandArity {
+  u32 min = 0;
+  u32 max = 0;
+  bool known = false;
+};
+
+constexpr u32 ANY_OPERANDS = U32_MAX;
+
+constexpr OperandArity operand_arity(const Opcode op) {
+  using O = Opcode;
+  switch (op) {
+    case O::Noop:
+    case O::TypeSizeOf:
+    case O::TypeAlignOf:
+    case O::Unreachable:
+    case O::Fence: return {0, 0, true};
+    case O::Alloca:
+    case O::Load:
+    case O::Not:
+    case O::BitReverse:
+    case O::TypeCast:
+    case O::AtomicLoad:
+    case O::Move:
+    case O::Drop:
+    case O::Borrow: return {1, 1, true};
+    case O::Store:
+    case O::ElemOffset:
+    case O::IntAdd:
+    case O::IntSub:
+    case O::IntMul:
+    case O::IntDiv:
+    case O::UintDiv:
+    case O::IntRem:
+    case O::UintRem:
+    case O::FAdd:
+    case O::FSub:
+    case O::FMul:
+    case O::FDiv:
+    case O::And:
+    case O::Or:
+    case O::Xor:
+    case O::ShiftLeft:
+    case O::ArithmeticShiftRight:
+    case O::LogicalShiftRight:
+    case O::Eq:
+    case O::Ne:
+    case O::Le:
+    case O::Lt:
+    case O::Ge:
+    case O::Gt:
+    case O::AtomicStore:
+    case O::AtomicRmw: return {2, 2, true};
+    case O::Memcopy:
+    case O::Select:
+    case O::CondBr:
+    case O::AtomicCompareExchange: return {3, 3, true};
+    case O::Ret: return {0, 1, true};
+    case O::GetElementPtr:
+    case O::ExtractValue:
+    case O::Switch: return {2, ANY_OPERANDS, true};
+    case O::InsertValue: return {3, ANY_OPERANDS, true};
+    case O::Br:
+    case O::Call: return {1, ANY_OPERANDS, true};
+  }
+  return {};
+}
+
+constexpr bool is_valid_symbol_kind(const SymbolKind kind) {
+  using K = SymbolKind;
+  return kind == K::Foreign || kind == K::Free || kind == K::Assoc ||
+         kind == K::Method;
+}
+
+constexpr bool is_valid_calling_convention(const CallingConvention convention) {
+  return convention == CallingConvention::C;
+}
+
+// The checks every function-like meta shares: its return type, its
+// parameter and instantiation ranges, and its symbol kind. `index` is
+// the row the error belongs to.
+VerificationResult check_function_meta(const Storage& storage,
+                                       const FunctionMeta& meta,
+                                       const u32 index) {
+  if (meta.return_type.idx >= storage.types().size()) {
+    return err(VerificationErrorKind::TypeIdxOutOfRange, index);
+  }
+  if (!range_in_bounds(meta.param_types.head(), meta.param_types.size(),
+                       storage.types().size())) {
+    return err(VerificationErrorKind::FunctionParamTypesOutOfRange, index);
+  }
+  if (!range_in_bounds(meta.generics.head(), meta.generics.size(),
+                       storage.types().size())) {
+    return err(VerificationErrorKind::FunctionGenericsOutOfRange, index);
+  }
+  if (!is_valid_symbol_kind(meta.kind)) {
+    return err(VerificationErrorKind::InvalidSymbolKind, index);
+  }
+  return base::make_ok();
+}
+
 }  // namespace
 
 VerificationResult verify_storage(const Storage& storage) {
@@ -55,6 +161,10 @@ VerificationResult verify_storage(const Storage& storage) {
       if (!range_in_bounds(struct_type.fields.head(), struct_type.fields.size(),
                            storage.types().size())) {
         return err(VerificationErrorKind::StructFieldsOutOfRange, sidx.idx);
+      }
+      if (!range_in_bounds(struct_type.params.head(), struct_type.params.size(),
+                           storage.types().size())) {
+        return err(VerificationErrorKind::StructParamsOutOfRange, sidx.idx);
       }
     } else if (node.tag == TypeTag::Slice) {
       const SliceTypeIdx sidx = node.as_slice();
@@ -92,6 +202,10 @@ VerificationResult verify_storage(const Storage& storage) {
                              storage.types().size())) {
           return err(VerificationErrorKind::EnumFieldsOutOfRange, vidx.idx);
         }
+      }
+      if (!range_in_bounds(enum_type.params.head(), enum_type.params.size(),
+                           storage.types().size())) {
+        return err(VerificationErrorKind::EnumParamsOutOfRange, eidx.idx);
       }
     } else if (node.tag == TypeTag::Tuple) {
       const TupleTypeIdx tuple_idx = node.as_tuple();
@@ -141,13 +255,24 @@ VerificationResult verify_storage(const Storage& storage) {
                          storage.blocks().size())) {
       return err(VerificationErrorKind::FunctionBlocksOutOfRange, fidx.idx);
     }
-    if (func.meta.return_type.idx >= storage.types().size()) {
-      return err(VerificationErrorKind::TypeIdxOutOfRange, fidx.idx);
+    VerificationResult meta = check_function_meta(storage, func.meta, fidx.idx);
+    if (meta.is_err()) {
+      return meta;
     }
-    for (const TypeIdx tidx : func.meta.param_types) {
-      if (tidx.idx >= storage.types().size()) {
-        return err(VerificationErrorKind::TypeIdxOutOfRange, tidx.idx);
-      }
+  }
+
+  // An external function has no body, so its meta is everything a
+  // consumer reads; nothing may index the tables it names without these.
+  for (ExternalFunctionIdx eidx(0);
+       eidx.idx < storage.external_functions().size(); ++eidx) {
+    const ExternalFunction& external = storage.external_functions()[eidx];
+    VerificationResult meta =
+        check_function_meta(storage, external.meta, eidx.idx);
+    if (meta.is_err()) {
+      return meta;
+    }
+    if (!is_valid_calling_convention(external.calling_conv)) {
+      return err(VerificationErrorKind::InvalidCallingConvention, eidx.idx);
     }
   }
 
@@ -429,6 +554,16 @@ VerificationResult verify_storage(const Storage& storage) {
             return err(VerificationErrorKind::InvalidExtractInsert, iidx.idx);
           }
         }
+      }
+      // The generic arity check runs last so an opcode's own shape check
+      // above reports the narrower error where there is one.
+      const OperandArity arity = operand_arity(instr.op);
+      if (!arity.known) {
+        return err(VerificationErrorKind::UnknownOpcode, iidx.idx);
+      }
+      if (instr.operands.size() < arity.min ||
+          instr.operands.size() > arity.max) {
+        return err(VerificationErrorKind::InstrOperandArity, iidx.idx);
       }
     }
   }

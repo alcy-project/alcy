@@ -210,6 +210,34 @@ TEST_CASE("A freestanding runtime calls no libc") {
   CHECK(text.find("asm sideeffect") != std::string::npos);
 }
 
+TEST_CASE("A failed allocation panics instead of returning null") {
+  llvm::LLVMContext context;
+  llvm::Module module("runtime_ir_test", context);
+  const auto usize = llvm::Type::getInt64Ty(context);
+  const auto pointer = opaque_pointer(context);
+
+  // The program asks for the allocator; a failed allocation has to
+  // abort, because every caller writes through the pointer it gets back
+  // and safe code has no null to check.
+  declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
+
+  add_runtime_definitions(module, target_of(ir::PointerWidth::W64));
+
+  CHECK(!llvm::verifyModule(module));
+
+  // Asking for the allocator asks for the panic path it aborts through.
+  llvm::Function* panic = module.getFunction("alcy_panic");
+  CHECK(panic != nullptr);
+  if (panic != nullptr) {
+    CHECK(!panic->isDeclaration());
+  }
+  const std::string text = module_text(module);
+  CHECK(text.find("allocation failed") != std::string::npos);
+  CHECK(text.find("call void @alcy_panic") != std::string::npos);
+  // The old failure path returned null, which a safe write followed.
+  CHECK(text.find("ret ptr null") == std::string::npos);
+}
+
 TEST_CASE("Runtime reaches libc the way the platform expects") {
   llvm::LLVMContext context;
   llvm::Module module("runtime_ir_test", context);

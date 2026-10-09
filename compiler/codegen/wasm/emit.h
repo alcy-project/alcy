@@ -193,6 +193,8 @@ class Emitter {
   u32 stack_base_ = 0;
   u32 heap_base_ = 0;
   u32 newline_ = NO_LOCAL;
+  // The offset of the allocator's failure text in the data segment.
+  u32 alloc_failure_ = 0;
 
   // --- per-function state, reset by emit_function ---
   BinaryWriter body_;

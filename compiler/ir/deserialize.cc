@@ -944,6 +944,15 @@ base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
       magic[2] != binary::MAGIC[2] || magic[3] != binary::MAGIC[3]) {
     return base::make_err(IrLoadError::BadMagic);
   }
+  // The trailing footer hashes every byte before it, so a package whose
+  // bytes changed under a cache or in transit is refused before any of
+  // it is read (compiler/docs/ir-format.md).
+  Cursor footer(bytes, bytes.size() - 8);
+  u64 expected_hash = 0;
+  if (!footer.read_u64(expected_hash) ||
+      binary::fnv1a64(bytes.first(bytes.size() - 8)) != expected_hash) {
+    return base::make_err(IrLoadError::BadChecksum);
+  }
   u16 major = 0;
   u16 minor = 0;
   u32 flags = 0;

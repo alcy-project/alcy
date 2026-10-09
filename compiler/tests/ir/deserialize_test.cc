@@ -57,6 +57,17 @@ struct LoadedInput {
   }
 };
 
+// Restores the trailing checksum after a case patches the body, so the
+// structural error under test is the one reported rather than the
+// checksum mismatch the same patch also caused.
+void reseal(std::vector<u8>& bytes) {
+  const std::span<const u8> body(bytes.data(), bytes.size() - 8);
+  const u64 hash = binary::fnv1a64(body);
+  for (u32 i = 0; i < 8; ++i) {
+    bytes[bytes.size() - 8 + i] = static_cast<u8>(hash >> (8 * i));
+  }
+}
+
 }  // namespace
 
 TEST_CASE("A serialized package reads back as the same bytes") {
@@ -161,12 +172,14 @@ TEST_CASE("A corrupt binary form is refused") {
   {
     std::vector<u8> broken = bytes;
     broken[4] = 2;  // A major version this reader does not know.
+    reseal(broken);
     CHECK(std::move(deserialize(broken)).unwrap_err() ==
           IrLoadError::UnsupportedVersion);
   }
   {
     std::vector<u8> broken = bytes;
     broken[8] = 0;  // Little-endian flag cleared.
+    reseal(broken);
     CHECK(std::move(deserialize(broken)).unwrap_err() == IrLoadError::BadFlags);
   }
   {
@@ -179,6 +192,7 @@ TEST_CASE("A corrupt binary form is refused") {
     for (u32 i = 1; i < 8; ++i) {
       broken[table_at + 24 + 8 + i] = 0;
     }
+    reseal(broken);
     CHECK(std::move(deserialize(broken)).unwrap_err() ==
           IrLoadError::BadSection);
   }
@@ -187,6 +201,7 @@ TEST_CASE("A corrupt binary form is refused") {
     std::vector<u8> broken = bytes;
     const usize spans_at = test::section_at(file, binary::Section::Spans);
     broken[spans_at] = 3;
+    reseal(broken);
     CHECK(std::move(deserialize(broken)).unwrap_err() == IrLoadError::BadShape);
   }
   {
@@ -205,6 +220,7 @@ TEST_CASE("A corrupt binary form is refused") {
       }
     }
     CHECK(patched);
+    reseal(broken);
     CHECK(std::move(deserialize(broken)).unwrap_err() ==
           IrLoadError::Verification);
   }
@@ -217,6 +233,7 @@ TEST_CASE("A corrupt binary form is refused") {
     broken[strings_at + 1] = 0xFF;
     broken[strings_at + 2] = 0xFF;
     broken[strings_at + 3] = 0x7F;
+    reseal(broken);
     CHECK(std::move(deserialize(broken)).unwrap_err() == IrLoadError::BadShape);
   }
   {
@@ -224,7 +241,18 @@ TEST_CASE("A corrupt binary form is refused") {
     std::vector<u8> broken = bytes;
     const usize operands_at = test::section_at(file, binary::Section::Operands);
     broken[operands_at + 4] = 0xEE;
+    reseal(broken);
     CHECK(std::move(deserialize(broken)).unwrap_err() == IrLoadError::BadShape);
+  }
+  {
+    // One byte inside a section payload: every structural reader accepts
+    // it, and only the footer says the file is not the one written.
+    // Without the check this loaded with a corrupted name.
+    std::vector<u8> broken = bytes;
+    const usize strings_at = test::section_at(file, binary::Section::Strings);
+    broken[strings_at + 8] ^= 0x01;
+    CHECK(std::move(deserialize(broken)).unwrap_err() ==
+          IrLoadError::BadChecksum);
   }
 }
 

@@ -489,6 +489,19 @@ base::Result<std::string, diag::Reported> emit_output(
                           ctx.target)) {
       return emit_package_module(ctx, lowered, optimize, output_path, is_lib);
     }
+    if (ctx.target.is_wasm() && codegen::backend_available(ctx.backend) &&
+        !backend_writes_final_module(ctx.backend, ctx.target)) {
+      // A wasm executable is one final module, and no wasm linker lives
+      // behind this build (ADR-0049 puts it at M3). Handing the object
+      // to the host driver only surfaces its own confusing error, so
+      // name the ways to get a wasm executable instead.
+      const u32 index =
+          ctx.bag.emit<i18n::Key::PipelineWasmExecutableNeedsModule>(
+              diag::Severity::Error, diag::Stage::Pipeline,
+              DiagCode::UnsupportedOutput, codegen::backend_name(ctx.backend));
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
     io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
     const std::string object_path = scratch.join("main.o");
     if (emit_package_object(ctx, lowered, optimize, object_path, is_lib)

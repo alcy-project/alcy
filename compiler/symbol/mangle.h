@@ -63,6 +63,17 @@ struct DecodedType {
     Nominal,
     // A compile-time value argument; `count` carries the value.
     Const,
+    // The unit type `()`.
+    Unit,
+    // The never type `!`.
+    Never,
+    // A failed resolution (`error`); never reaches codegen.
+    Error,
+    // An opaque function value with no signature.
+    Function,
+    // A function signature: `parts[0..n-1]` are the parameters and
+    // `parts[n]` is the return type.
+    Func,
   };
   Kind kind = Kind::Prim;
   std::string spelling;

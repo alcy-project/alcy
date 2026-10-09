@@ -3,7 +3,9 @@
 
 #include "symbol/mangle.h"
 
+#include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "doctest/doctest.h"
@@ -190,6 +192,57 @@ TEST_CASE("Mangle keeps const arguments distinct") {
     CHECK(back.generics[0].kind == symbol::DecodedType::Kind::Const);
     CHECK(back.generics[0].count == 4);
     CHECK(symbol::display(back.generics[0]) == "4");
+  }
+}
+
+TEST_CASE("Mangle keeps non-value types apart") {
+  // Void, Never, Error, Function, and Func are not parameter values, but
+  // they are legal generic arguments, and every one of them used to
+  // encode as `str`. Two instantiations of one item then shared a
+  // symbol, so one definition silently overwrote the other.
+  Fixture f;
+  const TypeIdx void_ty = f.builder.primitive(TypeTag::Void);
+  const TypeIdx never = f.builder.never_type();
+  const TypeIdx error = f.builder.error_type();
+  const TypeIdx function = f.builder.primitive(TypeTag::Function);
+  ir::TypeSeq params;
+  params.push(f.builder.ref_type(f.i32));
+  const TypeIdx func = f.builder.func_type(params.finish(), f.i32);
+  const ir::Storage types = f.build();
+
+  struct Case {
+    TypeIdx type;
+    symbol::DecodedType::Kind kind;
+    std::string_view text;
+  };
+  const Case cases[] = {
+      {void_ty, symbol::DecodedType::Kind::Unit, "()"},
+      {never, symbol::DecodedType::Kind::Never, "!"},
+      {error, symbol::DecodedType::Kind::Error, "error"},
+      {function, symbol::DecodedType::Kind::Function, "fn"},
+      {func, symbol::DecodedType::Kind::Func, "fn(i32) -> i32"},
+      {f.str, symbol::DecodedType::Kind::Str, "str"},
+  };
+  std::set<std::string> seen;
+  for (const Case& one : cases) {
+    symbol::Signature sig = signature("m", "id", symbol::Signature::Kind::Free);
+    sig.generics = {one.type};
+    const std::string encoded = symbol::mangle(sig, types, f.strings);
+    INFO("display: " << one.text);
+    CHECK(seen.insert(encoded).second);
+
+    base::Result<symbol::Demangled, symbol::DemangleError> decoded =
+        symbol::demangle(encoded);
+    CHECK(decoded.is_ok());
+    if (decoded.is_err()) {
+      continue;
+    }
+    const symbol::Demangled back = std::move(decoded).unwrap();
+    CHECK(back.generics.size() == 1);
+    if (back.generics.size() == 1) {
+      CHECK(back.generics[0].kind == one.kind);
+      CHECK(symbol::display(back.generics[0]) == one.text);
+    }
   }
 }
 
