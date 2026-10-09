@@ -146,19 +146,40 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
     }
   }
   // Closure is explicit: a selected member's dependencies must be
-  // selected too, never pulled silently.
-  for (std::string_view member : selection.members) {
-    const StdPackageDeps* info = find_member(member);
-    for (u64 i = 0; i < info->dep_count; ++i) {
-      std::string_view need(info->deps[i]);
-      if (!is_selected_member(selection.members, need)) {
-        const u32 index = bag.emit<i18n::Key::PipelineStdPackageRequiresSuite>(
-            diag::Severity::Error, diag::Stage::Pipeline,
-            DiagCode::NotImplemented, member, need);
-        (void)index;
-        return base::make_err(diag::Reported{});
+  // selected too, never pulled silently. One run names the whole missing
+  // closure - every member the selection reaches, directly or through
+  // another missing member - rather than the first edge it finds.
+  std::vector<std::pair<std::string_view, std::string_view>> missing;
+  const auto already_missing = [&missing](std::string_view need) {
+    for (const auto& entry : missing) {
+      if (entry.second == need) {
+        return true;
       }
     }
+    return false;
+  };
+  std::vector<std::string_view> work(selection.members);
+  for (usize at = 0; at < work.size(); ++at) {
+    const std::string_view member = work[at];
+    const StdPackageDeps* info = find_member(member);
+    for (u64 i = 0; i < info->dep_count; ++i) {
+      const std::string_view need(info->deps[i]);
+      if (is_selected_member(selection.members, need) ||
+          already_missing(need)) {
+        continue;
+      }
+      missing.emplace_back(member, need);
+      work.push_back(need);
+    }
+  }
+  if (!missing.empty()) {
+    for (const auto& entry : missing) {
+      const u32 index = bag.emit<i18n::Key::PipelineStdPackageRequiresSuite>(
+          diag::Severity::Error, diag::Stage::Pipeline,
+          DiagCode::NotImplemented, entry.first, entry.second);
+      (void)index;
+    }
+    return base::make_err(diag::Reported{});
   }
   return base::make_ok(std::move(selection));
 }
