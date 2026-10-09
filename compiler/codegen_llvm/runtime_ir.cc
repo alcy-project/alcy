@@ -40,6 +40,9 @@ class RuntimeBuilder {
     newline_text_ = text_constant("\n");
     if (freestanding_) {
       build_syscall();
+      // The backend lowers aggregate copies to `memcpy` calls, and a
+      // freestanding program has no libc to resolve them (ADR-0052).
+      build_memcpy();
     }
     // A piece is defined only when the program declares it. A module
     // that never allocates carries no allocator, and a freestanding
@@ -313,6 +316,52 @@ class RuntimeBuilder {
 
     builder_.SetInsertPoint(done);
     builder_.CreateRetVoid();
+  }
+
+  // A byte loop stands in for the libc routine a freestanding program
+  // cannot link: LLVM synthesizes `memcpy` for aggregate copies, so the
+  // symbol must exist whatever the program declares (ADR-0052).
+  void build_memcpy() {
+    llvm::FunctionType* type = llvm::FunctionType::get(
+        builder_.getPtrTy(), {builder_.getPtrTy(), builder_.getPtrTy(), usize_},
+        false);
+    llvm::Function* function = runtime("memcpy", type);
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", function);
+    llvm::BasicBlock* loop =
+        llvm::BasicBlock::Create(context, "loop", function);
+    llvm::BasicBlock* copy =
+        llvm::BasicBlock::Create(context, "copy", function);
+    llvm::BasicBlock* done =
+        llvm::BasicBlock::Create(context, "done", function);
+
+    llvm::Value* dst = function->getArg(0);
+    llvm::Value* src = function->getArg(1);
+    llvm::Value* count = function->getArg(2);
+
+    builder_.SetInsertPoint(entry);
+    builder_.CreateBr(loop);
+
+    builder_.SetInsertPoint(loop);
+    llvm::PHINode* at = builder_.CreatePHI(usize_, 2, "at");
+    at->addIncoming(llvm::ConstantInt::get(usize_, 0), entry);
+    llvm::Value* more = builder_.CreateICmpULT(at, count, "more");
+    builder_.CreateCondBr(more, copy, done);
+
+    builder_.SetInsertPoint(copy);
+    llvm::Value* from =
+        builder_.CreateGEP(builder_.getInt8Ty(), src, at, "from");
+    llvm::Value* byte = builder_.CreateLoad(builder_.getInt8Ty(), from, "byte");
+    llvm::Value* to = builder_.CreateGEP(builder_.getInt8Ty(), dst, at, "to");
+    builder_.CreateStore(byte, to);
+    llvm::Value* next =
+        builder_.CreateAdd(at, llvm::ConstantInt::get(usize_, 1), "next");
+    builder_.CreateBr(loop);
+    at->addIncoming(next, copy);
+
+    builder_.SetInsertPoint(done);
+    builder_.CreateRet(dst);
   }
 
   // `alcy_print` writes stdout; `alcy_println` adds the newline in a
