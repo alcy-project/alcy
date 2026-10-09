@@ -10,6 +10,6 @@
 // The containers that live on the heap; `alloc` holds the heap itself
 // and `String`. See docs/adr/0016-suites-and-the-std-split.md.
 
-pub use super::vec::Vec;
-pub use super::map::Map;
-pub use super::set::Set;
+pub use package::vec::Vec;
+pub use package::map::Map;
+pub use package::set::Set;

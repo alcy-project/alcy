@@ -225,7 +225,7 @@ match_arm   = pattern , "=>" , expr ;
 
 (* Modules and paths *)
 
-path = ( "package" | "self" | "super" | DEP | IDENT ) , { "::" , IDENT } ;
+path = ( "package" | "self" | DEP | IDENT ) , { "::" , IDENT } ;
 
 (* Lexical appendix (sketch only) *)
 

@@ -150,7 +150,6 @@ constexpr Keyword KEYWORDS[] = {
     {"static", TokenKind::Static},
     {"str", TokenKind::Str},
     {"struct", TokenKind::Struct},
-    {"super", TokenKind::Super},
     {"true", TokenKind::True},
     {"u128", TokenKind::U128},
     {"u16", TokenKind::U16},

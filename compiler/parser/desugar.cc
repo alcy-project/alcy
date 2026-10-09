@@ -26,8 +26,7 @@ namespace parser {
 namespace {
 
 bool is_keyword_name(std::string_view name) {
-  return name == "self" || name == "super" || name == "package" ||
-         name == "Self";
+  return name == "self" || name == "package" || name == "Self";
 }
 
 class Desugarer {

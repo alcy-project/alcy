@@ -11,6 +11,6 @@
 // than by their names; see docs/adr/0016-suites-and-the-std-split.md. Both are expanded at compile
 // time and neither declared body executes.
 
-pub use super::write::WriteOutcome;
-pub use super::write::write;
-pub use super::format::format;
+pub use package::write::WriteOutcome;
+pub use package::write::write;
+pub use package::format::format;

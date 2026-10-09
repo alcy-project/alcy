@@ -87,6 +87,10 @@ enum class DiagCode : u8 {
   // A staged declaration of a compiler-owned operator spec does not
   // match the canonical shape the operator's meaning fixes.
   SpecCanonicalShape = 42,
+  // A path head or a declaration is spelled the way a neighboring
+  // language spells it, so the name is known but the shape is not
+  // (ADR-0060, ADR-0061).
+  SpellingSuggestion = 43,
 };
 
 }  // namespace analyzer

@@ -953,7 +953,6 @@ module.exports = grammar({
     _path_segment: $ => choice(
       alias('package', $.package),
       alias('self', $.self),
-      alias('super', $.super),
       alias('Self', $.self_type),
       $.identifier,
     ),

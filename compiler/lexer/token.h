@@ -38,7 +38,6 @@ enum class TokenKind : u8 {
   // Paths and casts.
   Package,
   Self,
-  Super,
   SelfType,
   As,
 

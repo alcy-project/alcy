@@ -76,7 +76,6 @@ bool is_path_segment(lexer::TokenKind kind) {
   switch (kind) {
     case lexer::TokenKind::Ident:
     case lexer::TokenKind::Self:
-    case lexer::TokenKind::Super:
     case lexer::TokenKind::Package:
     case lexer::TokenKind::SelfType: return true;
     default: return false;

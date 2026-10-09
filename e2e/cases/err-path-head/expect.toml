@@ -1,0 +1,4 @@
+# `super` and `crate` are habits from neighboring languages; the root
+# has one spelling (ADR-0060).
+exit = 4
+contains = ["`super` is not a path head; the package root is `package::`"]

@@ -4821,15 +4821,6 @@
           "type": "ALIAS",
           "content": {
             "type": "STRING",
-            "value": "super"
-          },
-          "named": true,
-          "value": "super"
-        },
-        {
-          "type": "ALIAS",
-          "content": {
-            "type": "STRING",
             "value": "Self"
           },
           "named": true,

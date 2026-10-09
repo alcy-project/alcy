@@ -8,7 +8,6 @@ fn f() {
   c := module::inner::name
   d := package::name
   e := self::name
-  g := super::name
 }
 
 --------------------------------------------------------------------------------
@@ -52,13 +51,6 @@ fn f() {
         (path_expression
           (path
             (self)
-            (identifier))))
-      (declaration_statement
-        (identifier_pattern
-          (identifier))
-        (path_expression
-          (path
-            (super)
             (identifier)))))))
 
 ================================================================================

@@ -11,11 +11,11 @@
 // `collections` package above this one; see
 // docs/adr/0016-suites-and-the-std-split.md.
 
-pub use super::heap::alloc;
-pub use super::heap::dealloc;
-pub use super::heap::elem_ptr;
-pub use super::heap::elem_ref;
-pub use super::heap::uninit_write;
-pub use super::heap::uninit_assume;
-pub use super::heap::uninit_ref;
-pub use super::string::String;
+pub use package::heap::alloc;
+pub use package::heap::dealloc;
+pub use package::heap::elem_ptr;
+pub use package::heap::elem_ref;
+pub use package::heap::uninit_write;
+pub use package::heap::uninit_assume;
+pub use package::heap::uninit_ref;
+pub use package::string::String;

@@ -1644,6 +1644,14 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   return reserved;
 }
 
+// Whether a path head is one the module walk owns: the two relative
+// forms and the two neighbor-language spellings that get their own
+// message (ADR-0060).
+bool module_walk_head(std::string_view head) {
+  return head == "package" || head == "self" || head == "super" ||
+         head == "crate";
+}
+
 // Resolves all path segments but the last to a module. Shared by type
 // and value paths; `what` names the namespace for diagnostics.
 bool Checker::walk_module_prefix(u32 module,
@@ -1663,18 +1671,14 @@ bool Checker::walk_module_prefix(u32 module,
   // module by `package::` or `self::`.
   u32 opened_root = analyzer::NO_PACKAGE_ROOT;
   if (head == "package") {
-    current = tree.root;
+    // The root of the package this module belongs to, not the goal:
+    // each package's modules hang under their own root (ADR-0060).
+    current = module;
+    while (parents[current] != NO_MODULE) {
+      current = parents[current];
+    }
   } else if (head == "self") {
     current = module;
-  } else if (head == "super") {
-    if (parents[module] == NO_MODULE) {
-      const u32 index = bag.emit<i18n::Key::AnalyzerRootModuleHasNoParent>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
-          ast.paths[path].span);
-      (void)index;
-      return false;
-    }
-    current = parents[module];
   } else {
     const auto root = root_by_identity_.find(head);
     if (root != root_by_identity_.end()) {
@@ -1684,6 +1688,13 @@ bool Checker::walk_module_prefix(u32 module,
     if (opened_root == analyzer::NO_PACKAGE_ROOT) {
       current = find_child_module(module, head);
       if (current == NO_MODULE) {
+        if (head == "super" || head == "crate") {
+          const u32 index = bag.emit<i18n::Key::AnalyzerPathHeadNotSupported>(
+              diag::Severity::Error, diag::Stage::Analyzer,
+              DiagCode::SpellingSuggestion, segments[0].span, head);
+          (void)index;
+          return false;
+        }
         const u32 index = bag.emit<i18n::Key::AnalyzerUnresolved>(
             diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
             ast.paths[path].span, what, head);
@@ -4843,11 +4854,9 @@ bool Checker::resolve_value_path(u32 module,
   if (node.segments.size() == 2) {
     const std::string_view head = node.segments[0].name;
     const std::string_view member = node.segments[1].name;
-    const u32 child = (head == "package" || head == "self" || head == "super")
-                          ? NO_MODULE
-                          : find_child_module(module, head);
-    if (child != NO_MODULE || head == "package" || head == "self" ||
-        head == "super") {
+    const u32 child =
+        module_walk_head(head) ? NO_MODULE : find_child_module(module, head);
+    if (child != NO_MODULE || module_walk_head(head)) {
       u32 target = NO_MODULE;
       if (!walk_module_prefix(module, path, "value", target)) {
         return false;
@@ -5018,11 +5027,9 @@ bool Checker::resolve_variant_path(u32 module,
   if (node.segments.size() == 2) {
     const std::string_view head = node.segments[0].name;
     const std::string_view member = node.segments[1].name;
-    const u32 child = (head == "package" || head == "self" || head == "super")
-                          ? NO_MODULE
-                          : find_child_module(module, head);
-    if (child != NO_MODULE || head == "package" || head == "self" ||
-        head == "super") {
+    const u32 child =
+        module_walk_head(head) ? NO_MODULE : find_child_module(module, head);
+    if (child != NO_MODULE || module_walk_head(head)) {
       u32 target = NO_MODULE;
       if (!walk_module_prefix(module, path, "value", target)) {
         return false;

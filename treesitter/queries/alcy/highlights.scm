@@ -66,13 +66,12 @@
 (break_expression) @keyword.control
 (continue_expression) @keyword.control
 
-; `self`, `Self`, `super`, and `package` are named nodes, since each is a
+; `self`, `Self`, and `package` are named nodes, since each is a
 ; path segment rather than an anonymous token.
 "as" @keyword.import
 
 (self) @variable.builtin
 (self_type) @type.builtin
-(super) @keyword.import
 (package) @keyword.import
 
 [

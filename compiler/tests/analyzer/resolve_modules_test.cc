@@ -344,13 +344,13 @@ TEST_CASE("Resolve resolves imports across modules") {
   }
 }
 
-TEST_CASE("Resolve handles super imports from nested modules") {
+TEST_CASE("Resolve handles root imports from nested modules") {
   VirtualDir dir;
   const bool setup =
       write_all(dir, {
                          {"main.al", "fn main() {}\n"},
                          {"a.al", "struct Thing { x: i32 }\n"},
-                         {"a/b.al", "use super::Thing;\nfn deep() {}\n"},
+                         {"a/b.al", "use package::a::Thing;\nfn deep() {}\n"},
                      });
   CHECK(setup);
   if (!setup) {
@@ -417,7 +417,7 @@ TEST_CASE("Resolve reports bad imports") {
   {
     VirtualDir dir4;
     const bool setup4 =
-        write_all(dir4, {{"main.al", "use super::x;\nfn main() {}\n"}});
+        write_all(dir4, {{"main.al", "use package::Nope;\nfn main() {}\n"}});
     CHECK(setup4);
     if (!setup4) {
       return;
@@ -644,7 +644,7 @@ TEST_CASE("Resolve nests a facade beside its sibling modules") {
   const bool setup =
       write_all(dir, {
                          {"main.al", "fn main() {}\n"},
-                         {"core/prelude.al", "pub use super::mem::help;\n"},
+                         {"core/prelude.al", "pub use package::mem::help;\n"},
                          {"core/mem.al", "pub fn help() {}\n"},
                      });
   CHECK(setup);

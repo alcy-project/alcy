@@ -589,7 +589,15 @@ class Resolver {
     // same name, so a dependency is reached by its identity and a
     // same-named module by `package::` or `self::`.
     u32 opened_root = NO_PACKAGE_ROOT;
-    if (head == "package" || head == package_name) {
+    if (head == "package") {
+      // The root of the package this module belongs to: each package's
+      // modules hang under their own root, so the top of the parent
+      // chain is that root (ADR-0060).
+      current = module;
+      while (parents[current] != NO_MODULE) {
+        current = parents[current];
+      }
+    } else if (head == package_name) {
       current = 0;
       for (u32 i = 0; i < static_cast<u32>(modules.size()); ++i) {
         if (modules[i]->path.empty()) {
@@ -599,15 +607,6 @@ class Resolver {
       }
     } else if (head == "self") {
       current = module;
-    } else if (head == "super") {
-      if (parents[module] == NO_MODULE) {
-        const u32 index = bag.emit<i18n::Key::AnalyzerRootModuleHasNoParent>(
-            diag::Severity::Error, diag::Stage::Analyzer,
-            DiagCode::UnresolvedImport, node.span);
-        (void)index;
-        return;
-      }
-      current = parents[module];
     } else {
       for (u32 i = 0; i < static_cast<u32>(package_roots_.size()); ++i) {
         if (package_roots_[i].identity == head) {
@@ -620,6 +619,15 @@ class Resolver {
         current = find_child_module(module, head);
       }
       if (current == NO_MODULE) {
+        // `super` and `crate` are habits from neighboring languages and
+        // name nothing here; say what the root is (ADR-0060).
+        if (head == "super" || head == "crate") {
+          const u32 index = bag.emit<i18n::Key::AnalyzerPathHeadNotSupported>(
+              diag::Severity::Error, diag::Stage::Analyzer,
+              DiagCode::SpellingSuggestion, path.segments[0].span, head);
+          (void)index;
+          return;
+        }
         emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnresolvedImport,
                         node.span, std_hints_, "import", head);
         return;

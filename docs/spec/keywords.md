@@ -12,7 +12,7 @@ Declarations: `fn`, `struct`, `enum`, `impl`, `spec`, `static`, `pub`,
 Control flow: `if`, `else`, `loop`, `while`, `for`, `in`, `break`,
 `continue`, `ret`, `match`
 
-Paths and casts: `package`, `self`, `super`, `Self`, `as`
+Paths and casts: `package`, `self`, `Self`, `as`
 
 Primitive types: `i8`, `i16`, `i32`, `i64`, `isize`, `u8`,
 `u16`, `u32`, `u64`, `usize`, `f32`, `f64`, `bool`, `str`

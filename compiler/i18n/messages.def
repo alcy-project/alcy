@@ -186,6 +186,7 @@
   F(AnalyzerNotCaptured, "Use of '{}' is not captured; add it to the capture list") \
   F(AnalyzerNotTupleVariant, "Not a tuple variant") \
   F(AnalyzerOrPatternBindsDifferentNames, "Or-pattern alternatives must bind the same names") \
+  F(AnalyzerPathHeadNotSupported, "`{}` is not a path head; the package root is `package::`") \
   F(AnalyzerPowerNotImplemented, "The '**' operator is not implemented yet") \
   F(AnalyzerRangeEndpointNotInteger, "A range index must have an integer endpoint type") \
   F(AnalyzerRangeEndpointTypeMismatch, "Type mismatch in range endpoints: '{}' vs '{}'") \
@@ -202,7 +203,6 @@
   F(AnalyzerReturnNeedsRet, "A function returning '{}' must end every path with 'ret'") \
   F(AnalyzerReturnOutsideFunction, "A 'ret' outside of a function") \
   F(AnalyzerRootFileNotAModuleInput, "Root file is not among the module inputs") \
-  F(AnalyzerRootModuleHasNoParent, "The root module has no parent") \
   F(AnalyzerSelfOutsideImpl, "Self outside of an impl block") \
   F(AnalyzerSourceFileHasNoModule, "Source file '{}' has no module") \
   F(AnalyzerSpecCanonicalShape, "Spec '{}' must keep the compiler's operator shape") \

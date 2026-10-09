@@ -4970,4 +4970,30 @@ TEST_CASE("Check refuses a body whose value is not returned") {
   }
 }
 
+TEST_CASE("Check names the package root for foreign path heads") {
+  const std::string_view sources[] = {
+      "fn main() {\n  x := super::name\n}\n",
+      "fn main() {\n  x := crate::name\n}\n",
+      "use super::name;\nfn main() {}\n",
+      "use crate::name;\nfn main() {}\n",
+  };
+  for (const std::string_view text : sources) {
+    VirtualDir dir;
+    const bool setup = write_all(dir, {{"main.al", text}});
+    CHECK(setup);
+    if (!setup) {
+      continue;
+    }
+    Fixture f;
+    const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+    CHECK(!result.package.has_value());
+    CHECK(f.bag.has_errors());
+    const std::string_view head =
+        text.find("crate") != std::string_view::npos ? "crate" : "super";
+    CHECK(has_message(
+        f.bag, "`" + std::string(head) +
+                   "` is not a path head; the package root is `package::`"));
+  }
+}
+
 }  // namespace analyzer

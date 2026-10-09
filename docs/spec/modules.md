@@ -20,10 +20,13 @@
 
 ## Paths and imports
 
-- The package root is addressed as `package::`; `self::` and `super::`
-  address the current and parent modules. Dependency packages are
-  addressed as `<package>::<path>`, where `<package>` is the
-  `alcy.toml [package] name` with `-` normalized to `_`.
+- The package root is addressed as `package::`; `self::` addresses the
+  current module, and a bare head names a child module of it. A
+  dependency package is addressed as `<package>::<path>`, where
+  `<package>` is the `alcy.toml [package] name` with `-` normalized to
+  `_`. There is no parent-relative spelling: every upward reference
+  names the root
+  (`docs/adr/0060-the-path-vocabulary-is-three-forms.md`).
 - `use a::b;`, `use a::b as c;`, and `pub use` re-exports are MVP.
   Glob imports (`::*`) are deferred.
 - Default visibility is private; `pub` opens an item. There is no
