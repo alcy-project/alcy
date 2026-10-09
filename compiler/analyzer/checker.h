@@ -159,9 +159,22 @@ class Checker {
   std::unordered_map<u32, u64> const_int_values_;
   std::unordered_set<u32> const_init_in_progress_;
   std::unordered_set<u32> const_init_checked_;
+  // Initializers whose check reported an error. A later request sees
+  // the failure rather than evaluating an error-typed initializer and
+  // reporting a follow-on.
+  std::unordered_set<u32> const_init_failed_;
   // Functions whose bodies the const pre-pass already checked, so the
   // bodies sweep does not check them a second time.
   std::unordered_set<u32> prechecked_fns_;
+  // Items whose declaration has registered, by item index. On-demand
+  // resolution consults it so a declaration that reaches itself stops
+  // instead of recursing, and so a later sweep does not register the
+  // same declaration twice.
+  std::unordered_set<u32> registered_items_;
+  // Nonzero while a body is being checked by the const pre-pass.
+  // A call reached there types its callee's body too, so the evaluator
+  // finds the whole call graph typed.
+  u32 prechecking_fn_ = 0;
   // `MaybeUninit<T>` wrappers interned so far, as (wrapper, payload).
   std::vector<std::pair<ir::TypeIdx, ir::TypeIdx>> uninit_types_;
   // Destructor resolution, aligned with the type table by index.
@@ -496,7 +509,24 @@ class Checker {
   ir::TypeIdx check_literal(ast::LiteralIdx value, const ir::TypeIdx* expected);
   void validate_cycles(const ir::Storage& storage);
   const CheckedModule::StaticInfo* lookup_static(u32 module,
-                                                 std::string_view name) const;
+                                                 std::string_view name);
+  // The registered-only search: `lookup_static` registers a declaration
+  // the signature sweep has not reached yet, while a const method can
+  // only read what is already there.
+  const CheckedModule::StaticInfo* find_static(u32 module,
+                                               std::string_view name) const;
+  // Registers the signature of a non-generic function declared in
+  // `module` under `name`, when a use reaches it before the signature
+  // sweep has. True when a declaration exists; an already-registered
+  // signature is left alone, so processing the module later finds it.
+  bool ensure_function_named(u32 module, std::string_view name);
+  // The same for a const or static item, so an array length can name
+  // one declared later in the module.
+  bool ensure_static_named(u32 module, std::string_view name);
+  // Registers one non-generic function signature, once.
+  void register_fn_signature(u32 module, ast::ItemIdx item);
+  // Registers one const or static declaration, once.
+  void register_static(u32 module, ast::ItemIdx item);
   // An array length named by a path: the const item's initializer is
   // evaluated at compile time, through the comp evaluator, once the
   // initializers of the consts it references are checked.
@@ -509,15 +539,14 @@ class Checker {
   // parameter is the wording for a value that is not a non-negative
   // integer.
   template <i18n::Key not_const_key>
-  bool const_int_value(u32 module,
-                       const CheckedModule::StaticInfo& info,
+  bool const_int_value(const CheckedModule::StaticInfo& info,
                        diag::Span span,
                        u64& out);
   // Ensures the const item's initializer is checked (and its
   // dependencies', transitively), so the evaluator finds the
   // expressions it reads typed. A const that reaches itself is a
   // cycle.
-  bool ensure_const_checked(u32 module, const CheckedModule::StaticInfo& info);
+  bool ensure_const_checked(const CheckedModule::StaticInfo& info);
   bool check_const_dependencies(u32 module, ast::ExprIdx expr);
   bool check_const_dependencies_block(u32 module, ast::BlockIdx block);
   bool check_const_dependency_path(u32 module, ast::PathIdx path);
@@ -525,8 +554,18 @@ class Checker {
   // calls, because the evaluator interprets it before the bodies pass
   // would have typed its expressions.
   void precheck_called_fn(u32 module, ast::ExprIdx callee);
+  // Types the body of one resolved free function under its own
+  // instantiation. A call inside a body being prechecked reaches the
+  // same treatment, so the whole call graph the evaluator will walk is
+  // typed by the time it runs.
+  void precheck_fn_body(const CheckedModule::FnSig& fn);
+  // The same for a method a const initializer calls: its body is typed
+  // under the receiver's declared self type so the evaluator can
+  // interpret it. Methods of generic impls were typed at instantiation
+  // and are left alone.
+  void precheck_called_method(const CheckedModule::MethodInfo& method);
   const CheckedModule::FnSig* lookup_function(u32 module,
-                                              std::string_view name) const;
+                                              std::string_view name);
   // Generic free function item in scope, by name; invalid if absent.
   ast::ItemIdx lookup_generic_fn(u32 module, std::string_view name);
 
@@ -708,7 +747,8 @@ class Checker {
                                     ast::ExprIdx lhs,
                                     ast::ExprIdx rhs,
                                     diag::Span span,
-                                    std::string_view what);
+                                    std::string_view what,
+                                    const ir::TypeIdx* expected);
   void check_call_args(u32 module,
                        std::span<const ast::ExprIdx> args,
                        const std::vector<ir::TypeIdx>& params,

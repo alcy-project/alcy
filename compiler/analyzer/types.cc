@@ -931,7 +931,6 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       case ir::TypeTag::F32:
       case ir::TypeTag::F64: break;
       default: {
-        // `str` parses as a primitive but is not a scalar.
         const u32 index =
             bag.emit<i18n::Key::AnalyzerSpecRequiresNominalTarget>(
                 diag::Severity::Error, diag::Stage::Analyzer,
@@ -942,6 +941,19 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     }
     primitive_target = true;
     target_display = pretty_tag(tag_of(primitive));
+  } else if (target_node.kind == ast::TypeKind::Str) {
+    // `str` is a builtin type rather than a scalar, but a sealed spec
+    // may target it: byte comparison is the core suite's to give.
+    if (!sealed) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerSpecRequiresNominalTarget>(
+          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
+          target_node.span);
+      (void)index;
+      return;
+    }
+    primitive = builder.primitive(ir::TypeTag::Str);
+    primitive_target = true;
+    target_display = pretty_tag(ir::TypeTag::Str);
   } else if (target_node.kind == ast::TypeKind::Path) {
     const ast::TypePath& target_path = target_node.payload.get<ast::TypePath>();
     const std::span<const ast::Ident> segments =
@@ -1867,8 +1879,9 @@ bool Checker::resolve_value_argument(u32 module,
       (void)index;
       return false;
     }
+    const CheckedModule::StaticInfo definition = *info;
     return const_int_value<i18n::Key::AnalyzerValueArgumentNotInteger>(
-        target, *info, span, out);
+        definition, span, out);
   }
   // A single name that is an in-scope type is the case a declaration
   // spells with a value slot by mistake; name the slot rather than
@@ -2423,32 +2436,7 @@ void Checker::process_module(u32 module) {
         value_names.push_back(name.name);
         // Generic functions register per instantiation at their call
         // sites; eager registration cannot bind their parameters.
-        if (!node.payload.get<ast::ItemFn>().generic.empty()) {
-          break;
-        }
-        std::vector<ir::TypeIdx> params;
-        bool is_variadic = false;
-        for (const ast::ItemFnParam& param :
-             node.payload.get<ast::ItemFn>().params) {
-          if (param.is_variadic) {
-            is_variadic = true;
-            continue;
-          }
-          params.push_back(resolve_type(module, param.type, nullptr));
-        }
-        ir::TypeIdx ret = builder.primitive(ir::TypeTag::Void);
-        if (node.payload.get<ast::ItemFn>().return_type.is_valid()) {
-          ret = resolve_type(
-              module, node.payload.get<ast::ItemFn>().return_type, nullptr);
-        }
-        const ast::ItemFn& fn = node.payload.get<ast::ItemFn>();
-        add_function(module, {.name = fn.name.name,
-                              .params = std::move(params),
-                              .ret = ret,
-                              .item = item,
-                              .is_unsafe = fn.is_unsafe,
-                              .is_comp = fn.is_comp,
-                              .is_variadic = is_variadic});
+        register_fn_signature(module, item);
         break;
       }
       case ast::ItemKind::Intrinsic: {
@@ -2600,14 +2588,7 @@ void Checker::process_module(u32 module) {
           break;
         }
         value_names.push_back(name.name);
-        const ast::TypeIdx type =
-            is_const ? node.payload.get<ast::ItemConst>().type
-                     : node.payload.get<ast::ItemStatic>().type;
-        const ast::ExprIdx init =
-            is_const ? node.payload.get<ast::ItemConst>().init
-                     : node.payload.get<ast::ItemStatic>().init;
-        modules[module].statics.push_back(
-            {name.name, resolve_type(module, type, nullptr), init, is_const});
+        register_static(module, item);
         break;
       }
       case ast::ItemKind::Impl: {
@@ -3474,18 +3455,34 @@ bool Checker::const_array_length(u32 module,
                                  u64& out) {
   const std::span<const ast::Ident> segments =
       ast.paths[array.length_path].segments;
-  // A value parameter of the enclosing declaration shadows an item of
-  // the same name, exactly as a type parameter does.
+  if (segments.empty()) {
+    return false;
+  }
+  const std::string_view name = segments.back().name;
   if (segments.size() == 1) {
-    if (const ValueParam* bound = value_param(segments[0].name)) {
+    // A value parameter of the enclosing declaration shadows an item of
+    // the same name, exactly as a type parameter does.
+    if (const ValueParam* bound = value_param(name)) {
       out = bound->value;
       return true;
     }
+    // A type parameter names a type, never a length: consult it before
+    // the item namespaces so an outer item cannot answer for it.
+    for (usize i = type_params.size(); i > 0; --i) {
+      if (type_params[i - 1].first == name) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerTypeParameterAsValue>(
+            diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
+            span, name);
+        (void)index;
+        return false;
+      }
+    }
   }
-  const CheckedModule::StaticInfo* info = nullptr;
-  if (segments.size() == 1) {
-    info = lookup_static(module, segments[0].name);
+  u32 target = NO_MODULE;
+  if (!walk_module_prefix(module, array.length_path, "value", target)) {
+    return false;
   }
+  const CheckedModule::StaticInfo* info = lookup_static(target, name);
   if (info == nullptr || !info->is_const || !info->init.is_valid()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerArrayLengthNotConst>(
         diag::Severity::Error, diag::Stage::Analyzer,
@@ -3493,13 +3490,16 @@ bool Checker::const_array_length(u32 module,
     (void)index;
     return false;
   }
-  return const_int_value<i18n::Key::AnalyzerArrayLengthNotConst>(module, *info,
+  // The initializer evaluates in the module that declares the item,
+  // and registering a dependency can grow the table this pointer names,
+  // so carry a copy.
+  const CheckedModule::StaticInfo definition = *info;
+  return const_int_value<i18n::Key::AnalyzerArrayLengthNotConst>(definition,
                                                                  span, out);
 }
 
 template <i18n::Key not_const_key>
-bool Checker::const_int_value(u32 module,
-                              const CheckedModule::StaticInfo& info,
+bool Checker::const_int_value(const CheckedModule::StaticInfo& info,
                               diag::Span span,
                               u64& out) {
   const auto cached = const_int_values_.find(info.init.idx);
@@ -3520,33 +3520,33 @@ bool Checker::const_int_value(u32 module,
   }
   // The check diagnostics speak for themselves; a value that fails here
   // after checking is the evaluator's refusal.
-  if (!ensure_const_checked(module, info)) {
+  if (!ensure_const_checked(info)) {
     return false;
   }
   comp::CompVal value;
   CompEvaluator eval(CompInputs{tree, modules, {}, type_origins_}, ast, builder,
                      width);
   eval.set_call_recorder(this, &Checker::record_comp_call);
-  if (!eval.evaluate_item(module, info.init, cur_inst, value) ||
+  if (!eval.evaluate_item(info.module, info.init, cur_inst, value) ||
       value.value.tag != comp::CompValue::Tag::Int) {
     return wrong();
   }
-  // A length is an unsigned count; a signed const that evaluates below
-  // zero has none.
-  if (comp::is_signed(tag) &&
-      comp::sign_extend(value.value.int_value, tag) < 0) {
+  // A length is a count in the declared type's range, so a literal
+  // wider than the tag narrows exactly as lowering will.
+  const u64 narrowed = value.value.int_value & comp::mask(tag);
+  // A signed const that evaluates below zero has no length.
+  if (comp::is_signed(tag) && comp::sign_extend(narrowed, tag) < 0) {
     return wrong();
   }
-  out = value.value.int_value;
+  out = narrowed;
   const_int_values_.emplace(info.init.idx, out);
   return true;
 }
 
-bool Checker::ensure_const_checked(u32 module,
-                                   const CheckedModule::StaticInfo& info) {
+bool Checker::ensure_const_checked(const CheckedModule::StaticInfo& info) {
   const u32 key = info.init.idx;
   if (const_init_checked_.contains(key)) {
-    return true;
+    return !const_init_failed_.contains(key);
   }
   if (const_init_in_progress_.contains(key)) {
     const u32 index = bag.emit<i18n::Key::AnalyzerConstCycle>(
@@ -3556,18 +3556,21 @@ bool Checker::ensure_const_checked(u32 module,
     return false;
   }
   const_init_in_progress_.insert(key);
-  bool ok = check_const_dependencies(module, info.init);
+  bool ok = check_const_dependencies(info.module, info.init);
   if (ok && !const_init_checked_.contains(key)) {
     const ir::TypeIdx want = info.type;
     const bool saved_in_fn = in_fn;
     in_fn = false;
     scopes.emplace_back();
     ++comp_depth;
-    const ir::TypeIdx actual = check_expr(module, info.init, &want);
+    const ir::TypeIdx actual = check_expr(info.module, info.init, &want);
     --comp_depth;
     scopes.pop_back();
     in_fn = saved_in_fn;
     ok = !is_error(actual);
+    if (!ok) {
+      const_init_failed_.insert(key);
+    }
     const_init_checked_.insert(key);
   }
   const_init_in_progress_.erase(key);
@@ -3746,7 +3749,8 @@ bool Checker::check_const_dependency_path(u32 module, ast::PathIdx path) {
   if (info == nullptr || !info->is_const || !info->init.is_valid()) {
     return true;
   }
-  return ensure_const_checked(module, *info);
+  const CheckedModule::StaticInfo definition = *info;
+  return ensure_const_checked(definition);
 }
 
 void Checker::precheck_called_fn(u32 module, ast::ExprIdx callee) {
@@ -3759,27 +3763,196 @@ void Checker::precheck_called_fn(u32 module, ast::ExprIdx callee) {
     return;
   }
   const CheckedModule::FnSig* fn = lookup_function(module, segments[0].name);
-  if (fn == nullptr || !fn->item.is_valid() ||
-      prechecked_fns_.contains(fn->item.idx)) {
+  if (fn == nullptr) {
     return;
   }
-  const ast::ItemNode& item = ast.items[fn->item];
+  precheck_fn_body(*fn);
+}
+
+void Checker::precheck_fn_body(const CheckedModule::FnSig& fn) {
+  if (!fn.item.is_valid() || prechecked_fns_.contains(fn.item.idx)) {
+    return;
+  }
+  const ast::ItemNode& item = ast.items[fn.item];
   if (item.kind != ast::ItemKind::Fn ||
       !item.payload.get<ast::ItemFn>().generic.empty()) {
     return;
   }
-  prechecked_fns_.insert(fn->item.idx);
+  const auto where = position_by_address_.find(&fn);
+  if (where == position_by_address_.end()) {
+    return;
+  }
+  const u32 module = where->second.first;
+  const u32 inst = fn.inst;
+  prechecked_fns_.insert(fn.item.idx);
   std::vector<std::pair<std::string_view, ir::TypeIdx>> saved =
       std::move(type_params);
   std::vector<ValueParam> saved_values = std::move(value_params);
   type_params.clear();
   value_params.clear();
-  check_fn(module, fn->item, nullptr);
+  // check_fn resets the per-body state and leaves it reset; the
+  // precheck runs in the middle of whatever body asked for the value,
+  // so every field it writes is saved and restored. The callee keys its
+  // expressions under its own instantiation, the way the evaluator
+  // reads them.
+  const ir::TypeIdx saved_ret = fn_ret;
+  const u32 saved_loop = loop_depth;
+  const bool saved_in_fn = in_fn;
+  const bool saved_bind = bind_comp_known;
+  const bool saved_too_deep = reported_too_deep_;
+  const u32 saved_inst = cur_inst;
+  const u32 saved_comp = comp_depth;
+  cur_inst = inst;
+  // The callee is an ordinary function body wherever the precheck was
+  // reached from; only its typed expressions are wanted, so the comp
+  // rules of the caller do not apply to it.
+  comp_depth = 0;
+  ++prechecking_fn_;
+  check_fn(module, fn.item, nullptr);
+  --prechecking_fn_;
+  comp_depth = saved_comp;
+  cur_inst = saved_inst;
+  reported_too_deep_ = saved_too_deep;
+  bind_comp_known = saved_bind;
+  fn_ret = saved_ret;
+  loop_depth = saved_loop;
+  in_fn = saved_in_fn;
   type_params = std::move(saved);
   value_params = std::move(saved_values);
 }
 
-const CheckedModule::StaticInfo* Checker::lookup_static(
+void Checker::precheck_called_method(const CheckedModule::MethodInfo& method) {
+  if (!method.item.is_valid() || prechecked_fns_.contains(method.item.idx)) {
+    return;
+  }
+  // A method of a generic impl was checked under its instantiation the
+  // first time a call resolved it, so only a concrete impl waits for
+  // the bodies sweep.
+  if (generic_find(method.self_type) != nullptr) {
+    return;
+  }
+  const ast::ItemNode& node = ast.items[method.item];
+  if (node.kind != ast::ItemKind::Fn ||
+      !node.payload.get<ast::ItemFn>().generic.empty()) {
+    return;
+  }
+  const auto where = position_by_address_.find(&method);
+  if (where == position_by_address_.end()) {
+    return;
+  }
+  const u32 module = where->second.first;
+  prechecked_fns_.insert(method.item.idx);
+  const u32 inst = inst_index(method.self_type);
+  const ir::TypeIdx saved_ret = fn_ret;
+  const u32 saved_loop = loop_depth;
+  const bool saved_in_fn = in_fn;
+  const bool saved_bind = bind_comp_known;
+  const bool saved_too_deep = reported_too_deep_;
+  const u32 saved_inst = cur_inst;
+  const u32 saved_comp = comp_depth;
+  const usize saved_specs = spec_scope.size();
+  cur_inst = inst;
+  comp_depth = 0;
+  if (method.spec != NO_SPEC) {
+    spec_scope.push_back(method.spec);
+  }
+  ++prechecking_fn_;
+  check_fn(module, method.item, &method.self_type);
+  --prechecking_fn_;
+  spec_scope.resize(saved_specs);
+  comp_depth = saved_comp;
+  cur_inst = saved_inst;
+  reported_too_deep_ = saved_too_deep;
+  bind_comp_known = saved_bind;
+  fn_ret = saved_ret;
+  loop_depth = saved_loop;
+  in_fn = saved_in_fn;
+}
+
+bool Checker::ensure_function_named(u32 module, std::string_view name) {
+  for (ast::ItemIdx item : tree.modules[module]->items) {
+    const ast::ItemNode& node = ast.items[item];
+    if (node.kind != ast::ItemKind::Fn) {
+      continue;
+    }
+    const ast::ItemFn& fn = node.payload.get<ast::ItemFn>();
+    if (fn.name.name != name || !fn.generic.empty()) {
+      continue;
+    }
+    register_fn_signature(module, item);
+    return true;
+  }
+  return false;
+}
+
+bool Checker::ensure_static_named(u32 module, std::string_view name) {
+  for (ast::ItemIdx item : tree.modules[module]->items) {
+    const ast::ItemNode& node = ast.items[item];
+    std::string_view declared;
+    if (node.kind == ast::ItemKind::Const) {
+      declared = node.payload.get<ast::ItemConst>().name.name;
+    } else if (node.kind == ast::ItemKind::Static) {
+      declared = node.payload.get<ast::ItemStatic>().name.name;
+    } else {
+      continue;
+    }
+    if (declared != name) {
+      continue;
+    }
+    register_static(module, item);
+    return true;
+  }
+  return false;
+}
+
+void Checker::register_fn_signature(u32 module, ast::ItemIdx item) {
+  const ast::ItemFn& fn = ast.items[item].payload.get<ast::ItemFn>();
+  if (!fn.generic.empty() || !registered_items_.insert(item.idx).second) {
+    return;
+  }
+  std::vector<ir::TypeIdx> params;
+  bool is_variadic = false;
+  for (const ast::ItemFnParam& param : fn.params) {
+    if (param.is_variadic) {
+      is_variadic = true;
+      continue;
+    }
+    params.push_back(resolve_type(module, param.type, nullptr));
+  }
+  ir::TypeIdx ret = builder.primitive(ir::TypeTag::Void);
+  if (fn.return_type.is_valid()) {
+    ret = resolve_type(module, fn.return_type, nullptr);
+  }
+  add_function(module, {.name = fn.name.name,
+                        .params = std::move(params),
+                        .ret = ret,
+                        .item = item,
+                        .is_unsafe = fn.is_unsafe,
+                        .is_comp = fn.is_comp,
+                        .is_variadic = is_variadic});
+}
+
+void Checker::register_static(u32 module, ast::ItemIdx item) {
+  if (!registered_items_.insert(item.idx).second) {
+    return;
+  }
+  const ast::ItemNode& node = ast.items[item];
+  const bool is_const = node.kind == ast::ItemKind::Const;
+  const ast::Ident name = is_const ? node.payload.get<ast::ItemConst>().name
+                                   : node.payload.get<ast::ItemStatic>().name;
+  const ast::TypeIdx type = is_const ? node.payload.get<ast::ItemConst>().type
+                                     : node.payload.get<ast::ItemStatic>().type;
+  const ast::ExprIdx init = is_const ? node.payload.get<ast::ItemConst>().init
+                                     : node.payload.get<ast::ItemStatic>().init;
+  modules[module].statics.push_back(
+      {.name = name.name,
+       .type = resolve_type(module, type, nullptr),
+       .init = init,
+       .is_const = is_const,
+       .module = module});
+}
+
+const CheckedModule::StaticInfo* Checker::find_static(
     u32 module,
     std::string_view name) const {
   for (const CheckedModule::StaticInfo& info : modules[module].statics) {
@@ -3801,6 +3974,24 @@ const CheckedModule::StaticInfo* Checker::lookup_static(
   return nullptr;
 }
 
+const CheckedModule::StaticInfo* Checker::lookup_static(u32 module,
+                                                        std::string_view name) {
+  if (const CheckedModule::StaticInfo* info = find_static(module, name)) {
+    return info;
+  }
+  ensure_static_named(module, name);
+  if (const CheckedModule::StaticInfo* info = find_static(module, name)) {
+    return info;
+  }
+  for (const Import& import : tree.modules[module]->imports) {
+    if (import.ns != Namespace::Value || import.name != name) {
+      continue;
+    }
+    ensure_static_named(import.target_module, import.member);
+  }
+  return find_static(module, name);
+}
+
 ast::ItemIdx Checker::lookup_generic_fn(u32 module, std::string_view name) {
   for (ast::ItemIdx item : tree.modules[module]->items) {
     if (fn_name(item) == name && !fn_generic_params(item).empty()) {
@@ -3820,30 +4011,45 @@ ast::ItemIdx Checker::lookup_generic_fn(u32 module, std::string_view name) {
   return ast::ItemIdx::invalid();
 }
 
-const CheckedModule::FnSig* Checker::lookup_function(
-    u32 module,
-    std::string_view name) const {
-  for (const CheckedModule::FnSig& fn : modules[module].functions) {
-    // A generic function's registered signatures are per
-    // instantiation; the name still resolves through
-    // lookup_generic_fn so each call rebinds its parameters. A
-    // method's signature shares the table but not the name: a bare
-    // call cannot reach it.
-    if (fn.name == name && !fn.is_method &&
-        fn_generic_params(fn.item).empty()) {
-      return &fn;
+const CheckedModule::FnSig* Checker::lookup_function(u32 module,
+                                                     std::string_view name) {
+  // A generic function's registered signatures are per instantiation;
+  // the name still resolves through lookup_generic_fn so each call
+  // rebinds its parameters. A method's signature shares the table but
+  // not the name: a bare call cannot reach it.
+  const auto find =
+      [this](u32 in_module,
+             std::string_view wanted) -> const CheckedModule::FnSig* {
+    for (const CheckedModule::FnSig& fn : modules[in_module].functions) {
+      if (fn.name == wanted && !fn.is_method &&
+          fn_generic_params(fn.item).empty()) {
+        return &fn;
+      }
     }
+    return nullptr;
+  };
+  if (const CheckedModule::FnSig* fn = find(module, name)) {
+    return fn;
+  }
+  // A use may outrun the signature sweep, as an array length can reach
+  // a const whose initializer calls a function declared later; register
+  // the declaration on demand so the order does not matter.
+  ensure_function_named(module, name);
+  if (const CheckedModule::FnSig* fn = find(module, name)) {
+    return fn;
   }
   for (const Import& import : tree.modules[module]->imports) {
     if (import.ns != Namespace::Value || import.name != name) {
       continue;
     }
-    for (const CheckedModule::FnSig& fn :
-         modules[import.target_module].functions) {
-      if (fn.name == import.member && !fn.is_method &&
-          fn_generic_params(fn.item).empty()) {
-        return &fn;
-      }
+    if (const CheckedModule::FnSig* fn =
+            find(import.target_module, import.member)) {
+      return fn;
+    }
+    ensure_function_named(import.target_module, import.member);
+    if (const CheckedModule::FnSig* fn =
+            find(import.target_module, import.member)) {
+      return fn;
     }
   }
   return nullptr;
@@ -4067,6 +4273,9 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
                                                         diag::Span span,
                                                         bool spec_only,
                                                         u32 spec_filter) {
+  // A field's type is a storage copy of the declared type, so a method or
+  // operator reached through a field follows the copy back to its origin.
+  self = type_origin(self);
   if (!spec_only) {
     if (const CheckedModule::MethodInfo* inherent =
             lookup_inherent_method(self, name)) {
@@ -4766,7 +4975,11 @@ void Checker::check_spec_impl_bodies(u32 module, ast::ItemIdx item) {
     }
     spec_scope.push_back(entry.spec);
     for (ast::ItemIdx method_item : impl.methods) {
-      check_fn(module, method_item, &self_type);
+      // A method a const initializer already reached had its body typed
+      // on demand.
+      if (!prechecked_fns_.contains(method_item.idx)) {
+        check_fn(module, method_item, &self_type);
+      }
     }
     spec_scope.pop_back();
     return;
@@ -5028,12 +5241,20 @@ bool Checker::resolve_value_path(u32 module,
         }
       }
     }
-    const std::string_view package = std_hint_package(std_hints, head);
+    // The hint names the package that carries `member` when one does,
+    // so a path through the wrong staged prefix (`core::Vec`) points at
+    // `collections`; the head answers only when the member is unknown.
+    std::string_view known = member;
+    std::string_view package = std_hint_package(std_hints, member);
+    if (package.empty()) {
+      known = head;
+      package = std_hint_package(std_hints, head);
+    }
     if (!package.empty()) {
       const u32 index =
           bag.emit<i18n::Key::AnalyzerUnresolvedValueInStandardLibrary>(
               diag::Severity::Error, diag::Stage::Analyzer,
-              DiagCode::UnknownValue, node.span, head, member, head, package);
+              DiagCode::UnknownValue, node.span, head, member, known, package);
       (void)index;
       return false;
     }
@@ -5477,7 +5698,11 @@ void Checker::check_bodies() {
           }
           for (ast::ItemIdx method :
                node.payload.get<ast::ItemImpl>().methods) {
-            check_fn(m, method, self_ptr);
+            // A method a const initializer already reached had its body
+            // typed on demand.
+            if (!prechecked_fns_.contains(method.idx)) {
+              check_fn(m, method, self_ptr);
+            }
           }
           break;
         }
@@ -5507,6 +5732,11 @@ void Checker::check_bodies() {
                       DiagCode::InvalidOperation, ast.types[type].span, name);
               (void)index;
             }
+          }
+          // A const an array length already evaluated was checked on
+          // demand; checking it again would repeat its diagnostics.
+          if (is_const && const_init_checked_.contains(init.idx)) {
+            break;
           }
           in_fn = false;
           scopes.emplace_back();
@@ -5565,7 +5795,27 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  Checker checker{tree, width, ast, bag, strings, std_hints, profiler};
+
+  // A member the program already staged cannot be added again, so a
+  // hint naming one would send the user in circles; those hints are
+  // dropped here, before name resolution reads them.
+  std::vector<StdHint> usable_hints;
+  usable_hints.reserve(std_hints.size());
+  for (const StdHint& hint : std_hints) {
+    bool staged = false;
+    for (const ModuleNode* node : tree.modules) {
+      if (node->is_staged && is_package_path(node->path, hint.package)) {
+        staged = true;
+        break;
+      }
+    }
+    if (!staged) {
+      usable_hints.push_back(hint);
+    }
+  }
+  Checker checker{tree,    width,   ast,
+                  bag,     strings, std::span<const StdHint>(usable_hints),
+                  profiler};
   checker.uninit_name_id = checker.intern_name("MaybeUninit");
   if (checker.uninit_name_id == str::INVALID_STRING_POOL_ID) {
     return base::make_err(diag::Reported{});
@@ -5620,12 +5870,17 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   }
   checker.validate_value_parameter_types();
   checker.validate_variadic_parameters();
-  checker.modules.reserve(tree.modules.size());
+  // Every slot exists before any module processes: a signature can
+  // resolve a name into a module the sweep has not reached, and a slot
+  // past the constructed range would be read unbuilt.
+  checker.modules.resize(tree.modules.size());
+  for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
+    checker.modules[m] = checker.empty_module(m);
+  }
   {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "signatures",
                                              "analyze");
     for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
-      checker.modules.push_back(checker.empty_module(m));
       PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(
           checker.profiler, trace_module_name(*tree.modules[m]), "analyze");
       checker.process_module(m);

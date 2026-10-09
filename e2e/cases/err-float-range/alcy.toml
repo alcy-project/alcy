@@ -1,0 +1,14 @@
+[package]
+name = "floatrange"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[dependencies]
+"alcy/std/core" = {}
+
+[[bin]]
+name = "floatrange"
+path = "main.al"

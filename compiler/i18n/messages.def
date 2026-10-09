@@ -161,6 +161,8 @@
   F(AnalyzerExternCompParameter, "Comp parameters on external functions are not supported") \
   F(AnalyzerExternGeneric, "External function '{}' cannot be generic") \
   F(AnalyzerExternTypeNotSupported, "Type '{}' cannot cross a C boundary yet") \
+  F(AnalyzerFatReferenceComparison, "Cannot compare references to an unsized value") \
+  F(AnalyzerFloatRangeDoesNotIterate, "Float ranges do not iterate; a `for` loop needs an integer range") \
   F(AnalyzerFloatSuffixOnInteger, "Float suffix on an integer literal") \
   F(AnalyzerForRequiresIterator, "A 'for' loop requires an 'Iterator' implementation in scope for this type") \
   F(AnalyzerFormatArity, "Intrinsic 'format' expects a format string, found {} arguments") \
@@ -253,6 +255,7 @@
   F(AnalyzerTypeMismatch, "Type mismatch in {}: '{}' vs '{}'") \
   F(AnalyzerTypeMismatchExpectedFound, "Type mismatch in {}: expected '{}', found '{}'") \
   F(AnalyzerTypeNotSupported, "Type is not supported in MVP") \
+  F(AnalyzerTypeParameterAsValue, "Type parameter '{}' cannot be used as a value") \
   F(AnalyzerUnexpectedTypeArguments, "Type '{}' takes no type arguments") \
   F(AnalyzerUninitializedValueUsed, "Uninitialized value used as '{}'; release it with 'uninit_assume' once written") \
   F(AnalyzerUnknownField, "Unknown field '{}'") \
@@ -291,6 +294,7 @@
   F(LowerInternalError, "Internal lowering error: {}") \
   F(LowerCompEngineMismatch, "Internal error: the comp engines disagree on '{}'") \
   F(LowerIrVerificationFailed, "Lowered IR failed verification") \
+  F(LowerMoveOutOfDestructor, "Cannot move a field out of '{}'; its type implements `drop`") \
   F(LowerNameTableExhausted, "The compiler's name table cannot hold the names this package interns") \
   F(LowerUnreachableExpression, "Unreachable expression") \
   F(LowerUnreachableStatement, "Unreachable statement") \
@@ -410,6 +414,7 @@
   F(PipelineNoBackend, "This build of the compiler has no code generation backend") \
   F(PipelineUnknownTarget, "Cannot build for target '{}'; the compiler was not built with that backend") \
   F(PipelineUnknownSourceFile, "Unknown file id for a source input") \
+  F(PipelineWasmExecutableNeedsModule, "A wasm executable is one final module; the '{}' backend writes an object instead. Use --emit=object, or --backend=direct-wasm") \
   /* cli */ \
   F(CliAbout, "alcy language compiler") \
   F(CliBackendHelp, "Which code generation backend writes the machine code: llvm (the default where it was built in), or direct-wasm for alcy's own wasm emitter.") \

@@ -1,0 +1,5 @@
+# A slice reference is a fat aggregate, so the backend has no builtin
+# comparison for it; scalars and thin addresses keep theirs.
+exit = 4
+contains = ["Cannot compare references to an unsized value"]
+not_contains = []

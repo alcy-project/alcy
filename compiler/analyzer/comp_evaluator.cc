@@ -1078,10 +1078,16 @@ bool CompEvaluator::comp_eval_method_call(u32 mod,
   }
   CompFlow flow;
   if (ok) {
+    // The body is checked under the callee's own instantiation, which
+    // is how its expressions and call targets are keyed; the receiver
+    // and arguments above stay in the caller's.
+    const u32 saved_inst = inst_;
+    inst_ = callee_inst(target);
     if (!fn.body.is_valid() ||
         !comp_eval_block(target->module, fn.body, callee_scope, flow)) {
       ok = false;
     }
+    inst_ = saved_inst;
   }
   --call_depth_;
   if (!ok) {

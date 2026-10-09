@@ -80,7 +80,8 @@ CheckOutcome check_case(
     Fixture& f,
     ir::PointerWidth width = ir::PointerWidth::W64,
     std::initializer_list<std::pair<std::string_view, std::string_view>>
-        prelude = {}) {
+        prelude = {},
+    std::span<const StdHint> hints = {}) {
   std::vector<ModuleInput> inputs;
   source::FileId root = source::UNKNOWN_FILE;
   for (std::string_view rel : rels) {
@@ -123,7 +124,7 @@ CheckOutcome check_case(
   }
   ModuleTree tree = std::move(tree_result).unwrap();
   base::Result<CheckedPackage, diag::Reported> checked_result =
-      check_package(tree, width, f.ast, f.bag, f.strings);
+      check_package(tree, width, f.ast, f.bag, f.strings, hints);
   if (checked_result.is_err() || f.bag.has_errors()) {
     return {std::nullopt};
   }
@@ -213,6 +214,18 @@ bool has_message(const diag::DiagBag& bag, std::string_view message) {
     }
   }
   return false;
+}
+
+// How many diagnostics carry exactly this text.
+usize count_messages(const diag::DiagBag& bag, std::string_view message) {
+  usize count = 0;
+  for (u32 i = 0; i < bag.size(); ++i) {
+    const diag::Diagnostic* const diagnostic = bag.at(i);
+    if (diagnostic != nullptr && diagnostic->message == message) {
+      ++count;
+    }
+  }
+  return count;
 }
 
 // `Option` and `Result` live in the core prelude since
@@ -5082,6 +5095,406 @@ TEST_CASE("Check names the declaration for an undeclared assignment") {
   CHECK(has_message(
       f.bag, "no local or item named 'a'; if this declares, write 'a := ...'"));
   CHECK(f.bag.error_count() == 1);
+}
+
+TEST_CASE("Check keeps the caller body state across a const precheck") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "comp fn two() -> usize {\n  ret 2\n}\n"
+                                      "const N: usize = two()\n"
+                                      "fn f() -> i32 {\n"
+                                      "  a: [u8; N] := [0u8; 2]\n"
+                                      "  ret a[0] as i32\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check resolves an imported const before its module registers") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "use util::N\n"
+                       "fn f(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"},
+                      {"util.al", "pub const N: usize = 4\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al", "util.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const CheckedModule::FnSig* fn = find_fn(*root, "f");
+  CHECK(fn != nullptr);
+  if (fn == nullptr) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  CHECK(types.types()[fn->params[0]].tag == ir::TypeTag::Array);
+  const ir::ArrayType& array =
+      types.array_types()[types.types()[fn->params[0]].as_array()];
+  CHECK(array.count == 4);
+}
+
+TEST_CASE("Check evaluates an imported const in its declaring module") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "use util::N\n"
+                       "comp fn helper() -> u8 {\n  ret 9\n}\n"
+                       "fn f(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"},
+                      {"util.al",
+                       "comp fn helper() -> u8 {\n  ret 5\n}\n"
+                       "pub const N: usize = helper() as usize\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al", "util.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const CheckedModule::FnSig* fn = find_fn(*root, "f");
+  CHECK(fn != nullptr);
+  if (fn == nullptr) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  const ir::ArrayType& array =
+      types.array_types()[types.types()[fn->params[0]].as_array()];
+  CHECK(array.count == 5);
+}
+
+TEST_CASE("Check resolves an array length before a called comp fn registers") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "const N: usize = f()\n"
+                       "fn f() -> usize {\n  ret g()\n}\n"
+                       "fn use_it(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
+                       "fn g() -> usize {\n  ret 3\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check resolves an array length from a const declared later") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn f(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
+                       "const N: usize = 4\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a type parameter used as an array length") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "const N: usize = 4\n"
+                       "struct S<N> { a: [u8; N] }\n"
+                       "fn f(s: S<i32>) -> i32 {\n  ret s.a[0]\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Type parameter 'N' cannot be used as a value"));
+}
+
+TEST_CASE("Check narrows a const array length to its declared type") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "const N: u8 = 300u8\n"
+                       "fn f(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const CheckedModule::FnSig* fn = find_fn(*root, "f");
+  CHECK(fn != nullptr);
+  if (fn == nullptr) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  const ir::ArrayType& array =
+      types.array_types()[types.types()[fn->params[0]].as_array()];
+  CHECK(array.count == 44);
+}
+
+TEST_CASE("Check resolves a qualified const array length") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn f(a: [u8; util::N]) -> u8 {\n  ret a[0]\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"},
+                      {"util.al", "pub const N: usize = 4\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al", "util.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const CheckedModule::FnSig* fn = find_fn(*root, "f");
+  CHECK(fn != nullptr);
+  if (fn == nullptr) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  const ir::ArrayType& array =
+      types.array_types()[types.types()[fn->params[0]].as_array()];
+  CHECK(array.count == 4);
+}
+
+TEST_CASE("Check evaluates a method call in a const initializer") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct P { x: u8 }\n"
+                       "impl P {\n"
+                       "  fn get(self: Self) -> u8 {\n    ret self.x\n  }\n"
+                       "}\n"
+                       "const N: u8 = P { x: 3u8 }.get()\n"
+                       "fn f(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const CheckedModule::FnSig* fn = find_fn(*root, "f");
+  CHECK(fn != nullptr);
+  if (fn == nullptr) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  const ir::ArrayType& array =
+      types.array_types()[types.types()[fn->params[0]].as_array()];
+  CHECK(array.count == 3);
+}
+
+TEST_CASE("Check reports a const initializer error once") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "const N: usize = true\n"
+                       "fn f(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(count_messages(
+            f.bag,
+            "Type mismatch in boolean literal: expected 'u64', found 'bool'") ==
+        1);
+  CHECK(count_messages(f.bag,
+                       "Array length must be a constant integer value") == 0);
+}
+
+TEST_CASE("Check propagates an expected integer type into binary operands") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "const M: usize = 1 + 2\n"
+                       "fn f(a: [u8; M]) -> u8 {\n  ret a[0]\n}\n"
+                       "fn g() -> i32 {\n"
+                       "  x: u64 := 1 + 2\n"
+                       "  ret x as i32\n"
+                       "}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const CheckedModule::FnSig* fn = find_fn(*root, "f");
+  CHECK(fn != nullptr);
+  if (fn == nullptr) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  const ir::ArrayType& array =
+      types.array_types()[types.types()[fn->params[0]].as_array()];
+  CHECK(array.count == 3);
+}
+
+TEST_CASE("Check rejects comparing references to unsized values") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn eq(a: &[u8], b: &[u8]) -> bool {\n  ret a == b\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Cannot compare references to an unsized value"));
+}
+
+TEST_CASE("Check keeps comparing thin references") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn eq(a: &i32, b: &i32) -> bool {\n  ret a == b\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check suppresses a std hint for a staged member") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "fn f() -> i32 {\n"
+                       "  _ := Thing::<i32>::new()\n"
+                       "  ret 0\n"
+                       "}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"},
+                      {"widgets.al", "pub struct Gadget { x: i32 }\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  static const StdHint HINTS[] = {{"widgets", "Thing"}};
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"widgets", "widgets.al"}}, HINTS);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Unresolved value 'Thing::new'"));
+}
+
+TEST_CASE("Check hints at a std member that is not staged") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn f() -> i32 {\n"
+                                      "  _ := Thing::<i32>::new()\n"
+                                      "  ret 0\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  static const StdHint HINTS[] = {{"widgets", "Thing"}};
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f,
+                                         ir::PointerWidth::W64, {}, HINTS);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(
+      f.bag,
+      "Unresolved value 'Thing::new'; `Thing` is in the standard library "
+      "(alcy/std/widgets); add it to [dependencies]"));
 }
 
 }  // namespace analyzer

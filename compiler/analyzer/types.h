@@ -145,6 +145,9 @@ struct CheckedModule {
     // Initializer for const inlining (invalid for statics in lowering).
     ast::ExprIdx init;
     bool is_const = false;
+    // Module that declares the item. A use from elsewhere checks and
+    // evaluates the initializer here, never in the importing scope.
+    u32 module = 0;
   };
   std::vector<StaticInfo> statics;
   // Lowering side tables: every checked expression records its type,

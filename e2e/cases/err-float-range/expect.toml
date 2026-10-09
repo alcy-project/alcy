@@ -1,0 +1,5 @@
+# Float ranges hold no sequence; the cursor arithmetic is integer-only
+# (docs/spec/types.md), so the `for` desugar is refused at the loop.
+exit = 4
+contains = ["Float ranges do not iterate"]
+not_contains = []

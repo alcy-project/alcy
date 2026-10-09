@@ -118,6 +118,26 @@ TEST_CASE("Verification rejects a dangling type edge") {
   }
 }
 
+TEST_CASE("Verification rejects a dangling array length path") {
+  Fixture f;
+  TypeNode element;
+  element.kind = TypeKind::Primitive;
+  element.span = test_span();
+  element.payload.set(TypePrimitive{.primitive = PrimitiveKind::Usize});
+  const TypeIdx element_idx = f.ast.types.emplace_back(element);
+  TypeNode node;
+  node.kind = TypeKind::Array;
+  node.span = test_span();
+  node.payload.set(
+      TypeArray{.element = element_idx, .count = 0, .length_path = PathIdx(9)});
+  f.ast.types.emplace_back(node);
+  base::Result<void, VerificationError> result = verify_file(f.ast);
+  CHECK(result.is_err());
+  if (result.is_err()) {
+    CHECK(std::move(result).unwrap_err() == VerificationError::DanglingType);
+  }
+}
+
 TEST_CASE("Verification accepts a value parameter annotation") {
   Fixture f;
   TypeNode annotation;

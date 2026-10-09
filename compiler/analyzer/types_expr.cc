@@ -514,14 +514,20 @@ bool Checker::expr_comp_known_block(u32 module, ast::BlockIdx block) const {
 
 // Checks operands of a binary operator: same-type numerics, with
 // bare integer literals coerced to the other side (so `x + 42`
-// works for any integer x without an annotation).
+// works for any integer x without an annotation). An integer
+// expectation reaches both operands, so `1 + 2` adopts an annotated
+// type the way a lone literal does.
 ir::TypeIdx Checker::check_binary_operands(u32 module,
                                            ast::ExprIdx lhs,
                                            ast::ExprIdx rhs,
                                            diag::Span span,
-                                           std::string_view what) {
-  ir::TypeIdx left = check_expr(module, lhs, nullptr);
-  ir::TypeIdx right = check_expr(module, rhs, nullptr);
+                                           std::string_view what,
+                                           const ir::TypeIdx* expected) {
+  const ir::TypeIdx* operand_expected =
+      (expected != nullptr && is_integer_tag(tag_of(*expected))) ? expected
+                                                                 : nullptr;
+  ir::TypeIdx left = check_expr(module, lhs, operand_expected);
+  ir::TypeIdx right = check_expr(module, rhs, operand_expected);
   if (!types_equal(left, right) && !is_error(left) && !is_error(right)) {
     if (is_integer_tag(tag_of(right)) && is_bare_int_literal(lhs)) {
       left = check_expr(module, lhs, &right);
@@ -633,8 +639,7 @@ bool Checker::is_const_item(u32 module, ast::PathIdx path) const {
   if (segments.size() != 1) {
     return false;
   }
-  const CheckedModule::StaticInfo* info =
-      lookup_static(module, segments[0].name);
+  const CheckedModule::StaticInfo* info = find_static(module, segments[0].name);
   return info != nullptr && info->is_const && info->init.is_valid();
 }
 
@@ -1366,6 +1371,11 @@ ir::TypeIdx Checker::check_call(u32 module,
     check_unsafe_call(fn, span);
     check_comp_fn_call(fn, span);
     record_call(module, callee, fn);
+    // A call inside a prechecked body reaches a callee whose body the
+    // evaluator will interpret too, so type it before the sweep would.
+    if (prechecking_fn_ > 0) {
+      precheck_fn_body(*fn);
+    }
     check_call_args(module, args, fn->params, comp_param_flags(fn->item), span,
                     fn->name, false);
     if (expected != nullptr) {
@@ -1376,6 +1386,11 @@ ir::TypeIdx Checker::check_call(u32 module,
   if (resolved.kind == PathValue::Kind::AssocFunction) {
     const CheckedModule::MethodInfo* method = resolved.method;
     record_call(module, callee, method);
+    // An associated function reached from comp evaluation needs its
+    // body typed the same way a method's is.
+    if (comp_depth > 0 || prechecking_fn_ > 0) {
+      precheck_called_method(*method);
+    }
     // Associated functions take no receiver; params map 1:1.
     check_call_args(module, args, method->params,
                     comp_param_flags(method->item), span, method->name, false);
@@ -1486,6 +1501,19 @@ ir::TypeIdx Checker::check_method_call(u32 module,
     nominal = builder.ref_types()[builder.types()[receiver].as_ref()].pointee;
   }
   const bool spec_only = node.payload.get<ast::ExprMethodCall>().spec_only;
+  // A float range has no sequence to iterate: `Range<T>::into_iter`
+  // resolves for any T, but the cursor arithmetic is integer-only, so
+  // the `for` desugar is rejected here rather than inside `core`.
+  if (name == "into_iter") {
+    ir::TypeIdx element = error_type();
+    if (range_element(nominal, element) && is_float_tag(tag_of(element))) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerFloatRangeDoesNotIterate>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidOperation, span);
+      (void)index;
+      return error_type();
+    }
+  }
   const CheckedModule::MethodInfo* method =
       lookup_method(nominal, name, module, node.span, spec_only);
   if (method == nullptr) {
@@ -1517,6 +1545,12 @@ ir::TypeIdx Checker::check_method_call(u32 module,
     return error_type();
   }
   record_call(module, expr, method);
+  // A const initializer's method call is interpreted by the comp
+  // evaluator, which reads the callee's typed expressions; type the
+  // body now, where the bodies sweep would otherwise come too late.
+  if (comp_depth > 0 || prechecking_fn_ > 0) {
+    precheck_called_method(*method);
+  }
   // The receiver coerces to a declared borrow; coercion itself is
   // erased at this level and materialized by lowering.
   const ir::TypeIdx declared = method->params[0];
@@ -2843,9 +2877,10 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
         }
         return boolean;
       }
-      const ir::TypeIdx operands = check_binary_operands(
-          module, node.payload.get<ast::ExprBinary>().lhs,
-          node.payload.get<ast::ExprBinary>().rhs, node.span, "binary");
+      const ir::TypeIdx operands =
+          check_binary_operands(module, node.payload.get<ast::ExprBinary>().lhs,
+                                node.payload.get<ast::ExprBinary>().rhs,
+                                node.span, "binary", expected);
       if (is_error(operands)) {
         return error_type();
       }
@@ -2854,8 +2889,26 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
         case ast::BinaryOp::Eq:
         case ast::BinaryOp::NotEq: {
           // What the backend can compare: integers (bool included),
-          // floats, and addresses. A function value or an aggregate has
-          // no comparison, and the emitter would have no case for it.
+          // floats, and thin addresses. A function value or an aggregate
+          // has no comparison, and a reference to an unsized value is a
+          // fat aggregate rather than a thin address, so the emitter has
+          // no comparison for it either.
+          const bool is_reference =
+              tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef;
+          if (is_reference) {
+            const ir::TypeIdx pointee =
+                builder.ref_types()[builder.types()[operands].as_ref()].pointee;
+            const ir::TypeTag pointee_tag = tag_of(pointee);
+            if (pointee_tag == ir::TypeTag::Slice ||
+                pointee_tag == ir::TypeTag::Str) {
+              const u32 index =
+                  bag.emit<i18n::Key::AnalyzerFatReferenceComparison>(
+                      diag::Severity::Error, diag::Stage::Analyzer,
+                      DiagCode::InvalidOperation, node.span);
+              (void)index;
+              return error_type();
+            }
+          }
           const bool comparable =
               is_integer_tag(tag) || is_float_tag(tag) ||
               tag == ir::TypeTag::I1 || tag == ir::TypeTag::Ptr ||
@@ -2863,8 +2916,10 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
               ir::is_raw_ptr_type(tag);
           if (!comparable) {
             // A nominal type compares through the sealed `PartialEq`
-            // spec (ADR-0053); everything else has no comparison.
-            if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum) {
+            // spec (ADR-0053); `str` does too, byte comparison the core
+            // suite declares. Everything else has no comparison.
+            if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum ||
+                tag == ir::TypeTag::Str) {
               return check_spec_equality(module, expr, operands, expected);
             }
             break;

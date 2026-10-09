@@ -56,7 +56,8 @@ bool verify_type_children(const TypeNode& node, const AstArena& arena) {
     }
     case TypeKind::Array: {
       const TypeArray array = node.payload.get<TypeArray>();
-      return bound(array.element, arena.types);
+      return bound(array.element, arena.types) &&
+             bound(array.length_path, arena.paths);
     }
     case TypeKind::Slice: {
       const TypeSlice slice = node.payload.get<TypeSlice>();
