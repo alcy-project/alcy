@@ -108,6 +108,17 @@ const ModuleNode* find_module(const ModuleTree& tree, std::string_view path) {
   return nullptr;
 }
 
+// Whether the bag holds a diagnostic with exactly this text.
+bool has_message(const diag::DiagBag& bag, std::string_view message) {
+  for (u32 i = 0; i < bag.size(); ++i) {
+    const diag::Diagnostic* const diagnostic = bag.at(i);
+    if (diagnostic != nullptr && diagnostic->message == message) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // What a reader can see of a resolve: the modules it produced and the
 // diagnostics it reported, in the order it reported them. The node indices
 // are deliberately absent, because a threaded run hands them out in whatever
@@ -282,7 +293,7 @@ TEST_CASE("Resolve resolves imports across modules") {
                 "use a::Point;\nuse util::help as h;\nfn "
                 "main() {}\n"},
                {"a.al", "pub struct Point { x: i32 }\nuse package::util;\n"},
-               {"util.al", "fn help() {}\n"},
+               {"util.al", "pub fn help() {}\n"},
            });
   CHECK(setup);
   if (!setup) {
@@ -349,7 +360,7 @@ TEST_CASE("Resolve handles root imports from nested modules") {
   const bool setup =
       write_all(dir, {
                          {"main.al", "fn main() {}\n"},
-                         {"a.al", "struct Thing { x: i32 }\n"},
+                         {"a.al", "pub struct Thing { x: i32 }\n"},
                          {"a/b.al", "use package::a::Thing;\nfn deep() {}\n"},
                      });
   CHECK(setup);
@@ -454,7 +465,7 @@ TEST_CASE("Resolve follows public re-exports") {
       write_all(dir, {
                          {"main.al", "use a::Thing;\nfn main() {}\n"},
                          {"a.al", "pub use b::Thing;\n"},
-                         {"a/b.al", "struct Thing { x: i32 }\n"},
+                         {"a/b.al", "pub struct Thing { x: i32 }\n"},
                      });
   CHECK(setup);
   if (!setup) {
@@ -514,6 +525,51 @@ TEST_CASE("Resolve reports re-export cycles") {
       resolve_case(dir, "main.al", {"main.al", "a.al", "b.al"}, f);
   CHECK(!result.ok);
   CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Resolve refuses importing a private item") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {
+                         {"main.al", "use a::hidden;\nfn main() {}\n"},
+                         {"a.al", "fn hidden() {}\n"},
+                     });
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const ResolveCase result =
+      resolve_case(dir, "main.al", {"main.al", "a.al"}, f);
+  CHECK(!result.ok);
+  CHECK(has_message(
+      f.bag,
+      "Item 'hidden' is private; the module that declares it can open it "
+      "with `pub`"));
+}
+
+TEST_CASE("Resolve refuses re-exporting a private item") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {
+                         {"main.al", "fn main() {}\n"},
+                         {"a.al", "pub use package::b::Thing;\n"},
+                         {"b.al", "struct Thing {}\n"},
+                     });
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  const ResolveCase result =
+      resolve_case(dir, "main.al", {"main.al", "a.al", "b.al"}, f);
+  CHECK(!result.ok);
+  CHECK(has_message(
+      f.bag,
+      "Item 'Thing' is private; the module that declares it can open it "
+      "with `pub`"));
 }
 
 ResolveCase resolve_case_with_prelude(

@@ -4,8 +4,8 @@ pub spec Show {
 }
 
 pub struct Point {
-  x: i32,
-  y: i32,
+  pub x: i32,
+  pub y: i32,
 }
 
 impl Show for Point {
@@ -18,7 +18,7 @@ impl Show for Point {
 }
 
 pub struct Wrap<T> {
-  v: T,
+  pub v: T,
 }
 
 impl<T> Show for Wrap<T> {

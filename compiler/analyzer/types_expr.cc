@@ -213,10 +213,12 @@ bool Checker::bind_pattern(u32 module,
       for (const ast::FieldPattern& field : node.payload.strukt.fields) {
         u32 index = 0;
         bool found = false;
+        bool is_pub = false;
         for (const ast::ItemStructField& decl_field :
              decl.payload.get<ast::ItemStruct>().fields) {
           if (decl_field.name.name == field.name.name) {
             found = true;
+            is_pub = decl_field.is_pub;
             break;
           }
           ++index;
@@ -229,6 +231,9 @@ bool Checker::bind_pattern(u32 module,
           bind_error_idents(module, field.pattern);
           continue;
         }
+        (void)check_field_access(module, nominal->module, is_pub,
+                                 field.name.span, field.name.name,
+                                 nominal->name);
         if (bind_pattern(module, field.pattern,
                          struct_type_shape.fields[index])) {
           refutable = true;
@@ -1662,10 +1667,12 @@ ir::TypeIdx Checker::check_field(u32 module,
     }
     // A missing name on a resolved owner must not index past the end.
     bool named = false;
+    bool is_pub = false;
     for (const ast::ItemStructField& decl_field :
          ast.items[owner->item].payload.get<ast::ItemStruct>().fields) {
       if (decl_field.name.name == field_name.name) {
         named = true;
+        is_pub = decl_field.is_pub;
         break;
       }
     }
@@ -1676,8 +1683,11 @@ ir::TypeIdx Checker::check_field(u32 module,
       (void)index;
       return error_type();
     }
+    if (!check_field_access(module, owner->module, is_pub, field_name.span,
+                            field_name.name, owner->name)) {
+      return error_type();
+    }
     const ir::TypeIdx result = struct_type.fields[field_index];
-    (void)module;
     if (expected != nullptr) {
       return unify(*expected, result, node.span, "field");
     }
@@ -1768,10 +1778,12 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
        node.payload.get<ast::ExprStruct>().init) {
     u32 index = 0;
     bool found = false;
+    bool is_pub = false;
     for (const ast::ItemStructField& decl_field :
          decl.payload.get<ast::ItemStruct>().fields) {
       if (decl_field.name.name == field.name.name) {
         found = true;
+        is_pub = decl_field.is_pub;
         break;
       }
       ++index;
@@ -1784,6 +1796,8 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
       check_expr(module, field.value, nullptr);
       continue;
     }
+    (void)check_field_access(module, nominal->module, is_pub, field.name.span,
+                             field.name.name, nominal->name);
     if (seen[index]) {
       const u32 diag = bag.emit<i18n::Key::AnalyzerDuplicateField>(
           diag::Severity::Error, diag::Stage::Analyzer,

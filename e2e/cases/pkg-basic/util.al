@@ -1,3 +1,3 @@
-fn double(x: i32) -> i32 {
+pub fn double(x: i32) -> i32 {
   ret x * 2
 }

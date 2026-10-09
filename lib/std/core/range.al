@@ -22,8 +22,8 @@ pub enum Bound<T> {
 // `Included` (`..=`) or `Excluded` (`..<`), and bare `..` names no
 // end at all, so it leaves that side `Unbounded`.
 pub struct Range<T> {
-  start: Bound<T>,
-  end: Bound<T>,
+  pub start: Bound<T>,
+  pub end: Bound<T>,
 }
 
 // A cursor over a range: `Range::into_iter` builds one, and it

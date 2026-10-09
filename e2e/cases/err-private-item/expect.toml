@@ -1,0 +1,5 @@
+# A declaration without `pub` belongs to its module alone; another
+# module of the package reaches it only when the declaration opens it.
+exit = 4
+contains = ["Item 'hidden' is private"]
+not_contains = []

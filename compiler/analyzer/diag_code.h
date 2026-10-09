@@ -91,6 +91,11 @@ enum class DiagCode : u8 {
   // language spells it, so the name is known but the shape is not
   // (ADR-0060, ADR-0061).
   SpellingSuggestion = 43,
+  // A declaration or a struct field was reached from a module that
+  // cannot see it: it is not `pub`, and the reach comes from outside
+  // the module that declares it. A field follows the field's own
+  // marker; an item or method follows the declaration's.
+  PrivateAccess = 44,
 };
 
 }  // namespace analyzer

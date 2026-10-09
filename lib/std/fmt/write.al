@@ -3,7 +3,7 @@
 
 // `alcy/std/fmt`: formatting into a caller's buffer.
 
-pub struct WriteOutcome { written: usize, total: usize }
+pub struct WriteOutcome { pub written: usize, pub total: usize }
 
 pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ..) -> WriteOutcome {
   panic("fmt::write must expand")

@@ -1,0 +1,5 @@
+# A `pub` field is the module's own decision to open; every module of
+# the package reads it.
+exit = 0
+contains = ["Checked   2 files, 2 modules"]
+not_contains = ["error"]

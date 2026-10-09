@@ -551,6 +551,50 @@ class Resolver {
                     member);
   }
 
+  // The item that declares `member` in `module`'s `ns` namespace, or an
+  // invalid index when the name is a module rather than an item.
+  ast::ItemIdx find_declaration(u32 module,
+                                std::string_view member,
+                                Namespace ns) const {
+    using I = ast::ItemKind;
+    if (ns == Namespace::Module) {
+      return ast::ItemIdx::invalid();
+    }
+    for (ast::ItemIdx item : modules[module]->items) {
+      const ast::ItemNode& node = ast.items[item];
+      const bool in_ns = (ns == Namespace::Type &&
+                          (node.kind == I::Struct || node.kind == I::Enum ||
+                           node.kind == I::Spec)) ||
+                         (ns == Namespace::Value &&
+                          (node.kind == I::Struct || node.kind == I::Enum ||
+                           node.kind == I::Fn || node.kind == I::Intrinsic ||
+                           node.kind == I::Static || node.kind == I::Const));
+      if (in_ns && node.name() == member) {
+        return item;
+      }
+      if (ns == Namespace::Value && node.kind == I::Extern) {
+        for (const ast::ItemExternFn& fn :
+             node.payload.get<ast::ItemExtern>().fns) {
+          if (fn.name.name == member) {
+            return item;
+          }
+        }
+      }
+    }
+    return ast::ItemIdx::invalid();
+  }
+
+  // Whether `item` declared by `declaring` is reachable from `from`:
+  // its own module always, every other module only when it is `pub`. A
+  // module path that crossed a package boundary was already trimmed to
+  // the dependency's export list.
+  bool declaration_visible(u32 from, u32 declaring, ast::ItemIdx item) const {
+    if (from == declaring || !item.is_valid()) {
+      return true;
+    }
+    return ast.items[item].is_pub;
+  }
+
   // Looks a member up in a module's public imports (re-exports).
   bool lookup_reexport(u32 module,
                        std::string_view member,
@@ -677,29 +721,54 @@ class Resolver {
     // Locals first: that needs no recursion, and a self-target cannot
     // cycle. Re-exports follow only for members locals lack.
     bool resolved = false;
+    bool private_seen = false;
     u32 target = NO_MODULE;
     std::string_view final_member;
     // A struct or enum name occupies the type and value namespaces alike.
     const Namespace namespaces[] = {Namespace::Module, Namespace::Type,
                                     Namespace::Value};
     for (Namespace ns : namespaces) {
-      if (lookup_local(current, member, ns)) {
-        add_import(module, use, name, ns, current, member);
-        resolved = true;
+      if (!lookup_local(current, member, ns)) {
+        continue;
       }
+      if (!declaration_visible(module, current,
+                               find_declaration(current, member, ns))) {
+        if (!private_seen) {
+          private_seen = true;
+          const u32 index = bag.emit<i18n::Key::AnalyzerPrivateItem>(
+              diag::Severity::Error, diag::Stage::Analyzer,
+              DiagCode::PrivateAccess, node.span, member);
+          (void)index;
+        }
+        continue;
+      }
+      add_import(module, use, name, ns, current, member);
+      resolved = true;
     }
-    if (!resolved) {
+    if (!resolved && !private_seen) {
       if (current != module) {
         resolve_exports(current);
       }
       for (Namespace ns : namespaces) {
-        if (lookup_reexport(current, member, ns, target, final_member)) {
-          add_import(module, use, name, ns, target, final_member);
-          resolved = true;
+        if (!lookup_reexport(current, member, ns, target, final_member)) {
+          continue;
         }
+        if (!declaration_visible(module, target,
+                                 find_declaration(target, final_member, ns))) {
+          if (!private_seen) {
+            private_seen = true;
+            const u32 index = bag.emit<i18n::Key::AnalyzerPrivateItem>(
+                diag::Severity::Error, diag::Stage::Analyzer,
+                DiagCode::PrivateAccess, node.span, member);
+            (void)index;
+          }
+          continue;
+        }
+        add_import(module, use, name, ns, target, final_member);
+        resolved = true;
       }
     }
-    if (!resolved) {
+    if (!resolved && !private_seen) {
       emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnresolvedImport,
                       node.span, std_hints_, "import", member);
     }

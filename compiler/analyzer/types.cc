@@ -681,6 +681,12 @@ void Checker::check_superspecs() {
           if (resolve_type_path(entry.module, super_path.path, super_module,
                                 super_name)) {
             target = find_spec(super_module, super_name);
+            if (target != nullptr &&
+                !check_item_access(entry.module, target->module,
+                                   ast.items[target->item].is_pub,
+                                   super_node.span, super_name)) {
+              continue;
+            }
           }
         }
       }
@@ -794,6 +800,12 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
         std::string_view spec_name;
         if (resolve_type_path(module, spec_path.path, spec_module, spec_name)) {
           spec_entry = find_spec(spec_module, spec_name);
+          if (spec_entry != nullptr &&
+              !check_item_access(module, spec_entry->module,
+                                 ast.items[spec_entry->item].is_pub,
+                                 spec_node.span, spec_name)) {
+            return;
+          }
         }
       }
     }
@@ -967,6 +979,12 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
         if (resolve_type_path(module, target_path.path, target_module,
                               target_name)) {
           target_entry = find_nominal(target_module, target_name);
+          if (target_entry != nullptr &&
+              !check_item_access(module, target_entry->module,
+                                 ast.items[target_entry->item].is_pub,
+                                 target_node.span, target_name)) {
+            return;
+          }
         }
       }
     }
@@ -1872,6 +1890,9 @@ bool Checker::resolve_value_argument(u32 module,
   }
   const std::string_view member = path.segments.back().name;
   if (const CheckedModule::StaticInfo* info = lookup_static(target, member)) {
+    if (!check_item_access(module, info->module, info->is_pub, span, member)) {
+      return false;
+    }
     if (!info->is_const || !info->init.is_valid()) {
       const u32 index = bag.emit<i18n::Key::AnalyzerValueArgumentNotInteger>(
           diag::Severity::Error, diag::Stage::Analyzer,
@@ -2081,6 +2102,11 @@ ir::TypeIdx Checker::resolve_type(u32 module,
             diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
             node.span, target_name);
         (void)index;
+        return error_type();
+      }
+      if (!check_item_access(module, entry->module,
+                             ast.items[entry->item].is_pub, node.span,
+                             target_name)) {
         return error_type();
       }
       const usize param_count = nominal_params(*entry).size();
@@ -2635,6 +2661,9 @@ void Checker::process_module(u32 module) {
                                   target_module, target_name)) {
               NominalEntry* entry = find_nominal(target_module, target_name);
               if (entry != nullptr) {
+                (void)check_item_access(module, entry->module,
+                                        ast.items[entry->item].is_pub,
+                                        self_node.span, target_name);
                 target_known = true;
                 if (nominal_params(*entry).empty() &&
                     node.payload.get<ast::ItemImpl>().params.empty()) {
@@ -3483,6 +3512,10 @@ bool Checker::const_array_length(u32 module,
     return false;
   }
   const CheckedModule::StaticInfo* info = lookup_static(target, name);
+  if (info != nullptr &&
+      !check_item_access(module, info->module, info->is_pub, span, name)) {
+    return false;
+  }
   if (info == nullptr || !info->is_const || !info->init.is_valid()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerArrayLengthNotConst>(
         diag::Severity::Error, diag::Stage::Analyzer,
@@ -3949,7 +3982,8 @@ void Checker::register_static(u32 module, ast::ItemIdx item) {
        .type = resolve_type(module, type, nullptr),
        .init = init,
        .is_const = is_const,
-       .module = module});
+       .module = module,
+       .is_pub = node.is_pub});
 }
 
 const CheckedModule::StaticInfo* Checker::find_static(
@@ -4141,6 +4175,37 @@ NominalEntry* Checker::find_nominal_in_scope(u32 module,
   return nullptr;
 }
 
+bool Checker::check_item_access(u32 from,
+                                u32 declaring,
+                                bool is_pub,
+                                diag::Span span,
+                                std::string_view name) {
+  if (declaration_visible(from, declaring, is_pub)) {
+    return true;
+  }
+  const u32 index = bag.emit<i18n::Key::AnalyzerPrivateItem>(
+      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::PrivateAccess,
+      span, name);
+  (void)index;
+  return false;
+}
+
+bool Checker::check_field_access(u32 from,
+                                 u32 declaring,
+                                 bool is_pub,
+                                 diag::Span span,
+                                 std::string_view field,
+                                 std::string_view owner) {
+  if (declaration_visible(from, declaring, is_pub)) {
+    return true;
+  }
+  const u32 index = bag.emit<i18n::Key::AnalyzerPrivateField>(
+      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::PrivateAccess,
+      span, field, owner);
+  (void)index;
+  return false;
+}
+
 // Collects the generic impls of the package by the nominal each targets. The
 // walk runs once: a lookup matches an instantiation by visiting the impls that
 // name its nominal, in the order the modules and their items were in, which is
@@ -4156,7 +4221,9 @@ void Checker::index_generic_impls() {
         continue;
       }
       const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
-      if (impl.params.empty()) {
+      // A spec impl's methods dispatch through their spec; only an
+      // inherent block belongs to the inherent lookup this feeds.
+      if (impl.spec.is_valid() || impl.params.empty()) {
         continue;
       }
       const ast::TypeNode& target = ast.types[impl.type];
@@ -4181,7 +4248,9 @@ void Checker::index_generic_impls() {
 
 const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
     ir::TypeIdx self,
-    std::string_view name) {
+    std::string_view name,
+    u32 module,
+    diag::Span span) {
   const auto own = methods_by_self_.find(self.idx);
   if (own != methods_by_self_.end()) {
     for (const auto& [owner, position] : own->second) {
@@ -4191,6 +4260,9 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
         continue;
       }
       if (method.name == name) {
+        const bool is_pub =
+            !method.item.is_valid() || ast.items[method.item].is_pub;
+        (void)check_item_access(module, owner, is_pub, span, name);
         return &method;
       }
     }
@@ -4260,6 +4332,9 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
       const CheckedModule::MethodInfo* method =
           instantiate_method(m, self, scope, value_scope, impl, name);
       if (method != nullptr) {
+        const bool is_pub =
+            !method->item.is_valid() || ast.items[method->item].is_pub;
+        (void)check_item_access(module, m, is_pub, span, name);
         return method;
       }
     }
@@ -4278,7 +4353,7 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
   self = type_origin(self);
   if (!spec_only) {
     if (const CheckedModule::MethodInfo* inherent =
-            lookup_inherent_method(self, name)) {
+            lookup_inherent_method(self, name, module, span)) {
       return inherent;
     }
   }
@@ -5138,11 +5213,19 @@ bool Checker::resolve_value_path(u32 module,
       }
       if (const CheckedModule::StaticInfo* info =
               lookup_static(target, member)) {
+        if (!check_item_access(module, info->module, info->is_pub, node.span,
+                               member)) {
+          return false;
+        }
         out.kind = PathValue::Kind::Static;
         out.type = info->type;
         return true;
       }
       if (const CheckedModule::FnSig* fn = lookup_function(target, member)) {
+        const bool is_pub = !fn->item.is_valid() || ast.items[fn->item].is_pub;
+        if (!check_item_access(module, target, is_pub, node.span, member)) {
+          return false;
+        }
         out.kind = PathValue::Kind::Function;
         out.function = fn;
         return true;
@@ -5150,6 +5233,10 @@ bool Checker::resolve_value_path(u32 module,
       std::vector<VariantMatch> matches;
       if (find_variant_in(target, member, matches) && matches.size() == 1) {
         const ast::ItemNode& decl = ast.items[matches[0].enom->item];
+        if (!check_item_access(module, matches[0].enom->module, decl.is_pub,
+                               node.span, member)) {
+          return false;
+        }
         out.enom = matches[0].enom;
         out.variant = matches[0].variant;
         out.type = nominal_owner_type(matches[0].enom);
@@ -5270,11 +5357,19 @@ bool Checker::resolve_value_path(u32 module,
   }
   const std::string_view member = node.segments.back().name;
   if (const CheckedModule::StaticInfo* info = lookup_static(target, member)) {
+    if (!check_item_access(module, info->module, info->is_pub, node.span,
+                           member)) {
+      return false;
+    }
     out.kind = PathValue::Kind::Static;
     out.type = info->type;
     return true;
   }
   if (const CheckedModule::FnSig* fn = lookup_function(target, member)) {
+    const bool is_pub = !fn->item.is_valid() || ast.items[fn->item].is_pub;
+    if (!check_item_access(module, target, is_pub, node.span, member)) {
+      return false;
+    }
     out.kind = PathValue::Kind::Function;
     out.function = fn;
     return true;
@@ -5319,6 +5414,11 @@ bool Checker::resolve_variant_path(u32 module,
       }
       std::vector<VariantMatch> matches;
       if (find_variant_in(target, member, matches) && matches.size() == 1) {
+        const ast::ItemNode& enum_node = ast.items[matches[0].enom->item];
+        if (!check_item_access(module, matches[0].enom->module,
+                               enum_node.is_pub, node.span, member)) {
+          return false;
+        }
         out.kind = PathValue::Kind::TupleVariant;
         out.enom = matches[0].enom;
         out.variant = matches[0].variant;
@@ -5394,6 +5494,11 @@ NominalEntry* Checker::resolve_struct_path(u32 module, ast::PathIdx path) {
   NominalEntry* nominal = find_nominal(target, node.segments.back().name);
   if (nominal != nullptr &&
       ast.items[nominal->item].kind == ast::ItemKind::Struct) {
+    if (!check_item_access(module, nominal->module,
+                           ast.items[nominal->item].is_pub, node.span,
+                           node.segments.back().name)) {
+      return nullptr;
+    }
     return nominal;
   }
   emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnknownValue, node.span,

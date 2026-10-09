@@ -148,6 +148,9 @@ struct CheckedModule {
     // Module that declares the item. A use from elsewhere checks and
     // evaluates the initializer here, never in the importing scope.
     u32 module = 0;
+    // The declaration's `pub`; a static or const of another module is
+    // reachable only through it.
+    bool is_pub = false;
   };
   std::vector<StaticInfo> statics;
   // Lowering side tables: every checked expression records its type,

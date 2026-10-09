@@ -1,0 +1,11 @@
+[package]
+name = "prvitem"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main", "helper"]
+
+[[bin]]
+name = "prvitem"
+path = "main.al"

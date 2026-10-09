@@ -581,11 +581,36 @@ class Checker {
                     diag::Span span,
                     VariantMatch& out);
   NominalEntry* find_nominal_in_scope(u32 module, std::string_view name);
+  // Whether a declaration of `declaring` is reachable from `from`: its
+  // own module always, every other module only when it is `pub`. A
+  // module path that crossed a package boundary was already trimmed to
+  // the dependency's export list, so this is the whole rule.
+  static bool declaration_visible(u32 from, u32 declaring, bool is_pub) {
+    return from == NO_MODULE || from == declaring || is_pub;
+  }
+  // The same, reporting a private reach at `span` and answering whether
+  // the use may proceed.
+  bool check_item_access(u32 from,
+                         u32 declaring,
+                         bool is_pub,
+                         diag::Span span,
+                         std::string_view name);
+  // A field's marker, checked the same way; `owner` names the struct in
+  // the report.
+  bool check_field_access(u32 from,
+                          u32 declaring,
+                          bool is_pub,
+                          diag::Span span,
+                          std::string_view field,
+                          std::string_view owner);
   // Finds an inherent method, instantiating generic impls on demand
-  // (which checks the method body under the substitution).
-  const CheckedModule::MethodInfo* lookup_inherent_method(
-      ir::TypeIdx self,
-      std::string_view name);
+  // (which checks the method body under the substitution). `module` is
+  // the module the call is written in; a method of another module
+  // needs its `pub`.
+  const CheckedModule::MethodInfo* lookup_inherent_method(ir::TypeIdx self,
+                                                          std::string_view name,
+                                                          u32 module,
+                                                          diag::Span span);
   // Collects the generic impls of the package, by the nominal each targets.
   // Built on the first generic lookup and rebuilt if a nominal was interned
   // since, because a lookup may come before the last one is.

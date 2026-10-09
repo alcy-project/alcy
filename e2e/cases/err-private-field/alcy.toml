@@ -1,0 +1,11 @@
+[package]
+name = "prvfield"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main", "helper"]
+
+[[bin]]
+name = "prvfield"
+path = "main.al"

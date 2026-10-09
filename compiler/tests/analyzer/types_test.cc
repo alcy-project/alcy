@@ -847,13 +847,13 @@ TEST_CASE("Check rejects unknown generic methods") {
 TEST_CASE("Check resolves cross-module types") {
   VirtualDir dir;
   const bool setup = write_all(
-      dir,
-      {
-          {"main.al",
-           "use a::Point;\nstruct Holder { p: Point, q: a::Other }\nfn "
-           "main() {}\n"},
-          {"a.al", "pub struct Point { x: i32 }\nstruct Other { y: bool }\n"},
-      });
+      dir, {
+               {"main.al",
+                "use a::Point;\nstruct Holder { p: Point, q: a::Other }\nfn "
+                "main() {}\n"},
+               {"a.al",
+                "pub struct Point { x: i32 }\npub struct Other { y: bool }\n"},
+           });
   CHECK(setup);
   if (!setup) {
     return;
@@ -1729,10 +1729,10 @@ TEST_CASE("Check inherent and core generic methods") {
 pub enum Option<T> { Some(T), None }
 pub enum Result<T, E> { Ok(T), Err(E) }
 impl<T, E> Result<T, E> {
-  fn is_ok(self: Self) -> bool { ret true }
-  fn is_err(self: Self) -> bool { ret false }
-  fn unwrap(self: Self) -> T { ret panic("stub") }
-  fn expect(self: Self, msg: str) -> T { ret panic(msg) }
+  pub fn is_ok(self: Self) -> bool { ret true }
+  pub fn is_err(self: Self) -> bool { ret false }
+  pub fn unwrap(self: Self) -> T { ret panic("stub") }
+  pub fn expect(self: Self, msg: str) -> T { ret panic(msg) }
 }
 )"}});
     CHECK(setup);
@@ -3662,8 +3662,8 @@ TEST_CASE("Check keeps one name apart per module") {
                           "  _ := take(p)\n"
                           "  _ := take2(q)\n"
                           "}\n"},
-                         {"a.al", "pub struct Box { n: i32 }\n"},
-                         {"b.al", "pub struct Box { flag: bool }\n"},
+                         {"a.al", "pub struct Box { pub n: i32 }\n"},
+                         {"b.al", "pub struct Box { pub flag: bool }\n"},
                      });
   CHECK(setup);
   if (!setup) {
@@ -5495,6 +5495,131 @@ TEST_CASE("Check hints at a std member that is not staged") {
       f.bag,
       "Unresolved value 'Thing::new'; `Thing` is in the standard library "
       "(alcy/std/widgets); add it to [dependencies]"));
+}
+
+TEST_CASE("Check refuses an item private to its declaring module") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "use a::Point;\n"
+                                      "fn f(p: &Point) -> i32 {\n"
+                                      "  ret p.x + a::secret()\n"
+                                      "}\n"
+                                      "fn main() {}\n"},
+                                     {"a.al",
+                                      "pub struct Point { pub x: i32 }\n"
+                                      "fn secret() -> i32 { ret 1 }\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al", "a.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(has_message(
+      f.bag,
+      "Item 'secret' is private; the module that declares it can open it "
+      "with `pub`"));
+}
+
+TEST_CASE("Check opens pub items and fields across modules") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "use a::S;\n"
+                       "fn f(s: &S) -> i32 {\n"
+                       "  ret s.open\n"
+                       "}\n"
+                       "fn main() {}\n"},
+                      {"a.al",
+                       "pub struct S { pub open: i32, hidden: i32 }\n"
+                       "impl S {\n"
+                       "  fn read(self: &Self) -> i32 {\n"
+                       "    ret self.hidden\n"
+                       "  }\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al", "a.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check refuses private fields to other modules") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "use a::S;\n"
+                       "fn f(p: &S) -> i32 {\n"
+                       "  ret p.hidden\n"
+                       "}\n"
+                       "fn g(mut s: S) -> i32 {\n"
+                       "  s.hidden = 2\n"
+                       "  ret 0\n"
+                       "}\n"
+                       "fn h() -> i32 {\n"
+                       "  t := S { hidden: 3 }\n"
+                       "  match t {\n"
+                       "    S { hidden } => ret hidden,\n"
+                       "  }\n"
+                       "}\n"
+                       "fn main() {}\n"},
+                      {"a.al", "pub struct S { hidden: i32 }\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al", "a.al"}, f);
+  CHECK(!result.package.has_value());
+  const std::string_view message =
+      "Field 'hidden' of 'S' is private; the module that declares the struct "
+      "can open it with `pub`";
+  CHECK(count_messages(f.bag, message) == 4);
+}
+
+TEST_CASE("Check follows a spec method's visibility, not the impl's") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "use a::S;\n"
+                       "use a::Show;\n"
+                       "fn f(s: &S) -> i32 {\n"
+                       "  ret s.show() + s.secret()\n"
+                       "}\n"
+                       "fn main() {}\n"},
+                      {"a.al",
+                       "pub struct S { v: i32 }\n"
+                       "pub spec Show {\n"
+                       "  fn show(self: &Self) -> i32;\n"
+                       "}\n"
+                       "impl S {\n"
+                       "  fn secret(self: &Self) -> i32 { ret 1 }\n"
+                       "}\n"
+                       "impl Show for S {\n"
+                       "  fn show(self: &Self) -> i32 { ret 2 }\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al", "a.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(has_message(
+      f.bag,
+      "Item 'secret' is private; the module that declares it can open it "
+      "with `pub`"));
+  CHECK(!has_message(
+      f.bag,
+      "Item 'show' is private; the module that declares it can open it "
+      "with `pub`"));
 }
 
 }  // namespace analyzer

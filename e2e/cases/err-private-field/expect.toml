@@ -1,0 +1,5 @@
+# A field without `pub` belongs to the module that declares the struct;
+# another module reads it only when the field opens it.
+exit = 4
+contains = ["Field 'hidden' of 'S' is private"]
+not_contains = []

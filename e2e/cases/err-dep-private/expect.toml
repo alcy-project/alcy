@@ -1,0 +1,5 @@
+# `sha2` is exported, but `hidden` is not `pub`: crossing the package
+# boundary needs both the module on the export list and the item open.
+exit = 4
+contains = ["Item 'hidden' is private"]
+not_contains = []

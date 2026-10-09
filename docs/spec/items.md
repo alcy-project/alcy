@@ -150,7 +150,10 @@
 
 - Structs have named fields only and no constructors.
   Construction initializes every field; `..base` move-update is
-  allowed. A type may declare `fn drop(self: Self)`; scope exit and
+  allowed. A field without `pub` is private to the module that
+  declares the struct, which gates reads, writes, construction, and
+  destructuring alike (`modules.md`). A type may declare
+  `fn drop(self: Self)`; scope exit and
   `return` run it, and a type without one ends its destructible fields.
   See `values.md`.
 - Enums have unit and tuple variants only (`Ok(T)`/`Err(E)` and

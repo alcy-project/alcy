@@ -207,6 +207,8 @@
   F(AnalyzerPowerNotImplemented, "The '**' operator is not implemented yet") \
   F(AnalyzerPrintArity, "'{}' expects a format string, found {} arguments") \
   F(AnalyzerPrintInCompEvaluation, "'{}' is not allowed in comp evaluation") \
+  F(AnalyzerPrivateField, "Field '{}' of '{}' is private; the module that declares the struct can open it with `pub`") \
+  F(AnalyzerPrivateItem, "Item '{}' is private; the module that declares it can open it with `pub`") \
   F(AnalyzerRangeEndpointNotInteger, "A range index must have an integer endpoint type") \
   F(AnalyzerRangeEndpointTypeMismatch, "Type mismatch in range endpoints: '{}' vs '{}'") \
   F(AnalyzerRangeExpressionsDeferred, "range expressions arrive post-MVP") \

@@ -29,8 +29,16 @@
   (`docs/adr/0060-the-path-vocabulary-is-three-forms.md`).
 - `use a::b;`, `use a::b as c;`, and `pub use` re-exports are MVP.
   Glob imports (`::*`) are deferred.
-- Default visibility is private; `pub` opens an item. There is no
-  `priv` keyword. Restricted visibility (`pub(...)`) is deferred.
+- Default visibility is private: a declaration is reachable only from
+  the module that declares it. `pub` opens it to every module of the
+  package; reaching it from another package needs the declaring
+  module in that package's `[modules] export` list as well. Fields
+  carry their own `pub` and are private by default: another module
+  reads, writes, constructs, and destructures only the fields a struct
+  marked `pub`. An inherent method follows the same rule per method; a
+  spec method follows its spec, and an enum's variants follow the
+  enum. There is no `priv` keyword. Restricted visibility (`pub(...)`)
+  is deferred.
 - Three namespaces exist: types, values, and modules. A struct name
   may denote both its type and its constructor expressions.
 - Resolution order is lexical scope, then module, then the core

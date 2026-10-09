@@ -1,0 +1,11 @@
+[package]
+name = "pubfield"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main", "helper"]
+
+[[bin]]
+name = "pubfield"
+path = "main.al"
