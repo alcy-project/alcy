@@ -69,7 +69,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   Value parameters (`[T; N]`) land here, and `ArrayVec<T, N>` is
   their acceptance case rather than an item of its own. Designed in
   `docs/adr/0054-comp-and-const-are-separate.md`.
-- [ ] Compile-time variadic arguments, and `print`/`println` in `io`.
+- [x] Compile-time variadic arguments, and `print`/`println` in `io`.
 
   A parameter written `args: ..` takes the call's remaining
   arguments, which the compiler collects at compile time; no ABI
