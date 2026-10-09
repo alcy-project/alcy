@@ -4996,4 +4996,20 @@ TEST_CASE("Check names the package root for foreign path heads") {
   }
 }
 
+TEST_CASE("Check names the declaration for an undeclared assignment") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al", "fn main() {\n  a = 1\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(
+      f.bag, "no local or item named 'a'; if this declares, write 'a := ...'"));
+  CHECK(f.bag.error_count() == 1);
+}
+
 }  // namespace analyzer

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -70,6 +71,9 @@ class Parser {
   // Token cursor. Never rests on skipped kinds.
   bool at_end() const;
   lexer::TokenKind peek_kind() const;
+  // The nth significant token after the cursor (0 is the cursor
+  // itself), skipping what `skip_insignificant` skips.
+  lexer::TokenKind peek_kind(usize ahead) const;
   lexer::Token peek() const;
   lexer::Token previous() const;
   void advance();
@@ -171,6 +175,12 @@ class Parser {
 
   // Statements (recover at boundaries).
   ast::StmtIdx parse_stmt();
+  // A line spelled like a neighboring language's declaration or return
+  // is parsed as the construct it meant, so the report is the spelling
+  // and not a cascade (ADR-0061). Nothing means the line is not that
+  // shape and is parsed normally.
+  std::optional<ast::StmtIdx> parse_spelled_declaration(usize mark);
+  std::optional<ast::StmtIdx> parse_spelled_return(usize mark);
 
   // A closure literal: an optional capture list, parameter list,
   // `->`, and body. The caller scanned the shape, so the brackets

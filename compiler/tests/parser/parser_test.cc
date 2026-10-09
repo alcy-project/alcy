@@ -10,6 +10,7 @@
 
 #include "ast/ast.h"
 #include "diag/bag.h"
+#include "diag/diagnostic.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
@@ -48,6 +49,16 @@ ParseResult parse(std::string_view bytes, Fixture& f) {
   }
   auto items = std::move(parsed).unwrap();
   return {items, !f.bag.has_errors()};
+}
+
+bool has_message(const diag::DiagBag& bag, std::string_view message) {
+  for (u32 i = 0; i < bag.size(); ++i) {
+    const diag::Diagnostic* const diagnostic = bag.at(i);
+    if (diagnostic != nullptr && diagnostic->message == message) {
+      return true;
+    }
+  }
+  return false;
 }
 
 const ast::ItemFn as_fn(const ast::ItemIdx item_idx, Fixture& f) {
@@ -1751,6 +1762,61 @@ TEST_CASE("Parser reads a struct pattern in a declaration and condition") {
       f);
   CHECK(result.ok);
   CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("A spelled declaration reports the alcy form once") {
+  struct Case {
+    std::string_view source;
+    std::string_view message;
+  };
+  const Case cases[] = {
+      {"fn main() {\n  let a = 1\n}\n",
+       "`let` is not a keyword; declare with `x := ...` (`mut x := ...` "
+       "when mutable)"},
+      {"fn main() {\n  let mut a = 1\n}\n",
+       "`let` is not a keyword; declare with `x := ...` (`mut x := ...` "
+       "when mutable)"},
+      {"fn main() {\n  var a := 1\n}\n",
+       "`var` is not a keyword; declare with `x := ...`"},
+      {"fn main() {\n  mut a = 1\n}\n",
+       "a mutable declaration is `mut x := ...`; `=` only reassigns"},
+      {"fn main() {\n  a: i32 = 1\n}\n",
+       "a typed declaration is `x: T := ...`; `=` only reassigns"},
+      {"fn main() {\n  i32 a = 1\n}\n",
+       "a declaration puts the type after the name: `x: T := ...`"},
+  };
+  for (const Case& c : cases) {
+    Fixture f;
+    const ParseResult result = parse(c.source, f);
+    CHECK(!result.ok);
+    CHECK(has_message(f.bag, c.message));
+    CHECK(f.bag.error_count() == 1);
+  }
+}
+
+TEST_CASE("A spelled return reports ret once") {
+  Fixture f;
+  const ParseResult result = parse("fn f() -> i32 {\n  return 1\n}\n", f);
+  CHECK(!result.ok);
+  CHECK(has_message(f.bag, "`ret` returns; write `ret ...`"));
+  CHECK(f.bag.error_count() == 1);
+}
+
+TEST_CASE("The spelling shapes leave bindings of those names alone") {
+  // `let`, `var`, and `return` are ordinary identifiers; a declaration
+  // or a caller spelled with them is not the neighboring language's
+  // shape.
+  Fixture f;
+  const ParseResult result = parse(
+      "fn main() {\n"
+      "  let := 1\n"
+      "  let = 2\n"
+      "  var := 3\n"
+      "  return := 4\n"
+      "  return = 5\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
 }
 
 }  // namespace parser

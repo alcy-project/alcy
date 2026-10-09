@@ -39,6 +39,31 @@ bool is_reserved(lexer::TokenKind kind) {
   }
 }
 
+// The primitive type tokens, for the declaration a neighboring
+// language spells with the type first.
+bool is_primitive_type_token(lexer::TokenKind kind) {
+  using K = lexer::TokenKind;
+  switch (kind) {
+    case K::I8:
+    case K::I16:
+    case K::I32:
+    case K::I64:
+    case K::I128:
+    case K::Isize:
+    case K::U8:
+    case K::U16:
+    case K::U32:
+    case K::U64:
+    case K::U128:
+    case K::Usize:
+    case K::F32:
+    case K::F64:
+    case K::Bool:
+    case K::Str: return true;
+    default: return false;
+  }
+}
+
 bool is_compound_assign(lexer::TokenKind kind) {
   switch (kind) {
     case lexer::TokenKind::PlusEq:
@@ -104,6 +129,22 @@ bool Parser::at_end() const {
 
 lexer::TokenKind Parser::peek_kind() const {
   return peek().kind;
+}
+
+lexer::TokenKind Parser::peek_kind(usize ahead) const {
+  usize i = pos_;
+  while (i < tokens_.size()) {
+    const lexer::TokenKind kind = tokens_[i].kind;
+    if (kind != lexer::TokenKind::Error &&
+        kind != lexer::TokenKind::DocComment && !is_reserved(kind)) {
+      if (ahead == 0) {
+        return kind;
+      }
+      --ahead;
+    }
+    ++i;
+  }
+  return lexer::TokenKind::Eof;
 }
 
 lexer::Token Parser::peek() const {
@@ -1344,11 +1385,197 @@ ast::BlockIdx Parser::parse_block() {
   return ast_.blocks.push_back(block);
 }
 
+std::optional<ast::StmtIdx> Parser::parse_spelled_declaration(usize mark) {
+  using K = lexer::TokenKind;
+  const lexer::Token start = peek();
+  const std::string_view word =
+      bytes_.substr(start.span.offset, start.span.length);
+  bool keyword = false;     // `let`/`var`, consumed before the pattern
+  bool type_first = false;  // the type token leads the line
+  bool matched = false;
+  if (start.kind == K::Ident && (word == "let" || word == "var")) {
+    // `let a ...` / `var a ...`: a binding named let/var has a
+    // separator next, not a pattern.
+    const K after = peek_kind(1);
+    if (after == K::Mut || after == K::Ident || after == K::Underscore) {
+      if (word == "let") {
+        const u32 index = bag_.emit<i18n::Key::ParserLetSpelling>(
+            diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
+            start.span);
+        (void)index;
+      } else {
+        const u32 index = bag_.emit<i18n::Key::ParserVarSpelling>(
+            diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
+            start.span);
+        (void)index;
+      }
+      keyword = true;
+      matched = true;
+    }
+  } else if (start.kind == K::Mut && peek_kind(1) == K::Ident &&
+             peek_kind(2) == K::Eq) {
+    const u32 index = bag_.emit<i18n::Key::ParserMutDeclarationSpelling>(
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
+        start.span);
+    (void)index;
+    matched = true;
+  } else if (is_primitive_type_token(start.kind) && peek_kind(1) == K::Ident &&
+             (peek_kind(2) == K::Eq || peek_kind(2) == K::ColonEq)) {
+    const u32 index = bag_.emit<i18n::Key::ParserTypeFirstDeclarationSpelling>(
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
+        start.span);
+    (void)index;
+    matched = true;
+    type_first = true;
+  } else if (start.kind == K::Ident) {
+    // `a: T = ...`: a typed declaration that wrote `=` for `:=`. A
+    // plain `a = ...` has no ascription and stays an ordinary
+    // reassignment for the analyzer to judge.
+    bool ascription = false;
+    i32 depth = 0;
+    for (usize ahead = 1;; ++ahead) {
+      const K kind = peek_kind(ahead);
+      if (kind == K::Eof) {
+        break;
+      }
+      if (depth == 0) {
+        if (kind == K::Semicolon || kind == K::RBrace) {
+          break;
+        }
+        if (kind == K::ColonEq) {
+          break;
+        }
+        if (kind == K::Eq) {
+          matched = ascription;
+          break;
+        }
+        if (kind == K::Colon) {
+          ascription = true;
+        }
+      }
+      if (kind == K::LParen || kind == K::LBracket || kind == K::LBrace) {
+        ++depth;
+      } else if ((kind == K::RParen || kind == K::RBracket ||
+                  kind == K::RBrace) &&
+                 depth > 0) {
+        --depth;
+      }
+    }
+    if (matched) {
+      const u32 index = bag_.emit<i18n::Key::ParserTypedDeclarationSpelling>(
+          diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
+          start.span);
+      (void)index;
+    }
+  }
+  if (!matched) {
+    return std::nullopt;
+  }
+  if (keyword) {
+    advance();  // `let`/`var`
+  }
+  ast::TypeIdx type = ast::TypeIdx::invalid();
+  if (type_first) {
+    type = parse_closed_type();
+    if (!type.is_valid()) {
+      return ast::StmtIdx::invalid();
+    }
+  }
+  const ast::PatternIdx pattern = parse_pattern();
+  if (!pattern.is_valid()) {
+    return ast::StmtIdx::invalid();
+  }
+  if (!type_first && match(K::Colon)) {
+    type = parse_closed_type();
+    if (!type.is_valid()) {
+      return ast::StmtIdx::invalid();
+    }
+  }
+  if (!match(K::ColonEq) && !match(K::Eq)) {
+    expect(K::ColonEq, "`:=`");
+    return ast::StmtIdx::invalid();
+  }
+  const ast::ExprIdx init = parse_expr();
+  if (!init.is_valid()) {
+    return ast::StmtIdx::invalid();
+  }
+  ast::StmtNode node;
+  node.kind = ast::StmtKind::Decl;
+  node.span = span_from(mark);
+  node.payload.set(ast::StmtDecl{
+      .pattern = pattern,
+      .type = type,
+      .init = init,
+      .is_const = false,
+  });
+  return ast_.stmts.push_back(node);
+}
+
+std::optional<ast::StmtIdx> Parser::parse_spelled_return(usize mark) {
+  using K = lexer::TokenKind;
+  const lexer::Token start = peek();
+  if (start.kind != K::Ident ||
+      bytes_.substr(start.span.offset, start.span.length) != "return") {
+    return std::nullopt;
+  }
+  switch (peek_kind(1)) {
+    case K::Integer:
+    case K::Float:
+    case K::String:
+    case K::Char:
+    case K::True:
+    case K::False:
+    case K::Ident:
+    case K::If:
+    case K::Match:
+    case K::Loop:
+    case K::While:
+    case K::For:
+    case K::Ret:
+    case K::Unsafe:
+    case K::Comp: break;
+    default: return std::nullopt;
+  }
+  const u32 index = bag_.emit<i18n::Key::ParserReturnSpelling>(
+      diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
+      start.span);
+  (void)index;
+  advance();  // `return`
+  const ast::ExprIdx value = parse_expr();
+  if (!value.is_valid()) {
+    return ast::StmtIdx::invalid();
+  }
+  ast::ExprNode ret_node;
+  ret_node.kind = ast::ExprKind::Return;
+  ret_node.span = span_from(mark);
+  ret_node.payload.set(ast::ExprReturn{
+      .value = value,
+  });
+  const ast::ExprIdx ret_expr = ast_.exprs.push_back(ret_node);
+  ast::StmtNode node;
+  node.kind = ast::StmtKind::Expr;
+  node.span = span_from(mark);
+  node.payload.set(ast::StmtExpr{
+      .value = ret_expr,
+  });
+  return ast_.stmts.push_back(node);
+}
+
 ast::StmtIdx Parser::parse_stmt() {
   if (ast_.exhausted()) {
     return ast::StmtIdx::invalid();
   }
   const usize mark = pos_;
+  // A line spelled like a neighboring language's construct is parsed as
+  // the construct it meant, so the report is the spelling and not a
+  // cascade (ADR-0061).
+  if (const std::optional<ast::StmtIdx> spelled =
+          parse_spelled_declaration(mark)) {
+    return *spelled;
+  }
+  if (const std::optional<ast::StmtIdx> spelled = parse_spelled_return(mark)) {
+    return *spelled;
+  }
   // Control-flow heads own their `:=` (if-let/while-let conditions);
   // scanning for a declaration lead would misread them as patterns.
   StmtLead lead = scan_lead();
@@ -1368,7 +1595,7 @@ ast::StmtIdx Parser::parse_stmt() {
     const bool comp_decl = match(lexer::TokenKind::Comp);
     if (comp_decl) {
       const u32 index = bag_.emit<i18n::Key::ParserCompDeclarationSpelling>(
-          diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
+          diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
           comp_token.span);
       (void)index;
     }

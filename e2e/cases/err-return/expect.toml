@@ -1,0 +1,4 @@
+# `ret` is alcy's return, and the spelling message teaches it
+# (ADR-0061).
+exit = 4
+contains = ["`ret` returns"]

@@ -1,0 +1,4 @@
+# `let` is a neighbor language's keyword; alcy declares with `:=`
+# (ADR-0061).
+exit = 4
+contains = ["`let` is not a keyword"]

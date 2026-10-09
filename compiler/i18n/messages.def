@@ -71,13 +71,19 @@
   F(ParserExternNeedsConvention, "`extern` needs a convention string (`extern \"C\"`)") \
   F(ParserInvalidSyntaxTree, "Internal error: invalid syntax tree: {}") \
   F(ParserInvalidTokenStream, "Internal error: invalid token stream: {}") \
+  F(ParserLetSpelling, "`let` is not a keyword; declare with `x := ...` (`mut x := ...` when mutable)") \
+  F(ParserMutDeclarationSpelling, "a mutable declaration is `mut x := ...`; `=` only reassigns") \
   F(ParserNameAlreadyBound, "Name `{}` is already bound in this scope") \
   F(ParserNestingTooDeep, "Nesting is deeper than the limit of {}") \
   F(ParserRangeBoundRequired, "`..<` and `..=` describe an endpoint, so one must follow") \
   F(ParserRangeEndNeedsBound, "A range end must be spelled `..<` or `..=`, bare `..` names no end") \
   F(ParserReservedName, "Name `{}` is reserved for future use") \
+  F(ParserReturnSpelling, "`ret` returns; write `ret ...`") \
+  F(ParserTypeFirstDeclarationSpelling, "a declaration puts the type after the name: `x: T := ...`") \
+  F(ParserTypedDeclarationSpelling, "a typed declaration is `x: T := ...`; `=` only reassigns") \
   F(ParserUnsafeOnlyOnFunctions, "`unsafe` applies to functions") \
   F(ParserUnsafeWithoutBlock, "`unsafe` must open a block (`unsafe {{ ... }}`)") \
+  F(ParserVarSpelling, "`var` is not a keyword; declare with `x := ...`") \
   /* analyzer */ \
   F(AnalyzerAmbiguousMethod, "Ambiguous method '{}'") \
   F(AnalyzerAmbiguousVariant, "Ambiguous variant '{}'") \
@@ -137,6 +143,7 @@
   F(AnalyzerConstDeclarationInitializer, "Const declaration initializer is not comp-known") \
   F(AnalyzerContinueOutsideLoop, "Continue outside of a loop") \
   F(AnalyzerCopyTypeCannotHaveDestructor, "Type is Copy because all of its fields are, so it cannot have a destructor") \
+  F(AnalyzerDeclarationSpelling, "no local or item named '{}'; if this declares, write '{} := ...'") \
   F(AnalyzerDuplicateDefinition, "Duplicate definition of '{}'") \
   F(AnalyzerDuplicateField, "Field '{}' is initialized more than once") \
   F(AnalyzerDuplicateImport, "Module `{}` is imported more than once") \

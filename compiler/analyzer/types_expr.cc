@@ -3230,6 +3230,23 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
             ast.exprs[reassign.place].payload.get<ast::ExprPath>().idx;
         const std::span<const ast::Ident> segments = ast.paths[path].segments;
         if (segments.size() == 1) {
+          const std::string_view name = segments[0].name;
+          // Nothing answers to the name, so the line is almost
+          // certainly a declaration that wrote `=` for `:=`
+          // (ADR-0061); report that instead of the unresolved value
+          // the place check would add.
+          if (lookup_local(name) == nullptr && value_param(name) == nullptr &&
+              lookup_static(module, name) == nullptr &&
+              lookup_function(module, name) == nullptr &&
+              !lookup_generic_fn(module, name).is_valid() &&
+              find_nominal_in_scope(module, name) == nullptr) {
+            const u32 index = bag.emit<i18n::Key::AnalyzerDeclarationSpelling>(
+                diag::Severity::Error, diag::Stage::Analyzer,
+                DiagCode::SpellingSuggestion, node.span, name, name);
+            (void)index;
+            (void)check_expr(module, reassign.value, nullptr);
+            return builder.primitive(ir::TypeTag::Void);
+          }
           if (const Local* local = lookup_local(segments[0].name)) {
             if (local->comp_known) {
               const u32 index =
