@@ -90,16 +90,20 @@ namespace pipeline {
 TEST_CASE("A mode names the output kind a backend answers") {
   const codegen::Target wasm{"wasm32-unknown-emscripten",
                              ir::PointerWidth::W32};
-  const codegen::Target host = codegen::host_target();
+  // Explicit targets: the expectations name the mapping, and the host
+  // itself is a wasm machine in the emscripten test build.
+  const codegen::Target native{"x86_64-unknown-linux-gnu",
+                               ir::PointerWidth::W64};
   // A wasm executable is the final module itself; everywhere else the
   // executable is an object the linker finishes.
   CHECK(output_kind_for(EmitMode::Executable, wasm) ==
         codegen::OutputKind::Module);
-  CHECK(output_kind_for(EmitMode::Executable, host) ==
+  CHECK(output_kind_for(EmitMode::Executable, native) ==
         codegen::OutputKind::Object);
-  CHECK(output_kind_for(EmitMode::Object, host) == codegen::OutputKind::Object);
-  CHECK(output_kind_for(EmitMode::LlvmIr, host) == codegen::OutputKind::Text);
-  CHECK(output_kind_for(EmitMode::LlvmBitcode, host) ==
+  CHECK(output_kind_for(EmitMode::Object, native) ==
+        codegen::OutputKind::Object);
+  CHECK(output_kind_for(EmitMode::LlvmIr, native) == codegen::OutputKind::Text);
+  CHECK(output_kind_for(EmitMode::LlvmBitcode, native) ==
         codegen::OutputKind::Bitcode);
 }
 
@@ -136,8 +140,11 @@ TEST_CASE("The default backend answers what the request asks for") {
         codegen::Backend::DirectWasm);
 #endif
   CHECK(backend_writes_final_module(codegen::Backend::DirectWasm, wasm));
-  CHECK(!backend_writes_final_module(codegen::Backend::DirectWasm,
-                                     codegen::host_target()));
+  // The host is a wasm machine in the emscripten test build, so the
+  // native expectation names a native target.
+  const codegen::Target native{"x86_64-unknown-linux-gnu",
+                               ir::PointerWidth::W64};
+  CHECK(!backend_writes_final_module(codegen::Backend::DirectWasm, native));
 #if ALCY_BACKEND_LLVM
   CHECK(!backend_writes_final_module(codegen::Backend::Llvm, wasm));
 #endif
