@@ -898,6 +898,9 @@ struct ItemIntrinsic {
 struct ItemStructField {
   Ident name;
   TypeIdx type = TypeIdx::invalid();
+  // `pub` on the field; a field without it is private to the module
+  // that declares the struct.
+  bool is_pub = false;
 };
 
 // One declaration in an `extern "C"` block: signature without a body,

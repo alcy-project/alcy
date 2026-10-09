@@ -949,6 +949,7 @@ ast::ItemIdx Parser::parse_struct(bool is_pub) {
   }
   std::vector<ast::ItemStructField> fields;
   while (!check(lexer::TokenKind::RBrace) && !at_end()) {
+    const bool field_pub = match(lexer::TokenKind::Pub);
     base::Result<ast::Ident, diag::Reported> field_name =
         parse_ident("field name");
     if (field_name.is_err()) {
@@ -962,7 +963,7 @@ ast::ItemIdx Parser::parse_struct(bool is_pub) {
       return ast::ItemIdx::invalid();
     }
     fields.push_back(
-        ast::ItemStructField{std::move(field_name).unwrap(), type});
+        ast::ItemStructField{std::move(field_name).unwrap(), type, field_pub});
     if (!match(lexer::TokenKind::Comma)) {
       break;
     }

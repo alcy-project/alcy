@@ -269,6 +269,22 @@ TEST_CASE("Parser builds public methods and mut self receivers") {
   CHECK(f.ast.items[impl.methods[1]].is_pub);
 }
 
+TEST_CASE("Parser builds public struct fields") {
+  Fixture f;
+  const ParseResult result = parse("struct S { pub x: i32, y: i32 }\n", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemStruct s = as_struct(result.items[0], f);
+  CHECK(s.fields.size() == 2);
+  if (s.fields.size() != 2) {
+    return;
+  }
+  CHECK(s.fields[0].is_pub);
+  CHECK(!s.fields[1].is_pub);
+}
+
 TEST_CASE("Parser builds generic enum and impl params") {
   Fixture f;
   const ParseResult result = parse(
