@@ -54,7 +54,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   `PartialEq` only. Arithmetic and `Display` follow their own
   slices. Designed in
   `docs/adr/0053-operators-are-sealed-specs.md`.
-- [ ] `comp` and `const` separate, with compile-time evaluation.
+- [x] `comp` and `const` separate, with compile-time evaluation.
 
   `const` declares a compile-time value in item and local position;
   `comp` only says where code and parameters are evaluated, and
