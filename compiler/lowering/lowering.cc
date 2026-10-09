@@ -105,6 +105,9 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
             ast,
             builder,
             width) {
+  // The checker's answers are compared too; then this pass records its
+  // own through the same recorder.
+  comp_calls_ = std::move(pkg.comp_calls);
   comp_.set_call_recorder(this, &Lowerer::record_comp_call);
   comp_.set_ir_runner(this, &Lowerer::run_comp_ir);
   mark_drops();
@@ -558,9 +561,8 @@ std::string Lowerer::fn_key(ast::ItemIdx item,
   return key;
 }
 
-void Lowerer::record_comp_call(
-    void* context,
-    const analyzer::CompEvaluator::CompCallRecord& record) {
+void Lowerer::record_comp_call(void* context,
+                               const analyzer::CompCallRecord& record) {
   static_cast<Lowerer*>(context)->comp_calls_.push_back(record);
 }
 
@@ -1400,8 +1402,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   };
   std::vector<CompRun> comp_runs;
   comp_runs.reserve(lowerer.comp_calls_.size());
-  for (const analyzer::CompEvaluator::CompCallRecord& record :
-       lowerer.comp_calls_) {
+  for (const analyzer::CompCallRecord& record : lowerer.comp_calls_) {
     const std::string key = Lowerer::fn_key(
         record.item, record.params, record.ret, record.inst, record.comp_args);
     const auto found = lowerer.fn_by_key_.find(key);

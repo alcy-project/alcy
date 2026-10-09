@@ -77,6 +77,16 @@ annotated where the declaration spells it (`struct ArrayVec<T, N:
 usize>`), because a declaration fixes each parameter's kind at the
 parameter itself.
 
+Amended at the second engine's landing: the two engines meet where
+their phases allow. The lowering reader asks the IR engine first for a
+`comp fn` whose body the pass has already lowered and materialized,
+and falls back to the AST engine for anything the interpreter does not
+carry yet; every AST answer, from either reader, is re-run through the
+IR engine once the package is built, and a disagreement is an internal
+error. The checker's reader keeps the AST engine: it needs const
+values while signatures resolve, before any lowered IR exists, so the
+IR engine serves the reader that has storage.
+
 ## Consequences
 
 `comp.md` is rewritten at implementation; the grammar gains local

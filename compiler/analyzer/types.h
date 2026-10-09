@@ -12,6 +12,7 @@
 
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
+#include "comp/comp_value.h"
 #include "diag/bag.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
@@ -32,6 +33,23 @@ constexpr u32 NO_INST = 0xFFFFFFFFu;
 // index of the implemented spec in the checker's spec table, and
 // this for methods from inherent impl blocks.
 constexpr u32 NO_SPEC = 0xFFFFFFFFu;
+
+// One `comp fn` call an engine answered, kept whole so the other
+// engine can be asked the same question (ADR-0054): the declaration,
+// the instantiation, the evaluated arguments, and the result.
+// `comp_args` are the actuals of the callee's `comp` parameters, the
+// ones the specialization key is made of; `args` are every argument,
+// which is what the IR engine needs to run the body.
+struct CompCallRecord {
+  u32 def_module = 0;
+  ast::ItemIdx item = ast::ItemIdx::invalid();
+  std::vector<ir::TypeIdx> params;
+  ir::TypeIdx ret = ir::TypeIdx(base::INVALID_IDX);
+  u32 inst = NO_INST;
+  std::vector<comp::CompVal> comp_args;
+  std::vector<comp::CompVal> args;
+  comp::CompVal result;
+};
 
 // Per-module type information for type checking and lowering. All TypeIdx
 // refer to the package Storage below; all views borrow source bytes.
@@ -265,6 +283,10 @@ struct CheckedPackage {
   // containing value walks them.
   std::vector<CheckedModule::DropGlue> drop_glue;
   std::vector<bool> needs_drop;
+  // Comp fn calls the checker's evaluator answered, for the IR engine's
+  // differential run after lowering built the storage (ADR-0054). The
+  // checker's own reader has no lowered IR to offer while it runs.
+  std::vector<CompCallRecord> comp_calls;
 };
 
 // Resolves every type position in the package to interned TypeIdx:

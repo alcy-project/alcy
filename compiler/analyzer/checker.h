@@ -167,6 +167,10 @@ class Checker {
   // Destructor resolution, aligned with the type table by index.
   std::vector<CheckedModule::DropGlue> drop_glue_;
   std::vector<bool> needs_drop_;
+  // Comp fn calls the const pre-pass answered, carried on the checked
+  // package so lowering can compare them against the IR engine once the
+  // storage exists (ADR-0054).
+  std::vector<CompCallRecord> comp_calls_;
   // Interned name every `MaybeUninit` wrapper carries.
   str::StringPoolId uninit_name_id = str::INVALID_STRING_POOL_ID;
   // Set once the shared table has no room for another name; the sweep
@@ -262,6 +266,9 @@ class Checker {
   // Every annotated generic parameter names the type of a compile-time
   // value, so the annotation must resolve to an integer.
   void validate_value_parameter_types();
+  // The recorder the const pre-pass's evaluator reports through; the
+  // records ride the checked package to lowering (ADR-0054).
+  static void record_comp_call(void* context, const CompCallRecord& record);
   NominalEntry* find_nominal(u32 module, std::string_view name);
   // A spec declaration by module and name; at most one per module.
   SpecEntry* find_spec(u32 module, std::string_view name);

@@ -541,10 +541,9 @@ class Lowerer {
   std::unordered_map<std::string, u32> fn_by_key_;
   // Every `comp fn` call the AST engine answered (ADR-0054), so the IR
   // engine can be asked the same question once lowering is complete.
-  std::vector<analyzer::CompEvaluator::CompCallRecord> comp_calls_;
-  static void record_comp_call(
-      void* context,
-      const analyzer::CompEvaluator::CompCallRecord& record);
+  std::vector<analyzer::CompCallRecord> comp_calls_;
+  static void record_comp_call(void* context,
+                               const analyzer::CompCallRecord& record);
   // The IR engine, offered before the AST one for a `comp fn` whose
   // body this pass already materialized.
   static bool run_comp_ir(void* context,

@@ -120,6 +120,10 @@ void Checker::register_nominals() {
 // carry, so it must name an integer type. The annotation may name a
 // previously registered nominal, so this runs with the whole table
 // filled.
+void Checker::record_comp_call(void* context, const CompCallRecord& record) {
+  static_cast<Checker*>(context)->comp_calls_.push_back(record);
+}
+
 void Checker::validate_value_parameter_types() {
   const auto check = [&](u32 module,
                          std::span<const ast::GenericParam> params) {
@@ -3465,6 +3469,7 @@ bool Checker::const_int_value(u32 module,
   comp::CompVal value;
   CompEvaluator eval(CompInputs{tree, modules, {}, type_origins_}, ast, builder,
                      width);
+  eval.set_call_recorder(this, &Checker::record_comp_call);
   if (!eval.evaluate_item(module, info.init, cur_inst, value) ||
       value.value.tag != comp::CompValue::Tag::Int) {
     return wrong();
@@ -5257,6 +5262,13 @@ bool Checker::capture_is_copy(ir::TypeIdx idx, std::vector<u32>& visited) {
 
 void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   const ast::ItemNode& node = ast.items[fn];
+  // A body check can nest: the const pre-pass checks a called function
+  // while an enclosing body is mid-check, so the per-function state is
+  // saved and restored rather than left reset.
+  const ir::TypeIdx saved_fn_ret = fn_ret;
+  const bool saved_in_fn = in_fn;
+  const u32 saved_loop_depth = loop_depth;
+  const bool saved_reported_too_deep = reported_too_deep_;
   // One report per function: the budget is per function, and every
   // frame past it would otherwise repeat the same diagnostic.
   reported_too_deep_ = false;
@@ -5302,7 +5314,10 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
     }
   }
   scopes.pop_back();
-  in_fn = false;
+  in_fn = saved_in_fn;
+  fn_ret = saved_fn_ret;
+  loop_depth = saved_loop_depth;
+  reported_too_deep_ = saved_reported_too_deep;
 }
 
 void Checker::check_main(u32 module, ast::ItemIdx fn) {
@@ -5620,9 +5635,11 @@ base::Result<CheckedPackage, diag::Reported> check_package(
                          std::move(checker.fn_instances),
                          std::move(checker.type_origins_),
                          {},
+                         {},
                          {}};
   package.drop_glue = std::move(checker.drop_glue_);
   package.needs_drop = std::move(checker.needs_drop_);
+  package.comp_calls = std::move(checker.comp_calls_);
   // Generic instantiations lower as ordinary nominals; publish their
   // field or variant names under the defining module for lowering
   // lookups. Their types publish in instantiation order for keying.
