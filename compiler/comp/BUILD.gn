@@ -5,6 +5,8 @@ source_set("comp") {
   sources = [
     "comp_value.cc",
     "comp_value.h",
+    "ir_interpreter.cc",
+    "ir_interpreter.h",
   ]
   deps = [
     "//compiler:base_modules",

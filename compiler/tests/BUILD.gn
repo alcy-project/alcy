@@ -43,6 +43,8 @@ executable("tests") {
     "ir/verifier_test.cc",
     "lexer/lexer_test.cc",
     "lexer/token_test.cc",
+    "lowering/ir_interpreter_test.cc",
+    "lowering/lowering_fixture.h",
     "parser/desugar_test.cc",
     "parser/parser_test.cc",
     "path/path_test.cc",
