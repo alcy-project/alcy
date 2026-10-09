@@ -859,6 +859,10 @@ struct ItemFnParam {
   PatternIdx pattern = PatternIdx::invalid();
   TypeIdx type = TypeIdx::invalid();
   bool is_comp = false;
+  // A parameter written `args: ..` collects the call's remaining
+  // arguments at compile time; only the compiler-expanded functions may
+  // declare one, and it is always the last parameter.
+  bool is_variadic = false;
 };
 
 struct ItemFn {

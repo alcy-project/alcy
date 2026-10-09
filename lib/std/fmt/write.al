@@ -5,6 +5,6 @@
 
 pub struct WriteOutcome { written: usize, total: usize }
 
-pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ()) -> WriteOutcome {
+pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ..) -> WriteOutcome {
   panic("fmt::write must expand")
 }

@@ -46,6 +46,9 @@
   pattern: (mut_identifier_pattern
     name: (identifier) @name)) @definition.parameter
 
+(variadic_parameter
+  name: (identifier) @name) @definition.parameter
+
 (declaration_statement
   pattern: (identifier_pattern
     name: (identifier) @name)) @definition.variable

@@ -1266,37 +1266,79 @@
           "type": "CHOICE",
           "members": [
             {
-              "type": "SEQ",
+              "type": "CHOICE",
               "members": [
                 {
-                  "type": "SYMBOL",
-                  "name": "parameter"
-                },
-                {
-                  "type": "REPEAT",
-                  "content": {
-                    "type": "SEQ",
-                    "members": [
-                      {
-                        "type": "STRING",
-                        "value": ","
-                      },
-                      {
-                        "type": "SYMBOL",
-                        "name": "parameter"
-                      }
-                    ]
-                  }
-                },
-                {
-                  "type": "CHOICE",
+                  "type": "SEQ",
                   "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "parameter"
+                    },
+                    {
+                      "type": "REPEAT",
+                      "content": {
+                        "type": "SEQ",
+                        "members": [
+                          {
+                            "type": "STRING",
+                            "value": ","
+                          },
+                          {
+                            "type": "SYMBOL",
+                            "name": "parameter"
+                          }
+                        ]
+                      }
+                    },
                     {
                       "type": "STRING",
                       "value": ","
                     },
                     {
-                      "type": "BLANK"
+                      "type": "SYMBOL",
+                      "name": "variadic_parameter"
+                    }
+                  ]
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "variadic_parameter"
+                },
+                {
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "parameter"
+                    },
+                    {
+                      "type": "REPEAT",
+                      "content": {
+                        "type": "SEQ",
+                        "members": [
+                          {
+                            "type": "STRING",
+                            "value": ","
+                          },
+                          {
+                            "type": "SYMBOL",
+                            "name": "parameter"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "STRING",
+                          "value": ","
+                        },
+                        {
+                          "type": "BLANK"
+                        }
+                      ]
                     }
                   ]
                 }
@@ -1353,6 +1395,47 @@
           }
         }
       ]
+    },
+    "variadic_parameter": {
+      "type": "PREC",
+      "value": 1,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "FIELD",
+                "name": "comp",
+                "content": {
+                  "type": "STRING",
+                  "value": "comp"
+                }
+              },
+              {
+                "type": "BLANK"
+              }
+            ]
+          },
+          {
+            "type": "FIELD",
+            "name": "name",
+            "content": {
+              "type": "SYMBOL",
+              "name": "identifier"
+            }
+          },
+          {
+            "type": "STRING",
+            "value": ":"
+          },
+          {
+            "type": "STRING",
+            "value": ".."
+          }
+        ]
+      }
     },
     "_type": {
       "type": "CHOICE",
@@ -5394,6 +5477,11 @@
     [
       "tuple_type",
       "function_parameters"
+    ],
+    [
+      "identifier_pattern",
+      "variadic_parameter",
+      "_path_segment"
     ]
   ],
   "precedences": [],

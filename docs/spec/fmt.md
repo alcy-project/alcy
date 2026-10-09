@@ -9,12 +9,13 @@ conversion runs at runtime.
 ```alcy
 pub struct WriteOutcome { written: usize, total: usize }
 
-pub fn write(comp fmt: str, buf: &mut [u8; N], args: tuple) -> WriteOutcome
+pub fn write(comp fmt: str, buf: &mut [u8; N], args: ..) -> WriteOutcome
 ```
 
-`N` and the tuple shape vary per call: the declaration names the
-shape, and calls check customly (arity, buffer, convertibility)
-because the language cannot name varying sizes and arities yet.
+`N` varies per call: the declaration names a placeholder shape, and
+calls check customly (buffer and convertibility) because the language
+cannot name a varying size yet. `args: ..` collects the call's
+remaining arguments, one per placeholder.
 
 - `fmt` MUST be comp-known (a `comp` parameter); anything else is a
   compile-time error through the ordinary `comp` rules.
@@ -22,7 +23,7 @@ because the language cannot name varying sizes and arities yet.
   counts stored bytes, `total` counts bytes the output would have
   taken untruncated; `total > buf.len` - equivalently
   `total > written` - detects truncation. Truncation never panics.
-- `args` is a heterogeneous tuple, one element per placeholder.
+- The collected arguments are one per placeholder, in order.
 
 ## Placeholders
 
@@ -44,8 +45,8 @@ because the language cannot name varying sizes and arities yet.
 - Calls to `fmt::write` expand at lowering time to bounded copies
   per piece. The declared body never executes; reaching it aborts
   through `panic`.
-- Only the core prelude item expands: a local `write` shadows the
-  prelude through the ordinary name rules, and calls to it lower
+- Only the `fmt` package's item expands: a local `write` shadows the
+  package's through the ordinary name rules, and calls to it lower
   ordinarily without expansion.
 
 ## Deferred

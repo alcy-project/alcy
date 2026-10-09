@@ -759,7 +759,7 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
 // Verifies a literal format string against argument element types;
 // other comp-known strings verify in lowering, which holds the bytes.
 bool Checker::verify_fmt_literal(ast::ExprIdx fmt_expr,
-                                 ast::ExprIdx args_expr,
+                                 diag::Span args_span,
                                  const std::vector<ir::TypeIdx>& elements,
                                  diag::Span span) {
   if (ast.exprs[fmt_expr].kind != ast::ExprKind::Literal) {
@@ -790,7 +790,7 @@ bool Checker::verify_fmt_literal(ast::ExprIdx fmt_expr,
     if (!is_formattable_tag(tag_of(element))) {
       const u32 index = bag.emit<i18n::Key::CodegenArgumentNotFormattable>(
           diag::Severity::Error, diag::Stage::Analyzer,
-          DiagCode::InvalidOperation, ast.exprs[args_expr].span);
+          DiagCode::InvalidOperation, args_span);
       (void)index;
       return false;
     }
@@ -816,7 +816,7 @@ ir::TypeIdx Checker::check_fmt_write(u32 module,
     (void)index;
     return error_type();
   }
-  if (args.size() != 3) {
+  if (args.size() < 2) {
     const u32 index = bag.emit<i18n::Key::AnalyzerWriteArity>(
         diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityError,
         span, args.size());
@@ -851,30 +851,18 @@ ir::TypeIdx Checker::check_fmt_write(u32 module,
     (void)index;
     return error_type();
   }
-  const ir::TypeIdx args_type = check_expr(module, args[2], nullptr);
-  // `()` reads as the empty tuple (see types.md).
-  const bool empty_args =
-      !is_error(args_type) && tag_of(args_type) == ir::TypeTag::Void;
-  if (!is_error(args_type) && !empty_args &&
-      tag_of(args_type) != ir::TypeTag::Tuple) {
-    const u32 index = bag.emit<i18n::Key::AnalyzerArgumentsNotTuple>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
-        ast.exprs[args[2]].span);
-    (void)index;
-    return error_type();
+  // Every argument after the buffer is a format argument; they are the
+  // tuple the expansion builds (ADR-0055).
+  std::vector<ir::TypeIdx> elements;
+  elements.reserve(args.size() - 2);
+  for (usize i = 2; i < args.size(); ++i) {
+    const ir::TypeIdx element = check_expr(module, args[i], nullptr);
+    if (!is_error(element)) {
+      elements.push_back(element);
+    }
   }
-  if (!is_error(args_type)) {
-    std::vector<ir::TypeIdx> elements;
-    if (!empty_args) {
-      const ir::TupleType& shape =
-          builder.tuple_types()[builder.types()[args_type].as_tuple()];
-      for (ir::TypeIdx element : shape.elements) {
-        elements.push_back(element);
-      }
-    }
-    if (!verify_fmt_literal(args[0], args[2], elements, span)) {
-      return error_type();
-    }
+  if (!verify_fmt_literal(args[0], span, elements, span)) {
+    return error_type();
   }
   record_call(module, node.payload.get<ast::ExprCall>().callee, fn);
   NominalEntry* outcome = find_nominal_in_scope(module, "WriteOutcome");
@@ -908,7 +896,7 @@ ir::TypeIdx Checker::check_fmt_format(u32 module,
     (void)index;
     return error_type();
   }
-  if (args.size() != 2) {
+  if (args.size() < 1) {
     const u32 index = bag.emit<i18n::Key::AnalyzerFormatArity>(
         diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityError,
         span, args.size());
@@ -925,29 +913,18 @@ ir::TypeIdx Checker::check_fmt_format(u32 module,
     (void)index;
     return error_type();
   }
-  const ir::TypeIdx args_type = check_expr(module, args[1], nullptr);
-  const bool empty_args =
-      !is_error(args_type) && tag_of(args_type) == ir::TypeTag::Void;
-  if (!is_error(args_type) && !empty_args &&
-      tag_of(args_type) != ir::TypeTag::Tuple) {
-    const u32 index = bag.emit<i18n::Key::AnalyzerArgumentsNotTuple>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
-        ast.exprs[args[1]].span);
-    (void)index;
-    return error_type();
+  // Every argument after the format string is a format argument; they
+  // are the tuple the expansion builds (ADR-0055).
+  std::vector<ir::TypeIdx> elements;
+  elements.reserve(args.size() - 1);
+  for (usize i = 1; i < args.size(); ++i) {
+    const ir::TypeIdx element = check_expr(module, args[i], nullptr);
+    if (!is_error(element)) {
+      elements.push_back(element);
+    }
   }
-  if (!is_error(args_type)) {
-    std::vector<ir::TypeIdx> elements;
-    if (!empty_args) {
-      const ir::TupleType& shape =
-          builder.tuple_types()[builder.types()[args_type].as_tuple()];
-      for (ir::TypeIdx element : shape.elements) {
-        elements.push_back(element);
-      }
-    }
-    if (!verify_fmt_literal(args[0], args[1], elements, span)) {
-      return error_type();
-    }
+  if (!verify_fmt_literal(args[0], span, elements, span)) {
+    return error_type();
   }
   record_call(module, node.payload.get<ast::ExprCall>().callee, fn);
   NominalEntry* string_type = find_nominal_in_scope(module, "String");

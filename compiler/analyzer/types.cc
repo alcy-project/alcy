@@ -175,6 +175,54 @@ void Checker::validate_value_parameter_types() {
   }
 }
 
+bool Checker::is_expanded_variadic(ast::ItemIdx item) const {
+  if (!item.is_valid() || ast.items[item].kind != ast::ItemKind::Fn) {
+    return false;
+  }
+  const std::string_view name =
+      ast.items[item].payload.get<ast::ItemFn>().name.name;
+  return (name == "write" || name == "format") &&
+         tree.is_staged_item("fmt", item);
+}
+
+// Only a compiler-expanded function may declare `args: ..` (ADR-0055):
+// the expansion gives the slot its meaning, and a declaration without
+// one would be a function nobody could call.
+void Checker::validate_variadic_parameters() {
+  const auto check = [&](ast::ItemIdx item,
+                         std::span<const ast::ItemFnParam> params) {
+    for (const ast::ItemFnParam& param : params) {
+      if (!param.is_variadic || is_expanded_variadic(item)) {
+        continue;
+      }
+      const u32 index = bag.emit<i18n::Key::AnalyzerVariadicNotExpanded>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidOperation, ast.patterns[param.pattern].span);
+      (void)index;
+    }
+  };
+  for (ModuleNode* module : tree.modules) {
+    for (ast::ItemIdx item : module->items) {
+      const ast::ItemNode& node = ast.items[item];
+      switch (node.kind) {
+        case ast::ItemKind::Fn:
+          check(item, node.payload.get<ast::ItemFn>().params);
+          break;
+        case ast::ItemKind::Intrinsic:
+          check(item, node.payload.get<ast::ItemIntrinsic>().params);
+          break;
+        case ast::ItemKind::Extern:
+          for (const ast::ItemExternFn& fn :
+               node.payload.get<ast::ItemExtern>().fns) {
+            check(ast::ItemIdx::invalid(), fn.params);
+          }
+          break;
+        default: break;
+      }
+    }
+  }
+}
+
 NominalEntry* Checker::find_nominal(u32 module, std::string_view name) {
   if (module >= nominals_of_module.size()) {
     return nullptr;
@@ -2376,8 +2424,13 @@ void Checker::process_module(u32 module) {
           break;
         }
         std::vector<ir::TypeIdx> params;
+        bool is_variadic = false;
         for (const ast::ItemFnParam& param :
              node.payload.get<ast::ItemFn>().params) {
+          if (param.is_variadic) {
+            is_variadic = true;
+            continue;
+          }
           params.push_back(resolve_type(module, param.type, nullptr));
         }
         ir::TypeIdx ret = builder.primitive(ir::TypeTag::Void);
@@ -2391,7 +2444,8 @@ void Checker::process_module(u32 module) {
                               .ret = ret,
                               .item = item,
                               .is_unsafe = fn.is_unsafe,
-                              .is_comp = fn.is_comp});
+                              .is_comp = fn.is_comp,
+                              .is_variadic = is_variadic});
         break;
       }
       case ast::ItemKind::Intrinsic: {
@@ -5281,6 +5335,12 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   scopes.emplace_back();
   loop_depth = 0;
   for (const ast::ItemFnParam& param : node.payload.get<ast::ItemFn>().params) {
+    // A variadic slot has no type to resolve and no pattern to bind;
+    // only the compiler-expanded call reads the collected arguments
+    // (ADR-0055), and the declared body guards with panic.
+    if (param.is_variadic) {
+      continue;
+    }
     const ir::TypeIdx type = resolve_type(module, param.type, self);
     bind_comp_known = param.is_comp;
     const bool refutable = bind_pattern(module, param.pattern, type);
@@ -5556,6 +5616,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     }
   }
   checker.validate_value_parameter_types();
+  checker.validate_variadic_parameters();
   checker.modules.reserve(tree.modules.size());
   {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "signatures",

@@ -1,6 +1,6 @@
 fn main() -> i32 {
   mut buf := [0u8; 5]
-  out := write("a={} b={}!", &mut buf, (41i32, true))
+  out := write("a={} b={}!", &mut buf, 41i32, true)
   mut bad := 0
   if out.written != 5 {
     bad = 1

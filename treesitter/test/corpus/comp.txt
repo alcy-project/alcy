@@ -206,3 +206,25 @@ comp fn twice(x: i32) -> i32 {
             (path
               (identifier)))
           (integer))))))
+
+================================================================================
+A comp variadic parameter
+================================================================================
+
+fn collect(comp args: ..) -> i32 {
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (variadic_parameter
+        (identifier)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (integer)))))

@@ -157,6 +157,10 @@
 (range_expression operator: _ @operator)
 (assignment_statement operator: _ @operator)
 
+; `..` in a parameter stands for the arguments a call collects, so it
+; reads as punctuation rather than as an operator.
+(variadic_parameter ".." @punctuation.delimiter)
+
 [
   "("
   ")"

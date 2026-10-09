@@ -266,6 +266,10 @@ class Checker {
   // Every annotated generic parameter names the type of a compile-time
   // value, so the annotation must resolve to an integer.
   void validate_value_parameter_types();
+  // Only a compiler-expanded function may declare `args: ..`
+  // (ADR-0055); the expansion is what gives the slot meaning.
+  void validate_variadic_parameters();
+  bool is_expanded_variadic(ast::ItemIdx item) const;
   // The recorder the const pre-pass's evaluator reports through; the
   // records ride the checked package to lowering (ADR-0054).
   static void record_comp_call(void* context, const CompCallRecord& record);
@@ -733,7 +737,7 @@ class Checker {
                               const ir::TypeIdx* expected,
                               const CheckedModule::FnSig* fn);
   bool verify_fmt_literal(ast::ExprIdx fmt_expr,
-                          ast::ExprIdx args_expr,
+                          diag::Span args_span,
                           const std::vector<ir::TypeIdx>& elements,
                           diag::Span span);
   ir::TypeIdx check_fmt_format(u32 module,

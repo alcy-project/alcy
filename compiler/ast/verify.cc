@@ -339,7 +339,12 @@ bool verify_stmt_children(const StmtNode& node, const AstArena& arena) {
 }
 
 bool verify_param_children(const ItemFnParam& param, const AstArena& arena) {
-  return bound(param.pattern, arena.patterns) && bound(param.type, arena.types);
+  if (!bound(param.pattern, arena.patterns)) {
+    return false;
+  }
+  // A variadic parameter carries no type: it collects the call's
+  // remaining arguments and only the compiler expands it (ADR-0055).
+  return param.is_variadic || bound(param.type, arena.types);
 }
 
 bool verify_generic_children(std::span<const GenericParam> params,

@@ -55,7 +55,9 @@ Methods take explicit receivers: `self`, `&self`, `&mut self`.
 spec's own type inside `spec` declarations. An omitted
 return type means `()`; only free functions take type parameters, and
 a parameter annotated with an integer type (`N: usize`) is a value
-parameter.
+parameter. A last parameter written `args: ..` collects the call's
+remaining arguments; only the compiler-expanded functions declare one,
+and its declared body never runs.
 
 A `spec` declares a named capability as `;`-terminated method
 signatures, with no bodies. A spec may refine another: `spec Eq:

@@ -16,8 +16,7 @@ fn main() {
   step := 2
   total = total + 40
   total = total + step
-  t := (total,)
-  print(format("total = {}\n", t).as_str())
+  print(format("total = {}\n", total).as_str())
 }
 ```
 
@@ -36,8 +35,7 @@ fn add(a: i32, b: i32) -> i32 {
 }
 
 fn main() {
-  t := (add(2, 3),)
-  print(format("add(2, 3) = {}\n", t).as_str())
+  print(format("add(2, 3) = {}\n", add(2, 3)).as_str())
 }
 ```
 
@@ -61,8 +59,7 @@ fn sign(x: i32) -> i32 {
 }
 
 fn main() {
-  t := (sign(-7), sign(0), sign(9))
-  print(format("{} {} {}\n", t).as_str())
+  print(format("{} {} {}\n", sign(-7), sign(0), sign(9)).as_str())
 }
 ```
 
@@ -82,8 +79,7 @@ fn main() {
     sum = sum + n
     n = n + 1
   }
-  t := (sum,)
-  print(format("sum = {}\n", t).as_str())
+  print(format("sum = {}\n", sum).as_str())
 }
 ```
 
@@ -99,8 +95,7 @@ fn divmod(a: i32, b: i32) -> (i32, i32) {
 
 fn main() {
   result := divmod(17, 5)
-  t := (result.0, result.1)
-  print(format("17 / 5 = {} remainder {}\n", t).as_str())
+  print(format("17 / 5 = {} remainder {}\n", result.0, result.1).as_str())
 }
 ```
 
@@ -115,8 +110,7 @@ fn manhattan(p: Point) -> i32 {
 
 fn main() {
   p := Point { x: 3, y: 4 }
-  t := (manhattan(p),)
-  print(format("manhattan = {}\n", t).as_str())
+  print(format("manhattan = {}\n", manhattan(p)).as_str())
 }
 ```
 
@@ -139,8 +133,7 @@ fn area(s: Shape) -> i32 {
 fn main() {
   a := area(Shape::Circle(2))
   b := area(Shape::Rect(3, 4))
-  t := (a, b)
-  print(format("circle = {}, rect = {}\n", t).as_str())
+  print(format("circle = {}, rect = {}\n", a, b).as_str())
 }
 ```
 
@@ -151,13 +144,13 @@ and binds its payload, and `?` propagates the other one.
 ## Printing
 
 `print` and `println` write a `str`. `format` builds one from a
-compile-time format string and a tuple with one element per `{}`:
+compile-time format string and one argument per `{}`:
 
 ```alcy
 fn main() {
   print("print leaves the line open, ")
   println("println closes it")
-  line := format("{}\n", (40 + 2,))
+  line := format("{}\n", 40 + 2)
   print(line.as_str())
 }
 ```

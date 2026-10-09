@@ -15,7 +15,7 @@ fn main() -> i32 {
   if str_byte(s.as_str(), 0) != 104u8 {
     bad = 4
   }
-  t := format("hi {}!", (s.as_str(),))
+  t := format("hi {}!", s.as_str())
   if t.len() != 6 {
     bad = 5
   }
@@ -25,11 +25,11 @@ fn main() -> i32 {
   if str_byte(t.as_str(), 5) != 33u8 {
     bad = 7
   }
-  n := format("a={} b={}", (41i32, true))
+  n := format("a={} b={}", 41i32, true)
   if n.len() != 11 {
     bad = 8
   }
-  e := format("hi", ())
+  e := format("hi")
   if e.len() != 2 {
     bad = 9
   }
@@ -46,7 +46,7 @@ fn main() -> i32 {
   if str_byte(big.as_str(), 299) != 97u8 {
     bad = 11
   }
-  grown := format("{}{}", (big.as_str(), big.as_str()))
+  grown := format("{}{}", big.as_str(), big.as_str())
   if str_len(grown.as_str()) != 600 {
     bad = 12
   }

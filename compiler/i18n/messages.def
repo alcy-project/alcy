@@ -90,6 +90,7 @@
   F(ParserUnsafeOnlyOnFunctions, "`unsafe` applies to functions") \
   F(ParserUnsafeWithoutBlock, "`unsafe` must open a block (`unsafe {{ ... }}`)") \
   F(ParserUseItemSpelling, "`use` imports a path") \
+  F(ParserVariadicParameter, "a variadic parameter is a plain name and the last one (`args: ..`)") \
   F(ParserVarSpelling, "`var` is not a keyword; declare with `x := ...`") \
   /* analyzer */ \
   F(AnalyzerAmbiguousMethod, "Ambiguous method '{}'") \
@@ -162,7 +163,7 @@
   F(AnalyzerExternTypeNotSupported, "Type '{}' cannot cross a C boundary yet") \
   F(AnalyzerFloatSuffixOnInteger, "Float suffix on an integer literal") \
   F(AnalyzerForRequiresIterator, "A 'for' loop requires an 'Iterator' implementation in scope for this type") \
-  F(AnalyzerFormatArity, "Intrinsic 'format' expects 2 arguments, found {}") \
+  F(AnalyzerFormatArity, "Intrinsic 'format' expects a format string, found {} arguments") \
   F(AnalyzerFormatInCompEvaluation, "Intrinsic 'format' is not allowed in comp evaluation") \
   F(AnalyzerFormatPlaceholderArity, "Format string has {} placeholders for {} arguments") \
   F(AnalyzerFormatStringNotCompKnown, "Format string must be comp-known") \
@@ -274,11 +275,12 @@
   F(AnalyzerValueParameterAsType, "Value parameter '{}' cannot be used as a type") \
   F(AnalyzerValueParameterHasNoAddress, "Value parameter '{}' has no address") \
   F(AnalyzerValueParameterTypeNotInteger, "Value parameter '{}' must have an integer type") \
+  F(AnalyzerVariadicNotExpanded, "A variadic parameter may only appear on a compiler-expanded function") \
   F(AnalyzerVariantCallArity, "Variant expects {} arguments, found {}") \
   F(AnalyzerVariantFieldArity, "Variant expects {} fields, pattern has {}") \
   F(AnalyzerVariantNotInMatchedType, "Variant is not a member of the matched type") \
   F(AnalyzerViewIsAlreadyReference, "A view is already a reference; re-slice it without `&`") \
-  F(AnalyzerWriteArity, "Intrinsic 'write' expects 3 arguments, found {}") \
+  F(AnalyzerWriteArity, "Intrinsic 'write' expects a format string and a buffer, found {} arguments") \
   F(AnalyzerWriteInCompEvaluation, "Intrinsic 'write' is not allowed in comp evaluation") \
   F(AnalyzerWriteOutcomeNotInScope, "Type 'WriteOutcome' is not in scope") \
   /* lower */ \

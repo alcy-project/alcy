@@ -3,6 +3,6 @@
 
 // `alcy/std/fmt`: formatting into an owned string.
 
-pub fn format(comp fmt: str, args: ()) -> String {
+pub fn format(comp fmt: str, args: ..) -> String {
   panic("fmt::format must expand")
 }

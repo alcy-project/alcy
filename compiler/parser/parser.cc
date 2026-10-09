@@ -714,6 +714,7 @@ bool Parser::parse_fn_params(std::vector<ast::ItemFnParam>& params) {
       const bool is_comp = match(lexer::TokenKind::Comp);
       ast::PatternIdx pattern = ast::PatternIdx::invalid();
       ast::TypeIdx type = ast::TypeIdx::invalid();
+      bool is_variadic = false;
       if (ref_self_parameter_shape()) {
         const lexer::Token amp = peek();
         const u32 index = bag_.emit<i18n::Key::ParserRefSelfParameter>(
@@ -735,12 +736,36 @@ bool Parser::parse_fn_params(std::vector<ast::ItemFnParam>& params) {
         if (!expect(lexer::TokenKind::Colon, "`:`")) {
           return false;
         }
-        type = parse_closed_type();
-        if (!type.is_valid()) {
-          return false;
+        if (check(lexer::TokenKind::DotDot)) {
+          // `args: ..` collects the call's remaining arguments; the
+          // name binds them and only the compiler expands the call.
+          if (ast_.patterns[pattern].kind != ast::PatternKind::Ident) {
+            const u32 index = bag_.emit<i18n::Key::ParserVariadicParameter>(
+                diag::Severity::Error, diag::Stage::Parser,
+                DiagCode::UnexpectedToken, ast_.patterns[pattern].span);
+            (void)index;
+            return false;
+          }
+          advance();
+          is_variadic = true;
+        } else {
+          type = parse_closed_type();
+          if (!type.is_valid()) {
+            return false;
+          }
         }
       }
-      params.push_back(ast::ItemFnParam{pattern, type, is_comp});
+      params.push_back(ast::ItemFnParam{pattern, type, is_comp, is_variadic});
+      if (is_variadic) {
+        if (check(lexer::TokenKind::Comma)) {
+          const u32 index = bag_.emit<i18n::Key::ParserVariadicParameter>(
+              diag::Severity::Error, diag::Stage::Parser,
+              DiagCode::UnexpectedToken, ast_.patterns[pattern].span);
+          (void)index;
+          return false;
+        }
+        break;
+      }
       if (!match(lexer::TokenKind::Comma)) {
         break;
       }

@@ -51,10 +51,14 @@ type_params = "<" , type_param , { "," , type_param } , ">" ;
                  `ArrayVec<T, N: usize>` fixes the kind at the
                  parameter, a value rather than a type. See
                  docs/adr/0054-*. *)
-params      = [ [ "comp" ] , pattern , ":" , type ,
+params      = [ [ "comp" ] , pattern , ":" , ( ".." | type ) ,
                 { "," , [ "comp" ] , pattern , ":" , type } , [ "," ] ] ;
               (* "comp" marks a compile-time parameter; plain functions
-                 use the same shape without it. See docs/spec/comp.md. *)
+                 use the same shape without it. A parameter whose type
+                 is `..` collects the call's remaining arguments; it
+                 must be last, its pattern is a plain name, and only
+                 the compiler-expanded functions may declare it. See
+                 docs/spec/comp.md and docs/adr/0055-*. *)
 struct_item = "struct" , IDENT , [ type_params ] , "{"
             , field , { "," , field } , [ "," ] , "}" ;
 field       = IDENT , ":" , type ;

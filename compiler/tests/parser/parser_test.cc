@@ -1108,6 +1108,39 @@ TEST_CASE("Parser accepts comp parameters") {
   CHECK(!fn.params[1].is_comp);
 }
 
+TEST_CASE("Parser reads a variadic parameter") {
+  Fixture f;
+  const ParseResult result =
+      parse("fn log(comp fmt: str, args: ..) -> i32 { ret 0 }", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  CHECK(fn.params.size() == 2);
+  if (fn.params.size() != 2) {
+    return;
+  }
+  CHECK(!fn.params[0].is_variadic);
+  CHECK(fn.params[1].is_variadic);
+  CHECK(!fn.params[1].type.is_valid());
+}
+
+TEST_CASE("Parser refuses a malformed variadic parameter") {
+  {
+    Fixture f;
+    const ParseResult result = parse("fn f(args: .., x: i32) { }", f);
+    CHECK(!result.ok);
+    CHECK(f.bag.has_errors());
+  }
+  {
+    Fixture f;
+    const ParseResult result = parse("fn f((a, b): ..) { }", f);
+    CHECK(!result.ok);
+    CHECK(f.bag.has_errors());
+  }
+}
+
 TEST_CASE("Parser reads const declarations") {
   Fixture f;
   const ParseResult result = parse("fn f() { const n := 3\n _ := n }", f);

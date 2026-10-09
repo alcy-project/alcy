@@ -97,6 +97,10 @@ struct CheckedModule {
     // An `extern "C"` declaration (ADR-0051): the name is the symbol
     // the linker resolves, and the body lives outside the program.
     bool is_extern = false;
+    // A parameter written `args: ..` collects the call's remaining
+    // arguments (ADR-0055). Only the compiler-expanded functions carry
+    // one, and the slot is not part of `params`.
+    bool is_variadic = false;
   };
   // Lazily-instantiated generic methods append signatures during body
   // checking, so element addresses must stay stable: never

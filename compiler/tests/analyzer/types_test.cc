@@ -2661,6 +2661,78 @@ TEST_CASE("Check rejects non-tuple fmt arguments") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Check refuses a user-declared variadic parameter") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn log(args: ..) {\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(
+      f.bag,
+      "A variadic parameter may only appear on a compiler-expanded function"));
+}
+
+TEST_CASE("Check reads the fmt package's variadic call") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "fn main() {\n"
+             "  mut buf := [0u8; 8]\n"
+             "  _ := write(\"a={}\", &mut buf, 1i32)\n"
+             "}\n"},
+            {"fmt.al",
+             "pub intrinsic fn panic(msg: str) -> !;\n"
+             "pub struct WriteOutcome { written: usize, total: usize }\n"
+             "pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ..) -> "
+             "WriteOutcome {\n"
+             "  panic(\"x\")\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"fmt", "fmt.al"}});
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects a fmt call without its buffer") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "fn main() {\n"
+             "  _ := write(\"a={}\")\n"
+             "}\n"},
+            {"fmt.al",
+             "pub intrinsic fn panic(msg: str) -> !;\n"
+             "pub struct WriteOutcome { written: usize, total: usize }\n"
+             "pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ..) -> "
+             "WriteOutcome {\n"
+             "  panic(\"x\")\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"fmt", "fmt.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Check accepts generic free functions and turbofish arguments") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",

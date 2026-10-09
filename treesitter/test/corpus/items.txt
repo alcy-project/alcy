@@ -608,3 +608,29 @@ struct ArrayVec<T, N: usize> {
             (identifier)))
         (path
           (identifier))))))
+
+================================================================================
+A variadic parameter is last
+================================================================================
+
+fn log(comp fmt: str, args: ..) -> i32 {
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (str_type))
+      (variadic_parameter
+        (identifier)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (integer)))))

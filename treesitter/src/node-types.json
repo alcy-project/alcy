@@ -3037,6 +3037,10 @@
         {
           "type": "parameter",
           "named": true
+        },
+        {
+          "type": "variadic_parameter",
+          "named": true
         }
       ]
     }
@@ -4357,6 +4361,32 @@
         "types": [
           {
             "type": "visibility",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "variadic_parameter",
+    "named": true,
+    "fields": {
+      "comp": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "comp",
+            "named": false
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
             "named": true
           }
         ]

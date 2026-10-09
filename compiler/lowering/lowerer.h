@@ -496,6 +496,15 @@ class Lowerer {
                        ir::OperandIdx capacity,
                        FmtState& state,
                        bool measure_only);
+  // Lowers a variadic call's remaining arguments into the tuple the
+  // expansion reads (ADR-0055): one field per argument, allocated and
+  // stored like a tuple literal. `first` is the index of the first
+  // collected argument; an empty rest yields `()` and no tuple.
+  bool lower_rest_tuple(std::span<const ast::ExprIdx> args,
+                        usize first,
+                        diag::Span span,
+                        Val& out,
+                        std::vector<ir::TypeIdx>& elem_types);
   Val lower_fmt_write(ast::ExprIdx expr,
                       const analyzer::CheckedModule::FnSig& sig);
   Val lower_fmt_format(ast::ExprIdx expr,

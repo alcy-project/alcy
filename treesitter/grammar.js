@@ -107,6 +107,10 @@ module.exports = grammar({
     // `(A, B)` is a tuple type and the parameter list of `(A, B) -> R`;
     // the `->` after the `)` is what tells them apart.
     [$.tuple_type, $.function_parameters],
+    // `name: ..` is a variadic parameter and `name: T` a regular one; the
+    // token after the `:` is what tells them apart, so both readings of a
+    // lone identifier are explored until then.
+    [$.identifier_pattern, $.variadic_parameter, $._path_segment],
   ],
 
   supertypes: $ => [
@@ -311,7 +315,13 @@ module.exports = grammar({
 
     parameters: $ => seq(
       '(',
-      optional(sepByTrailing($.parameter, ',')),
+      optional(choice(
+        // A variadic parameter must be last and takes no trailing comma,
+        // so it is spelled outside the regular list.
+        seq($.parameter, repeat(seq(',', $.parameter)), ',', $.variadic_parameter),
+        $.variadic_parameter,
+        sepByTrailing($.parameter, ','),
+      )),
       ')',
     ),
 
@@ -323,6 +333,18 @@ module.exports = grammar({
       ':',
       field('type', $._type),
     ),
+
+    // `args: ..` collects the call's remaining arguments; only a plain
+    // name may bind them and only a compiler-expanded function may
+    // declare one (ADR-0055). The precedence matches `identifier_pattern`
+    // so the `:` after a lone name stays a conflict rather than being
+    // resolved before the token that follows it is read.
+    variadic_parameter: $ => prec(1, seq(
+      optional(field('comp', 'comp')),
+      field('name', $.identifier),
+      ':',
+      '..',
+    )),
 
     // Types ----------------------------------------------------------------
 

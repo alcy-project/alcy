@@ -19,6 +19,7 @@
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 #include "ir/opcode.h"
+#include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
@@ -526,12 +527,57 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
   return !failed;
 }
 
+bool Lowerer::lower_rest_tuple(std::span<const ast::ExprIdx> args,
+                               usize first,
+                               diag::Span span,
+                               Val& out,
+                               std::vector<ir::TypeIdx>& elem_types) {
+  if (first >= args.size()) {
+    out = Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+    return true;
+  }
+  // Tuple element slots are contiguous type-table entries whose shapes
+  // match the argument types; a copy is one entry, the same convention
+  // tuple literals use.
+  std::vector<ir::TypeIdx> slots;
+  ir::TypeSeq element_seq;
+  for (usize i = first; i < args.size(); ++i) {
+    const ir::TypeIdx element = expr_type(args[i]);
+    if (tag_of(element) == ir::TypeTag::Error) {
+      return false;
+    }
+    const ir::TypeIdx slot = builder.ref_type(element);
+    slots.push_back(slot);
+    element_seq.push(slot);
+  }
+  const ir::TypeIdx tuple_type = builder.tuple_type(element_seq.finish());
+  const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, tuple_type, {size_one});
+  for (usize i = 0; i < slots.size() && !failed; ++i) {
+    const ir::TypeIdx slot = slots[i];
+    Val value = lower_expr(args[first + i], &slot);
+    if (failed) {
+      return false;
+    }
+    const ir::RegisterIdx gep = emit(ir::Opcode::GetElementPtr, slot,
+                                     {to_operand(addr, tuple_type), zero_i32,
+                                      index_operand(static_cast<u32>(i))});
+    emit_void(ir::Opcode::Store, {use_value(value), to_operand(gep, slot)});
+  }
+  if (failed) {
+    return false;
+  }
+  out = Val{to_operand(addr, tuple_type), tuple_type, true, false};
+  elem_types = std::move(slots);
+  (void)span;
+  return true;
+}
+
 Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
                              const analyzer::CheckedModule::FnSig& sig) {
   const ast::ExprNode& node = ast.exprs[expr];
   const std::span<const ast::ExprIdx> args =
       node.payload.get<ast::ExprCall>().args;
-  if (args.size() != 3) {
+  if (args.size() < 2) {
     internal(node.span, "call arity");
     return Val{size_one, error_type(), false, false};
   }
@@ -559,27 +605,12 @@ Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
   }
   const u64 capacity =
       builder.array_types()[builder.types()[buf_pointee].as_array()].count;
-  Val tup = lower_expr(args[2], nullptr);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
-  }
-  const ir::TypeIdx tup_type = expr_type(args[2]);
-  if (tag_of(tup_type) != ir::TypeTag::Tuple &&
-      tag_of(tup_type) != ir::TypeTag::Void) {
-    internal(node.span, "arguments without tuple");
-    return Val{size_one, error_type(), false, false};
-  }
-  if (!tup.address && tag_of(tup_type) == ir::TypeTag::Tuple) {
-    tup = address_of(tup);
-  }
+  // The arguments after the buffer are the format arguments; they are
+  // collected into the tuple the pieces read (ADR-0055).
   std::vector<ir::TypeIdx> elem_types;
-  if (tag_of(tup_type) == ir::TypeTag::Tuple) {
-    const ir::TupleType& shape =
-        builder.state().tuple_types[builder.state().types[tup_type].as_tuple()];
-    elem_types.reserve(shape.elements.size());
-    for (ir::TypeIdx element : shape.elements) {
-      elem_types.push_back(element);
-    }
+  Val tup{size_one, error_type(), false, false};
+  if (!lower_rest_tuple(args, 2, node.span, tup, elem_types)) {
+    return Val{size_one, error_type(), false, false};
   }
   const analyzer::FmtTemplate parsed =
       analyzer::parse_format_string(fmt_val.value.str_value);
@@ -640,7 +671,7 @@ Val Lowerer::lower_fmt_format(ast::ExprIdx expr,
   const ast::ExprNode& node = ast.exprs[expr];
   const std::span<const ast::ExprIdx> args =
       node.payload.get<ast::ExprCall>().args;
-  if (args.size() != 2) {
+  if (args.size() < 1) {
     internal(node.span, "call arity");
     return Val{size_one, error_type(), false, false};
   }
@@ -652,27 +683,14 @@ Val Lowerer::lower_fmt_format(ast::ExprIdx expr,
     }
     return Val{size_one, error_type(), false, false};
   }
-  Val tup = lower_expr(args[1], nullptr);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
-  }
-  const ir::TypeIdx tup_type = expr_type(args[1]);
-  ir::OperandIdx tup_op = size_one;
+  // The arguments after the format string are collected into the tuple
+  // the pieces read (ADR-0055).
   std::vector<ir::TypeIdx> elem_types;
-  if (tag_of(tup_type) == ir::TypeTag::Tuple) {
-    if (!tup.address) {
-      tup = address_of(tup);
-    }
-    tup_op = tup.op;
-    const ir::TupleType& shape =
-        builder.state().tuple_types[builder.state().types[tup_type].as_tuple()];
-    for (ir::TypeIdx element : shape.elements) {
-      elem_types.push_back(element);
-    }
-  } else if (tag_of(tup_type) != ir::TypeTag::Void) {
-    internal(node.span, "arguments without tuple");
+  Val tup{size_one, error_type(), false, false};
+  if (!lower_rest_tuple(args, 1, node.span, tup, elem_types)) {
     return Val{size_one, error_type(), false, false};
   }
+  ir::OperandIdx tup_op = tup.op;
   const analyzer::FmtTemplate parsed =
       analyzer::parse_format_string(fmt_val.value.str_value);
   if (parsed.error != analyzer::FmtError::None) {

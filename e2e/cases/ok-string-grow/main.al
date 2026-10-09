@@ -10,7 +10,7 @@ fn main() -> i32 {
   if s.len() != 300 {
     ret 1
   }
-  big := format("{}{}{}", (s.as_str(), s.as_str(), s.as_str()))
+  big := format("{}{}{}", s.as_str(), s.as_str(), s.as_str())
   if str_len(big.as_str()) != 900 {
     ret 2
   }
