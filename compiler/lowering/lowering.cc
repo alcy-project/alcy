@@ -106,6 +106,7 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
             builder,
             width) {
   comp_.set_call_recorder(this, &Lowerer::record_comp_call);
+  comp_.set_ir_runner(this, &Lowerer::run_comp_ir);
   mark_drops();
   index_origins();
   index_structs();
@@ -561,6 +562,56 @@ void Lowerer::record_comp_call(
     void* context,
     const analyzer::CompEvaluator::CompCallRecord& record) {
   static_cast<Lowerer*>(context)->comp_calls_.push_back(record);
+}
+
+bool Lowerer::run_comp_ir(void* context,
+                          u32 def_module,
+                          ast::ItemIdx item,
+                          const std::vector<ir::TypeIdx>& params,
+                          ir::TypeIdx ret,
+                          u32 inst,
+                          std::span<const CompVal> comp_args,
+                          std::span<const CompVal> args,
+                          u64& quota,
+                          u32& depth,
+                          CompVal& out) {
+  return static_cast<Lowerer*>(context)->try_run_comp_ir(
+      def_module, item, params, ret, inst, comp_args, args, quota, depth, out);
+}
+
+bool Lowerer::try_run_comp_ir(u32 def_module,
+                              ast::ItemIdx item,
+                              const std::vector<ir::TypeIdx>& params,
+                              ir::TypeIdx ret,
+                              u32 inst,
+                              std::span<const CompVal> comp_args,
+                              std::span<const CompVal> args,
+                              u64& quota,
+                              u32& depth,
+                              CompVal& out) {
+  (void)def_module;
+  const std::string key = fn_key(item, params, ret, inst, comp_args);
+  const auto found = fn_by_key_.find(key);
+  if (found == fn_by_key_.end()) {
+    return false;
+  }
+  const ir::FunctionIdx target(found->second);
+  base::Result<comp::CompVal, comp::IrRunError> result =
+      comp::interpret_function(builder.state(), strings, width, target, args,
+                               quota, depth);
+  if (result.is_err()) {
+    const comp::IrRunError error = std::move(result).unwrap_err();
+    if (error.kind == comp::IrRunError::Kind::Internal) {
+      // The AST engine is about to answer instead, which would hide a
+      // disagreement the comparison pass cannot see for this call.
+      DLOG("comp engines: internal interpreter failure: {}", error.what);
+    }
+    return false;
+  }
+  out = std::move(result).unwrap();
+  out.type = ret;
+  ++comp_engine_answered_;
+  return true;
 }
 
 // Enqueues lowering work on first encounter, so a recursive call sees
@@ -1074,6 +1125,31 @@ void Lowerer::run() {
     zero.data.i32_value = 0;
     zero_i32 = to_operand(builder.immutable(zero), i32);
   }
+  // Comp fn bodies first: the IR engine needs them materialized before
+  // any ordinary body can ask the evaluator for a value. Only the ones
+  // with no `comp` parameters are seeded here; a specialization is
+  // reserved on demand like any other instantiation.
+  for (u32 m = 0; m < static_cast<u32>(pkg.modules.size()); ++m) {
+    const analyzer::CheckedModule& checked = pkg.modules[m];
+    for (const auto& sig : checked.functions) {
+      if (!sig.item.is_valid() || !sig.is_comp ||
+          !comp_positions(sig.item).empty() ||
+          ast.items[sig.item].kind == ast::ItemKind::Intrinsic ||
+          sig.is_extern) {
+        continue;
+      }
+      if (ast.items[sig.item].kind == ast::ItemKind::Fn &&
+          !ast.items[sig.item].payload.get<ast::ItemFn>().generic.empty()) {
+        continue;
+      }
+      fn_index(m, sig.item, sig.name, sig.params, sig.ret, analyzer::NO_INST,
+               {});
+      if (failed) {
+        return;
+      }
+    }
+  }
+  const usize comp_prefix = fns.size();
   // Seed every checked non-comp signature so bodies without call
   // sites still reach codegen. A generic impl contributes one
   // signature per instantiation, keyed by its self type.
@@ -1134,9 +1210,8 @@ void Lowerer::run() {
     FnEntry entry;
     std::vector<ir::BlockIdx> blocks;
   };
-  std::vector<Done> done;
-  for (usize w = 0; w < worklist_.size() && !failed; ++w) {
-    const FnEntry entry = fns[worklist_[w]];
+  const auto lower_and_publish = [&](const FnEntry& entry,
+                                     std::vector<ir::BlockIdx>& blocks) {
     // The function name is interned storage: profiling by PrintableName
     // would allocate, so the trace names what the Lowerer names - the
     // source spelling, which collides only when overloads do, and
@@ -1151,7 +1226,6 @@ void Lowerer::run() {
     }
     // Publish reserved blocks in reservation order; entry block
     // carries the recorded parameters.
-    std::vector<ir::BlockIdx> blocks;
     bool first = true;
     for (usize i = 0; i < fn_blocks_.size(); ++i) {
       ir::BlockIdx created =
@@ -1163,21 +1237,48 @@ void Lowerer::run() {
       blocks.push_back(created);
     }
     pending_block_params_ = ir::BlockParamIdxRange{};
+  };
+  // The comp prefix is lowered and materialized before the rest; its
+  // names are interned first so the function records can take them.
+  std::vector<Done> prefix_done;
+  for (usize w = 0; w < comp_prefix && !failed; ++w) {
+    const FnEntry entry = fns[worklist_[w]];
+    std::vector<ir::BlockIdx> blocks;
+    lower_and_publish(entry, blocks);
+    prefix_done.push_back({entry, std::move(blocks)});
+  }
+  if (failed) {
+    return;
+  }
+  if (!resolve_names()) {
+    return;
+  }
+  for (const Done& entry : prefix_done) {
+    materialize(entry.entry, entry.blocks);
+  }
+  std::vector<Done> done;
+  for (usize w = comp_prefix; w < worklist_.size() && !failed; ++w) {
+    const FnEntry entry = fns[worklist_[w]];
+    std::vector<ir::BlockIdx> blocks;
+    lower_and_publish(entry, blocks);
     done.push_back({entry, std::move(blocks)});
   }
   if (failed) {
     return;
   }
-  for (const Done& entry : done) {
-    // Every staged module is toolchain sources, facades and siblings
-    // alike; only facades are preludes.
-    if (pkg.tree.modules[entry.entry.mod]->is_staged) {
-      ++prelude_functions_;
-    }
+  if (!resolve_names()) {
+    return;
   }
+  for (const Done& entry : done) {
+    materialize(entry.entry, entry.blocks);
+  }
+}
+
+bool Lowerer::resolve_names() {
   // The names the work list recorded are interned in one gather, in the
   // order the entries were made rather than the order the bodies ran, and
-  // each entry takes the handle it was given.
+  // each entry takes the handle it was given. A later gather re-interns
+  // the earlier names to the same handles and picks up the new ones.
   strings.gather(name_bins_);
   bool names_ok = true;
   for (const ir::SymbolTable::Bins& producer : name_bins_) {
@@ -1190,42 +1291,48 @@ void Lowerer::run() {
   }
   if (!names_ok) {
     (void)report_name_table_exhausted();
+    return false;
+  }
+  return true;
+}
+
+void Lowerer::materialize(const FnEntry& entry,
+                          const std::vector<ir::BlockIdx>& blocks) {
+  // Every staged module is toolchain sources, facades and siblings
+  // alike; only facades are preludes.
+  if (pkg.tree.modules[entry.mod]->is_staged) {
+    ++prelude_functions_;
+  }
+  const std::vector<u32> comp = comp_positions(entry.item);
+  ir::TypeSeq params;
+  usize comp_at = 0;
+  for (usize i = 0; i < entry.params.size(); ++i) {
+    if (comp_at < comp.size() && comp[comp_at] == i) {
+      ++comp_at;
+      continue;
+    }
+    params.push(builder.ref_type(entry.params[i]));
+  }
+  ir::BlockIdxRange range{blocks.front(), static_cast<u32>(blocks.size())};
+  ir::TypeSeq generics;
+  for (const ir::TypeIdx arg : entry.generics) {
+    generics.push(builder.ref_type(arg));
+  }
+  // The handle the gather left in the entry, which this copy of it
+  // predates.
+  const str::StringPoolId name = fns[entry.idx.idx].name_id;
+  const str::StringPoolId path = intern_name(pkg.tree.modules[entry.mod]->path);
+  if (name == str::INVALID_STRING_POOL_ID ||
+      path == str::INVALID_STRING_POOL_ID) {
     return;
   }
-  for (const Done& entry : done) {
-    const std::vector<u32> comp = comp_positions(entry.entry.item);
-    ir::TypeSeq params;
-    usize comp_at = 0;
-    for (usize i = 0; i < entry.entry.params.size(); ++i) {
-      if (comp_at < comp.size() && comp[comp_at] == i) {
-        ++comp_at;
-        continue;
-      }
-      params.push(builder.ref_type(entry.entry.params[i]));
-    }
-    ir::BlockIdxRange range{entry.blocks.front(),
-                            static_cast<u32>(entry.blocks.size())};
-    ir::TypeSeq generics;
-    for (const ir::TypeIdx arg : entry.entry.generics) {
-      generics.push(builder.ref_type(arg));
-    }
-    // The handle the gather left in the entry, which this copy of it
-    // predates.
-    const str::StringPoolId name = fns[entry.entry.idx.idx].name_id;
-    const str::StringPoolId path =
-        intern_name(pkg.tree.modules[entry.entry.mod]->path);
-    if (name == str::INVALID_STRING_POOL_ID ||
-        path == str::INVALID_STRING_POOL_ID) {
-      return;
-    }
-    builder.function({.meta = {.return_type = entry.entry.ret,
-                               .param_types = params.finish(),
-                               .name = name,
-                               .path = path,
-                               .kind = entry.entry.kind,
-                               .generics = generics.finish()},
-                      .blocks = range});
-  }
+  builder.function({.meta = {.return_type = entry.ret,
+                             .param_types = params.finish(),
+                             .name = name,
+                             .path = path,
+                             .kind = entry.kind,
+                             .generics = generics.finish()},
+                    .blocks = range});
 }
 
 base::Result<ir::VerifiedStorage, ir::VerificationError> Lowerer::finish() && {
@@ -1282,6 +1389,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   std::vector<diag::Span> spans = std::move(lowerer.instr_spans_);
   std::vector<LoweredPackage::AddrInfo> addrs = std::move(lowerer.addr_names_);
   const usize prelude_functions = lowerer.prelude_functions_;
+  const usize comp_engine_answered = lowerer.comp_engine_answered_;
   // Resolve each recorded comp call to the function lowering reserved
   // for it while the reservation table is still here.
   struct CompRun {
@@ -1355,6 +1463,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     return base::make_err(diag::Reported{});
   }
   lowered.comp_engine_compared = compared;
+  lowered.comp_engine_answered = comp_engine_answered;
   return base::make_ok(std::move(lowered));
 }
 

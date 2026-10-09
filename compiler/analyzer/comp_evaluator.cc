@@ -837,6 +837,20 @@ bool CompEvaluator::comp_run_fn(u32 def_module,
     }
   }
   CompFlow flow;
+  // The IR engine answers first when the lowering has the callee's body
+  // materialized; a false answer means it does not carry the call, and
+  // the AST engine evaluates and records it.
+  if (ok && fn.is_comp && ir_runner_ != nullptr) {
+    CompVal ir_out;
+    if (ir_runner_(ir_context_, def_module, item, params, ret, inst,
+                   comp_actuals, accepted_args, quota_, call_depth_, ir_out)) {
+      --call_depth_;
+      inst_ = saved_inst;
+      out = std::move(ir_out);
+      out.type = ret;
+      return true;
+    }
+  }
   if (ok) {
     if (!fn.body.is_valid() ||
         !comp_eval_block(def_module, fn.body, callee_scope, flow)) {

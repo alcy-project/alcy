@@ -79,9 +79,9 @@ TEST_CASE("Lower evaluates a comp fn through a const item") {
   if (!result.ok || !result.lowered.has_value()) {
     return;
   }
-  // The differential pass ran the same call through the IR engine and
-  // it agreed with the AST engine (ADR-0054).
-  CHECK(result.lowered->comp_engine_compared >= 1);
+  // The IR engine answered the call; lowering's differential pass only
+  // sees AST-answered calls, so this is where the switch shows.
+  CHECK(result.lowered->comp_engine_answered >= 1);
 }
 
 TEST_CASE("Lower reports a const cycle instead of recursing") {

@@ -116,6 +116,26 @@ class CompEvaluator {
     record_call_ = recorder;
   }
 
+  // The other engine, asked before the AST one when it is installed:
+  // the lowering offers an already-lowered `comp fn` body. Returning
+  // false says the IR engine does not carry this call, and the AST
+  // engine answers (and records) it instead.
+  using CompIrRunner = bool (*)(void* context,
+                                u32 def_module,
+                                ast::ItemIdx item,
+                                const std::vector<ir::TypeIdx>& params,
+                                ir::TypeIdx ret,
+                                u32 inst,
+                                std::span<const comp::CompVal> comp_args,
+                                std::span<const comp::CompVal> args,
+                                u64& quota,
+                                u32& depth,
+                                comp::CompVal& out);
+  void set_ir_runner(void* context, CompIrRunner runner) {
+    ir_context_ = context;
+    ir_runner_ = runner;
+  }
+
  private:
   using CompValue = comp::CompValue;
   using CompVal = comp::CompVal;
@@ -251,6 +271,8 @@ class CompEvaluator {
   std::unordered_map<u32, const CheckedModule::EnumInfo*> enums_;
   void* record_context_ = nullptr;
   CompCallRecorder record_call_ = nullptr;
+  void* ir_context_ = nullptr;
+  CompIrRunner ir_runner_ = nullptr;
 };
 
 }  // namespace analyzer

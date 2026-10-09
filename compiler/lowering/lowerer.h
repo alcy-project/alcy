@@ -545,6 +545,38 @@ class Lowerer {
   static void record_comp_call(
       void* context,
       const analyzer::CompEvaluator::CompCallRecord& record);
+  // The IR engine, offered before the AST one for a `comp fn` whose
+  // body this pass already materialized.
+  static bool run_comp_ir(void* context,
+                          u32 def_module,
+                          ast::ItemIdx item,
+                          const std::vector<ir::TypeIdx>& params,
+                          ir::TypeIdx ret,
+                          u32 inst,
+                          std::span<const CompVal> comp_args,
+                          std::span<const CompVal> args,
+                          u64& quota,
+                          u32& depth,
+                          CompVal& out);
+  bool try_run_comp_ir(u32 def_module,
+                       ast::ItemIdx item,
+                       const std::vector<ir::TypeIdx>& params,
+                       ir::TypeIdx ret,
+                       u32 inst,
+                       std::span<const CompVal> comp_args,
+                       std::span<const CompVal> args,
+                       u64& quota,
+                       u32& depth,
+                       CompVal& out);
+  // Comp calls the IR engine answered instead of the AST engine.
+  usize comp_engine_answered_ = 0;
+  // Interns the recorded names and writes their handles into the
+  // entries; false means the shared table is exhausted.
+  bool resolve_names();
+  // Publishes one reserved entry into the built storage: its signature,
+  // its blocks, and the symbol name. Called in reservation order.
+  void materialize(const FnEntry& entry,
+                   const std::vector<ir::BlockIdx>& blocks);
   void index_origins();
   void index_structs();
   void lower_fn(const FnEntry& entry);

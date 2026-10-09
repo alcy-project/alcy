@@ -58,7 +58,7 @@ u64 int_mask(TypeTag tag) {
 
 class Interpreter {
  public:
-  Interpreter(const ir::Storage& storage,
+  Interpreter(const ir::StorageState& storage,
               const ir::SymbolTable& strings,
               ir::PointerWidth width,
               u64& quota,
@@ -86,25 +86,24 @@ class Interpreter {
   };
 
   const ir::Operand& operand_at(ir::InstructionIdx instr, u32 offset) const {
-    const ir::Instruction& ins = storage_.instrs()[instr];
-    return storage_
-        .operands()[ir::OperandIdx(ins.operands.head().idx + offset)];
+    const ir::Instruction& ins = storage_.instrs[instr];
+    return storage_.operands[ir::OperandIdx(ins.operands.head().idx + offset)];
   }
 
-  TypeTag tag_of(ir::TypeIdx type) const { return storage_.types()[type].tag; }
+  TypeTag tag_of(ir::TypeIdx type) const { return storage_.types[type].tag; }
 
   ir::TypeIdx reg_type(ir::RegisterIdx reg) const {
-    return storage_.registers()[reg].type;
+    return storage_.registers[reg].type;
   }
 
   ir::TypeLayout layout_of(ir::TypeIdx type) const {
-    return ir::type_layout(storage_.state(), type, width_);
+    return ir::type_layout(storage_, type, width_);
   }
 
   u64 word_bytes() const { return width_ == ir::PointerWidth::W64 ? 8 : 4; }
 
   ir::TypeIdx pointee_of(ir::TypeIdx type) const {
-    return storage_.ref_types()[storage_.types()[type].as_ref()].pointee;
+    return storage_.ref_types[storage_.types[type].as_ref()].pointee;
   }
 
   bool fail(IrRunError::Kind kind,
@@ -188,7 +187,7 @@ class Interpreter {
 
   base::Result<CompVal, IrRunError> to_result(const Returned& returned);
 
-  const ir::Storage& storage_;
+  const ir::StorageState& storage_;
   const ir::SymbolTable& strings_;
   ir::PointerWidth width_;
   u64& quota_;
@@ -333,7 +332,7 @@ bool Interpreter::resolve(const ir::Operand& operand,
   }
   if (operand.is<ir::ImmutableIdx>()) {
     const ir::Immutable& immutable =
-        storage_.immutables()[operand.as_immutable()];
+        storage_.immutables[operand.as_immutable()];
     const TypeTag tag = tag_of(immutable.type);
     if (!ir::is_integer_type(tag)) {
       return fail(IrRunError::Kind::Unsupported, instr,
@@ -350,7 +349,7 @@ bool Interpreter::resolve_at(ir::InstructionIdx instr,
                              u32 offset,
                              const Frame& frame,
                              Slot& out) {
-  if (offset >= storage_.instrs()[instr].operands.size()) {
+  if (offset >= storage_.instrs[instr].operands.size()) {
     return fail(IrRunError::Kind::Internal, instr,
                 "instruction is missing an operand");
   }
@@ -446,8 +445,15 @@ bool Interpreter::comp_val_to_slot(ir::TypeIdx type,
 base::Result<CompVal, IrRunError> Interpreter::run(
     ir::FunctionIdx function,
     std::span<const CompVal> args) {
-  const ir::Function& fn = storage_.functions()[function];
-  const ir::Block& entry = storage_.blocks()[fn.blocks.head()];
+  // The same incompleteness the call path guards against applies to the
+  // entry the caller names.
+  if (function.idx >= storage_.functions.size()) {
+    fail(IrRunError::Kind::Unsupported, ir::InstructionIdx(base::INVALID_IDX),
+         "function that is not lowered yet");
+    return error_result();
+  }
+  const ir::Function& fn = storage_.functions[function];
+  const ir::Block& entry = storage_.blocks[fn.blocks.head()];
   if (args.size() != entry.block_params.size()) {
     fail(IrRunError::Kind::Internal, ir::InstructionIdx(base::INVALID_IDX),
          "call arity does not match parameters");
@@ -457,7 +463,7 @@ base::Result<CompVal, IrRunError> Interpreter::run(
   bound.reserve(args.size());
   u32 at = 0;
   for (const ir::BlockParamIdx param_id : entry.block_params) {
-    const ir::BlockParam& param = storage_.block_params()[param_id];
+    const ir::BlockParam& param = storage_.block_params[param_id];
     Slot slot;
     if (!comp_val_to_slot(param.type, args[at], slot)) {
       return error_result();
@@ -483,17 +489,17 @@ bool Interpreter::execute_function(ir::FunctionIdx function,
   if (depth_ >= COMP_MAX_CALL_DEPTH) {
     return fail(IrRunError::Kind::Depth, at, "comp call depth exhausted");
   }
-  const ir::Function& fn = storage_.functions()[function];
-  const ir::Block& entry = storage_.blocks()[fn.blocks.head()];
+  const ir::Function& fn = storage_.functions[function];
+  const ir::Block& entry = storage_.blocks[fn.blocks.head()];
   if (args.size() != entry.block_params.size()) {
     return fail(IrRunError::Kind::Internal, at,
                 "call arity does not match parameters");
   }
   Frame frame;
-  frame.regs.resize(storage_.registers().size());
+  frame.regs.resize(storage_.registers.size());
   u32 position = 0;
   for (const ir::BlockParamIdx param_id : entry.block_params) {
-    const ir::BlockParam& param = storage_.block_params()[param_id];
+    const ir::BlockParam& param = storage_.block_params[param_id];
     Slot bound;
     if (!bind_slot(param.type, args[position], bound, at)) {
       return false;
@@ -512,7 +518,7 @@ bool Interpreter::execute_blocks(const ir::Function& function,
                                  Returned& out) {
   ir::BlockIdx block_idx = function.blocks.head();
   while (true) {
-    const ir::Block& block = storage_.blocks()[block_idx];
+    const ir::Block& block = storage_.blocks[block_idx];
     bool moved = false;
     for (const ir::InstructionIdx instr : block.instrs) {
       jumped_ = false;
@@ -540,7 +546,7 @@ bool Interpreter::execute_blocks(const ir::Function& function,
 bool Interpreter::execute_instruction(ir::InstructionIdx instr,
                                       ir::BlockIdx block,
                                       Frame& frame) {
-  const ir::Instruction& ins = storage_.instrs()[instr];
+  const ir::Instruction& ins = storage_.instrs[instr];
   switch (ins.op) {
     case Opcode::Noop: return true;
     case Opcode::Move:
@@ -638,7 +644,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
                     "branch without a target");
       }
       const ir::BlockIdx target = target_operand.as_block();
-      const ir::Block& target_block = storage_.blocks()[target];
+      const ir::Block& target_block = storage_.blocks[target];
       if (target.idx <= block.idx && !spend(instr)) {
         return false;
       }
@@ -648,7 +654,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       }
       u32 position = 0;
       for (const ir::BlockParamIdx param_id : target_block.block_params) {
-        const ir::BlockParam& param = storage_.block_params()[param_id];
+        const ir::BlockParam& param = storage_.block_params[param_id];
         Slot value;
         if (!resolve_at(instr, 1 + position, frame, value)) {
           return false;
@@ -743,7 +749,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
 }
 
 bool Interpreter::execute_gep(ir::InstructionIdx instr, Frame& frame) {
-  const ir::Instruction& ins = storage_.instrs()[instr];
+  const ir::Instruction& ins = storage_.instrs[instr];
   if (ins.operands.size() < 2) {
     return fail(IrRunError::Kind::Internal, instr,
                 "getelementptr without an index");
@@ -773,31 +779,31 @@ bool Interpreter::execute_gep(ir::InstructionIdx instr, Frame& frame) {
     const TypeTag tag = tag_of(current);
     if (tag == TypeTag::Struct) {
       const ir::TypeIdxRange fields =
-          storage_.struct_types()[storage_.types()[current].as_struct()].fields;
+          storage_.struct_types[storage_.types[current].as_struct()].fields;
       if (index >= fields.size()) {
         return fail(IrRunError::Kind::Internal, instr,
                     "getelementptr field out of range");
       }
-      offset += ir::field_offset(storage_.state(), fields,
-                                 static_cast<u32>(index), width_);
+      offset +=
+          ir::field_offset(storage_, fields, static_cast<u32>(index), width_);
       current = fields[static_cast<u32>(index)];
       continue;
     }
     if (tag == TypeTag::Tuple) {
       const ir::TypeIdxRange elements =
-          storage_.tuple_types()[storage_.types()[current].as_tuple()].elements;
+          storage_.tuple_types[storage_.types[current].as_tuple()].elements;
       if (index >= elements.size()) {
         return fail(IrRunError::Kind::Internal, instr,
                     "getelementptr element out of range");
       }
-      offset += ir::field_offset(storage_.state(), elements,
-                                 static_cast<u32>(index), width_);
+      offset +=
+          ir::field_offset(storage_, elements, static_cast<u32>(index), width_);
       current = elements[static_cast<u32>(index)];
       continue;
     }
     if (tag == TypeTag::Array) {
       const ir::ArrayType& array =
-          storage_.array_types()[storage_.types()[current].as_array()];
+          storage_.array_types[storage_.types[current].as_array()];
       offset += index * layout_of(array.element).size;
       current = array.element;
       continue;
@@ -812,7 +818,7 @@ bool Interpreter::execute_gep(ir::InstructionIdx instr, Frame& frame) {
 }
 
 bool Interpreter::execute_binary(ir::InstructionIdx instr, Frame& frame) {
-  const ir::Instruction& ins = storage_.instrs()[instr];
+  const ir::Instruction& ins = storage_.instrs[instr];
   Slot lhs;
   Slot rhs;
   if (!resolve_at(instr, 0, frame, lhs) || !resolve_at(instr, 1, frame, rhs)) {
@@ -909,7 +915,7 @@ bool Interpreter::execute_not(ir::InstructionIdx instr, Frame& frame) {
     return fail(IrRunError::Kind::Internal, instr,
                 "integer operand is not a scalar");
   }
-  const ir::Instruction& ins = storage_.instrs()[instr];
+  const ir::Instruction& ins = storage_.instrs[instr];
   if (ins.dst.is_valid()) {
     frame.regs[ins.dst.idx] =
         Slot{Slot::Kind::Scalar, ~value.bits & int_mask(tag), 0};
@@ -939,7 +945,7 @@ bool Interpreter::execute_bit_reverse(ir::InstructionIdx instr, Frame& frame) {
       reversed |= static_cast<u64>(1) << (width - 1 - i);
     }
   }
-  const ir::Instruction& ins = storage_.instrs()[instr];
+  const ir::Instruction& ins = storage_.instrs[instr];
   if (ins.dst.is_valid()) {
     frame.regs[ins.dst.idx] = Slot{Slot::Kind::Scalar, reversed, 0};
   }
@@ -952,7 +958,7 @@ bool Interpreter::execute_compare(ir::InstructionIdx instr, Frame& frame) {
   if (!resolve_at(instr, 0, frame, lhs) || !resolve_at(instr, 1, frame, rhs)) {
     return false;
   }
-  const ir::Instruction& ins = storage_.instrs()[instr];
+  const ir::Instruction& ins = storage_.instrs[instr];
   const TypeTag tag = tag_of(operand_at(instr, 0).type);
   bool outcome = false;
   if (ir::is_integer_type(tag)) {
@@ -1013,7 +1019,7 @@ bool Interpreter::execute_compare(ir::InstructionIdx instr, Frame& frame) {
 }
 
 bool Interpreter::execute_cast(ir::InstructionIdx instr, Frame& frame) {
-  const ir::Instruction& ins = storage_.instrs()[instr];
+  const ir::Instruction& ins = storage_.instrs[instr];
   if (!ins.dst.is_valid()) {
     return fail(IrRunError::Kind::Internal, instr,
                 "cast without a destination");
@@ -1094,7 +1100,7 @@ bool Interpreter::execute_select(ir::InstructionIdx instr, Frame& frame) {
     return fail(IrRunError::Kind::Internal, instr,
                 "select of different value kinds");
   }
-  const ir::Instruction& ins = storage_.instrs()[instr];
+  const ir::Instruction& ins = storage_.instrs[instr];
   if (ins.dst.is_valid()) {
     frame.regs[ins.dst.idx] = condition.bits != 0 ? on_true : on_false;
   }
@@ -1102,11 +1108,11 @@ bool Interpreter::execute_select(ir::InstructionIdx instr, Frame& frame) {
 }
 
 bool Interpreter::execute_call(ir::InstructionIdx instr, Frame& frame) {
-  const ir::Instruction& ins = storage_.instrs()[instr];
+  const ir::Instruction& ins = storage_.instrs[instr];
   const ir::Operand& callee = operand_at(instr, 0);
   if (callee.is<ir::ExternalFunctionIdx>()) {
     const ir::ExternalFunction& external =
-        storage_.external_functions()[callee.as_external_function()];
+        storage_.external_functions[callee.as_external_function()];
     const std::string_view name = strings_.get(external.meta.name);
     if (name == "alcy_panic") {
       return fail(IrRunError::Kind::Unsupported, instr,
@@ -1132,8 +1138,16 @@ bool Interpreter::execute_call(ir::InstructionIdx instr, Frame& frame) {
                 "indirect call in comp evaluation");
   }
   const ir::FunctionIdx target = callee.as_function();
-  const ir::Function& fn = storage_.functions()[target];
-  const ir::Block& entry = storage_.blocks()[fn.blocks.head()];
+  // A caller may hold storage that is still being built (the lowering's
+  // seam asks mid-pass), so a target without a function record yet is
+  // refused rather than read. A finished, verified storage can never
+  // take this path.
+  if (target.idx >= storage_.functions.size()) {
+    return fail(IrRunError::Kind::Unsupported, instr,
+                "call to a function that is not lowered yet");
+  }
+  const ir::Function& fn = storage_.functions[target];
+  const ir::Block& entry = storage_.blocks[fn.blocks.head()];
   if (ins.operands.size() - 1 != entry.block_params.size()) {
     return fail(IrRunError::Kind::Internal, instr,
                 "call arity does not match parameters");
@@ -1206,7 +1220,7 @@ base::Result<CompVal, IrRunError> Interpreter::to_result(
 }  // namespace
 
 base::Result<CompVal, IrRunError> interpret_function(
-    const ir::Storage& storage,
+    const ir::StorageState& storage,
     const ir::SymbolTable& strings,
     ir::PointerWidth width,
     ir::FunctionIdx function,

@@ -61,13 +61,31 @@ inline constexpr u32 COMP_MAX_CALL_DEPTH = 64;
 // (COMP_BRANCH_QUOTA and zero for a fresh top-level call) and can read
 // back what the run spent. `width` selects the layout the frame uses,
 // as every other consumer of IR takes it explicitly.
+//
+// The state-based form serves a caller whose storage is still being
+// built - the lowering, asking mid-pass - while the wrapper form is
+// what a finished Storage offers. A call whose target is not
+// materialized yet is refused as unsupported, so a caller can fall
+// back rather than read past the table.
 base::Result<CompVal, IrRunError> interpret_function(
-    const ir::Storage& storage,
+    const ir::StorageState& state,
     const ir::SymbolTable& strings,
     ir::PointerWidth width,
     ir::FunctionIdx function,
     std::span<const CompVal> args,
     u64& quota,
     u32& depth);
+
+inline base::Result<CompVal, IrRunError> interpret_function(
+    const ir::Storage& storage,
+    const ir::SymbolTable& strings,
+    ir::PointerWidth width,
+    ir::FunctionIdx function,
+    std::span<const CompVal> args,
+    u64& quota,
+    u32& depth) {
+  return interpret_function(storage.state(), strings, width, function, args,
+                            quota, depth);
+}
 
 }  // namespace comp

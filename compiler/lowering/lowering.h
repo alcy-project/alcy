@@ -87,6 +87,8 @@ struct LoweredPackage {
   // comparison before the switch). A construct outside the engine's
   // subset is not counted.
   usize comp_engine_compared = 0;
+  // Comp calls the IR engine answered instead of the AST engine.
+  usize comp_engine_answered = 0;
 };
 
 base::Result<LoweredPackage, diag::Reported> lower_package(
