@@ -83,6 +83,10 @@ struct LoweredPackage {
   // Lowered functions from prelude modules. Reported counts exclude
   // them, matching files and modules.
   usize prelude_functions = 0;
+  // Comp calls the IR engine also ran and matched (ADR-0054's
+  // comparison before the switch). A construct outside the engine's
+  // subset is not counted.
+  usize comp_engine_compared = 0;
 };
 
 base::Result<LoweredPackage, diag::Reported> lower_package(

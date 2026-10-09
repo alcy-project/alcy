@@ -236,6 +236,15 @@ class Lowerer {
       ast::ExprIdx expr) const;
   std::vector<u32> comp_positions(ast::ItemIdx item) const;
   static void comp_key_into(std::string& key, const CompValue& value);
+  // The identity of one specialization: the declaration, the
+  // instantiation, the signature, and the comp argument values. Used
+  // where a function is reserved and where the differential pass looks
+  // one up.
+  static std::string fn_key(ast::ItemIdx item,
+                            const std::vector<ir::TypeIdx>& params,
+                            ir::TypeIdx ret,
+                            u32 inst,
+                            std::span<const CompVal> comp_args);
   // Reserves (or finds) the IR function for one instantiation. `kind`
   // says what the symbol names, because a method and an associated
   // function share an item.
@@ -530,6 +539,12 @@ class Lowerer {
   // every call site, and walking the entries so far to compare keys charged
   // one call site for every function lowered before it.
   std::unordered_map<std::string, u32> fn_by_key_;
+  // Every `comp fn` call the AST engine answered (ADR-0054), so the IR
+  // engine can be asked the same question once lowering is complete.
+  std::vector<analyzer::CompEvaluator::CompCallRecord> comp_calls_;
+  static void record_comp_call(
+      void* context,
+      const analyzer::CompEvaluator::CompCallRecord& record);
   void index_origins();
   void index_structs();
   void lower_fn(const FnEntry& entry);

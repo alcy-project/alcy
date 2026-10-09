@@ -270,6 +270,7 @@
   F(LowerDestructorNotRun, "Destructor for '{}' is not run: it is reached through a variant or an array, so declare 'fn drop(self: Self)' to end it") \
   F(LowerDiscardedDestructor, "Discarded value holds something with a destructor, so ending it here is needed") \
   F(LowerInternalError, "Internal lowering error: {}") \
+  F(LowerCompEngineMismatch, "Internal error: the comp engines disagree on '{}'") \
   F(LowerIrVerificationFailed, "Lowered IR failed verification") \
   F(LowerNameTableExhausted, "The compiler's name table cannot hold the names this package interns") \
   F(LowerUnreachableExpression, "Unreachable expression") \

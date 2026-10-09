@@ -91,6 +91,31 @@ class CompEvaluator {
     return comp_bind_pattern(module, pattern, value, scope, span);
   }
 
+  // One `comp fn` call this engine answered, kept whole so the IR
+  // engine can be asked the same question (ADR-0054): the declaration,
+  // the instantiation, the evaluated arguments, and the result.
+  // `comp_args` are the actuals of the callee's `comp` parameters, the
+  // ones the specialization key is made of; `args` are every argument,
+  // which is what the IR engine needs to run the body.
+  struct CompCallRecord {
+    u32 def_module = 0;
+    ast::ItemIdx item = ast::ItemIdx::invalid();
+    std::vector<ir::TypeIdx> params;
+    ir::TypeIdx ret = ir::TypeIdx(base::INVALID_IDX);
+    u32 inst = NO_INST;
+    std::vector<comp::CompVal> comp_args;
+    std::vector<comp::CompVal> args;
+    comp::CompVal result;
+  };
+  // The lowering installs one recorder; the checker's evaluator does
+  // not, because no lowered function exists while it runs.
+  using CompCallRecorder = void (*)(void* context,
+                                    const CompCallRecord& record);
+  void set_call_recorder(void* context, CompCallRecorder recorder) {
+    record_context_ = context;
+    record_call_ = recorder;
+  }
+
  private:
   using CompValue = comp::CompValue;
   using CompVal = comp::CompVal;
@@ -224,6 +249,8 @@ class CompEvaluator {
   std::unordered_map<u32, u32> type_origins_;
   std::unordered_map<u32, const CheckedModule::StructInfo*> structs_;
   std::unordered_map<u32, const CheckedModule::EnumInfo*> enums_;
+  void* record_context_ = nullptr;
+  CompCallRecorder record_call_ = nullptr;
 };
 
 }  // namespace analyzer

@@ -812,6 +812,8 @@ bool CompEvaluator::comp_run_fn(u32 def_module,
   inst_ = inst;
   CompScope callee_scope;
   callee_scope.frames.emplace_back();
+  std::vector<CompVal> accepted_args;
+  std::vector<CompVal> comp_actuals;
   bool ok = true;
   for (usize i = 0; i < args.size() && ok; ++i) {
     // A `comp fn`'s arguments all bind as comp values; an ordinary
@@ -824,6 +826,10 @@ bool CompEvaluator::comp_run_fn(u32 def_module,
     if (!comp_eval_expr(caller_module, args[i], caller_scope, arg)) {
       ok = false;
       break;
+    }
+    accepted_args.push_back(arg);
+    if (fn.params[i].is_comp) {
+      comp_actuals.push_back(arg);
     }
     if (!comp_bind_pattern(def_module, fn.params[i].pattern, arg, callee_scope,
                            ast.exprs[args[i]].span)) {
@@ -846,6 +852,12 @@ bool CompEvaluator::comp_run_fn(u32 def_module,
   if (flow.kind == CompFlow::Kind::Return ||
       flow.kind == CompFlow::Kind::Value) {
     out.value = flow.value.value;
+    if (fn.is_comp && record_call_ != nullptr) {
+      record_call_(record_context_,
+                   CompCallRecord{def_module, item, params, ret, inst,
+                                  std::move(comp_actuals),
+                                  std::move(accepted_args), out});
+    }
     return true;
   }
   return fail(span, "control escapes the comp call");
