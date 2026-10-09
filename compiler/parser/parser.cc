@@ -3,6 +3,7 @@
 
 #include "parser/parser.h"
 
+#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -418,6 +419,55 @@ base::Result<void, diag::Reported> verify_trees(ast::AstArena& ast,
   return base::make_ok();
 }
 
+std::optional<ast::ItemIdx> Parser::parse_spelled_item(bool is_pub,
+                                                       bool is_unsafe,
+                                                       bool is_comp) {
+  using K = lexer::TokenKind;
+  const lexer::Token start = peek();
+  if (start.kind != K::Ident) {
+    return std::nullopt;
+  }
+  const std::string_view word =
+      bytes_.substr(start.span.offset, start.span.length);
+  if ((word == "func" || word == "def" || word == "function") &&
+      peek_kind(1) == K::Ident) {
+    const u32 index = bag_.emit<i18n::Key::ParserFnItemSpelling>(
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
+        start.span);
+    (void)index;
+    advance();
+    return parse_fn(is_pub, is_unsafe, is_comp, /*keyword_consumed=*/true);
+  }
+  if (word == "trait" && peek_kind(1) == K::Ident) {
+    const u32 index = bag_.emit<i18n::Key::ParserSpecItemSpelling>(
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
+        start.span);
+    (void)index;
+    advance();
+    return parse_spec(is_pub, /*keyword_consumed=*/true);
+  }
+  if (word == "import" && peek_kind(1) == K::Ident) {
+    const u32 index = bag_.emit<i18n::Key::ParserUseItemSpelling>(
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
+        start.span);
+    (void)index;
+    advance();
+    return parse_use(is_pub, /*keyword_consumed=*/true);
+  }
+  if (word == "mod") {
+    const u32 index = bag_.emit<i18n::Key::ParserModuleFromManifest>(
+        diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
+        start.span);
+    (void)index;
+    while (!at_end() && !check(K::Semicolon) && !check(K::RBrace)) {
+      advance();
+    }
+    match(K::Semicolon);
+    return ast::ItemIdx::invalid();
+  }
+  return std::nullopt;
+}
+
 ast::ItemIdx Parser::parse_item() {
   // A spent arena builds nothing further: what it refused would leave a
   // node half made and a diagnostic about the wrong thing.
@@ -444,6 +494,12 @@ ast::ItemIdx Parser::parse_item() {
   if (is_comp && peek_kind() == lexer::TokenKind::Unsafe) {
     advance();
     return refuse_comp_unsafe();
+  }
+  // An item keyword from a neighboring language is parsed as the item
+  // it meant (ADR-0061).
+  if (const std::optional<ast::ItemIdx> spelled =
+          parse_spelled_item(is_pub, is_unsafe, is_comp)) {
+    return *spelled;
   }
   if (is_comp && peek_kind() != lexer::TokenKind::Fn) {
     const u32 index = bag_.emit<i18n::Key::ParserCompOnlyOnFunctions>(
@@ -593,8 +649,8 @@ bool Parser::parse_turbofish(std::vector<ast::TypeIdx>& type_args) {
   return true;
 }
 
-bool Parser::parse_fn_signature(FnSignature& signature) {
-  if (!expect(lexer::TokenKind::Fn, "function")) {
+bool Parser::parse_fn_signature(FnSignature& signature, bool keyword_consumed) {
+  if (!keyword_consumed && !expect(lexer::TokenKind::Fn, "function")) {
     return false;
   }
   base::Result<ast::Ident, diag::Reported> name = parse_ident("function name");
@@ -623,10 +679,13 @@ bool Parser::parse_fn_signature(FnSignature& signature) {
   return true;
 }
 
-ast::ItemIdx Parser::parse_fn(bool is_pub, bool is_unsafe, bool is_comp) {
+ast::ItemIdx Parser::parse_fn(bool is_pub,
+                              bool is_unsafe,
+                              bool is_comp,
+                              bool keyword_consumed) {
   const usize mark = pos_;
   FnSignature signature;
-  if (!parse_fn_signature(signature)) {
+  if (!parse_fn_signature(signature, keyword_consumed)) {
     return ast::ItemIdx::invalid();
   }
   ast::BlockIdx body = parse_header_block();
@@ -653,16 +712,33 @@ bool Parser::parse_fn_params(std::vector<ast::ItemFnParam>& params) {
   if (!check(lexer::TokenKind::RParen)) {
     while (true) {
       const bool is_comp = match(lexer::TokenKind::Comp);
-      ast::PatternIdx pattern = parse_pattern();
-      if (!pattern.is_valid()) {
-        return false;
-      }
-      if (!expect(lexer::TokenKind::Colon, "`:`")) {
-        return false;
-      }
-      ast::TypeIdx type = parse_closed_type();
-      if (!type.is_valid()) {
-        return false;
+      ast::PatternIdx pattern = ast::PatternIdx::invalid();
+      ast::TypeIdx type = ast::TypeIdx::invalid();
+      if (ref_self_parameter_shape()) {
+        const lexer::Token amp = peek();
+        const u32 index = bag_.emit<i18n::Key::ParserRefSelfParameter>(
+            diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
+            amp.span);
+        (void)index;
+        advance();  // `&`
+        const bool is_mut = peek_kind() == lexer::TokenKind::Mut;
+        pattern = parse_pattern();  // `mut self` or `self`
+        if (!pattern.is_valid()) {
+          return false;
+        }
+        type = ref_self_type(is_mut, amp.span);
+      } else {
+        pattern = parse_pattern();
+        if (!pattern.is_valid()) {
+          return false;
+        }
+        if (!expect(lexer::TokenKind::Colon, "`:`")) {
+          return false;
+        }
+        type = parse_closed_type();
+        if (!type.is_valid()) {
+          return false;
+        }
       }
       params.push_back(ast::ItemFnParam{pattern, type, is_comp});
       if (!match(lexer::TokenKind::Comma)) {
@@ -674,6 +750,47 @@ bool Parser::parse_fn_params(std::vector<ast::ItemFnParam>& params) {
     }
   }
   return true;
+}
+
+bool Parser::ref_self_parameter_shape() const {
+  using K = lexer::TokenKind;
+  if (peek_kind() != K::Amp) {
+    return false;
+  }
+  const K next = peek_kind(1);
+  if (next == K::Self) {
+    const K after = peek_kind(2);
+    return after == K::Comma || after == K::RParen;
+  }
+  if (next == K::Mut && peek_kind(2) == K::Self) {
+    const K after = peek_kind(3);
+    return after == K::Comma || after == K::RParen;
+  }
+  return false;
+}
+
+ast::TypeIdx Parser::ref_self_type(bool is_mut, diag::Span span) {
+  std::vector<ast::Ident> segments;
+  segments.push_back(ast::Ident{"Self", span});
+  ast::Path path;
+  path.segments = ast::copy_to_arena(ast_.spans, segments);
+  path.span = span;
+  ast::TypeNode path_type;
+  path_type.kind = ast::TypeKind::Path;
+  path_type.span = span;
+  path_type.payload.set(ast::TypePath{
+      .path = ast_.paths.push_back(path),
+      .args = {},
+  });
+  const ast::TypeIdx self_type = ast_.types.push_back(path_type);
+  ast::TypeNode ref_type;
+  ref_type.kind = ast::TypeKind::Ref;
+  ref_type.span = span;
+  ref_type.payload.set(ast::TypeRef{
+      .is_mut = is_mut,
+      .inner = self_type,
+  });
+  return ast_.types.push_back(ref_type);
 }
 
 ast::ItemIdx Parser::parse_intrinsic_fn(bool is_pub, bool is_unsafe) {
@@ -1037,9 +1154,9 @@ bool Parser::parse_spec_method(ast::SpecMethod& method) {
   return true;
 }
 
-ast::ItemIdx Parser::parse_spec(bool is_pub) {
+ast::ItemIdx Parser::parse_spec(bool is_pub, bool keyword_consumed) {
   const usize mark = pos_;
-  if (!expect(lexer::TokenKind::Spec, "spec")) {
+  if (!keyword_consumed && !expect(lexer::TokenKind::Spec, "spec")) {
     return ast::ItemIdx::invalid();
   }
   base::Result<ast::Ident, diag::Reported> name = parse_ident("spec name");
@@ -1165,9 +1282,9 @@ ast::ItemIdx Parser::parse_const(bool is_pub) {
   return ast_.items.push_back(node);
 }
 
-ast::ItemIdx Parser::parse_use(bool is_pub) {
+ast::ItemIdx Parser::parse_use(bool is_pub, bool keyword_consumed) {
   const usize mark = pos_;
-  if (!expect(lexer::TokenKind::Use, "use")) {
+  if (!keyword_consumed && !expect(lexer::TokenKind::Use, "use")) {
     return ast::ItemIdx::invalid();
   }
   ast::PathIdx path = parse_path();

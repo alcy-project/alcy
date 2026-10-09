@@ -103,22 +103,36 @@ class Parser {
 
   // Items.
   ast::ItemIdx parse_item();
-  ast::ItemIdx parse_fn(bool is_pub, bool is_unsafe, bool is_comp);
+  // An item spelled like a neighboring language's keyword (`func`,
+  // `trait`, `import`) is parsed as the item it meant; `mod` has no alcy
+  // form and is reported and skipped (ADR-0061).
+  std::optional<ast::ItemIdx> parse_spelled_item(bool is_pub,
+                                                 bool is_unsafe,
+                                                 bool is_comp);
+  ast::ItemIdx parse_fn(bool is_pub,
+                        bool is_unsafe,
+                        bool is_comp,
+                        bool keyword_consumed = false);
   ast::ItemIdx parse_intrinsic_fn(bool is_pub, bool is_unsafe);
   ast::ItemIdx parse_extern(bool is_pub);
   bool parse_fn_params(std::vector<ast::ItemFnParam>& params);
+  // Rust's `&self` / `&mut self` receiver, which alcy spells as the
+  // binding and its reference type (ADR-0061).
+  bool ref_self_parameter_shape() const;
+  ast::TypeIdx ref_self_type(bool is_mut, diag::Span span);
   ast::ItemIdx parse_struct(bool is_pub);
   ast::ItemIdx parse_enum(bool is_pub);
   ast::ItemIdx parse_impl(bool is_pub);
-  ast::ItemIdx parse_spec(bool is_pub);
-  bool parse_fn_signature(FnSignature& signature);
+  ast::ItemIdx parse_spec(bool is_pub, bool keyword_consumed = false);
+  bool parse_fn_signature(FnSignature& signature,
+                          bool keyword_consumed = false);
   bool parse_spec_method(ast::SpecMethod& method);
   // Parses an optional `<T, N: usize, ...>` parameter list; empty when
   // absent. A parameter with an annotation is a value parameter.
   bool parse_generic_params(std::vector<ast::GenericParam>& params);
   ast::ItemIdx parse_static(bool is_pub);
   ast::ItemIdx parse_const(bool is_pub);
-  ast::ItemIdx parse_use(bool is_pub);
+  ast::ItemIdx parse_use(bool is_pub, bool keyword_consumed = false);
 
   // Types. parse_closed_type additionally rejects a dangling banked
   // ">" left over from splitting ">>" in nested argument lists.
@@ -198,6 +212,9 @@ class Parser {
   // Reads a turbofish argument list; `<` and its `::` are consumed.
   bool parse_turbofish(std::vector<ast::TypeIdx>& type_args);
   ast::CondIdx parse_cond();
+  // Rust's `if let PAT = EXPR`, which alcy spells `if PAT := EXPR`
+  // (ADR-0061). Nothing means an ordinary condition.
+  std::optional<ast::CondIdx> parse_spelled_condition();
   bool consume_gt();
 
   std::span<const lexer::Token> tokens_;

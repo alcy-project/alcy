@@ -1819,4 +1819,82 @@ TEST_CASE("The spelling shapes leave bindings of those names alone") {
   CHECK(result.ok);
 }
 
+TEST_CASE("A spelled condition reports the alcy form once") {
+  const std::string_view sources[] = {
+      "fn main() {\n  o := 1\n  if let 1 = o {\n  }\n}\n",
+      "fn main() {\n  o := 1\n  while let Some(x) = o {\n  }\n}\n",
+  };
+  for (const std::string_view source : sources) {
+    Fixture f;
+    const ParseResult result = parse(source, f);
+    CHECK(!result.ok);
+    CHECK(has_message(f.bag,
+                      "a condition binds with `:=`: write `if PAT := EXPR`"));
+    CHECK(f.bag.error_count() == 1);
+  }
+}
+
+TEST_CASE("A macro call reports once") {
+  Fixture f;
+  const ParseResult result = parse("fn main() {\n  println!(\"x\")\n}\n", f);
+  CHECK(!result.ok);
+  CHECK(has_message(f.bag, "alcy has no macros; call `name(...)`"));
+  CHECK(f.bag.error_count() == 1);
+}
+
+TEST_CASE("A spelled item reports the alcy form once") {
+  struct Case {
+    std::string_view source;
+    std::string_view message;
+  };
+  const Case cases[] = {
+      {"func f() {}\n", "`fn` declares a function"},
+      {"trait Show {}\n",
+       "`spec` declares a capability; `impl Spec for Type` opts a type in"},
+      {"import foo::Bar;\n", "`use` imports a path"},
+      {"mod foo;\n", "modules are declared in `alcy.toml`; there is no `mod`"},
+  };
+  for (const Case& c : cases) {
+    Fixture f;
+    const ParseResult result = parse(c.source, f);
+    CHECK(!result.ok);
+    CHECK(has_message(f.bag, c.message));
+    CHECK(f.bag.error_count() == 1);
+  }
+}
+
+TEST_CASE("A spelled receiver reports once") {
+  const std::string_view sources[] = {
+      "struct F {}\nimpl F {\n  fn g(&self) -> i32 {\n    ret 1\n  }\n}\n",
+      "struct F {}\nimpl F {\n  fn g(&mut self) {\n  }\n}\n",
+  };
+  for (const std::string_view source : sources) {
+    Fixture f;
+    const ParseResult result = parse(source, f);
+    CHECK(!result.ok);
+    CHECK(has_message(
+        f.bag,
+        "a receiver is `self: &Self` (`mut self: &mut Self` when exclusive)"));
+    CHECK(f.bag.error_count() == 1);
+  }
+}
+
+TEST_CASE("The phase-two shapes leave valid programs alone") {
+  // A binding named `let` in a condition, a reference parameter with an
+  // explicit type, and a call to a name that merely looks foreign.
+  Fixture f;
+  const ParseResult result = parse(
+      "fn take(&y: &i32) {\n"
+      "}\n"
+      "fn main() {\n"
+      "  o := true\n"
+      "  if let := o {\n"
+      "  }\n"
+      "  func := 1\n"
+      "  _ := func\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+}
+
 }  // namespace parser

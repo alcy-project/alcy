@@ -1,6 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -479,6 +480,18 @@ ast::ExprIdx Parser::parse_postfix() {
     return ast::ExprIdx::invalid();
   }
   while (true) {
+    // A macro call (`name!(...)`) is a neighboring language's spelling;
+    // read it as the call it meant (ADR-0061).
+    if (check(lexer::TokenKind::Bang) &&
+        (peek_kind(1) == lexer::TokenKind::LParen ||
+         peek_kind(1) == lexer::TokenKind::LBracket)) {
+      const u32 index = bag_.emit<i18n::Key::ParserMacroCallSpelling>(
+          diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
+          peek().span);
+      (void)index;
+      advance();  // `!`
+      continue;
+    }
     // A turbofish on the base path (`f::<T>(...)`) belongs to the call
     // that follows it.
     std::vector<ast::TypeIdx> type_args;
@@ -807,7 +820,80 @@ ast::ExprIdx Parser::parse_primary() {
   return ast_.exprs.push_back(path_node);
 }
 
+std::optional<ast::CondIdx> Parser::parse_spelled_condition() {
+  using K = lexer::TokenKind;
+  const lexer::Token start = peek();
+  if (start.kind != K::Ident ||
+      bytes_.substr(start.span.offset, start.span.length) != "let") {
+    return std::nullopt;
+  }
+  const K after = peek_kind(1);
+  if (after != K::Ident && after != K::Underscore && after != K::LParen &&
+      after != K::Integer && after != K::String && after != K::Char &&
+      after != K::True && after != K::False) {
+    return std::nullopt;
+  }
+  // Only `if let PAT = EXPR`: a top-level `=` before the body, and no
+  // `:=` (which would be an ordinary pattern condition whose binding
+  // is named `let`).
+  bool matched = false;
+  i32 depth = 0;
+  for (usize ahead = 1;; ++ahead) {
+    const K kind = peek_kind(ahead);
+    if (kind == K::Eof || kind == K::LBrace) {
+      break;
+    }
+    if (depth == 0) {
+      if (kind == K::ColonEq || kind == K::Semicolon) {
+        break;
+      }
+      if (kind == K::Eq) {
+        matched = true;
+        break;
+      }
+    }
+    if (kind == K::LParen || kind == K::LBracket) {
+      ++depth;
+    } else if ((kind == K::RParen || kind == K::RBracket) && depth > 0) {
+      --depth;
+    }
+  }
+  if (!matched) {
+    return std::nullopt;
+  }
+  const u32 index = bag_.emit<i18n::Key::ParserIfLetSpelling>(
+      diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
+      start.span);
+  (void)index;
+  advance();  // `let`
+  const ast::PatternIdx pattern = parse_pattern();
+  if (!pattern.is_valid()) {
+    return ast::CondIdx::invalid();
+  }
+  if (!match(K::Eq) && !match(K::ColonEq)) {
+    expect(K::ColonEq, "`:=`");
+    return ast::CondIdx::invalid();
+  }
+  const bool saved = allow_struct_lit_;
+  allow_struct_lit_ = false;
+  const ast::ExprIdx init = parse_expr();
+  allow_struct_lit_ = saved;
+  if (!init.is_valid()) {
+    return ast::CondIdx::invalid();
+  }
+  ast::Cond cond;
+  cond.is_pattern = true;
+  cond.pattern = pattern;
+  cond.init = init;
+  return ast_.conds.push_back(cond);
+}
+
 ast::CondIdx Parser::parse_cond() {
+  // Rust's `if let` reads as the pattern condition it meant
+  // (ADR-0061).
+  if (const std::optional<ast::CondIdx> spelled = parse_spelled_condition()) {
+    return *spelled;
+  }
   // Pattern declarations (`if pat := expr`) are detected by scanning
   // for ":=" at bracket depth zero; everything else is an expression.
   if (scan_lead() != StmtLead::Decl) {

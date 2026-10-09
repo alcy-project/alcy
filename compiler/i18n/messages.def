@@ -67,22 +67,29 @@
   F(ParserExpectedItemFoundEndOfFile, "Expected item, found end of file") \
   F(ParserExpectedSemicolon, "Expected `;`") \
   F(ParserExpectedValueFoundType, "Expected a value, found a type") \
+  F(ParserFnItemSpelling, "`fn` declares a function") \
+  F(ParserIfLetSpelling, "a condition binds with `:=`: write `if PAT := EXPR`") \
   F(ParserExternConvention, "Only the \"C\" calling convention is supported") \
   F(ParserExternNeedsConvention, "`extern` needs a convention string (`extern \"C\"`)") \
   F(ParserInvalidSyntaxTree, "Internal error: invalid syntax tree: {}") \
   F(ParserInvalidTokenStream, "Internal error: invalid token stream: {}") \
   F(ParserLetSpelling, "`let` is not a keyword; declare with `x := ...` (`mut x := ...` when mutable)") \
+  F(ParserMacroCallSpelling, "alcy has no macros; call `name(...)`") \
+  F(ParserModuleFromManifest, "modules are declared in `alcy.toml`; there is no `mod`") \
   F(ParserMutDeclarationSpelling, "a mutable declaration is `mut x := ...`; `=` only reassigns") \
   F(ParserNameAlreadyBound, "Name `{}` is already bound in this scope") \
   F(ParserNestingTooDeep, "Nesting is deeper than the limit of {}") \
   F(ParserRangeBoundRequired, "`..<` and `..=` describe an endpoint, so one must follow") \
   F(ParserRangeEndNeedsBound, "A range end must be spelled `..<` or `..=`, bare `..` names no end") \
+  F(ParserRefSelfParameter, "a receiver is `self: &Self` (`mut self: &mut Self` when exclusive)") \
   F(ParserReservedName, "Name `{}` is reserved for future use") \
   F(ParserReturnSpelling, "`ret` returns; write `ret ...`") \
+  F(ParserSpecItemSpelling, "`spec` declares a capability; `impl Spec for Type` opts a type in") \
   F(ParserTypeFirstDeclarationSpelling, "a declaration puts the type after the name: `x: T := ...`") \
   F(ParserTypedDeclarationSpelling, "a typed declaration is `x: T := ...`; `=` only reassigns") \
   F(ParserUnsafeOnlyOnFunctions, "`unsafe` applies to functions") \
   F(ParserUnsafeWithoutBlock, "`unsafe` must open a block (`unsafe {{ ... }}`)") \
+  F(ParserUseItemSpelling, "`use` imports a path") \
   F(ParserVarSpelling, "`var` is not a keyword; declare with `x := ...`") \
   /* analyzer */ \
   F(AnalyzerAmbiguousMethod, "Ambiguous method '{}'") \
