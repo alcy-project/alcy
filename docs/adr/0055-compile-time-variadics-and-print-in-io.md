@@ -47,6 +47,12 @@ scope now traces to a manifest entry.
 members become prelude facades (ADR-0016), so the samples and the
 documentation show the three, or the whole suite.
 
+Amended at the move's landing: a selection names its whole closure, so
+the explicit hello-world manifest carries `alcy/std/core`,
+`alcy/std/alloc`, `alcy/std/arch`, `alcy/std/fmt`, and `alcy/std/io` -
+the three above plus the heap, which `io` formats into - or
+`alcy/std/*`.
+
 ## Consequences
 
 Format call sites read as calls, and the arity check stays where it

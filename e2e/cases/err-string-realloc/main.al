@@ -7,6 +7,6 @@ fn main() -> i32 {
   s.push(104u8)
   r := s.as_str()
   s.push(105u8)
-  print(r)
+  print("{}", r)
   ret 0
 }

@@ -8,6 +8,10 @@ include = ["main"]
 
 [dependencies]
 "alcy/std/core" = {}
+"alcy/std/alloc" = {}
+"alcy/std/arch" = {}
+"alcy/std/fmt" = {}
+"alcy/std/io" = {}
 
 [[bin]]
 path = "main.al"

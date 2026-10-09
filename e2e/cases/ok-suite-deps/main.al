@@ -8,6 +8,6 @@ fn main() -> i32 {
   if v.len() != 1 {
     ret 2
   }
-  print(format("n={}", 7i32).as_str())
+  print("n={}", 7i32)
   ret 0
 }

@@ -784,4 +784,105 @@ Val Lowerer::lower_fmt_format(ast::ExprIdx expr,
             {to_operand(written, len_ty), to_operand(len_addr, len_ty)});
   return Val{to_operand(slot, sig.ret), sig.ret, true, false};
 }
+
+Val Lowerer::lower_io_print(ast::ExprIdx expr,
+                            const analyzer::CheckedModule::FnSig& sig) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const std::span<const ast::ExprIdx> args =
+      node.payload.get<ast::ExprCall>().args;
+  if (args.empty()) {
+    internal(node.span, "call arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  CompVal fmt_val;
+  if (!comp_evaluate(module, args[0], fmt_val) ||
+      fmt_val.value.tag != CompValue::Tag::Str) {
+    if (!failed) {
+      internal(node.span, "format string without value");
+    }
+    return Val{size_one, error_type(), false, false};
+  }
+  // The arguments after the format string are collected into the tuple
+  // the pieces read (ADR-0055).
+  std::vector<ir::TypeIdx> elem_types;
+  Val tup{size_one, error_type(), false, false};
+  if (!lower_rest_tuple(args, 1, node.span, tup, elem_types)) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const analyzer::FmtTemplate parsed =
+      analyzer::parse_format_string(fmt_val.value.str_value);
+  if (parsed.error != analyzer::FmtError::None) {
+    unsupported(node.span, "invalid format string");
+    return Val{size_one, error_type(), false, false};
+  }
+  if (parsed.placeholders != elem_types.size()) {
+    unsupported(node.span, "placeholder count does not match arguments");
+    return Val{size_one, error_type(), false, false};
+  }
+  for (ir::TypeIdx element : elem_types) {
+    if (!analyzer::is_formattable_tag(tag_of(element))) {
+      unsupported(node.span, "argument is not formattable");
+      return Val{size_one, error_type(), false, false};
+    }
+  }
+  const ir::TypeIdx usize_ty = usize_type();
+  const ir::TypeIdx u8_ty = builder.primitive(ir::TypeTag::U8);
+  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+  const ir::TypeIdx buf_ty = builder.reference_type(u8_ty, true);
+  // Phase one measures; the total is the exact reservation. The tuple
+  // is lowered once up front, so its side effects happen once and both
+  // passes read the same values.
+  FmtState measured;
+  const ir::OperandIdx no_capacity = to_operand(
+      builder.immutable({.type = usize_ty, .data = {.u64_value = 0}}),
+      usize_ty);
+  if (!emit_fmt_pieces(node.span, parsed.pieces, tup.op, elem_types, size_one,
+                       no_capacity, measured, true)) {
+    return Val{size_one, error_type(), false, false};
+  }
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::RegisterIdx total = emit(ir::Opcode::Load, usize_ty,
+                                     {to_operand(measured.tot_addr, usize_ty)});
+  const ir::RegisterIdx heap =
+      emit_heap_alloc(u8_ty, buf_ty, to_operand(total, usize_ty));
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  // Phase two writes the whole measured total, so nothing truncates.
+  FmtState state;
+  if (!emit_fmt_pieces(node.span, parsed.pieces, tup.op, elem_types,
+                       to_operand(heap, buf_ty), to_operand(total, usize_ty),
+                       state, false)) {
+    return Val{size_one, error_type(), false, false};
+  }
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  // The hook writes stdout; println adds the newline in a second write.
+  const bool newline = sig.name == "println";
+  const ir::ExternalFunctionIdx write_ext = declare_external(
+      newline ? "alcy_println" : "alcy_print",
+      builder.primitive(ir::TypeTag::Void), {ptr_ty, usize_ty});
+  emit_void(ir::Opcode::Call,
+            {builder.operand(ir::Operand::from_external_function(
+                 write_ext, builder.primitive(ir::TypeTag::Function))),
+             to_operand(heap, buf_ty), to_operand(total, usize_ty)});
+  // The buffer is the expansion's; hand it back with the size and
+  // alignment it was reserved at.
+  const ir::RegisterIdx align = emit_type_query(ir::Opcode::TypeAlignOf, u8_ty);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::ExternalFunctionIdx free_ext =
+      declare_external("alcy_dealloc", builder.primitive(ir::TypeTag::Void),
+                       {ptr_ty, usize_ty, usize_ty});
+  emit_void(ir::Opcode::Call,
+            {builder.operand(ir::Operand::from_external_function(
+                 free_ext, builder.primitive(ir::TypeTag::Function))),
+             to_operand(heap, buf_ty), to_operand(total, usize_ty),
+             to_operand(align, usize_ty)});
+  return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+}
 }  // namespace lowering

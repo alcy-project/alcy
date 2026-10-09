@@ -19,8 +19,6 @@ pub use package::mem::memcopy;
 pub use package::mem::ptr_offset;
 pub use package::mem::ptr_offset_mut;
 pub use package::mem::panic;
-pub use package::mem::print;
-pub use package::mem::println;
 pub use package::mem::size_of;
 pub use package::mem::align_of;
 pub use package::option::Option;

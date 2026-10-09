@@ -279,11 +279,16 @@ TEST_CASE("Lower emits verifiable LLVM IR for print") {
                    "fn main() {\n"
                    "  print(\"hi\")\n"
                    "}\n"},
-                  {"core.al", "pub intrinsic fn print(msg: str);\n"}});
+                  {"io.al",
+                   "pub intrinsic fn panic(msg: str) -> !;\n"
+                   "\n"
+                   "pub fn print(comp fmt: str, args: ..) {\n"
+                   "  panic(\"must expand\")\n"
+                   "}\n"}});
 
   Fixture f;
   LowerCase result =
-      lower_case(dir, "main.al", {"main.al"}, f, {{"core", "core.al"}});
+      lower_case(dir, "main.al", {"main.al"}, f, {{"io", "io.al"}});
   CHECK(result.ok);
   CHECK(result.lowered.has_value());
   if (!result.ok || !result.lowered.has_value()) {
@@ -319,11 +324,16 @@ TEST_CASE("Lower emits relocatable objects") {
                    "  print(\"hi\")\n"
                    "  _ := add(40, 2)\n"
                    "}\n"},
-                  {"core.al", "pub intrinsic fn print(msg: str);\n"}});
+                  {"io.al",
+                   "pub intrinsic fn panic(msg: str) -> !;\n"
+                   "\n"
+                   "pub fn print(comp fmt: str, args: ..) {\n"
+                   "  panic(\"must expand\")\n"
+                   "}\n"}});
 
   Fixture f;
   LowerCase result =
-      lower_case(dir, "main.al", {"main.al"}, f, {{"core", "core.al"}});
+      lower_case(dir, "main.al", {"main.al"}, f, {{"io", "io.al"}});
   CHECK(result.ok);
   CHECK(result.lowered.has_value());
   if (!result.ok || !result.lowered.has_value()) {
@@ -471,11 +481,16 @@ TEST_CASE("Lower wraps all main forms in a C entry") {
   for (const std::string_view source : cases) {
     VirtualDir dir;
     write_all(dir, {{"main.al", source},
-                    {"core.al", "pub intrinsic fn print(msg: str);\n"}});
+                    {"io.al",
+                     "pub intrinsic fn panic(msg: str) -> !;\n"
+                     "\n"
+                     "pub fn print(comp fmt: str, args: ..) {\n"
+                     "  panic(\"must expand\")\n"
+                     "}\n"}});
 
     Fixture f;
     LowerCase result =
-        lower_case(dir, "main.al", {"main.al"}, f, {{"core", "core.al"}});
+        lower_case(dir, "main.al", {"main.al"}, f, {{"io", "io.al"}});
     CHECK(result.ok);
     CHECK(result.lowered.has_value());
     if (!result.ok || !result.lowered.has_value()) {

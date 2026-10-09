@@ -55,9 +55,9 @@ namespace lowering {
 // never through block parameters, matching what the verifier accepts
 // for branch targets.
 //
-// Runtime hooks (codegen provides the bodies): `print` lowers to
-// external `alcy_print(ptr, len)`, `println` to
-// `alcy_println(ptr, len)`, and `panic` to `alcy_panic(ptr, len)`
+// Runtime hooks (codegen provides the bodies): the expanded
+// `io::print` and `io::println` call `alcy_print(ptr, len)` and
+// `alcy_println(ptr, len)`, and `panic` calls `alcy_panic(ptr, len)`
 // returning never, followed by `Unreachable`.
 //
 // Ownership analysis consumes LoweredPackage rather than raw storage:

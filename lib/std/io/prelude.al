@@ -3,9 +3,13 @@
 
 // Toolchain standard library, `alcy/std` suite, `io` package.
 //
-// This file is the package's root module and its implicit surface.
+// This file is the package's facade: the re-exports below are the
+// package's implicit surface. The modules beside this one hold the
+// definitions and are reachable by path.
 //
-// Files, readers, writers, and the standard streams.
-//
-// Declared but empty: the package is part of the suite's shape and
-// carries no names yet. See docs/adr/0016-suites-and-the-std-split.md.
+// The compiler recognises `print` and `println` by this package rather
+// than by their names; both are expanded at compile time and neither
+// declared body executes. See docs/adr/0016-suites-and-the-std-split.md.
+
+pub use package::print::print;
+pub use package::print::println;

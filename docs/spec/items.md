@@ -60,9 +60,8 @@
   - `memcopy(dst: &mut u8, src: &u8, n: usize)` copies `n` bytes.
   - `panic(msg: str)` diverges through the runtime abort.
   - `sys_write(fd: i32, buf: str)` writes `buf` to the file
-    descriptor. Backs the ordinary `print`/`println` below; user
-    code cannot name file descriptors portably, so this stays
-    intrinsic.
+    descriptor. User code cannot name file descriptors portably, so
+    this stays intrinsic.
   - `str_len(s: str) -> usize`, `str_byte(s: str, i: usize) -> u8`,
     and `str_slice(s: str, start: usize, end: usize) -> str` are the
     string primitives. Out-of-bounds `str_byte`/`str_slice` panic.
@@ -122,10 +121,11 @@
   verifies the marker against the set the way it verifies the shape,
   so leaving it out, or adding it to a safe intrinsic, is an error.
   The remaining intrinsics stay safe.
-- `print(msg: str)` and `println(msg: str)` are ordinary core
-  functions over `sys_write`. They remain callable with or without
-  a declaration: without the prelude, the legacy name-based path
-  lowers them directly.
+- `print(comp fmt: str, args: ..)` and
+  `println(comp fmt: str, args: ..)` are `io`'s declarations,
+  compiler-expanded like `fmt::format`: the format string is
+  comp-known and the call's remaining arguments are collected at
+  compile time (`fmt.md`, ADR-0055). The declared bodies never run.
 - Calls to intrinsics check like ordinary calls. Intrinsics have no
   bodies to lower, borrow, or specialize; `comp` parameters on
   intrinsics are rejected.

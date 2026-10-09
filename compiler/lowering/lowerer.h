@@ -402,7 +402,7 @@ class Lowerer {
                                   ir::TypeIdx ref_ty,
                                   ir::OperandIdx count);
   Val lower_str_intrinsic(ast::ExprIdx expr, std::string_view name);
-  Val lower_intrinsic(ast::ExprIdx expr, std::string_view name);
+  Val lower_panic(ast::ExprIdx expr);
   ir::OperandIdx arg_for(Val arg, ir::TypeIdx param);
   Val load_disc(Val slot_addr);
   bool is_unit_payload(const std::vector<ir::TypeIdx>& payloads);
@@ -509,6 +509,10 @@ class Lowerer {
                       const analyzer::CheckedModule::FnSig& sig);
   Val lower_fmt_format(ast::ExprIdx expr,
                        const analyzer::CheckedModule::FnSig& sig);
+  // `io::print`/`io::println`: format into a heap buffer and hand it to
+  // the standard-output hook (ADR-0055).
+  Val lower_io_print(ast::ExprIdx expr,
+                     const analyzer::CheckedModule::FnSig& sig);
   Val lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected);
   Val lower_literal_zero(ir::TypeIdx type, diag::Span span);
   void lower_stmt(ast::StmtIdx stmt);

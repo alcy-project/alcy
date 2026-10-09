@@ -463,7 +463,11 @@ TEST_CASE("A package build refuses targets sharing one output") {
           "proj/alcy.toml",
           "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
           "[modules]\ninclude = [\"main\", \"lib\"]\n\n"
-          "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+          "[dependencies]\n\"alcy/std/core\" = {}\n"
+          "\"alcy/std/alloc\" = {}\n"
+          "\"alcy/std/arch\" = {}\n"
+          "\"alcy/std/fmt\" = {}\n"
+          "\"alcy/std/io\" = {}\n\n"
           "[[bin]]\npath = \"main.al\"\n\n"
           "[lib]\npath = \"lib.al\"\n") &&
       dir.write_file("proj/main.al", PROGRAM) &&

@@ -1081,8 +1081,7 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
     const ast::PathIdx path_idx = path.idx;
     if (ast.paths[path_idx].segments.size() == 1) {
       const std::string_view name = ast.paths[path_idx].segments[0].name;
-      if ((name == "print" || name == "println" || name == "panic") &&
-          lookup_local(name) == nullptr &&
+      if (name == "panic" && lookup_local(name) == nullptr &&
           lookup_static(module, name) == nullptr) {
         bool shadowed = false;
         for (const auto& checked : pkg.modules) {
@@ -1097,7 +1096,7 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
           }
         }
         if (!shadowed) {
-          return lower_intrinsic(expr, name);
+          return lower_panic(expr);
         }
       }
     }
@@ -1139,6 +1138,10 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
   }
   if (sig.name == "format" && pkg.tree.is_staged_item("fmt", sig.item)) {
     return lower_fmt_format(expr, sig);
+  }
+  if ((sig.name == "print" || sig.name == "println") &&
+      pkg.tree.is_staged_item("io", sig.item)) {
+    return lower_io_print(expr, sig);
   }
   const std::vector<u32> comp = comp_positions(sig.item);
   std::vector<CompVal> comp_args;
@@ -1249,8 +1252,8 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
 }
 
 // Calls through an intrinsic declaration: known names map to
-// runtime hooks or IR operations. Undeclared legacy names
-// (print/println/panic) still arrive through lower_intrinsic.
+// runtime hooks or IR operations. The one undeclared legacy name,
+// `panic`, still arrives through lower_panic.
 ir::RegisterIdx Lowerer::emit_heap_alloc(ir::TypeIdx elem,
                                          ir::TypeIdx ref_ty,
                                          ir::OperandIdx count) {
@@ -1322,8 +1325,8 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
                                   const std::vector<ir::TypeIdx>& type_args) {
   const ast::ExprNode& node = ast.exprs[expr];
   const std::string_view name = sig.name;
-  if (name == "print" || name == "println" || name == "panic") {
-    return lower_intrinsic(expr, name);
+  if (name == "panic") {
+    return lower_panic(expr);
   }
   if (name == "sys_write") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
@@ -2091,7 +2094,7 @@ Val Lowerer::lower_str_intrinsic(ast::ExprIdx expr, std::string_view name) {
   return Val{size_one, error_type(), false, false};
 }
 
-Val Lowerer::lower_intrinsic(ast::ExprIdx expr, std::string_view name) {
+Val Lowerer::lower_panic(ast::ExprIdx expr) {
   const ast::ExprNode& call = ast.exprs[expr];
   if (call.payload.get<ast::ExprCall>().args.size() != 1) {
     internal(call.span, "intrinsic arity");
@@ -2111,29 +2114,17 @@ Val Lowerer::lower_intrinsic(ast::ExprIdx expr, std::string_view name) {
   const ir::RegisterIdx len =
       emit(ir::Opcode::ExtractValue, usize_ty, {material.op, index_operand(1)});
 
-  bool is_panic = false;
-  ir::ExternalFunctionIdx ext(0);
-  if (name == "print") {
-    ext = declare_external("alcy_print", builder.primitive(ir::TypeTag::Void),
-                           {ptr_ty, usize_ty});
-
-  } else if (name == "println") {
-    ext = declare_external("alcy_println", builder.primitive(ir::TypeTag::Void),
-                           {ptr_ty, usize_ty});
-  } else if (name == "panic") {
-    is_panic = true;
-    ext = declare_external("alcy_panic", builder.never_type(),
-                           {ptr_ty, usize_ty});
-  }
+  // `panic` is the one name-based fallback left: it aborts through the
+  // runtime. `print` and `println` are io's declarations, expanded by
+  // package (ADR-0055).
+  const ir::ExternalFunctionIdx ext =
+      declare_external("alcy_panic", builder.never_type(), {ptr_ty, usize_ty});
   emit_void(ir::Opcode::Call,
             {builder.operand(ir::Operand::from_external_function(
                  ext, builder.primitive(ir::TypeTag::Function))),
              to_operand(bytes, ptr_ty), to_operand(len, usize_ty)});
-  if (is_panic) {
-    emit_void(ir::Opcode::Unreachable, {});
-    return Val{size_one, builder.never_type(), false, false};
-  }
-  return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+  emit_void(ir::Opcode::Unreachable, {});
+  return Val{size_one, builder.never_type(), false, false};
 }
 
 // The slice behind a slice reference, or invalid when the type is

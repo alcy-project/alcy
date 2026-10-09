@@ -16,15 +16,6 @@ pub intrinsic fn panic(msg: str) -> !;
 
 intrinsic fn sys_write(fd: i32, buf: str);
 
-pub fn print(msg: str) {
-  sys_write(1, msg)
-}
-
-pub fn println(msg: str) {
-  sys_write(1, msg)
-  sys_write(1, "\n")
-}
-
 pub intrinsic fn size_of<T>() -> usize;
 
 pub intrinsic fn align_of<T>() -> usize;

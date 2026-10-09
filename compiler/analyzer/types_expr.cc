@@ -594,6 +594,15 @@ bool Checker::is_core_fmt(const CheckedModule::FnSig* fn) const {
   return tree.is_staged_item("fmt", fn->item);
 }
 
+// A standard-output write of the staged `io` package: recognized by the
+// package its item is declared in, like fmt's (ADR-0055).
+bool Checker::is_io_print(const CheckedModule::FnSig* fn) const {
+  if (fn->name != "print" && fn->name != "println") {
+    return false;
+  }
+  return tree.is_staged_item("io", fn->item);
+}
+
 std::vector<bool> Checker::comp_param_flags(ast::ItemIdx item) const {
   std::vector<bool> flags;
   if (!item.is_valid()) {
@@ -942,6 +951,60 @@ ir::TypeIdx Checker::check_fmt_format(u32 module,
   return result;
 }
 
+// Checks an `io::print` or `io::println` call: the shape of
+// `fmt::format` without a result. Literal content verifies in lowering,
+// which holds the bytes.
+ir::TypeIdx Checker::check_io_print(u32 module,
+                                    ast::ExprIdx expr,
+                                    const ir::TypeIdx* expected,
+                                    const CheckedModule::FnSig* fn) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const std::span<const ast::ExprIdx> args =
+      node.payload.get<ast::ExprCall>().args;
+  const diag::Span span = node.span;
+  if (comp_depth > 0) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerPrintInCompEvaluation>(
+        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::InvalidComp,
+        span, fn->name);
+    (void)index;
+    return error_type();
+  }
+  if (args.empty()) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerPrintArity>(
+        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityError,
+        span, fn->name, args.size());
+    (void)index;
+    return error_type();
+  }
+  const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
+  const ir::TypeIdx fmt_type = check_expr(module, args[0], &str);
+  unify(str, fmt_type, ast.exprs[args[0]].span, "format string");
+  if (!expr_comp_known(module, args[0])) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerFormatStringNotCompKnown>(
+        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::NotCompKnown,
+        ast.exprs[args[0]].span);
+    (void)index;
+    return error_type();
+  }
+  std::vector<ir::TypeIdx> elements;
+  elements.reserve(args.size() - 1);
+  for (usize i = 1; i < args.size(); ++i) {
+    const ir::TypeIdx element = check_expr(module, args[i], nullptr);
+    if (!is_error(element)) {
+      elements.push_back(element);
+    }
+  }
+  if (!verify_fmt_literal(args[0], span, elements, span)) {
+    return error_type();
+  }
+  record_call(module, node.payload.get<ast::ExprCall>().callee, fn);
+  const ir::TypeIdx unit = builder.primitive(ir::TypeTag::Void);
+  if (expected != nullptr) {
+    return unify(*expected, unit, span, "call");
+  }
+  return unit;
+}
+
 // A closure literal: parameters bind from annotations or the
 // expected function type, a non-empty capture list is refused
 // until captures land, and the body checks as a function body
@@ -1256,9 +1319,9 @@ ir::TypeIdx Checker::check_call(u32 module,
   }
   // No fallback for `print`, `println`, or `panic`: an unresolved name
   // is an error like any other, so every name in scope traces to a
-  // manifest entry. The prelude provides them whenever `core` is
-  // selected, and the missing-dependency hint names the package when it
-  // is not.
+  // manifest entry. `panic` comes from core and the writes from io
+  // whenever those are selected, and the missing-dependency hint names
+  // the package when they are not.
   const ast::PathIdx path = ast.exprs[callee].payload.get<ast::ExprPath>().idx;
   PathValue resolved;
   if (!resolve_value_path(
@@ -1296,6 +1359,9 @@ ir::TypeIdx Checker::check_call(u32 module,
         return check_fmt_format(module, expr, expected, fn);
       }
       return check_fmt_write(module, expr, expected, fn);
+    }
+    if (is_io_print(fn)) {
+      return check_io_print(module, expr, expected, fn);
     }
     check_unsafe_call(fn, span);
     check_comp_fn_call(fn, span);

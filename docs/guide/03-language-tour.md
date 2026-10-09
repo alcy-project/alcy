@@ -143,15 +143,15 @@ and binds its payload, and `?` propagates the other one.
 
 ## Printing
 
-`print` and `println` write a `str`. `format` builds one from a
-compile-time format string and one argument per `{}`:
+`print` and `println` take a compile-time format string and one
+argument per `{}` - the same call shape as `format`, which builds a
+`String` instead of writing:
 
 ```alcy
 fn main() {
   print("print leaves the line open, ")
   println("println closes it")
-  line := format("{}\n", 40 + 2)
-  print(line.as_str())
+  println("the answer is {}", 40 + 2)
 }
 ```
 

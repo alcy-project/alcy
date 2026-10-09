@@ -181,8 +181,13 @@ bool Checker::is_expanded_variadic(ast::ItemIdx item) const {
   }
   const std::string_view name =
       ast.items[item].payload.get<ast::ItemFn>().name.name;
-  return (name == "write" || name == "format") &&
-         tree.is_staged_item("fmt", item);
+  if (name == "write" || name == "format") {
+    return tree.is_staged_item("fmt", item);
+  }
+  if (name == "print" || name == "println") {
+    return tree.is_staged_item("io", item);
+  }
+  return false;
 }
 
 // Only a compiler-expanded function may declare `args: ..` (ADR-0055):
@@ -2109,12 +2114,12 @@ ir::TypeIdx Checker::resolve_type(u32 module,
 }
 
 // Closed compiler-known intrinsic set (see docs/spec/items.md).
-// `print`/`println`/`panic` stay callable without a declaration
-// until core provides them; `memcopy` requires one.
+// `panic` stays callable without a declaration; `print`/`println` are
+// declared by io and expanded by package (ADR-0055); `memcopy`
+// requires a declaration.
 bool Checker::is_known_intrinsic(std::string_view name) {
-  return name == "memcopy" || name == "print" || name == "println" ||
-         name == "panic" || name == "str_len" || name == "str_byte" ||
-         name == "str_slice" || name == "sys_write" ||
+  return name == "memcopy" || name == "panic" || name == "str_len" ||
+         name == "str_byte" || name == "str_slice" || name == "sys_write" ||
          name == "str_from_parts" || name == "slice_len" ||
          name == "slice_from_parts" || name == "slice_from_parts_mut" ||
          name == "alloc" || name == "dealloc" || name == "elem_ptr" ||
@@ -2314,8 +2319,6 @@ bool Checker::check_intrinsic_signature(u32 module,
     expected.push_back(builder.reference_type(u8, true));
     expected.push_back(builder.reference_type(u8, false));
     expected.push_back(usize_ty);
-  } else if (name == "print" || name == "println") {
-    expected.push_back(str);
   } else if (name == "panic") {
     expected.push_back(str);
     expected_ret = builder.never_type();

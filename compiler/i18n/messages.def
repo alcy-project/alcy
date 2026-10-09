@@ -203,6 +203,8 @@
   F(AnalyzerOrPatternBindsDifferentNames, "Or-pattern alternatives must bind the same names") \
   F(AnalyzerPathHeadNotSupported, "`{}` is not a path head; the package root is `package::`") \
   F(AnalyzerPowerNotImplemented, "The '**' operator is not implemented yet") \
+  F(AnalyzerPrintArity, "'{}' expects a format string, found {} arguments") \
+  F(AnalyzerPrintInCompEvaluation, "'{}' is not allowed in comp evaluation") \
   F(AnalyzerRangeEndpointNotInteger, "A range index must have an integer endpoint type") \
   F(AnalyzerRangeEndpointTypeMismatch, "Type mismatch in range endpoints: '{}' vs '{}'") \
   F(AnalyzerRangeExpressionsDeferred, "range expressions arrive post-MVP") \
