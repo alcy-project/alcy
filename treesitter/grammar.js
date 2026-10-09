@@ -207,6 +207,7 @@ module.exports = grammar({
     ),
 
     field_declaration: $ => seq(
+      optional(field('visibility', $.visibility)),
       field('name', $.identifier),
       ':',
       field('type', $._type),

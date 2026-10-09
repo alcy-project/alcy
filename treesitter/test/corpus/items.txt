@@ -112,6 +112,28 @@ struct Point {
       (primitive_type))))
 
 ================================================================================
+A public field beside a private one
+================================================================================
+
+struct Pair {
+  pub left: i32,
+  right: i32,
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (identifier)
+    (field_declaration
+      (visibility)
+      (identifier)
+      (primitive_type))
+    (field_declaration
+      (identifier)
+      (primitive_type))))
+
+================================================================================
 Unit and tuple enum variants
 ================================================================================
 

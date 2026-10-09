@@ -61,7 +61,7 @@ params      = [ [ "comp" ] , pattern , ":" , ( ".." | type ) ,
                  docs/spec/comp.md and docs/adr/0055-*. *)
 struct_item = "struct" , IDENT , [ type_params ] , "{"
             , field , { "," , field } , [ "," ] , "}" ;
-field       = IDENT , ":" , type ;
+field       = [ vis ] , IDENT , ":" , type ;
 enum_item   = "enum" , IDENT , [ type_params ] , "{"
             , variant , { "," , variant } , [ "," ] , "}" ;
 variant     = IDENT | IDENT , "(" , [ type , { "," , type } ] , ")" ;
