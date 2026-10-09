@@ -18,11 +18,15 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] Diagnose a binary with no free `main` while checking. Today the
   program reaches the linker and reports `Linking failed`, which names
   the tool rather than the missing entry.
-- [ ] Drop elaboration as a pass over IR. Lowering places destructors
-  while walking the AST with one per-declaration "moved" flag, which
-  approximates per-path ownership; a pass that consumes the `Move`
-  markers and solves drops on the CFG would make `break`, `continue`,
-  `?`, and `match` joins one rule instead of four special cases.
+- [ ] Drop elaboration as a pass over IR. Lowering now ends each live
+  path's values in that path's own epilogue (match arms, if arms, and a
+  moved field is skipped where it left), which fixed the double drops and
+  the `or`/`unwrap_or` leaks. What remains is the borrow pass: a move on
+  one path retires the value on every path, so `if c { take(r) }` and
+  `Option::filter` over a non-Copy `T` still report use-after-move where
+  the owning path would end the value. A pass that consumes the `Move`
+  markers and solves ownership per CFG path makes `break`, `continue`,
+  `?`, and these joins one rule.
 - [ ] Index the analyzer's and lowerer's side tables by their keys
   (expression types, type origins, generic instances, function
   specializations). Each lookup is a linear scan today, so checking and
@@ -31,6 +35,76 @@ replaced. The foundations are in `roadmap.md`.
   lowering share one class with a large public surface.
 - [ ] Size borrow-pass scratch by the function, not the package: each
   function's reset clears arrays as large as the whole program today.
+
+### Language and library surface
+
+- [ ] Container iteration: an `into_iter`/cursor for `Vec`, `Map`, `Set`,
+  arrays, and slices, so `for` can walk the standard containers. Iterator
+  adapters (`map`, `filter`, `collect`) are roadmap work; until the cursors
+  land, algorithms index-loop instead.
+- [ ] Spec methods on standard types from user code: `mut r := 0..<5;
+  r.next()` is rejected with "No method 'next'" although the same spec
+  implemented in the caller's package works, and a generic
+  `fn sum<I>(it: I)` over a standard iterator cannot be written. Find why
+  cross-package spec implementations do not resolve for an explicit call
+  (the `for` desugar dispatches internally and hides it).
+- [ ] The implementing side of sealed operator specs: a user package cannot
+  write `impl PartialEq for P` or `impl Index for G`; the diagnostic says
+  the `[spec] implement` manifest key is not accepted yet (ADR-0053,
+  `deferred.md`). Ship the key.
+- [ ] Indexing a container field through `self`: `self.data[0]` in a method
+  is rejected as "does not implement the Index spec" while
+  `self.data.as_slice()[0]` works. A field's storage-copy type is not
+  followed to its origin in operator lookup.
+- [ ] Read-before-write through an operator: `v[i] = v[i] + 1` and
+  `m[k] = m[k] + 1` are rejected as conflicting borrows; binding the read
+  to a temporary first works. Two-phase borrows would let the idiomatic
+  form compile.
+- [ ] Recursive data structures: a recursive enum or struct needs raw
+  pointers and manual `alloc` today; there is no owning indirection
+  (`Box`-equivalent). Design one with the owning environment follow-up
+  (ADR-0044).
+- [ ] A returned error from `main() -> Result` aborts (SIGABRT, status 134)
+  with "main returned Err". Decide whether the error variant is an exit
+  status instead of a panic.
+- [ ] Structural equality for tuples and arrays: `==` is builtin for
+  scalars and addresses and spec-based for nominal types, so `(1, 2) ==
+  (1, 2)` and `[1, 2] == [1, 2]` have no comparison. Decide the builtin
+  element-wise rule or keep it explicit.
+- [ ] Float ranges: `for x in 0.5..<2.5` fails with type errors inside
+  `core/range.al`. `types.md` says float ranges have no iteration, so the
+  iteration site wants one clear diagnostic instead of std internals.
+- [ ] Float formatting: `fmt.md` defers it (integers, `bool`, and `str`
+  are the convertible types). Implement when the formatter grows precision
+  handling.
+- [ ] Discards of values with destructors: `_ := expr` is an error while a
+  bare expression statement only warns, and neither ends the value. Decide
+  one rule for both spellings.
+- [ ] Explicit spec call with a temporary: `a.eq(&2)` fails lowering with
+  "Construct 'borrowed temporary' is not supported in this lowering slice".
+- [ ] `Option::is_some`/`is_none`/`is_ok`/`is_err` take the receiver by
+  value, so the option cannot be consulted twice and a payload ends only
+  through the enum walk. `&Self` receivers would fix both.
+- [ ] An enum's payload has no drop glue: `match` on a wildcard arm (as
+  `is_some` writes) discards a `String` payload without ending it, and
+  the same holds for arrays. Elaborating payload drops is part of the
+  drop pass above; until then the warning names the binding.
+- [ ] Standard dependency selection: `--deps alcy/std/collections` on top
+  of the default suite errors "Dependency 'alcy/std/*' overlaps
+  'collections'". Make the default suite and the glob rule visible in
+  `--help` and the diagnostic.
+- [ ] `Map` key ergonomics: keys are `str`-only and `Set` holds strings
+  only; `m["missing"] = v` panics with the `Option::unwrap` wording; there
+  is no entry API, no `keys()` traversal, and no sort on `Vec`. The
+  containers package is the place for these.
+- [ ] Trace report nesting: the one-pass scan picks the innermost open
+  interval as parent, not the smallest containing one as its comment says,
+  so overlapping events from two threads reshape the tree. The tree stays
+  well formed; the rule and the code disagree.
+- [ ] `demangle` recurses per type constructor with no depth limit; a
+  hostile symbol can exhaust the stack. Latent while only tests call it.
+- [ ] Stale module comments: `lib/std/collections/{vec,map,set}.al` still
+  name `alcy/std/alloc`.
 
 ## Shipped
 
