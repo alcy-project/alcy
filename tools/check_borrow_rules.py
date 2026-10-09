@@ -779,7 +779,7 @@ case(
   mut s := String::new()
   s.push(104u8)
   s.push(105u8)
-  print(s.as_str())
+  print("{}", s.as_str())
   ret 0
 }""",
 )
