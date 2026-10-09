@@ -1,0 +1,5 @@
+# Equality over the standard generic and container types resolves
+# through the `PartialEq` implementations `alcy/std` declares.
+exit = 0
+contains = ["Checked   1 file, 1 module"]
+not_contains = ["error"]

@@ -51,3 +51,24 @@ impl<T, E> Result<T, E> {
   }
 }
 
+// `==` compares the shapes and then the matching payloads: `Ok` with
+// `Ok` through `T`, `Err` with `Err` through `E`, and mixed shapes are
+// not equal. Whether the payload compares is checked where the generic
+// body is instantiated.
+impl<T, E> PartialEq for Result<T, E> {
+  fn eq(self: &Self, other: &Self) -> bool {
+    ret match *self {
+      Result::Ok(a) => match *other {
+        Result::Ok(b) => a == b,
+        Result::Err(_) => false,
+      },
+      Result::Err(a) => match *other {
+        Result::Ok(_) => false,
+        Result::Err(b) => a == b,
+      },
+    }
+  }
+}
+
+impl<T, E> Eq for Result<T, E> {
+}

@@ -3,6 +3,17 @@
 
 // `alcy/std/alloc`: the typed heap primitives.
 
+// The capacity after one doubling step, panicking when the result
+// would not fit in a `usize`. A wrapped capacity would name a far
+// smaller block than the container records, so growth refuses the
+// overflow before the allocator sees it.
+pub fn doubled_capacity(cap: usize) -> usize {
+  if cap > ((0 as usize) - 1) / 2 {
+    panic("capacity overflow")
+  }
+  ret cap * 2
+}
+
 // Heap allocation. `alloc<T>(count)` reserves room for `count`
 // elements of `T`, using `T`'s own size and alignment. The returned
 // reference uniquely owns the block and must be released with

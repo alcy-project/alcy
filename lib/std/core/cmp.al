@@ -117,3 +117,25 @@ impl PartialEq for f64 {
     ret *self == *other
   }
 }
+
+// `str` is a builtin primitive, not a nominal, so its comparison is the
+// core suite's to declare like a scalar's. Bytes decide: equal lengths
+// first, then each byte in turn.
+impl PartialEq for str {
+  fn eq(self: &Self, other: &Self) -> bool {
+    if str_len(*self) != str_len(*other) {
+      ret false
+    }
+    mut i := 0 as usize
+    while i < str_len(*self) {
+      if str_byte(*self, i) != str_byte(*other, i) {
+        ret false
+      }
+      i = i + 1
+    }
+    ret true
+  }
+}
+
+impl Eq for str {
+}

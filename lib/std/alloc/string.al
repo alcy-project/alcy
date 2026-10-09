@@ -57,7 +57,7 @@ impl String {
 
   // Moves to a block twice the room, or to a first block of four.
   fn grow(mut self: &mut Self) {
-    mut next := self.cap * 2
+    mut next := doubled_capacity(self.cap)
     if self.cap == 0 {
       next = 4
     }

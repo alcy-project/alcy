@@ -57,7 +57,7 @@ impl<T> Vec<T> {
   // Elements are moved to the new buffer, so a `T` carrying a
   // destructor does not get one run for them; see docs/spec/deferred.md.
   fn grow(mut self: &mut Self) {
-    mut next := self.cap * 2
+    mut next := doubled_capacity(self.cap)
     if self.cap == 0 {
       next = 4
     }

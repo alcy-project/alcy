@@ -50,3 +50,20 @@ impl Set {
     self.map.clear()
   }
 }
+
+// The backing map's equality is the set's: same length and every key of
+// one present in the other. A `Set` field read carries a storage copy,
+// which the operator's spec lookup does not see through, so the maps
+// meet as parameters first.
+fn maps_equal(a: &Map<u8>, b: &Map<u8>) -> bool {
+  ret *a == *b
+}
+
+impl PartialEq for Set {
+  fn eq(self: &Self, other: &Self) -> bool {
+    ret maps_equal(&self.map, &other.map)
+  }
+}
+
+impl Eq for Set {
+}

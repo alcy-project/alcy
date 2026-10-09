@@ -13,6 +13,7 @@
 
 pub use package::heap::alloc;
 pub use package::heap::dealloc;
+pub use package::heap::doubled_capacity;
 pub use package::heap::elem_ptr;
 pub use package::heap::elem_ref;
 pub use package::heap::uninit_write;

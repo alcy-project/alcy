@@ -55,19 +55,32 @@ fn key_eq(a: str, b: str) -> bool {
   ret true
 }
 
+// The slot count that backs `n` inserts under the three-quarters load
+// factor `insert` grows at: `ceil(4n/3)`, with the sum refused when it
+// would not fit in a `usize`.
+fn slots_for(n: usize) -> usize {
+  if n > ((0 as usize) - 1) / 4 * 3 {
+    panic("capacity overflow")
+  }
+  ret n + (n + 2) / 3
+}
+
 impl<V> Map<V> {
   pub fn new() -> Map<V> {
     ret Map::<V>::with_capacity(0)
   }
 
-  // Reserves room for `n` entries without changing the length. A zero
-  // `n` still yields a distinct, freeable block, like `Vec`.
+  // Reserves room for `n` entries without changing the length. The
+  // table grows at three quarters occupancy, so the slots are the
+  // smallest count that keeps `n` inserts from rehashing. A zero `n`
+  // still yields a distinct, freeable block, like `Vec`.
   pub fn with_capacity(n: usize) -> Map<V> {
-    keys := unsafe { alloc::<String>(n) }
-    values := unsafe { alloc::<V>(n) }
-    states := unsafe { alloc::<u8>(n) }
+    slots := slots_for(n)
+    keys := unsafe { alloc::<String>(slots) }
+    values := unsafe { alloc::<V>(slots) }
+    states := unsafe { alloc::<u8>(slots) }
     mut i := 0 as usize
-    while i < n {
+    while i < slots {
       unsafe { uninit_write(elem_ptr(states, i), 0 as u8) }
       i = i + 1
     }
@@ -77,7 +90,7 @@ impl<V> Map<V> {
       states: states,
       len: 0,
       tombs: 0,
-      cap: n,
+      cap: slots,
     }
   }
 
@@ -222,7 +235,7 @@ impl<V> Map<V> {
   // Moves to a table twice the size, or to a first table of eight,
   // rehashing the live entries into it.
   fn grow(mut self: &mut Self) {
-    mut next := self.cap * 2
+    mut next := doubled_capacity(self.cap)
     if self.cap == 0 {
       next = 8
     }
