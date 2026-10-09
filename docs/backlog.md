@@ -42,6 +42,9 @@ replaced. The foundations are in `roadmap.md`.
   arrays, and slices, so `for` can walk the standard containers. Iterator
   adapters (`map`, `filter`, `collect`) are roadmap work; until the cursors
   land, algorithms index-loop instead.
+- [ ] Qualified generic calls: `helper::id::<i32>(x)` is "Unresolved value
+  'id'". Only a single-segment callee registers a generic function with its
+  turbofish; a module-qualified one never reaches `lookup_generic_fn`.
 - [ ] Spec methods on standard types from user code: `mut r := 0..<5;
   r.next()` is rejected with "No method 'next'" although the same spec
   implemented in the caller's package works, and a generic
