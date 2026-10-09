@@ -614,6 +614,13 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   const std::span<const ast::Ident> segments = ast.paths[path].segments;
   if (segments.size() == 1) {
     const std::string_view name = segments[0].name;
+    // A value-parameter use is a compile-time constant: emit the value
+    // its use was checked under, with the annotation's integer type.
+    if (const auto* splice = value_splice(expr)) {
+      return Val{
+          imm_from_u64(tag_of(splice->type), splice->type, splice->value),
+          splice->type, false, false};
+    }
     if (const Local* local = lookup_local(name)) {
       if (tag_of(local->type) == ir::TypeTag::Void) {
         return Val{size_one, local->type, false, false};
@@ -722,6 +729,22 @@ const analyzer::CheckedModule::VariantUse* Lowerer::variant_use_in(
     return found->second;
   }
   return nullptr;
+}
+
+const analyzer::CheckedModule::ValueSplice* Lowerer::value_splice(
+    ast::ExprIdx expr) const {
+  return value_splice_in(expr, cur_inst_);
+}
+
+const analyzer::CheckedModule::ValueSplice* Lowerer::value_splice_in(
+    ast::ExprIdx expr,
+    u32 inst) const {
+  const analyzer::CheckedModule& checked = pkg.modules[module];
+  const auto found = checked.value_splice_by_key.find(
+      analyzer::CheckedModule::value_splice_key(expr, inst));
+  return found == checked.value_splice_by_key.end()
+             ? nullptr
+             : &checked.value_splices[found->second];
 }
 
 const analyzer::CheckedModule::EnumInfo* Lowerer::enum_info(

@@ -152,6 +152,22 @@ struct CheckedModule {
   // list, and the entry module's list grows with the package: every call it
   // makes is an entry, and lowering each of them walked all of them.
   std::unordered_map<u64, u32> call_target_by_key;
+  // One use of a value parameter as an ordinary value: the constant to
+  // splice, the annotation type it carries, and the instantiation the
+  // body was checked under. Lowering emits the value where the path is.
+  struct ValueSplice {
+    ast::ExprIdx expr;
+    u32 inst = NO_INST;
+    u64 value = 0;
+    ir::TypeIdx type;
+  };
+  std::vector<ValueSplice> value_splices;
+  // Key of a value splice: the expression and the instantiation it was
+  // recorded under, exactly like a call target.
+  [[nodiscard]] static u64 value_splice_key(ast::ExprIdx expr, u32 inst) {
+    return (static_cast<u64>(expr.idx) << 32) | static_cast<u64>(inst);
+  }
+  std::unordered_map<u64, u32> value_splice_by_key;
   // One closure literal: the signature lowering compiles the body
   // against, with the parameters it binds. Keyed by the closure
   // expression; the body stays in the AST. `inst` keys entries

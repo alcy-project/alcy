@@ -121,6 +121,9 @@ class CompEvaluator {
   ir::TypeIdx expr_type_in(u32 mod, ast::ExprIdx expr);
   const CheckedModule::CallTarget* call_target_in(u32 mod,
                                                   ast::ExprIdx callee) const;
+  const CheckedModule::ValueSplice* value_splice_in(u32 mod,
+                                                    ast::ExprIdx expr,
+                                                    u32 inst) const;
   const CheckedModule::StaticInfo* lookup_static_in(
       u32 mod,
       std::string_view name) const;

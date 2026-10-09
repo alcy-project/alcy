@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <optional>
 #include <span>
 #include <string_view>
 #include <unordered_map>
@@ -176,10 +175,18 @@ class Checker {
   // Active type-parameter scope: innermost last. Pushed while
   // instantiating a generic enum or checking its members.
   std::vector<std::pair<std::string_view, ir::TypeIdx>> type_params;
+  // One active value parameter: the value it bound, the module and
+  // annotation a value use resolves its type through.
+  struct ValueParam {
+    std::string_view name;
+    u64 value = 0;
+    u32 module = NO_MODULE;
+    ast::TypeIdx annotation = ast::TypeIdx::invalid();
+  };
   // Active value-parameter scope: the parameters a declaration
   // annotated (`N: usize`) bind their compile-time value here while
   // the declaration's members resolve.
-  std::vector<std::pair<std::string_view, u64>> value_params;
+  std::vector<ValueParam> value_params;
   // Index into generic_instances while checking an instantiated
   // method body (NO_INST otherwise); keys the lowering side tables.
   u32 cur_inst = NO_INST;
@@ -406,8 +413,9 @@ class Checker {
   };
   GenericScope push_generic_scope(const GenericInstance& instance);
   void pop_generic_scope(const GenericScope& kept);
-  // The value a visible value parameter is bound to, or nothing.
-  std::optional<u64> value_param(std::string_view name) const;
+  // The value parameter a visible name is bound to, or null. The
+  // innermost binding wins.
+  const ValueParam* value_param(std::string_view name) const;
   // The u64 a const type argument carries.
   u64 const_type_value(ir::TypeIdx type) const;
   // Parameter names of a nominal declaration, whether struct or enum.
@@ -551,7 +559,7 @@ class Checker {
       u32 impl_module,
       ir::TypeIdx self_type,
       const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
-      const std::vector<std::pair<std::string_view, u64>>& value_scope,
+      std::span<const ValueParam> value_scope,
       const ast::ItemImpl& impl,
       std::string_view name);
   void record_call(u32 module,
@@ -633,6 +641,7 @@ class Checker {
   struct PathValue {
     enum class Kind : u8 {
       Local,
+      ValueParam,
       Static,
       Function,
       AssocFunction,
@@ -650,7 +659,10 @@ class Checker {
     u32 variant = 0;
   };
   // `type_args` carries a turbofish from the enclosing expression path.
+  // `expr` is the expression the path was written at; a value-parameter
+  // resolution records its splice for lowering under that expression.
   bool resolve_value_path(u32 module,
+                          ast::ExprIdx expr,
                           ast::PathIdx path,
                           std::span<const ast::TypeIdx> type_args,
                           PathValue& out);

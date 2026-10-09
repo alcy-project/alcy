@@ -272,6 +272,16 @@ const analyzer::CheckedModule::CallTarget* CompEvaluator::call_target_in(
              : &checked.call_targets[found->second];
 }
 
+const CheckedModule::ValueSplice*
+CompEvaluator::value_splice_in(u32 mod, ast::ExprIdx expr, u32 inst) const {
+  const CheckedModule& checked = inputs_.modules[mod];
+  const auto found = checked.value_splice_by_key.find(
+      CheckedModule::value_splice_key(expr, inst));
+  return found == checked.value_splice_by_key.end()
+             ? nullptr
+             : &checked.value_splices[found->second];
+}
+
 bool CompEvaluator::comp_eval_literal(u32 mod,
                                       ast::ExprIdx expr,
                                       CompVal& out) {
@@ -1096,6 +1106,13 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
       if (segments.size() == 1) {
         if (const CompVal* bound = comp::lookup(scope, segments[0].name)) {
           out = *bound;
+          return true;
+        }
+        if (const CheckedModule::ValueSplice* splice =
+                value_splice_in(mod, expr, inst_)) {
+          out.type = splice->type;
+          out.value.tag = CompValue::Tag::Int;
+          out.value.int_value = splice->value;
           return true;
         }
         if (const auto* info = lookup_static_in(mod, segments[0].name)) {

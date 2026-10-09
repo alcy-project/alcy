@@ -257,6 +257,7 @@
   F(AnalyzerValueArgumentNotInteger, "Value argument must be a non-negative constant integer value") \
   F(AnalyzerValueCannotBeType, "A value argument cannot be used as a type") \
   F(AnalyzerValueParameterAsType, "Value parameter '{}' cannot be used as a type") \
+  F(AnalyzerValueParameterHasNoAddress, "Value parameter '{}' has no address") \
   F(AnalyzerValueParameterTypeNotInteger, "Value parameter '{}' must have an integer type") \
   F(AnalyzerVariantCallArity, "Variant expects {} arguments, found {}") \
   F(AnalyzerVariantFieldArity, "Variant expects {} fields, pattern has {}") \

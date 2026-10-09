@@ -339,6 +339,10 @@ bool Checker::expr_comp_known(u32 module, ast::ExprIdx expr) const {
       if (const Local* local = lookup_local(segments[0].name)) {
         return local->comp_known;
       }
+      // A value parameter is a compile-time constant by construction.
+      if (value_param(segments[0].name) != nullptr) {
+        return true;
+      }
       return is_const_item(module, path);
     }
     case ast::ExprKind::Unary:
@@ -632,11 +636,12 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
                                      const ir::TypeIdx* expected,
                                      diag::Span span) {
   PathValue resolved;
-  if (!resolve_value_path(module, path, type_args, resolved)) {
+  if (!resolve_value_path(module, expr, path, type_args, resolved)) {
     return error_type();
   }
   switch (resolved.kind) {
     case PathValue::Kind::Local:
+    case PathValue::Kind::ValueParam:
     case PathValue::Kind::Static:
     case PathValue::Kind::UnitVariant: {
       if (resolved.kind == PathValue::Kind::Static && comp_depth > 0 &&
@@ -1280,7 +1285,7 @@ ir::TypeIdx Checker::check_call(u32 module,
   const ast::PathIdx path = ast.exprs[callee].payload.get<ast::ExprPath>().idx;
   PathValue resolved;
   if (!resolve_value_path(
-          module, path,
+          module, callee, path,
           ast.exprs[callee].payload.get<ast::ExprPath>().type_args, resolved)) {
     for (ast::ExprIdx arg : args) {
       check_expr(module, arg, nullptr);
@@ -2717,6 +2722,24 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
       // Place-ness is a borrow-checking concern; here the
       // inner type only determines the reference shape.
       const ast::ExprBorrow& borrow = node.payload.get<ast::ExprBorrow>();
+      // A value parameter is a compile-time value with no place, so
+      // there is nothing to borrow.
+      if (ast.exprs[borrow.inner].kind == ast::ExprKind::Path) {
+        const ast::ExprPath& inner =
+            ast.exprs[borrow.inner].payload.get<ast::ExprPath>();
+        const std::span<const ast::Ident> segments =
+            ast.paths[inner.idx].segments;
+        if (segments.size() == 1 && lookup_local(segments[0].name) == nullptr &&
+            value_param(segments[0].name) != nullptr) {
+          const u32 index =
+              bag.emit<i18n::Key::AnalyzerValueParameterHasNoAddress>(
+                  diag::Severity::Error, diag::Stage::Analyzer,
+                  DiagCode::InvalidOperation, segments[0].span,
+                  segments[0].name);
+          (void)index;
+          return error_type();
+        }
+      }
       if (ast.exprs[borrow.inner].kind == ast::ExprKind::Index) {
         return check_borrow_of_index(module, expr, borrow, expected);
       }
@@ -3035,7 +3058,7 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
     case ast::ExprKind::Path: {
       const ast::PathIdx path = node.payload.get<ast::ExprPath>().idx;
       PathValue resolved;
-      if (!resolve_value_path(module, path,
+      if (!resolve_value_path(module, place, path,
                               node.payload.get<ast::ExprPath>().type_args,
                               resolved)) {
         return error_type();

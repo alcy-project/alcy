@@ -20,6 +20,25 @@ impl<T, N: usize> ArrayVec<T, N> {
     self.data[self.len] = v
     self.len = self.len + 1
   }
+
+  // The declaration's own count is an ordinary value of its annotation
+  // type, usable wherever `usize` is.
+  fn capacity(self: &Self) -> usize {
+    ret N
+  }
+
+  fn full(self: &Self) -> bool {
+    ret self.len >= N
+  }
+
+  // `N` is comp-known, so it can specialize a `comp` parameter.
+  fn doubled(self: &Self) -> usize {
+    ret double(N)
+  }
+}
+
+fn double(comp k: usize) -> usize {
+  ret k + k
 }
 
 fn main() -> i32 {
@@ -65,6 +84,19 @@ fn main() -> i32 {
   if a.get(2) != 30 {
     ret 8
   }
+  if a.capacity() != 4 {
+    ret 11
+  }
+  if a.full() {
+    ret 12
+  }
+  a.push(40)
+  if !a.full() {
+    ret 13
+  }
+  if a.doubled() != 8 {
+    ret 16
+  }
 
   // A second count in the same program runs as its own instance.
   mut b: ArrayVec<u8, 8> := ArrayVec {
@@ -77,6 +109,15 @@ fn main() -> i32 {
   }
   if b.get(0) != 8 as u8 {
     ret 10
+  }
+  if b.capacity() != 8 {
+    ret 14
+  }
+  if b.full() {
+    ret 15
+  }
+  if b.doubled() != 16 {
+    ret 17
   }
   ret 0
 }

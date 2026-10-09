@@ -342,6 +342,12 @@ class Lowerer {
       ast::PathIdx path) const;
   const analyzer::CheckedModule::VariantUse* variant_use_in(ast::PathIdx path,
                                                             u32 inst) const;
+  // The constant a value-parameter use splices, by the expression and
+  // the instantiation the body was lowered under.
+  const analyzer::CheckedModule::ValueSplice* value_splice(
+      ast::ExprIdx expr) const;
+  const analyzer::CheckedModule::ValueSplice* value_splice_in(ast::ExprIdx expr,
+                                                              u32 inst) const;
   const analyzer::CheckedModule::EnumInfo* enum_info(ir::TypeIdx type) const;
   bool variant_index(ir::TypeIdx enum_type,
                      std::string_view name,

@@ -4684,22 +4684,156 @@ TEST_CASE("Check instantiates inherent methods over value parameters") {
   CHECK(both_counts);
 }
 
-TEST_CASE("Check keeps refusing a value parameter read as a value") {
-  // Reading `N` as an ordinary value waits for its own slice; the
-  // count resolves in type positions only.
+TEST_CASE("Check reads a value parameter as an ordinary value") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "struct ArrayVec<T, N: usize> { data: [T; N], len: "
+             "usize }\n"
+             "impl<T, N: usize> ArrayVec<T, N> {\n"
+             "  fn capacity(self: &Self) -> usize {\n    ret N\n  }\n"
+             "  fn full(self: &Self) -> bool {\n    ret self.len >= N\n  }\n"
+             "  fn as_i32(self: &Self) -> i32 {\n    ret N as i32\n  }\n"
+             "}\n"
+             "fn main() -> i32 {\n"
+             "  a: ArrayVec<i32, 4> := ArrayVec { data: [1, 2, 3, 4], len: "
+             "0 }\n"
+             "  b: ArrayVec<i32, 8> := ArrayVec { data: [0, 0, 0, 0, 0, 0, "
+             "0, 0], len: 0 }\n"
+             "  if a.full() {\n    ret 1\n  }\n"
+             "  if b.full() {\n    ret 2\n  }\n"
+             "  ret a.capacity() as i32 + b.capacity() as i32 + "
+             "a.as_i32() + b.as_i32()\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  const CheckedModule* root = find_checked(*result.package, "");
+  CHECK(root != nullptr);
+  if (root == nullptr) {
+    return;
+  }
+  const ir::Storage& types = *result.package->types;
+  std::vector<const CheckedModule::MethodInfo*> capacities;
+  std::vector<const CheckedModule::MethodInfo*> fulls;
+  std::vector<const CheckedModule::MethodInfo*> as_i32s;
+  for (const CheckedModule::MethodInfo& method : root->methods) {
+    if (method.name == "capacity") {
+      capacities.push_back(&method);
+    } else if (method.name == "full") {
+      fulls.push_back(&method);
+    } else if (method.name == "as_i32") {
+      as_i32s.push_back(&method);
+    }
+  }
+  // One instance per count, each typed by the annotation: `N` is the
+  // declaration's `usize`, `self.len >= N` checks, and `N as i32`
+  // casts through the ordinary rules.
+  CHECK(capacities.size() == 2);
+  CHECK(fulls.size() == 2);
+  CHECK(as_i32s.size() == 2);
+  if (capacities.size() != 2 || fulls.size() != 2 || as_i32s.size() != 2) {
+    return;
+  }
+  CHECK(capacities[0]->self_type.idx != capacities[1]->self_type.idx);
+  for (const CheckedModule::MethodInfo* method : capacities) {
+    CHECK(types.types()[method->ret].tag == ir::TypeTag::U64);
+  }
+  for (const CheckedModule::MethodInfo* method : fulls) {
+    CHECK(types.types()[method->ret].tag == ir::TypeTag::I1);
+  }
+  for (const CheckedModule::MethodInfo* method : as_i32s) {
+    CHECK(types.types()[method->ret].tag == ir::TypeTag::I32);
+  }
+  // The numbering keys the splice table, so `inst` is the type's
+  // position in the shared instantiation order.
+  const auto inst_of = [&](ir::TypeIdx type) {
+    for (u32 i = 0; i < result.package->generic_insts.size(); ++i) {
+      if (result.package->generic_insts[i].idx == type.idx) {
+        return i;
+      }
+    }
+    return analyzer::NO_INST;
+  };
+  const auto splices_for = [&](u32 inst) {
+    std::vector<const CheckedModule::ValueSplice*> out;
+    for (const CheckedModule::ValueSplice& splice : root->value_splices) {
+      if (splice.inst == inst) {
+        out.push_back(&splice);
+      }
+    }
+    return out;
+  };
+  // Three uses per instantiation: `capacity`, `full`, and `as_i32`
+  // each name `N`, and the same body under the other count records
+  // its own value.
+  const u32 first_inst = inst_of(capacities[0]->self_type);
+  const u32 second_inst = inst_of(capacities[1]->self_type);
+  CHECK(first_inst != analyzer::NO_INST);
+  CHECK(second_inst != analyzer::NO_INST);
+  const std::vector<const CheckedModule::ValueSplice*> first =
+      splices_for(first_inst);
+  const std::vector<const CheckedModule::ValueSplice*> second =
+      splices_for(second_inst);
+  CHECK(first.size() == 3);
+  CHECK(second.size() == 3);
+  if (first.size() != 3 || second.size() != 3) {
+    return;
+  }
+  for (const CheckedModule::ValueSplice* splice : first) {
+    CHECK(splice->value == first[0]->value);
+    CHECK(types.types()[splice->type].tag == ir::TypeTag::U64);
+  }
+  for (const CheckedModule::ValueSplice* splice : second) {
+    CHECK(splice->value == second[0]->value);
+    CHECK(types.types()[splice->type].tag == ir::TypeTag::U64);
+  }
+  const bool both_counts = (first[0]->value == 4 && second[0]->value == 8) ||
+                           (first[0]->value == 8 && second[0]->value == 4);
+  CHECK(both_counts);
+}
+
+TEST_CASE("Check treats a value parameter as comp-known") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "fn scale(comp k: usize) -> usize {\n  ret k + k\n}\n"
+             "struct ArrayVec<T, N: usize> { data: [T; N], len: "
+             "usize }\n"
+             "impl<T, N: usize> ArrayVec<T, N> {\n"
+             "  fn scaled(self: &Self) -> usize {\n    ret scale(N)\n  "
+             "}\n"
+             "}\n"
+             "fn main() -> i32 {\n"
+             "  a: ArrayVec<i32, 4> := ArrayVec { data: [1, 2, 3, 4], len: "
+             "0 }\n"
+             "  ret a.scaled() as i32\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check leaves a value parameter unresolved outside its declaration") {
   VirtualDir dir;
   const bool setup =
       write_all(dir, {{"main.al",
                        "struct ArrayVec<T, N: usize> { data: [T; N], len: "
                        "usize }\n"
-                       "impl<T, N: usize> ArrayVec<T, N> {\n"
-                       "  fn count(self: &Self) -> usize {\n    ret N\n  }\n"
-                       "}\n"
-                       "fn main() -> i32 {\n"
-                       "  v: ArrayVec<i32, 4> := ArrayVec { data: [1, 2, 3, "
-                       "4], len: 4 }\n"
-                       "  ret v.count() as i32\n"
-                       "}\n"}});
+                       "fn count() -> usize {\n  ret N\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
   CHECK(setup);
   if (!setup) {
     return;
@@ -4709,6 +4843,58 @@ TEST_CASE("Check keeps refusing a value parameter read as a value") {
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
   CHECK(has_message(f.bag, "Unresolved value 'N'"));
+}
+
+TEST_CASE("Check rejects assignment to a value parameter") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "struct ArrayVec<T, N: usize> { data: [T; N], len: "
+             "usize }\n"
+             "impl<T, N: usize> ArrayVec<T, N> {\n"
+             "  fn bump(mut self: &mut Self) {\n    N = 5\n  }\n"
+             "}\n"
+             "fn main() -> i32 {\n"
+             "  mut a: ArrayVec<i32, 4> := ArrayVec { data: [1, 2, 3, 4], "
+             "len: 0 }\n"
+             "  a.bump()\n"
+             "  ret 0\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Cannot assign to this place"));
+}
+
+TEST_CASE("Check rejects the address of a value parameter") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "struct ArrayVec<T, N: usize> { data: [T; N], len: "
+             "usize }\n"
+             "impl<T, N: usize> ArrayVec<T, N> {\n"
+             "  fn addr(self: &Self) -> &usize {\n    ret &N\n  }\n"
+             "}\n"
+             "fn main() -> i32 {\n"
+             "  a: ArrayVec<i32, 4> := ArrayVec { data: [1, 2, 3, 4], len: "
+             "0 }\n"
+             "  _ := a.addr()\n"
+             "  ret 0\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Value parameter 'N' has no address"));
 }
 
 }  // namespace analyzer

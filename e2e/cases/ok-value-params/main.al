@@ -11,6 +11,10 @@ impl<T, N: usize> ArrayVec<T, N> {
   fn len(self: &Self) -> usize {
     ret self.len
   }
+
+  fn capacity(self: &Self) -> usize {
+    ret N
+  }
 }
 
 enum Chunk<T, N: usize> {
@@ -30,7 +34,9 @@ fn main() -> i32 {
     Chunk::Empty => 0,
   }
   // One method call on each of the literal and the const-item
-  // instantiations, plus the 8-wide one.
+  // instantiations, plus the 8-wide one. `capacity` reads the count
+  // the declaration bound as an ordinary value.
   ret a.data[3] + b.data[0] + c.data[7] + n + a.len() as i32 + b.len() as i32 +
-    c.len() as i32
+    c.len() as i32 + a.capacity() as i32 + b.capacity() as i32 +
+    c.capacity() as i32
 }
