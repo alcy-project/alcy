@@ -264,6 +264,130 @@ Val Lowerer::address_of(Val v) {
   return Val{to_operand(addr, v.type), v.type, true, v.place};
 }
 
+void Lowerer::give_drop_guard(Local& local) {
+  if (!local.needs_drop) {
+    return;
+  }
+  const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
+  local.drop_guard = emit(ir::Opcode::Alloca, i1, {size_one});
+  emit_void(ir::Opcode::Store,
+            {bool_operand(false), to_operand(local.drop_guard, i1)});
+}
+
+bool Lowerer::place_of_register(u32 reg,
+                                u32& local_out,
+                                std::vector<u32>& path) const {
+  for (u32 i = 0; i < static_cast<u32>(locals.size()); ++i) {
+    if (locals[i].addr.idx == reg) {
+      local_out = i;
+      return true;
+    }
+  }
+  const ir::StorageState& state = builder.state();
+  if (reg >= static_cast<u32>(state.registers.size()) ||
+      !state.registers[ir::RegisterIdx(reg)].def_idx.is_valid()) {
+    return false;
+  }
+  const ir::Instruction& instr =
+      state.instrs[state.registers[ir::RegisterIdx(reg)].def_idx];
+  // A field or tuple slot is a constant-index GEP from the place it sits
+  // in; anything else (a dynamic index, a load) names no tracked path.
+  if (instr.op != ir::Opcode::GetElementPtr || instr.operands.size() != 3) {
+    return false;
+  }
+  const ir::Operand& base = state.operands[instr.operands.head()];
+  const ir::Operand& index =
+      state.operands[ir::OperandIdx(instr.operands.head().idx + 2)];
+  if (!base.is<ir::RegisterIdx>() || !index.is<ir::ImmutableIdx>()) {
+    return false;
+  }
+  const ir::Immutable& slot = state.immutables[index.as_immutable()];
+  u32 field = 0;
+  switch (tag_of(slot.type)) {
+    case ir::TypeTag::I8: field = static_cast<u32>(slot.data.i8_value); break;
+    case ir::TypeTag::I16: field = static_cast<u32>(slot.data.i16_value); break;
+    case ir::TypeTag::I32: field = static_cast<u32>(slot.data.i32_value); break;
+    case ir::TypeTag::I64: field = static_cast<u32>(slot.data.i64_value); break;
+    case ir::TypeTag::U8: field = static_cast<u32>(slot.data.u8_value); break;
+    case ir::TypeTag::U16: field = static_cast<u32>(slot.data.u16_value); break;
+    case ir::TypeTag::U32: field = slot.data.u32_value; break;
+    case ir::TypeTag::U64: field = static_cast<u32>(slot.data.u64_value); break;
+    default: return false;
+  }
+  if (!place_of_register(base.as_register().idx, local_out, path)) {
+    return false;
+  }
+  path.push_back(field);
+  return true;
+}
+
+bool Lowerer::type_has_custom_drop(ir::TypeIdx type) const {
+  const ir::TypeIdx origin = type_origin(type);
+  if (origin.idx < pkg.drop_glue.size()) {
+    return pkg.drop_glue[origin.idx].index != base::INVALID_IDX;
+  }
+  return false;
+}
+
+ir::TypeIdx Lowerer::type_at_path(ir::TypeIdx type, std::span<const u32> path) {
+  ir::TypeIdx current = type_origin(type);
+  for (u32 index : path) {
+    const ir::TypeNode& node = builder.types()[current];
+    if (node.tag == ir::TypeTag::Struct) {
+      const ir::StructType& fields = builder.struct_types()[node.as_struct()];
+      if (index >= fields.fields.size()) {
+        return error_type();
+      }
+      current = type_origin(fields.fields[index]);
+    } else if (node.tag == ir::TypeTag::Tuple) {
+      const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
+      if (index >= tuple.elements.size()) {
+        return error_type();
+      }
+      current = type_origin(tuple.elements[index]);
+    } else {
+      return error_type();
+    }
+  }
+  return current;
+}
+
+namespace {
+
+// Whether `prefix` names the first fields of `path`, in order.
+bool starts_with(std::span<const u32> path, std::span<const u32> prefix) {
+  if (prefix.size() > path.size()) {
+    return false;
+  }
+  for (usize i = 0; i < prefix.size(); ++i) {
+    if (path[i] != prefix[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+}  // namespace
+
+bool Lowerer::path_moved(const Local& local, std::span<const u32> path) const {
+  for (const std::vector<u32>& moved : local.moved_fields) {
+    if (starts_with(path, moved)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool Lowerer::path_has_moved_below(const Local& local,
+                                   std::span<const u32> path) const {
+  for (const std::vector<u32>& moved : local.moved_fields) {
+    if (moved.size() > path.size() && starts_with(moved, path)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Uses a value, emitting a Move marker when a non-Copy place is
 // consumed. The marker's source is the place address so later
 // ownership analysis observes origins, not temporaries.
@@ -271,19 +395,49 @@ void Lowerer::mark_move(Val v) {
   if (v.place && v.address && !is_copy(v.type)) {
     const ir::RegisterIdx marker = emit(ir::Opcode::Move, v.type, {v.op});
     (void)marker;
-    // Scope exit ends the value's own place, so a move out of it has
-    // to retire the drop that exit would otherwise place. A move of a
-    // field counts: the enclosing value is no longer whole.
+    if (in_destructor_call_) {
+      return;
+    }
     const ir::Operand& operand = builder.state().operands[v.op.idx];
-    if (operand.is<ir::RegisterIdx>()) {
-      const u32 reg = operand.as_register().idx;
-      for (Local& local : locals) {
-        if (local.addr.idx == reg) {
-          local.moved = true;
-          break;
-        }
+    if (!operand.is<ir::RegisterIdx>()) {
+      return;
+    }
+    u32 local_index = 0;
+    std::vector<u32> path;
+    if (!place_of_register(operand.as_register().idx, local_index, path)) {
+      return;
+    }
+    Local& local = locals[local_index];
+    if (path.empty()) {
+      // The move happened on this path only; the guard tells later exits.
+      local.moved = true;
+      local.moved_somewhere = true;
+      if (local.drop_guard.is_valid()) {
+        const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
+        emit_void(ir::Opcode::Store,
+                  {bool_operand(true), to_operand(local.drop_guard, i1)});
+      }
+      return;
+    }
+    // A field moved out: a later scope exit must not end it again, and a
+    // field cannot move out of a value with a user-written `drop`.
+    for (usize i = 0; i < path.size(); ++i) {
+      const ir::TypeIdx prefix =
+          type_at_path(local.type, std::span<const u32>(path.data(), i));
+      if (type_has_custom_drop(prefix)) {
+        const u32 index = bag.emit<i18n::Key::LowerMoveOutOfDestructor>(
+            diag::Severity::Error, diag::Stage::Lowering,
+            DiagCode::MoveOutOfDestructor, cur_span_, local.name);
+        (void)index;
+        return;
       }
     }
+    for (const std::vector<u32>& moved : local.moved_fields) {
+      if (moved == path) {
+        return;
+      }
+    }
+    local.moved_fields.push_back(path);
   }
 }
 
@@ -295,15 +449,25 @@ bool Lowerer::runs_destructor(ir::TypeIdx type) const {
   return type.idx < pkg.needs_drop.size() && pkg.needs_drop[type.idx];
 }
 
-bool Lowerer::emit_drop_at(ir::OperandIdx place,
-                           ir::TypeIdx type,
-                           diag::Span span) {
+bool Lowerer::emit_drop_at_path(ir::OperandIdx place,
+                                ir::TypeIdx type,
+                                diag::Span span,
+                                const Local* owner,
+                                std::vector<u32>& path) {
   if (!runs_destructor(type)) {
+    return true;
+  }
+  if (owner != nullptr && path_moved(*owner, path)) {
     return true;
   }
   if (type.idx < pkg.drop_glue.size()) {
     const analyzer::CheckedModule::DropGlue& glue = pkg.drop_glue[type.idx];
     if (glue.index != base::INVALID_IDX) {
+      // The move was refused where it happened; calling the method would
+      // hand it a partially moved value.
+      if (owner != nullptr && path_has_moved_below(*owner, path)) {
+        return true;
+      }
       const analyzer::CheckedModule& def = pkg.modules[glue.module];
       const analyzer::CheckedModule::MethodInfo& info = def.methods[glue.index];
       ir::FunctionIdx fn = fn_index(
@@ -316,7 +480,11 @@ bool Lowerer::emit_drop_at(ir::OperandIdx place,
       ops.push_back(builder.operand(ir::Operand::from_function(
           fn, builder.primitive(ir::TypeTag::Function))));
       Val self{place, type, true, true};
-      ops.push_back(arg_for(self, info.params[0]));
+      const bool saved = in_destructor_call_;
+      in_destructor_call_ = true;
+      const ir::OperandIdx argument = arg_for(self, info.params[0]);
+      in_destructor_call_ = saved;
+      ops.push_back(argument);
       emit_void(ir::Opcode::Call, ops);
       return true;
     }
@@ -334,13 +502,44 @@ bool Lowerer::emit_drop_at(ir::OperandIdx place,
     if (!runs_destructor(field)) {
       continue;
     }
-    const ir::RegisterIdx gep = emit(ir::Opcode::GetElementPtr, field,
-                                     {place, zero_i32, index_operand(i)});
-    if (!emit_drop_at(to_operand(gep, field), field, span)) {
-      placed = false;
+    path.push_back(i);
+    const bool skipped = owner != nullptr && path_moved(*owner, path);
+    if (!skipped) {
+      const ir::RegisterIdx gep = emit(ir::Opcode::GetElementPtr, field,
+                                       {place, zero_i32, index_operand(i)});
+      if (!emit_drop_at_path(to_operand(gep, field), field, span, owner,
+                             path)) {
+        placed = false;
+      }
     }
+    path.pop_back();
   }
   return placed;
+}
+
+void Lowerer::emit_guarded_drop(Local& local, diag::Span span) {
+  const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
+  const ir::RegisterIdx left =
+      emit(ir::Opcode::Load, i1, {to_operand(local.drop_guard, i1)});
+  if (failed) {
+    return;
+  }
+  const ir::BlockIdx drop_block = reserve_block();
+  const ir::BlockIdx after_block = reserve_block();
+  emit_cond_br(to_operand(left, i1), after_block, drop_block);
+  switch_to(drop_block);
+  std::vector<u32> path;
+  if (!emit_drop_at_path(to_operand(local.addr, local.type), local.type, span,
+                         &local, path)) {
+    const u32 index = bag.emit<i18n::Key::LowerDestructorNotRun>(
+        diag::Severity::Warning, diag::Stage::Lowering, DiagCode::DropUnplaced,
+        span, local.name);
+    (void)index;
+  }
+  emit_void(ir::Opcode::Store,
+            {bool_operand(true), to_operand(local.drop_guard, i1)});
+  emit_br(after_block);
+  switch_to(after_block);
 }
 
 void Lowerer::emit_drops(u32 mark, diag::Span span) {
@@ -349,7 +548,14 @@ void Lowerer::emit_drops(u32 mark, diag::Span span) {
     if (!local.needs_drop || local.moved) {
       continue;
     }
-    if (emit_drop_at(to_operand(local.addr, local.type), local.type, span)) {
+    if (local.moved_somewhere && local.drop_guard.is_valid()) {
+      emit_guarded_drop(local, span);
+      local.moved = true;
+      continue;
+    }
+    std::vector<u32> path;
+    if (emit_drop_at_path(to_operand(local.addr, local.type), local.type, span,
+                          &local, path)) {
       // Ending a value through its own destructor consumes it, so a
       // second scope exit must not end it again. A value ended through
       // the destructors of what it holds is spent the same way.
@@ -432,9 +638,13 @@ const analyzer::CheckedModule::StaticInfo* Lowerer::lookup_static(
 }
 
 ir::TypeIdx Lowerer::expr_type(ast::ExprIdx expr) {
-  for (const auto& entry : pkg.modules[module].expr_types) {
-    if (entry.expr == expr && entry.inst == cur_inst_) {
-      return entry.type;
+  // An expression can be checked more than once: a bare integer literal
+  // is re-checked against its sibling's type so `x + 42` adopts `x`'s, and
+  // the last entry is the answer the enclosing expression used.
+  const auto& entries = pkg.modules[module].expr_types;
+  for (usize i = entries.size(); i > 0; --i) {
+    if (entries[i - 1].expr == expr && entries[i - 1].inst == cur_inst_) {
+      return entries[i - 1].type;
     }
   }
   return error_type();
@@ -1020,13 +1230,13 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
           emit(ir::Opcode::GetElementPtr, field_ty,
                {to_operand(pregs[0], env_ty), zero_i32, index_operand(i)});
       if (capture.mode == ast::CaptureMode::Move) {
-        locals.push_back({capture.name, field, capture.type, false, false});
+        locals.emplace_back(capture.name, field, capture.type);
         addr_names_.push_back({field, capture.name, false, false});
         continue;
       }
       const ir::RegisterIdx ref =
           emit(ir::Opcode::Load, field_ty, {to_operand(field, field_ty)});
-      locals.push_back({capture.name, ref, capture.type, false, false});
+      locals.emplace_back(capture.name, ref, capture.type);
       addr_names_.push_back({ref, capture.name, false, true});
     }
   }
@@ -1038,13 +1248,14 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
       const ir::TypeIdx ptype = entry.params[slot];
       const std::string_view name = lit->params[i].name;
       if (tag_of(ptype) == ir::TypeTag::Void) {
-        locals.push_back({name, ir::RegisterIdx(base::INVALID_IDX), ptype});
+        locals.emplace_back(name, ir::RegisterIdx(base::INVALID_IDX), ptype);
         continue;
       }
       const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, ptype, {size_one});
       emit_void(ir::Opcode::Store,
                 {to_operand(pregs[slot], ptype), to_operand(addr, ptype)});
-      locals.push_back({name, addr, ptype, runs_destructor(ptype), false});
+      locals.emplace_back(name, addr, ptype, runs_destructor(ptype));
+      give_drop_guard(locals.back());
       addr_names_.push_back({addr, name, binding_param_});
     }
   }

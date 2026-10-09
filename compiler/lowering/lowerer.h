@@ -47,14 +47,31 @@ struct Val {
 };
 
 struct Local {
+  Local(std::string_view name,
+        ir::RegisterIdx addr,
+        ir::TypeIdx type,
+        bool needs_drop = false,
+        bool moved = false)
+      : name(name),
+        addr(addr),
+        type(type),
+        needs_drop(needs_drop),
+        moved(moved) {}
+
   std::string_view name;
   ir::RegisterIdx addr;
   ir::TypeIdx type;
   // Ending this value runs code, so a scope exit has to place a call.
   bool needs_drop = false;
-  // The value has already left, either through a move out of it or
-  // through a call that consumed it. Scope exit must not end it again.
+  // The value has already left on this lowering path. Scope exit must
+  // not end it again.
   bool moved = false;
+  // Whether some path moves the whole value; those drops consult the
+  // runtime slot below.
+  bool moved_somewhere = false;
+  ir::RegisterIdx drop_guard = ir::RegisterIdx(base::INVALID_IDX);
+  // Field paths moved out of this value, as indices from the root.
+  std::vector<std::vector<u32>> moved_fields;
 };
 
 class Lowerer {
@@ -163,6 +180,9 @@ class Lowerer {
   u32 block_next_ = 0;
   u32 fn_block_base_ = 0;
   bool binding_param_ = false;
+  // A destructor call consumes the value it ends; recording that as a
+  // user move would retire fields on paths that still own them.
+  bool in_destructor_call_ = false;
   // A loop's branch target and where its body's locals begin. A branch
   // out of the body skips the body's own drop point, so break and
   // continue end those locals from this mark. The innermost block's mark
@@ -221,6 +241,20 @@ class Lowerer {
   Val materialize(Val v);
   Val address_of(Val v);
   void mark_move(Val v);
+  // Allocates and clears the runtime slot a droppable binding's moves
+  // record into.
+  void give_drop_guard(Local& local);
+  // Resolves a register to the local it names and the field path from
+  // that local's root, when it names either.
+  bool place_of_register(u32 reg, u32& local_out, std::vector<u32>& path) const;
+  // A type with a user-written `drop` method.
+  bool type_has_custom_drop(ir::TypeIdx type) const;
+  ir::TypeIdx type_at_path(ir::TypeIdx type, std::span<const u32> path);
+  bool path_moved(const Local& local, std::span<const u32> path) const;
+  bool path_has_moved_below(const Local& local,
+                            std::span<const u32> path) const;
+  // Ends a value whose whole move happened on some path.
+  void emit_guarded_drop(Local& local, diag::Span span);
   ir::OperandIdx use_value(Val v);
   const Local* lookup_local(std::string_view name) const;
   const analyzer::CheckedModule::StaticInfo* lookup_static(
@@ -528,9 +562,14 @@ class Lowerer {
   // as ending the local.
   void emit_drops(u32 mark, diag::Span span);
   // Ends one place: calls the type's destructor if it has one, and
-  // otherwise ends each destructible field it holds. Returns whether
-  // every destructor in that place was placed.
-  bool emit_drop_at(ir::OperandIdx place, ir::TypeIdx type, diag::Span span);
+  // otherwise ends each destructible field it holds. The owner's moved
+  // field paths are in hand, so a field that moved out is not ended
+  // again. Returns whether every destructor in that place was placed.
+  bool emit_drop_at_path(ir::OperandIdx place,
+                         ir::TypeIdx type,
+                         diag::Span span,
+                         const Local* owner,
+                         std::vector<u32>& path);
   bool runs_destructor(ir::TypeIdx type) const;
   bool is_destructor(ast::ItemIdx item) const;
   // Which items are a destructor, gathered once from the checked package.

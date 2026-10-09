@@ -32,6 +32,8 @@ enum class DiagCode : u8 {
   // The shared name table the checker interns into was sized for fewer
   // names than this package uses.
   NameTableExhausted = 7,
+  // A field moved out of a value whose `drop` method the user wrote.
+  MoveOutOfDestructor = 8,
 };
 
 }  // namespace lowering
