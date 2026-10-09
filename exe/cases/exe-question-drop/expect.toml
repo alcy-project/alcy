@@ -1,5 +1,5 @@
-# The first `drop-res` is f's local on the success return; the second is
-# f's local on the propagation path, which still ends its other values;
-# one `drop-E` per returned value, never two for one.
+# f's local ends on each path out (`drop-res` twice). At scope exit the
+# returned values end innermost first: `b`'s destructor ends its payload,
+# then `a`'s destructor runs. One `drop-E` per value, never two for one.
 exit = 0
-stdout = "drop-res\nmid\ndrop-res\nend\ndrop-E\ndrop-E\n"
+stdout = "drop-res\nmid\ndrop-res\nend\ndrop-E\ndrop-res\ndrop-E\n"

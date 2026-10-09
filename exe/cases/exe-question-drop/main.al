@@ -13,6 +13,12 @@ enum E { Ok(i32), Err(Res) }
 impl E {
   fn drop(self: E) {
     print("drop-E\n")
+    // The enum's own destructor is the one the compiler runs for it,
+    // so the payload ends here, on the path that still owns it.
+    match self {
+      E::Ok(_) => {}
+      E::Err(r) => { r.drop() }
+    }
   }
 }
 
