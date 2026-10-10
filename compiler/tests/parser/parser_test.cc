@@ -1157,6 +1157,23 @@ TEST_CASE("Parser refuses a malformed variadic parameter") {
   }
 }
 
+TEST_CASE("Parser reads a method type argument list") {
+  Fixture f;
+  const ast::ExprIdx value = body_value("fn f() { w.map::<i32>(inc) }", f);
+  CHECK(value.is_valid());
+  if (!value.is_valid()) {
+    return;
+  }
+  const ast::ExprNode& node = f.ast.exprs[value];
+  CHECK(node.kind == ast::ExprKind::MethodCall);
+  if (node.kind != ast::ExprKind::MethodCall) {
+    return;
+  }
+  const ast::ExprMethodCall& call = node.payload.get<ast::ExprMethodCall>();
+  CHECK(call.name.name == "map");
+  CHECK(call.type_args.size() == 1);
+}
+
 TEST_CASE("Parser reads const declarations") {
   Fixture f;
   const ParseResult result = parse("fn f() { const n := 3\n _ := n }", f);

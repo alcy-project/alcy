@@ -548,6 +548,19 @@ ast::ExprIdx Parser::parse_postfix() {
         if (name.is_err()) {
           return ast::ExprIdx::invalid();
         }
+        // A method that declares its own type parameters takes explicit
+        // arguments after its name (`v.map::<i32>(f)`); only a call can
+        // carry them.
+        std::vector<ast::TypeIdx> type_args;
+        if (match(lexer::TokenKind::ColonColon)) {
+          if (!match(lexer::TokenKind::Less)) {
+            (void)expect(lexer::TokenKind::Less, "`<`");
+            return ast::ExprIdx::invalid();
+          }
+          if (!parse_turbofish(type_args)) {
+            return ast::ExprIdx::invalid();
+          }
+        }
         if (match(lexer::TokenKind::LParen)) {
           std::vector<ast::ExprIdx> args;
           if (!check(lexer::TokenKind::RParen)) {
@@ -575,9 +588,14 @@ ast::ExprIdx Parser::parse_postfix() {
               .receiver = base,
               .name = std::move(name).unwrap(),
               .args = ast::copy_to_arena(ast_.spans, args),
+              .type_args = ast::copy_to_arena(ast_.spans, type_args),
           });
           base = ast_.exprs.push_back(method_node);
         } else {
+          if (!type_args.empty()) {
+            (void)expect(lexer::TokenKind::LParen, "`(`");
+            return ast::ExprIdx::invalid();
+          }
           ast::ExprNode field_node;
           field_node.kind = ast::ExprKind::Field;
           field_node.span = span_from(mark);
@@ -1285,6 +1303,7 @@ ast::ExprIdx Parser::parse_for() {
       .receiver = head,
       .name = ast::Ident{"into_iter", keyword},
       .args = {},
+      .type_args = {},
   });
   const ast::ExprIdx iterator = ast_.exprs.push_back(into_iter);
 
@@ -1319,6 +1338,7 @@ ast::ExprIdx Parser::parse_for() {
       .receiver = ast_.exprs.push_back(it_use),
       .name = ast::Ident{"next", keyword},
       .args = {},
+      .type_args = {},
       .spec_only = true,
   });
   const ast::ExprIdx next = ast_.exprs.push_back(next_call);

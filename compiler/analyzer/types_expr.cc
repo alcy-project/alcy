@@ -1519,8 +1519,19 @@ ir::TypeIdx Checker::check_method_call(u32 module,
       return error_type();
     }
   }
+  const std::span<const ast::TypeIdx> method_type_args =
+      node.payload.get<ast::ExprMethodCall>().type_args;
+  // A call that spells type arguments can only resolve a method that
+  // declares them; one without reaches the eager methods and the spec
+  // implementations first.
   const CheckedModule::MethodInfo* method =
-      lookup_method(nominal, name, module, node.span, spec_only);
+      method_type_args.empty()
+          ? lookup_method(nominal, name, module, node.span, spec_only)
+          : nullptr;
+  if (method == nullptr && !spec_only) {
+    method = instantiate_generic_method(module, nominal, name, method_type_args,
+                                        span);
+  }
   if (method == nullptr) {
     if (spec_only) {
       // The `for` desugar's generated `next` reaches the cursor

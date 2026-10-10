@@ -163,7 +163,7 @@ postfix_expr  = primary , { call | field | method | index | "?" } ;
 call          = [ turbofish ] , "(" , [ expr , { "," , expr } ] , ")" ;
 turbofish     = "::" , "<" , type_arg , { "," , type_arg } , ">" ;
 field         = "." , ( IDENT | INTEGER ) ;
-method        = "." , IDENT , "(" , [ expr , { "," , expr } ] , ")" ;
+method        = "." , IDENT , [ turbofish ] , "(" , [ expr , { "," , expr } ] , ")" ;
 index         = "[" , expr , "]" ;
 primary       = literal | path | struct_expr | tuple_expr | array_expr
               | paren_expr | block_like | comp_block | unsafe_block

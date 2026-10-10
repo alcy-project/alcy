@@ -71,6 +71,32 @@ impl<T> Option<T> {
       Option::None => Option::None,
     }
   }
+
+  // Applies `f` to the contained value; `None` stays absent. The
+  // result type is the call's to spell (`o.map::<U>(f)`); it appears
+  // nowhere in the receiver.
+  pub fn map<U>(self: Self, f: (T) -> U) -> Option<U> {
+    ret match self {
+      Option::Some(v) => Option::Some(f(v)),
+      Option::None => Option::None,
+    }
+  }
+
+  // Chains an option-returning `f`; `None` stays absent.
+  pub fn and_then<U>(self: Self, f: (T) -> Option<U>) -> Option<U> {
+    ret match self {
+      Option::Some(v) => f(v),
+      Option::None => Option::None,
+    }
+  }
+
+  // The contained value as `Ok`, or `err` as `Err`.
+  pub fn ok_or<E>(self: Self, err: E) -> Result<T, E> {
+    ret match self {
+      Option::Some(v) => Result::Ok(v),
+      Option::None => Result::Err(err),
+    }
+  }
 }
 
 // `==` compares shapes and payloads: two `Some`s are equal when their

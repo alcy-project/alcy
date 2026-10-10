@@ -2393,9 +2393,10 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
     }
     comp_args.push_back(std::move(arg));
   }
-  ir::FunctionIdx fn = fn_index(target->module, info.item, info.name,
-                                info.params, info.ret, callee_inst(target),
-                                std::move(comp_args), ir::SymbolKind::Method);
+  ir::FunctionIdx fn =
+      fn_index(target->module, info.item, info.name, info.params, info.ret,
+               callee_inst(target), std::move(comp_args),
+               ir::SymbolKind::Method, info.method_args);
   if (!fn.is_valid()) {
     return Val{size_one, error_type(), false, false};
   }

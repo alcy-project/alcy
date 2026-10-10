@@ -128,6 +128,7 @@
   F(AnalyzerCannotIndexWithRange, "Cannot index '{}' with a range") \
   F(AnalyzerCannotInferType, "Cannot infer the generic type; add an annotation") \
   F(AnalyzerCannotInferTypeArguments, "Cannot infer the type arguments of '{}'; add them with '{}::<T>(...)'") \
+  F(AnalyzerCannotInferMethodTypeArguments, "Cannot infer the type arguments of method '{}'; spell them as 'x.{}::<T>(...)'") \
   F(AnalyzerCannotInferValueArgument, "Cannot infer the value argument for parameter '{}' of '{}'; add it with '{}::<...>(...)'") \
   F(AnalyzerCharacterLiteralDeferred, "Character literals need the core Char type (deferred)") \
   F(AnalyzerCheckedTypesFailedVerification, "Internal error: checked types failed verification ({} at index {})") \

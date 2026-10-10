@@ -759,7 +759,8 @@ std::string Lowerer::fn_key(ast::ItemIdx item,
                             const std::vector<ir::TypeIdx>& params,
                             ir::TypeIdx ret,
                             u32 inst,
-                            std::span<const CompVal> comp_args) {
+                            std::span<const CompVal> comp_args,
+                            std::span<const ir::TypeIdx> extra_generics) {
   std::string key = std::to_string(item.idx) + "|" + std::to_string(inst) + "|";
   for (ir::TypeIdx param : params) {
     key += std::to_string(param.idx) + ",";
@@ -767,6 +768,11 @@ std::string Lowerer::fn_key(ast::ItemIdx item,
   key += "|" + std::to_string(ret.idx) + "|";
   for (const CompVal& arg : comp_args) {
     comp_key_into(key, arg.value);
+  }
+  // A method's own type arguments may appear nowhere in its signature
+  // (`size_of::<U>()` in the body), so they are part of the key.
+  for (ir::TypeIdx arg : extra_generics) {
+    key += "g" + std::to_string(arg.idx) + ";";
   }
   return key;
 }
@@ -835,8 +841,9 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
                                   ir::TypeIdx ret,
                                   u32 inst,
                                   std::vector<CompVal> comp_args,
-                                  ir::SymbolKind kind) {
-  std::string key = fn_key(item, params, ret, inst, comp_args);
+                                  ir::SymbolKind kind,
+                                  std::span<const ir::TypeIdx> extra_generics) {
+  std::string key = fn_key(item, params, ret, inst, comp_args, extra_generics);
   const auto found = fn_by_key_.find(key);
   if (found != fn_by_key_.end()) {
     return ir::FunctionIdx(found->second);
@@ -873,6 +880,11 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   }
   if (entry.generics.empty()) {
     entry.generics = fn_args_for(item, inst);
+  }
+  // A method's own type arguments join the symbol after the ones its
+  // receiver supplied.
+  for (ir::TypeIdx arg : extra_generics) {
+    entry.generics.push_back(arg);
   }
   entry.comp_args = std::move(comp_args);
   fns.push_back(std::move(entry));
@@ -1016,7 +1028,13 @@ u32 Lowerer::callee_inst(
     if (target->index >= def.methods.size()) {
       return analyzer::NO_INST;
     }
-    return generic_inst_index(def.methods[target->index].self_type);
+    const analyzer::CheckedModule::MethodInfo& info =
+        def.methods[target->index];
+    // A method with its own type arguments carries the instantiation
+    // its body was checked under; a plain method's is its receiver's.
+    return info.method_inst != analyzer::NO_INST
+               ? info.method_inst
+               : generic_inst_index(info.self_type);
   }
   const analyzer::CheckedModule& def = pkg.modules[target->module];
   if (target->index >= def.functions.size()) {
@@ -1371,6 +1389,11 @@ void Lowerer::run() {
     for (const auto& method : checked.methods) {
       if (!method.item.is_valid() || !comp_positions(method.item).empty() ||
           ast.items[method.item].kind == ast::ItemKind::Intrinsic) {
+        continue;
+      }
+      // A method with its own type parameters is reserved at its call
+      // site, which spells them.
+      if (!ast.items[method.item].payload.get<ast::ItemFn>().generic.empty()) {
         continue;
       }
       const u32 inst = generic_inst_index(method.self_type);

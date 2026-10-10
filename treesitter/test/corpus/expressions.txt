@@ -201,6 +201,50 @@ fn f(v: Vec<i32>) {
           (integer))))))
 
 ================================================================================
+A method call carries a turbofish
+================================================================================
+
+fn f(w: Wrap) {
+  w.map::<i32>(f)
+  w.ok_or::<str>("missing")
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)))))
+    (block
+      (expression_statement
+        (method_call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (identifier)
+          (type_arguments
+            (primitive_type))
+          (arguments
+            (path_expression
+              (path
+                (identifier))))))
+      (method_call_expression
+        (path_expression
+          (path
+            (identifier)))
+        (identifier)
+        (type_arguments
+          (str_type))
+        (arguments
+          (string))))))
+
+================================================================================
 Tuple element access by number
 ================================================================================
 

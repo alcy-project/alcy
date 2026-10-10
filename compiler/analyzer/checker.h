@@ -615,6 +615,10 @@ class Checker {
   // Built on the first generic lookup and rebuilt if a nominal was interned
   // since, because a lookup may come before the last one is.
   void index_generic_impls();
+  // Collects the inherent methods that declare their own type parameters,
+  // by the nominal their impl targets. Built and rebuilt like the generic
+  // impls index.
+  void index_generic_methods();
   // Finds a method for `self`: an inherent one, or with `spec_only` a
   // spec implementation reachable from `module`. Only in-scope specs
   // match.
@@ -636,7 +640,17 @@ class Checker {
       const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
       std::span<const ValueParam> value_scope,
       const ast::ItemImpl& impl,
-      std::string_view name);
+      std::string_view name,
+      std::span<const ir::TypeIdx> method_args = {});
+  // Finds an inherent method that declares its own type parameters for
+  // `self` and instantiates it with the call's explicit arguments; null
+  // when no such method carries the name.
+  const CheckedModule::MethodInfo* instantiate_generic_method(
+      u32 module,
+      ir::TypeIdx self,
+      std::string_view name,
+      std::span<const ast::TypeIdx> type_args,
+      diag::Span span);
   void record_call(u32 module,
                    ast::ExprIdx callee,
                    const CheckedModule::FnSig* fn);
@@ -676,6 +690,16 @@ class Checker {
   // nominal count the index was built against.
   std::vector<std::vector<std::pair<u32, ast::ItemIdx>>>
       generic_impls_by_nominal_;
+  // Inherent methods that declare their own type parameters, by the nominal
+  // their impl targets: `(module, impl item, method item)`. Such a method
+  // is instantiated at its call site, which spells the arguments.
+  struct GenericMethodEntry {
+    u32 module = 0;
+    ast::ItemIdx impl_item = ast::ItemIdx::invalid();
+    ast::ItemIdx method_item = ast::ItemIdx::invalid();
+  };
+  std::vector<std::vector<GenericMethodEntry>> generic_methods_by_nominal_;
+  bool generic_methods_indexed_ = false;
   usize indexed_nominals_ = 0;
   bool generic_impls_indexed_ = false;
   // Where a module's children are, by the name a path calls them, and the

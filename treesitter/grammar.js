@@ -677,10 +677,15 @@ module.exports = grammar({
       field('arguments', $.arguments),
     )),
 
+    // A method that declares its own type parameters takes explicit type
+    // arguments after its name (`w.map::<i32>(f)`), which is the turbofish
+    // a call carries, attached to the name instead of the path
+    // (grammar.ebnf, `turbofish`).
     method_call_expression: $ => prec.left(PREC.POSTFIX, seq(
       field('object', postfixOperand($)),
       '.',
       field('name', $.identifier),
+      optional(seq('::', field('type_arguments', $.type_arguments))),
       field('arguments', $.arguments),
     )),
 

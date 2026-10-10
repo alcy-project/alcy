@@ -249,6 +249,11 @@ bool verify_expr_children(const ExprNode& node, const AstArena& arena) {
           return false;
         }
       }
+      for (const TypeIdx type_arg : call.type_args) {
+        if (!bound(type_arg, arena.types)) {
+          return false;
+        }
+      }
       return true;
     }
     case ExprKind::Field: {

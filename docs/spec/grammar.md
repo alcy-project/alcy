@@ -123,8 +123,9 @@ Declaration left-hand sides use this grammar with `:=`
   dereference is an operation the gate covers (`ffi.md`). `**p`
   lexes as the power token, but a binary `**` needs a left operand,
   so in prefix position the pair is two dereferences.
-- A turbofish supplies explicit type arguments to a generic call;
-  without one, the parameters bind from the argument types.
+- A turbofish supplies explicit type arguments to a generic call or
+  method call; without one, the parameters bind from the argument
+  types.
 - Array indexing is builtin with panic-on-out-of-bounds semantics;
   indexing a nominal type resolves through the sealed `Index` and
   `IndexMut` specs (see `types.md`).

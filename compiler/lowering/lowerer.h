@@ -278,10 +278,12 @@ class Lowerer {
                             const std::vector<ir::TypeIdx>& params,
                             ir::TypeIdx ret,
                             u32 inst,
-                            std::span<const CompVal> comp_args);
+                            std::span<const CompVal> comp_args,
+                            std::span<const ir::TypeIdx> extra_generics = {});
   // Reserves (or finds) the IR function for one instantiation. `kind`
   // says what the symbol names, because a method and an associated
-  // function share an item.
+  // function share an item. `extra_generics` are the method's own type
+  // arguments, appended to the symbol's generics.
   ir::FunctionIdx fn_index(u32 mod,
                            ast::ItemIdx item,
                            std::string_view name,
@@ -289,7 +291,8 @@ class Lowerer {
                            ir::TypeIdx ret,
                            u32 inst,
                            std::vector<CompVal> comp_args,
-                           ir::SymbolKind kind = ir::SymbolKind::Free);
+                           ir::SymbolKind kind = ir::SymbolKind::Free,
+                           std::span<const ir::TypeIdx> extra_generics = {});
   u32 callee_inst(const analyzer::CheckedModule::CallTarget* target) const;
   // Type arguments of a nominal type, empty for a plain declaration.
   std::vector<ir::TypeIdx> nominal_arguments(ir::TypeIdx type) const;

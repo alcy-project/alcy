@@ -2746,6 +2746,92 @@ TEST_CASE("Check rejects a fmt call without its buffer") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Check instantiates a method's own type parameters") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "struct W { }\n"
+             "impl W {\n"
+             "  pub fn width<U>(self: &Self) -> i32 {\n"
+             "    ret size_of::<U>() as i32\n"
+             "  }\n"
+             "}\n"
+             "fn main() -> i32 {\n"
+             "  w: W := W {}\n"
+             "  ret w.width::<i32>() + w.width::<u64>()\n"
+             "}\n"},
+            {"core.al", "pub intrinsic fn size_of<T>() -> usize;\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check refuses an unspelled method type argument") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "struct W { }\n"
+             "impl W {\n"
+             "  pub fn width<U>(self: &Self) -> i32 {\n"
+             "    ret size_of::<U>() as i32\n"
+             "  }\n"
+             "}\n"
+             "fn main() -> i32 {\n"
+             "  w: W := W {}\n"
+             "  ret w.width()\n"
+             "}\n"},
+            {"core.al", "pub intrinsic fn size_of<T>() -> usize;\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(
+      f.bag,
+      "Cannot infer the type arguments of method 'width'; spell them as "
+      "'x.width::<T>(...)'"));
+}
+
+TEST_CASE("Check refuses a method type argument arity mismatch") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "struct W { }\n"
+             "impl W {\n"
+             "  pub fn width<U>(self: &Self) -> i32 {\n"
+             "    ret size_of::<U>() as i32\n"
+             "  }\n"
+             "}\n"
+             "fn main() -> i32 {\n"
+             "  w: W := W {}\n"
+             "  ret w.width::<i32, u8>()\n"
+             "}\n"},
+            {"core.al", "pub intrinsic fn size_of<T>() -> usize;\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Type 'width' expects 1 type argument"));
+}
+
 TEST_CASE("Check accepts generic free functions and turbofish arguments") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",

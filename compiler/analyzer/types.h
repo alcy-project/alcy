@@ -127,6 +127,14 @@ struct CheckedModule {
     // Index of the implemented spec in the checker's spec table;
     // NO_SPEC for methods from inherent impl blocks.
     u32 spec = NO_SPEC;
+    // Explicit type arguments of a method that declares its own type
+    // parameters, in declaration order; empty for every other method.
+    // The symbol and the lowered instance key on them.
+    std::vector<ir::TypeIdx> method_args;
+    // The instantiation key this method's body was checked under: the
+    // nominal's instance for a plain method, a fresh number when the
+    // method has its own type arguments. Side tables key on it.
+    u32 method_inst = NO_INST;
   };
   // Destructor glue for one type: the `drop` method to call, as an
   // index into `modules[module].methods`. A method reached through a
