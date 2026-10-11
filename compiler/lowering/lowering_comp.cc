@@ -1231,8 +1231,8 @@ Val Lowerer::lower_fmt_format(ast::ExprIdx expr,
   }
   const ir::RegisterIdx total = emit(ir::Opcode::Load, usize_ty,
                                      {to_operand(measured.tot_addr, usize_ty)});
-  const ir::RegisterIdx heap =
-      emit_heap_alloc(u8_ty, buf_field_ty, to_operand(total, usize_ty));
+  const ir::RegisterIdx heap = emit_heap_alloc(
+      u8_ty, buf_field_ty, to_operand(total, usize_ty), node.span);
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
@@ -1339,7 +1339,7 @@ Val Lowerer::lower_io_print(ast::ExprIdx expr,
   const ir::RegisterIdx total = emit(ir::Opcode::Load, usize_ty,
                                      {to_operand(measured.tot_addr, usize_ty)});
   const ir::RegisterIdx heap =
-      emit_heap_alloc(u8_ty, buf_ty, to_operand(total, usize_ty));
+      emit_heap_alloc(u8_ty, buf_ty, to_operand(total, usize_ty), node.span);
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }

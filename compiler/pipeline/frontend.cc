@@ -46,7 +46,8 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
   base::Result<lowering::LoweredPackage, diag::Reported> lowered = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "lower", "frontend");
     return lowering::lower_package(std::move(package), ctx.target.width,
-                                   ctx.ast, ctx.strings, ctx.bag, ctx.profiler);
+                                   ctx.ast, ctx.strings, ctx.bag, ctx.profiler,
+                                   &ctx.sources);
   }();
   if (lowered.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});

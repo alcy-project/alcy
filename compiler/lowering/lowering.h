@@ -17,6 +17,7 @@
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
+#include "source/source.h"
 
 namespace lowering {
 
@@ -97,6 +98,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     ast::AstArena& ast,
     ir::SymbolTable& strings,
     diag::DiagBag& bag,
-    debug::Profiler* profiler = nullptr);
+    debug::Profiler* profiler = nullptr,
+    const source::SourceManager* sources = nullptr);
 
 }  // namespace lowering

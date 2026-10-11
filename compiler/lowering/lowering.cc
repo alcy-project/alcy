@@ -46,6 +46,7 @@
 #include "ir/verifier.h"
 #include "lowering/diag_code.h"
 #include "lowering/lowerer.h"
+#include "source/source.h"
 
 namespace lowering {
 
@@ -1448,8 +1449,10 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     ast::AstArena& ast,
     ir::SymbolTable& strings,
     diag::DiagBag& bag,
-    debug::Profiler* profiler) {
+    debug::Profiler* profiler,
+    const source::SourceManager* sources) {
   Lowerer lowerer(std::move(package), width, ast, strings, bag, profiler);
+  lowerer.sources = sources;
   lowerer.run();
   if (lowerer.failed) {
     return base::make_err(diag::Reported{});

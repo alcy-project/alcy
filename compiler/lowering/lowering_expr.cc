@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <cstdlib>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -15,8 +16,10 @@
 #include "comp/comp_value.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/render.h"
 #include "diag/span.h"
 #include "diag/stage.h"
+#include "fmt/format.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
 #include "fpag/str/string_interner.h"
@@ -35,6 +38,7 @@
 #include "ir/type_util.h"
 #include "lowering/diag_code.h"
 #include "lowering/lowerer.h"
+#include "source/source.h"
 #include "text/unescape.h"
 
 namespace lowering {
@@ -388,7 +392,7 @@ Val Lowerer::checked_index_addr(Val base, Val position, diag::Span span) {
     const ir::BlockIdx bad_block = reserve_block();
     emit_cond_br(to_operand(in_bounds, boolean), ok_block, bad_block);
     switch_to(bad_block);
-    emit_panic(str_operand("index out of bounds"));
+    emit_panic(span, str_operand("index out of bounds"));
     switch_to(ok_block);
     if (failed) {
       return Val{size_one, error_type(), true, false};
@@ -442,7 +446,7 @@ Val Lowerer::checked_index_addr(Val base, Val position, diag::Span span) {
   const ir::BlockIdx bad_block = reserve_block();
   emit_cond_br(to_operand(in_bounds, boolean), ok_block, bad_block);
   switch_to(bad_block);
-  emit_panic(str_operand("index out of bounds"));
+  emit_panic(span, str_operand("index out of bounds"));
   switch_to(ok_block);
   if (failed) {
     return Val{size_one, error_type(), true, false};
@@ -1266,7 +1270,8 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
 // `panic`, still arrives through lower_panic.
 ir::RegisterIdx Lowerer::emit_heap_alloc(ir::TypeIdx elem,
                                          ir::TypeIdx ref_ty,
-                                         ir::OperandIdx count) {
+                                         ir::OperandIdx count,
+                                         diag::Span span) {
   const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
   const ir::TypeIdx usize_ty = usize_type();
   // The runtime counts bytes; the compiler supplies the element size
@@ -1299,7 +1304,7 @@ ir::RegisterIdx Lowerer::emit_heap_alloc(ir::TypeIdx elem,
     const ir::BlockIdx panic_block = reserve_block();
     emit_cond_br(to_operand(too_big, boolean), panic_block, checked_block);
     switch_to(panic_block);
-    emit_panic(str_operand("capacity overflow"));
+    emit_panic(span, str_operand("capacity overflow"));
     switch_to(checked_block);
     if (failed) {
       return ir::RegisterIdx(base::INVALID_IDX);
@@ -1624,7 +1629,7 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
     }
     const ir::RegisterIdx labelled =
-        emit_heap_alloc(type_args[0], sig.ret, args[0]);
+        emit_heap_alloc(type_args[0], sig.ret, args[0], node.span);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
@@ -1867,7 +1872,7 @@ bool Lowerer::run_bounds(Val range,
     const ir::BlockIdx bad_block = reserve_block();
     emit_cond_br(to_operand(good, boolean), ok_block, bad_block);
     switch_to(bad_block);
-    emit_panic(str_operand("slice out of bounds"));
+    emit_panic(span, str_operand("slice out of bounds"));
     switch_to(ok_block);
   };
 
@@ -2162,7 +2167,7 @@ Val Lowerer::lower_str_intrinsic(ast::ExprIdx expr, std::string_view name) {
     const ir::BlockIdx bad_block = reserve_block();
     emit_cond_br(to_operand(in_bounds, boolean), ok_block, bad_block);
     switch_to(bad_block);
-    emit_panic(str_operand("index out of bounds"));
+    emit_panic(node.span, str_operand("index out of bounds"));
     switch_to(ok_block);
     if (failed) {
       return Val{size_one, error_type(), false, false};
@@ -2196,7 +2201,7 @@ Val Lowerer::lower_str_intrinsic(ast::ExprIdx expr, std::string_view name) {
     const ir::BlockIdx bad_block = reserve_block();
     emit_cond_br(to_operand(bad, boolean), bad_block, ok_block);
     switch_to(bad_block);
-    emit_panic(str_operand("slice out of bounds"));
+    emit_panic(node.span, str_operand("slice out of bounds"));
     switch_to(ok_block);
     if (failed) {
       return Val{size_one, error_type(), false, false};
@@ -2249,13 +2254,7 @@ Val Lowerer::lower_panic(ast::ExprIdx expr) {
   // `panic` is the one name-based fallback left: it aborts through the
   // runtime. `print` and `println` are io's declarations, expanded by
   // package (ADR-0055).
-  const ir::ExternalFunctionIdx ext =
-      declare_external("alcy_panic", builder.never_type(), {ptr_ty, usize_ty});
-  emit_void(ir::Opcode::Call,
-            {builder.operand(ir::Operand::from_external_function(
-                 ext, builder.primitive(ir::TypeTag::Function))),
-             to_operand(bytes, ptr_ty), to_operand(len, usize_ty)});
-  emit_void(ir::Opcode::Unreachable, {});
+  emit_panic_registers(call.span, bytes, len);
   return Val{size_one, builder.never_type(), false, false};
 }
 
@@ -2442,20 +2441,52 @@ ir::OperandIdx Lowerer::bool_operand(bool value) {
   return to_operand(builder.immutable(imm), i1);
 }
 
-void Lowerer::emit_panic(ir::OperandIdx message) {
+void Lowerer::emit_panic(diag::Span span, ir::OperandIdx message) {
   const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
   const ir::TypeIdx usize_ty = usize_type();
   const ir::RegisterIdx bytes =
       emit(ir::Opcode::ExtractValue, ptr_ty, {message, index_operand(0)});
   const ir::RegisterIdx len =
       emit(ir::Opcode::ExtractValue, usize_ty, {message, index_operand(1)});
-  const ir::ExternalFunctionIdx ext =
-      declare_external("alcy_panic", builder.never_type(), {ptr_ty, usize_ty});
+  emit_panic_registers(span, bytes, len);
+}
+
+void Lowerer::emit_panic_registers(diag::Span span,
+                                   ir::RegisterIdx bytes,
+                                   ir::RegisterIdx len) {
+  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+  const ir::TypeIdx usize_ty = usize_type();
+  const ir::OperandIdx where = where_operand(span);
+  const ir::RegisterIdx where_bytes =
+      emit(ir::Opcode::ExtractValue, ptr_ty, {where, index_operand(0)});
+  const ir::RegisterIdx where_len =
+      emit(ir::Opcode::ExtractValue, usize_ty, {where, index_operand(1)});
+  const ir::ExternalFunctionIdx ext = declare_external(
+      "alcy_panic", builder.never_type(), {ptr_ty, usize_ty, ptr_ty, usize_ty});
   emit_void(ir::Opcode::Call,
             {builder.operand(ir::Operand::from_external_function(
                  ext, builder.primitive(ir::TypeTag::Function))),
-             to_operand(bytes, ptr_ty), to_operand(len, usize_ty)});
+             to_operand(bytes, ptr_ty), to_operand(len, usize_ty),
+             to_operand(where_bytes, ptr_ty), to_operand(where_len, usize_ty)});
   emit_void(ir::Opcode::Unreachable, {});
+}
+
+ir::OperandIdx Lowerer::where_operand(diag::Span span) {
+  if (sources == nullptr || span.file == source::UNKNOWN_FILE) {
+    return str_operand("");
+  }
+  const std::optional<std::string_view> name = sources->name(span.file);
+  const std::optional<std::string_view> bytes = sources->bytes(span.file);
+  if (!name.has_value() || !bytes.has_value()) {
+    return str_operand("");
+  }
+  const diag::LineColumn at = diag::line_column(*bytes, span.offset);
+  const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
+  const str::StringPoolId id =
+      intern_copied(fmt::format("{}:{}:{}", *name, at.line, at.column));
+  const ir::ImmutableIdx imm =
+      builder.immutable({.type = str, .data = {.str_id_value = id}});
+  return to_operand(imm, str);
 }
 
 ir::OperandIdx Lowerer::str_operand(std::string_view message) {

@@ -34,6 +34,7 @@
 #include "ir/type.h"
 #include "ir/verifier.h"
 #include "lowering/lowering.h"
+#include "source/source.h"
 
 namespace lowering {
 
@@ -75,6 +76,9 @@ class Lowerer {
   // Where the trace events go, or nothing. Set where the lowerer is
   // constructed - `lower_package` - and read by the function loop here.
   debug::Profiler* profiler = nullptr;
+  // The sources the spans point into, or nothing. Set where the lowerer
+  // is constructed; a runtime panic names its site through these bytes.
+  const source::SourceManager* sources = nullptr;
 
   // Side tables for ownership analysis: every emitted instruction
   // records its source span, and every address alloca records the
@@ -407,7 +411,8 @@ class Lowerer {
   // buffer without going through the intrinsic.
   ir::RegisterIdx emit_heap_alloc(ir::TypeIdx elem,
                                   ir::TypeIdx ref_ty,
-                                  ir::OperandIdx count);
+                                  ir::OperandIdx count,
+                                  diag::Span span);
   Val lower_str_intrinsic(ast::ExprIdx expr, std::string_view name);
   Val lower_panic(ast::ExprIdx expr);
   ir::OperandIdx arg_for(Val arg, ir::TypeIdx param);
@@ -425,7 +430,17 @@ class Lowerer {
                     ir::BlockIdx then_block,
                     ir::BlockIdx else_block);
   ir::OperandIdx bool_operand(bool value);
-  void emit_panic(ir::OperandIdx message);
+  // Ends the program through `alcy_panic`, naming the site `span`
+  // points at. `message` is a fat `str` operand.
+  void emit_panic(diag::Span span, ir::OperandIdx message);
+  // The same for a message whose bytes and length are already registers,
+  // which is what a computed `panic(msg)` argument is.
+  void emit_panic_registers(diag::Span span,
+                            ir::RegisterIdx bytes,
+                            ir::RegisterIdx len);
+  // The `<file>:<line>:<column>` `span` names, interned. Empty when the
+  // lowerer was handed no sources or the span names no file.
+  ir::OperandIdx where_operand(diag::Span span);
   ir::OperandIdx str_operand(std::string_view message);
   Val lower_method_call(ast::ExprIdx expr);
   // `a[i]` where the checker resolved an `Index`/`IndexMut` impl: the

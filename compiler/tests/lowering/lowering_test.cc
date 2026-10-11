@@ -273,6 +273,34 @@ TEST_CASE("Lower emits verifiable LLVM IR") {
   CHECK(!llvm::verifyModule(*module));
 }
 
+TEST_CASE("Lowered panic names the site it was written at") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "fn main() {\n"
+                   "  panic(\"boom\")\n"
+                   "}\n"
+                   "intrinsic fn panic(msg: str) -> !;\n"}});
+
+  Fixture f;
+  LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("lower_panic_site_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
+  codegen_llvm::LlvmIrEmitter emitter(module.get(),
+                                      std::move(result.lowered->storage),
+                                      &f.strings, host_target(), true);
+  std::move(emitter).emit();
+  const std::string text = codegen_llvm::emit_ir(*module);
+  CHECK(text.find("main.al:2:3") != std::string::npos);
+  CHECK(text.find("boom") != std::string::npos);
+}
+
 TEST_CASE("Lower emits verifiable LLVM IR for print") {
   VirtualDir dir;
   write_all(dir, {{"main.al",

@@ -389,14 +389,38 @@ class RuntimeBuilder {
 
   void build_panic() {
     llvm::FunctionType* type = llvm::FunctionType::get(
-        builder_.getVoidTy(), {builder_.getPtrTy(), usize_}, false);
+        builder_.getVoidTy(),
+        {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
     llvm::Function* function = runtime("alcy_panic", type);
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(module_.getContext(), "entry", function);
+    llvm::BasicBlock* located =
+        llvm::BasicBlock::Create(module_.getContext(), "located", function);
+    llvm::BasicBlock* text =
+        llvm::BasicBlock::Create(module_.getContext(), "text", function);
 
     builder_.SetInsertPoint(entry);
-    Guarded text = guard_null(function->getArg(0), function->getArg(1));
-    builder_.CreateCall(write_all_, {fd(2), text.text, text.len});
+    Guarded message = guard_null(function->getArg(0), function->getArg(1));
+    Guarded where = guard_null(function->getArg(2), function->getArg(3));
+    // `panic at <site>: <message>`, and `panic: <message>` when the call
+    // site is unknown (the entry thunk and the allocator's failure have
+    // no source position).
+    builder_.CreateCall(write_all_, {fd(2), text_constant("panic"),
+                                     llvm::ConstantInt::get(usize_, 5)});
+    llvm::Value* has_where = builder_.CreateICmpNE(
+        where.len, llvm::ConstantInt::get(usize_, 0), "has_where");
+    builder_.CreateCondBr(has_where, located, text);
+
+    builder_.SetInsertPoint(located);
+    builder_.CreateCall(write_all_, {fd(2), text_constant(" at "),
+                                     llvm::ConstantInt::get(usize_, 4)});
+    builder_.CreateCall(write_all_, {fd(2), where.text, where.len});
+    builder_.CreateBr(text);
+
+    builder_.SetInsertPoint(text);
+    builder_.CreateCall(write_all_, {fd(2), text_constant(": "),
+                                     llvm::ConstantInt::get(usize_, 2)});
+    builder_.CreateCall(write_all_, {fd(2), message.text, message.len});
     if (freestanding_) {
       // No libc `abort`; exit with the status a hosted abort reports.
       exit_now(134);
@@ -448,9 +472,10 @@ class RuntimeBuilder {
     constexpr std::string_view MESSAGE = "allocation failed";
     llvm::Function* panic_function = module_.getFunction("alcy_panic");
     DCHECK_MSG(panic_function != nullptr, "allocation failure has no panic");
-    builder_.CreateCall(panic_function,
-                        {text_constant(MESSAGE),
-                         llvm::ConstantInt::get(usize_, MESSAGE.size())});
+    builder_.CreateCall(
+        panic_function,
+        {text_constant(MESSAGE), llvm::ConstantInt::get(usize_, MESSAGE.size()),
+         empty_text_, llvm::ConstantInt::get(usize_, 0)});
     builder_.CreateUnreachable();
   }
 

@@ -264,6 +264,11 @@ void append_marker(fmt::memory_buffer& out,
 
 }  // namespace
 
+LineColumn line_column(std::string_view bytes, u32 offset) {
+  const LineInfo info = locate(bytes, offset);
+  return {.line = info.line, .column = info.col};
+}
+
 std::string render(const Diagnostic& diag, const RenderOptions& options) {
   fmt::memory_buffer out;
   render(diag, out, options);

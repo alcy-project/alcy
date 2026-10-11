@@ -28,6 +28,11 @@
 
 - `panic(msg: str)` diverges and aborts the process. There is no
   unwinding, and drops do not run on the panic path.
+- A panic writes `panic at <file>:<line>:<column>: <message>` to
+  standard error, so the abort says where it happened. A panic with no
+  source position - the entry thunk's fixed message, an allocation
+  failure - writes `panic: <message>`. The runtime's text is fixed and
+  not localized; only compiler diagnostics follow `--lang`.
 - The `!` (never) type exists from MVP: `panic` has type `!`, and `!`
   coerces to any type. Looping constructs that cannot fall through
   also produce `!`.

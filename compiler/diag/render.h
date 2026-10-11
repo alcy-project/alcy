@@ -9,17 +9,28 @@
 
 #include "diag/diagnostic.h"
 #include "fmt/format.h"
+#include "fpag/base/numeric.h"
 #include "i18n/language.h"
 #include "source/source.h"
 
 namespace diag {
-
 // Zero-copy source lookup for the renderer: both views borrow from storage
 // owned by the caller (e.g. SourceManager's mapped files).
 struct SourceText {
   std::string_view name;
   std::string_view bytes;
 };
+
+// The 1-based line and display column a byte offset falls on, measured
+// the way the renderer's caret is: UTF-8 code points, with a tab
+// advancing to the next tab stop. An offset past the end clamps to the
+// end of the buffer.
+struct LineColumn {
+  u32 line = 1;
+  u32 column = 1;
+};
+
+LineColumn line_column(std::string_view bytes, u32 offset);
 
 // Returns the source text for a file id, or std::nullopt when the id does
 // not name a known file - distinct from a known file whose bytes are

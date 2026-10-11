@@ -10,11 +10,12 @@ translation units) carries the lowering state; it is not public API.
 
 ## Entry points
 
-- `lower_package(package, width, ast, strings, bag)` ->
+- `lower_package(package, width, ast, strings, bag, profiler, sources)` ->
   `base::Result<LoweredPackage, diag::Reported>`. The checked types
   arrive as `ir::VerifiedStorage` proof, so no entry re-verification
   runs; the finished IR is verified once by `StorageBuilder::build`
-  on the way out (`LOWER_INTERNAL`).
+  on the way out (`LOWER_INTERNAL`). With `sources`, a runtime panic
+  names the span it was lowered at.
 
 ## Input requirements
 

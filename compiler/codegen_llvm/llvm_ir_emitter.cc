@@ -818,9 +818,10 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
                              ? builder_->getInt64Ty()
                              : builder_->getInt32Ty();
     llvm::FunctionCallee panic = module_->getOrInsertFunction(
-        "alcy_panic",
-        llvm::FunctionType::get(builder_->getVoidTy(),
-                                {builder_->getPtrTy(), len_ty}, false));
+        "alcy_panic", llvm::FunctionType::get(builder_->getVoidTy(),
+                                              {builder_->getPtrTy(), len_ty,
+                                               builder_->getPtrTy(), len_ty},
+                                              false));
     llvm::GlobalVariable* message =
         builder_->CreateGlobalString("main returned Err", "", 0, module_);
     llvm::Value* zero = llvm::ConstantInt::get(builder_->getInt32Ty(), 0);
@@ -829,7 +830,14 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
         builder_->CreateInBoundsGEP(message->getValueType(), message, indices);
     llvm::Value* len = llvm::ConstantInt::get(
         len_ty, llvm::StringRef("main returned Err").size());
-    builder_->CreateCall(panic, {bytes, len});
+    // The entry thunk has no source position to name, so the panic prints
+    // its message without one.
+    llvm::GlobalVariable* where =
+        builder_->CreateGlobalString("", "", 0, module_);
+    llvm::Value* where_bytes =
+        builder_->CreateInBoundsGEP(where->getValueType(), where, indices);
+    llvm::Value* zero_len = llvm::ConstantInt::get(len_ty, 0);
+    builder_->CreateCall(panic, {bytes, len, where_bytes, zero_len});
     builder_->CreateUnreachable();
     return;
   }

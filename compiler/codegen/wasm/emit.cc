@@ -185,8 +185,12 @@ base::Result<std::vector<u8>, codegen::EmitError> Emitter::run() {
   }
   // The runtime's newline is data too, and the scratch slot the layout
   // publishes sits after every string; both must be placed before the
-  // runtime bodies bake the addresses in.
+  // runtime bodies bake the addresses in. The panic chrome is data for
+  // the same reason.
   (void)newline_offset();
+  panic_text_ = data_for("panic");
+  at_text_ = data_for(" at ");
+  colon_text_ = data_for(": ");
   if (emit_start().is_err()) {
     return base::make_err(codegen::EmitError::Unsupported);
   }
@@ -211,6 +215,8 @@ void Emitter::declare_runtime() {
   const u32 proc_exit = builder_.add_type(FuncType{{ValType::I32}, {}});
   const u32 text =
       builder_.add_type(FuncType{{ValType::I32, ValType::I32}, {}});
+  const u32 panic = builder_.add_type(
+      FuncType{{ValType::I32, ValType::I32, ValType::I32, ValType::I32}, {}});
   const u32 write_all = builder_.add_type(
       FuncType{{ValType::I32, ValType::I32, ValType::I32}, {}});
   const u32 alloc =
@@ -229,7 +235,7 @@ void Emitter::declare_runtime() {
   DCHECK_EQ(print_index, PRINT);
   const u32 println_index = builder_.add_function(text);
   DCHECK_EQ(println_index, PRINTLN);
-  const u32 panic_index = builder_.add_function(text);
+  const u32 panic_index = builder_.add_function(panic);
   DCHECK_EQ(panic_index, PANIC);
   const u32 sys_write_index = builder_.add_function(write_all);
   DCHECK_EQ(sys_write_index, SYS_WRITE);
@@ -1167,8 +1173,29 @@ void Emitter::emit_runtime_bodies() {
     finish_body(SYS_WRITE);
   }
   {
-    // alcy_panic(ptr, len)
-    begin_body(2);
+    // alcy_panic(msg, msg_len, where, where_len): `panic at <site>:
+    // <msg>` when the compiler named the site, `panic: <msg>` when it
+    // had none (the entry thunk and the allocator's failure).
+    begin_body(4);
+    i32_const(2);
+    i32_const(static_cast<i32>(panic_text_));
+    i32_const(5);
+    call(WRITE_ALL);
+    local_get(3);
+    if_void();
+    i32_const(2);
+    i32_const(static_cast<i32>(at_text_));
+    i32_const(4);
+    call(WRITE_ALL);
+    i32_const(2);
+    local_get(2);
+    guard_null_len(2);
+    call(WRITE_ALL);
+    end_op();
+    i32_const(2);
+    i32_const(static_cast<i32>(colon_text_));
+    i32_const(2);
+    call(WRITE_ALL);
     i32_const(2);
     local_get(0);
     guard_null_len(0);
@@ -1230,6 +1257,9 @@ void Emitter::emit_runtime_bodies() {
     if_void();
     i32_const(static_cast<i32>(alloc_failure_));
     i32_const(static_cast<i32>(ALLOC_FAILURE.size()));
+    // The allocator has no source position to name.
+    i32_const(0);
+    i32_const(0);
     call(PANIC);
     op(OP_UNREACHABLE);
     end_op();
@@ -1294,6 +1324,9 @@ Emitter::EmitResult Emitter::emit_start() {
     const u32 message = data_for(MAIN_ERROR);
     i32_const(static_cast<i32>(message));
     i32_const(static_cast<i32>(MAIN_ERROR.size()));
+    // The entry thunk has no source position to name.
+    i32_const(0);
+    i32_const(0);
     call(PANIC);
     op(OP_UNREACHABLE);
     end_op();

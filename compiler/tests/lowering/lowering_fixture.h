@@ -124,8 +124,9 @@ struct LowerCase {
 
 inline LowerCase lower_checked_case(analyzer::CheckedPackage checked,
                                     Fixture& f) {
-  base::Result<LoweredPackage, diag::Reported> lowered_result = lower_package(
-      std::move(checked), ir::PointerWidth::W64, f.ast, f.strings, f.bag);
+  base::Result<LoweredPackage, diag::Reported> lowered_result =
+      lower_package(std::move(checked), ir::PointerWidth::W64, f.ast, f.strings,
+                    f.bag, nullptr, &f.sources);
   if (lowered_result.is_err()) {
     return {std::nullopt, false};
   }

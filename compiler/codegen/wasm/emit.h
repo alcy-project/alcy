@@ -195,6 +195,11 @@ class Emitter {
   u32 newline_ = NO_LOCAL;
   // The offset of the allocator's failure text in the data segment.
   u32 alloc_failure_ = 0;
+  // The panic chrome: "panic", " at ", and ": ", placed before the
+  // memory layout so the runtime body bakes their offsets in.
+  u32 panic_text_ = NO_LOCAL;
+  u32 at_text_ = NO_LOCAL;
+  u32 colon_text_ = NO_LOCAL;
 
   // --- per-function state, reset by emit_function ---
   BinaryWriter body_;
