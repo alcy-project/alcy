@@ -1,9 +1,13 @@
 # Shared toolchain setup for the standard (prebuilt LLVM) and Nix build
 # environments. Callers must check out the repository (with submodules)
-# before invoking this action.
+# before invoking this action: the LLVM pin is read from config.toml
+# here, so a caller cannot pass a version it never read.
+#
+# Dependabot updates the actions the workflow files name and does not see
+# this file, so the pins below are bumped by hand alongside the workflows.
 
 name: setup-build
-description: Install the Nix or prebuilt-LLVM toolchain, Python venv, and LLVM submodule tags.
+description: Install the Nix or prebuilt-LLVM toolchain and the Python venv. The LLVM version comes from config.toml, so callers pass none.
 
 inputs:
   nix:
@@ -12,10 +16,6 @@ inputs:
     default: "false"
   os:
     description: "Value forwarded to cxx-gn-setup (e.g. runner.os). Ignored for Nix."
-    required: false
-    default: ""
-  llvm-version:
-    description: "Prebuilt LLVM version. Ignored for Nix, which pins LLVM via flake.nix."
     required: false
     default: ""
 
@@ -29,12 +29,20 @@ runs:
         extra_nix_config: |
           experimental-features = nix-command flakes
 
+    - name: Read the pinned LLVM
+      id: versions
+      if: inputs.nix != 'true'
+      shell: bash
+      run: |
+        py=$(command -v python3 || command -v python)
+        echo "llvm_toolchain_version=$("$py" tools/config_values.py --get llvm_toolchain_version)" >> "$GITHUB_OUTPUT"
+
     - name: Setup Build Environment (Standard)
       if: inputs.nix != 'true'
       uses: pug523/actions/cxx-gn-setup@6a99c1e7020935c77ea80adc3ed0e9365ec8a209
       with:
         os: ${{ inputs.os }}
-        llvm_version: ${{ inputs.llvm-version }}
+        llvm_version: ${{ steps.versions.outputs.llvm_toolchain_version }}
         directory: ${{ runner.temp }}/llvm
 
     # GN resolves libc++ headers and libraries through these variables
@@ -69,7 +77,7 @@ runs:
 
     - name: Install uv
       if: inputs.nix != 'true'
-      uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
       with:
         enable-cache: true
 

@@ -15,34 +15,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  load-config:
-    name: Load Config
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    outputs:
-      llvm_toolchain_version: ${{ steps.parse.outputs.llvm_toolchain_version }}
-      taplo_version: ${{ steps.parse.outputs.taplo_version }}
-      tree_sitter_cli_version: ${{ steps.parse.outputs.tree_sitter_cli_version }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          submodules: false
-          fetch-depth: 1
-
-      - name: Parse config.toml
-        id: parse
-        run: |
-          TOOLCHAIN_VER=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["llvm_toolchain_version"])')
-          echo "llvm_toolchain_version=${TOOLCHAIN_VER}" >> $GITHUB_OUTPUT
-          TAPLO_VER=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["taplo_version"])')
-          echo "taplo_version=${TAPLO_VER}" >> $GITHUB_OUTPUT
-          TS_VER=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["tree_sitter_cli_version"])')
-          echo "tree_sitter_cli_version=${TS_VER}" >> $GITHUB_OUTPUT
-
   spelling:
     name: Spell Check
-    needs: [load-config]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -57,7 +31,6 @@ jobs:
 
   format:
     name: Format
-    needs: [load-config]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -72,14 +45,12 @@ jobs:
         with:
           nix: "false"
           os: Linux
-          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
       - name: Check Formatting
         run: uv run ./tools/format.py --dry-run
 
   specification:
     name: Specification
-    needs: [load-config]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -115,7 +86,6 @@ jobs:
   # generated from grammar.js rather than written by hand.
   grammar:
     name: Grammar
-    needs: [load-config]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -128,8 +98,9 @@ jobs:
       - name: Install the tree-sitter CLI
         run: |
           mkdir -p "$HOME/.local/bin"
+          TS_VERSION=$(python3 tools/config_values.py --get tree_sitter_cli_version)
           curl -fsSL -o tree-sitter-cli.zip \
-            "https://github.com/tree-sitter/tree-sitter/releases/download/v${{ needs.load-config.outputs.tree_sitter_cli_version }}/tree-sitter-cli-linux-x64.zip"
+            "https://github.com/tree-sitter/tree-sitter/releases/download/v${TS_VERSION}/tree-sitter-cli-linux-x64.zip"
           unzip -o tree-sitter-cli.zip -d "$HOME/.local/bin" tree-sitter
           rm tree-sitter-cli.zip
           tree-sitter --version
@@ -154,7 +125,6 @@ jobs:
   # checkout and virtual environment four times for the same answer.
   tree-checks:
     name: Tree Checks
-    needs: [load-config]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -175,10 +145,14 @@ jobs:
           uv sync --frozen
           echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
 
+      - name: Read the pinned taplo
+        id: versions
+        run: echo "taplo=$(python3 tools/config_values.py --get taplo_version)" >> "$GITHUB_OUTPUT"
+
       - name: Install taplo
         uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0
         with:
-          tool: taplo@${{ needs.load-config.outputs.taplo_version }}
+          tool: taplo@${{ steps.versions.outputs.taplo }}
 
       - name: Check TOML Formatting
         run: taplo fmt --check

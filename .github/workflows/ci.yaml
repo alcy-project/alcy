@@ -20,8 +20,9 @@ on:
       - .clang-tidy
       - .gn
       - BUILD.gn
-      - CPPLINT.cfg
       - config.toml
+      - flake.lock
+      - pyproject.toml
       - uv.lock
       - flake.nix
   pull_request:
@@ -38,81 +39,39 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  load-config:
-    name: Load Config
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    outputs:
-      llvm_toolchain_version: ${{ steps.parse.outputs.llvm_toolchain_version }}
-      llvm_fork_tag: ${{ steps.parse.outputs.llvm_fork_tag }}
-      taplo_version: ${{ steps.parse.outputs.taplo_version }}
-      tree_sitter_cli_version: ${{ steps.parse.outputs.tree_sitter_cli_version }}
-      bun_version: ${{ steps.parse.outputs.bun_version }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          submodules: false
-          fetch-depth: 1
-
-      - name: Parse config.toml
-        id: parse
-        run: |
-          toolchain_ver=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["llvm_toolchain_version"])')
-          fork_tag=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["llvm_fork_tag"])')
-          echo "llvm_toolchain_version=${toolchain_ver}" >> $GITHUB_OUTPUT
-          echo "llvm_fork_tag=${fork_tag}" >> $GITHUB_OUTPUT
-          taplo_ver=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["taplo_version"])')
-          echo "taplo_version=${taplo_ver}" >> $GITHUB_OUTPUT
-          ts_ver=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["tree_sitter_cli_version"])')
-          echo "tree_sitter_cli_version=${ts_ver}" >> $GITHUB_OUTPUT
-          bun_ver=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["bun_version"])')
-          echo "bun_version=${bun_ver}" >> $GITHUB_OUTPUT
-
   debug:
-    needs: [load-config]
     name: Debug Build & Test
     uses: ./.github/workflows/build.yaml
     with:
       build_type: debug
       role: ci
-      llvm_version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
-      bun_version: ${{ needs.load-config.outputs.bun_version }}
 
   release:
-    needs: [load-config]
     name: Release Build & Test
     uses: ./.github/workflows/build.yaml
     with:
       build_type: release
       role: ci
-      llvm_version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
-      bun_version: ${{ needs.load-config.outputs.bun_version }}
 
   wasm-debug:
-    needs: [load-config]
     name: WebAssembly Debug Build & Test
     uses: ./.github/workflows/build-wasm.yaml
     with:
       build_type: debug
       role: ci
-      bun_version: ${{ needs.load-config.outputs.bun_version }}
 
   wasm-release:
-    needs: [load-config]
     name: WebAssembly Release Build & Test
     uses: ./.github/workflows/build-wasm.yaml
     with:
       build_type: release
       role: ci
-      bun_version: ${{ needs.load-config.outputs.bun_version }}
 
   # Lint needs a compilation database, which `gn gen` produces and the
   # whole toolchain is needed to produce. It is a minute of clang-tidy
   # over every translation unit, and it belongs beside the builds rather
   # than in a workflow that a documentation change also triggers.
   lint:
-    needs: [load-config]
     name: Lint
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -128,7 +87,6 @@ jobs:
         with:
           nix: "false"
           os: Linux
-          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
       - name: Lint
         shell: bash
@@ -138,7 +96,6 @@ jobs:
   # the compiler falls below build/coverage_baseline.json, so it needs
   # its own instrumented build and cannot share the matrix's.
   coverage:
-    needs: [load-config]
     name: Coverage Ratchet
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -154,7 +111,6 @@ jobs:
         with:
           nix: "false"
           os: Linux
-          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
       # Nothing is cached here on purpose. A stale instrumented tree
       # yields profile data that describes a compiler that no longer
@@ -170,7 +126,6 @@ jobs:
   # --emit=llvm-ir and clang. Refuses rather than degrading where clang
   # is absent, so this job cannot pass without having run.
   sanitizers:
-    needs: [load-config]
     name: Generated-Code Sanitizers
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -186,7 +141,6 @@ jobs:
         with:
           nix: "false"
           os: Linux
-          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
       - name: Build All
         shell: bash
@@ -203,7 +157,6 @@ jobs:
   # matrix would have asked it. The corpus half of the same check needs no
   # build at all and runs in the Grammar job.
   grammar-vs-compiler:
-    needs: [load-config]
     name: Grammar Against the Compiler
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -219,14 +172,14 @@ jobs:
         with:
           nix: "false"
           os: Linux
-          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
       - name: Install the tree-sitter CLI
         shell: bash
         run: |
           mkdir -p "$HOME/.local/bin"
+          TS_VERSION=$(python3 tools/config_values.py --get tree_sitter_cli_version)
           curl -fsSL -o tree-sitter-cli.zip \
-            "https://github.com/tree-sitter/tree-sitter/releases/download/v${{ needs.load-config.outputs.tree_sitter_cli_version }}/tree-sitter-cli-linux-x64.zip"
+            "https://github.com/tree-sitter/tree-sitter/releases/download/v${TS_VERSION}/tree-sitter-cli-linux-x64.zip"
           unzip -o tree-sitter-cli.zip -d "$HOME/.local/bin" tree-sitter
           rm tree-sitter-cli.zip
           tree-sitter --version
@@ -245,7 +198,6 @@ jobs:
   # nothing about timing, and it used to run in all ten matrix entries,
   # which is ten times the cost for one answer.
   benchmarks:
-    needs: [load-config]
     name: Benchmark Harness
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -261,7 +213,6 @@ jobs:
         with:
           nix: "false"
           os: Linux
-          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
       - name: Build All
         shell: bash
@@ -276,7 +227,6 @@ jobs:
   # artifacts are all recognised is the pass, and a fresh crash fails
   # the job with the bytes libFuzzer minimised it to.
   fuzz:
-    needs: [load-config]
     name: Fuzz Smoke
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -292,7 +242,6 @@ jobs:
         with:
           nix: "false"
           os: Linux
-          llvm-version: ${{ needs.load-config.outputs.llvm_toolchain_version }}
 
       - name: Build and Run the Fuzz Targets
         shell: bash
