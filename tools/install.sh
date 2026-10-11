@@ -23,6 +23,7 @@ uv run "$tools_dir/build.py" \
 executable_name="alcy"
 build_artifact="$root_dir/out/$release_subdir/$executable_name"
 install_destination="$HOME/.local/bin/$executable_name"
+mkdir -p "$(dirname "$install_destination")"
 cp "$build_artifact" "$install_destination"
 
 echo "Installed successfully to $install_destination"
