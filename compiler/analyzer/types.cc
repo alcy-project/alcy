@@ -3024,10 +3024,16 @@ bool Checker::check_intrinsic_signature(u32 module,
                     same(slice.element, pointee(params[0])) && kinds_match);
   }
   if (name == "memcopy") {
-    expected.push_back(builder.reference_type(u8, true));
-    expected.push_back(builder.reference_type(u8, false));
-    expected.push_back(usize_ty);
-  } else if (name == "panic") {
+    // `memcopy<T>(dst: &mut T, src: &T, n: usize)`: the pointees are one
+    // storage type, so a buffer of any element or `MaybeUninit` slot
+    // crosses while the copy still reads bytes.
+    return or_wrong(params.size() == 3 && is_usize(params[2]) &&
+                    builder.types()[params[0].idx].tag == ir::TypeTag::MutRef &&
+                    builder.types()[params[1].idx].tag == ir::TypeTag::Ref &&
+                    same(pointee(params[0]), pointee(params[1])) &&
+                    builder.types()[ret.idx].tag == ir::TypeTag::Void);
+  }
+  if (name == "panic") {
     expected.push_back(str);
     expected_ret = builder.never_type();
   } else if (name == "str_len") {

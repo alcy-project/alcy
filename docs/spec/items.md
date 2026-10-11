@@ -57,7 +57,8 @@
   free functions may be intrinsic; `intrinsic` methods are rejected.
 - The compiler knows a closed set, enumerated here. Declaring any
   other name is a compile-time error:
-  - `memcopy(dst: &mut u8, src: &u8, n: usize)` copies `n` bytes.
+  - `memcopy<T>(dst: &mut T, src: &T, n: usize)` copies `n` bytes
+    between two buffers of one storage type.
   - `panic(msg: str)` diverges through the runtime abort.
   - `sys_write(fd: i32, buf: str)` writes `buf` to the file
     descriptor. User code cannot name file descriptors portably, so

@@ -46,26 +46,52 @@ impl String {
     self.len = self.len + 1
   }
 
-  // Appends every byte of `s`, growing as needed.
+  // Appends every byte of `s`, growing once for the whole run.
   pub fn push_str(mut self: &mut Self, s: str) {
+    n := str_len(s)
+    self.reserve(n)
     mut i := 0 as usize
-    while i < str_len(s) {
-      self.push(str_byte(s, i))
+    while i < n {
+      unsafe {
+        uninit_write(elem_ptr(self.buf, self.len + i), str_byte(s, i))
+      }
       i = i + 1
     }
+    self.len = self.len + n
   }
 
-  // Moves to a block twice the room, or to a first block of four.
+  // Reserves room for `extra` more bytes.
+  fn reserve(mut self: &mut Self, extra: usize) {
+    needed := self.len + extra
+    if needed < self.len {
+      panic("capacity overflow")
+    }
+    if needed <= self.cap {
+      ret
+    }
+    mut next := doubled_capacity(self.cap)
+    if next < needed {
+      next = needed
+    }
+    fresh := unsafe { alloc::<u8>(next) }
+    unsafe {
+      memcopy(elem_ptr(fresh, 0), elem_ref(self.buf, 0), self.len)
+    }
+    unsafe { dealloc(self.buf, self.cap) }
+    self.buf = fresh
+    self.cap = next
+  }
+
+  // Moves to a block twice the room, or to a first block of four. The
+  // initialized prefix crosses as one byte copy.
   fn grow(mut self: &mut Self) {
     mut next := doubled_capacity(self.cap)
     if self.cap == 0 {
       next = 4
     }
     fresh := unsafe { alloc::<u8>(next) }
-    mut i := 0 as usize
-    while i < self.len {
-      unsafe { uninit_write(elem_ptr(fresh, i), *uninit_assume(elem_ptr(self.buf, i))) }
-      i = i + 1
+    unsafe {
+      memcopy(elem_ptr(fresh, 0), elem_ref(self.buf, 0), self.len)
     }
     unsafe { dealloc(self.buf, self.cap) }
     self.buf = fresh

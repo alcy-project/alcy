@@ -56,16 +56,20 @@ impl<T> Vec<T> {
   // Moves to a block twice the room, or to a first block of four.
   // Elements are moved to the new buffer, so a `T` carrying a
   // destructor does not get one run for them; see docs/spec/deferred.md.
+  // The move is one byte copy of the initialized prefix: every element
+  // crosses once and its destructor belongs to the destination.
   fn grow(mut self: &mut Self) {
     mut next := doubled_capacity(self.cap)
     if self.cap == 0 {
       next = 4
     }
     fresh := unsafe { alloc::<T>(next) }
-    mut i := 0 as usize
-    while i < self.len {
-      unsafe { uninit_write(elem_ptr(fresh, i), *uninit_assume(elem_ptr(self.buf, i))) }
-      i = i + 1
+    unsafe {
+      memcopy(
+        elem_ptr(fresh, 0),
+        elem_ref(self.buf, 0),
+        self.len * size_of::<T>(),
+      )
     }
     unsafe { dealloc(self.buf, self.cap) }
     self.buf = fresh

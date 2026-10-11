@@ -31,6 +31,13 @@ replaced. The foundations are in `roadmap.md`.
   the tool rather than the missing entry.
 - [ ] `alcy check --file /dev/stdin` (any non-regular, zero-length input)
   reports success without reading the pipe; `compile --stdin` reads it.
+- [ ] Container destructors do not end their elements. `Vec`'s and
+  `Map`'s `drop` release the buffer and never run an element's
+  destructor, so a one-element `Vec<String>` leaks that string's
+  block (LeakSanitizer reports 4 bytes). The fix needs an
+  element-ending walk, either in the container's own `drop` once the
+  language can end a moved-out value, or as compiler glue over a
+  container's elements.
 - [ ] Index the side tables the proportionality work left behind. Most
   landed (ADR-0046); the tail is `expr_types` in both readers, the
   per-module closure, closure-fn, and indirect-call tables,
