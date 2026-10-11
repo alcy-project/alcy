@@ -53,23 +53,53 @@ BASELINE = "lint"
 BUDGET = 1.2
 
 # (label, argv) in the order `check.sh` runs them, so the report reads as
-# the gate's own ordering rather than as a sorted table. `fuzz` is not
-# here: it is a development tool (ADR-0017), corpus-dependent, and would
-# neither compare nor finish in a gate's time.
+# the gate's own ordering rather than as a sorted table. The TOML,
+# Markdown, rule and Python checks are seconds each and live inside
+# `format` and `lint` here, which is where `check.sh` reaches them too.
+# `fuzz` is not here: it is corpus-dependent development tooling
+# (ADR-0017), asked in CI as a bounded smoke rather than a gate this
+# report ranks.
 GATES = [
     ("typos", ["typos"]),
-    ("format", ["uv", "run", "./tools/format.py", "--dry-run"]),
-    ("check_spec", ["uv", "run", "./tools/check_spec.py"]),
-    ("grammar", ["uv", "run", "./tools/check_treesitter.py", "--grammar"]),
-    ("lint", ["uv", "run", "./tools/lint.py"]),
     (
         "tests",
         ["uv", "run", "./tools/run.py", "--target=tests", "--build-subdir=build"],
+    ),
+    (
+        "tests release",
+        [
+            "uv",
+            "run",
+            "./tools/run.py",
+            "--target=tests",
+            "--mode=release",
+            "--build-subdir=build_release",
+        ],
+    ),
+    (
+        "e2e release",
+        ["uv", "run", "./tools/check_e2e.py", "--build-subdir=build_release"],
+    ),
+    (
+        "exe release",
+        ["uv", "run", "./tools/check_exe.py", "--build-subdir=build_release"],
     ),
     ("e2e", ["uv", "run", "./tools/check_e2e.py", "--build-subdir=build"]),
     (
         "borrow_rules",
         ["uv", "run", "./tools/check_borrow_rules.py", "--build-subdir=build"],
+    ),
+    ("check_spec", ["uv", "run", "./tools/check_spec.py"]),
+    ("grammar", ["uv", "run", "./tools/check_treesitter.py", "--grammar"]),
+    (
+        "grammar vs compiler",
+        [
+            "uv",
+            "run",
+            "./tools/check_treesitter.py",
+            "--differential",
+            "--build-subdir=build",
+        ],
     ),
     ("exe", ["uv", "run", "./tools/check_exe.py", "--build-subdir=build"]),
     (
@@ -83,27 +113,43 @@ GATES = [
         ],
     ),
     (
+        "benchmark smoke",
+        ["uv", "run", "./tools/run_benchmarks.py", "smoke", "--build-subdir=build"],
+    ),
+    (
         "exe sanitized",
         ["uv", "run", "./tools/check_exe.py", "--build-subdir=build", "--sanitize"],
     ),
+    ("format", ["uv", "run", "./tools/format.py", "--dry-run"]),
+    ("lint", ["uv", "run", "./tools/lint.py"]),
+    ("coverage", ["uv", "run", "./tools/check_coverage.py"]),
     (
         "static_linkage",
         ["uv", "run", "./tools/verify_static_linkage.py", "--build-dir=out/build"],
     ),
     (
-        "grammar vs compiler",
+        "wasm tests",
         [
             "uv",
             "run",
-            "./tools/check_treesitter.py",
-            "--differential",
-            "--build-subdir=build",
+            "./tools/run.py",
+            "--target=tests",
+            "--build-subdir=build_wasm",
+            "--target-os=emscripten",
         ],
     ),
-    ("coverage", ["uv", "run", "./tools/check_coverage.py"]),
     (
-        "benchmark smoke",
-        ["uv", "run", "./tools/run_benchmarks.py", "smoke", "--build-subdir=build"],
+        "wasm acceptance",
+        ["uv", "run", "./tools/check_wasm.py", "--build-subdir=build"],
+    ),
+    (
+        "playground smoke",
+        [
+            "uv",
+            "run",
+            "./tools/check_playground.py",
+            "--build-subdir=build_wasm_playground",
+        ],
     ),
 ]
 
@@ -125,7 +171,6 @@ def machine() -> dict:
 # would read as a fast gate rather than as no gate.
 NEEDS_TOOL = {
     "typos": ("typos", "typos is not on PATH"),
-    "fuzz": ("clang", "clang is not on PATH, and the fuzz targets need it"),
     "coverage": ("llvm-cov", "llvm-cov is not on PATH"),
     "exe sanitized": (
         "clang",
@@ -138,6 +183,18 @@ NEEDS_TOOL = {
     "grammar vs compiler": (
         "tree-sitter",
         "tree-sitter is not on PATH, and the grammar check refuses without it",
+    ),
+    "wasm tests": (
+        "emcc",
+        "emcc is not on PATH, and the emscripten build refuses without it",
+    ),
+    "wasm acceptance": (
+        "bun",
+        "bun is not on PATH, and the wasm acceptance refuses without it",
+    ),
+    "playground smoke": (
+        "bun",
+        "bun is not on PATH, and the playground smoke refuses without it",
     ),
 }
 
