@@ -76,6 +76,9 @@ enum class DiagCode : u8 {
   // A release build asked for an IR form, and no IR form is optimized;
   // the output would be silently unoptimized otherwise.
   IrNoOptimizer = 21,
+  // The command line named a profile neither built in nor declared by
+  // the goal package's .alcy/profile.toml.
+  UnknownProfile = 22,
 };
 
 }  // namespace pipeline

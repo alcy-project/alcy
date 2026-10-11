@@ -13,6 +13,8 @@
 #include "i18n/language.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/link_options.h"
+#include "pipeline/pipeline_context.h"
+#include "pipeline/profile.h"
 #include "pipeline/vcs.h"
 #include "pkg/toolchain.h"
 
@@ -38,7 +40,16 @@ struct CliConfig {
   // on different machines.
   i18n::Language language = i18n::Language::EnUs;
   Subcommand subcommand = Subcommand::None;
+  // The build profile this invocation selects: `debug` when nothing
+  // named another, and `release` when `--release` did. Borrows argv
+  // storage like target_dir.
+  std::string_view profile = pipeline::DEFAULT_PROFILE_NAME;
+  // Whether `--release` was given. It selects the release profile, and
+  // validation refuses it beside an explicit `--profile`.
   bool release = false;
+  // Whether `--profile` was named explicitly, which `--release` must
+  // not silently stand in for.
+  bool profile_given = false;
   // First positional, read as each subcommand's target (empty when
   // absent; the cli substitutes "."). Borrows argv storage, so a config
   // must not outlive the argument vector it was parsed from.
@@ -104,5 +115,13 @@ struct CliConfig {
 // no file passes.
 pipeline::LinkOptions resolve_link_options(const CliConfig& config,
                                            const pkg::Toolchain& tool);
+
+// Sets the backend this invocation uses: the one it named, or the first
+// that serves the mode's output kind and the resolved profile's
+// optimization. The profile is what decides whether a backend with no
+// optimizer is acceptable, so this runs once the profile is resolved.
+void resolve_backend_options(const CliConfig& config,
+                             pipeline::PipelineContext& ctx,
+                             const pipeline::BuildProfile& profile);
 
 }  // namespace cli

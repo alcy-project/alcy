@@ -16,10 +16,11 @@ An expect.toml file declares the outcome:
 
 `exit` is required (integer value or "non-zero"); `contains` lines must
 all appear in the combined output, `not_contains` lines must all be absent.
-An optional `args` list is inserted before the selected subcommand, and an
-optional `env` table sets environment variables for the run. A `build` case
-gets `-o` pointed at a scratch path unless it sets `default_output = true`,
-which keeps the compiler's own placement.
+An optional `args` list is inserted after the selected subcommand, so a
+case can name the subcommand's own flags as well as the global ones, and
+an optional `env` table sets environment variables for the run. A `build`
+case gets `-o` pointed at a scratch path unless it sets
+`default_output = true`, which keeps the compiler's own placement.
 """
 
 import argparse
@@ -100,18 +101,23 @@ def run_case(alcy: Path, case_dir: Path):
     # starts from the environment it inherits with the table applied.
     process_env = run_environment(env)
     if (case_dir / "alcy.toml").is_file():
-        argv = [str(alcy), *extra_args, subcommand, "."]
+        argv = [str(alcy), subcommand, *extra_args, "."]
         cwd = case_dir
     elif (case_dir / "main.al").is_file():
         # Single files name their verb explicitly: `check` takes --file
         # and `build` is spelled `compile`.
         if subcommand == "build":
-            argv = [str(alcy), *extra_args, "compile", str(case_dir / "main.al")]
+            argv = [
+                str(alcy),
+                "compile",
+                *extra_args,
+                str(case_dir / "main.al"),
+            ]
         else:
             argv = [
                 str(alcy),
-                *extra_args,
                 subcommand,
+                *extra_args,
                 "--file",
                 str(case_dir / "main.al"),
             ]

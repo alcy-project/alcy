@@ -40,6 +40,19 @@ TEST_CASE("Config validation accepts a plain command config") {
   CHECK(validate_cli_config(config).is_ok());
 }
 
+TEST_CASE("Config validation refuses release beside a profile") {
+  CliConfig config{};
+  config.subcommand = Subcommand::Build;
+  config.profile = "fast";
+  config.profile_given = true;
+  config.release = true;
+  CHECK(validate_cli_config(config).is_err());
+  CHECK(describe_config_error(ConfigError::ReleaseWithProfile,
+                              i18n::Language::EnUs) ==
+        "`--release` is the same as `--profile release`; give one or the "
+        "other");
+}
+
 TEST_CASE("Config validation splits files from packages") {
   CliConfig build{};
   build.subcommand = Subcommand::Build;

@@ -5,9 +5,12 @@ source_set("pkg") {
   sources = [
     "arena_copy.cc",
     "arena_copy.h",
+    "config.h",
     "diag_code.h",
     "manifest.cc",
     "manifest.h",
+    "profile.cc",
+    "profile.h",
     "toolchain.cc",
     "toolchain.h",
     "version.cc",

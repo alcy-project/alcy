@@ -27,6 +27,8 @@ enum class DiagCode : u8 {
   ManifestSemanticError = 2,
   ToolchainSyntaxError = 3,
   ToolchainSemanticError = 4,
+  ProfileSyntaxError = 5,
+  ProfileSemanticError = 6,
 };
 
 }  // namespace pkg

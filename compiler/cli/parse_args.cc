@@ -75,6 +75,15 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
     c.subcommand = Subcommand::Check;
   }
   c.release = matches.get<bool>("release").unwrap_or(false);
+  // `--release` selects the release profile; `--profile` names a profile
+  // explicitly. Validation refuses the two together rather than letting
+  // one silently stand in for the other.
+  c.profile_given = matches.has("profile");
+  if (c.profile_given) {
+    c.profile = matches.get<std::string_view>("profile").unwrap_or(c.profile);
+  } else if (c.release) {
+    c.profile = "release";
+  }
   // The choices above already rejected anything else, so an unknown value
   // here means the default, not an error to report a second time.
   c.stdin_source = matches.get<bool>("stdin").unwrap_or(false);
@@ -233,6 +242,10 @@ arg::Parser build_parser(i18n::Language language) {
                        .help(usage.text(i18n::Key::CliReleaseHelp))
                        .is_flag(true)
                        .build())
+          .add_arg(arg::ArgBuilder("profile")
+                       .help(usage.text(i18n::Key::CliProfileHelp))
+                       .value_name("NAME")
+                       .build())
           .add_arg(arg::ArgBuilder("output")
                        .short_name('o')
                        .help(usage.text(i18n::Key::CliBuildOutputHelp))
@@ -269,6 +282,10 @@ arg::Parser build_parser(i18n::Language language) {
           .add_arg(arg::ArgBuilder("release")
                        .help(usage.text(i18n::Key::CliReleaseHelp))
                        .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("profile")
+                       .help(usage.text(i18n::Key::CliProfileHelp))
+                       .value_name("NAME")
                        .build())
           .add_arg(arg::ArgBuilder("output")
                        .short_name('o')
@@ -317,6 +334,10 @@ arg::Parser build_parser(i18n::Language language) {
           .add_arg(arg::ArgBuilder("release")
                        .help(usage.text(i18n::Key::CliReleaseHelp))
                        .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("profile")
+                       .help(usage.text(i18n::Key::CliProfileHelp))
+                       .value_name("NAME")
                        .build())
           .add_arg(arg::ArgBuilder("linker")
                        .help(usage.text(i18n::Key::CliLinkerOverrideHelp))

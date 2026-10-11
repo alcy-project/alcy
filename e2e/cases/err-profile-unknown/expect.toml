@@ -1,0 +1,7 @@
+# A profile name the goal package does not declare is refused once the
+# profile file has been consulted; neither built-in goes by that name,
+# and .alcy/profile.toml is where the rest are declared.
+exit = "non-zero"
+args = ["--profile", "nope"]
+subcommand = "build"
+contains = ["Unknown profile 'nope'"]

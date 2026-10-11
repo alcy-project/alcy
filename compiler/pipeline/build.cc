@@ -36,6 +36,7 @@
 #include "pipeline/frontend.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/profile.h"
 #include "pipeline/spawn.h"
 #include "pipeline/std_select.h"
 #include "pipeline/target.h"
@@ -203,7 +204,7 @@ base::Result<void, diag::Reported> write_output(PipelineContext& ctx,
 base::Result<void, diag::Reported> emit_package_output(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
-    bool optimize,
+    BuildProfile profile,
     const std::string& output_path,
     bool is_lib,
     codegen::OutputKind kind,
@@ -250,7 +251,7 @@ base::Result<void, diag::Reported> emit_package_output(
       .target = ctx.target,
       .emit_entry = !is_lib,
       .freestanding = ctx.freestanding,
-      .optimize = optimize,
+      .optimize = profile.optimize,
       .kind = kind,
       .profiler = ctx.profiler,
   };
@@ -266,23 +267,23 @@ base::Result<void, diag::Reported> emit_package_output(
 base::Result<void, diag::Reported> emit_package_object(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
-    bool optimize,
+    BuildProfile profile,
     const std::string& output_path,
     bool is_lib) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-object",
                                            "backend");
-  return emit_package_output(ctx, package, optimize, output_path, is_lib,
+  return emit_package_output(ctx, package, profile, output_path, is_lib,
                              codegen::OutputKind::Object, "object");
 }
 
 base::Result<void, diag::Reported> emit_package_ir(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
-    bool optimize,
+    BuildProfile profile,
     const std::string& output_path,
     bool is_lib) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-ir", "backend");
-  return emit_package_output(ctx, package, optimize, output_path, is_lib,
+  return emit_package_output(ctx, package, profile, output_path, is_lib,
                              codegen::OutputKind::Text, "ir");
 }
 
@@ -317,10 +318,10 @@ struct IrWriteInput {
   }
 };
 
-// No IR form is optimized, so a release build is refused rather than
-// answered with an unoptimized dump.
-base::Result<void, diag::Reported> refuse_ir_release(PipelineContext& ctx,
-                                                     std::string_view mode) {
+// No IR form is optimized, so a profile that optimizes is refused
+// rather than answered with an unoptimized dump.
+base::Result<void, diag::Reported> refuse_ir_optimized(PipelineContext& ctx,
+                                                       std::string_view mode) {
   const u32 index = ctx.bag.emit<i18n::Key::PipelineIrNotOptimized>(
       diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IrNoOptimizer,
       mode);
@@ -334,11 +335,11 @@ base::Result<void, diag::Reported> refuse_ir_release(PipelineContext& ctx,
 base::Result<void, diag::Reported> emit_package_ir_text(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
-    bool optimize,
+    BuildProfile profile,
     const std::string& output_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "dump-ir", "backend");
-  if (optimize) {
-    return refuse_ir_release(ctx, "ir");
+  if (profile.optimize) {
+    return refuse_ir_optimized(ctx, "ir");
   }
   IrWriteInput write_input(ctx, package);
   const std::string text = ir::write_text(write_input.input);
@@ -351,12 +352,12 @@ base::Result<void, diag::Reported> emit_package_ir_text(
 base::Result<void, diag::Reported> emit_package_ir_binary(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
-    bool optimize,
+    BuildProfile profile,
     const std::string& output_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-ir-bc",
                                            "backend");
-  if (optimize) {
-    return refuse_ir_release(ctx, "ir-bc");
+  if (profile.optimize) {
+    return refuse_ir_optimized(ctx, "ir-bc");
   }
   IrWriteInput write_input(ctx, package);
   const std::vector<u8> bytes = ir::serialize(write_input.input);
@@ -366,24 +367,24 @@ base::Result<void, diag::Reported> emit_package_ir_binary(
 base::Result<void, diag::Reported> emit_package_bitcode(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
-    bool optimize,
+    BuildProfile profile,
     const std::string& output_path,
     bool is_lib) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-bitcode",
                                            "backend");
-  return emit_package_output(ctx, package, optimize, output_path, is_lib,
+  return emit_package_output(ctx, package, profile, output_path, is_lib,
                              codegen::OutputKind::Bitcode, "bitcode");
 }
 
 base::Result<void, diag::Reported> emit_package_module(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
-    bool optimize,
+    BuildProfile profile,
     const std::string& output_path,
     bool is_lib) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-wasm",
                                            "backend");
-  return emit_package_output(ctx, package, optimize, output_path, is_lib,
+  return emit_package_output(ctx, package, profile, output_path, is_lib,
                              codegen::OutputKind::Module, "module");
 }
 
@@ -443,7 +444,7 @@ base::Result<void, diag::Reported> link_executable(
 base::Result<std::string, diag::Reported> emit_output(
     PipelineContext& ctx,
     lowering::LoweredPackage& lowered,
-    bool optimize,
+    BuildProfile profile,
     LinkOptions link,
     EmitMode mode,
     const std::string& output_path,
@@ -469,25 +470,25 @@ base::Result<std::string, diag::Reported> emit_output(
   base::Result<void, diag::Reported> written =
       [&]() -> base::Result<void, diag::Reported> {
     if (mode == EmitMode::Object) {
-      return emit_package_object(ctx, lowered, optimize, output_path, is_lib);
+      return emit_package_object(ctx, lowered, profile, output_path, is_lib);
     }
     if (mode == EmitMode::LlvmIr) {
-      return emit_package_ir(ctx, lowered, optimize, output_path, is_lib);
+      return emit_package_ir(ctx, lowered, profile, output_path, is_lib);
     }
     if (mode == EmitMode::LlvmBitcode) {
-      return emit_package_bitcode(ctx, lowered, optimize, output_path, is_lib);
+      return emit_package_bitcode(ctx, lowered, profile, output_path, is_lib);
     }
     if (mode == EmitMode::Ir) {
-      return emit_package_ir_text(ctx, lowered, optimize, output_path);
+      return emit_package_ir_text(ctx, lowered, profile, output_path);
     }
     if (mode == EmitMode::IrBinary) {
-      return emit_package_ir_binary(ctx, lowered, optimize, output_path);
+      return emit_package_ir_binary(ctx, lowered, profile, output_path);
     }
     // Executable: a backend that writes objects hands them to the linker;
     // one whose output is a final module writes that module and stops.
     if (!backend_supports(ctx.backend, codegen::OutputKind::Object,
                           ctx.target)) {
-      return emit_package_module(ctx, lowered, optimize, output_path, is_lib);
+      return emit_package_module(ctx, lowered, profile, output_path, is_lib);
     }
     if (ctx.target.is_wasm() && codegen::backend_available(ctx.backend) &&
         !backend_writes_final_module(ctx.backend, ctx.target)) {
@@ -504,7 +505,7 @@ base::Result<std::string, diag::Reported> emit_output(
     }
     io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
     const std::string object_path = scratch.join("main.o");
-    if (emit_package_object(ctx, lowered, optimize, object_path, is_lib)
+    if (emit_package_object(ctx, lowered, profile, object_path, is_lib)
             .is_err()) {
       return base::make_err(diag::Reported{});
     }
@@ -522,7 +523,7 @@ base::Result<std::string, diag::Reported> build_single_file(
     PipelineContext& ctx,
     std::string_view target,
     std::string_view output,
-    bool optimize,
+    BuildProfile profile,
     LinkOptions link,
     EmitMode mode,
     const StdSelection& selection) {
@@ -547,7 +548,7 @@ base::Result<std::string, diag::Reported> build_single_file(
     }
     output_path = std::move(derived).unwrap();
   }
-  return build_single_root(ctx, root, output_path, optimize, link, mode,
+  return build_single_root(ctx, root, output_path, profile, link, mode,
                            selection);
 }
 
@@ -555,7 +556,7 @@ base::Result<std::string, diag::Reported> build_single_root(
     PipelineContext& ctx,
     source::FileId root,
     std::string_view output,
-    bool optimize,
+    BuildProfile profile,
     LinkOptions link,
     EmitMode mode,
     const StdSelection& selection) {
@@ -570,7 +571,7 @@ base::Result<std::string, diag::Reported> build_single_root(
     return base::make_err(diag::Reported{});
   }
   lowering::LoweredPackage lowered = std::move(package).unwrap();
-  return emit_output(ctx, lowered, optimize, link, mode, std::string(output),
+  return emit_output(ctx, lowered, profile, link, mode, std::string(output),
                      false);
 }
 
@@ -580,7 +581,7 @@ base::Result<std::string, diag::Reported> build_package(
     source::FileId manifest_file,
     std::string_view manifest_name,
     std::string_view output,
-    bool optimize,
+    BuildProfile profile,
     LinkOptions link,
     EmitMode mode) {
   base::Result<std::vector<PackageTarget>, diag::Reported> targets =
@@ -664,7 +665,7 @@ base::Result<std::string, diag::Reported> build_package(
     }
     lowering::LoweredPackage lowered = std::move(package).unwrap();
     base::Result<std::string, diag::Reported> written =
-        emit_output(ctx, lowered, optimize, link, planned_target.mode,
+        emit_output(ctx, lowered, profile, link, planned_target.mode,
                     planned_target.path, target.is_lib);
     if (written.is_err() || ctx.bag.has_errors()) {
       failed = true;
@@ -690,7 +691,7 @@ base::Result<std::string, diag::Reported> build_suite(
     source::FileId manifest_file,
     std::string_view manifest_name,
     std::string_view output,
-    bool optimize,
+    BuildProfile profile,
     LinkOptions link,
     EmitMode mode) {
   const std::optional<std::string_view> bytes =
@@ -742,7 +743,7 @@ base::Result<std::string, diag::Reported> build_suite(
     ManifestProbe member = std::move(probe).unwrap();
     base::Result<std::string, diag::Reported> built =
         build_package(ctx, member.root, member.manifest, member.manifest_name,
-                      {}, optimize, link, mode);
+                      {}, profile, link, mode);
     if (built.is_err()) {
       return base::make_err(diag::Reported{});
     }

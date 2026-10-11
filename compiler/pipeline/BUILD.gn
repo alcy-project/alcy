@@ -88,6 +88,8 @@ source_set("pipeline") {
     "pipeline.h",
     "pipeline_context.cc",
     "pipeline_context.h",
+    "profile.cc",
+    "profile.h",
     "run.cc",
     "run.h",
     "spawn.cc",

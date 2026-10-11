@@ -38,6 +38,9 @@ enum class ConfigError : u8 {
   // `--json` reports a result a tool reads, and only the verbs that
   // produce one accept it.
   JsonWithoutResult,
+  // `--release` is the release profile under another name; naming both
+  // it and `--profile` leaves neither standing.
+  ReleaseWithProfile,
 };
 
 // Semantic validation of a parsed config, kept separate from grammar

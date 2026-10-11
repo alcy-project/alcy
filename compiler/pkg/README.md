@@ -20,6 +20,9 @@ does with them.
   conjunction); the requirements expand to bounds at parse time.
 - `toolchain` parses `.alcy/toolchain.toml`: which driver links a
   binary and what arguments it is given.
+- `profile` parses `.alcy/profile.toml`: the named build profiles the
+  goal package declares, and the keys that override the built-in
+  `debug` and `release` profiles (ADR-0062).
 
 Nothing here opens a file, walks a directory, or decides which sources
 are modules. The bytes are the caller's, which is what keeps the parser
@@ -29,7 +32,8 @@ testable without a filesystem:
   (`pipeline/select_modules`), because both are questions about what the
   run found rather than about the manifest;
 - loading a manifest or a toolchain file is `pipeline`
-  (`require_package_manifest`, `load_toolchain`).
+  (`require_package_manifest`, `load_toolchain`), and so is a profile
+  file (`load_profiles`).
 
 Path dependencies load from source (`pipeline/dependencies`):
 a build resolves the package it was pointed at and every path
@@ -58,6 +62,8 @@ fetcher that uses them.
 - `parse_version_req(text)` -> `base::Result<VersionReq, VersionReqError>`,
   with each wildcard already expanded to the bounds it stands for.
 - `parse_toolchain(bytes, bag)` -> `base::Result<Toolchain, diag::Reported>`.
+- `parse_profile(bytes, bag)` -> `base::Result<Profiles, diag::Reported>`,
+  the tables a profile file declares in file order.
 - `parse_dependency_flag(bag, arena, "alcy/std/core")` parses one
   dependency the way the manifest grammar would, for `--deps`.
 

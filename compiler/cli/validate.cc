@@ -18,6 +18,9 @@ base::Result<void, ConfigError> validate_cli_config(const CliConfig& config) {
   if (config.subcommand == Subcommand::None) {
     return base::make_err(ConfigError::MissingSubcommand);
   }
+  if (config.release && config.profile_given) {
+    return base::make_err(ConfigError::ReleaseWithProfile);
+  }
   if (!config.program_args.empty() && config.subcommand != Subcommand::Run) {
     return base::make_err(ConfigError::UnexpectedProgramArgs);
   }
@@ -79,6 +82,8 @@ std::string describe_config_error(ConfigError error, i18n::Language language) {
       return i18n::format<Key::CliDepsOnlyForCompile>(language);
     case ConfigError::JsonWithoutResult:
       return i18n::format<Key::CliJsonOnlyForResultVerbs>(language);
+    case ConfigError::ReleaseWithProfile:
+      return i18n::format<Key::CliReleaseWithProfile>(language);
   }
   return i18n::format<Key::CliInvalidConfiguration>(language);
 }

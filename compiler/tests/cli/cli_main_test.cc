@@ -653,15 +653,31 @@ bool write_toolchain(io::TempDir& dir,
   return write_all(dir, std::string(rel) + "/.alcy/toolchain.toml", text);
 }
 
-i32 run_build_on(io::TempDir& dir, std::string_view rel) {
+bool write_profile(io::TempDir& dir,
+                   std::string_view rel,
+                   std::string_view text) {
+  return write_all(dir, std::string(rel) + "/.alcy/profile.toml", text);
+}
+
+i32 run_build_with(io::TempDir& dir,
+                   std::string_view rel,
+                   std::span<const std::string_view> extra) {
   const std::string target = dir.join(rel);
-  std::vector<std::string> storage{"alcy", "build", target};
+  std::vector<std::string> storage{"alcy", "build"};
+  for (const std::string_view arg : extra) {
+    storage.emplace_back(arg);
+  }
+  storage.push_back(target);
   std::vector<char*> argv;
   argv.reserve(storage.size());
   for (std::string& arg : storage) {
     argv.push_back(arg.data());
   }
   return cli_main(static_cast<i32>(argv.size()), argv.data());
+}
+
+i32 run_build_on(io::TempDir& dir, std::string_view rel) {
+  return run_build_with(dir, rel, {});
 }
 
 #if ALCY_TEST_LINKS
@@ -719,6 +735,63 @@ TEST_CASE("Build links the arguments toolchain.toml names") {
   // does not have.
   SilencedOutput silenced;
   CHECK(run_build_on(dir, "proj") != 0);
+}
+
+TEST_CASE("Build reports a broken profile file") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_profile_bad_");
+  const bool setup = write_package(dir, "proj",
+                                   "fn main() -> i32 {\n"
+                                   "  ret 0\n"
+                                   "}\n") &&
+                     write_profile(dir, "proj", "[fast\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  // The file is parsed before anything is emitted, so the failure proves
+  // it was read rather than ignored.
+  SilencedOutput silenced;
+  CHECK(run_build_on(dir, "proj") != 0);
+}
+
+TEST_CASE("Build refuses a profile nothing declares") {
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_cli_build_profile_unknown_");
+  const bool setup = write_package(dir, "proj",
+                                   "fn main() -> i32 {\n"
+                                   "  ret 0\n"
+                                   "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  const std::string_view extra[] = {"--profile", "nope"};
+  SilencedOutput silenced;
+  CHECK(run_build_with(dir, "proj", extra) != 0);
+}
+
+TEST_CASE("Build accepts a profile the package declares") {
+#if !ALCY_TEST_LINKS
+  return;
+#endif
+#if !ALCY_BACKEND_LLVM
+  // An optimizing profile needs a backend that optimizes.
+  return;
+#endif
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_cli_build_profile_declared_");
+  const bool setup = write_package(dir, "proj",
+                                   "fn main() -> i32 {\n"
+                                   "  ret 0\n"
+                                   "}\n") &&
+                     write_profile(dir, "proj", "[fast]\noptimize = true\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  const std::string_view extra[] = {"--profile", "fast"};
+  SilencedOutput silenced;
+  CHECK(run_build_with(dir, "proj", extra) == 0);
 }
 
 TEST_CASE("A link argument flag replaces the file's list rather than join it") {

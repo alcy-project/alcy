@@ -331,6 +331,10 @@
   F(PkgDependencyTooManySources, "Manifest '{}': dependency '{}' names more than one source") \
   F(PkgDependencyUnknownField, "Manifest '{}': dependency '{}' has an unknown field '{}'") \
   F(PkgManifestInvalid, "Manifest '{}': {}") \
+  F(PkgProfileKeyNotTable, "Profile '{}': key '{}' is not a profile table") \
+  F(PkgProfileNotLoaded, "Profile '{}' is not a loaded file") \
+  F(PkgProfileOptimizeNotBool, "Profile '{}': optimize must be a bool") \
+  F(PkgProfileTomlSyntaxError, "Profile '{}': TOML syntax error: {}") \
   F(PkgSpecImplementDuplicate, "Manifest '{}': duplicate [spec] implement entry '{}'") \
   F(PkgSpecImplementNotStrings, "Manifest '{}': [spec] implement must be a list of strings") \
   F(PkgSpecSuiteOnlyDuplicate, "Manifest '{}': duplicate [spec] suite-only entry '{}'") \
@@ -343,7 +347,7 @@
   F(PkgToolchainNotLoaded, "Toolchain '{}' is not a loaded file") \
   F(PkgToolchainTomlSyntaxError, "Toolchain '{}': TOML syntax error: {}") \
   /* pipeline */ \
-  F(PipelineBackendNoOptimizer, "The '{}' backend does not optimize; build without --release") \
+  F(PipelineBackendNoOptimizer, "The '{}' backend does not optimize; build with a profile that does not") \
   F(PipelineBackendNotBuilt, "The '{}' backend is not part of this build of the compiler") \
   F(PipelineBackendUnsupported, "The '{}' backend cannot write this output") \
   F(PipelineBinTargetNotDiscovered, "Bin target '{}' was not discovered") \
@@ -388,7 +392,7 @@
   F(PipelineInvalidSourcePath, "Invalid source path for file") \
   F(PipelineInvalidSuiteName, "Invalid suite name '{}'; write <name> or <owner>/<name>") \
   F(PipelineInvalidTarget, "Invalid target '{}'") \
-  F(PipelineIrNotOptimized, "The '{}' output is written unoptimized; build without --release") \
+  F(PipelineIrNotOptimized, "The '{}' output is written unoptimized; build with a profile that does not optimize") \
   F(PipelineLibTargetNotDiscovered, "Lib target '{}' was not discovered") \
   F(PipelineLibTargetNotSelected, "Lib target '{}' is not in [modules]") \
   F(PipelineLinkFailed, "Linking '{}' failed") \
@@ -419,6 +423,7 @@
   F(PipelineSuiteHasMemberNamed, "Suite '{}' already has a member named '{}'") \
   F(PipelineTargetOutputsCollide, "Bin target '{}' and lib target '{}' both write to '{}'; name one of them") \
   F(PipelineNoBackend, "This build of the compiler has no code generation backend") \
+  F(PipelineUnknownProfile, "Unknown profile '{}'; the built-in profiles are debug and release, and .alcy/profile.toml defines the rest") \
   F(PipelineUnknownTarget, "Cannot build for target '{}'; the compiler was not built with that backend") \
   F(PipelineUnknownSourceFile, "Unknown file id for a source input") \
   F(PipelineWasmExecutableNeedsModule, "A wasm executable is one final module; the '{}' backend writes an object instead. Use --emit=object, or --backend=direct-wasm") \
@@ -463,8 +468,10 @@
   F(CliNoSubcommand, "No subcommand given") \
   F(CliPackageAddedToSuite, " (added to suite {})") \
   F(CliPackageCreatedAt, "'{}' in {}") \
+  F(CliProfileHelp, "Build profile to use: debug (the default), release, or one that .alcy/profile.toml defines.") \
   F(CliProgramArgsOnlyForRun, "Program arguments are only accepted by `run`") \
-  F(CliReleaseHelp, "Build with optimizations.") \
+  F(CliReleaseHelp, "Build with optimizations. The same as --profile release.") \
+  F(CliReleaseWithProfile, "`--release` is the same as `--profile release`; give one or the other") \
   F(CliRunAbout, "Build and run a package directory") \
   F(CliRunTakesDirectory, "The `run` command takes a package directory; use `compile` for a file") \
   F(CliStdinHelp, "Read the program from standard input instead of a file, and report against the name <stdin>. For an editor buffer that has never been saved.") \

@@ -22,6 +22,7 @@
 #include "pipeline/diag_code.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/profile.h"
 #include "pipeline/spawn.h"
 #include "pipeline/target.h"
 #include "source/source.h"
@@ -36,15 +37,14 @@ base::Result<RunOutcome, diag::Reported> link_and_run(
     PipelineContext& ctx,
     lowering::LoweredPackage& lowered,
     std::string_view target,
-    bool optimize,
+    BuildProfile profile,
     LinkOptions link,
     std::span<const std::string_view> args,
     AnnounceExec announce,
     const void* announce_ctx) {
   io::TempDir scratch = io::TempDir::create_unique("alcy_run_");
   const std::string object_path = scratch.join("main.o");
-  if (emit_package_object(ctx, lowered, optimize, object_path, false)
-          .is_err()) {
+  if (emit_package_object(ctx, lowered, profile, object_path, false).is_err()) {
     return base::make_err(diag::Reported{});
   }
   const std::string exe_path =
@@ -83,7 +83,7 @@ base::Result<RunOutcome, diag::Reported> run_package(
     const path::Path& root,
     source::FileId manifest_file,
     std::string_view manifest_name,
-    bool optimize,
+    BuildProfile profile,
     LinkOptions link,
     std::span<const std::string_view> args,
     AnnounceExec announce,
@@ -110,7 +110,7 @@ base::Result<RunOutcome, diag::Reported> run_package(
     return base::make_err(diag::Reported{});
   }
   lowering::LoweredPackage lowered = std::move(package).unwrap();
-  return link_and_run(ctx, lowered, bin.name, optimize, link, args, announce,
+  return link_and_run(ctx, lowered, bin.name, profile, link, args, announce,
                       announce_ctx);
 }
 

@@ -15,6 +15,7 @@
 #include "pipeline/emit_mode.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/profile.h"
 #include "pipeline/std_select.h"
 #include "source/source.h"
 
@@ -27,14 +28,14 @@ base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
     analyzer::ModuleTree tree);
 
 // Emits one relocatable object for a lowered package. The module is
-// built, runtime included, and, when `optimize` is set, put through the
-// O3 pipeline here rather than inside the emission, so that every
-// backend sees the same module. Write failures land in the bag; the
-// output's parent directory is the caller's to have made.
+// built, runtime included, and, when the profile optimizes it, put
+// through the O3 pipeline here rather than inside the emission, so that
+// every backend sees the same module. Write failures land in the bag;
+// the output's parent directory is the caller's to have made.
 base::Result<void, diag::Reported> emit_package_object(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
-    bool optimize,
+    BuildProfile profile,
     const std::string& output_path,
     bool is_lib);
 
@@ -43,7 +44,7 @@ base::Result<void, diag::Reported> emit_package_object(
 base::Result<void, diag::Reported> emit_package_ir(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
-    bool optimize,
+    BuildProfile profile,
     const std::string& output_path,
     bool is_lib);
 
@@ -52,7 +53,7 @@ base::Result<void, diag::Reported> emit_package_ir(
 base::Result<void, diag::Reported> emit_package_bitcode(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
-    bool optimize,
+    BuildProfile profile,
     const std::string& output_path,
     bool is_lib);
 
@@ -63,7 +64,7 @@ base::Result<void, diag::Reported> emit_package_bitcode(
 base::Result<void, diag::Reported> emit_package_module(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
-    bool optimize,
+    BuildProfile profile,
     const std::string& output_path,
     bool is_lib);
 
@@ -84,7 +85,7 @@ base::Result<void, diag::Reported> link_executable(
 base::Result<std::string, diag::Reported> emit_output(
     PipelineContext& ctx,
     lowering::LoweredPackage& lowered,
-    bool optimize,
+    BuildProfile profile,
     LinkOptions link,
     EmitMode mode,
     const std::string& output_path,
@@ -94,7 +95,7 @@ base::Result<std::string, diag::Reported> build_single_file(
     PipelineContext& ctx,
     std::string_view target,
     std::string_view output,
-    bool optimize,
+    BuildProfile profile,
     LinkOptions link,
     EmitMode mode,
     const StdSelection& selection);
@@ -106,7 +107,7 @@ base::Result<std::string, diag::Reported> build_single_root(
     PipelineContext& ctx,
     source::FileId root,
     std::string_view output,
-    bool optimize,
+    BuildProfile profile,
     LinkOptions link,
     EmitMode mode,
     const StdSelection& selection);
@@ -117,7 +118,7 @@ base::Result<std::string, diag::Reported> build_package(
     source::FileId manifest_file,
     std::string_view manifest_name,
     std::string_view output,
-    bool optimize,
+    BuildProfile profile,
     LinkOptions link,
     EmitMode mode);
 
@@ -131,7 +132,7 @@ base::Result<std::string, diag::Reported> build_suite(
     source::FileId manifest_file,
     std::string_view manifest_name,
     std::string_view output,
-    bool optimize,
+    BuildProfile profile,
     LinkOptions link,
     EmitMode mode);
 

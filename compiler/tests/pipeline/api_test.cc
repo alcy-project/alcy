@@ -18,6 +18,7 @@
 #include "pipeline/emit_mode.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/profile.h"
 #include "pipeline/spawn.h"
 #include "pipeline/std_select.h"
 #include "pipeline/std_stage.h"
@@ -67,8 +68,9 @@ TEST_CASE("Pipeline build produces object file") {
 
   const std::string obj_path = std::string(dir.path()) + "/main.o";
   auto res = pipeline::build_single_file(
-      ctx, dir.join("main.al"), obj_path, false, pipeline::LinkOptions{},
-      pipeline::EmitMode::Object, pipeline::full_std_selection());
+      ctx, dir.join("main.al"), obj_path, BuildProfile{},
+      pipeline::LinkOptions{}, pipeline::EmitMode::Object,
+      pipeline::full_std_selection());
   CHECK(res.is_ok());
 }
 
@@ -89,8 +91,9 @@ TEST_CASE("Pipeline build produces executable") {
   PipelineContext ctx{i18n::Language::EnUs};
   const std::string exe_path = std::string(dir.path()) + "/main_exe";
   auto res = pipeline::build_single_file(
-      ctx, dir.join("main.al"), exe_path, false, pipeline::LinkOptions{},
-      pipeline::EmitMode::Executable, pipeline::full_std_selection());
+      ctx, dir.join("main.al"), exe_path, BuildProfile{},
+      pipeline::LinkOptions{}, pipeline::EmitMode::Executable,
+      pipeline::full_std_selection());
   CHECK(res.is_ok());
 }
 
@@ -112,8 +115,9 @@ TEST_CASE("Pipeline release build produces a working executable") {
   const std::string exe_path =
       std::string(dir.path()) + "/main_exe" + std::string(exe_suffix());
   auto res = pipeline::build_single_file(
-      ctx, dir.join("main.al"), exe_path, true, pipeline::LinkOptions{},
-      pipeline::EmitMode::Executable, pipeline::full_std_selection());
+      ctx, dir.join("main.al"), exe_path, BuildProfile{.optimize = true},
+      pipeline::LinkOptions{}, pipeline::EmitMode::Executable,
+      pipeline::full_std_selection());
   CHECK(res.is_ok());
   if (res.is_err()) {
     return;
@@ -158,8 +162,9 @@ TEST_CASE("Release optimizes the textual IR, not only the object") {
        {std::pair{false, plain}, std::pair{true, released}}) {
     PipelineContext ctx{i18n::Language::EnUs};
     base::Result<std::string, diag::Reported> built = build_single_file(
-        ctx, dir.join("main.al"), target, optimize, pipeline::LinkOptions{},
-        pipeline::EmitMode::LlvmIr, pipeline::full_std_selection());
+        ctx, dir.join("main.al"), target, BuildProfile{.optimize = optimize},
+        pipeline::LinkOptions{}, pipeline::EmitMode::LlvmIr,
+        pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
 
@@ -235,7 +240,7 @@ TEST_CASE("A build creates the directory its output names") {
   }
   PipelineContext ctx{i18n::Language::EnUs};
   base::Result<std::string, diag::Reported> built = build_single_file(
-      ctx, dir.join("main.al"), out, false, pipeline::LinkOptions{},
+      ctx, dir.join("main.al"), out, BuildProfile{}, pipeline::LinkOptions{},
       pipeline::EmitMode::Executable, pipeline::full_std_selection());
   CHECK(built.is_ok());
   CHECK(io::is_file(out));
@@ -255,8 +260,9 @@ TEST_CASE("Pipeline build reports an unwritable object path") {
   // parent nor writing the object can succeed.
   const std::string bad_path = std::string(dir.path()) + "/blocker/main.o";
   auto res = pipeline::build_single_file(
-      ctx, dir.join("main.al"), bad_path, false, pipeline::LinkOptions{},
-      pipeline::EmitMode::Object, pipeline::full_std_selection());
+      ctx, dir.join("main.al"), bad_path, BuildProfile{},
+      pipeline::LinkOptions{}, pipeline::EmitMode::Object,
+      pipeline::full_std_selection());
   CHECK(res.is_err());
   CHECK(ctx.bag.has_errors());
 }

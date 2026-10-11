@@ -41,6 +41,7 @@
 #include "pipeline/std_select.h"
 #include "pipeline/std_stage.h"
 #include "pkg/arena_copy.h"
+#include "pkg/config.h"
 #include "pkg/manifest.h"
 #include "pkg/toolchain.h"
 #include "source/source.h"

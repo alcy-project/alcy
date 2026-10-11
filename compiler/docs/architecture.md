@@ -534,15 +534,16 @@ for testing the filesystem or writing an output artifact.
 - **Configuration layering**: each build dimension lives in exactly one
   place. The manifest (`alcy.toml`, versioned and shared) declares what
   is built: targets, dependencies, and package identity. `.alcy/` beside
-  it holds how the goal package is built on this machine (today the link
-  driver and its arguments in `toolchain.toml`); a dependency's `.alcy/`
-  is never read. CLI flags carry invocation-scoped, user-specific
+  it holds how the goal package is built on this machine: the link
+  driver and its arguments in `toolchain.toml`, and the named build
+  profiles in `profile.toml` (ADR-0062); a dependency's `.alcy/` is
+  never read. CLI flags carry invocation-scoped, user-specific
   configuration: presentation (`--color`, `--lang`, verbosity), local
-  paths, and parallelism.
-  Dimensions affecting outputs through a finite selection (such as the
-  debug/release mode) live on the CLI as part of the build identity;
-  option spaces are declared in the manifest while selection happens on
-  the CLI. No dimension is configured in both places without a
+  paths, parallelism, and the selection of a build profile, whose
+  individual keys a flag may override. A setting that changes what the
+  generated program means belongs to a profile, which is selected on
+  the CLI; settings that only choose an artifact or a machine are not
+  profile keys. No dimension is configured in both places without a
   documented precedence, and environment variables are never a
   behavioral input channel.
 

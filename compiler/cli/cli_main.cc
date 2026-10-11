@@ -26,7 +26,6 @@
 #include "cli/run_command.h"
 #include "cli/validate.h"
 #include "cli/version.h"
-#include "codegen/backend.h"
 #include "debug/fatal.h"
 #include "diag/diagnostic.h"
 #include "fpag/arg/parser.h"
@@ -34,7 +33,6 @@
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
 #include "i18n/language.h"
-#include "pipeline/backend_emit.h"
 #include "pipeline/pipeline_context.h"
 
 namespace cli {
@@ -156,14 +154,6 @@ i32 cli_main(i32 argc, char** argv) {
       // the IR binary's header carries it so a cache can reject a
       // mismatch.
       ctx.version = alcy_version();
-      // A command that named no backend takes one that serves the
-      // output kind and mode the command asked for.
-      ctx.backend = config.backend == codegen::Backend::None
-                        ? pipeline::select_backend(ctx.target,
-                                                   pipeline::output_kind_for(
-                                                       config.emit, ctx.target),
-                                                   config.release)
-                        : config.backend;
       Envelope envelope;
       envelope.command = command_name(config.subcommand);
       exit_code = dispatch(config, ctx, envelope);

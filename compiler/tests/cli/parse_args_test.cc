@@ -15,6 +15,7 @@
 #include "fpag/term/color_mode.h"
 #include "ir/type.h"
 #include "pipeline/emit_mode.h"
+#include "pipeline/profile.h"
 #include "pipeline/vcs.h"
 
 namespace cli {
@@ -43,6 +44,7 @@ TEST_CASE("Parse build subcommand") {
   CHECK(config == CliConfig{.time_trace = false,
                             .color_mode = term::ColorMode::Auto,
                             .subcommand = Subcommand::Build,
+                            .profile = "release",
                             .release = true,
                             .target_dir = "mydir",
                             .file = "",
@@ -52,6 +54,32 @@ TEST_CASE("Parse build subcommand") {
                             .program_args = {},
                             .no_std = false,
                             .deps = {}});
+}
+
+TEST_CASE("Parse profile flag") {
+  const std::string_view args[] = {"alcy", "build", "--profile", "fast",
+                                   "mydir"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.subcommand == Subcommand::Build);
+  CHECK(config.profile == "fast");
+  CHECK(config.profile_given);
+  CHECK(!config.release);
+}
+
+TEST_CASE("Parse without a profile flag means the default") {
+  const std::string_view args[] = {"alcy", "build", "mydir"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.profile == pipeline::DEFAULT_PROFILE_NAME);
+  CHECK(!config.profile_given);
+  CHECK(!config.release);
+}
+
+TEST_CASE("Parse release as the release profile") {
+  const std::string_view args[] = {"alcy", "compile", "--release", "main.al"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.profile == "release");
+  CHECK(config.release);
+  CHECK(!config.profile_given);
 }
 
 TEST_CASE("Parse compile standard library flags") {

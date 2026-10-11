@@ -23,8 +23,10 @@
 #include "pipeline/diag_code.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/profile.h"
 #include "pipeline/std_select.h"
 #include "pkg/manifest.h"
+#include "pkg/profile.h"
 #include "pkg/toolchain.h"
 #include "source/source.h"
 
@@ -104,6 +106,18 @@ ResultCode run_compile(const CliConfig& config,
   // docs/adr/0019-goal-config-in-dot-alcy.md.
   const pipeline::LinkOptions link =
       resolve_link_options(config, pkg::Toolchain{});
+  // The same rule for profiles: `--profile` selects a built-in one and
+  // no file is read, so a name only the goal package could declare is
+  // unknown here.
+  base::Result<pipeline::BuildProfile, diag::Reported> resolved =
+      pipeline::resolve_profile(
+          pipeline::ProfileRequest{.name = config.profile}, pkg::Profiles{},
+          ctx.bag);
+  if (resolved.is_err()) {
+    return failed;
+  }
+  const pipeline::BuildProfile profile = std::move(resolved).unwrap();
+  resolve_backend_options(config, ctx, profile);
   // Validation guarantees one of these: a target, or the pipe with a
   // named output.
   if (config.stdin_source) {
@@ -120,7 +134,7 @@ ResultCode run_compile(const CliConfig& config,
     const source::FileId root =
         ctx.sources.add_virtual(STDIN_NAME, std::move(text).unwrap());
     base::Result<std::string, diag::Reported> res = pipeline::build_single_root(
-        ctx, root, config.output, config.release, link, config.emit, selection);
+        ctx, root, config.output, profile, link, config.emit, selection);
     envelope.trace = trace.take_events();
     if (res.is_err() || ctx.bag.has_errors()) {
       return failed;
@@ -133,7 +147,7 @@ ResultCode run_compile(const CliConfig& config,
 
   base::Result<std::string, diag::Reported> res =
       pipeline::build_single_file(ctx, config.target_dir, config.output,
-                                  config.release, link, config.emit, selection);
+                                  profile, link, config.emit, selection);
   envelope.trace = trace.take_events();
   if (res.is_err() || ctx.bag.has_errors()) {
     return failed;
