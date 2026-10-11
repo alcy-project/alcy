@@ -144,15 +144,25 @@ body.site {
   flex-wrap: wrap;
 }
 
-.site-nav a {
+.site-nav a,
+.site-nav .site-search-open {
   color: var(--fg-soft);
   font-size: 13px;
   text-decoration: none;
 }
 
-.site-nav a:hover {
+.site-nav a:hover,
+.site-nav .site-search-open:hover {
   color: var(--fg);
   text-decoration: underline;
+}
+
+.site-nav .site-search-open {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
 }
 
 .site-nav a[aria-current="page"] {
@@ -635,4 +645,67 @@ body.site {
 :root[data-theme="dark"] .hl-property,
 :root[data-theme="dark"] .hl-namespace {
   color: #6fc0cf;
+}
+
+/* The search dialog: one field, one list, opened by the header's
+   button, the slash key, or Ctrl/Cmd-K. */
+
+.site-search {
+  position: fixed;
+  top: 12vh;
+  margin: 0 auto;
+  min-width: min(520px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.22);
+}
+
+.site-search::backdrop {
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.site-search input {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+}
+
+.site-search input:focus {
+  outline: none;
+}
+
+.site-search ol {
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.site-search li a,
+.site-search li.site-search-none {
+  display: block;
+  padding: 7px 14px;
+  color: var(--fg-soft);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.site-search li a:hover {
+  background: var(--bg-soft);
+  color: var(--fg);
+}
+
+.site-search li.site-search-none {
+  color: var(--fg-faint);
 }

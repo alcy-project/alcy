@@ -64,6 +64,7 @@ function header(route: string, language: Language, treePath: string): string {
       <nav class="site-nav">
         <a href="${home}guide/" aria-current="page">${t("site.guide")}</a>
         <a href="${home}playground/">${t("site.playground")}</a>
+        <button type="button" class="site-search-open" data-action="search">${t("site.search")}</button>
       </nav>
       ${settings}
     </header>`;

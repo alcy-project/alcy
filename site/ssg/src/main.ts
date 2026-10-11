@@ -35,7 +35,7 @@ import type { Highlighter } from "./highlight.js";
 import { otherLanguages, prefixOf } from "./languages.js";
 import type { Language } from "./languages.js";
 import { createLinkChecker } from "./links.js";
-import { renderGuideIndex, renderGuidePage, renderNotFound } from "./render.js";
+import { renderGuideIndex, renderGuidePage, renderNotFound, sectionsOf } from "./render.js";
 import { renderSettings } from "./shell.js";
 import { stampTemplate } from "./templates.js";
 import type { TemplateValues } from "./templates.js";
@@ -256,6 +256,22 @@ function writeSiteRootFiles(options: Options, pages: readonly GuidePage[]): void
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
       `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
       `${entries}\n</urlset>\n`,
+  );
+  // The search index covers the trees' shared content once; the module
+  // that reads it resolves a route into the reader's own tree.
+  const guide = pages
+    .filter((page) => page.language === "en")
+    .map((page) => ({
+      route: page.route,
+      title: page.title,
+      sections: sectionsOf(page).map((section) => ({
+        id: section.id,
+        text: section.text,
+      })),
+    }));
+  writeFileSync(
+    join(options.dist, "search-index.json"),
+    JSON.stringify(guide, null, 2) + "\n",
   );
 }
 

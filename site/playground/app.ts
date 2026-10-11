@@ -6,6 +6,7 @@
 // modules next to this file.
 
 import { initThemeToggle, registerAssetWorker, t } from "../shared/site.js";
+import { initSearch } from "../shared/search.js";
 import { writeClipboard } from "../shared/clipboard.js";
 
 import { elements } from "./elements.js";
@@ -42,6 +43,7 @@ function onInput(): void {
 function init(): void {
   initThemeToggle(elements.theme);
   registerAssetWorker();
+  initSearch();
   splitter.initSplitter();
   tabs.initTabs();
   status.renderStatus();

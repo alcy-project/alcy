@@ -28,7 +28,9 @@ site is shaped this way.
   tree-sitter grammar the playground uses, fetched on the first Edit;
   Open hands the working copy to the playground through `handoff.ts`,
   and `compiler-client.ts` is the shared client for the playground's
-  two workers.
+  two workers. `search.ts` opens the guide's search dialog from the
+  header's button, `/`, or Ctrl/Cmd-K, over the index the generator
+  writes; a result links into the tree the reader is in.
 - `playground/` - the browser playground. Its `index.html` is a template
   too; the launch scripts resolve the page's assets against their own
   URL, so a page in another language's tree finds the one set of assets.
@@ -47,8 +49,10 @@ title, and the slug (number dropped) is the URL.
 The generator also writes the site's root files: `404.html`, whose links
 are written from the deployment root because GitHub Pages serves it
 under the path that was asked for; `sitemap.xml` and `robots.txt` from
-the page list; and the icon. Every page carries its own canonical
-address and the opposite language's alternate.
+the page list; `search-index.json`, the guide's pages and sections that
+`shared/search.ts` reads; `og.png`, the social card every page cites;
+and the icon. Every page carries its own canonical address and the
+opposite language's alternate.
 
 ## Languages
 
