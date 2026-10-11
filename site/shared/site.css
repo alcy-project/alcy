@@ -124,6 +124,9 @@ body.site {
   padding: 10px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-soft);
+  position: sticky;
+  top: 0;
+  z-index: 30;
 }
 
 .site-brand {
@@ -353,7 +356,7 @@ body.site {
 .guide-nav {
   align-self: start;
   position: sticky;
-  top: 16px;
+  top: 72px;
   font-size: 13px;
 }
 
@@ -481,8 +484,25 @@ body.site {
     padding-top: 20px;
   }
 
+  /* The chapter list becomes one wrapping row above the article
+     rather than a stack that pushes the reading down. */
   .guide-nav {
     position: static;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .guide-nav h2 {
+    margin: 0;
+  }
+
+  .guide-nav ol {
+    flex-direction: row;
+    gap: 2px 18px;
   }
 }
 
