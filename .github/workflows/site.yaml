@@ -12,9 +12,17 @@ on:
       - build/**
       - third_party/**
       - tools/**
+      - pyproject.toml
+      - uv.lock
       - config.toml
       - .github/workflows/site.yaml
       - .github/actions/**
+  # The site builds on the pull request too: a change that breaks the
+  # assembly or the generator's tests is one a merge should not have to
+  # discover.
+  pull_request:
+    branches: [main]
+    paths: *site_paths
   workflow_dispatch:
 
 permissions:
@@ -23,10 +31,12 @@ permissions:
   id-token: write
 
 # One deployment at a time; a queued run waits rather than cancels so the
-# site never lands in a half-published state.
+# site never lands in a half-published state. A pull request deploys
+# nothing, so it never joins that queue, and a newer push to the same
+# request cancels the run it superseded.
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: site-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # The compiler target the playground page calls: a C ABI with no LLVM,
@@ -140,6 +150,9 @@ jobs:
   deploy:
     name: Deploy
     needs: build
+    # A pull request builds the site and stops: only what landed on main
+    # is ever published.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     environment:
       name: github-pages
