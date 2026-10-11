@@ -81,7 +81,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   hello world names `core`, `fmt`, and `io`, or the whole suite.
   Designed in
   `docs/adr/0055-compile-time-variadics-and-print-in-io.md`.
-- [ ] Iterator and `Option` APIs.
+- [x] Iterator and `Option` APIs.
 
   `Option` gains `map`, `and_then`, `unwrap_or`, `or_else`,
   `filter`, and `ok_or`; iterator adapters (`map`, `filter`,
@@ -89,6 +89,6 @@ peripheral work lives in `backlog.md`. The language record lives in
   frame-bound: an adapter holds closures whose captures stay in the
   frame that made it, and an iterator that crosses frames waits for
   the owning environment in `deferred.md`. The compiler slice the
-  adapters need is a generic instantiation over a function type,
-  which today cannot be mangled apart (ADR-0044); `collect` and
-  generic constructors wait for spec bounds.
+  adapters need is a generic instantiation over a function type
+  (ADR-0044, amended); `collect` and generic constructors wait for
+  spec bounds.
