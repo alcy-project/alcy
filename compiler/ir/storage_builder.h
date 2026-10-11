@@ -5,6 +5,7 @@
 
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "debug/dcheck.h"
 #include "fpag/base/numeric.h"
@@ -238,22 +239,16 @@ class StorageBuilder {
   // arguments share one type index and type equality stays index
   // equality for the generic argument lists that hold them.
   TypeIdx const_type(u64 value) {
-    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
-         ++idx) {
-      const TypeNode& node = state_.types[idx];
-      if (node.tag != TypeTag::Const) {
-        continue;
-      }
-      const ConstTypeIdx cidx = node.data.get<ConstTypeIdx>();
-      if (cidx.idx < state_.const_types.size() &&
-          state_.const_types[cidx].value == value) {
-        return idx;
-      }
+    const auto found = const_by_value_.find(value);
+    if (found != const_by_value_.end()) {
+      return found->second;
     }
     TypeNode node{};
     node.tag = TypeTag::Const;
     node.data.set(state_.const_types.emplace_back(ConstType{.value = value}));
-    return state_.types.emplace_back(node);
+    const TypeIdx idx = state_.types.emplace_back(node);
+    const_by_value_.emplace(value, idx);
+    return idx;
   }
 
   // Structural interning: identical pointer shapes share one index, so type
@@ -290,26 +285,26 @@ class StorageBuilder {
 
  public:
   TypeIdx tuple_type(TypeIdxRange elements) {
-    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
-         ++idx) {
-      const TypeNode& node = state_.types[idx];
-      if (node.tag != TypeTag::Tuple) {
-        continue;
-      }
-      const TupleTypeIdx tidx = node.data.get<TupleTypeIdx>();
-      if (tidx.idx >= state_.tuple_types.size()) {
-        continue;
-      }
-      const TupleType& tuple = state_.tuple_types[tidx];
-      if (tuple.elements.size() != elements.size()) {
-        continue;
-      }
-      bool match = true;
-      for (u32 i = 0; match && i < elements.size(); ++i) {
-        match = tuple.elements[i].idx == elements[i].idx;
-      }
-      if (match) {
-        return idx;
+    const u64 key = elements_key(elements);
+    const auto found = tuple_by_key_.find(key);
+    if (found != tuple_by_key_.end()) {
+      for (const TypeIdx candidate : found->second) {
+        const TypeNode& node = state_.types[candidate];
+        const TupleTypeIdx tidx = node.data.get<TupleTypeIdx>();
+        if (tidx.idx >= state_.tuple_types.size()) {
+          continue;
+        }
+        const TupleType& tuple = state_.tuple_types[tidx];
+        if (tuple.elements.size() != elements.size()) {
+          continue;
+        }
+        bool match = true;
+        for (u32 i = 0; match && i < elements.size(); ++i) {
+          match = tuple.elements[i].idx == elements[i].idx;
+        }
+        if (match) {
+          return candidate;
+        }
       }
     }
     TypeNode node{};
@@ -318,7 +313,13 @@ class StorageBuilder {
     TupleType tuple;
     tuple.elements = elements;
     node.data.set(state_.tuple_types.emplace_back(tuple));
-    return state_.types.emplace_back(node);
+    const TypeIdx idx = state_.types.emplace_back(node);
+    if (found != tuple_by_key_.end()) {
+      found->second.push_back(idx);
+    } else {
+      tuple_by_key_.emplace(key, std::vector<TypeIdx>{idx});
+    }
+    return idx;
   }
 
   // Appends a function shape over `params` and `ret`. A signature does
@@ -440,6 +441,19 @@ class StorageBuilder {
   }
 
   // The interning table of a pointer kind, or null for every other tag.
+  // A tuple's elements as one key. The count leads so that a prefix cannot
+  // collide with the longer shape by construction, and the elements are
+  // combined in order; two shapes that still collide share a bucket and the
+  // comparison above tells them apart.
+  static u64 elements_key(TypeIdxRange elements) {
+    u64 key = elements.size();
+    for (const TypeIdx element : elements) {
+      key ^= static_cast<u64>(element.idx) + 0x9E3779B97F4A7C15ull +
+             (key << 6) + (key >> 2);
+    }
+    return key;
+  }
+
   std::unordered_map<u32, TypeIdx>* pointer_table(TypeTag tag) {
     if (tag == TypeTag::Ref) {
       return &ref_by_pointee_;
@@ -490,6 +504,11 @@ class StorageBuilder {
   std::unordered_map<u32, TypeIdx> mut_ref_by_pointee_;
   std::unordered_map<u32, TypeIdx> raw_ptr_by_pointee_;
   std::unordered_map<u32, TypeIdx> raw_mut_ptr_by_pointee_;
+  // Tuple shapes by a key over their elements, and const shapes by value.
+  // Both were found by scanning every type in the package, and a function
+  // value asks for its signature's shape once per call site.
+  std::unordered_map<u64, std::vector<TypeIdx>> tuple_by_key_;
+  std::unordered_map<u64, TypeIdx> const_by_value_;
 };
 
 }  // namespace ir
