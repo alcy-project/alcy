@@ -72,6 +72,14 @@ struct EmitRequest {
   bool optimize = false;
   OutputKind kind = OutputKind::Object;
   debug::Profiler* profiler = nullptr;
+  // How many objects code generation may be split into, for a backend that
+  // can write more than one. The count is a function of the program, never
+  // of the machine running the build: what a run writes must not depend on
+  // how many threads read it.
+  u32 parts = 1;
+  // How many threads the split may use. A backend that ignores `parts`
+  // ignores this too.
+  u32 workers = 1;
 };
 
 // A backend implementation. `emit` owns the request: the storage moves
@@ -92,6 +100,29 @@ concept BackendImpl = requires {
 template <BackendImpl Impl>
 base::Result<std::vector<u8>, EmitError> emit_with(EmitRequest request) {
   return Impl::emit(std::move(request));
+}
+
+// The same, answering with every artifact the request produced. A backend
+// that can split code generation across objects answers `emit_artifacts`;
+// one that always writes a single artifact is answered by `emit` and the
+// blob becomes the one artifact.
+template <class Impl>
+base::Result<std::vector<std::vector<u8>>, EmitError> emit_artifacts_with(
+    EmitRequest request) {
+  if constexpr (requires(EmitRequest one) {
+                  { Impl::emit_artifacts(std::move(one)) };
+                }) {
+    return Impl::emit_artifacts(std::move(request));
+  } else {
+    base::Result<std::vector<u8>, EmitError> single =
+        Impl::emit(std::move(request));
+    if (single.is_err()) {
+      return base::make_err(std::move(single).unwrap_err());
+    }
+    std::vector<std::vector<u8>> artifacts;
+    artifacts.push_back(std::move(single).unwrap());
+    return base::make_ok(std::move(artifacts));
+  }
 }
 
 // The name a `--backend` spelling uses, and the reverse. `None` names no

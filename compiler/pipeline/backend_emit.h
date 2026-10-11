@@ -52,4 +52,11 @@ namespace pipeline {
 [[nodiscard]] base::Result<std::vector<u8>, codegen::EmitError>
 emit_with_backend(codegen::Backend backend, codegen::EmitRequest request);
 
+// The same, for a request that may produce more than one artifact: a backend
+// that can split code generation answers with one object per part, and one
+// that cannot answers the artifact `emit_with_backend` would have returned.
+[[nodiscard]] base::Result<std::vector<std::vector<u8>>, codegen::EmitError>
+emit_artifacts_with_backend(codegen::Backend backend,
+                            codegen::EmitRequest request);
+
 }  // namespace pipeline

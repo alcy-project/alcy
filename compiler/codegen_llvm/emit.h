@@ -25,6 +25,14 @@ struct Llvm {
 
   static base::Result<std::vector<u8>, codegen::EmitError> emit(
       codegen::EmitRequest request);
+
+  // The same request, written as one object per part. The partitions are a
+  // function of the module and of nothing else, so two runs of one package
+  // write the same objects whatever `-j` said, and they are code-generated
+  // on as many threads as the request allows. A request for any other kind,
+  // or for one part, answers the single artifact `emit` does.
+  static base::Result<std::vector<std::vector<u8>>, codegen::EmitError>
+  emit_artifacts(codegen::EmitRequest request);
 };
 
 }  // namespace codegen_llvm

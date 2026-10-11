@@ -79,16 +79,17 @@ PipelineContext::PipelineContext(i18n::Language language,
   arena.reserve(DIAGNOSTIC_CAPACITY);
 }
 
-u32 PipelineContext::parse_jobs() const {
+u32 PipelineContext::requested_jobs() const {
 #if BUILD_FLAG(IS_OS_ASMJS)
   // A target without threads has nothing to spread the work over, and the
   // count a caller asked for cannot make it appear. One is the answer here
-  // rather than at the loop because more than one is read as a promise: the
-  // syntax arena cuts a lane of itself for each parser it is told to expect,
-  // and a lane no parser takes is room the one parser that does the work
-  // cannot reach. A package whose arena is small -- the 32-bit targets
-  // reserve an eighth of what a 64-bit one does -- runs out of it while a
-  // third of it is sitting in lanes.
+  // rather than at the loop because more than one is read as a promise: a
+  // stage told to expect several workers cuts its memory into that many
+  // pieces before any of them run, and a piece no worker takes is room the
+  // one worker that does the work cannot reach. The read does exactly that
+  // with its arena lanes, and a package whose arena is small -- the 32-bit
+  // targets reserve an eighth of what a 64-bit one does -- runs out of it
+  // while a third of it is sitting in lanes.
   (void)jobs;
   return 1;
 #else

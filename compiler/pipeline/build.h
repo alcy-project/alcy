@@ -3,13 +3,16 @@
 
 #pragma once
 
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "analyzer/resolve.h"
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/io/temp_dir.h"
 #include "lowering/lowering.h"
 #include "path/path.h"
 #include "pipeline/emit_mode.h"
@@ -68,14 +71,31 @@ base::Result<void, diag::Reported> emit_package_module(
     const std::string& output_path,
     bool is_lib);
 
-// Links one object into an executable. An empty driver in `link`
-// selects the default toolchain driver, and its arguments follow the
-// object on the command line.
+// Links the objects into an executable, in the order given. An empty driver
+// in `link` selects the default toolchain driver, and its arguments follow
+// the objects on the command line.
 base::Result<void, diag::Reported> link_executable(
     PipelineContext& ctx,
     LinkOptions link,
-    const std::string& object_path,
+    std::span<const std::string> object_paths,
     const std::string& exe_path);
+
+// How many objects a package's code generation is split into. A function of
+// the program and not of the machine: a small package stays whole, and a
+// large one gains nothing from parts finer than the work a core can take.
+[[nodiscard]] u32 codegen_parts(const lowering::LoweredPackage& package);
+
+// Emits the package's code generation as objects under `scratch`, one per
+// part, and answers their paths in order. The part count is the caller's,
+// and it must be a function of the program: two runs of one package write
+// the same objects whatever `-j` said.
+base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
+    PipelineContext& ctx,
+    lowering::LoweredPackage& package,
+    BuildProfile profile,
+    const io::TempDir& scratch,
+    bool is_lib,
+    u32 parts);
 
 // Emits lowered IR according to the mode: one object, textual IR,
 // bitcode, or an object linked into an executable. Both single-file and

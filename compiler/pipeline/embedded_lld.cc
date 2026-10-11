@@ -5,6 +5,7 @@
 
 #include <fstream>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -114,7 +115,7 @@ bool embedded_lld_ready() {
 base::Result<void, diag::Reported> link_with_embedded_lld(
     PipelineContext& ctx,
     const LinkOptions& link,
-    const std::string& object_path,
+    std::span<const std::string> object_paths,
     const std::string& exe_path) {
   std::vector<std::string> args;
   args.emplace_back("ld.lld");
@@ -127,7 +128,9 @@ base::Result<void, diag::Reported> link_with_embedded_lld(
     // calls: no startup objects, no loader, no C library (ADR-0052).
     args.emplace_back("-e");
     args.emplace_back("_start");
-    args.push_back(object_path);
+    for (const std::string& object_path : object_paths) {
+      args.push_back(object_path);
+    }
     for (std::string_view argument : link.args) {
       args.emplace_back(argument);
     }
@@ -140,14 +143,17 @@ base::Result<void, diag::Reported> link_with_embedded_lld(
       return base::make_err(diag::Reported{});
     }
     const Startup& startup = *found;
-    args.reserve(args.size() + 6 + startup.lib_dirs.size() + link.args.size());
+    args.reserve(args.size() + 6 + startup.lib_dirs.size() +
+                 object_paths.size() + link.args.size());
     args.emplace_back("--dynamic-linker=" + startup.dynamic_linker);
     args.push_back(startup.crt1);
     args.push_back(startup.crti);
     for (const std::string& dir : startup.lib_dirs) {
       args.push_back("-L" + dir);
     }
-    args.push_back(object_path);
+    for (const std::string& object_path : object_paths) {
+      args.push_back(object_path);
+    }
     for (std::string_view argument : link.args) {
       args.emplace_back(argument);
     }
@@ -183,10 +189,11 @@ bool embedded_lld_ready() {
   return false;
 }
 
-base::Result<void, diag::Reported> link_with_embedded_lld(PipelineContext&,
-                                                          const LinkOptions&,
-                                                          const std::string&,
-                                                          const std::string&) {
+base::Result<void, diag::Reported> link_with_embedded_lld(
+    PipelineContext&,
+    const LinkOptions&,
+    std::span<const std::string>,
+    const std::string&) {
   // The caller asks embedded_lld_ready() first, so only a mistake in the
   // caller reaches this.
   DCHECK(false);

@@ -3,6 +3,7 @@
 
 #include "pipeline/build.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <span>
@@ -278,6 +279,69 @@ base::Result<void, diag::Reported> emit_package_output(
   return write_output(ctx, what, output_path, std::move(bytes).unwrap());
 }
 
+u32 codegen_parts(const lowering::LoweredPackage& package) {
+  constexpr u32 FUNCTIONS_PER_PART = 128;
+  constexpr u32 MAX_PARTS = 16;
+  const u32 functions = static_cast<u32>(package.storage->functions().size());
+  return std::clamp(functions / FUNCTIONS_PER_PART, 1u, MAX_PARTS);
+}
+
+base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
+    PipelineContext& ctx,
+    lowering::LoweredPackage& package,
+    BuildProfile profile,
+    const io::TempDir& scratch,
+    bool is_lib,
+    u32 parts) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-object",
+                                           "backend");
+  codegen::EmitRequest request{
+      .storage = std::move(package.storage),
+      .instr_spans = package.instr_spans,
+      .instr_site_names = {},
+      .strings = &ctx.strings,
+      .bag = &ctx.bag,
+      .target = ctx.target,
+      .emit_entry = !is_lib,
+      .freestanding = ctx.freestanding,
+      .backtrace = profile.on_panic == pkg::OnPanic::Backtrace,
+      .optimize = profile.optimize,
+      .kind = codegen::OutputKind::Object,
+      .profiler = ctx.profiler,
+      .parts = parts,
+      .workers = ctx.requested_jobs(),
+  };
+  // A backtrace names call sites as well as functions, so the emission
+  // carries their rendered spellings. The table lives in this frame and
+  // the request only borrows it, which lasts exactly as long as the
+  // emission below.
+  std::vector<str::StringPoolId> site_names;
+  if (profile.on_panic == pkg::OnPanic::Backtrace) {
+    site_names = render_instr_sites(ctx, package.instr_spans);
+    request.instr_site_names = site_names;
+  }
+  base::Result<std::vector<std::vector<u8>>, codegen::EmitError> emitted =
+      emit_artifacts_with_backend(ctx.backend, std::move(request));
+  if (emitted.is_err()) {
+    (void)report_emit_failure(ctx, std::move(emitted).unwrap_err(),
+                              codegen::OutputKind::Object, "object");
+    return base::make_err(diag::Reported{});
+  }
+  std::vector<std::vector<u8>> objects = std::move(emitted).unwrap();
+  std::vector<std::string> paths;
+  paths.reserve(objects.size());
+  for (usize at = 0; at < objects.size(); ++at) {
+    const std::string name =
+        at == 0 ? std::string("main.o") : "main." + std::to_string(at) + ".o";
+    const std::string path = scratch.join(name);
+    if (write_output(ctx, "object", path, objects[at]).is_err()) {
+      return base::make_err(diag::Reported{});
+    }
+    paths.push_back(path);
+  }
+  return base::make_ok(std::move(paths));
+}
+
 base::Result<void, diag::Reported> emit_package_object(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
@@ -405,14 +469,14 @@ base::Result<void, diag::Reported> emit_package_module(
 base::Result<void, diag::Reported> link_executable(
     PipelineContext& ctx,
     LinkOptions link,
-    const std::string& object_path,
+    std::span<const std::string> object_paths,
     const std::string& exe_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "link", "backend");
   // A configured linker replaces the embedded one; the embedded one runs
   // in-process where the build has it and the host's startup inputs are
   // found.
   if (link.driver.empty() && embedded_lld_ready()) {
-    return link_with_embedded_lld(ctx, link, object_path, exe_path);
+    return link_with_embedded_lld(ctx, link, object_paths, exe_path);
   }
   const std::string driver =
       link.driver.empty() ? "clang" : std::string(link.driver);
@@ -420,9 +484,11 @@ base::Result<void, diag::Reported> link_executable(
   // resolved against it, and stop short of the output, which stays the
   // last word.
   std::vector<std::string> argv;
-  argv.reserve(6 + link.args.size() + 2);
+  argv.reserve(6 + link.args.size() + object_paths.size() + 2);
   argv.emplace_back(driver);
-  argv.emplace_back(object_path);
+  for (const std::string& object_path : object_paths) {
+    argv.emplace_back(object_path);
+  }
   for (std::string_view argument : link.args) {
     argv.emplace_back(argument);
   }
@@ -518,12 +584,14 @@ base::Result<std::string, diag::Reported> emit_output(
       return base::make_err(diag::Reported{});
     }
     io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
-    const std::string object_path = scratch.join("main.o");
-    if (emit_package_object(ctx, lowered, profile, object_path, is_lib)
-            .is_err()) {
+    base::Result<std::vector<std::string>, diag::Reported> objects =
+        emit_package_objects(ctx, lowered, profile, scratch, is_lib,
+                             codegen_parts(lowered));
+    if (objects.is_err()) {
       return base::make_err(diag::Reported{});
     }
-    return link_executable(ctx, link, object_path, output_path);
+    const std::vector<std::string> paths = std::move(objects).unwrap();
+    return link_executable(ctx, link, paths, output_path);
   }();
   if (written.is_err()) {
     return base::make_err(std::move(written).unwrap_err());

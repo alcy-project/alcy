@@ -156,7 +156,7 @@ base::Result<ParsedFiles, diag::Reported> parse_files(
   // for eight parsers would cut eight lanes and use one, and that one reads a
   // third of the table.
   const u32 wanted =
-      std::min(ctx.parse_jobs(), static_cast<u32>(parsed.files.size()));
+      std::min(ctx.requested_jobs(), static_cast<u32>(parsed.files.size()));
   if (ctx.parse_lanes == 0) {
     // Every append leaves room for the appends that may race with it,
     // so the slot count is what the arena is told before parsing

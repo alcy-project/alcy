@@ -4,6 +4,7 @@
 #include "codegen_llvm/llvm_backend.h"
 
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <utility>
@@ -31,7 +32,7 @@ namespace codegen_llvm {
 
 namespace {
 
-void init_linked_targets() {
+void register_linked_targets() {
 #if !BUILD_FLAG(IS_OS_ASMJS)
   ::LLVMInitializeX86TargetInfo();
   ::LLVMInitializeX86Target();
@@ -119,6 +120,14 @@ void init_linked_targets() {
   // ::LLVMInitializeSystemZTarget();
   // ::LLVMInitializeSystemZTargetMC();
   // ::LLVMInitializeSystemZAsmPrinter();
+}
+
+void init_linked_targets() {
+  // Registering a target twice at once is a race inside LLVM, and one emit's
+  // partitions are code-generated on several threads: the first caller does
+  // the work and the rest wait for it.
+  static std::once_flag once;
+  std::call_once(once, register_linked_targets);
 }
 
 }  // namespace

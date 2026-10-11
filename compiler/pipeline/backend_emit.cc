@@ -109,6 +109,27 @@ codegen::Backend select_backend(const codegen::Target& target,
   return preferred;
 }
 
+base::Result<std::vector<std::vector<u8>>, codegen::EmitError>
+emit_artifacts_with_backend(codegen::Backend backend,
+                            codegen::EmitRequest request) {
+  (void)request;
+  switch (backend) {
+    case codegen::Backend::None:
+      return base::make_err(codegen::EmitError::Unsupported);
+    case codegen::Backend::Llvm:
+#if ALCY_BACKEND_LLVM
+      return codegen::emit_artifacts_with<codegen_llvm::Llvm>(
+          std::move(request));
+#else
+      return base::make_err(codegen::EmitError::Unsupported);
+#endif
+    case codegen::Backend::DirectWasm:
+      return codegen::emit_artifacts_with<codegen::wasm::Wasm>(
+          std::move(request));
+  }
+  return base::make_err(codegen::EmitError::Unsupported);
+}
+
 base::Result<std::vector<u8>, codegen::EmitError> emit_with_backend(
     codegen::Backend backend,
     codegen::EmitRequest request) {

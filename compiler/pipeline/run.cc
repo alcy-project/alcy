@@ -43,13 +43,16 @@ base::Result<RunOutcome, diag::Reported> link_and_run(
     AnnounceExec announce,
     const void* announce_ctx) {
   io::TempDir scratch = io::TempDir::create_unique("alcy_run_");
-  const std::string object_path = scratch.join("main.o");
-  if (emit_package_object(ctx, lowered, profile, object_path, false).is_err()) {
+  base::Result<std::vector<std::string>, diag::Reported> objects =
+      emit_package_objects(ctx, lowered, profile, scratch, false,
+                           codegen_parts(lowered));
+  if (objects.is_err()) {
     return base::make_err(diag::Reported{});
   }
   const std::string exe_path =
       scratch.join(std::string("main") + std::string(exe_suffix()));
-  if (link_executable(ctx, link, object_path, exe_path).is_err()) {
+  const std::vector<std::string> paths = std::move(objects).unwrap();
+  if (link_executable(ctx, link, paths, exe_path).is_err()) {
     return base::make_err(diag::Reported{});
   }
   std::vector<std::string> argv;

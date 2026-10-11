@@ -3,11 +3,13 @@
 
 #include "codegen_llvm/emit.h"
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/for_each.h"
 #include "codegen/backend.h"
 #include "codegen/target.h"
 #include "codegen_llvm/common.h"
@@ -20,9 +22,15 @@
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
 #include "ir/storage.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/Bitcode/BitcodeReader.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Support/MemoryBufferRef.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/Utils/SplitModule.h"
 
 namespace codegen_llvm {
 namespace {
@@ -150,6 +158,84 @@ base::Result<std::vector<u8>, codegen::EmitError> Llvm::emit(
     case codegen::OutputKind::Module: break;
   }
   return base::make_err(codegen::EmitError::Unsupported);
+}
+
+base::Result<std::vector<std::vector<u8>>, codegen::EmitError>
+Llvm::emit_artifacts(codegen::EmitRequest request) {
+  const u32 parts =
+      request.kind == codegen::OutputKind::Object && request.parts > 1
+          ? request.parts
+          : 1;
+  if (parts <= 1) {
+    base::Result<std::vector<u8>, codegen::EmitError> single =
+        Llvm::emit(std::move(request));
+    if (single.is_err()) {
+      return base::make_err(std::move(single).unwrap_err());
+    }
+    std::vector<std::vector<u8>> artifacts;
+    artifacts.push_back(std::move(single).unwrap());
+    return base::make_ok(std::move(artifacts));
+  }
+  if (!supports(request.kind, request.target)) {
+    return base::make_err(codegen::EmitError::Unsupported);
+  }
+  // Built and optimized whole, then partitioned: the middle end sees one
+  // module, so a release build keeps the cross-function inlining it has
+  // today, and only code generation - which is per function either way - is
+  // spread. `SplitModule` writes partitions a linker accepts, which is what
+  // lets the caller link them back into one image.
+  EmittedModule emitted;
+  base::Result<void, codegen::EmitError> built = emitted.build(request);
+  if (built.is_err()) {
+    return base::make_err(std::move(built).unwrap_err());
+  }
+  std::vector<std::unique_ptr<llvm::Module>> split;
+  split.reserve(parts);
+  llvm::SplitModule(*emitted.module, parts,
+                    [&split](std::unique_ptr<llvm::Module> part) {
+                      split.push_back(std::move(part));
+                    });
+  // The parts come out of the source module's context, and code generation
+  // wants a context per thread. They take the trip LLVM's own parallel code
+  // generation takes: written to bitcode where they stand, and read back
+  // into a context of their own by the thread that will use it. Carrying IR
+  // across contexts by hand is not a path LLVM supports; this is.
+  std::vector<std::vector<u8>> bitcode(split.size());
+  std::vector<std::unique_ptr<llvm::LLVMContext>> contexts(split.size());
+  for (usize at = 0; at < split.size(); ++at) {
+    contexts[at] = std::make_unique<llvm::LLVMContext>();
+    llvm::SmallVector<char, 0> buffer;
+    llvm::raw_svector_ostream out(buffer);
+    llvm::WriteBitcodeToFile(*split[at], out);
+    bitcode[at].assign(buffer.begin(), buffer.end());
+  }
+  std::vector<std::vector<u8>> objects(split.size());
+  std::atomic<bool> failed{false};
+  const u32 workers = request.workers == 0 ? 1 : request.workers;
+  base::for_each(0, bitcode.size(), workers, [&](usize at, usize worker) {
+    (void)worker;
+    const llvm::StringRef bytes(
+        reinterpret_cast<const char*>(bitcode[at].data()), bitcode[at].size());
+    llvm::Expected<std::unique_ptr<llvm::Module>> parsed =
+        llvm::parseBitcodeFile(llvm::MemoryBufferRef(bytes, "alcy_part"),
+                               *contexts[at]);
+    if (!parsed) {
+      llvm::consumeError(parsed.takeError());
+      failed.store(true);
+      return;
+    }
+    base::Result<std::vector<u8>, ObjectEmitError> object =
+        emit_object(*parsed.get(), request.target);
+    if (object.is_err()) {
+      failed.store(true);
+      return;
+    }
+    objects[at] = std::move(object).unwrap();
+  });
+  if (failed.load()) {
+    return base::make_err(codegen::EmitError::CannotEmit);
+  }
+  return base::make_ok(std::move(objects));
 }
 
 }  // namespace codegen_llvm

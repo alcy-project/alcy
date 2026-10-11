@@ -49,7 +49,7 @@ struct ParsedFiles {
 // Lexes, parses, desugars, and verifies `files`, in order.
 //
 // Reading a file depends on nothing in another, so up to
-// `ctx.parse_jobs()` threads take a share of it. While several do, each
+// `ctx.requested_jobs()` threads take a share of it. While several do, each
 // file reports into a bag of its own and the bags merge in input order,
 // so the diagnostics a run reports do not depend on how many threads
 // read the input; one thread writes into the run's bag directly, in the

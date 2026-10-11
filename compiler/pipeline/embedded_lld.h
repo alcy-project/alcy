@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <span>
 #include <string>
 
 #include "diag/bag.h"
@@ -20,13 +21,13 @@ struct PipelineContext;
 // which is what every build did before the linker was embedded.
 bool embedded_lld_ready();
 
-// Links `object_path` into `exe_path` with the embedded lld, passing the
+// Links the objects into `exe_path` with the embedded lld, passing the
 // configured driver arguments through. Only called when
 // `embedded_lld_ready()` is true.
 base::Result<void, diag::Reported> link_with_embedded_lld(
     PipelineContext& ctx,
     const LinkOptions& link,
-    const std::string& object_path,
+    std::span<const std::string> object_paths,
     const std::string& exe_path);
 
 }  // namespace pipeline

@@ -79,7 +79,11 @@ struct PipelineContext {
   // The thread count `parse_files` reads with, which is one unless the
   // command line asked for more. Reading files is the only work spread
   // over threads, so nothing after it is bounded by this.
-  [[nodiscard]] u32 parse_jobs() const;
+  // How many threads the command asked for: `-j`'s count, or half the
+  // machine when it said nothing, and never fewer than one. A stage bounds
+  // this by what it can spread over, which is why the number a stage works
+  // with is this one rather than the one it asked with.
+  [[nodiscard]] u32 requested_jobs() const;
 };
 
 // Returns ".exe" on Windows or else ""
