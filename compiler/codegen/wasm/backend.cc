@@ -21,11 +21,9 @@ base::Result<std::vector<u8>, codegen::EmitError> Wasm::emit(
   if (!supports(request.kind, request.target)) {
     return base::make_err(codegen::EmitError::Unsupported);
   }
-  // No optimizer lives behind this emitter, and unoptimized machine code
-  // under `--release` would be a silent lie about what was built.
-  if (request.optimize) {
-    return base::make_err(codegen::EmitError::NoOptimizer);
-  }
+  // A release build arrives with the pipeline's IR passes already run,
+  // so there is nothing left to refuse here; the flag is the
+  // pipeline's, not the emitter's.
   return emit_module(std::move(request));
 }
 

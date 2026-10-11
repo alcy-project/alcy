@@ -108,7 +108,7 @@ base::Result<RunOutcome, diag::Reported> run_package(
   }
   PackageTarget& bin = resolved.front();
   base::Result<lowering::LoweredPackage, diag::Reported> package =
-      compile_tree(ctx, bin.tree);
+      compile_tree(ctx, bin.tree, profile.optimize);
   if (package.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }

@@ -122,6 +122,7 @@ source_set("pipeline") {
     "//compiler/ir",
     "//compiler/lexer",
     "//compiler/lowering",
+    "//compiler/opt",
     "//compiler/parser",
     "//compiler/path",
     "//compiler/pkg",

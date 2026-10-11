@@ -54,9 +54,10 @@ bool backend_can_optimize(codegen::Backend backend) {
       return false;
 #endif
     case codegen::Backend::DirectWasm:
-      // No optimizer lives behind the direct emitter; it answers
-      // NoOptimizer rather than emit unoptimized code under --release.
-      return false;
+      // The direct emitter has no middle end of its own; the
+      // pipeline's IR passes are the optimizer, and they run before
+      // either backend is chosen.
+      return true;
   }
   return false;
 }

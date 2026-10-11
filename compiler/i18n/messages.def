@@ -414,6 +414,7 @@
   F(PipelineNoManifestWithFileHint, "No manifest found at '{}'; pass a file with --file or add alcy.toml") \
   F(PipelineNoManifestWithFileHintInCurrentDirectory, "No manifest found at current directory; pass a file with --file or add alcy.toml") \
   F(PipelineNoSourceFiles, "No source files found under '{}'") \
+  F(PipelineOptimizeFailed, "Optimized IR failed verification") \
   F(PipelinePathExists, "Path '{}' already exists; refusing to overwrite") \
   F(PipelineSpanArenaExhausted, "Parsing this input needs more than the {} bytes of arena the compiler reserves for syntax") \
   F(PipelineSourceDirectoryInaccessible, "Source directory '{}' is not accessible") \

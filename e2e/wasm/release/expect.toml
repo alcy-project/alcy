@@ -1,0 +1,5 @@
+# The direct backend accepts --release now that the pipeline's IR
+# passes are its optimizer; the module is the optimized one.
+exit = 0
+stdout = "sum 76\n"
+args = ["--release"]

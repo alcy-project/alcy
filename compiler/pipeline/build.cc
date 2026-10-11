@@ -27,9 +27,12 @@
 #include "fpag/str/string_pool_id.h"
 #include "i18n/messages.h"
 #include "ir/serialize.h"
+#include "ir/storage.h"
 #include "ir/text_dump.h"
+#include "ir/verifier.h"
 #include "ir/write_input.h"
 #include "lowering/lowering.h"
+#include "opt/opt.h"
 #include "path/path.h"
 #include "pipeline/backend_emit.h"
 #include "pipeline/call_sites.h"
@@ -49,14 +52,28 @@
 
 namespace pipeline {
 
-base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
-    PipelineContext& ctx,
-    analyzer::ModuleTree tree) {
+base::Result<lowering::LoweredPackage, diag::Reported>
+compile_tree(PipelineContext& ctx, analyzer::ModuleTree tree, bool optimize) {
   base::Result<FrontendOutput, diag::Reported> out = run_frontend(ctx, tree);
   if (out.is_err()) {
     return base::make_err(diag::Reported{});
   }
   FrontendOutput done = std::move(out).unwrap();
+  // The release passes run after borrow checking, so the ownership they
+  // leave behind still holds, and both backends - including the direct
+  // one with no middle end - see the same optimized IR.
+  if (optimize) {
+    base::Result<ir::VerifiedStorage, ir::VerificationError> optimized =
+        opt::optimize(std::move(done.package.storage));
+    if (optimized.is_err()) {
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineOptimizeFailed>(
+          diag::Severity::Error, diag::Stage::Pipeline,
+          DiagCode::OptimizeFailed);
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
+    done.package.storage = std::move(optimized).unwrap();
+  }
   return base::make_ok(std::move(done.package));
 }
 
@@ -650,7 +667,7 @@ base::Result<std::string, diag::Reported> build_single_root(
     return base::make_err(diag::Reported{});
   }
   base::Result<lowering::LoweredPackage, diag::Reported> package =
-      compile_tree(ctx, std::move(tree).unwrap());
+      compile_tree(ctx, std::move(tree).unwrap(), profile.optimize);
   if (package.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
@@ -742,7 +759,7 @@ base::Result<std::string, diag::Reported> build_package(
   for (PlannedTarget& planned_target : planned) {
     PackageTarget& target = *planned_target.target;
     base::Result<lowering::LoweredPackage, diag::Reported> package =
-        compile_tree(ctx, target.tree);
+        compile_tree(ctx, target.tree, profile.optimize);
     if (package.is_err() || ctx.bag.has_errors()) {
       failed = true;
       break;

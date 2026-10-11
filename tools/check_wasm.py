@@ -17,7 +17,8 @@ The compiler builds the case for wasm with `--backend=direct-wasm`, and
 `tools/wasm_run.mjs` runs the module under WASI. `exit` is
 required; `stdout` is compared exactly when present, and `contains` and
 `not_contains` are checked against the combined output. An optional
-`args` list is inserted before `compile`.
+`args` list is inserted after `compile`, so a case can ask for
+`--release` like any other compiler flag.
 """
 
 import argparse
@@ -105,8 +106,8 @@ def run_case(alcy: Path, shim: Path, case_dir: Path):
         module_path = Path(scratch) / "case.wasm"
         compile_args = [
             str(alcy),
-            *extra_args,
             "compile",
+            *extra_args,
             str(source),
             f"--target={WASM_TARGET}",
             f"--backend={WASM_BACKEND}",

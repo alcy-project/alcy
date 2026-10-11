@@ -79,8 +79,14 @@ reader makes is between going through LLVM and generating code directly;
 
 The emitters allocate every value to a stack slot and keep no register state
 across instructions beyond a fixed scratch set. There is no register
-allocator, and there is no optimizer: `--release` with a direct backend is an
-error rather than a silently unoptimized binary. Link-visible functions --
+allocator, and the emitter itself has no optimizer: `--release` with a direct
+backend used to be an error rather than a silently unoptimized binary.
+
+Amended at the IR passes' landing: the pipeline runs the release passes over
+the IR before any backend is chosen (ADR-0063), so a direct backend now
+accepts `--release` and its module is the optimized one; what the emitter
+still lacks is a register allocator, and that stays true. Link-visible
+functions --
 anything another object may call -- follow the target's ABI where one exists
 (System V for x86-64), because an object from this backend has to be
 replaceable by one from the LLVM backend and vice versa; compiler-internal
@@ -143,8 +149,10 @@ tested against the LLVM backend's output, and kept current with the IR. The
 `alcy_backends` build matrix doubles the configurations CI must cover. The
 dispatch loop is slower than structured control flow, and the stack-machine
 code is slower than anything LLVM emits; that is accepted for the playground
-and the debug profile, and is why `--release` refuses a direct backend.
-Embedding the wasm lld driver and its driver-side inputs is its own work,
+and the debug profile. The release passes run before the backend is chosen,
+so they lift the debug-profile ceiling for direct backends without giving
+the emitter a register allocator; the emitter's machine code stays what it
+is. Embedding the wasm lld driver and its driver-side inputs is its own work,
 because today's embedded linker is the ELF driver with Linux startup inputs.
 
 Out of scope, and recorded as such: cross-target builds (`--target`), the
