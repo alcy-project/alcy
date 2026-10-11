@@ -3,6 +3,7 @@
 
 #include "analyzer/resolve.h"
 
+#include <algorithm>
 #include <span>
 #include <string>
 #include <string_view>
@@ -927,6 +928,19 @@ class Resolver {
         modules[m]->imports = ast::copy_to_arena(ast.spans, module_imports[m]);
       }
     }
+    // Every staged item, sorted so the question "is this item the
+    // toolchain's" costs a binary search: a `format` or `println` call asks
+    // it once per call site.
+    std::vector<std::pair<u32, u32>> staged_items;
+    for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+      if (!modules[m]->is_staged) {
+        continue;
+      }
+      for (ast::ItemIdx item : modules[m]->items) {
+        staged_items.emplace_back(item.idx, m);
+      }
+    }
+    std::sort(staged_items.begin(), staged_items.end());
     u32 root_index = 0;
     for (u32 i = 0; i < static_cast<u32>(modules.size()); ++i) {
       if (modules[i]->path.empty()) {
@@ -940,6 +954,7 @@ class Resolver {
     tree.package_roots = ast::copy_to_arena(ast.spans, package_roots_);
     tree.module_roots = ast::copy_to_arena(ast.spans, module_roots_);
     tree.package_policies = ast::copy_to_arena(ast.spans, package_policies_);
+    tree.staged_items = ast::copy_to_arena(ast.spans, staged_items);
     tree.package_name = package_name;
     if (ast.exhausted()) {
       fail_out_of_arena();
@@ -956,6 +971,20 @@ class Resolver {
 
 bool ModuleTree::is_staged_item(std::string_view package,
                                 ast::ItemIdx item) const {
+  if (!staged_items.empty()) {
+    const auto found =
+        std::lower_bound(staged_items.begin(), staged_items.end(), item.idx,
+                         [](const std::pair<u32, u32>& entry, u32 what) {
+                           return entry.first < what;
+                         });
+    if (found == staged_items.end() || found->first != item.idx) {
+      return false;
+    }
+    const ModuleNode* module = modules[found->second];
+    return module->is_staged && is_package_path(module->path, package);
+  }
+  // A tree built by hand carries no index, and the walk is what answers
+  // for it.
   for (const ModuleNode* module : modules) {
     if (!module->is_staged || !is_package_path(module->path, package)) {
       continue;

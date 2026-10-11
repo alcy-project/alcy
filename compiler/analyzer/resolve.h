@@ -6,6 +6,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "ast/ast.h"
 #include "diag/bag.h"
@@ -143,6 +144,14 @@ struct ModuleTree {
   [[nodiscard]] u32 module_root(u32 module) const {
     return module_roots.empty() ? NO_PACKAGE_ROOT : module_roots[module];
   }
+
+  // The items staged modules declare, paired with the module that declares
+  // them and sorted by item. Whether an item is the toolchain's is asked per
+  // `format`, `println`, and operator lookup, and the walk over every module
+  // and its items charged each of those for the whole package. Empty in a
+  // hand-built tree, which reads as no index and falls back to the walk.
+  // NOLINTNEXTLINE(readability-redundant-member-init)
+  std::span<const std::pair<u32, u32>> staged_items = {};
 
   // Whether `item` is declared by the staged package `package`. Only the
   // embedded standard library is staged, so the staged flag plus a path
