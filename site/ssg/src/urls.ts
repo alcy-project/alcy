@@ -6,6 +6,7 @@
 // sitemap. GitHub Pages serves the project under `/alcy/`.
 
 import { LANGUAGES } from "../../shared/i18n.js";
+import { escapeHtml } from "../../shared/highlight.js";
 import { prefixOf } from "./languages.js";
 import type { Language } from "./languages.js";
 
@@ -33,4 +34,22 @@ export function pageLinks(language: Language, treePath: string): string {
     );
   }
   return lines.join("\n    ");
+}
+
+// The card a social client reads: the committed `site/og.png`, titled
+// per page, pointing at the page's canonical address.
+export const OG_IMAGE = `${SITE_URL}og.png`;
+
+export function socialMeta(title: string, description: string, route: string): string {
+  const tags: Array<[string, string]> = [
+    ["og:type", "website"],
+    ["og:title", escapeHtml(title)],
+    ["og:description", escapeHtml(description)],
+    ["og:url", canonicalUrl(route)],
+    ["og:image", OG_IMAGE],
+    ["twitter:card", "summary_large_image"],
+  ];
+  return tags
+    .map(([key, value]) => `<meta ${key.startsWith("og:") ? "property" : "name"}="${key}" content="${value}" />`)
+    .join("\n    ");
 }

@@ -17,7 +17,7 @@ import type { Language } from "./languages.js";
 import { renderInline } from "./markdown.js";
 import type { Block } from "./markdown.js";
 import { renderSettings } from "./shell.js";
-import { pageLinks, SITE_PATH } from "./urls.js";
+import { pageLinks, SITE_PATH, socialMeta } from "./urls.js";
 
 export interface PageOptions {
   pages: readonly GuidePage[];
@@ -174,6 +174,7 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
   const article = page.blocks
     .map((block) => blockHtml(block, options, t))
     .join("\n      ");
+  const description = `${page.title} · ${t("meta.guide")}`;
   return `<!doctype html>
 <!-- Copyright 2026 The Alcy Project Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception -->
@@ -181,12 +182,13 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="${escapeHtml(page.title)} · ${escapeHtml(t("meta.guide"))}" />
+    <meta name="description" content="${escapeHtml(description)}" />
     <title>${escapeHtml(page.title)} · alcy</title>
     <script src="${assets}shared/boot.js"></script>
     <link rel="stylesheet" href="${assets}shared/site.css" />${guideCss}
     <link rel="icon" href="${assets}favicon.svg" />
     ${pageLinks(page.language, page.path)}
+    ${socialMeta(`${page.title} · alcy`, description, page.route)}
   </head>
   <body class="site">
     ${header(page.route, page.language, page.path)}
@@ -236,6 +238,7 @@ export function renderGuideIndex(
     <link rel="stylesheet" href="${assets}shared/site.css" />
     <link rel="icon" href="${assets}favicon.svg" />
     ${pageLinks(language, "guide/index.html")}
+    ${socialMeta(`${t("site.guide")} · alcy`, t("meta.guide"), route)}
   </head>
   <body class="site">
     ${header(route, language, "guide/index.html")}

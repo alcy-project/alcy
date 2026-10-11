@@ -27,7 +27,7 @@ import { dirname, join, posix } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { escapeHtml } from "../../shared/highlight.js";
-import { LANGUAGES } from "../../shared/i18n.js";
+import { LANGUAGES, translate } from "../../shared/i18n.js";
 import { discoverGuide, pagesForLanguage } from "./guide.js";
 import type { GuidePage, GuideSource } from "./guide.js";
 import { createHighlighter } from "./highlight.js";
@@ -39,7 +39,7 @@ import { renderGuideIndex, renderGuidePage, renderNotFound } from "./render.js";
 import { renderSettings } from "./shell.js";
 import { stampTemplate } from "./templates.js";
 import type { TemplateValues } from "./templates.js";
-import { canonicalUrl, pageLinks, SITE_URL } from "./urls.js";
+import { canonicalUrl, pageLinks, SITE_URL, socialMeta } from "./urls.js";
 
 interface Options {
   docs: string;
@@ -180,10 +180,24 @@ function siteExists(dist: string, route: string): boolean {
   return existsSync(join(dist, route));
 }
 
+// The social card a template's page shows: titled for what the page is,
+// pointing at its own canonical address.
+function templateSocial(language: Language, treePath: string, route: string): string {
+  if (treePath === "playground/index.html") {
+    const title = `alcy ${translate(language, "site.playground")}`;
+    return socialMeta(title, translate(language, "meta.playground"), route);
+  }
+  return socialMeta(
+    "alcy",
+    "An experimental statically-typed programming language.",
+    route,
+  );
+}
+
 // The values a page template needs for one language: where the shared
 // assets are, where the language tree's root is, the link to the same
-// page in the other language, the settings menu, and the absolute links
-// a crawler reads.
+// page in the other language, the settings menu, the absolute links a
+// crawler reads, and the social card.
 function templateValues(language: Language, treePath: string): TemplateValues {
   const route = prefixOf(language) + treePath;
   const dir = posix.dirname(route);
@@ -200,6 +214,7 @@ function templateValues(language: Language, treePath: string): TemplateValues {
     switch: switchHref,
     settings: renderSettings({ language, switchHref }),
     pageLinks: pageLinks(language, treePath),
+    social: templateSocial(language, treePath, route),
   };
 }
 
@@ -216,6 +231,10 @@ function writeSiteRootFiles(options: Options, pages: readonly GuidePage[]): void
   writeFileSync(
     join(options.dist, "favicon.svg"),
     readFileSync(join(options.site, "favicon.svg")),
+  );
+  writeFileSync(
+    join(options.dist, "og.png"),
+    readFileSync(join(options.site, "og.png")),
   );
   writeFileSync(
     join(options.dist, "robots.txt"),
