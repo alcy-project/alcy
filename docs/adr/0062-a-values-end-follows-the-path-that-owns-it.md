@@ -132,10 +132,11 @@ spellings.
 
 ## Staged landing
 
-- S1. The journal and the pass: direct ends, edge splitting, and the
-  flag for a maybe; lowering's flag, guard, and epilogue placement
-  retires. Acceptance cases: a conditional move, and `Option::filter`
-  over a non-Copy `T`.
+- S1. The journal and the pass: direct ends and the flag for a maybe;
+  lowering's flag, guard, and epilogue placement retires. Acceptance
+  cases: a conditional move, and `Option::filter` over a non-Copy `T`.
+  Splitting an edge whose paths differ, so the common joins need no
+  flag at all, is the pass's next refinement.
 - S2. Re-owning stores and flag resets; the `Drop` marker and its
   consumption by the borrow checker. Acceptance cases: a loop that
   consumes and re-owns, and the guarded end of a loop-carried maybe.

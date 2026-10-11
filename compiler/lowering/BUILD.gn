@@ -4,6 +4,7 @@
 source_set("lowering") {
   sources = [
     "diag_code.h",
+    "drop_elaboration.cc",
     "lowerer.cc",
     "lowerer.h",
     "lowering.cc",

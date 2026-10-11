@@ -532,8 +532,9 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
       const ir::RegisterIdx addr =
           emit(ir::Opcode::Alloca, init.type, {size_one});
       emit_void(ir::Opcode::Store, {material.op, to_operand(addr, init.type)});
-      locals.emplace_back(name, addr, init.type, runs_destructor(init.type));
-      give_drop_guard(locals.back());
+      locals.emplace_back(name, addr, init.type);
+      record_event(OwnershipEvent::Kind::Bind,
+                   static_cast<u32>(locals.size() - 1), {}, node.span);
       addr_names_.push_back({addr, name, binding_param_});
       return;
     }
@@ -3101,29 +3102,19 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     return Val{size_one, error_type(), false, false};
   }
   emit_br(tests.front());
-  // Values in scope when the match begins: an arm's path can move one,
-  // and which paths still own it is a question the arms answer together.
-  const u32 scope_mark = static_cast<u32>(locals.size());
-  // One epilogue per live arm, where the arm ends the values it still
-  // owns that another arm moved.
+  // One epilogue per live arm; it closes the arm's path into the join.
+  // The ends of the enclosing scope's values are the drop pass's to
+  // place (ADR-0062).
   std::vector<ir::BlockIdx> epilogues;
-  std::vector<std::vector<bool>> arm_moved;
   std::vector<bool> arm_live(arms.size(), false);
   epilogues.reserve(arms.size());
-  arm_moved.reserve(arms.size());
   for (usize i = 0; i < arms.size(); ++i) {
     epilogues.push_back(reserve_block());
-    arm_moved.emplace_back();
   }
   for (usize i = 0; i < arms.size() && !failed; ++i) {
     // The arm's pattern bindings end at the arm's own exit, or the sweep
     // would place their drops where their slots do not dominate.
     const u32 arm_mark = static_cast<u32>(locals.size());
-    std::vector<bool> arm_inherited;
-    arm_inherited.reserve(arm_mark);
-    for (u32 k = 0; k < arm_mark; ++k) {
-      arm_inherited.push_back(locals[k].moved);
-    }
     switch_to(tests[i]);
     const ir::BlockIdx next = i + 1 < arms.size() ? tests[i + 1] : fail;
     lower_arm_test(arms[i].first, addr, scrut_type, bodies[i], next);
@@ -3142,14 +3133,7 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       mark_move(produced);
     }
     if (!terminated_cur()) {
-      emit_drops(arm_mark, node.span);
-    }
-    // What this arm's path moved, against what it inherited; the flags
-    // return so the next arm lowers from the same scope.
-    arm_moved[i].reserve(arm_mark);
-    for (u32 k = 0; k < arm_mark && k < locals.size(); ++k) {
-      arm_moved[i].push_back(locals[k].moved && !arm_inherited[k]);
-      locals[k].moved = arm_inherited[k];
+      record_end(arm_mark, node.span);
     }
     arm_live[i] = !terminated_cur();
     if (arm_live[i]) {
@@ -3159,19 +3143,6 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
-  // Whether a live arm other than `skip` moved the in-scope value `k`;
-  // `arms.size()` skips nothing.
-  const auto moved_elsewhere = [&](u32 k, usize skip) {
-    for (usize j = 0; j < arms.size(); ++j) {
-      if (j == skip || !arm_live[j] || k >= arm_moved[j].size()) {
-        continue;
-      }
-      if (arm_moved[j][k]) {
-        return true;
-      }
-    }
-    return false;
-  };
   for (usize i = 0; i < arms.size(); ++i) {
     switch_to(epilogues[i]);
     if (!arm_live[i]) {
@@ -3179,27 +3150,10 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       emit_void(ir::Opcode::Unreachable, {});
       continue;
     }
-    for (u32 k = 0; k < scope_mark && k < arm_moved[i].size(); ++k) {
-      if (!locals[k].needs_drop || locals[k].moved || arm_moved[i][k] ||
-          !moved_elsewhere(k, i)) {
-        continue;
-      }
-      std::vector<u32> path;
-      emit_drop_at_path(to_operand(locals[k].addr, locals[k].type),
-                        locals[k].type, node.span, &locals[k], path);
-    }
     if (!join.is_valid()) {
       join = reserve_block();
     }
     emit_br(join);
-  }
-  // A value some live arm moved is spent on every path reaching the
-  // join, so a later scope exit must not end it again.
-  for (u32 k = 0; k < scope_mark; ++k) {
-    if (locals[k].needs_drop && !locals[k].moved &&
-        moved_elsewhere(k, arms.size())) {
-      locals[k].moved = true;
-    }
   }
   switch_to(fail);
   emit_void(ir::Opcode::Unreachable, {});
@@ -3231,50 +3185,28 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   }
   ir::BlockIdx else_block = reserve_block();
   ir::BlockIdx join = ir::BlockIdx(base::INVALID_IDX);
-  // Values in scope when the `if` begins: one arm's path can move one
-  // while the other still owns it, so each live path ends what it owns
-  // in its own epilogue.
-  const u32 scope_mark = static_cast<u32>(locals.size());
   const ir::BlockIdx then_epilogue = reserve_block();
   const ir::BlockIdx else_epilogue = reserve_block();
-  std::vector<bool> then_moved;
-  std::vector<bool> else_moved;
   bool then_live = false;
   bool else_live = false;
 
-  // Ends one arm: the result lands where it belongs, the arm's own
-  // bindings end, and the flags return so the other arm lowers from the
-  // same scope.
+  // Ends one arm: the result lands where it belongs and the arm's own
+  // bindings end. The ends of the enclosing scope's values are the drop
+  // pass's to place (ADR-0062).
   auto arm_tail = [&](Val produced, u32 arm_mark, ir::BlockIdx epilogue,
-                      const std::vector<bool>& inherited,
-                      std::vector<bool>& moved_out, bool& live_out) {
+                      bool& live_out) {
     if (has_slot && !terminated_cur()) {
       store_result(slot, produced);
     } else if (!has_slot) {
       mark_move(produced);
     }
     if (!terminated_cur()) {
-      emit_drops(arm_mark, node.span);
-    }
-    moved_out.clear();
-    for (u32 k = 0; k < scope_mark; ++k) {
-      moved_out.push_back(locals[k].moved && !inherited[k]);
+      record_end(arm_mark, node.span);
     }
     live_out = !terminated_cur();
     if (live_out) {
       emit_br(epilogue);
     }
-    for (u32 k = 0; k < scope_mark; ++k) {
-      locals[k].moved = inherited[k];
-    }
-  };
-  auto arm_inherited = [&]() {
-    std::vector<bool> inherited;
-    inherited.reserve(scope_mark);
-    for (u32 k = 0; k < scope_mark; ++k) {
-      inherited.push_back(locals[k].moved);
-    }
-    return inherited;
   };
 
   const ast::Cond& cond_node = ast.conds[if_expr.cond];
@@ -3288,27 +3220,23 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     emit_cond_br(material.op, then_block, else_block);
     switch_to(then_block);
     {
-      const std::vector<bool> inherited = arm_inherited();
       const u32 arm_mark = static_cast<u32>(locals.size());
-      arm_tail(lower_branch(if_expr.then_block, expected), arm_mark,
-               then_epilogue, inherited, then_moved, then_live);
+      arm_tail(lower_block(if_expr.then_block, expected), arm_mark,
+               then_epilogue, then_live);
     }
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
     switch_to(else_block);
     if (if_expr.else_block.is_valid()) {
-      const std::vector<bool> inherited = arm_inherited();
       const u32 arm_mark = static_cast<u32>(locals.size());
-      arm_tail(lower_branch(if_expr.else_block, expected), arm_mark,
-               else_epilogue, inherited, else_moved, else_live);
+      arm_tail(lower_block(if_expr.else_block, expected), arm_mark,
+               else_epilogue, else_live);
     } else if (has_slot) {
       internal(node.span, "value if without else");
       return Val{size_one, error_type(), false, false};
     } else {
-      // Statement position without else: the empty arm owns everything
-      // and moves nothing.
-      else_moved.assign(scope_mark, false);
+      // Statement position without else: the empty arm owns everything.
       else_live = true;
       emit_br(else_epilogue);
     }
@@ -3336,29 +3264,26 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     // binding, so the move lands after the body - but before the arm's
     // branch, since a terminated block takes no more instructions.
     auto finish_pattern_arm = [&](Val produced, ir::BlockIdx epilogue,
-                                  std::vector<bool>& moved_out,
                                   bool& live_out) {
-      const std::vector<bool> inherited = arm_inherited();
       if (!terminated_cur()) {
         mark_move(addr);
       }
-      arm_tail(produced, arm_mark, epilogue, inherited, moved_out, live_out);
+      arm_tail(produced, arm_mark, epilogue, live_out);
     };
     switch_to(body_block);
-    finish_pattern_arm(lower_branch(if_expr.then_block, expected),
-                       then_epilogue, then_moved, then_live);
+    finish_pattern_arm(lower_block(if_expr.then_block, expected), then_epilogue,
+                       then_live);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
     switch_to(else_block);
     if (if_expr.else_block.is_valid()) {
-      finish_pattern_arm(lower_branch(if_expr.else_block, expected),
-                         else_epilogue, else_moved, else_live);
+      finish_pattern_arm(lower_block(if_expr.else_block, expected),
+                         else_epilogue, else_live);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
     } else if (!has_slot) {
-      else_moved.assign(scope_mark, false);
       else_live = true;
       emit_br(else_epilogue);
     } else {
@@ -3366,45 +3291,20 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       return Val{size_one, error_type(), false, false};
     }
   }
-  // Each live path ends the values it still owns that another path
-  // moved; a dead arm's epilogue only closes the block.
-  const auto fill_epilogue =
-      [&](ir::BlockIdx epilogue, const std::vector<bool>& here,
-          const std::vector<bool>& other, bool here_live, bool other_live) {
-        switch_to(epilogue);
-        if (!here_live) {
-          emit_void(ir::Opcode::Unreachable, {});
-          return;
-        }
-        for (u32 k = 0; k < scope_mark && k < here.size(); ++k) {
-          if (!locals[k].needs_drop || locals[k].moved || here[k]) {
-            continue;
-          }
-          if (!other_live || k >= other.size() || !other[k]) {
-            continue;
-          }
-          std::vector<u32> path;
-          emit_drop_at_path(to_operand(locals[k].addr, locals[k].type),
-                            locals[k].type, node.span, &locals[k], path);
-        }
-        if (!join.is_valid()) {
-          join = reserve_block();
-        }
-        emit_br(join);
-      };
-  fill_epilogue(then_epilogue, then_moved, else_moved, then_live, else_live);
-  fill_epilogue(else_epilogue, else_moved, then_moved, else_live, then_live);
-  // A value some live path moved is spent on all of them, so a later
-  // scope exit must not end it again.
-  for (u32 k = 0; k < scope_mark; ++k) {
-    if (!locals[k].needs_drop || locals[k].moved) {
-      continue;
+  // A dead arm's epilogue only closes the block.
+  const auto fill_epilogue = [&](ir::BlockIdx epilogue, bool here_live) {
+    switch_to(epilogue);
+    if (!here_live) {
+      emit_void(ir::Opcode::Unreachable, {});
+      return;
     }
-    if ((then_live && k < then_moved.size() && then_moved[k]) ||
-        (else_live && k < else_moved.size() && else_moved[k])) {
-      locals[k].moved = true;
+    if (!join.is_valid()) {
+      join = reserve_block();
     }
-  }
+    emit_br(join);
+  };
+  fill_epilogue(then_epilogue, then_live);
+  fill_epilogue(else_epilogue, else_live);
   if (!join.is_valid()) {
     // Both arms ended the path, so the slot holds nothing and the `if`
     // is `!`.
@@ -3427,7 +3327,7 @@ Val Lowerer::lower_loop(ast::ExprIdx expr) {
   const u32 drops = static_cast<u32>(locals.size());
   break_targets_.push_back({exit, drops});
   continue_targets_.push_back({header, drops});
-  lower_branch(loop_expr.body, nullptr);
+  lower_block(loop_expr.body, nullptr);
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
@@ -3480,12 +3380,12 @@ Val Lowerer::lower_while(ast::ExprIdx expr) {
   }
   break_targets_.push_back({exit, drops});
   continue_targets_.push_back({header, drops});
-  lower_branch(while_expr.body, nullptr);
+  lower_block(while_expr.body, nullptr);
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
   if (!terminated_cur()) {
-    emit_drops(drops, node.span);
+    record_end(drops, node.span);
   }
   if (!terminated_cur()) {
     emit_br(header);
@@ -3527,19 +3427,11 @@ Val Lowerer::lower_question(ast::ExprIdx expr) {
   // other live values.
   switch_to(err_block);
   const ir::OperandIdx propagate = use_value(addr);
-  // Leaving the function ends every live value, but only on this path:
-  // the success path still runs, so the per-local flags the sweep
-  // commits are put back before it lowers.
-  std::vector<bool> inherited;
-  inherited.reserve(locals.size());
-  for (const Local& local : locals) {
-    inherited.push_back(local.moved);
-  }
-  emit_drops(0, node.span);
+  // Leaving the function ends every live value on this path; the
+  // success path continues at ok_block and the pass places its ends
+  // separately.
+  record_end(0, node.span);
   emit_void(ir::Opcode::Ret, {propagate});
-  for (usize i = 0; i < inherited.size(); ++i) {
-    locals[i].moved = inherited[i];
-  }
   switch_to(ok_block);
   const Val payload =
       load_payload_field(addr, variant_fields(scrut_type, 0), 0);
@@ -3720,7 +3612,7 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       // so everything the body declared ends here. The branch usually
       // sits in a nested block, so the innermost block's mark would
       // miss the body's own values.
-      emit_drops(break_targets_.back().drops, node.span);
+      record_end(break_targets_.back().drops, node.span);
       emit_br(break_targets_.back().block);
       return Val{size_one, builder.never_type(), false, false};
     }
@@ -3732,7 +3624,7 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       // Leaving the body early skips its normal drop point, so the
       // values the body declared are ended here instead; the mark is
       // the body's, not the nested block's the branch sits in.
-      emit_drops(continue_targets_.back().drops, node.span);
+      record_end(continue_targets_.back().drops, node.span);
       emit_br(continue_targets_.back().block);
       return Val{size_one, builder.never_type(), false, false};
     }
@@ -3800,7 +3692,7 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
           carries_result = true;
         }
       }
-      emit_drops(0, node.span);
+      record_end(0, node.span);
       if (carries_result) {
         emit_void(ir::Opcode::Ret, {result});
       } else {
@@ -3923,55 +3815,16 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
         value = Val{to_operand(result, loaded.type), loaded.type, false, false};
       }
       ir::OperandIdx stored = use_value(value);
+      emit_void(ir::Opcode::Store, {stored, place.op});
+      // A store re-owns what it writes. The pass ends the value it
+      // replaces and clears the flags the exits consult.
       const ir::Operand& target = builder.state().operands[place.op.idx];
       u32 local_index = 0;
       std::vector<u32> path;
-      const bool rooted =
-          target.is<ir::RegisterIdx>() &&
-          place_of_register(target.as_register().idx, local_index, path);
-      if (rooted) {
-        // Writing over an owned place ends the value it replaces: the
-        // right-hand side may have moved it already, and a moved-out
-        // place is re-initialized rather than overwritten.
-        Local& local = locals[local_index];
-        if (!local.moved) {
-          if (local.moved_somewhere && path.empty() &&
-              local.drop_guard.is_valid()) {
-            emit_guarded_drop(local, node.span);
-          } else if (!local.moved_somewhere) {
-            std::vector<u32> end_path = path;
-            const ir::TypeIdx end_type = type_at_path(local.type, path);
-            emit_drop_at_path(place.op, end_type, node.span, &local, end_path);
-          }
-        }
-      }
-      emit_void(ir::Opcode::Store, {stored, place.op});
-      // A store writes a new value, so the place is owned again: the
-      // flag the exits consult clears, and the fields a previous value
-      // moved out are owned again. A store to a field re-owns it and
-      // leaves the rest of the value as it was.
-      if (rooted) {
-        Local& local = locals[local_index];
-        if (path.empty()) {
-          local.moved = false;
-          local.moved_fields.clear();
-          if (local.drop_guard.is_valid()) {
-            const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
-            emit_void(ir::Opcode::Store,
-                      {bool_operand(false), to_operand(local.drop_guard, i1)});
-          }
-        } else {
-          for (usize i = local.moved_fields.size(); i > 0; --i) {
-            const std::vector<u32>& moved = local.moved_fields[i - 1];
-            bool covered = moved.size() >= path.size();
-            for (usize s = 0; covered && s < path.size(); ++s) {
-              covered = moved[s] == path[s];
-            }
-            if (covered) {
-              local.moved_fields.erase(local.moved_fields.begin() + (i - 1));
-            }
-          }
-        }
+      if (target.is<ir::RegisterIdx>() &&
+          place_of_register(target.as_register().idx, local_index, path)) {
+        record_event(OwnershipEvent::Kind::Store, local_index, std::move(path),
+                     node.span);
       }
       return;
     }
@@ -4022,7 +3875,7 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
       value = lower_expr(node.value, expected);
     }
     if (!failed && !terminated_cur()) {
-      emit_drops(mark, node.span);
+      record_end(mark, node.span);
     }
   } else if (!reachable && node.value.is_valid()) {
     const u32 index = bag.emit<i18n::Key::LowerUnreachableExpression>(
@@ -4038,16 +3891,4 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
   return value;
 }
 
-Val Lowerer::lower_branch(ast::BlockIdx block, const ir::TypeIdx* expected) {
-  std::vector<bool> inherited;
-  inherited.reserve(locals.size());
-  for (const Local& local : locals) {
-    inherited.push_back(local.moved);
-  }
-  Val value = lower_block(block, expected);
-  for (usize i = 0; i < inherited.size() && i < locals.size(); ++i) {
-    locals[i].moved = inherited[i];
-  }
-  return value;
-}
 }  // namespace lowering

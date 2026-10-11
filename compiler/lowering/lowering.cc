@@ -264,16 +264,6 @@ Val Lowerer::address_of(Val v) {
   return Val{to_operand(addr, v.type), v.type, true, v.place};
 }
 
-void Lowerer::give_drop_guard(Local& local) {
-  if (!local.needs_drop) {
-    return;
-  }
-  const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
-  local.drop_guard = emit(ir::Opcode::Alloca, i1, {size_one});
-  emit_void(ir::Opcode::Store,
-            {bool_operand(false), to_operand(local.drop_guard, i1)});
-}
-
 bool Lowerer::place_of_register(u32 reg,
                                 u32& local_out,
                                 std::vector<u32>& path) const {
@@ -352,93 +342,39 @@ ir::TypeIdx Lowerer::type_at_path(ir::TypeIdx type, std::span<const u32> path) {
   return current;
 }
 
-namespace {
-
-// Whether `prefix` names the first fields of `path`, in order.
-bool starts_with(std::span<const u32> path, std::span<const u32> prefix) {
-  if (prefix.size() > path.size()) {
-    return false;
-  }
-  for (usize i = 0; i < prefix.size(); ++i) {
-    if (path[i] != prefix[i]) {
-      return false;
-    }
-  }
-  return true;
-}
-
-}  // namespace
-
-bool Lowerer::path_moved(const Local& local, std::span<const u32> path) const {
-  for (const std::vector<u32>& moved : local.moved_fields) {
-    if (starts_with(path, moved)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool Lowerer::path_has_moved_below(const Local& local,
-                                   std::span<const u32> path) const {
-  for (const std::vector<u32>& moved : local.moved_fields) {
-    if (moved.size() > path.size() && starts_with(moved, path)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 // Uses a value, emitting a Move marker when a non-Copy place is
 // consumed. The marker's source is the place address so later
 // ownership analysis observes origins, not temporaries.
 void Lowerer::mark_move(Val v) {
-  if (v.place && v.address && !is_copy(v.type)) {
-    const ir::RegisterIdx marker = emit(ir::Opcode::Move, v.type, {v.op});
-    (void)marker;
-    if (in_destructor_call_) {
-      return;
-    }
-    const ir::Operand& operand = builder.state().operands[v.op.idx];
-    if (!operand.is<ir::RegisterIdx>()) {
-      return;
-    }
-    u32 local_index = 0;
-    std::vector<u32> path;
-    if (!place_of_register(operand.as_register().idx, local_index, path)) {
-      return;
-    }
-    Local& local = locals[local_index];
-    if (path.empty()) {
-      // The move happened on this path only; the guard tells later exits.
-      local.moved = true;
-      local.moved_somewhere = true;
-      if (local.drop_guard.is_valid()) {
-        const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
-        emit_void(ir::Opcode::Store,
-                  {bool_operand(true), to_operand(local.drop_guard, i1)});
-      }
-      return;
-    }
-    // A field moved out: a later scope exit must not end it again, and a
-    // field cannot move out of a value with a user-written `drop`.
-    for (usize i = 0; i < path.size(); ++i) {
-      const ir::TypeIdx prefix =
-          type_at_path(local.type, std::span<const u32>(path.data(), i));
-      if (type_has_custom_drop(prefix)) {
-        const u32 index = bag.emit<i18n::Key::LowerMoveOutOfDestructor>(
-            diag::Severity::Error, diag::Stage::Lowering,
-            DiagCode::MoveOutOfDestructor, cur_span_, local.name);
-        (void)index;
-        return;
-      }
-    }
-    for (const std::vector<u32>& moved : local.moved_fields) {
-      if (moved == path) {
-        return;
-      }
-    }
-    local.moved_fields.push_back(path);
+  if (!v.place || !v.address || is_copy(v.type)) {
+    return;
   }
+  const ir::RegisterIdx marker = emit(ir::Opcode::Move, v.type, {v.op});
+  (void)marker;
+  const ir::Operand& operand = builder.state().operands[v.op.idx];
+  if (!operand.is<ir::RegisterIdx>()) {
+    return;
+  }
+  u32 local_index = 0;
+  std::vector<u32> path;
+  if (!place_of_register(operand.as_register().idx, local_index, path)) {
+    return;
+  }
+  // A field cannot move out of a value with a user-written `drop`; the
+  // move has already been refused where it happened.
+  for (usize i = 0; i < path.size(); ++i) {
+    const ir::TypeIdx prefix = type_at_path(
+        locals[local_index].type, std::span<const u32>(path.data(), i));
+    if (type_has_custom_drop(prefix)) {
+      const u32 index = bag.emit<i18n::Key::LowerMoveOutOfDestructor>(
+          diag::Severity::Error, diag::Stage::Lowering,
+          DiagCode::MoveOutOfDestructor, cur_span_, locals[local_index].name);
+      (void)index;
+      return;
+    }
+  }
+  record_event(OwnershipEvent::Kind::Move, local_index, std::move(path),
+               cur_span_);
 }
 
 bool Lowerer::is_destructor(ast::ItemIdx item) const {
@@ -447,130 +383,6 @@ bool Lowerer::is_destructor(ast::ItemIdx item) const {
 
 bool Lowerer::runs_destructor(ir::TypeIdx type) const {
   return type.idx < pkg.needs_drop.size() && pkg.needs_drop[type.idx];
-}
-
-bool Lowerer::emit_drop_at_path(ir::OperandIdx place,
-                                ir::TypeIdx type,
-                                diag::Span span,
-                                const Local* owner,
-                                std::vector<u32>& path) {
-  if (!runs_destructor(type)) {
-    return true;
-  }
-  if (owner != nullptr && path_moved(*owner, path)) {
-    return true;
-  }
-  if (type.idx < pkg.drop_glue.size()) {
-    const analyzer::CheckedModule::DropGlue& glue = pkg.drop_glue[type.idx];
-    if (glue.index != base::INVALID_IDX) {
-      // The move was refused where it happened; calling the method would
-      // hand it a partially moved value.
-      if (owner != nullptr && path_has_moved_below(*owner, path)) {
-        return true;
-      }
-      const analyzer::CheckedModule& def = pkg.modules[glue.module];
-      const analyzer::CheckedModule::MethodInfo& info = def.methods[glue.index];
-      ir::FunctionIdx fn = fn_index(
-          glue.module, info.item, info.name, info.params, info.ret,
-          generic_inst_index(info.self_type), {}, ir::SymbolKind::Method);
-      if (!fn.is_valid()) {
-        return false;
-      }
-      std::vector<ir::OperandIdx> ops;
-      ops.push_back(builder.operand(ir::Operand::from_function(
-          fn, builder.primitive(ir::TypeTag::Function))));
-      // The end is authorized here: whatever the may-move analysis says
-      // about the paths that reach it, the compiler placed it where the
-      // value is still owned (a guard decides a maybe at run time).
-      emit_void(ir::Opcode::Drop, {place});
-      Val self{place, type, true, true};
-      const bool saved = in_destructor_call_;
-      in_destructor_call_ = true;
-      const ir::OperandIdx argument = arg_for(self, info.params[0]);
-      in_destructor_call_ = saved;
-      ops.push_back(argument);
-      emit_void(ir::Opcode::Call, ops);
-      return true;
-    }
-  }
-  // No destructor of its own: ending the value ends what it holds. A
-  // struct names its fields, so that walk is direct.
-  const ir::TypeNode& node = builder.types()[type];
-  if (node.tag != ir::TypeTag::Struct) {
-    return false;
-  }
-  const ir::StructType& fields = builder.struct_types()[node.as_struct()];
-  bool placed = true;
-  for (u32 i = 0; i < fields.fields.size(); ++i) {
-    const ir::TypeIdx field = fields.fields[i];
-    if (!runs_destructor(field)) {
-      continue;
-    }
-    path.push_back(i);
-    const bool skipped = owner != nullptr && path_moved(*owner, path);
-    if (!skipped) {
-      const ir::RegisterIdx gep = emit(ir::Opcode::GetElementPtr, field,
-                                       {place, zero_i32, index_operand(i)});
-      if (!emit_drop_at_path(to_operand(gep, field), field, span, owner,
-                             path)) {
-        placed = false;
-      }
-    }
-    path.pop_back();
-  }
-  return placed;
-}
-
-void Lowerer::emit_guarded_drop(Local& local, diag::Span span) {
-  const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
-  const ir::RegisterIdx left =
-      emit(ir::Opcode::Load, i1, {to_operand(local.drop_guard, i1)});
-  if (failed) {
-    return;
-  }
-  const ir::BlockIdx drop_block = reserve_block();
-  const ir::BlockIdx after_block = reserve_block();
-  emit_cond_br(to_operand(left, i1), after_block, drop_block);
-  switch_to(drop_block);
-  std::vector<u32> path;
-  if (!emit_drop_at_path(to_operand(local.addr, local.type), local.type, span,
-                         &local, path)) {
-    const u32 index = bag.emit<i18n::Key::LowerDestructorNotRun>(
-        diag::Severity::Warning, diag::Stage::Lowering, DiagCode::DropUnplaced,
-        span, local.name);
-    (void)index;
-  }
-  emit_void(ir::Opcode::Store,
-            {bool_operand(true), to_operand(local.drop_guard, i1)});
-  emit_br(after_block);
-  switch_to(after_block);
-}
-
-void Lowerer::emit_drops(u32 mark, diag::Span span) {
-  for (u32 i = static_cast<u32>(locals.size()); i > mark; --i) {
-    Local& local = locals[i - 1];
-    if (!local.needs_drop || local.moved) {
-      continue;
-    }
-    if (local.moved_somewhere && local.drop_guard.is_valid()) {
-      emit_guarded_drop(local, span);
-      local.moved = true;
-      continue;
-    }
-    std::vector<u32> path;
-    if (emit_drop_at_path(to_operand(local.addr, local.type), local.type, span,
-                          &local, path)) {
-      // Ending a value through its own destructor consumes it, so a
-      // second scope exit must not end it again. A value ended through
-      // the destructors of what it holds is spent the same way.
-      local.moved = true;
-      continue;
-    }
-    const u32 index = bag.emit<i18n::Key::LowerDestructorNotRun>(
-        diag::Severity::Warning, diag::Stage::Lowering, DiagCode::DropUnplaced,
-        span, local.name);
-    (void)index;
-  }
 }
 
 ir::OperandIdx Lowerer::use_value(Val v) {
@@ -1068,6 +880,10 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   module = mod;
   cur_inst_ = entry.inst;
   locals.clear();
+  ownership_.clear();
+  end_sites_.clear();
+  record_seq_ = 0;
+  end_exempt_ = base::INVALID_IDX;
   comp_scope_.clear();
   fn_blocks_.clear();
   streams_.clear();
@@ -1154,7 +970,7 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   if (is_destructor(entry.item) && !locals.empty()) {
     // A destructor ends the value it is given; ending it again on the
     // way out would call the destructor on its own receiver forever.
-    locals[0].moved = true;
+    end_exempt_ = 0;
   }
   if (failed) {
     return;
@@ -1175,12 +991,12 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   // first, which moves it out of the value it came from, so the scope
   // exit does not end it again.
   if (body_tag == ir::TypeTag::Void) {
-    emit_drops(0, fn.name.span);
+    record_end(0, fn.name.span);
     emit_void(ir::Opcode::Ret, {});
     return;
   }
   const ir::OperandIdx result = use_value(body);
-  emit_drops(0, fn.name.span);
+  record_end(0, fn.name.span);
   emit_void(ir::Opcode::Ret, {result});
 }
 
@@ -1190,6 +1006,10 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
   module = mod;
   cur_inst_ = entry.inst;
   locals.clear();
+  ownership_.clear();
+  end_sites_.clear();
+  record_seq_ = 0;
+  end_exempt_ = base::INVALID_IDX;
   comp_scope_.clear();
   fn_blocks_.clear();
   streams_.clear();
@@ -1276,8 +1096,9 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
       const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, ptype, {size_one});
       emit_void(ir::Opcode::Store,
                 {to_operand(pregs[slot], ptype), to_operand(addr, ptype)});
-      locals.emplace_back(name, addr, ptype, runs_destructor(ptype));
-      give_drop_guard(locals.back());
+      locals.emplace_back(name, addr, ptype);
+      record_event(OwnershipEvent::Kind::Bind,
+                   static_cast<u32>(locals.size() - 1), {}, cur_span_);
       addr_names_.push_back({addr, name, binding_param_});
     }
   }
@@ -1303,12 +1124,12 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
       return;
     }
     if (body_tag == ir::TypeTag::Void) {
-      emit_drops(0, cur_span_);
+      record_end(0, cur_span_);
       emit_void(ir::Opcode::Ret, {});
       return;
     }
     const ir::OperandIdx result = use_value(lowered);
-    emit_drops(0, cur_span_);
+    record_end(0, cur_span_);
     emit_void(ir::Opcode::Ret, {result});
     return;
   }
@@ -1461,6 +1282,12 @@ void Lowerer::run() {
                                                "lower-fn");
       lower_fn(entry);
     }
+    if (failed) {
+      return;
+    }
+    // The ends of the body's places are the pass's to place; it rewrites
+    // the streams before the blocks are published.
+    place_ends();
     if (failed) {
       return;
     }
