@@ -104,7 +104,7 @@ const ja: Record<MessageKey, string> = {
   "guide.copied": "コピーしました",
   "guide.edit": "編集",
   "guide.done": "完了",
-  "guide.reset": "元に戻す",
+  "guide.reset": "リセット",
   "guide.open": "開く",
   "guide.openTitle": "このプログラムをプレイグラウンドで開く",
   "meta.guide": "alcy ガイド",
