@@ -16,7 +16,7 @@ fn main() {
   step := 2
   total = total + 40
   total = total + step
-  print("total = {}\n", total)
+  println("total = {}", total)
 }
 ```
 
@@ -35,13 +35,13 @@ fn add(a: i32, b: i32) -> i32 {
 }
 
 fn main() {
-  print("add(2, 3) = {}\n", add(2, 3))
+  println("add(2, 3) = {}", add(2, 3))
 }
 ```
 
 A function that never returns a value says nothing after its parameter
-list, and its body still returns with a bare `ret`. The `main` in the
-examples above is one of those.
+list; its body needs no `ret`, and a bare `ret` leaves it early. The
+`main` in the examples above is one of those.
 
 ## Control flow
 
@@ -51,7 +51,7 @@ expected:
 ```alcy
 fn sign(x: i32) -> i32 {
   if x < 0 {
-    ret 0 - 1
+    ret -1
   } else if x > 0 {
     ret 1
   }
@@ -59,7 +59,7 @@ fn sign(x: i32) -> i32 {
 }
 
 fn main() {
-  print("{} {} {}\n", sign(-7), sign(0), sign(9))
+  println("{} {} {}", sign(-7), sign(0), sign(9))
 }
 ```
 
@@ -79,7 +79,7 @@ fn main() {
     sum = sum + n
     n = n + 1
   }
-  print("sum = {}\n", sum)
+  println("sum = {}", sum)
 }
 ```
 
@@ -95,7 +95,7 @@ fn divmod(a: i32, b: i32) -> (i32, i32) {
 
 fn main() {
   result := divmod(17, 5)
-  print("17 / 5 = {} remainder {}\n", result.0, result.1)
+  println("17 / 5 = {} remainder {}", result.0, result.1)
 }
 ```
 
@@ -110,7 +110,7 @@ fn manhattan(p: Point) -> i32 {
 
 fn main() {
   p := Point { x: 3, y: 4 }
-  print("manhattan = {}\n", manhattan(p))
+  println("manhattan = {}", manhattan(p))
 }
 ```
 
@@ -133,31 +133,52 @@ fn area(s: Shape) -> i32 {
 fn main() {
   a := area(Shape::Circle(2))
   b := area(Shape::Rect(3, 4))
-  print("circle = {}, rect = {}\n", a, b)
+  println("circle = {}, rect = {}", a, b)
 }
 ```
 
 Enums may take type parameters, and the compiler understands `Option`
-and `Result` well enough to destructure them: `if let` tests one variant
-and binds its payload, and `?` propagates the other one.
+and `Result` well enough to destructure them: a condition binds a
+pattern with `if pattern := expr`, and `?` propagates a failure:
+
+```alcy
+fn half(n: i32) -> Result<i32, str> {
+  if n % 2 != 0 {
+    ret Result::Err("odd")
+  }
+  ret Result::Ok(n / 2)
+}
+
+fn sum_of_halves(a: i32, b: i32) -> Result<i32, str> {
+  x := half(a)?
+  y := half(b)?
+  ret Result::Ok(x + y)
+}
+
+fn main() {
+  if Result::Ok(v) := sum_of_halves(8, 6) {
+    println("8/2 + 6/2 = {}", v)
+  }
+}
+```
 
 ## Printing
 
 `print` and `println` take a compile-time format string and one
-argument per `{}` - the same call shape as `format`, which builds a
-`String` instead of writing:
+argument per `{}` - the same call shape as `format`. `print` writes the
+expansion as it is; `println` writes it and then a newline:
 
 ```alcy
 fn main() {
   print("print leaves the line open, ")
   println("println closes it")
-  println("the answer is {}", 40 + 2)
+  line := format("the answer is {}", 40 + 2)
+  println("{}", line.as_str())
 }
 ```
 
-`format` returns an owned `String`; `.as_str()` lends it wherever a
-`str` is wanted. The tuple in `(40 + 2,)` needs its trailing comma to be
-a one-element tuple rather than a parenthesized expression.
+`format` builds the expansion as an owned `String`; `.as_str()` lends
+it wherever a `str` is wanted.
 
 ## Where to go next
 
@@ -167,7 +188,7 @@ a one-element tuple rather than a parenthesized expression.
 - [The architecture](../../compiler/docs/architecture.md) describes the
   compiler's design.
 
-The language is far from finished: generics are limited, closures and
-modules exist only in part, and the standard library is mostly declared
-rather than implemented. The [backlog](../backlog.md) tracks what is
-being worked on.
+The language is far from finished: generic functions take no bounds
+yet, a closure that captures borrows its frame, and several
+standard-library packages are declared but empty. The
+[backlog](../backlog.md) tracks what is being worked on.
