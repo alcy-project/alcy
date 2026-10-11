@@ -11,5 +11,6 @@
 // and `String`. See docs/adr/0016-suites-and-the-std-split.md.
 
 pub use package::vec::Vec;
+pub use package::vec::VecIntoIter;
 pub use package::map::Map;
 pub use package::set::Set;

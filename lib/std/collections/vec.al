@@ -110,7 +110,7 @@ impl<T> Vec<T> {
     ret Option::Some(unsafe { *uninit_assume(elem_ptr(self.buf, self.len)) })
   }
 
-  // Ends every element, keeping the room already reserved.
+  // Forgets every element, keeping the room already reserved.
   pub fn clear(mut self: &mut Self) {
     mut i := 0 as usize
     while i < self.len {
@@ -123,6 +123,45 @@ impl<T> Vec<T> {
   pub fn drop(mut self: Vec<T>) {
     self.clear()
     unsafe { dealloc(self.buf, self.cap) }
+  }
+
+  // Consumes the vector; the cursor owns what is left.
+  pub fn into_iter(self: Vec<T>) -> VecIntoIter<T> {
+    ret VecIntoIter { v: self, pos: 0 }
+  }
+}
+
+// A consuming cursor over a `Vec`. Elements leave one at a time from
+// the front; the cursor's own destructor ends the ones still there and
+// releases the buffer, so a loop that stops early leaks nothing.
+pub struct VecIntoIter<T> {
+  v: Vec<T>,
+  pos: usize,
+}
+
+impl<T> VecIntoIter<T> {
+  pub fn into_iter(self: VecIntoIter<T>) -> VecIntoIter<T> {
+    ret self
+  }
+
+  pub fn drop(self: VecIntoIter<T>) {
+    mut i := self.pos
+    while i < self.v.len() {
+      unsafe { drop_in_place::<T>(uninit_assume(elem_ptr(self.v.buf, i))) }
+      i = i + 1
+    }
+    unsafe { dealloc(self.v.buf, self.v.cap) }
+  }
+}
+
+impl<T> Iterator<T> for VecIntoIter<T> {
+  fn next(mut self: &mut Self) -> Option<T> {
+    if self.pos >= self.v.len() {
+      ret Option::None
+    }
+    v := unsafe { *uninit_assume(elem_ptr(self.v.buf, self.pos)) }
+    self.pos = self.pos + 1
+    ret Option::Some(v)
   }
 }
 
