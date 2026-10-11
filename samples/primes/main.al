@@ -20,8 +20,7 @@ fn main() -> i32 {
   mut n := 2
   while n < 50 {
     if is_prime(n) {
-      line := format("{}\n", n)
-      print("{}", line.as_str())
+      println("{}", n)
     }
     n = n + 1
   }

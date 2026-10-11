@@ -8,14 +8,13 @@ fn main() -> i32 {
     three := n % 3 == 0
     five := n % 5 == 0
     if both {
-      print("FizzBuzz\n")
+      println("FizzBuzz")
     } else if three {
-      print("Fizz\n")
+      println("Fizz")
     } else if five {
-      print("Buzz\n")
+      println("Buzz")
     } else {
-      line := format("{}\n", n)
-      print("{}", line.as_str())
+      println("{}", n)
     }
     n = n + 1
   }

@@ -14,15 +14,16 @@ are examples that cannot quietly rot.
 
 | Sample | What it shows |
 | --- | --- |
-| `fizzbuzz` | `while`, `mut`, `else if`, and a single-argument `format` |
+| `hello` | simplest hello world |
+| `fizzbuzz` | `while`, `mut`, `else if`, and formatted `println` |
 | `fibonacci` | a named function, iterative, printing a formatted table |
 | `primes` | two functions, an early `ret`, and trial division to a square root |
 
 ## What they do not show
 
 They are not a tour of the language. Several things alcy has are absent
-here, most obviously collections: there is no `Array` or `String` to push
-into, so every sample prints line by line. That is also why these are
+here, most obviously collections: no sample builds a `Vec` or a `String`,
+and every one prints line by line. That is also why these are
 small — the exercises are the ones a reader already knows the shape of,
 so the reading is about alcy rather than about the algorithm.
 
