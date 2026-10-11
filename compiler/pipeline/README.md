@@ -19,6 +19,8 @@ parse stage owns the threads and the diagnostic merge order.
 - `load_profiles` -> the goal package's `.alcy/profile.toml` tables;
   `resolve_profile` -> the build settings the selected name resolves to
   (ADR-0062).
+- `render_instr_sites` -> the `file:line:column` spellings of lowered
+  instructions, interned for a backend that names call sites.
 - `parse_files` -> the items of every file, once, which every target of a
   package then resolves against; `resolve_inputs` is the one-shot form.
 - `select_modules` -> the module inputs a manifest declares, from the

@@ -4,6 +4,7 @@
 #include "codegen_llvm/llvm_ir_emitter.h"
 
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -15,8 +16,10 @@
 #include "debug/dcheck.h"
 #include "debug/dlog.h"
 #include "debug/fatal.h"
+#include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/debug/profiler/profile_scope.h"
+#include "fpag/str/string_pool_id.h"
 #include "ir/block.h"
 #include "ir/common.h"
 #include "ir/external_function.h"
@@ -35,6 +38,7 @@
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Module.h"
+#include "source/source.h"
 #include "symbol/mangle.h"
 
 #if BUILD_FLAG(IS_DEBUG)
@@ -50,7 +54,9 @@ LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
                              bool emit_entry,
                              bool freestanding,
                              debug::Profiler* profiler,
-                             bool backtrace)
+                             bool backtrace,
+                             std::span<const diag::Span> instr_spans,
+                             std::span<const str::StringPoolId> site_names)
     : module_(module),
       storage_(std::move(storage)),
       builder_(std::make_unique<IRBuilder>(module_->getContext())),
@@ -60,7 +66,9 @@ LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
       profiler_(profiler),
       emit_entry_(emit_entry),
       freestanding_(freestanding),
-      backtrace_(backtrace) {}
+      backtrace_(backtrace),
+      instr_spans_(instr_spans),
+      site_names_(site_names) {}
 
 void LlvmIrEmitter::check_state() {
   // DCHECK_MSG(storage_, "IR Storage is null");
@@ -236,7 +244,7 @@ llvm::Type* LlvmIrEmitter::enum_payload_area_type(ir::TypeIdx idx) const {
   return llvm::ArrayType::get(carrier, area.size / carrier_bytes);
 }
 
-std::vector<BacktraceName> LlvmIrEmitter::emit() && noexcept {
+EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
   check_state();
 
   values_.resize_functions(storage_->functions().size());
@@ -248,6 +256,20 @@ std::vector<BacktraceName> LlvmIrEmitter::emit() && noexcept {
 
   setup_immutables();
   setup_external_functions();
+
+  if (backtrace_) {
+    // The slots the panic walker loads, filled once the runtime exists.
+    // They have to exist before the runtime builds, because the walker
+    // bakes the load in and a table defined later only fills them.
+    for (std::string_view name :
+         {"alcy_backtrace_entries", "alcy_callsite_entries"}) {
+      llvm::GlobalVariable* slot =
+          module_->getOrInsertGlobal(std::string(name), builder_->getPtrTy());
+      slot->setLinkage(llvm::GlobalValue::PrivateLinkage);
+      slot->setInitializer(
+          llvm::ConstantPointerNull::get(builder_->getPtrTy()));
+    }
+  }
 
   // Declare every function before defining any body so forward
   // calls resolve regardless of declaration order.
@@ -301,14 +323,6 @@ std::vector<BacktraceName> LlvmIrEmitter::emit() && noexcept {
   if (entry_function != nullptr) {
     emit_entry(entry_function, entry_return);
   }
-  if (backtrace_) {
-    // The slot the walker loads; define_backtrace_table fills it once
-    // the runtime exists, and an unused slot is dropped with the table.
-    llvm::GlobalVariable* slot = module_->getOrInsertGlobal(
-        "alcy_backtrace_entries", builder_->getPtrTy());
-    slot->setLinkage(llvm::GlobalValue::PrivateLinkage);
-    slot->setInitializer(llvm::ConstantPointerNull::get(builder_->getPtrTy()));
-  }
 
 #if BUILD_FLAG(IS_DEBUG)
   // Storage arrives verified, so only the generated module is rechecked.
@@ -318,7 +332,7 @@ std::vector<BacktraceName> LlvmIrEmitter::emit() && noexcept {
     UNREACHABLE();
   }
 #endif
-  return std::move(visible_functions_);
+  return {std::move(visible_functions_), std::move(call_sites_)};
 }
 
 void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
@@ -393,6 +407,25 @@ void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
     builder_->SetInsertPoint(values_.block(block_idx));
     emit_block(block);
   }
+  // A split block keeps its old block's outgoing edge only through the
+  // continuation, so successor PHIs still naming the old block would
+  // read a predecessor that no longer reaches them.
+  for (const auto& [from, to] : split_blocks_) {
+    for (llvm::BasicBlock& block : *llvm_function) {
+      for (llvm::Instruction& inst : block) {
+        llvm::PHINode* phi = llvm::dyn_cast<llvm::PHINode>(&inst);
+        if (phi == nullptr) {
+          break;
+        }
+        for (u32 i = 0; i < phi->getNumIncomingValues(); ++i) {
+          if (phi->getIncomingBlock(i) == from) {
+            phi->setIncomingBlock(i, to);
+          }
+        }
+      }
+    }
+  }
+  split_blocks_.clear();
 
 #if BUILD_FLAG(IS_DEBUG)
   if (llvm::verifyFunction(*llvm_function, &llvm::errs())) [[unlikely]] {
@@ -409,15 +442,53 @@ void LlvmIrEmitter::emit_block(const ir::Block& block) {
 
   for (const ir::InstructionIdx instr_idx : block.instrs) {
     const ir::Instruction& instr = storage_->instrs()[instr_idx];
-    emit_instruction(instr);
+    emit_instruction(instr_idx, instr);
   }
 }
 
-void LlvmIrEmitter::emit_instruction(const ir::Instruction& instr) {
+bool LlvmIrEmitter::has_call_site(ir::InstructionIdx instr_idx) const {
+  if (!backtrace_) {
+    return false;
+  }
+  if (instr_idx.idx >= instr_spans_.size() ||
+      instr_idx.idx >= site_names_.size()) {
+    return false;
+  }
+  if (instr_spans_[instr_idx.idx].file == source::UNKNOWN_FILE) {
+    return false;
+  }
+  return site_names_[instr_idx.idx] != str::EMPTY_STRING_ID;
+}
+
+void LlvmIrEmitter::emit_sited_call(ir::InstructionIdx instr_idx,
+                                    const ir::Instruction& instr) {
+  llvm::LLVMContext& context = module_->getContext();
+  llvm::BasicBlock* here = builder_->GetInsertBlock();
+  llvm::Function* function = here->getParent();
+  llvm::BasicBlock* call_block =
+      llvm::BasicBlock::Create(context, "", function);
+  llvm::BasicBlock* cont_block =
+      llvm::BasicBlock::Create(context, "", function);
+  builder_->CreateBr(call_block);
+  builder_->SetInsertPoint(call_block);
+  emit_control(instr);
+  builder_->CreateBr(cont_block);
+  builder_->SetInsertPoint(cont_block);
+  call_sites_.push_back(CallSiteName{
+      call_block, std::string(interner_->get(site_names_[instr_idx.idx]))});
+  split_blocks_.emplace_back(here, cont_block);
+}
+
+void LlvmIrEmitter::emit_instruction(ir::InstructionIdx instr_idx,
+                                     const ir::Instruction& instr) {
   check_state();
 
   using Op = ir::Opcode;
 
+  if (backtrace_ && instr.op == Op::Call && has_call_site(instr_idx)) {
+    emit_sited_call(instr_idx, instr);
+    return;
+  }
   switch (instr.op) {
     case Op::Noop: break;
 
@@ -675,58 +746,106 @@ std::string LlvmIrEmitter::display_name(
   return out;
 }
 
-void define_backtrace_table(llvm::Module& module,
-                            const std::vector<BacktraceName>& visible) {
+namespace {
+
+// One address the panic walker can name, with the spelling a frame
+// shows. An empty name marks a frame the trace does not show (the
+// runtime's own).
+struct TableEntry {
+  llvm::Constant* address = nullptr;
+  std::string name;
+};
+
+// Defines `{address, name, len}` plus a null terminator under
+// `array_name`, and points `slot_name` (created when missing) at it.
+// Called after the runtime exists and before optimization.
+void define_table(llvm::Module& module,
+                  std::string_view array_name,
+                  std::string_view slot_name,
+                  std::string_view name_prefix,
+                  const std::vector<TableEntry>& entries) {
   llvm::LLVMContext& context = module.getContext();
   llvm::PointerType* ptr = llvm::PointerType::getUnqual(context);
   llvm::Type* usize = module.getDataLayout().getIntPtrType(context);
   llvm::StructType* entry_type =
       llvm::StructType::get(context, {ptr, ptr, usize});
 
-  std::vector<llvm::Constant*> entries;
-  entries.reserve(visible.size() + 1);
+  std::vector<llvm::Constant*> constants;
+  constants.reserve(entries.size() + 1);
   u32 made = 0;
-  for (llvm::Function& function : module) {
-    if (function.isDeclaration()) {
-      continue;
-    }
+  for (const TableEntry& entry : entries) {
     llvm::Constant* name = llvm::ConstantPointerNull::get(ptr);
     llvm::Constant* length = llvm::ConstantInt::get(usize, 0);
-    for (const BacktraceName& shown : visible) {
-      if (shown.function != &function) {
-        continue;
-      }
-      llvm::Constant* bytes =
-          llvm::ConstantDataArray::getString(context, shown.name,
-                                             /*AddNull=*/false);
+    if (!entry.name.empty()) {
+      llvm::Constant* bytes = llvm::ConstantDataArray::getString(
+          context, entry.name, /*AddNull=*/false);
       llvm::GlobalVariable* text = module.getOrInsertGlobal(
-          "alcy.backtrace.name." + std::to_string(made++), bytes->getType());
+          std::string(name_prefix) + std::to_string(made++), bytes->getType());
       text->setInitializer(bytes);
       text->setConstant(true);
       text->setLinkage(llvm::GlobalValue::PrivateLinkage);
       name = llvm::ConstantExpr::getBitCast(text, ptr);
-      length = llvm::ConstantInt::get(usize, shown.name.size());
-      break;
+      length = llvm::ConstantInt::get(usize, entry.name.size());
     }
-    entries.push_back(
-        llvm::ConstantStruct::get(entry_type, {&function, name, length}));
+    constants.push_back(
+        llvm::ConstantStruct::get(entry_type, {entry.address, name, length}));
   }
   // The walker stops at an entry with no start address.
-  entries.push_back(llvm::ConstantStruct::get(
+  constants.push_back(llvm::ConstantStruct::get(
       entry_type,
       {llvm::ConstantPointerNull::get(ptr), llvm::ConstantPointerNull::get(ptr),
        llvm::ConstantInt::get(usize, 0)}));
   llvm::ArrayType* array_type =
-      llvm::ArrayType::get(entry_type, entries.size());
+      llvm::ArrayType::get(entry_type, constants.size());
   llvm::GlobalVariable* array =
-      module.getOrInsertGlobal("alcy_backtrace_array", array_type);
-  array->setInitializer(llvm::ConstantArray::get(array_type, entries));
+      module.getOrInsertGlobal(std::string(array_name), array_type);
+  array->setInitializer(llvm::ConstantArray::get(array_type, constants));
   array->setConstant(true);
   array->setLinkage(llvm::GlobalValue::PrivateLinkage);
-  llvm::GlobalVariable* slot = module.getNamedGlobal("alcy_backtrace_entries");
-  DCHECK_MSG(slot != nullptr, "backtrace table without its slot");
+  llvm::GlobalVariable* slot = module.getNamedGlobal(slot_name);
+  if (slot == nullptr) {
+    slot = module.getOrInsertGlobal(std::string(slot_name), ptr);
+    slot->setLinkage(llvm::GlobalValue::PrivateLinkage);
+    slot->setInitializer(llvm::ConstantPointerNull::get(ptr));
+  }
   slot->setInitializer(llvm::ConstantExpr::getBitCast(array, ptr));
   slot->setConstant(true);
+}
+
+}  // namespace
+
+void define_backtrace_table(llvm::Module& module,
+                            const std::vector<BacktraceName>& visible) {
+  std::vector<TableEntry> entries;
+  entries.reserve(visible.size() + 1);
+  for (llvm::Function& function : module) {
+    if (function.isDeclaration()) {
+      continue;
+    }
+    std::string name;
+    for (const BacktraceName& shown : visible) {
+      if (shown.function == &function) {
+        name = shown.name;
+        break;
+      }
+    }
+    entries.push_back(TableEntry{&function, std::move(name)});
+  }
+  define_table(module, "alcy_backtrace_array", "alcy_backtrace_entries",
+               "alcy.backtrace.name.", entries);
+}
+
+void define_callsite_table(llvm::Module& module,
+                           const std::vector<CallSiteName>& sites) {
+  std::vector<TableEntry> entries;
+  entries.reserve(sites.size() + 1);
+  for (const CallSiteName& site : sites) {
+    entries.push_back(
+        TableEntry{llvm::BlockAddress::get(site.block->getParent(), site.block),
+                   site.site});
+  }
+  define_table(module, "alcy_callsite_array", "alcy_callsite_entries",
+               "alcy.callsite.name.", entries);
 }
 
 llvm::Function* LlvmIrEmitter::create_function(

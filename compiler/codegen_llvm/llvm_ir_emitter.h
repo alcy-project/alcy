@@ -4,14 +4,18 @@
 #pragma once
 
 #include <memory>
+#include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "codegen_llvm/declaration.h"
 #include "codegen_llvm/llvm_ir_storage.h"
 #include "codegen_llvm/target.h"
+#include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/debug/profiler/profiler.h"
+#include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 #include "ir/function.h"
 #include "ir/storage.h"
@@ -19,6 +23,7 @@
 #include "ir/type.h"
 
 namespace llvm {
+class BasicBlock;
 class Function;
 class Module;
 }  // namespace llvm
@@ -41,6 +46,27 @@ struct BacktraceName {
 void define_backtrace_table(llvm::Module& module,
                             const std::vector<BacktraceName>& visible);
 
+// One call a backtrace names: the block holding only that call, and the
+// rendered site the frame shows beside the function name (ADR-0063).
+struct CallSiteName {
+  llvm::BasicBlock* block = nullptr;
+  std::string site;
+};
+
+// Fills the table the panic walker reads for call sites, on the same
+// terms as define_backtrace_table: one entry per recorded call, so a
+// frame's return address resolves to the call it returns to.
+void define_callsite_table(llvm::Module& module,
+                           const std::vector<CallSiteName>& sites);
+
+// What a backtrace build names: the program functions and the call
+// sites, each with the spelling a frame shows. Both empty unless the
+// emitter was built with backtrace on.
+struct EmittedBacktrace {
+  std::vector<BacktraceName> functions;
+  std::vector<CallSiteName> sites;
+};
+
 class LlvmIrEmitter {
  public:
   using IRBuilder =
@@ -57,7 +83,9 @@ class LlvmIrEmitter {
                 bool emit_entry,
                 bool freestanding = false,
                 debug::Profiler* profiler = nullptr,
-                bool backtrace = false);
+                bool backtrace = false,
+                std::span<const diag::Span> instr_spans = {},
+                std::span<const str::StringPoolId> site_names = {});
   ~LlvmIrEmitter() = default;
 
   LlvmIrEmitter(const LlvmIrEmitter&) = delete;
@@ -66,10 +94,9 @@ class LlvmIrEmitter {
   LlvmIrEmitter(LlvmIrEmitter&&) noexcept = default;
   LlvmIrEmitter& operator=(LlvmIrEmitter&&) noexcept = default;
 
-  // Emits every function body. Returns the program functions and the
-  // names a runtime backtrace shows for them, empty unless the emitter
-  // was built with backtrace on.
-  std::vector<BacktraceName> emit() && noexcept;
+  // Emits every function body. Returns what a backtrace build names,
+  // empty unless the emitter was built with backtrace on.
+  EmittedBacktrace emit() && noexcept;
 
  private:
   void check_state();
@@ -80,7 +107,8 @@ class LlvmIrEmitter {
 
   void emit_function(llvm::Function* llvm_function, const ir::Function& func);
   void emit_block(const ir::Block& block);
-  void emit_instruction(const ir::Instruction& instr);
+  void emit_instruction(ir::InstructionIdx instr_idx,
+                        const ir::Instruction& instr);
 
   // Per-category instruction emission (see llvm_ir_emitter_compute.cc and
   // llvm_ir_emitter_memory.cc).
@@ -96,6 +124,16 @@ class LlvmIrEmitter {
 
   llvm::Value* resolve_operand_value(const ir::Operand& operand) const;
   llvm::Function* resolve_operand_function(const ir::Operand& operand) const;
+
+  // Whether an instruction is a call a backtrace names: a call whose
+  // site the emission carries. Anything else emits inline, and the
+  // site table stays without it.
+  [[nodiscard]] bool has_call_site(ir::InstructionIdx instr_idx) const;
+  // Emits a named call in a block of its own, so the site table maps
+  // the call's address and not its neighbors'. Records the split for
+  // the fixup below: successor PHIs still name the block as it was.
+  void emit_sited_call(ir::InstructionIdx instr_idx,
+                       const ir::Instruction& instr);
 
   void setup_immutables();
   void setup_external_functions();
@@ -132,6 +170,16 @@ class LlvmIrEmitter {
   // runtime exists (ADR-0063).
   bool backtrace_ = false;
   std::vector<BacktraceName> visible_functions_;
+  // Source spans parallel to storage instructions, and the rendered
+  // site spellings beside them. Both empty unless a backtrace asked
+  // for call sites.
+  std::span<const diag::Span> instr_spans_;
+  std::span<const str::StringPoolId> site_names_;
+  // Calls this emission gave a block of their own, with the block that
+  // continues after each. Successor PHIs are rewritten from the former
+  // to the latter once the function is whole.
+  std::vector<CallSiteName> call_sites_;
+  std::vector<std::pair<llvm::BasicBlock*, llvm::BasicBlock*>> split_blocks_;
   LlvmIrStorage values_;
   // LLVM types are immutable once built, and one shape is requested for
   // every register, operand, and signature that names it, so each is

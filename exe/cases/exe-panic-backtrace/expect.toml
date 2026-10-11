@@ -1,5 +1,12 @@
 # A panic under --on-panic=backtrace names the frames the walk can
-# find, innermost first, after the message and its site.
+# find, innermost first, each with the site of the call it returns to.
+# The call sits in a loop body, so the emission also splits a block a
+# successor PHI names.
 exit = "non-zero"
 args = ["--on-panic=backtrace"]
-stderr_contains = ["panic at main.al:2:3: boom", "  at g", "  at f", "  at main"]
+stderr_contains = [
+  "panic at main.al:2:3: boom",
+  "  at g (main.al:2:3)",
+  "  at f (main.al:10:7)",
+  "  at main (main.al:16:3)",
+]

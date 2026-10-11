@@ -23,16 +23,24 @@ on-panic = "backtrace"
 
 - `abort` (the default) writes the message and its site, as before.
 - `backtrace` additionally walks the frame chain and prints one
-  `at <name>` line per program frame it can name, innermost first,
-  before aborting.
+  indented `at <name>` line per program frame it can name, innermost
+  first, before aborting. A frame with a known call site appends it:
+  `at f (main.al:6:3)`.
 
-The mechanism is frame pointers plus a function table, LLVM only:
+The mechanism is frame pointers plus two tables, LLVM only:
 
 - The emitter records every defined function with its source spelling
   (`path::name`, without the signature the linkable name encodes) and
   defines `@alcy_backtrace_entries`: `{start, name, len}` per function
   plus a null terminator. The runtime's own frames and the entry thunk
   carry a null name, so the walk skips them.
+- A named call gets a block of its own, and the emitter defines
+  `@alcy_callsite_entries` the same way: one `{start, site, len}` per
+  call, so a frame's return address resolves to the call it returns to
+  rather than to a neighbor sharing its block. Successor PHIs are
+  rewritten to the continuation, which the per-function verifier
+  checks. Only a backtrace build splits; every other build emits calls
+  inline and the table stays empty.
 - Every generated function keeps a frame pointer, and tail calls are
   off, so the panic's frame stays a frame of its own. `alcy_panic`
   itself is `noinline`: inlining it into the caller would start the
@@ -45,14 +53,17 @@ The mechanism is frame pointers plus a function table, LLVM only:
   greatest start at or below it and within range; anything farther is
   another mapping (libc, the sanitizer runtime) and not a match. It
   stops after 64 frames, on a null or non-advancing frame, and prints
-  nothing when nothing matches rather than guessing.
+  nothing when nothing matches rather than guessing. Each frame looks
+  up both tables: the function name, then the site after it.
 - The walk reads the x86-64 and AArch64 frame layout (`[fp]` is the
   caller's frame, `[fp+8]` its return address). On any other target the
   panic carries its message and site only, even with backtrace on.
 - An optimized build inlines and tail-calls less visibly: `release`
   with backtrace shows the frames that survived, which can be just
   `main`. That is best effort, not a second unwinder, and documented as
-  such.
+  such. A call site survives with its block: an address-taken block is
+  not merged away, so the surviving frame still resolves to the call
+  it returns to.
 
 Resolution follows the profile order (ADR-0062): built-in `abort`,
 the selected table's `on-panic`, then `--on-panic`, which every verb

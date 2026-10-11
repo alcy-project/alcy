@@ -55,8 +55,9 @@ struct EmittedModule {
     LlvmIrEmitter emitter(module.get(), std::move(request.storage),
                           request.strings, request.target, request.emit_entry,
                           request.freestanding, request.profiler,
-                          request.backtrace);
-    std::vector<BacktraceName> visible = std::move(emitter).emit();
+                          request.backtrace, request.instr_spans,
+                          request.instr_site_names);
+    EmittedBacktrace named = std::move(emitter).emit();
     // Before the optimizer, so the runtime is inlined and folded like
     // any other code, and after the program, so its definitions land in
     // the declarations the program's call sites already hold.
@@ -68,12 +69,14 @@ struct EmittedModule {
     }
     if (request.backtrace) {
       // The frames the walk reads and the names it prints: every
-      // generated function keeps a frame pointer, and the table names
-      // the program's. Tail calls are off so the panic's own frame stays
-      // a frame of its own; an inlined caller still has no frame to
-      // find, which is the best-effort part. All three are what an
+      // generated function keeps a frame pointer, and one table names
+      // the program's functions while another names the call sites a
+      // frame returns to. Tail calls are off so the panic's own frame
+      // stays a frame of its own; an inlined caller still has no frame
+      // to find, which is the best-effort part. All three are what an
       // on-panic profile asked for and absent when it did not.
-      define_backtrace_table(*module, visible);
+      define_backtrace_table(*module, named.functions);
+      define_callsite_table(*module, named.sites);
       for (llvm::Function& function : *module) {
         if (!function.isDeclaration()) {
           function.addFnAttr("frame-pointer", "all");

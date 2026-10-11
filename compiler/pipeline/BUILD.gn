@@ -65,6 +65,8 @@ source_set("pipeline") {
     "backend_emit.h",
     "build.cc",
     "build.h",
+    "call_sites.cc",
+    "call_sites.h",
     "check.cc",
     "check.h",
     "dependencies.cc",

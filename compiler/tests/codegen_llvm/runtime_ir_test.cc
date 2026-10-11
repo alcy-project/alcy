@@ -264,6 +264,7 @@ TEST_CASE("A panic writes the site it was handed") {
   CHECK(text.find("has_where") != std::string::npos);
   // No backtrace asked, so no frame walk is built in.
   CHECK(text.find("c\"  at \\00\"") == std::string::npos);
+  CHECK(text.find("llvm.frameaddress") == std::string::npos);
 }
 
 TEST_CASE("A panic with backtrace walks the frame chain") {
@@ -289,6 +290,9 @@ TEST_CASE("A panic with backtrace walks the frame chain") {
   // The walk reads the frame chain and prints one line per named frame.
   CHECK(text.find("llvm.frameaddress") != std::string::npos);
   CHECK(text.find("c\"  at \\00\"") != std::string::npos);
+  // A frame with a site prints it after the name.
+  CHECK(text.find("c\" (\\00\"") != std::string::npos);
+  CHECK(text.find("c\")\\00\"") != std::string::npos);
   // The walk starts from the panic's own frame, so the panic stays a
   // function of its own rather than folding into its caller.
   llvm::Function* panic = module.getFunction("alcy_panic");

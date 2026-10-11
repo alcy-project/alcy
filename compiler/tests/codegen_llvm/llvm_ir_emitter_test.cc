@@ -11,6 +11,7 @@
 #include "codegen_llvm/common.h"
 #include "codegen_llvm/llvm_backend.h"
 #include "codegen_llvm/target.h"
+#include "diag/span.h"
 #include "doctest/doctest.h"
 #include "fpag/base/idx.h"
 #include "fpag/mem/page_allocator.h"
@@ -941,25 +942,26 @@ TEST_CASE("Emit with backtrace names the entry for the walk") {
                         /*freestanding=*/false, /*profiler=*/nullptr,
                         /*backtrace=*/true);
 
-  std::vector<BacktraceName> visible = std::move(emitter).emit();
+  EmittedBacktrace named = std::move(emitter).emit();
 
   CHECK(!llvm::verifyModule(*module));
   // The table names the entry by its source spelling, not the renamed
   // symbol the wrapper calls through.
-  CHECK(visible.size() == 1);
-  if (visible.size() != 1) {
+  CHECK(named.functions.size() == 1);
+  if (named.functions.size() != 1) {
     return;
   }
-  CHECK(visible[0].name == "main");
+  CHECK(named.functions[0].name == "main");
   // The optimizer would fold the entry into its wrapper and leave the
   // walk no named frame at all; one missed inlining on a function
   // called once is what keeps `main` standing.
-  CHECK(visible[0].function != nullptr);
-  if (visible[0].function != nullptr) {
-    CHECK(visible[0].function->getName().contains("alcy_main"));
-    CHECK(visible[0].function->hasFnAttribute(llvm::Attribute::NoInline));
+  CHECK(named.functions[0].function != nullptr);
+  if (named.functions[0].function != nullptr) {
+    CHECK(named.functions[0].function->getName().contains("alcy_main"));
+    CHECK(
+        named.functions[0].function->hasFnAttribute(llvm::Attribute::NoInline));
   }
-  define_backtrace_table(*module, visible);
+  define_backtrace_table(*module, named.functions);
   llvm::GlobalVariable* slot = module->getNamedGlobal("alcy_backtrace_entries");
   CHECK(slot != nullptr);
   if (slot != nullptr) {
@@ -969,6 +971,150 @@ TEST_CASE("Emit with backtrace names the entry for the walk") {
   llvm::raw_string_ostream os(ir_str);
   module->print(os, nullptr);
   CHECK(ir_str.find("alcy_backtrace_array") != std::string::npos);
+}
+
+namespace {
+
+// A program with one call: `main` calls `helper`, so the emission has
+// a call site to record. Built fresh per case, since the builder is
+// consumed on the way out.
+ir::VerifiedStorage call_site_ir(ir::SymbolTable* interner,
+                                 ir::InstructionIdx* call_out) {
+  ir::StorageBuilder builder;
+
+  const ir::InstructionIdx helper_ret =
+      builder.instr({.op = ir::Opcode::Ret,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(base::INVALID_IDX),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = {}});
+  ir::InstrSeq helper_instrs;
+  helper_instrs.push(helper_ret);
+  const ir::BlockIdx helper_block =
+      builder.block({.instrs = helper_instrs.finish(), .block_params = {}});
+  const ir::FunctionIdx helper = builder.function({
+      .meta = {.return_type = builder.primitive(ir::TypeTag::Void),
+               .param_types = {},
+               .name = interner->intern("helper"),
+               .path = str::EMPTY_STRING_ID,
+               .kind = ir::SymbolKind::Free,
+               .generics = ir::TypeIdxRange{}},
+      .blocks = {helper_block, 1},
+  });
+
+  ir::OperandSeq call_args;
+  call_args.push(builder.operand(ir::Operand::from_function(
+      helper, ir::primitive_idx(ir::TypeTag::Function))));
+  const ir::InstructionIdx call =
+      builder.instr({.op = ir::Opcode::Call,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(base::INVALID_IDX),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = call_args.finish()});
+  const ir::InstructionIdx main_ret =
+      builder.instr({.op = ir::Opcode::Ret,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(base::INVALID_IDX),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = {}});
+  ir::InstrSeq main_instrs;
+  main_instrs.push(call);
+  main_instrs.push(main_ret);
+  const ir::BlockIdx main_block =
+      builder.block({.instrs = main_instrs.finish(), .block_params = {}});
+  builder.function({
+      .meta = {.return_type = builder.primitive(ir::TypeTag::Void),
+               .param_types = {},
+               .name = interner->intern("main"),
+               .path = str::EMPTY_STRING_ID,
+               .kind = ir::SymbolKind::Free,
+               .generics = ir::TypeIdxRange{}},
+      .blocks = {main_block, 1},
+  });
+
+  *call_out = call;
+  return std::move(builder).build().unwrap();
+}
+
+}  // namespace
+
+TEST_CASE("Emit with backtrace records call sites") {
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("callsite_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
+
+  ir::SymbolTable interner(mem::page_size());
+  ir::InstructionIdx call = ir::InstructionIdx::invalid();
+  ir::VerifiedStorage storage = call_site_ir(&interner, &call);
+  CHECK(call.is_valid());
+  if (!call.is_valid()) {
+    return;
+  }
+  // Three instructions: the helper's return, the call, and main's
+  // return. Only the call carries a site.
+  std::vector<diag::Span> spans(3);
+  std::vector<str::StringPoolId> sites(3, str::EMPTY_STRING_ID);
+  spans[call.idx] = diag::Span{.file = 7, .offset = 20, .length = 1};
+  sites[call.idx] = interner.intern("main.al:2:3");
+
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
+                        host_target(), /*emit_entry=*/false,
+                        /*freestanding=*/false, /*profiler=*/nullptr,
+                        /*backtrace=*/true, spans, sites);
+
+  EmittedBacktrace named = std::move(emitter).emit();
+
+  CHECK(!llvm::verifyModule(*module));
+  CHECK(named.sites.size() == 1);
+  if (named.sites.size() != 1) {
+    return;
+  }
+  CHECK(named.sites[0].site == "main.al:2:3");
+  define_callsite_table(*module, named.sites);
+  llvm::GlobalVariable* slot = module->getNamedGlobal("alcy_callsite_entries");
+  CHECK(slot != nullptr);
+  if (slot != nullptr) {
+    CHECK(slot->hasInitializer());
+  }
+  std::string ir_str;
+  llvm::raw_string_ostream os(ir_str);
+  module->print(os, nullptr);
+  CHECK(ir_str.find("alcy_callsite_array") != std::string::npos);
+  CHECK(ir_str.find("main.al:2:3") != std::string::npos);
+}
+
+TEST_CASE("Emit without backtrace records no call sites") {
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("no_callsite_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
+
+  ir::SymbolTable interner(mem::page_size());
+  ir::InstructionIdx call = ir::InstructionIdx::invalid();
+  ir::VerifiedStorage storage = call_site_ir(&interner, &call);
+  CHECK(call.is_valid());
+  if (!call.is_valid()) {
+    return;
+  }
+  std::vector<diag::Span> spans(3);
+  std::vector<str::StringPoolId> sites(3, str::EMPTY_STRING_ID);
+  spans[call.idx] = diag::Span{.file = 7, .offset = 20, .length = 1};
+  sites[call.idx] = interner.intern("main.al:2:3");
+
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
+                        host_target(), /*emit_entry=*/false,
+                        /*freestanding=*/false, /*profiler=*/nullptr,
+                        /*backtrace=*/false, spans, sites);
+
+  EmittedBacktrace named = std::move(emitter).emit();
+
+  CHECK(!llvm::verifyModule(*module));
+  CHECK(named.sites.empty());
+  std::string ir_str;
+  llvm::raw_string_ostream os(ir_str);
+  module->print(os, nullptr);
+  CHECK(ir_str.find("alcy_callsite_array") == std::string::npos);
 }
 
 }  // namespace codegen_llvm

@@ -480,45 +480,123 @@ class RuntimeBuilder {
     builder_.CreateRetVoid();
   }
 
-  // Walks the frame chain outward from `alcy_panic` and prints one
-  // `  at <name>` line per table entry that matches a frame. The table
-  // is `define_backtrace_table`'s: `{start, name, len}`, terminated by
-  // an entry with no start, with a null name marking a frame the trace
-  // does not show (the runtime's own).
-  void build_panic_walk(llvm::BasicBlock* end) {
+  // Loads the address table `slot_name` holds, or null when no table
+  // was defined. The tables are the emitter's to define; a runtime
+  // without one walks nothing.
+  llvm::Value* load_entries(std::string_view slot_name) {
+    llvm::GlobalVariable* slot = module_.getNamedGlobal(slot_name);
+    if (slot == nullptr) {
+      return llvm::ConstantPointerNull::get(builder_.getPtrTy());
+    }
+    return builder_.CreateLoad(builder_.getPtrTy(), slot, "entries");
+  }
+
+  // One table lookup: the name and length of the entry with the
+  // greatest start at or below `pc` and in range, or null and zero.
+  // Builds its own scan loop and leaves the insert point past it. The
+  // caller only looks up a table it defined beside the function table,
+  // so entries is never null where this runs.
+  struct TableMatch {
+    llvm::Value* name = nullptr;
+    llvm::Value* len = nullptr;
+    llvm::BasicBlock* matched = nullptr;
+  };
+
+  TableMatch build_table_lookup(llvm::Value* pc, llvm::Value* entries) {
     llvm::LLVMContext& context = module_.getContext();
     llvm::Type* ptr = builder_.getPtrTy();
     llvm::StructType* entry_type =
         llvm::StructType::get(context, {ptr, ptr, usize_});
-    llvm::BasicBlock* from = builder_.GetInsertBlock();
-    llvm::Function* function = from->getParent();
-
-    // The emitter creates the slot; a runtime asked for the walk with no
-    // table gets an empty one, which the walk skips.
-    llvm::GlobalVariable* slot =
-        module_.getNamedGlobal("alcy_backtrace_entries");
-    if (slot == nullptr) {
-      slot = module_.getOrInsertGlobal("alcy_backtrace_entries", ptr);
-      slot->setLinkage(llvm::GlobalValue::PrivateLinkage);
-      slot->setInitializer(llvm::ConstantPointerNull::get(ptr));
-    }
-
-    llvm::BasicBlock* walk =
-        llvm::BasicBlock::Create(context, "walk", function);
+    llvm::BasicBlock* here = builder_.GetInsertBlock();
+    llvm::Function* function = here->getParent();
     llvm::BasicBlock* scan =
         llvm::BasicBlock::Create(context, "scan", function);
     llvm::BasicBlock* advance =
         llvm::BasicBlock::Create(context, "advance", function);
     llvm::BasicBlock* matched =
         llvm::BasicBlock::Create(context, "matched", function);
+    llvm::Constant* nil = llvm::ConstantPointerNull::get(builder_.getPtrTy());
+    builder_.CreateBr(scan);
+
+    // The scan keeps the match with the greatest start at or below the
+    // return address. Entries are not sorted, and an entry whose start
+    // is too far below the address (libc, another mapping) is not a
+    // match.
+    builder_.SetInsertPoint(scan);
+    llvm::PHINode* best_start = builder_.CreatePHI(ptr, 2, "best_start");
+    llvm::PHINode* best_name = builder_.CreatePHI(ptr, 2, "best_name");
+    llvm::PHINode* best_len = builder_.CreatePHI(usize_, 2, "best_len");
+    llvm::PHINode* index = builder_.CreatePHI(usize_, 2, "index");
+    best_start->addIncoming(nil, here);
+    best_name->addIncoming(nil, here);
+    best_len->addIncoming(llvm::ConstantInt::get(usize_, 0), here);
+    index->addIncoming(llvm::ConstantInt::get(usize_, 0), here);
+    llvm::Value* entry =
+        builder_.CreateGEP(entry_type, entries, {index}, "entry");
+    llvm::Value* start = builder_.CreateLoad(
+        ptr, builder_.CreateStructGEP(entry_type, entry, 0), "start");
+    llvm::Value* last = builder_.CreateICmpEQ(start, nil, "last");
+    builder_.CreateCondBr(last, matched, advance);
+
+    builder_.SetInsertPoint(advance);
+    llvm::Value* name = builder_.CreateLoad(
+        ptr, builder_.CreateStructGEP(entry_type, entry, 1), "name");
+    llvm::Value* len = builder_.CreateLoad(
+        usize_, builder_.CreateStructGEP(entry_type, entry, 2), "len");
+    llvm::Value* pc_word = builder_.CreatePtrToInt(pc, usize_, "pc_word");
+    llvm::Value* start_word =
+        builder_.CreatePtrToInt(start, usize_, "start_word");
+    llvm::Value* after = builder_.CreateICmpULE(start_word, pc_word, "after");
+    llvm::Value* near = builder_.CreateICmpULT(
+        builder_.CreateSub(pc_word, start_word),
+        llvm::ConstantInt::get(usize_, MAX_BACKTRACE_DISTANCE), "near");
+    llvm::Value* candidate = builder_.CreateAnd(after, near, "candidate");
+    llvm::Value* closer = builder_.CreateICmpUGT(
+        start_word, builder_.CreatePtrToInt(best_start, usize_, "best_word"),
+        "closer");
+    llvm::Value* take = builder_.CreateAnd(candidate, closer, "take");
+    best_start->addIncoming(builder_.CreateSelect(take, start, best_start),
+                            advance);
+    best_name->addIncoming(builder_.CreateSelect(take, name, best_name),
+                           advance);
+    best_len->addIncoming(builder_.CreateSelect(take, len, best_len), advance);
+    index->addIncoming(
+        builder_.CreateAdd(index, llvm::ConstantInt::get(usize_, 1)), advance);
+    builder_.CreateBr(scan);
+
+    builder_.SetInsertPoint(matched);
+    return {best_name, best_len, matched};
+  }
+
+  // Walks the frame chain outward from `alcy_panic` and prints one line
+  // per program frame: `  at <name>`, with the call site appended as
+  // `  at <name> (<site>)` when the site table names one. The runtime's
+  // own frames carry no name and print nothing.
+  void build_panic_walk(llvm::BasicBlock* end) {
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::Type* ptr = builder_.getPtrTy();
+    llvm::BasicBlock* from = builder_.GetInsertBlock();
+    llvm::Function* function = from->getParent();
+
+    llvm::BasicBlock* walk =
+        llvm::BasicBlock::Create(context, "walk", function);
+    llvm::BasicBlock* look =
+        llvm::BasicBlock::Create(context, "look", function);
+    llvm::BasicBlock* site =
+        llvm::BasicBlock::Create(context, "site", function);
     llvm::BasicBlock* print =
         llvm::BasicBlock::Create(context, "print", function);
+    llvm::BasicBlock* print_site =
+        llvm::BasicBlock::Create(context, "print_site", function);
+    llvm::BasicBlock* print_end =
+        llvm::BasicBlock::Create(context, "print_end", function);
     llvm::BasicBlock* next_frame =
         llvm::BasicBlock::Create(context, "next_frame", function);
     llvm::BasicBlock* done =
         llvm::BasicBlock::Create(context, "done", function);
 
-    llvm::Value* entries = builder_.CreateLoad(ptr, slot, "entries");
+    llvm::Value* entries = load_entries("alcy_backtrace_entries");
+    llvm::Value* site_entries = load_entries("alcy_callsite_entries");
     llvm::Value* no_entries = builder_.CreateICmpEQ(
         entries, llvm::ConstantPointerNull::get(builder_.getPtrTy()),
         "no_entries");
@@ -558,65 +636,40 @@ class RuntimeBuilder {
     // the blocks that carry it forward.
     llvm::Value* increased = builder_.CreateAdd(
         depth, llvm::ConstantInt::get(usize_, 1), "increased");
-    builder_.CreateCondBr(builder_.CreateNot(stop, "go"), scan, done);
+    builder_.CreateCondBr(builder_.CreateNot(stop, "go"), look, done);
 
-    // The scan keeps the match with the greatest start at or below the
-    // return address. Entries are not sorted, and an entry whose start
-    // is too far below the address (libc, another mapping) is not a
-    // match.
-    builder_.SetInsertPoint(scan);
-    llvm::PHINode* best_start = builder_.CreatePHI(ptr, 2, "best_start");
-    llvm::PHINode* best_name = builder_.CreatePHI(ptr, 2, "best_name");
-    llvm::PHINode* best_len = builder_.CreatePHI(usize_, 2, "best_len");
-    llvm::PHINode* index = builder_.CreatePHI(usize_, 2, "index");
-    llvm::Constant* nil = llvm::ConstantPointerNull::get(builder_.getPtrTy());
-    best_start->addIncoming(nil, walk);
-    best_name->addIncoming(nil, walk);
-    best_len->addIncoming(llvm::ConstantInt::get(usize_, 0), walk);
-    index->addIncoming(llvm::ConstantInt::get(usize_, 0), walk);
-    llvm::Value* entry =
-        builder_.CreateGEP(entry_type, entries, {index}, "entry");
-    llvm::Value* start = builder_.CreateLoad(
-        ptr, builder_.CreateStructGEP(entry_type, entry, 0), "start");
-    llvm::Value* last = builder_.CreateICmpEQ(start, nil, "last");
-    builder_.CreateCondBr(last, matched, advance);
+    // A frame shows exactly when the function table names it; the name
+    // is null for an unmatched address and for the runtime's own
+    // frames, and both read the same way.
+    builder_.SetInsertPoint(look);
+    TableMatch frame = build_table_lookup(pc, entries);
+    llvm::Value* show = builder_.CreateICmpNE(
+        frame.name, llvm::ConstantPointerNull::get(builder_.getPtrTy()),
+        "show");
+    builder_.CreateCondBr(show, site, next_frame);
 
-    builder_.SetInsertPoint(advance);
-    llvm::Value* name = builder_.CreateLoad(
-        ptr, builder_.CreateStructGEP(entry_type, entry, 1), "name");
-    llvm::Value* len = builder_.CreateLoad(
-        usize_, builder_.CreateStructGEP(entry_type, entry, 2), "len");
-    llvm::Value* pc_word = builder_.CreatePtrToInt(pc, usize_, "pc_word");
-    llvm::Value* start_word =
-        builder_.CreatePtrToInt(start, usize_, "start_word");
-    llvm::Value* after = builder_.CreateICmpULE(start_word, pc_word, "after");
-    llvm::Value* near = builder_.CreateICmpULT(
-        builder_.CreateSub(pc_word, start_word),
-        llvm::ConstantInt::get(usize_, MAX_BACKTRACE_DISTANCE), "near");
-    llvm::Value* candidate = builder_.CreateAnd(after, near, "candidate");
-    llvm::Value* closer = builder_.CreateICmpUGT(
-        start_word, builder_.CreatePtrToInt(best_start, usize_, "best_word"),
-        "closer");
-    llvm::Value* take = builder_.CreateAnd(candidate, closer, "take");
-    best_start->addIncoming(builder_.CreateSelect(take, start, best_start),
-                            advance);
-    best_name->addIncoming(builder_.CreateSelect(take, name, best_name),
-                           advance);
-    best_len->addIncoming(builder_.CreateSelect(take, len, best_len), advance);
-    index->addIncoming(
-        builder_.CreateAdd(index, llvm::ConstantInt::get(usize_, 1)), advance);
-    builder_.CreateBr(scan);
-
-    builder_.SetInsertPoint(matched);
-    llvm::Value* found = builder_.CreateICmpNE(best_start, nil, "found");
-    llvm::Value* named = builder_.CreateICmpNE(best_name, nil, "named");
-    builder_.CreateCondBr(builder_.CreateAnd(found, named, "show"), print,
-                          next_frame);
+    builder_.SetInsertPoint(site);
+    TableMatch at = build_table_lookup(pc, site_entries);
+    builder_.CreateBr(print);
 
     builder_.SetInsertPoint(print);
     builder_.CreateCall(write_all_, {fd(2), text_constant("  at "),
                                      llvm::ConstantInt::get(usize_, 5)});
-    builder_.CreateCall(write_all_, {fd(2), best_name, best_len});
+    builder_.CreateCall(write_all_, {fd(2), frame.name, frame.len});
+    llvm::Value* has_site = builder_.CreateICmpNE(
+        at.name, llvm::ConstantPointerNull::get(builder_.getPtrTy()),
+        "has_site");
+    builder_.CreateCondBr(has_site, print_site, print_end);
+
+    builder_.SetInsertPoint(print_site);
+    builder_.CreateCall(write_all_, {fd(2), text_constant(" ("),
+                                     llvm::ConstantInt::get(usize_, 2)});
+    builder_.CreateCall(write_all_, {fd(2), at.name, at.len});
+    builder_.CreateCall(write_all_, {fd(2), text_constant(")"),
+                                     llvm::ConstantInt::get(usize_, 1)});
+    builder_.CreateBr(print_end);
+
+    builder_.SetInsertPoint(print_end);
     builder_.CreateCall(
         write_all_, {fd(2), newline_text_, llvm::ConstantInt::get(usize_, 1)});
     builder_.CreateBr(next_frame);
@@ -624,10 +677,10 @@ class RuntimeBuilder {
     builder_.SetInsertPoint(next_frame);
     llvm::PHINode* parent = builder_.CreatePHI(ptr, 2, "parent");
     llvm::PHINode* deeper = builder_.CreatePHI(usize_, 2, "deeper");
-    parent->addIncoming(next_fp, matched);
-    parent->addIncoming(next_fp, print);
-    deeper->addIncoming(increased, matched);
-    deeper->addIncoming(increased, print);
+    parent->addIncoming(next_fp, frame.matched);
+    parent->addIncoming(next_fp, print_end);
+    deeper->addIncoming(increased, frame.matched);
+    deeper->addIncoming(increased, print_end);
     builder_.CreateBr(walk);
     fp->addIncoming(parent, next_frame);
     depth->addIncoming(deeper, next_frame);

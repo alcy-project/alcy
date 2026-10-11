@@ -48,6 +48,10 @@ struct EmitRequest {
   // Source spans parallel to storage instructions, for a backend that
   // reports a construct it cannot encode at the place it was written.
   std::span<const diag::Span> instr_spans;
+  // Rendered `file:line:column` spellings parallel to instr_spans, for a
+  // backend that names call sites. Empty unless a backtrace asked for
+  // them; entries without a site carry the empty name.
+  std::span<const str::StringPoolId> instr_site_names;
   ir::SymbolTable* strings = nullptr;
   diag::DiagBag* bag = nullptr;
   Target target;

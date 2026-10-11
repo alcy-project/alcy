@@ -154,6 +154,7 @@ extern "C" i32 alcy_compile(const u8* src, usize len, AlcyResult* out) {
   codegen::EmitRequest request{
       .storage = std::move(package.package.storage),
       .instr_spans = package.package.instr_spans,
+      .instr_site_names = {},
       .strings = &ctx.strings,
       .bag = &ctx.bag,
       .target = ctx.target,

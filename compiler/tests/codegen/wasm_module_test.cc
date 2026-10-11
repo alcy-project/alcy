@@ -169,6 +169,7 @@ base::Result<std::vector<u8>, codegen::EmitError> emit_test_module(
   codegen::EmitRequest request{
       .storage = std::move(storage),
       .instr_spans = {},
+      .instr_site_names = {},
       .strings = &strings,
       .bag = nullptr,
       .target =

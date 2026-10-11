@@ -23,6 +23,7 @@
 #include "fpag/debug/profiler/profile_scope.h"
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
+#include "fpag/str/string_pool_id.h"
 #include "i18n/messages.h"
 #include "ir/serialize.h"
 #include "ir/text_dump.h"
@@ -30,6 +31,7 @@
 #include "lowering/lowering.h"
 #include "path/path.h"
 #include "pipeline/backend_emit.h"
+#include "pipeline/call_sites.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/embedded_lld.h"
 #include "pipeline/emit_mode.h"
@@ -247,6 +249,7 @@ base::Result<void, diag::Reported> emit_package_output(
   codegen::EmitRequest request{
       .storage = std::move(package.storage),
       .instr_spans = package.instr_spans,
+      .instr_site_names = {},
       .strings = &ctx.strings,
       .bag = &ctx.bag,
       .target = ctx.target,
@@ -257,6 +260,15 @@ base::Result<void, diag::Reported> emit_package_output(
       .kind = kind,
       .profiler = ctx.profiler,
   };
+  // A backtrace names call sites as well as functions, so the emission
+  // carries their rendered spellings. The table lives in this frame and
+  // the request only borrows it, which lasts exactly as long as the
+  // emission below.
+  std::vector<str::StringPoolId> site_names;
+  if (profile.on_panic == pkg::OnPanic::Backtrace) {
+    site_names = render_instr_sites(ctx, package.instr_spans);
+    request.instr_site_names = site_names;
+  }
   base::Result<std::vector<u8>, codegen::EmitError> bytes =
       emit_with_backend(ctx.backend, std::move(request));
   if (bytes.is_err()) {
