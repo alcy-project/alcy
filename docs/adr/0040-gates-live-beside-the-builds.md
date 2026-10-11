@@ -37,14 +37,13 @@ answering one question ten times over.
 
 ## Decision
 
-`ci.yaml` gains five jobs, each depending only on `load-config`:
+`ci.yaml` gains the jobs below, each standing on its own:
 
 | Job | Command | Why it needs its own job |
 | --- | --- | --- |
 | `lint` | `tools/lint.py` | Needs a compilation database of its own |
 | `coverage` | `tools/check_coverage.py` | Needs an instrumented build; deliberately uncached |
 | `sanitizers` | `tools/check_exe.py --sanitize` | Needs a build, then clang on the output |
-| `local-gate` | `tools/check.sh` | The gate as a contributor runs it |
 | `benchmarks` | `tools/run_benchmarks.py smoke` | One entry's worth of work, asked once |
 
 `style.yaml` keeps `spelling`, `format`, and a new `specification` job, and
@@ -82,13 +81,45 @@ be a machine whose opinion changed with its load.
 
 ## Consequences
 
-- CI runs the gate `CONTRIBUTING.md` names, so the two cannot drift.
 - Lint no longer runs on a push that touched only a document, and a build is
   no longer waiting on it.
-- The fuzzer stays out of CI, and cost is not the reason. Its value decays as
-  its corpus saturates, so a per-push job would mostly re-verify crashes it
-  already knows; it is a tool to reach for, not a gate to clear.
+- The fuzzer runs in CI as a bounded smoke rather than not at all, and the
+  unbounded run stays a development tool. A smoke's value does not decay with
+  the corpus the way a full run's does: the corpus and the known-failure
+  manifest are what discriminate, so a pass re-verifies what the corpus
+  banked and a fail reports a crash it did not.
 - `check.sh` reported a missing `typos` by skipping in silence, and now says
   it skipped. The other optional tools in that script refuse; this one was
   the exception, and a check that is green because it did not run is the one
   failure a reader cannot see.
+
+## Amendments
+
+**The `local-gate` job is gone.** It ran `check.sh` whole, which built what
+the ten matrix entries had just built and asked every gate a second time on
+one runner, so the job cost more than the rest of the workflow's Linux jobs
+to answer questions its neighbours had already answered. The contract it
+stood for is kept the other way around now: CI asks each gate as its own
+job, and `check.sh` is the union a contributor runs, kept a superset by
+carrying the gates it once lacked -- the direct-backend wasm acceptance,
+the release-mode tests, e2e cases, and exe programs, and the benchmark
+smoke. A gate the project tells you to run and a gate CI runs are still
+two gates; what keeps them from drifting is that the local union now
+contains the CI set, not that one job ran the union.
+
+**Lint is sharded and cpplint is gone.** clang-tidy is the whole of the
+lint job's cost and the only net for the bug classes the compiler cannot
+warn about -- a `DCHECK` with a side effect, a handle dangling off a
+temporary, a use after a move -- so it stays, and the job runs as three
+`--shard` shares of the tree so the wall clock is a third of it; the
+checks that read the whole tree ride with the first shard. cpplint
+overlapped clang-format's include sorting, clang-tidy's naming rules, and
+the ast-grep rules, and cost a tool and a config file to say what three
+other checks already said.
+
+**A pin is read where it is used.** The workflows once parsed config.toml
+in a `load-config` job and handed the values to the jobs that needed
+them, and a release workflow that was never handed an LLVM version built
+with none. Each job now reads the pin it uses from config.toml itself, so
+a workflow cannot forget to ask for a value it uses, and the reusable
+build workflows take no version inputs at all.

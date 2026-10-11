@@ -6,7 +6,10 @@
 - GN and Ninja.
 - Python via `uv` (`uv sync` sets up the environment; `uv run` prefixes commands).
 - The tree-sitter CLI and Bun, for the language's grammar (see [treesitter/README.md](treesitter/README.md)).
-- Alternatively, Nix provides the whole toolchain: `nix develop`.
+- Alternatively, Nix provides the whole toolchain: `nix develop`. The wasm
+  gates need Emscripten too, which the default shell leaves out to keep the
+  build matrix light; they run from the shell that carries it:
+  `nix develop .#wasm --command ./tools/check.sh --nix`.
 
 ## Workflow
 
@@ -28,7 +31,8 @@ uv run ./tools/verify_static_linkage.py --build-dir=out/build
 # The grammar needs no toolchain but the tree-sitter CLI and Bun:
 uv run ./tools/check_treesitter.py --grammar
 
-# Or run all of the above commands at once, which is what CI runs:
+# Or run every local gate at once. CI asks each of these as its own job,
+# and check.sh asks the same gates plus the ones below:
 ./tools/check.sh
 
 # Faster iteration (skips gn gen, gn check, and compdb; never for CI):
@@ -86,15 +90,19 @@ uv run ./tools/lint.py --fix-errors
 ```
 
 `uv run ./tools/format.py --dry-run` reports the same checks without
-writing, and `uv run ./tools/lint.py` runs them plus clang-tidy and
-cpplint. `taplo` is a system tool rather than a uv dependency: the
-scripts use it when it is installed, and CI's tree checks enforce it
-regardless.
+writing, and `uv run ./tools/lint.py` runs them plus clang-tidy. `taplo`
+is a system tool rather than a uv dependency: the scripts use it when it
+is installed, and CI's tree checks enforce it regardless.
 
 Please make sure the CI pass before requesting a review.
 
-`./tools/check.sh` runs every gate, including the WebAssembly tests and
-the playground smoke, which need `emcc` and `bun` on `PATH`.
+`./tools/check.sh` runs every local gate: the same commands as above,
+against the debug build and again against the release one (the unit
+tests, the e2e cases, and the exe programs -- a bug that only a release
+build has is invisible to the debug gates), plus the benchmark smoke, the
+WebAssembly tests, the direct-backend wasm acceptance, and the playground
+smoke, which need `emcc` and `bun` on `PATH`. `./tools/check.sh --help`
+lists what each flag skips.
 
 ```bash
 # Everything (requires emcc and bun on PATH):
@@ -102,6 +110,9 @@ the playground smoke, which need `emcc` and `bun` on `PATH`.
 
 # Skip the wasm gates:
 ./tools/check.sh --no-wasm
+
+# Skip the release gates:
+./tools/check.sh --no-release
 
 # Just the wasm tests:
 uv run ./tools/run.py --target=tests --mode=debug \

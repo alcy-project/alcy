@@ -204,7 +204,12 @@ replaced. The foundations are in `roadmap.md`.
   any of them - two documents called the coverage ratchet the slowest
   gate in `check.sh` and it is among the cheapest, which
   `tools/measure_gates.py` now reports rather than leaves to be believed.
-  Designed in `docs/adr/0040-gates-live-beside-the-builds.md`.
+  Designed in `docs/adr/0040-gates-live-beside-the-builds.md`. The
+  `check.sh` job was later removed - it rebuilt what the matrix had just
+  built and asked every gate a second time on one runner - and the union
+  it stood for moved into `check.sh` itself, which now also runs the
+  release-mode gates, the wasm acceptance, and the benchmark smoke; the
+  ADR's amendments record the change.
 - [x] `unsafe` as a gate on operations: `unsafe fn` and
   `unsafe { ... }` blocks, always lexical, with the block's value
   being its own. The precondition-carrying intrinsics are declared

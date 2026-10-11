@@ -55,9 +55,11 @@ also a reading of the language. The comparison against the compiler needs a
 binary, so it is one job in the CI workflow rather than a step in each of
 the ten matrix entries: it asks whether the grammar and the compiler agree,
 and ten answers to one question is the cost ADR-0040 removed the benchmark
-smoke for. Both halves are in `check.sh`, which CI runs as `local-gate`,
-because a gate the project tells you to run and a gate CI runs are two
-gates.
+smoke for. Both halves are in `check.sh`, and each half has its own CI
+job -- the corpus in the Style workflow, the comparison in the CI
+workflow -- while `check.sh` remains the union a contributor runs, so the
+gate the project tells you to run and the gates CI runs are not two gates
+that drift (ADR-0040's amendments).
 
 **Generated sources are committed.** `src/` is what a consumer links
 without running Node. The drift check is what keeps it honest:

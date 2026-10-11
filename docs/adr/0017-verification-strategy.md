@@ -67,8 +67,9 @@ another.**
 
 4. **libFuzzer owns coverage-guided exploration, interactively.** Six
    targets sit behind `is_fuzz` and are driven by `tools/run_fuzz.py`. They are
-   a development tool, not a gate: they need clang's fuzzer runtime and
-   take minutes, so `check.sh` does not run them. Two of them assert an
+   a development tool: they need clang's fuzzer runtime and take minutes,
+   so `check.sh` does not run them, and what CI runs is the bounded smoke
+   rather than the open-ended run. Two of them assert an
    invariant rather than merely surviving, and abort on a violation,
    because libFuzzer turns an abort into a minimising reproducer.
 
@@ -129,9 +130,12 @@ another.**
   `docs/adr/0021-benchmark-measurement.md` applies to the length of a
   gate at least as much as it applies to the speed of a program.
 - `fuzz/` maintains its own entry points into the same code the unit
-  tests drive, which is the other overlap. It is not in CI: a fuzz run's
-  value decays as its corpus saturates, so a per-push job would mostly
-  re-verify crashes it already knows about.
+  tests drive, which is the other overlap. The open-ended run stays out
+  of CI -- its value decays as its corpus saturates, so a per-push job
+  would mostly re-verify crashes it already knows about -- while a
+  bounded smoke runs there, with the corpus and the known-failure
+  manifest deciding what a pass re-verifies and what a fail reports
+  (ADR-0040's amendments).
 - The nesting limit is deliberately low (256) and deliberately shared.
   Real code nests in single digits, so the budget only ever rejects
   generated input, and sharing it means the limit cannot drift between
