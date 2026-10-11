@@ -34,7 +34,7 @@ fn hash(s: str) -> u64 {
   mut h := 2166136261 as u64
   mut i := 0 as usize
   while i < str_len(s) {
-    h = (h ^ (str_byte(s, i) as u64)) * 0x100000001b3 as u64
+    h = wrapping_mul(h ^ (str_byte(s, i) as u64), 0x100000001b3 as u64)
     i = i + 1
   }
   ret h
@@ -49,7 +49,9 @@ fn key_eq(a: str, b: str) -> bool {
 // factor `insert` grows at: `ceil(4n/3)`, with the sum refused when it
 // would not fit in a `usize`.
 fn slots_for(n: usize) -> usize {
-  if n > ((0 as usize) - 1) / 4 * 3 {
+  // The largest `usize`, through the wrapping form so a debug build
+  // does not trip the checked subtraction.
+  if n > wrapping_sub(0 as usize, 1 as usize) / 4 * 3 {
     panic("capacity overflow")
   }
   ret n + (n + 2) / 3

@@ -2779,7 +2779,9 @@ bool Checker::is_known_intrinsic(std::string_view name) {
          name == "uninit_write" || name == "uninit_assume" ||
          name == "uninit_ref" || name == "ptr_offset" ||
          name == "ptr_offset_mut" || name == "drop_in_place" ||
-         name == "slice_at" || name == "slice_at_mut" || name == "read";
+         name == "slice_at" || name == "slice_at_mut" ||
+         name == "read" || name == "wrapping_add" ||
+         name == "wrapping_sub" || name == "wrapping_mul";
 }
 
 // The intrinsics whose preconditions the compiler cannot check
@@ -2870,6 +2872,14 @@ bool Checker::check_intrinsic_signature(u32 module,
   const auto same = [&](ir::TypeIdx a, ir::TypeIdx b) {
     return type_origin(a).idx == type_origin(b).idx;
   };
+  if (name == "wrapping_add" || name == "wrapping_sub" ||
+      name == "wrapping_mul") {
+    // `wrapping_add<T>(a: T, b: T) -> T`: both operands and the result
+    // are one integer type, whatever its signedness.
+    return or_wrong(params.size() == 2 && same(params[0], params[1]) &&
+                    same(params[0], ret) &&
+                    ir::is_integer_type(tag_of(params[0])));
+  }
   if (name == "alloc") {
     // `alloc<T>(count: usize) -> &mut MaybeUninit<T>`.
     return or_wrong(params.size() == 1 && is_usize(params[0]) &&

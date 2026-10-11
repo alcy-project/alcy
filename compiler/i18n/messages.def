@@ -299,6 +299,7 @@
   F(LowerDestructorNotRun, "Destructor for '{}' is not run: it is reached through a variant or an array, so declare 'fn drop(self: Self)' to end it") \
   F(LowerInternalError, "Internal lowering error: {}") \
   F(LowerCompEngineMismatch, "Internal error: the comp engines disagree on '{}'") \
+  F(LowerCompOverflow, "Integer overflow in constant evaluation") \
   F(LowerIrVerificationFailed, "Lowered IR failed verification") \
   F(LowerMoveOutOfDestructor, "Cannot move a field out of '{}'; its type implements `drop`") \
   F(LowerNameTableExhausted, "The compiler's name table cannot hold the names this package interns") \

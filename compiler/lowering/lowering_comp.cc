@@ -204,6 +204,10 @@ void Lowerer::report_comp_failure() {
     internal(comp_.failure_span(), comp_.failure());
     return;
   }
+  if (comp_.failure_is_overflow()) {
+    comp_overflow(comp_.failure_span());
+    return;
+  }
   unsupported(comp_.failure_span(), comp_.failure());
 }
 

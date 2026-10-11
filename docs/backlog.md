@@ -90,6 +90,9 @@ replaced. The foundations are in `roadmap.md`.
   well formed; the rule and the code disagree.
 - [ ] `demangle` recurses per type constructor with no depth limit; a
   hostile symbol can exhaust the stack. Latent while only tests call it.
+- [ ] A debug build through `--backend=direct-wasm` wraps: the direct
+  wasm backend does not lower the checked arithmetic yet, so only the
+  LLVM backend honors the debug policy (ADR-0062).
 
 ## Shipped
 

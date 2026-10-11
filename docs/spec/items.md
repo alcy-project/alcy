@@ -87,6 +87,11 @@
     reference is not a runtime operation, so a leaked block leaks.
   - `size_of<T>() -> usize` and `align_of<T>() -> usize` report the
     allocation size and the required alignment of `T`.
+  - `wrapping_add<T>(a: T, b: T) -> T`, `wrapping_sub<T>`, and
+    `wrapping_mul<T>` name the wrapping forms of the source
+    arithmetic: the result is the mathematical one reduced modulo 2^N
+    in every build. `T` is an integer type; a hash that relies on the
+    wrap says so through these (ADR-0062).
   - `elem_ptr<T>(ptr: &mut MaybeUninit<T>, index: usize) -> &mut
     MaybeUninit<T>` offsets a pointer by whole elements. It is
     unchecked: the result is in bounds exactly when the caller keeps
@@ -106,10 +111,11 @@
   - The allocation intrinsics are generic. `elem_ptr`, `dealloc`,
     `uninit_write`, and `uninit_assume` recover `T` from the pointee of
     their reference argument, so a call admits one instantiation;
-    `alloc`, `size_of`, and `align_of` have no argument to recover it
-    from and take `T` from a turbofish. A generic intrinsic's declared
-    shape is still checked against the canonical one, with each type
-    parameter bound to a placeholder.
+    `wrapping_add`, `wrapping_sub`, and `wrapping_mul` recover it from
+    their arguments; `alloc`, `size_of`, and `align_of` have no
+    argument to recover it from and take `T` from a turbofish. A
+    generic intrinsic's declared shape is still checked against the
+    canonical one, with each type parameter bound to a placeholder.
   - `&u8` and `&mut u8` are not indexable. Element access through a
     heap pointer arrives with the growable containers, which own the
     bounds check. See `docs/adr/0010-typed-heap-primitives.md`.

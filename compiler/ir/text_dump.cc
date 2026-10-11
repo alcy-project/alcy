@@ -527,6 +527,9 @@ class TextWriter {
       case O::FDiv: write_binary(instr, "/"); break;
       case O::IntRem:
       case O::UintRem: write_binary(instr, "%"); break;
+      case O::IntAddWrap: write_wrap_binary(instr, "wrap_add"); break;
+      case O::IntSubWrap: write_wrap_binary(instr, "wrap_sub"); break;
+      case O::IntMulWrap: write_wrap_binary(instr, "wrap_mul"); break;
       case O::And: write_binary(instr, "&"); break;
       case O::Or: write_binary(instr, "|"); break;
       case O::Xor: write_binary(instr, "^"); break;
@@ -716,6 +719,19 @@ class TextWriter {
     out_ += token;
     out_ += ' ';
     write_operand(state_.operands[instr.operands.head() + 1]);
+  }
+
+  // A wrap arithmetic op is spelled as a call, so the text form
+  // distinguishes it from the source operator that carries the build's
+  // overflow policy.
+  void write_wrap_binary(const Instruction& instr, std::string_view name) {
+    write_dst(instr);
+    out_ += name;
+    out_ += '(';
+    write_operand(state_.operands[instr.operands.head()]);
+    out_ += ", ";
+    write_operand(state_.operands[instr.operands.head() + 1]);
+    out_ += ')';
   }
 
   void write_branch_args(const Instruction& instr) {

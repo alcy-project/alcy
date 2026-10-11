@@ -130,6 +130,7 @@ bool CompEvaluator::fail(diag::Span span, std::string_view what) {
   if (!failed_) {
     failed_ = true;
     fail_internal_ = false;
+    fail_overflow_ = false;
     fail_span_ = span;
     fail_what_ = what;
   }
@@ -140,6 +141,18 @@ bool CompEvaluator::fail_internal(diag::Span span, std::string_view what) {
   if (!failed_) {
     failed_ = true;
     fail_internal_ = true;
+    fail_overflow_ = false;
+    fail_span_ = span;
+    fail_what_ = what;
+  }
+  return false;
+}
+
+bool CompEvaluator::fail_overflow(diag::Span span, std::string_view what) {
+  if (!failed_) {
+    failed_ = true;
+    fail_internal_ = false;
+    fail_overflow_ = true;
     fail_span_ = span;
     fail_what_ = what;
   }
@@ -157,6 +170,7 @@ bool CompEvaluator::spend(diag::Span span) {
 void CompEvaluator::clear_failure() {
   failed_ = false;
   fail_internal_ = false;
+  fail_overflow_ = false;
   fail_span_ = diag::Span{};
   fail_what_ = {};
 }
@@ -913,6 +927,32 @@ bool CompEvaluator::comp_eval_intrinsic(
   const ast::ItemIntrinsic& intrinsic =
       ast.items[sig.item].payload.get<ast::ItemIntrinsic>();
   const std::string_view name = intrinsic.name.name;
+  if (name == "wrapping_add" || name == "wrapping_sub" ||
+      name == "wrapping_mul") {
+    if (args.size() != 2) {
+      return fail(span, "intrinsic arity");
+    }
+    CompVal left;
+    CompVal right;
+    if (!comp_eval_expr(mod, args[0], scope, left) ||
+        !comp_eval_expr(mod, args[1], scope, right)) {
+      return false;
+    }
+    if (left.value.tag != CompValue::Tag::Int ||
+        right.value.tag != CompValue::Tag::Int) {
+      return fail(span, "operand without value");
+    }
+    const ir::TypeTag tag = tag_of(sig.ret);
+    const u64 modulus = comp::mask(tag);
+    const u64 l = left.value.int_value & modulus;
+    const u64 r = right.value.int_value & modulus;
+    out.type = sig.ret;
+    out.value.tag = CompValue::Tag::Int;
+    out.value.int_value = name == "wrapping_add"   ? (l + r) & modulus
+                          : name == "wrapping_sub" ? (l - r) & modulus
+                                                   : (l * r) & modulus;
+    return true;
+  }
   if (name != "str_len" && name != "str_byte" && name != "str_slice") {
     return fail(span, "intrinsic is not comp-evaluable");
   }
@@ -1540,12 +1580,21 @@ bool CompEvaluator::comp_eval_binary(u32 mod,
   out.value.tag = CompValue::Tag::Int;
   switch (bin.op) {
     case ast::BinaryOp::Add:
+      if (comp::add_overflows(left, right, tag)) {
+        return fail_overflow(node.span, "integer overflow in comp evaluation");
+      }
       out.value.int_value = (left + right) & mask;
       return true;
     case ast::BinaryOp::Sub:
+      if (comp::sub_overflows(left, right, tag)) {
+        return fail_overflow(node.span, "integer overflow in comp evaluation");
+      }
       out.value.int_value = (left - right) & mask;
       return true;
     case ast::BinaryOp::Mul:
+      if (comp::mul_overflows(left, right, tag)) {
+        return fail_overflow(node.span, "integer overflow in comp evaluation");
+      }
       out.value.int_value = (left * right) & mask;
       return true;
     case ast::BinaryOp::Div:

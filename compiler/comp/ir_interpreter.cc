@@ -617,6 +617,9 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
     case Opcode::IntAdd:
     case Opcode::IntSub:
     case Opcode::IntMul:
+    case Opcode::IntAddWrap:
+    case Opcode::IntSubWrap:
+    case Opcode::IntMulWrap:
     case Opcode::IntDiv:
     case Opcode::UintDiv:
     case Opcode::IntRem:
@@ -837,9 +840,30 @@ bool Interpreter::execute_binary(ir::InstructionIdx instr, Frame& frame) {
   const u64 right = rhs.bits & int_mask(tag);
   u64 result = 0;
   switch (ins.op) {
-    case Opcode::IntAdd: result = left + right; break;
-    case Opcode::IntSub: result = left - right; break;
-    case Opcode::IntMul: result = left * right; break;
+    case Opcode::IntAdd:
+      if (add_overflows(left, right, tag)) {
+        return fail(IrRunError::Kind::Overflow, instr,
+                    "integer overflow in comp evaluation");
+      }
+      result = left + right;
+      break;
+    case Opcode::IntAddWrap: result = left + right; break;
+    case Opcode::IntSub:
+      if (sub_overflows(left, right, tag)) {
+        return fail(IrRunError::Kind::Overflow, instr,
+                    "integer overflow in comp evaluation");
+      }
+      result = left - right;
+      break;
+    case Opcode::IntSubWrap: result = left - right; break;
+    case Opcode::IntMul:
+      if (mul_overflows(left, right, tag)) {
+        return fail(IrRunError::Kind::Overflow, instr,
+                    "integer overflow in comp evaluation");
+      }
+      result = left * right;
+      break;
+    case Opcode::IntMulWrap: result = left * right; break;
     case Opcode::And: result = left & right; break;
     case Opcode::Or: result = left | right; break;
     case Opcode::Xor: result = left ^ right; break;

@@ -70,6 +70,12 @@ struct EmitRequest {
   // `NoOptimizer` rather than emitting unoptimized code under a release
   // command.
   bool optimize = false;
+  // Whether the source operations check overflow: a debug build
+  // aborts on `+ - * / %` and shift overflow, a release one wraps them
+  // (ADR-0062). The policy is a property of the build, not of the IR,
+  // so the same verified IR serves every profile; a backend that does
+  // not carry the checks yet ignores this.
+  bool overflow_checks = false;
   OutputKind kind = OutputKind::Object;
   debug::Profiler* profiler = nullptr;
   // How many objects code generation may be split into, for a backend that

@@ -17,8 +17,11 @@
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 #include "ir/function.h"
+#include "ir/opcode.h"
+#include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/symbol_table.h"
@@ -738,6 +741,73 @@ TEST_CASE("IR interpreter refuses a float operation") {
   CHECK(run.error.kind == comp::IrRunError::Kind::Unsupported);
   CHECK(run.error.instr.is_valid());
   CHECK(run.error.what.find("float") != std::string_view::npos);
+}
+
+namespace {
+
+// `f() -> i32 { ret max + 1 }` with `op` as the add, built by hand so
+// one instruction's behavior is read without a source program around
+// it.
+ir::VerifiedStorage overflow_add_ir(ir::SymbolTable& strings, ir::Opcode op) {
+  ir::StorageBuilder builder;
+  const ir::TypeIdx i32 = ir::primitive_idx(ir::TypeTag::I32);
+  const ir::ImmutableIdx maximum =
+      builder.immutable({.type = i32, .data = {.i32_value = 2147483647}});
+  const ir::ImmutableIdx one =
+      builder.immutable({.type = i32, .data = {.i32_value = 1}});
+  ir::OperandSeq args;
+  args.push(builder.operand(ir::Operand::from_immutable(maximum, i32)));
+  args.push(builder.operand(ir::Operand::from_immutable(one, i32)));
+  const ir::InstructionIdx sum =
+      builder.instr({.op = op,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(0),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = args.finish()});
+  builder.reg({.type = i32, .def_idx = sum});
+  const ir::OperandIdx result =
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(0), i32));
+  const ir::InstructionIdx ret =
+      builder.instr({.op = ir::Opcode::Ret,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(base::INVALID_IDX),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = {result, 1}});
+  ir::InstrSeq instrs;
+  instrs.push(sum);
+  instrs.push(ret);
+  const ir::BlockIdx block =
+      builder.block({.instrs = instrs.finish(), .block_params = {}});
+  builder.function({.meta = {.return_type = i32,
+                             .param_types = {},
+                             .name = strings.intern("f"),
+                             .path = str::EMPTY_STRING_ID,
+                             .kind = ir::SymbolKind::Foreign,
+                             .generics = ir::TypeIdxRange{}},
+                    .blocks = {block, 1}});
+  return std::move(builder).build().unwrap();
+}
+
+}  // namespace
+
+TEST_CASE("IR interpreter refuses an overflowing source add") {
+  Fixture f;
+  ir::VerifiedStorage storage = overflow_add_ir(f.strings, ir::Opcode::IntAdd);
+  const RunResult run = run_function(f, *storage, ir::FunctionIdx(0), {},
+                                     comp::COMP_BRANCH_QUOTA, 0);
+  CHECK(!run.ok);
+  CHECK(run.error.kind == comp::IrRunError::Kind::Overflow);
+}
+
+TEST_CASE("IR interpreter wraps where the opcode says so") {
+  Fixture f;
+  ir::VerifiedStorage storage =
+      overflow_add_ir(f.strings, ir::Opcode::IntAddWrap);
+  const RunResult run = run_function(f, *storage, ir::FunctionIdx(0), {},
+                                     comp::COMP_BRANCH_QUOTA, 0);
+  CHECK(run.ok);
+  CHECK(run.value.value.tag == comp::CompValue::Tag::Int);
+  CHECK(run.value.value.int_value == 2147483648ull);
 }
 
 }  // namespace lowering

@@ -6,6 +6,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -82,6 +83,7 @@ class LlvmIrEmitter {
                 const Target& target,
                 bool emit_entry,
                 bool freestanding = false,
+                bool overflow_checks = false,
                 debug::Profiler* profiler = nullptr,
                 bool backtrace = false,
                 std::span<const diag::Span> instr_spans = {},
@@ -115,6 +117,16 @@ class LlvmIrEmitter {
   void emit_compute(const ir::Instruction& instr);
   void emit_memory(const ir::Instruction& instr);
   void emit_control(const ir::Instruction& instr);
+  // The checked forms of `+ - *`, `/ %`, and the shifts: each computes
+  // the operation's overflow condition, calls the runtime check named
+  // for it, and answers the operation's value. `emit_compute` takes
+  // these only in a build whose `overflow_checks_` is set.
+  void emit_checked_arith(const ir::Instruction& instr);
+  void emit_checked_div(const ir::Instruction& instr);
+  void emit_checked_shift(const ir::Instruction& instr);
+  // The declaration of a runtime check by name, created on first use so
+  // `runtime_ir` defines only the checks a build's code reaches.
+  llvm::Function* check_function(std::string_view name);
 
   llvm::Function* create_function(const ir::FunctionMeta& function_meta) const;
   std::string linkable_name(const ir::FunctionMeta& function_meta) const;
@@ -165,6 +177,10 @@ class LlvmIrEmitter {
   // Whether the entry is `_start`, ending through the exit syscall
   // instead of returning to a C runtime (ADR-0052).
   bool freestanding_ = false;
+  // Whether the source operations check overflow (ADR-0062): a debug
+  // build says yes and the checked forms above run; a release one says
+  // no and the plain operations wrap.
+  bool overflow_checks_ = false;
   // Whether the panic walker gets a table to read; the emitter creates
   // the slot it lands in, and define_backtrace_table fills it once the
   // runtime exists (ADR-0070).

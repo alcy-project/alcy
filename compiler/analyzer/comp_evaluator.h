@@ -77,6 +77,7 @@ class CompEvaluator {
 
   bool failed() const { return failed_; }
   bool failure_is_internal() const { return fail_internal_; }
+  bool failure_is_overflow() const { return fail_overflow_; }
   diag::Span failure_span() const { return fail_span_; }
   std::string_view failure() const { return fail_what_; }
   void clear_failure();
@@ -131,6 +132,9 @@ class CompEvaluator {
   // The first failure is kept; later ones are consequences of it.
   bool fail(diag::Span span, std::string_view what);
   bool fail_internal(diag::Span span, std::string_view what);
+  // A program error, not an engine limit: the constant expression
+  // overflows, which has a diagnostic of its own.
+  bool fail_overflow(diag::Span span, std::string_view what);
   // Spends one quota unit; false once the quota is exhausted.
   bool spend(diag::Span span);
 
@@ -245,6 +249,7 @@ class CompEvaluator {
   u32 call_depth_ = 0;
   bool failed_ = false;
   bool fail_internal_ = false;
+  bool fail_overflow_ = false;
   diag::Span fail_span_{};
   std::string_view fail_what_;
   // The indexes the evaluator used to walk for: a type's instantiation

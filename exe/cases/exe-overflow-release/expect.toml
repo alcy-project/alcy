@@ -1,0 +1,2 @@
+args = ["--release"]
+exit = 7

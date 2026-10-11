@@ -258,6 +258,7 @@ base::Result<void, diag::Reported> emit_package_output(
       .freestanding = ctx.freestanding,
       .backtrace = profile.on_panic == pkg::OnPanic::Backtrace,
       .optimize = profile.optimize,
+      .overflow_checks = ctx.overflow_checks,
       .kind = kind,
       .profiler = ctx.profiler,
   };
@@ -306,6 +307,7 @@ base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
       .freestanding = ctx.freestanding,
       .backtrace = profile.on_panic == pkg::OnPanic::Backtrace,
       .optimize = profile.optimize,
+      .overflow_checks = ctx.overflow_checks,
       .kind = codegen::OutputKind::Object,
       .profiler = ctx.profiler,
       .parts = parts,

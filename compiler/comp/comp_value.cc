@@ -49,6 +49,63 @@ i64 sign_extend(u64 bits, ir::TypeTag tag) {
   return static_cast<i64>(bits);
 }
 
+namespace {
+
+// Whether a signed result fits `bytes` bytes.
+bool fits_signed(i64 value, u32 bytes) {
+  if (bytes >= 8) {
+    return true;
+  }
+  const i64 limit = static_cast<i64>(1) << (bytes * 8 - 1);
+  return value >= -limit && value < limit;
+}
+
+}  // namespace
+
+bool add_overflows(u64 left, u64 right, ir::TypeTag tag) {
+  if (is_signed(tag)) {
+    i64 result = 0;
+    if (__builtin_add_overflow(sign_extend(left, tag), sign_extend(right, tag),
+                               &result)) {
+      return true;
+    }
+    return !fits_signed(result, int_bytes(tag));
+  }
+  u64 result = 0;
+  if (__builtin_add_overflow(left, right, &result)) {
+    return true;
+  }
+  return result > mask(tag);
+}
+
+bool sub_overflows(u64 left, u64 right, ir::TypeTag tag) {
+  if (is_signed(tag)) {
+    i64 result = 0;
+    if (__builtin_sub_overflow(sign_extend(left, tag), sign_extend(right, tag),
+                               &result)) {
+      return true;
+    }
+    return !fits_signed(result, int_bytes(tag));
+  }
+  return left < right;
+}
+
+bool mul_overflows(u64 left, u64 right, ir::TypeTag tag) {
+  if (is_signed(tag)) {
+    i64 result = 0;
+    if (__builtin_mul_overflow(sign_extend(left, tag), sign_extend(right, tag),
+                               &result)) {
+      return true;
+    }
+    return !fits_signed(result, int_bytes(tag));
+  }
+  u64 result = 0;
+  if (__builtin_mul_overflow(left, right, &result)) {
+    return true;
+  }
+  return result > mask(tag);
+}
+
 bool truth(const CompVal& value) {
   if (value.value.tag == CompValue::Tag::Bool) {
     return value.value.bool_value;

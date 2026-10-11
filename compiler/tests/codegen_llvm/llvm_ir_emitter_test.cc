@@ -38,6 +38,46 @@ Target host_target() {
   return Target{host_triple(), ir::PointerWidth::W64};
 }
 
+// `main() -> i32 { ret 1 + 1 }` with the source add, so a checked and
+// an unchecked emission of the same module can be compared.
+ir::VerifiedStorage add_one_ir(ir::SymbolTable* interner) {
+  ir::StorageBuilder builder;
+  const ir::TypeIdx i32 = ir::primitive_idx(ir::TypeTag::I32);
+  const ir::ImmutableIdx one =
+      builder.immutable({.type = i32, .data = {.i32_value = 1}});
+  ir::OperandSeq add_args;
+  add_args.push(builder.operand(ir::Operand::from_immutable(one, i32)));
+  add_args.push(builder.operand(ir::Operand::from_immutable(one, i32)));
+  const ir::InstructionIdx inst_add =
+      builder.instr({.op = ir::Opcode::IntAdd,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(0),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = add_args.finish()});
+  builder.reg({.type = i32, .def_idx = inst_add});
+  const ir::OperandIdx reg_op =
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(0), i32));
+  const ir::InstructionIdx inst_ret =
+      builder.instr({.op = ir::Opcode::Ret,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(base::INVALID_IDX),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = {reg_op, 1}});
+  ir::InstrSeq instrs;
+  instrs.push(inst_add);
+  instrs.push(inst_ret);
+  const ir::BlockIdx block =
+      builder.block({.instrs = instrs.finish(), .block_params = {}});
+  builder.function({.meta = {.return_type = i32,
+                             .param_types = {},
+                             .name = interner->intern("main"),
+                             .path = str::EMPTY_STRING_ID,
+                             .kind = ir::SymbolKind::Free,
+                             .generics = ir::TypeIdxRange{}},
+                    .blocks = {block, 1}});
+  return std::move(builder).build().unwrap();
+}
+
 }  // namespace
 
 ir::VerifiedStorage hello_world_ir(ir::SymbolTable* interner) {
@@ -939,8 +979,8 @@ TEST_CASE("Emit with backtrace names the entry for the walk") {
   ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         host_target(), /*emit_entry=*/true,
-                        /*freestanding=*/false, /*profiler=*/nullptr,
-                        /*backtrace=*/true);
+                        /*freestanding=*/false, /*overflow_checks=*/false,
+                        /*profiler=*/nullptr, /*backtrace=*/true);
 
   EmittedBacktrace named = std::move(emitter).emit();
 
@@ -1060,8 +1100,8 @@ TEST_CASE("Emit with backtrace records call sites") {
 
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         host_target(), /*emit_entry=*/false,
-                        /*freestanding=*/false, /*profiler=*/nullptr,
-                        /*backtrace=*/true, spans, sites);
+                        /*freestanding=*/false, /*overflow_checks=*/false,
+                        /*profiler=*/nullptr, /*backtrace=*/true, spans, sites);
 
   EmittedBacktrace named = std::move(emitter).emit();
 
@@ -1104,8 +1144,8 @@ TEST_CASE("Emit without backtrace records no call sites") {
 
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         host_target(), /*emit_entry=*/false,
-                        /*freestanding=*/false, /*profiler=*/nullptr,
-                        /*backtrace=*/false, spans, sites);
+                        /*freestanding=*/false, /*overflow_checks=*/false,
+                        /*profiler=*/nullptr, /*backtrace=*/false, spans, sites);
 
   EmittedBacktrace named = std::move(emitter).emit();
 
@@ -1115,6 +1155,47 @@ TEST_CASE("Emit without backtrace records no call sites") {
   llvm::raw_string_ostream os(ir_str);
   module->print(os, nullptr);
   CHECK(ir_str.find("alcy_callsite_array") == std::string::npos);
+}
+
+TEST_CASE("A checked build emits the overflow check") {
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("checked_add_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
+
+  ir::SymbolTable interner(mem::page_size());
+  ir::VerifiedStorage storage = add_one_ir(&interner);
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
+                        host_target(), true, /*freestanding=*/false,
+                        /*overflow_checks=*/true);
+  std::move(emitter).emit();
+
+  CHECK(!llvm::verifyModule(*module));
+  std::string ir_str;
+  llvm::raw_string_ostream os(ir_str);
+  module->print(os, nullptr);
+  CHECK(ir_str.find("llvm.sadd.with.overflow.i32") != std::string::npos);
+  CHECK(ir_str.find("alcy_check_overflow") != std::string::npos);
+}
+
+TEST_CASE("An unchecked build emits the plain add") {
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("unchecked_add_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
+
+  ir::SymbolTable interner(mem::page_size());
+  ir::VerifiedStorage storage = add_one_ir(&interner);
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
+                        host_target(), true);
+  std::move(emitter).emit();
+
+  CHECK(!llvm::verifyModule(*module));
+  std::string ir_str;
+  llvm::raw_string_ostream os(ir_str);
+  module->print(os, nullptr);
+  CHECK(ir_str.find("alcy_check_overflow") == std::string::npos);
+  CHECK(ir_str.find("sadd.with.overflow") == std::string::npos);
 }
 
 }  // namespace codegen_llvm

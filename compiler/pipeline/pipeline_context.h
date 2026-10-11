@@ -40,6 +40,10 @@ struct PipelineContext {
   // handed and the triple the backend writes cannot disagree, and so a
   // `--target` flag has one place to change.
   codegen::Target target = codegen::host_target();
+  // Whether the source operations check overflow (ADR-0062). The
+  // policy belongs to the build, not to the IR, so one lowered package
+  // serves every setting; a release build turns the checks off.
+  bool overflow_checks = true;
   // Which backend writes the machine code this run produces. `--backend`
   // overrides it; the default is the first implementation the build
   // carries, and a build that carries none can still check.

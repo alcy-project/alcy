@@ -88,6 +88,17 @@ enum class Opcode : u8 {
   // VecExtract,
   // VecInsert,
   // VecReduce,
+
+  // Explicitly wrapping integer add/sub/mul: the result is the
+  // mathematical result reduced modulo 2^N, whatever the build's
+  // overflow policy is. The source operations above carry that policy
+  // instead (a debug build checks them, a release one wraps), so a
+  // compiler-generated or library-requested wrap says so here. They
+  // sit after the commented-out block because the binary form's
+  // opcode byte is a stored value: a new opcode goes at the end.
+  IntAddWrap,
+  IntSubWrap,
+  IntMulWrap,
 };
 
 constexpr const char* opcode_to_str(const Opcode opcode) {
@@ -155,8 +166,12 @@ constexpr const char* opcode_to_str(const Opcode opcode) {
 
     case O::Move: return "Move";
     case O::Drop: return "Drop";
-    case O::Borrow:
-      return "Borrow";
+    case O::Borrow: return "Borrow";
+
+    case O::IntAddWrap: return "IntAddWrap";
+    case O::IntSubWrap: return "IntSubWrap";
+    case O::IntMulWrap:
+      return "IntMulWrap";
 
       // case O::BorrowBegin: return "BorrowBegin";
       // case O::BorrowEnd: return "BorrowEnd";

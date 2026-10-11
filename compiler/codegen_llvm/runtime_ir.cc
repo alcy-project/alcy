@@ -65,10 +65,13 @@ class RuntimeBuilder {
     const bool print = declared("alcy_print");
     const bool println = declared("alcy_println");
     const bool alloc = declared("alcy_alloc");
-    // The allocator's failure path is a panic, so asking for the
-    // allocator asks for the panic path too, whether or not the program
-    // named it.
-    const bool panic = declared("alcy_panic") || alloc;
+    // A checked source operation declares the runtime check it calls,
+    // so a declaration of one asks for the panic path too, the way the
+    // allocator's failure path does.
+    const bool checked = declared("alcy_check_overflow") ||
+                         declared("alcy_check_divide_by_zero") ||
+                         declared("alcy_check_shift");
+    const bool panic = declared("alcy_panic") || alloc || checked;
     const bool sys_write = declared("alcy_sys_write");
     if (print || println || panic || sys_write) {
       build_write_all();
@@ -81,6 +84,15 @@ class RuntimeBuilder {
     }
     if (panic) {
       build_panic();
+    }
+    if (declared("alcy_check_overflow")) {
+      build_check("alcy_check_overflow", "integer overflow");
+    }
+    if (declared("alcy_check_divide_by_zero")) {
+      build_check("alcy_check_divide_by_zero", "division by zero");
+    }
+    if (declared("alcy_check_shift")) {
+      build_check("alcy_check_shift", "shift out of range");
     }
     if (sys_write) {
       build_sys_write();
@@ -687,6 +699,37 @@ class RuntimeBuilder {
 
     builder_.SetInsertPoint(done);
     builder_.CreateBr(end);
+  }
+
+  // One checked-arithmetic abort: the emitter's call carries the
+  // operation's overflow condition, a set condition prints the message
+  // and takes the panic path, and a clear one returns so the operation
+  // proceeds.
+  void build_check(std::string_view name, std::string_view message) {
+    llvm::FunctionType* type = llvm::FunctionType::get(
+        builder_.getVoidTy(), {builder_.getInt1Ty()}, false);
+    llvm::Function* function = runtime(name, type);
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(module_.getContext(), "entry", function);
+    llvm::BasicBlock* fail =
+        llvm::BasicBlock::Create(module_.getContext(), "fail", function);
+    llvm::BasicBlock* done =
+        llvm::BasicBlock::Create(module_.getContext(), "done", function);
+
+    builder_.SetInsertPoint(entry);
+    builder_.CreateCondBr(function->getArg(0), fail, done);
+    builder_.SetInsertPoint(fail);
+    llvm::Function* panic_function = module_.getFunction("alcy_panic");
+    DCHECK_MSG(panic_function != nullptr, "checked arithmetic has no panic");
+    builder_.CreateCall(
+        panic_function,
+        {text_constant(message),
+         llvm::ConstantInt::get(usize_, message.size()),
+         llvm::ConstantPointerNull::get(builder_.getPtrTy()),
+         llvm::ConstantInt::get(usize_, 0)});
+    builder_.CreateUnreachable();
+    builder_.SetInsertPoint(done);
+    builder_.CreateRetVoid();
   }
 
   // Ends the program through the exit syscall. Only a freestanding

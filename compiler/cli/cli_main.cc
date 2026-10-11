@@ -154,6 +154,9 @@ i32 cli_main(i32 argc, char** argv) {
       // the IR binary's header carries it so a cache can reject a
       // mismatch.
       ctx.version = alcy_version();
+      // A debug build checks the source arithmetic; `--release` turns
+      // the checks off and the operations wrap (ADR-0062).
+      ctx.overflow_checks = !config.release;
       Envelope envelope;
       envelope.command = command_name(config.subcommand);
       exit_code = dispatch(config, ctx, envelope);

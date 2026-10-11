@@ -8,7 +8,9 @@
 // smaller block than the container records, so growth refuses the
 // overflow before the allocator sees it.
 pub fn doubled_capacity(cap: usize) -> usize {
-  if cap > ((0 as usize) - 1) / 2 {
+  // The largest `usize`, through the wrapping form so a debug build
+  // does not trip the checked subtraction.
+  if cap > wrapping_sub(0 as usize, 1 as usize) / 2 {
     panic("capacity overflow")
   }
   ret cap * 2

@@ -73,6 +73,9 @@ constexpr OperandArity operand_arity(const Opcode op) {
     case O::IntAdd:
     case O::IntSub:
     case O::IntMul:
+    case O::IntAddWrap:
+    case O::IntSubWrap:
+    case O::IntMulWrap:
     case O::IntDiv:
     case O::UintDiv:
     case O::IntRem:

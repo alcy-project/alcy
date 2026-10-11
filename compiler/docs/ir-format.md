@@ -149,6 +149,7 @@ Named values (`@function`, immutables) print inline.
 | `InsertValue` | `v = insert(agg, x, 0, 1)` |
 | `Memcopy` | `memcopy(dst, src, len)` |
 | `IntAdd`/`IntSub`/`IntMul` | `a + b`, `a - b`, `a * b` |
+| `IntAddWrap`/`IntSubWrap`/`IntMulWrap` | `wrap_add(a, b)`, `wrap_sub(a, b)`, `wrap_mul(a, b)` |
 | `IntDiv`/`UintDiv` | `a / b` |
 | `IntRem`/`UintRem` | `a % b` |
 | `FAdd`/`FSub`/`FMul`/`FDiv` | `a + b`, `a - b`, `a * b`, `a / b` |
@@ -180,6 +181,13 @@ Operands: a register is `vN`, a block `bN`, an immutable is inline, a
 function is its name (or `name#idx`), an external is its name, an
 integer immediate inside `ExtractValue`/`InsertValue`/`Switch`/`Alloca`
 prints as a bare number.
+
+The arithmetic opcodes carry the language's operations, whose overflow
+behavior is the build's: a debug profile lowers them with checks, a
+release profile without (ADR-0062). The `*Wrap` opcodes are the
+program's explicit wrapping forms, so they wrap in every profile; a
+compiler-generated step that must wrap says so through them rather
+than through a source operator.
 
 ## 3. Binary form
 

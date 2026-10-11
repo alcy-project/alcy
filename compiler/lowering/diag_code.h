@@ -33,6 +33,9 @@ enum class DiagCode : u8 {
   NameTableExhausted = 7,
   // A field moved out of a value whose `drop` method the user wrote.
   MoveOutOfDestructor = 8,
+  // A constant expression the compiler evaluated overflows its type
+  // (ADR-0062): the program is refused rather than read as wrapping.
+  CompOverflow = 9,
 };
 
 }  // namespace lowering

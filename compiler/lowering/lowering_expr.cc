@@ -59,6 +59,14 @@ void Lowerer::internal(diag::Span span, std::string_view what) {
   failed = true;
 }
 
+void Lowerer::comp_overflow(diag::Span span) {
+  const u32 index = bag.emit<i18n::Key::LowerCompOverflow>(
+      diag::Severity::Error, diag::Stage::Lowering, DiagCode::CompOverflow,
+      span);
+  (void)index;
+  failed = true;
+}
+
 ir::TypeIdx Lowerer::error_type() {
   return builder.error_type();
 }
@@ -1585,6 +1593,32 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{size_one, error_type(), false, false};
     }
     return Val{to_operand(measured, usize_type()), usize_type(), false, false};
+  }
+  if (name == "wrapping_add" || name == "wrapping_sub" ||
+      name == "wrapping_mul") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    if (call.args.size() != 2 || type_args.size() != 1) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::TypeIdx type = type_args[0];
+    Val left = lower_expr(call.args[0], &type);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    Val right = lower_expr(call.args[1], &type);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::Opcode op = name == "wrapping_add"   ? ir::Opcode::IntAddWrap
+                          : name == "wrapping_sub" ? ir::Opcode::IntSubWrap
+                                                   : ir::Opcode::IntMulWrap;
+    const ir::RegisterIdx result =
+        emit(op, type, {use_value(left), use_value(right)});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(result, type), type, false, false};
   }
   if (name == "alloc" || name == "dealloc") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();

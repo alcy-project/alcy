@@ -28,3 +28,13 @@ pub unsafe intrinsic fn drop_in_place<T>(p: &mut T);
 // Reads the value at `p` and leaves the place uninitialized. The
 // caller owns the result and must not use or end `p` again.
 pub unsafe intrinsic fn read<T>(p: *T) -> T;
+
+// The explicitly wrapping forms of `+`, `-`, and `*`: the result is
+// the mathematical one reduced modulo 2^N, whatever the build's
+// overflow policy is. A hash that relies on the wrap says so through
+// these.
+pub intrinsic fn wrapping_add<T>(a: T, b: T) -> T;
+
+pub intrinsic fn wrapping_sub<T>(a: T, b: T) -> T;
+
+pub intrinsic fn wrapping_mul<T>(a: T, b: T) -> T;

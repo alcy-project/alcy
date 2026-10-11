@@ -53,6 +53,7 @@ LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
                              const Target& target,
                              bool emit_entry,
                              bool freestanding,
+                             bool overflow_checks,
                              debug::Profiler* profiler,
                              bool backtrace,
                              std::span<const diag::Span> instr_spans,
@@ -66,6 +67,7 @@ LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
       profiler_(profiler),
       emit_entry_(emit_entry),
       freestanding_(freestanding),
+      overflow_checks_(overflow_checks),
       backtrace_(backtrace),
       instr_spans_(instr_spans),
       site_names_(site_names) {}
@@ -495,6 +497,9 @@ void LlvmIrEmitter::emit_instruction(ir::InstructionIdx instr_idx,
     case Op::IntAdd:
     case Op::IntSub:
     case Op::IntMul:
+    case Op::IntAddWrap:
+    case Op::IntSubWrap:
+    case Op::IntMulWrap:
     case Op::IntDiv:
     case Op::UintDiv:
     case Op::IntRem:

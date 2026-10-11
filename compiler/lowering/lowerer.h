@@ -192,6 +192,9 @@ class Lowerer {
           debug::Profiler* profiler = nullptr);
   void unsupported(diag::Span span, std::string_view what);
   void internal(diag::Span span, std::string_view what);
+  // A constant expression overflowed its type; the diagnostic names
+  // the rule rather than calling the program unsupported.
+  void comp_overflow(diag::Span span);
   ir::TypeIdx error_type();
   bool is_copy(ir::TypeIdx type) const;
   ir::TypeTag tag_of(ir::TypeIdx idx) const;

@@ -37,6 +37,11 @@ struct IrRunError {
     Quota,
     // The call stack reached COMP_MAX_CALL_DEPTH.
     Depth,
+    // A checked source operation overflowed (ADR-0062): the program
+    // is refused at compile time the way a debug build refuses it at
+    // runtime. The wrap operations are the program's own choice and
+    // never take this path.
+    Overflow,
   };
 
   Kind kind = Kind::Internal;

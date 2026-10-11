@@ -734,4 +734,31 @@ TEST_CASE("Lowering reports a spent name table") {
   CHECK(reported);
 }
 
+// A constant expression the compiler evaluates overflows its type: the
+// program is refused with the check's own code rather than a
+// not-supported report (ADR-0062).
+TEST_CASE("Lowering reports an overflow in a constant") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "const N: i32 = 2147483647 + 1\n"
+                   "fn main() -> i32 {\n"
+                   "  ret N\n"
+                   "}\n"}});
+
+  Fixture f;
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+  bool reported = false;
+  for (u32 i = 0; i < f.bag.size(); ++i) {
+    const diag::Diagnostic* const diag = f.bag.at(i);
+    if (diag != nullptr &&
+        diag->code == diag::Code{diag::Stage::Lowering,
+                                 static_cast<u8>(DiagCode::CompOverflow)}) {
+      reported = true;
+    }
+  }
+  CHECK(reported);
+}
+
 }  // namespace lowering

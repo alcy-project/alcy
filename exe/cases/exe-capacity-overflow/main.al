@@ -2,7 +2,7 @@
 // the wrap: a wrapped capacity would name a smaller block than the
 // container records, so growth panics instead.
 fn main() -> i32 {
-  limit := ((0 as usize) - 1) / 2
+  limit := wrapping_sub(0 as usize, 1 as usize) / 2
   next := doubled_capacity(limit)
   if next <= limit {
     ret 1
