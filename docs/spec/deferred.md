@@ -5,12 +5,10 @@ relied upon by MVP programs or by the MVP compiler implementation.
 
 ## Language
 
-- Destructor glue reaches a struct's fields, an enum's live variant
-  after a discriminant read, and an array's elements in a loop. What
-  remains is a wildcard match discard, which moves the scrutinee
-  without ending the payload it leaves behind. A move out of a type
-  with its own `drop` is refused by design, and `Vec::grow` moves
-  elements rather than ending them. See
+- Destructor glue reaches a struct's or tuple's fields, an enum's live
+  variant after a discriminant read, and an array's elements in a loop.
+  A move out of a type with its own `drop` is refused by design, and
+  `Vec::grow` moves elements rather than ending them. See
   `docs/adr/0013-destructors-consume-their-value.md`.
 - Generic structs, generic enums, generic free functions, and generic
   intrinsics are MVP: they intern per instantiation, and `impl<T>

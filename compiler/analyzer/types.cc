@@ -2841,6 +2841,16 @@ bool Checker::drop_scan(ir::TypeIdx type, std::vector<u32>& stack) {
     case ir::TypeTag::Array:
       result = drop_scan(builder.array_types()[node.as_array()].element, stack);
       break;
+    case ir::TypeTag::Tuple: {
+      const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
+      for (ir::TypeIdx element : tuple.elements) {
+        if (drop_scan(element, stack)) {
+          result = true;
+          break;
+        }
+      }
+      break;
+    }
     default: break;
   }
   stack.pop_back();

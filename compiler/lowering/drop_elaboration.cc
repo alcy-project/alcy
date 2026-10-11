@@ -637,7 +637,7 @@ void Lowerer::place_ends() {
       out.current = exit_index;
       return;
     }
-    if (node.tag != ir::TypeTag::Struct) {
+    if (node.tag != ir::TypeTag::Struct && node.tag != ir::TypeTag::Tuple) {
       // A place no walk reaches; the caller's value is left alone. The
       // sites name a binding, the explicit end does not.
       if (local < locals.size()) {
@@ -648,9 +648,12 @@ void Lowerer::place_ends() {
       }
       return;
     }
-    const ir::StructType& fields = builder.struct_types()[node.as_struct()];
-    for (u32 i = 0; i < fields.fields.size(); ++i) {
-      const ir::TypeIdx field = fields.fields[i];
+    const ir::TypeIdxRange fields =
+        node.tag == ir::TypeTag::Struct
+            ? builder.struct_types()[node.as_struct()].fields
+            : builder.tuple_types()[node.as_tuple()].elements;
+    for (u32 i = 0; i < fields.size(); ++i) {
+      const ir::TypeIdx field = fields[i];
       if (!runs_destructor(field)) {
         continue;
       }

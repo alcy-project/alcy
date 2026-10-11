@@ -34,9 +34,9 @@
   still alive. A destructor that ends a value of a generic type is
   resolved per instantiation.
 - A type with no destructor of its own still ends what it holds: the
-  compiler ends each destructible struct field, the live variant's
-  destructible fields after a discriminant read, and each destructible
-  array element.
+  compiler ends each destructible struct or tuple field, the live
+  variant's destructible fields after a discriminant read, and each
+  destructible array element.
 - Discarding a value ends it where it stands: `_ := v` runs the
   destructor, and a bare expression statement whose value is not `()`
   warns and does the same. A wildcard binding in a pattern ends what it

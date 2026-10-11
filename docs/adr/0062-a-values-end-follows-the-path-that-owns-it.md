@@ -88,9 +88,9 @@ the opcode; it stops being reserved and starts meaning something.
 **Ending a value ends what it holds.**
 
 The own `drop` runs when declared. Otherwise the compiler walks the
-fields the value is made of: a struct's fields, the live variant's
-destructible fields after a discriminant read, and an array's elements
-in a loop. The warning that asks a type to declare its own `drop` for
+fields the value is made of: a struct's or tuple's fields, the live
+variant's destructible fields after a discriminant read, and an
+array's elements in a loop. The warning that asks a type to declare its own `drop` for
 a variant or an array retires, and a wildcard match that discards a
 payload ends it on the way out.
 
