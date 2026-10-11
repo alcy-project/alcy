@@ -92,13 +92,16 @@ jobs:
 
       - name: Package & Generate Checksum
         shell: bash
+        # --verify checks the archive holds what a site's loader looks
+        # for; the module itself already ran in the smoke above.
         run: |
           uv run ./tools/package.py \
             --plat=wasm \
             --arch=wasm32 \
             --mode="${{ inputs.build_type }}" \
             --role="${{ inputs.role }}" \
-            --archive=tar.zst
+            --archive=tar.zst \
+            --verify
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

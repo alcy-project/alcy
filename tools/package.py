@@ -5,9 +5,12 @@
 
 import argparse
 import hashlib
+import os
 import shutil
+import subprocess
 import sys
 import tarfile
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -74,6 +77,52 @@ def generate_sha256(file_path: Path) -> Path:
     return checksum_path
 
 
+def extract_archive(archive_path: Path, dest_dir: Path) -> None:
+    if archive_path.suffix == ".zip":
+        with zipfile.ZipFile(archive_path, "r") as zf:
+            zf.extractall(dest_dir)
+    else:
+        dctx = zstd.ZstdDecompressor()
+        with open(archive_path, "rb") as f_in, dctx.stream_reader(f_in) as reader:
+            with tarfile.open(fileobj=reader, mode="r|") as tar:
+                tar.extractall(dest_dir, filter="data")
+
+
+def verify_archive(archive_path: Path, plat: str, required_targets: list[str]) -> bool:
+    """Unpacks the archive and asks the binary it carries to run.
+
+    The archive is the artifact a consumer downloads, so packaging that
+    stops at writing the file proves the runner could write it. The wasm
+    archive carries a module no host runs directly, so its check is the
+    file list.
+    """
+    with tempfile.TemporaryDirectory(prefix="alcy_package_") as temp:
+        dest_dir = Path(temp)
+        try:
+            extract_archive(archive_path, dest_dir)
+        except Exception as e:
+            log_error(f"Verify could not unpack {archive_path.name}: {e}")
+            return False
+
+        missing = [name for name in required_targets if not (dest_dir / name).is_file()]
+        if missing:
+            log_error(f"Archive is missing: {', '.join(missing)}")
+            return False
+
+        if plat == "wasm":
+            return True
+
+        # The extraction filter does not promise the mode bits, and a
+        # binary the host cannot execute is a binary the smoke cannot ask.
+        binary = dest_dir / required_targets[0]
+        os.chmod(binary, 0o755)
+        run = subprocess.run([str(binary), "--version"], capture_output=True, text=True)
+        if run.returncode != 0 or not run.stdout.strip():
+            log_error(f"The packaged binary failed to run: exit={run.returncode}")
+            return False
+        return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Package build artifacts.")
     parser.add_argument("--plat", required=True, choices=VALID_PLATS)
@@ -81,6 +130,12 @@ def main() -> int:
     parser.add_argument("--mode", required=True, choices=VALID_MODES)
     parser.add_argument("--role", default="ci", choices=VALID_ROLES)
     parser.add_argument("--archive", default="tar.zst")
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Unpack the archive, check its contents, and run the binary "
+        "it carries; the wasm archive stops at the contents",
+    )
     parser.add_argument("--nix", action="store_true")
     parser.add_argument("--build-dir", type=Path, default=Path("out/build"))
     parser.add_argument("--dist-dir", type=Path, default=Path("dist"))
@@ -154,6 +209,9 @@ def main() -> int:
         generate_sha256(archive_path)
     except Exception as e:
         log_error(f"Packaging failed for {archive_name}: {e}")
+        return 1
+
+    if args.verify and not verify_archive(archive_path, args.plat, required_targets):
         return 1
 
     return 0

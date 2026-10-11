@@ -81,6 +81,9 @@ jobs:
 
       - name: Package & Generate Checksum
         shell: bash
+        # --verify unpacks the archive and runs the binary it carries, so
+        # packaging is a path a consumer took rather than a file the
+        # runner wrote.
         run: |
           ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/package.py \
             --plat="${{ matrix.plat }}" \
@@ -88,6 +91,7 @@ jobs:
             --mode="${{ inputs.build_type }}" \
             --role="${{ inputs.role }}" \
             --archive="${{ matrix.archive }}" \
+            --verify \
             ${{ matrix.nix && '--nix' || '' }}
 
       - name: Upload Build Artifacts
