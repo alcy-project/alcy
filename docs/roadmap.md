@@ -10,28 +10,30 @@ peripheral work lives in `backlog.md`. The language record lives in
 - [ ] Ownership and drops per CFG path.
 
   A loan's extent is a region, solved per path; ownership is not.
-  Lowering tracks a moved flag per local and falls back to a runtime
-  guard, so a value consumed on one arm of an `if` and not the other
-  reports "use of moved" - the in-tree case is `Option::filter` over
-  a non-Copy `T` - and a destructor that needs a variant's
-  discriminant or an array's elements cannot be placed: a droppable
-  local or field warns, a wildcard match discard leaks its payload
-  silently, and `Vec`, `Map`, and `Set` release a buffer without
-  ending the live elements in it. In slices: the `if` epilogue
-  computes its moved delta after the branch restores its flags, so it
-  never fires - the branch returns the delta and path-exact drops
-  return to `if` joins; then a pass over IR consumes the `Move`
-  markers and solves ownership per CFG path (owned, moved, dead;
-  joins take maybe-moved), replacing the linear flags and the runtime
-  guard so `break`, `continue`, `?`, and joins are one rule; then
-  drop glue for enum payloads (a discriminant switch) and array
-  elements (an element loop), which is also the `drop_in_place` the
-  owning pointers of the fifth item need; then the containers end
-  live elements in `clear` and `drop`; and one rule replaces today's
-  `_ := expr` error beside a bare statement's warning, neither of
-  which ends the value. `Drop` exists as an IR opcode and has no
-  emitter. Designed in
-  `docs/adr/0013-destructors-consume-their-value.md`.
+  Lowering tracks a moved flag per local with a one-bit latch, so a
+  value consumed on one arm of an `if` and not the other reports "use
+  of moved" - the in-tree case is `Option::filter` over a non-Copy
+  `T` - a store that re-owns a place leaks the new value, and a
+  destructor that needs a variant's discriminant or an array's
+  elements cannot be placed: a droppable local or field warns, a
+  wildcard match discard leaks its payload silently, and `Vec`,
+  `Map`, and `Set` release a buffer without ending the live elements
+  in it. In slices: lowering journals an end site per place and stops
+  placing ends; a `drop` pass beside lowering reads the `Move`
+  markers and the stores, solves ownership per place (owned, moved,
+  maybe), appends an end where every path owns, splits the edges
+  where the paths differ, and keeps a per-place flag only where a
+  loop carries both states; the `Drop` opcode becomes the marker a
+  placed end carries, and the borrow checker consumes it as an
+  authoritative boundary, which retires the remaining false
+  positives; then drop glue for enum payloads (a discriminant
+  switch) and array elements (an element loop), ending a wildcard
+  discard's payload and giving the `drop_in_place` the owning
+  pointers of the fifth item need; then the containers end live
+  elements in `clear` and `drop`; and one rule replaces today's
+  `_ := expr` error beside a bare statement's warning, both ending
+  the value. Designed in
+  `docs/adr/0062-a-values-end-follows-the-path-that-owns-it.md`.
 
 - [ ] Container iteration.
 

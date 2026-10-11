@@ -106,6 +106,16 @@ retire the value for the code that follows the branch.
 Discarding a value that holds something with a destructor is an error.
 Nothing would be left to own it, so its destructor could never run.
 
+Amended at the drop pass's landing: placement is the per-place
+dataflow of
+`docs/adr/0062-a-values-end-follows-the-path-that-owns-it.md`, not the
+flag snapshot described above. A store re-owns its place, `Move`
+markers are the events the pass reads, and only a state a loop carries
+both ways is decided at run time. This supersedes the enum/array and
+partial-move consequences below and the discard error above: variants
+and array elements end through glue, field-level move tracking landed,
+and discarding ends the value.
+
 ## Consequences
 
 - `Vec<T>` and a growable `String` can release a block they no longer
