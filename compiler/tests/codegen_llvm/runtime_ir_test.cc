@@ -262,6 +262,63 @@ TEST_CASE("A panic writes the site it was handed") {
   CHECK(text.find("c\" at \\00\"") != std::string::npos);
   CHECK(text.find("c\": \\00\"") != std::string::npos);
   CHECK(text.find("has_where") != std::string::npos);
+  // No backtrace asked, so no frame walk is built in.
+  CHECK(text.find("c\"  at \\00\"") == std::string::npos);
+}
+
+TEST_CASE("A panic with backtrace walks the frame chain") {
+  llvm::LLVMContext context;
+  llvm::Module module("runtime_ir_test", context);
+  const auto usize = llvm::Type::getInt64Ty(context);
+  const auto void_ty = llvm::Type::getVoidTy(context);
+  const auto pointer = opaque_pointer(context);
+
+  // The walk reads one frame layout, so the case names its machine
+  // rather than the host's: under a wasm test runner the host triple
+  // is not a machine with frames to walk.
+  const codegen_llvm::Target target{"x86_64-unknown-linux-gnu",
+                                    ir::PointerWidth::W64};
+  declare(module, "alcy_panic",
+          signature(void_ty, {pointer, usize, pointer, usize}));
+  add_runtime_definitions(module, target,
+                          /*freestanding=*/false, /*backtrace=*/true);
+
+  CHECK(!llvm::verifyModule(module));
+
+  const std::string text = module_text(module);
+  // The walk reads the frame chain and prints one line per named frame.
+  CHECK(text.find("llvm.frameaddress") != std::string::npos);
+  CHECK(text.find("c\"  at \\00\"") != std::string::npos);
+  // The walk starts from the panic's own frame, so the panic stays a
+  // function of its own rather than folding into its caller.
+  llvm::Function* panic = module.getFunction("alcy_panic");
+  CHECK(panic != nullptr);
+  if (panic != nullptr) {
+    CHECK(panic->hasFnAttribute(llvm::Attribute::NoInline));
+  }
+}
+
+TEST_CASE("A panic without walkable frames carries no walk") {
+  llvm::LLVMContext context;
+  llvm::Module module("runtime_ir_test", context);
+  const auto usize = llvm::Type::getInt32Ty(context);
+  const auto void_ty = llvm::Type::getVoidTy(context);
+  const auto pointer = opaque_pointer(context);
+
+  // The walk reads the x86-64 and AArch64 frame layout; anywhere else
+  // backtrace on still means the message and its site only.
+  const codegen_llvm::Target target{"wasm32-unknown-emscripten",
+                                    ir::PointerWidth::W32};
+  declare(module, "alcy_panic",
+          signature(void_ty, {pointer, usize, pointer, usize}));
+  add_runtime_definitions(module, target,
+                          /*freestanding=*/false, /*backtrace=*/true);
+
+  CHECK(!llvm::verifyModule(module));
+
+  const std::string text = module_text(module);
+  CHECK(text.find("llvm.frameaddress") == std::string::npos);
+  CHECK(text.find("c\"  at \\00\"") == std::string::npos);
 }
 
 TEST_CASE("Runtime reaches libc the way the platform expects") {

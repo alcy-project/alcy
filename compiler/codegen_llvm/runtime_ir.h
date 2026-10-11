@@ -26,8 +26,17 @@ namespace codegen_llvm {
 // a Windows target gets `_write` and `_aligned_malloc` whoever is
 // building it. A freestanding runtime reaches the kernel through raw
 // syscalls instead, so its pieces carry no libc call at all.
+//
+// With `backtrace`, `alcy_panic` also walks the frame chain and names
+// the program functions `define_backtrace_table` listed, before it
+// aborts (ADR-0063). The walk reads the x86-64 and AArch64 frame
+// layout; on any other target the panic carries its message and site
+// only. The walk is only as good as the frames: every generated
+// function keeps a frame pointer, and inlined or tail-called ones have
+// no frame to find.
 void add_runtime_definitions(llvm::Module& module,
                              const Target& target,
-                             bool freestanding = false);
+                             bool freestanding = false,
+                             bool backtrace = false);
 
 }  // namespace codegen_llvm

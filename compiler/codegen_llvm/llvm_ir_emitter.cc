@@ -28,7 +28,13 @@
 #include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/InlineAsm.h"
+#include "llvm/IR/Module.h"
 #include "symbol/mangle.h"
 
 #if BUILD_FLAG(IS_DEBUG)
@@ -43,7 +49,8 @@ LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
                              const Target& target,
                              bool emit_entry,
                              bool freestanding,
-                             debug::Profiler* profiler)
+                             debug::Profiler* profiler,
+                             bool backtrace)
     : module_(module),
       storage_(std::move(storage)),
       builder_(std::make_unique<IRBuilder>(module_->getContext())),
@@ -52,7 +59,8 @@ LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
       triple_(target.triple),
       profiler_(profiler),
       emit_entry_(emit_entry),
-      freestanding_(freestanding) {}
+      freestanding_(freestanding),
+      backtrace_(backtrace) {}
 
 void LlvmIrEmitter::check_state() {
   // DCHECK_MSG(storage_, "IR Storage is null");
@@ -228,7 +236,7 @@ llvm::Type* LlvmIrEmitter::enum_payload_area_type(ir::TypeIdx idx) const {
   return llvm::ArrayType::get(carrier, area.size / carrier_bytes);
 }
 
-void LlvmIrEmitter::emit() && noexcept {
+std::vector<BacktraceName> LlvmIrEmitter::emit() && noexcept {
   check_state();
 
   values_.resize_functions(storage_->functions().size());
@@ -258,10 +266,22 @@ void LlvmIrEmitter::emit() && noexcept {
       llvm_function = create_function(renamed);
       entry_function = llvm_function;
       entry_return = storage_->types()[function.meta.return_type.idx].tag;
+      if (backtrace_) {
+        // The optimizer would fold the entry into its wrapper and
+        // leave the walk no named frame at all; one missed inlining
+        // on a function called once is what keeps `main` standing.
+        llvm_function->addFnAttr(llvm::Attribute::NoInline);
+      }
     } else {
       llvm_function = create_function(function.meta);
     }
     values_.add_function(function_idx, llvm_function);
+    if (backtrace_) {
+      // The renamed entry keeps its source spelling: a frame reads
+      // `main`, not `alcy_main`.
+      visible_functions_.push_back(
+          BacktraceName{llvm_function, display_name(function.meta)});
+    }
   }
   // PERF: consider running this process concurrently.
   for (const ir::FunctionIdx function_idx : storage_->functions().idx_range()) {
@@ -281,6 +301,14 @@ void LlvmIrEmitter::emit() && noexcept {
   if (entry_function != nullptr) {
     emit_entry(entry_function, entry_return);
   }
+  if (backtrace_) {
+    // The slot the walker loads; define_backtrace_table fills it once
+    // the runtime exists, and an unused slot is dropped with the table.
+    llvm::GlobalVariable* slot = module_->getOrInsertGlobal(
+        "alcy_backtrace_entries", builder_->getPtrTy());
+    slot->setLinkage(llvm::GlobalValue::PrivateLinkage);
+    slot->setInitializer(llvm::ConstantPointerNull::get(builder_->getPtrTy()));
+  }
 
 #if BUILD_FLAG(IS_DEBUG)
   // Storage arrives verified, so only the generated module is rechecked.
@@ -290,6 +318,7 @@ void LlvmIrEmitter::emit() && noexcept {
     UNREACHABLE();
   }
 #endif
+  return std::move(visible_functions_);
 }
 
 void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
@@ -632,6 +661,72 @@ std::string LlvmIrEmitter::linkable_name(
     signature.generics.emplace_back(generics.head().idx + i);
   }
   return symbol::mangle(signature, *storage_, *interner_);
+}
+
+std::string LlvmIrEmitter::display_name(
+    const ir::FunctionMeta& function_meta) const {
+  const std::string_view path = interner_->get(function_meta.path);
+  std::string out;
+  if (!path.empty()) {
+    out += path;
+    out += "::";
+  }
+  out += interner_->get(function_meta.name);
+  return out;
+}
+
+void define_backtrace_table(llvm::Module& module,
+                            const std::vector<BacktraceName>& visible) {
+  llvm::LLVMContext& context = module.getContext();
+  llvm::PointerType* ptr = llvm::PointerType::getUnqual(context);
+  llvm::Type* usize = module.getDataLayout().getIntPtrType(context);
+  llvm::StructType* entry_type =
+      llvm::StructType::get(context, {ptr, ptr, usize});
+
+  std::vector<llvm::Constant*> entries;
+  entries.reserve(visible.size() + 1);
+  u32 made = 0;
+  for (llvm::Function& function : module) {
+    if (function.isDeclaration()) {
+      continue;
+    }
+    llvm::Constant* name = llvm::ConstantPointerNull::get(ptr);
+    llvm::Constant* length = llvm::ConstantInt::get(usize, 0);
+    for (const BacktraceName& shown : visible) {
+      if (shown.function != &function) {
+        continue;
+      }
+      llvm::Constant* bytes =
+          llvm::ConstantDataArray::getString(context, shown.name,
+                                             /*AddNull=*/false);
+      llvm::GlobalVariable* text = module.getOrInsertGlobal(
+          "alcy.backtrace.name." + std::to_string(made++), bytes->getType());
+      text->setInitializer(bytes);
+      text->setConstant(true);
+      text->setLinkage(llvm::GlobalValue::PrivateLinkage);
+      name = llvm::ConstantExpr::getBitCast(text, ptr);
+      length = llvm::ConstantInt::get(usize, shown.name.size());
+      break;
+    }
+    entries.push_back(
+        llvm::ConstantStruct::get(entry_type, {&function, name, length}));
+  }
+  // The walker stops at an entry with no start address.
+  entries.push_back(llvm::ConstantStruct::get(
+      entry_type,
+      {llvm::ConstantPointerNull::get(ptr), llvm::ConstantPointerNull::get(ptr),
+       llvm::ConstantInt::get(usize, 0)}));
+  llvm::ArrayType* array_type =
+      llvm::ArrayType::get(entry_type, entries.size());
+  llvm::GlobalVariable* array =
+      module.getOrInsertGlobal("alcy_backtrace_array", array_type);
+  array->setInitializer(llvm::ConstantArray::get(array_type, entries));
+  array->setConstant(true);
+  array->setLinkage(llvm::GlobalValue::PrivateLinkage);
+  llvm::GlobalVariable* slot = module.getNamedGlobal("alcy_backtrace_entries");
+  DCHECK_MSG(slot != nullptr, "backtrace table without its slot");
+  slot->setInitializer(llvm::ConstantExpr::getBitCast(array, ptr));
+  slot->setConstant(true);
 }
 
 llvm::Function* LlvmIrEmitter::create_function(

@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "codegen_llvm/common.h"
 #include "codegen_llvm/llvm_backend.h"
@@ -903,6 +904,71 @@ TEST_CASE("Emit ignores Drop markers") {
   module->print(os, nullptr);
 
   CHECK(ir_str.find("drop") == std::string::npos);
+}
+
+TEST_CASE("Emit with backtrace names the entry for the walk") {
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("backtrace_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
+
+  ir::SymbolTable interner(mem::page_size());
+  ir::StorageBuilder builder;
+
+  const ir::InstructionIdx inst_ret =
+      builder.instr({.op = ir::Opcode::Ret,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(base::INVALID_IDX),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = {}});
+  ir::InstrSeq instrs;
+  instrs.push(inst_ret);
+  const ir::BlockIdx block =
+      builder.block({.instrs = instrs.finish(), .block_params = {}});
+  builder.function({
+      .meta = {.return_type = builder.primitive(ir::TypeTag::Void),
+               .param_types = {},
+               .name = interner.intern("main"),
+               .path = str::EMPTY_STRING_ID,
+               .kind = ir::SymbolKind::Free,
+               .generics = ir::TypeIdxRange{}},
+      .blocks = {block, 1},
+  });
+
+  ir::VerifiedStorage storage = std::move(builder).build().unwrap();
+  LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
+                        host_target(), /*emit_entry=*/true,
+                        /*freestanding=*/false, /*profiler=*/nullptr,
+                        /*backtrace=*/true);
+
+  std::vector<BacktraceName> visible = std::move(emitter).emit();
+
+  CHECK(!llvm::verifyModule(*module));
+  // The table names the entry by its source spelling, not the renamed
+  // symbol the wrapper calls through.
+  CHECK(visible.size() == 1);
+  if (visible.size() != 1) {
+    return;
+  }
+  CHECK(visible[0].name == "main");
+  // The optimizer would fold the entry into its wrapper and leave the
+  // walk no named frame at all; one missed inlining on a function
+  // called once is what keeps `main` standing.
+  CHECK(visible[0].function != nullptr);
+  if (visible[0].function != nullptr) {
+    CHECK(visible[0].function->getName().contains("alcy_main"));
+    CHECK(visible[0].function->hasFnAttribute(llvm::Attribute::NoInline));
+  }
+  define_backtrace_table(*module, visible);
+  llvm::GlobalVariable* slot = module->getNamedGlobal("alcy_backtrace_entries");
+  CHECK(slot != nullptr);
+  if (slot != nullptr) {
+    CHECK(slot->hasInitializer());
+  }
+  std::string ir_str;
+  llvm::raw_string_ostream os(ir_str);
+  module->print(os, nullptr);
+  CHECK(ir_str.find("alcy_backtrace_array") != std::string::npos);
 }
 
 }  // namespace codegen_llvm

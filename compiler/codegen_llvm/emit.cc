@@ -14,9 +14,15 @@
 #include "codegen_llvm/llvm_backend.h"
 #include "codegen_llvm/llvm_ir_emitter.h"
 #include "codegen_llvm/runtime_ir.h"
+#include "config/build_config.h"
+#include "debug/dlog.h"
+#include "debug/fatal.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
 #include "ir/storage.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Verifier.h"
 
 namespace codegen_llvm {
 namespace {
@@ -48,16 +54,42 @@ struct EmittedModule {
     // carries its items unwrapped, even one named `main`.
     LlvmIrEmitter emitter(module.get(), std::move(request.storage),
                           request.strings, request.target, request.emit_entry,
-                          request.freestanding, request.profiler);
-    std::move(emitter).emit();
+                          request.freestanding, request.profiler,
+                          request.backtrace);
+    std::vector<BacktraceName> visible = std::move(emitter).emit();
     // Before the optimizer, so the runtime is inlined and folded like
     // any other code, and after the program, so its definitions land in
     // the declarations the program's call sites already hold.
     {
       PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.profiler, "runtime",
                                                "backend");
-      add_runtime_definitions(*module, request.target, request.freestanding);
+      add_runtime_definitions(*module, request.target, request.freestanding,
+                              request.backtrace);
     }
+    if (request.backtrace) {
+      // The frames the walk reads and the names it prints: every
+      // generated function keeps a frame pointer, and the table names
+      // the program's. Tail calls are off so the panic's own frame stays
+      // a frame of its own; an inlined caller still has no frame to
+      // find, which is the best-effort part. All three are what an
+      // on-panic profile asked for and absent when it did not.
+      define_backtrace_table(*module, visible);
+      for (llvm::Function& function : *module) {
+        if (!function.isDeclaration()) {
+          function.addFnAttr("frame-pointer", "all");
+          function.addFnAttr("disable-tail-calls", "true");
+        }
+      }
+    }
+#if BUILD_FLAG(IS_DEBUG)
+    // The emitter checked its own output above; the runtime landed
+    // after that check, so the module is rechecked with it in.
+    if (llvm::verifyModule(*module, &llvm::errs())) [[unlikely]] {
+      DLOG("LLVM verify module with runtime failed");
+      module->print(llvm::errs(), nullptr);
+      UNREACHABLE();
+    }
+#endif
     if (!request.optimize) {
       return base::make_ok();
     }

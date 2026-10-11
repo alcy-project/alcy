@@ -57,6 +57,11 @@ struct EmitRequest {
   // Whether the entry is `_start` and the link skips the C runtime
   // (ADR-0052); only meaningful with `emit_entry`.
   bool freestanding = false;
+  // Whether a panic walks the frame chain and names the frames it can
+  // (ADR-0063). Only the LLVM backend keeps frame pointers and emits the
+  // table the walk reads; the direct wasm backend writes the message and
+  // its site and no frames.
+  bool backtrace = false;
   // Whether to run the middle end. A backend without one answers
   // `NoOptimizer` rather than emitting unoptimized code under a release
   // command.

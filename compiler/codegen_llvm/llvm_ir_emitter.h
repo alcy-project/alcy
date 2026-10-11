@@ -18,7 +18,28 @@
 #include "ir/symbol_table.h"
 #include "ir/type.h"
 
+namespace llvm {
+class Function;
+class Module;
+}  // namespace llvm
+
 namespace codegen_llvm {
+
+// One program function of the runtime backtrace table the unwinder
+// reads: the LLVM function and the source spelling a frame shows
+// (ADR-0063).
+struct BacktraceName {
+  llvm::Function* function = nullptr;
+  std::string name;
+};
+
+// Fills the table the panic walker dereferences, for a module built with
+// backtrace on: every defined function gets an entry, the program's with
+// the display name `visible` carries and every other one (the runtime,
+// the entry thunk) with a null name, which the walker skips. Called
+// after add_runtime_definitions and before optimization.
+void define_backtrace_table(llvm::Module& module,
+                            const std::vector<BacktraceName>& visible);
 
 class LlvmIrEmitter {
  public:
@@ -35,7 +56,8 @@ class LlvmIrEmitter {
                 const Target& target,
                 bool emit_entry,
                 bool freestanding = false,
-                debug::Profiler* profiler = nullptr);
+                debug::Profiler* profiler = nullptr,
+                bool backtrace = false);
   ~LlvmIrEmitter() = default;
 
   LlvmIrEmitter(const LlvmIrEmitter&) = delete;
@@ -44,7 +66,10 @@ class LlvmIrEmitter {
   LlvmIrEmitter(LlvmIrEmitter&&) noexcept = default;
   LlvmIrEmitter& operator=(LlvmIrEmitter&&) noexcept = default;
 
-  void emit() && noexcept;
+  // Emits every function body. Returns the program functions and the
+  // names a runtime backtrace shows for them, empty unless the emitter
+  // was built with backtrace on.
+  std::vector<BacktraceName> emit() && noexcept;
 
  private:
   void check_state();
@@ -65,6 +90,9 @@ class LlvmIrEmitter {
 
   llvm::Function* create_function(const ir::FunctionMeta& function_meta) const;
   std::string linkable_name(const ir::FunctionMeta& function_meta) const;
+  // The source spelling of a function for a backtrace frame: its module
+  // path and name, without the signature the linkable name encodes.
+  std::string display_name(const ir::FunctionMeta& function_meta) const;
 
   llvm::Value* resolve_operand_value(const ir::Operand& operand) const;
   llvm::Function* resolve_operand_function(const ir::Operand& operand) const;
@@ -99,6 +127,11 @@ class LlvmIrEmitter {
   // Whether the entry is `_start`, ending through the exit syscall
   // instead of returning to a C runtime (ADR-0052).
   bool freestanding_ = false;
+  // Whether the panic walker gets a table to read; the emitter creates
+  // the slot it lands in, and define_backtrace_table fills it once the
+  // runtime exists (ADR-0063).
+  bool backtrace_ = false;
+  std::vector<BacktraceName> visible_functions_;
   LlvmIrStorage values_;
   // LLVM types are immutable once built, and one shape is requested for
   // every register, operand, and signature that names it, so each is

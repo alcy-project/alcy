@@ -12,8 +12,17 @@
 #include "debug/dcheck.h"
 #include "fpag/base/numeric.h"
 #include "ir/type.h"
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/ConstantFolder.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/InlineAsm.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
 
 namespace codegen_llvm {
 namespace {
@@ -26,11 +35,15 @@ using Builder =
 // than compiled per build (see `docs/adr/0023-program-runtime-in-process.md`).
 class RuntimeBuilder {
  public:
-  RuntimeBuilder(llvm::Module& module, const Target& target, bool freestanding)
+  RuntimeBuilder(llvm::Module& module,
+                 const Target& target,
+                 bool freestanding,
+                 bool backtrace)
       : module_(module),
         builder_(module.getContext()),
         windows_(target.is_windows()),
         freestanding_(freestanding),
+        backtrace_(backtrace),
         arch_(target.triple.substr(0, target.triple.find('-'))),
         usize_(target.width == ir::PointerWidth::W64 ? builder_.getInt64Ty()
                                                      : builder_.getInt32Ty()) {}
@@ -81,8 +94,24 @@ class RuntimeBuilder {
   }
 
  private:
+  // A panic trace stops after this many frames, and a frame only
+  // matches an entry whose start is this close to the return address.
+  // The window keeps a libc or runtime address from being blamed on
+  // whichever program function happens to sit below it.
+  static constexpr u64 MAX_BACKTRACE_FRAMES = 64;
+  static constexpr u64 MAX_BACKTRACE_DISTANCE = u64{1} << 24;
+
   bool declared(std::string_view name) const {
     return module_.getFunction(name) != nullptr;
+  }
+
+  // Whether the panic walker can read this target's frames: the walk
+  // assumes the frame pointer addresses the caller's frame and the
+  // word above it holds the return address, which is the x86-64 and
+  // AArch64 layout. Anywhere else the walk stays off and the panic
+  // carries its message and site only.
+  bool walkable_frames() const {
+    return arch_ == "x86_64" || arch_ == "aarch64";
   }
 
   // The kernel entry for one architecture: the instruction text and
@@ -392,12 +421,20 @@ class RuntimeBuilder {
         builder_.getVoidTy(),
         {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
     llvm::Function* function = runtime("alcy_panic", type);
+    if (backtrace_) {
+      // The walk starts from this frame; inlining it into the caller
+      // would start the walk one frame too deep and fold the walk into
+      // code the table cannot name back.
+      function->addFnAttr(llvm::Attribute::NoInline);
+    }
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(module_.getContext(), "entry", function);
     llvm::BasicBlock* located =
         llvm::BasicBlock::Create(module_.getContext(), "located", function);
     llvm::BasicBlock* text =
         llvm::BasicBlock::Create(module_.getContext(), "text", function);
+    llvm::BasicBlock* end =
+        llvm::BasicBlock::Create(module_.getContext(), "end", function);
 
     builder_.SetInsertPoint(entry);
     Guarded message = guard_null(function->getArg(0), function->getArg(1));
@@ -421,6 +458,18 @@ class RuntimeBuilder {
     builder_.CreateCall(write_all_, {fd(2), text_constant(": "),
                                      llvm::ConstantInt::get(usize_, 2)});
     builder_.CreateCall(write_all_, {fd(2), message.text, message.len});
+    // The walk needs frames it can read; without them the message and
+    // its site are the whole report.
+    if (backtrace_ && walkable_frames()) {
+      // The frames start on their own line, after the message.
+      builder_.CreateCall(write_all_, {fd(2), newline_text_,
+                                       llvm::ConstantInt::get(usize_, 1)});
+      build_panic_walk(end);
+    } else {
+      builder_.CreateBr(end);
+    }
+
+    builder_.SetInsertPoint(end);
     if (freestanding_) {
       // No libc `abort`; exit with the status a hosted abort reports.
       exit_now(134);
@@ -429,6 +478,162 @@ class RuntimeBuilder {
     builder_.CreateCall(
         libc("abort", llvm::FunctionType::get(builder_.getVoidTy(), false)));
     builder_.CreateRetVoid();
+  }
+
+  // Walks the frame chain outward from `alcy_panic` and prints one
+  // `  at <name>` line per table entry that matches a frame. The table
+  // is `define_backtrace_table`'s: `{start, name, len}`, terminated by
+  // an entry with no start, with a null name marking a frame the trace
+  // does not show (the runtime's own).
+  void build_panic_walk(llvm::BasicBlock* end) {
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::Type* ptr = builder_.getPtrTy();
+    llvm::StructType* entry_type =
+        llvm::StructType::get(context, {ptr, ptr, usize_});
+    llvm::BasicBlock* from = builder_.GetInsertBlock();
+    llvm::Function* function = from->getParent();
+
+    // The emitter creates the slot; a runtime asked for the walk with no
+    // table gets an empty one, which the walk skips.
+    llvm::GlobalVariable* slot =
+        module_.getNamedGlobal("alcy_backtrace_entries");
+    if (slot == nullptr) {
+      slot = module_.getOrInsertGlobal("alcy_backtrace_entries", ptr);
+      slot->setLinkage(llvm::GlobalValue::PrivateLinkage);
+      slot->setInitializer(llvm::ConstantPointerNull::get(ptr));
+    }
+
+    llvm::BasicBlock* walk =
+        llvm::BasicBlock::Create(context, "walk", function);
+    llvm::BasicBlock* scan =
+        llvm::BasicBlock::Create(context, "scan", function);
+    llvm::BasicBlock* advance =
+        llvm::BasicBlock::Create(context, "advance", function);
+    llvm::BasicBlock* matched =
+        llvm::BasicBlock::Create(context, "matched", function);
+    llvm::BasicBlock* print =
+        llvm::BasicBlock::Create(context, "print", function);
+    llvm::BasicBlock* next_frame =
+        llvm::BasicBlock::Create(context, "next_frame", function);
+    llvm::BasicBlock* done =
+        llvm::BasicBlock::Create(context, "done", function);
+
+    llvm::Value* entries = builder_.CreateLoad(ptr, slot, "entries");
+    llvm::Value* no_entries = builder_.CreateICmpEQ(
+        entries, llvm::ConstantPointerNull::get(builder_.getPtrTy()),
+        "no_entries");
+    // `[fp]` is the caller's frame and `[fp + word]` its return address
+    // in the x86-64 and AArch64 layout the walk is enabled for; the
+    // chain starts at this frame.
+    llvm::Function* frame_address = llvm::Intrinsic::getOrInsertDeclaration(
+        &module_, llvm::Intrinsic::frameaddress, {ptr});
+    llvm::Value* fp0 =
+        builder_.CreateCall(frame_address, {builder_.getInt32(0)}, "frame");
+    builder_.CreateCondBr(no_entries, done, walk);
+
+    builder_.SetInsertPoint(walk);
+    llvm::PHINode* fp = builder_.CreatePHI(ptr, 2, "fp");
+    llvm::PHINode* depth = builder_.CreatePHI(usize_, 2, "depth");
+    fp->addIncoming(fp0, from);
+    depth->addIncoming(llvm::ConstantInt::get(usize_, 0), from);
+    llvm::Value* next_fp = builder_.CreateLoad(ptr, fp, "next_fp");
+    llvm::Value* pc_offset =
+        llvm::ConstantInt::get(usize_, usize_->getBitWidth() / 8);
+    llvm::Value* at_pc =
+        builder_.CreateGEP(builder_.getInt8Ty(), fp, {pc_offset}, "at_pc");
+    llvm::Value* pc = builder_.CreateLoad(ptr, at_pc, "pc");
+    llvm::Value* no_pc = builder_.CreateICmpEQ(
+        pc, llvm::ConstantPointerNull::get(builder_.getPtrTy()), "no_pc");
+    llvm::Value* too_deep = builder_.CreateICmpUGE(
+        depth, llvm::ConstantInt::get(usize_, MAX_BACKTRACE_FRAMES),
+        "too_deep");
+    // The stack grows down, so a frame that did not move up ends the
+    // walk.
+    llvm::Value* not_up =
+        builder_.CreateICmpULE(builder_.CreatePtrToInt(next_fp, usize_),
+                               builder_.CreatePtrToInt(fp, usize_), "not_up");
+    llvm::Value* stop = builder_.CreateOr(no_pc, too_deep, "stop");
+    stop = builder_.CreateOr(stop, not_up);
+    // The depth the next frame runs at, computed here so it dominates
+    // the blocks that carry it forward.
+    llvm::Value* increased = builder_.CreateAdd(
+        depth, llvm::ConstantInt::get(usize_, 1), "increased");
+    builder_.CreateCondBr(builder_.CreateNot(stop, "go"), scan, done);
+
+    // The scan keeps the match with the greatest start at or below the
+    // return address. Entries are not sorted, and an entry whose start
+    // is too far below the address (libc, another mapping) is not a
+    // match.
+    builder_.SetInsertPoint(scan);
+    llvm::PHINode* best_start = builder_.CreatePHI(ptr, 2, "best_start");
+    llvm::PHINode* best_name = builder_.CreatePHI(ptr, 2, "best_name");
+    llvm::PHINode* best_len = builder_.CreatePHI(usize_, 2, "best_len");
+    llvm::PHINode* index = builder_.CreatePHI(usize_, 2, "index");
+    llvm::Constant* nil = llvm::ConstantPointerNull::get(builder_.getPtrTy());
+    best_start->addIncoming(nil, walk);
+    best_name->addIncoming(nil, walk);
+    best_len->addIncoming(llvm::ConstantInt::get(usize_, 0), walk);
+    index->addIncoming(llvm::ConstantInt::get(usize_, 0), walk);
+    llvm::Value* entry =
+        builder_.CreateGEP(entry_type, entries, {index}, "entry");
+    llvm::Value* start = builder_.CreateLoad(
+        ptr, builder_.CreateStructGEP(entry_type, entry, 0), "start");
+    llvm::Value* last = builder_.CreateICmpEQ(start, nil, "last");
+    builder_.CreateCondBr(last, matched, advance);
+
+    builder_.SetInsertPoint(advance);
+    llvm::Value* name = builder_.CreateLoad(
+        ptr, builder_.CreateStructGEP(entry_type, entry, 1), "name");
+    llvm::Value* len = builder_.CreateLoad(
+        usize_, builder_.CreateStructGEP(entry_type, entry, 2), "len");
+    llvm::Value* pc_word = builder_.CreatePtrToInt(pc, usize_, "pc_word");
+    llvm::Value* start_word =
+        builder_.CreatePtrToInt(start, usize_, "start_word");
+    llvm::Value* after = builder_.CreateICmpULE(start_word, pc_word, "after");
+    llvm::Value* near = builder_.CreateICmpULT(
+        builder_.CreateSub(pc_word, start_word),
+        llvm::ConstantInt::get(usize_, MAX_BACKTRACE_DISTANCE), "near");
+    llvm::Value* candidate = builder_.CreateAnd(after, near, "candidate");
+    llvm::Value* closer = builder_.CreateICmpUGT(
+        start_word, builder_.CreatePtrToInt(best_start, usize_, "best_word"),
+        "closer");
+    llvm::Value* take = builder_.CreateAnd(candidate, closer, "take");
+    best_start->addIncoming(builder_.CreateSelect(take, start, best_start),
+                            advance);
+    best_name->addIncoming(builder_.CreateSelect(take, name, best_name),
+                           advance);
+    best_len->addIncoming(builder_.CreateSelect(take, len, best_len), advance);
+    index->addIncoming(
+        builder_.CreateAdd(index, llvm::ConstantInt::get(usize_, 1)), advance);
+    builder_.CreateBr(scan);
+
+    builder_.SetInsertPoint(matched);
+    llvm::Value* found = builder_.CreateICmpNE(best_start, nil, "found");
+    llvm::Value* named = builder_.CreateICmpNE(best_name, nil, "named");
+    builder_.CreateCondBr(builder_.CreateAnd(found, named, "show"), print,
+                          next_frame);
+
+    builder_.SetInsertPoint(print);
+    builder_.CreateCall(write_all_, {fd(2), text_constant("  at "),
+                                     llvm::ConstantInt::get(usize_, 5)});
+    builder_.CreateCall(write_all_, {fd(2), best_name, best_len});
+    builder_.CreateCall(
+        write_all_, {fd(2), newline_text_, llvm::ConstantInt::get(usize_, 1)});
+    builder_.CreateBr(next_frame);
+
+    builder_.SetInsertPoint(next_frame);
+    llvm::PHINode* parent = builder_.CreatePHI(ptr, 2, "parent");
+    llvm::PHINode* deeper = builder_.CreatePHI(usize_, 2, "deeper");
+    parent->addIncoming(next_fp, matched);
+    parent->addIncoming(next_fp, print);
+    deeper->addIncoming(increased, matched);
+    deeper->addIncoming(increased, print);
+    builder_.CreateBr(walk);
+    fp->addIncoming(parent, next_frame);
+    depth->addIncoming(deeper, next_frame);
+
+    builder_.SetInsertPoint(done);
+    builder_.CreateBr(end);
   }
 
   // Ends the program through the exit syscall. Only a freestanding
@@ -731,6 +936,8 @@ class RuntimeBuilder {
   Builder builder_;
   bool windows_;
   bool freestanding_;
+  // Whether `alcy_panic` walks the frame chain before it aborts.
+  bool backtrace_;
   std::string arch_;
   llvm::IntegerType* usize_;
   llvm::Constant* empty_text_ = nullptr;
@@ -743,8 +950,9 @@ class RuntimeBuilder {
 
 void add_runtime_definitions(llvm::Module& module,
                              const Target& target,
-                             bool freestanding) {
-  RuntimeBuilder(module, target, freestanding).build();
+                             bool freestanding,
+                             bool backtrace) {
+  RuntimeBuilder(module, target, freestanding, backtrace).build();
 }
 
 }  // namespace codegen_llvm
