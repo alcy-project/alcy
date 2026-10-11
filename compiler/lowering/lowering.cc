@@ -479,6 +479,10 @@ bool Lowerer::emit_drop_at_path(ir::OperandIdx place,
       std::vector<ir::OperandIdx> ops;
       ops.push_back(builder.operand(ir::Operand::from_function(
           fn, builder.primitive(ir::TypeTag::Function))));
+      // The end is authorized here: whatever the may-move analysis says
+      // about the paths that reach it, the compiler placed it where the
+      // value is still owned (a guard decides a maybe at run time).
+      emit_void(ir::Opcode::Drop, {place});
       Val self{place, type, true, true};
       const bool saved = in_destructor_call_;
       in_destructor_call_ = true;

@@ -1061,6 +1061,13 @@ class Checker {
         if (place_of(storage.operands()[instr.operands.head()], place)) {
           add_moved(out, place);
         }
+      } else if (instr.op == ir::Opcode::Drop && !instr.operands.empty()) {
+        // A placed end leaves the value owned at the edge: the guard
+        // behind a maybe has already decided, so what follows owns it.
+        Place place;
+        if (place_of(storage.operands()[instr.operands.head()], place)) {
+          kill_moved(out, place);
+        }
       } else if (instr.op == ir::Opcode::Store && instr.operands.size() == 2) {
         Place place;
         if (place_of(storage.operands()[instr.operands.head() + 1], place)) {
@@ -1235,6 +1242,16 @@ class Checker {
           break;
         }
         add_moved(moved, place);
+        break;
+      }
+      case ir::Opcode::Drop: {
+        // A placed end is authorized: the compiler put it where the
+        // value is still owned on this path (a guard decides a maybe at
+        // run time), so the end's own move is not a use after one.
+        Place place;
+        if (operand_place(0, place)) {
+          kill_moved(moved, place);
+        }
         break;
       }
       case ir::Opcode::Borrow: {

@@ -3923,7 +3923,56 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
         value = Val{to_operand(result, loaded.type), loaded.type, false, false};
       }
       ir::OperandIdx stored = use_value(value);
+      const ir::Operand& target = builder.state().operands[place.op.idx];
+      u32 local_index = 0;
+      std::vector<u32> path;
+      const bool rooted =
+          target.is<ir::RegisterIdx>() &&
+          place_of_register(target.as_register().idx, local_index, path);
+      if (rooted) {
+        // Writing over an owned place ends the value it replaces: the
+        // right-hand side may have moved it already, and a moved-out
+        // place is re-initialized rather than overwritten.
+        Local& local = locals[local_index];
+        if (!local.moved) {
+          if (local.moved_somewhere && path.empty() &&
+              local.drop_guard.is_valid()) {
+            emit_guarded_drop(local, node.span);
+          } else if (!local.moved_somewhere) {
+            std::vector<u32> end_path = path;
+            const ir::TypeIdx end_type = type_at_path(local.type, path);
+            emit_drop_at_path(place.op, end_type, node.span, &local, end_path);
+          }
+        }
+      }
       emit_void(ir::Opcode::Store, {stored, place.op});
+      // A store writes a new value, so the place is owned again: the
+      // flag the exits consult clears, and the fields a previous value
+      // moved out are owned again. A store to a field re-owns it and
+      // leaves the rest of the value as it was.
+      if (rooted) {
+        Local& local = locals[local_index];
+        if (path.empty()) {
+          local.moved = false;
+          local.moved_fields.clear();
+          if (local.drop_guard.is_valid()) {
+            const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
+            emit_void(ir::Opcode::Store,
+                      {bool_operand(false), to_operand(local.drop_guard, i1)});
+          }
+        } else {
+          for (usize i = local.moved_fields.size(); i > 0; --i) {
+            const std::vector<u32>& moved = local.moved_fields[i - 1];
+            bool covered = moved.size() >= path.size();
+            for (usize s = 0; covered && s < path.size(); ++s) {
+              covered = moved[s] == path[s];
+            }
+            if (covered) {
+              local.moved_fields.erase(local.moved_fields.begin() + (i - 1));
+            }
+          }
+        }
+      }
       return;
     }
     case ast::StmtKind::Expr: {

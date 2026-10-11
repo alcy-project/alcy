@@ -23,6 +23,9 @@
 - The destructor consumes the value. Ending a value by value is a move,
   so a value that has already left is never ended twice, whether it was
   passed to a function, returned, or ended explicitly.
+- Writing over a place that still owns a value ends that value before
+  the new one lands. Writing into a place whose value has already left
+  is re-initialization, and ends nothing.
 - A type that is `Copy` cannot have a destructor. `Copy` is structural
   (see above), so such a type has nothing a destructor could release,
   and every copy of it would be ended.
