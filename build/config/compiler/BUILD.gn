@@ -244,11 +244,15 @@ config("release") {
     "-fomit-frame-pointer",
   ]
 
-  # A perf build keeps the debug information and the symbol table, so a profile
-  # can name what it sampled; see //compiler/docs/performance.md. It is the
-  # later flag that wins, and the strip is what would take the table away.
+  # A perf build keeps the debug information, the symbol table, and the frame
+  # pointer, so a profile can name what it sampled and a call graph can walk
+  # out of it; see //compiler/docs/performance.md. It is the later flag that
+  # wins, and the strip is what would take the table away.
   if (perf_symbols) {
-    cflags += [ "-g" ]
+    cflags += [
+      "-g",
+      "-fno-omit-frame-pointer",
+    ]
   } else if (!is_mac && !is_win && !is_wasm) {
     ldflags = [ "-Wl,--strip-all" ]
   }

@@ -34,7 +34,8 @@ For a complete list of supported flags and options, pass `--help` to any script.
 Build output goes to `out/<build-subdir>/` (`out/build/` by default). A
 `perf_symbols` build is the exception to the strip a release build applies:
 the binary with symbols is `out/opt/exe.unstripped/alcy`, and `out/opt/alcy`
-beside it is the stripped one. See
+beside it is the stripped one. It also keeps the frame pointer, which is what
+lets `tools/perf.py callers` walk a stack. See
 [performance.md](performance.md) for what to do with it.
 
 ## How the LLVM dependency works
