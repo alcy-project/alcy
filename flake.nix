@@ -17,6 +17,12 @@
         runtimeLibs = [
           llvmPkgs.libcxx
         ];
+
+        shellHook = ''
+          export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath runtimeLibs}:$LD_LIBRARY_PATH"
+          export LIBCXX_INCLUDE_DIR="${llvmPkgs.libcxx.dev}/include/c++/v1"
+          export LIBCXX_LIB_DIR="${llvmPkgs.libcxx}/lib"
+        '';
       in
       {
         devShells.default = (pkgs.mkShell.override { inherit stdenv; }) {
@@ -36,15 +42,27 @@
             # one its output is compared against.
             pkgs.tree-sitter
             pkgs.bun
+            # `check.sh` runs the spell check through typos when it is on
+            # PATH and only notes its absence, so the shell carries it and
+            # the note never has a reason to appear.
+            pkgs.typos
           ];
 
           buildInputs = [];
 
-          shellHook = ''
-            export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath runtimeLibs}:$LD_LIBRARY_PATH"
-            export LIBCXX_INCLUDE_DIR="${llvmPkgs.libcxx.dev}/include/c++/v1"
-            export LIBCXX_LIB_DIR="${llvmPkgs.libcxx}/lib"
-          '';
+          inherit shellHook;
+        };
+
+        # The wasm gates need Emscripten, a closure far larger than the
+        # tools around it; it stays out of the default shell so the nix
+        # matrix entries never download it, and `check.sh --nix` runs its
+        # wasm gates from here:
+        #   nix develop .#wasm --command ./tools/check.sh --nix
+        devShells.wasm = (pkgs.mkShell.override { inherit stdenv; }) {
+          inputsFrom = [ self.devShells.${system}.default ];
+          nativeBuildInputs = [ pkgs.emscripten ];
+
+          inherit shellHook;
         };
       }
     );
