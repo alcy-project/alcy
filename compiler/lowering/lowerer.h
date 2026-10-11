@@ -659,6 +659,16 @@ class Lowerer {
   // every call site, and walking the entries so far to compare keys charged
   // one call site for every function lowered before it.
   std::unordered_map<std::string, u32> fn_by_key_;
+  // Where a function instantiation's arguments are, so a lookup does not have
+  // to walk the package's instances: by (item, instantiation) for a body that
+  // knows the context it was checked under, by (module, signature slot) for a
+  // call site that knows the callee's, and by item alone for the first
+  // instance, which is what an entry carrying none falls back to. Built once,
+  // in the constructor, where the other indexes are.
+  std::unordered_map<u64, u32> fn_args_by_item_;
+  std::unordered_map<u64, u32> first_fn_args_by_item_;
+  std::unordered_map<u64, u32> fn_args_by_slot_;
+  void index_fn_insts();
   // Where a closure body's entry already is. What names one body is the
   // module, the expression, and the instantiation, so those are the key and
   // the entries under it are compared the way the walk compared them: a

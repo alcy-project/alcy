@@ -114,6 +114,23 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
   mark_drops();
   index_origins();
   index_structs();
+  index_fn_insts();
+}
+
+void Lowerer::index_fn_insts() {
+  fn_args_by_item_.reserve(pkg.fn_insts.size());
+  first_fn_args_by_item_.reserve(pkg.fn_insts.size());
+  fn_args_by_slot_.reserve(pkg.fn_insts.size());
+  for (u32 i = 0; i < static_cast<u32>(pkg.fn_insts.size()); ++i) {
+    const analyzer::FnInstance& instance = pkg.fn_insts[i];
+    // The first instance of a key wins, which is what the walks this
+    // replaces returned.
+    fn_args_by_item_.emplace(
+        (static_cast<u64>(instance.item.idx) << 32) | instance.inst, i);
+    first_fn_args_by_item_.emplace(instance.item.idx, i);
+    fn_args_by_slot_.emplace(
+        (static_cast<u64>(instance.module) << 32) | instance.sig_index, i);
+  }
 }
 
 void Lowerer::mark_drops() {
@@ -221,12 +238,12 @@ ir::RegisterIdx Lowerer::emit_type_query(ir::Opcode op, ir::TypeIdx measure) {
 const std::vector<ir::TypeIdx>& Lowerer::fn_instance_args(u32 module,
                                                           u32 sig_index) const {
   static const std::vector<ir::TypeIdx> NONE;
-  for (const analyzer::FnInstance& instance : pkg.fn_insts) {
-    if (instance.module == module && instance.sig_index == sig_index) {
-      return instance.args;
-    }
+  const auto found =
+      fn_args_by_slot_.find((static_cast<u64>(module) << 32) | sig_index);
+  if (found == fn_args_by_slot_.end()) {
+    return NONE;
   }
-  return NONE;
+  return pkg.fn_insts[found->second].args;
 }
 
 void Lowerer::emit_void(ir::Opcode op, const std::vector<ir::OperandIdx>& ops) {
@@ -822,15 +839,14 @@ std::vector<ir::TypeIdx> Lowerer::fn_args_for(ast::ItemIdx item,
                                               u32 inst) const {
   // The key is what separates two instantiations of one function; the
   // first-instance fallback only serves an entry that carries none.
-  for (const analyzer::FnInstance& instance : pkg.fn_insts) {
-    if (instance.item == item && instance.inst == inst) {
-      return instance.args;
-    }
+  const auto found =
+      fn_args_by_item_.find((static_cast<u64>(item.idx) << 32) | inst);
+  if (found != fn_args_by_item_.end()) {
+    return pkg.fn_insts[found->second].args;
   }
-  for (const analyzer::FnInstance& instance : pkg.fn_insts) {
-    if (instance.item == item) {
-      return instance.args;
-    }
+  const auto first = first_fn_args_by_item_.find(item.idx);
+  if (first != first_fn_args_by_item_.end()) {
+    return pkg.fn_insts[first->second].args;
   }
   return {};
 }
