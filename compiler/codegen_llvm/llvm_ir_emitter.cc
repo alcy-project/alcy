@@ -300,6 +300,12 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
       llvm_function = create_function(function.meta);
     }
     values_.add_function(function_idx, llvm_function);
+    // A binary defines the whole image: nothing outside can call these
+    // symbols, so the middle end may drop the instantiations no caller
+    // reached. A library keeps its surface external.
+    if (emit_entry_) {
+      llvm_function->setLinkage(llvm::GlobalValue::InternalLinkage);
+    }
     if (backtrace_) {
       // The renamed entry keeps its source spelling: a frame reads
       // `main`, not `alcy_main`.

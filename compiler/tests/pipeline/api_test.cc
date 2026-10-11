@@ -134,10 +134,9 @@ TEST_CASE("Pipeline release build produces a working executable") {
 // per one and the O3 pipeline's mem2reg promotes them. That makes the
 // program's spills the difference between the flag reaching the IR and
 // the flag reaching only the object file, which is how a release build
-// once produced byte-identical IR either way. The runtime is defined in
-// the module too, and its `alcy_alloc` keeps one alloca of its own -
-// `posix_memalign` writes its result through a pointer - so the two are
-// told apart by element type.
+// once produced byte-identical IR either way. A release build's own
+// symbols are internal, so O3 also inlines the program into the entry
+// and drops what nothing calls.
 TEST_CASE("Release optimizes the textual IR, not only the object") {
 #if !ALCY_BACKEND_LLVM
   // The direct backend writes a module, not the object, IR, or
@@ -200,7 +199,7 @@ TEST_CASE("Release optimizes the textual IR, not only the object") {
   // }
 
   // Release LLVM-IR should be like:
-  // define noundef i32 @"_A1f0:.9:alcy_main"() local_unnamed_addr #3 {
+  // define noundef i32 @main() local_unnamed_addr #0 {
   //   ret i32 0
   // }
 
@@ -210,7 +209,10 @@ TEST_CASE("Release optimizes the textual IR, not only the object") {
   // Both have "alcy_main" function
   CHECK(plain_ir.find("alcy_main") != std::string::npos);
   CHECK(plain_ir.find("ret i32 0") != std::string::npos);
-  CHECK(released_ir.find("alcy_main") != std::string::npos);
+  // A binary's own symbols are internal, so O3 inlines the whole program
+  // into the C entry and drops what nothing calls: one definition
+  // remains.
+  CHECK(released_ir.find("define noundef i32 @main()") != std::string::npos);
   CHECK(released_ir.find("ret i32 0") != std::string::npos);
 
   // Call of "add" at least exists on plain
