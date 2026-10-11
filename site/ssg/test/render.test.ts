@@ -55,6 +55,7 @@ test("the guide's assets load only when a page has code", () => {
 test("an alcy block gains edit, run, and an output panel", () => {
   const html = render("en", [alcy]);
   match(html, /<div class="code-block" data-language="alcy">/);
+  match(html, /<div class="code-view">\s*<pre><code>/);
   match(html, /data-action="edit" aria-pressed="false">Edit</);
   match(html, /data-action="reset" hidden>Reset</);
   match(html, /data-action="run">Run</);

@@ -14,6 +14,12 @@
   margin: 0;
 }
 
+/* The positioning context for the editing overlay: the highlighted pre
+   beneath is the mirror the transparent textarea sits on. */
+.code-view {
+  position: relative;
+}
+
 /* The generator leaves the row hidden until `guide.js` wires it; the
    author display rule would otherwise beat the UA's `[hidden]`. */
 .code-actions[hidden],
@@ -57,18 +63,27 @@
 
 /* Editing swaps the highlighted block for a plain textarea. */
 
+/* The editing overlay: the pre beneath is the mirror, so the textarea
+   carries only the caret -- its own text is invisible -- and the
+   mirror's box decides the height and width. The paddings, the border
+   widths, and the type metrics are the pre's, or the caret drifts off
+   the glyphs it belongs to. */
 .code-editor {
-  display: block;
+  position: absolute;
+  inset: 0;
   width: 100%;
+  height: 100%;
   padding: 10px 12px;
-  color: var(--fg);
-  background: var(--bg-code);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--accent);
   font-family: var(--mono);
   font-size: 12.5px;
   line-height: 1.5;
-  resize: vertical;
+  white-space: pre;
+  overflow: hidden;
+  resize: none;
 }
 
 /* The run output under an `alcy` block. */

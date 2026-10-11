@@ -102,8 +102,12 @@ function blockHtml(
       ].join("\n          ");
       const output = isAlcy ? `\n        <div class="code-output" hidden></div>` : "";
       const language = isAlcy ? ` data-language="alcy"` : "";
+      // `code-view` is the positioning context for the editing overlay:
+      // the pre is the highlight mirror the transparent textarea sits on.
       return `<div class="code-block"${language}>
-        <pre><code>${code}</code></pre>
+        <div class="code-view">
+          <pre><code>${code}</code></pre>
+        </div>
         <div class="code-actions" hidden>
           ${actions}
         </div>${output}

@@ -16,6 +16,7 @@ import type {
   Diagnostic,
   RunOutcome,
 } from "./compiler-client.js";
+import type { Highlighter } from "../playground/highlight.js";
 import { t } from "./site.js";
 
 // The workers live in the playground's one set of assets; the module's
@@ -23,6 +24,48 @@ import { t } from "./site.js";
 const PLAYGROUND_BASE = new URL("../playground/", import.meta.url);
 const COPIED_MS = 1500;
 const RUN_TIMEOUT_MS = 5000;
+
+// The runtime highlighter, shared by every editable block and loaded on
+// the first Edit: colors while typing are an enhancement, so a reader
+// who never edits never downloads the grammar, and a load that fails
+// leaves the plain mirror -- the same text, uncolored -- doing the
+// same job.
+let highlighterPromise: Promise<Highlighter | null> | null = null;
+let highlighter: Highlighter | null = null;
+const mirrorRefreshes: Array<() => void> = [];
+
+function ensureHighlighter(): Promise<Highlighter | null> {
+  if (highlighterPromise === null) {
+    highlighterPromise = (async () => {
+      try {
+        const [module, query, runtime, grammar] = await Promise.all([
+          import("../playground/highlight.js"),
+          fetch(new URL("grammar/highlights.scm", PLAYGROUND_BASE)),
+          fetch(new URL("vendor/web-tree-sitter.wasm", PLAYGROUND_BASE)).then(
+            (response) => response.arrayBuffer(),
+          ),
+          fetch(new URL("grammar/tree-sitter-alcy.wasm", PLAYGROUND_BASE)).then(
+            (response) => response.arrayBuffer(),
+          ),
+        ]);
+        const ready = await module.createHighlighter({
+          runtimeWasm: runtime,
+          languageWasm: new Uint8Array(grammar),
+          querySource: await query.text(),
+        });
+        highlighter = ready;
+        // Blocks already showing a plain mirror get their colors now.
+        for (const refresh of mirrorRefreshes) {
+          refresh();
+        }
+        return ready;
+      } catch {
+        return null;
+      }
+    })();
+  }
+  return highlighterPromise;
+}
 
 interface CodeBlock {
   pre: HTMLElement;
@@ -129,11 +172,10 @@ function onCompilerStatus(status: CompilerStatusName, detail: string): void {
   }
 }
 
-function createEditor(block: CodeBlock, source: string): HTMLTextAreaElement {
+function createEditor(source: string): HTMLTextAreaElement {
   const editor = document.createElement("textarea");
   editor.className = "code-editor";
   editor.value = source;
-  editor.rows = Math.max(2, source.split("\n").length);
   editor.spellcheck = false;
   editor.setAttribute("autocomplete", "off");
   editor.setAttribute("autocapitalize", "off");
@@ -313,38 +355,60 @@ function wireAlcy(block: CodeBlock): void {
     reset.hidden = !modified();
   };
 
+  // The pre beneath the editing overlay is the mirror: the same bytes
+  // the reader is typing, colored once the highlighter is up and plain
+  // until then.
+  const paint = (text: string): void => {
+    if (highlighter === null) {
+      block.code.textContent = text;
+    } else {
+      block.code.innerHTML = highlighter.highlight(text);
+    }
+  };
+
   // Done shows the working copy, not the published one: an edit survives
-  // leaving the textarea, and only Reset takes it back. A modified copy
-  // has no highlighting to show -- it was never parsed -- so it reads as
-  // plain text.
+  // leaving the textarea, and only Reset takes it back. The colors come
+  // from the runtime highlighter when it is up; until then the copy
+  // reads as plain text.
   const showWorking = (): void => {
     if (modified()) {
-      block.code.textContent = working;
+      paint(working);
     } else {
       block.code.innerHTML = publishedHtml;
     }
   };
+
+  // Repaint whenever the highlighter arrives late: editing blocks show
+  // the caret's own text, a finished edit its working copy.
+  const refreshMirror = (): void => {
+    if (editor !== null) {
+      paint(editor.value);
+    } else {
+      showWorking();
+    }
+  };
+  mirrorRefreshes.push(refreshMirror);
 
   // Copy and Run follow the reader, not the published text.
   block.source = () => (editor === null ? working : editor.value);
 
   edit.addEventListener("click", () => {
     if (editor === null) {
-      const created = createEditor(block, working);
+      const created = createEditor(working);
       editor = created;
       created.addEventListener("input", () => {
         working = created.value;
+        paint(working);
         syncReset();
       });
-      block.pre.hidden = true;
       block.pre.after(created);
       edit.textContent = t("guide.done");
       edit.setAttribute("aria-pressed", "true");
+      void ensureHighlighter();
     } else {
       working = editor.value;
       editor.remove();
       editor = null;
-      block.pre.hidden = false;
       showWorking();
       edit.textContent = t("guide.edit");
       edit.setAttribute("aria-pressed", "false");
@@ -356,7 +420,7 @@ function wireAlcy(block: CodeBlock): void {
     working = published;
     if (editor !== null) {
       editor.value = published;
-      editor.rows = Math.max(2, published.split("\n").length);
+      block.code.innerHTML = publishedHtml;
     } else {
       showWorking();
     }
