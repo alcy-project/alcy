@@ -125,11 +125,9 @@ jobs:
           submodules: false
           fetch-depth: 1
 
-      # grammar.json is formatted by whichever CLI wrote it, so the version
-      # that generates the parser is the one config.toml records rather than
-      # the one the runner happens to carry.
       - name: Install the tree-sitter CLI
         run: |
+          mkdir -p "$HOME/.local/bin"
           curl -fsSL -o tree-sitter-cli.zip \
             "https://github.com/tree-sitter/tree-sitter/releases/download/v${{ needs.load-config.outputs.tree_sitter_cli_version }}/tree-sitter-cli-linux-x64.zip"
           unzip -o tree-sitter-cli.zip -d "$HOME/.local/bin" tree-sitter

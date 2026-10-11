@@ -73,6 +73,7 @@ jobs:
       - name: Install the tree-sitter CLI
         shell: bash
         run: |
+          mkdir -p "$HOME/.local/bin"
           TS_VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("config.toml", "rb"))["tree_sitter_cli_version"])')
           curl -fsSL -o tree-sitter-cli.zip \
             "https://github.com/tree-sitter/tree-sitter/releases/download/v${TS_VERSION}/tree-sitter-cli-linux-x64.zip"
