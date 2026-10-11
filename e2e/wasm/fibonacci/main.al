@@ -16,8 +16,7 @@ fn fib(n: i32) -> i32 {
 fn main() -> i32 {
   mut n := 0
   while n < 10 {
-    line := format("fib({}) = {}\n", n, fib(n))
-    print("{}", line.as_str())
+    println("fib({}) = {}", n, fib(n))
     n = n + 1
   }
   ret 0
