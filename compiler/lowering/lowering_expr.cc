@@ -41,6 +41,23 @@
 #include "source/source.h"
 #include "text/unescape.h"
 
+namespace {
+
+// The width a shift count is taken modulo.
+u32 integer_bits(ir::TypeTag tag) {
+  switch (tag) {
+    case ir::TypeTag::I8:
+    case ir::TypeTag::U8: return 8;
+    case ir::TypeTag::I16:
+    case ir::TypeTag::U16: return 16;
+    case ir::TypeTag::I32:
+    case ir::TypeTag::U32: return 32;
+    default: return 64;
+  }
+}
+
+}  // namespace
+
 namespace lowering {
 
 void Lowerer::unsupported(diag::Span span, std::string_view what) {
@@ -198,8 +215,13 @@ ir::TypeTag Lowerer::literal_tag(ast::LiteralIdx value,
 }
 
 Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
-                           const ir::TypeIdx* expected) {
+                           const ir::TypeIdx* expected,
+                           bool negate) {
   const ast::Literal& lit = ast.literals[lit_idx];
+  // A `-` the source wrote in front of the literal; expression negation
+  // arrives as its own node, so only a pattern or a folding caller sets
+  // this.
+  const bool negative = lit.is_negative != negate;
   const ir::TypeTag tag = literal_tag(lit_idx, expected);
   const ir::TypeIdx type = builder.primitive(tag);
   if (tag == ir::TypeTag::Str) {
@@ -233,7 +255,7 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
       }
     }
     f64 value = digits.empty() ? 0.0 : std::strtod(digits.c_str(), nullptr);
-    if (lit.is_negative) {
+    if (negative) {
       value = -value;
     }
     ir::Immutable imm{.type = type, .data = {}};
@@ -252,7 +274,7 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
     value = comp::parse_numeric_value(lit.spelling);
     // Negation wraps, matching the two's-complement release semantics
     // the rest of the literal path already uses.
-    if (lit.is_negative) {
+    if (negative) {
       value = 0 - value;
     }
   }
@@ -1848,6 +1870,16 @@ ir::OperandIdx Lowerer::const_usize(u64 value) {
   return to_operand(builder.immutable(imm), usize_ty);
 }
 
+ir::OperandIdx Lowerer::int_operand(u64 value, ir::TypeIdx type) {
+  ir::Immutable imm{.type = type, .data = {}};
+  if (integer_bits(tag_of(type)) == 64) {
+    imm.data.u64_value = value;
+  } else {
+    imm.data.u32_value = static_cast<u32>(value);
+  }
+  return to_operand(builder.immutable(imm), type);
+}
+
 bool Lowerer::is_range_type(ir::TypeIdx type) {
   const ir::TypeIdx origin = type_origin(type);
   if (tag_of(origin) != ir::TypeTag::Struct) {
@@ -3056,6 +3088,57 @@ ir::Opcode Lowerer::int_binop(ast::BinaryOp op, ir::TypeTag tag) {
   }
 }
 
+Val Lowerer::lower_int_division(diag::Span span,
+                                ast::BinaryOp op,
+                                Val lhs,
+                                Val rhs,
+                                ir::TypeTag tag) {
+  const bool unsigned_op = tag == ir::TypeTag::U8 || tag == ir::TypeTag::U16 ||
+                           tag == ir::TypeTag::U32 || tag == ir::TypeTag::U64;
+  const ir::Opcode div_op = int_binop(op, tag);
+  const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+  const ir::OperandIdx zero = int_operand(0, lhs.type);
+  // A zero divisor panics here rather than reaching a backend's
+  // division by zero, which would be undefined and differ per target.
+  const ir::RegisterIdx nonzero =
+      emit(ir::Opcode::Ne, boolean, {use_value(rhs), zero});
+  const ir::BlockIdx ok_block = reserve_block();
+  const ir::BlockIdx bad_block = reserve_block();
+  emit_cond_br(to_operand(nonzero, boolean), ok_block, bad_block);
+  switch_to(bad_block);
+  emit_panic(span, str_operand("division by zero"));
+  switch_to(ok_block);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  if (unsigned_op) {
+    const ir::RegisterIdx dst =
+        emit(div_op, lhs.type, {use_value(lhs), use_value(rhs)});
+    return Val{to_operand(dst, lhs.type), lhs.type, false, false};
+  }
+  // `MIN / -1` would overflow; the language wraps it, matching
+  // compile-time evaluation, so the divisor rides as one and the
+  // wrapping negation (or the zero remainder) is selected instead.
+  const ir::OperandIdx minus_one = int_operand(~static_cast<u64>(0), lhs.type);
+  const ir::RegisterIdx negated =
+      emit(ir::Opcode::Eq, boolean, {use_value(rhs), minus_one});
+  const ir::RegisterIdx safe = emit(
+      ir::Opcode::Select, lhs.type,
+      {to_operand(negated, boolean), int_operand(1, lhs.type), use_value(rhs)});
+  const ir::RegisterIdx quotient =
+      emit(div_op, lhs.type, {use_value(lhs), to_operand(safe, lhs.type)});
+  const ir::OperandIdx wrapped =
+      op == ast::BinaryOp::Div
+          ? to_operand(emit(ir::Opcode::IntSubWrap, lhs.type,
+                            {zero, use_value(lhs)}),
+                       lhs.type)
+          : zero;
+  const ir::RegisterIdx result = emit(
+      ir::Opcode::Select, lhs.type,
+      {to_operand(negated, boolean), wrapped, to_operand(quotient, lhs.type)});
+  return Val{to_operand(result, lhs.type), lhs.type, false, false};
+}
+
 Val Lowerer::lower_binary(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprBinary& bin = node.payload.get<ast::ExprBinary>();
@@ -3159,6 +3242,20 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
     const ir::RegisterIdx dst =
         emit(op, lhs.type, {use_value(lhs), use_value(rhs)});
     return Val{to_operand(dst, lhs.type), lhs.type, false, false};
+  }
+  // A shift count rides modulo the type's width, so an overshift has
+  // one result instead of a backend-defined one.
+  if (bin.op == ast::BinaryOp::Shl || bin.op == ast::BinaryOp::Shr) {
+    const ir::RegisterIdx amount =
+        emit(ir::Opcode::And, lhs.type,
+             {use_value(rhs), int_operand(integer_bits(tag) - 1, lhs.type)});
+    const ir::RegisterIdx dst =
+        emit(int_binop(bin.op, tag), lhs.type,
+             {use_value(lhs), to_operand(amount, lhs.type)});
+    return Val{to_operand(dst, lhs.type), lhs.type, false, false};
+  }
+  if (bin.op == ast::BinaryOp::Div || bin.op == ast::BinaryOp::Mod) {
+    return lower_int_division(node.span, bin.op, lhs, rhs, tag);
   }
   const ir::Opcode op = int_binop(bin.op, tag);
   const ir::RegisterIdx dst =
@@ -3824,6 +3921,20 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       if (const analyzer::CheckedModule::CallTarget* target = call_target(expr);
           target != nullptr) {
         return lower_spec_unary(expr, target);
+      }
+      // A `-` before a literal is the literal's own sign: `-128i8` is a
+      // value, not a subtraction, so a checked build never sees an
+      // overflow where the source wrote one.
+      if (unary.op == ast::UnaryOp::Neg &&
+          ast.exprs[unary.inner].kind == ast::ExprKind::Literal) {
+        const ast::ExprLiteral& literal =
+            ast.exprs[unary.inner].payload.get<ast::ExprLiteral>();
+        const ir::TypeIdx checked = expr_type(expr);
+        const ir::TypeIdx* hint = expected;
+        if (tag_of(checked) != ir::TypeTag::Error) {
+          hint = &checked;
+        }
+        return lower_literal(literal.value, hint, /*negate=*/true);
       }
       Val inner = lower_expr(unary.inner, nullptr);
       if (failed) {

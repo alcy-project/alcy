@@ -867,29 +867,23 @@ bool Interpreter::execute_binary(ir::InstructionIdx instr, Frame& frame) {
     case Opcode::And: result = left & right; break;
     case Opcode::Or: result = left | right; break;
     case Opcode::Xor: result = left ^ right; break;
-    case Opcode::ShiftLeft:
-      if (right >= 64) {
-        return fail(IrRunError::Kind::Unsupported, instr,
-                    "shift out of range in comp evaluation");
-      }
-      result = left << right;
+    case Opcode::ShiftLeft: {
+      const u64 amount = right & ((static_cast<u64>(int_bytes(tag)) * 8) - 1);
+      result = left << amount;
       break;
-    case Opcode::LogicalShiftRight:
-      if (right >= 64) {
-        return fail(IrRunError::Kind::Unsupported, instr,
-                    "shift out of range in comp evaluation");
-      }
-      result = left >> right;
+    }
+    case Opcode::LogicalShiftRight: {
+      const u64 amount = right & ((static_cast<u64>(int_bytes(tag)) * 8) - 1);
+      result = left >> amount;
       break;
-    case Opcode::ArithmeticShiftRight:
-      if (right >= 64) {
-        return fail(IrRunError::Kind::Unsupported, instr,
-                    "shift out of range in comp evaluation");
-      }
+    }
+    case Opcode::ArithmeticShiftRight: {
+      const u64 amount = right & ((static_cast<u64>(int_bytes(tag)) * 8) - 1);
       result = is_signed(tag)
-                   ? static_cast<u64>(sign_extend(left, tag) >> right)
-                   : (left >> right);
+                   ? static_cast<u64>(sign_extend(left, tag) >> amount)
+                   : (left >> amount);
       break;
+    }
     case Opcode::IntDiv:
     case Opcode::IntRem:
     case Opcode::UintDiv:

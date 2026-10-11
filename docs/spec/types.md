@@ -6,15 +6,17 @@
   `bool`. `f16`, 128-bit integers, posits, and decimals are deferred.
 - Literals: decimal, `0b`/`0o`/`0x`, type suffixes (`42i32`, `1.5f64`),
   `_` separators.
-- Overflow: the source arithmetic is checked in a debug build, which
-  aborts through the panic path, and unchecked in a release build,
-  where `+ - *` wrap and division by zero, `MIN / -1`, and overshifts
-  keep backend-defined behavior. The policy belongs to the build, not
-  to the module (ADR-0062), so one lowered program serves every
-  profile; `wrapping_add`, `wrapping_sub`, and `wrapping_mul` name the
-  wrapping forms for code that wants them in every profile. A constant
-  expression is always evaluated checked, so an overflow there is an
-  error.
+- Overflow: the source arithmetic is checked in a debug build and
+  unchecked in a release one. Checked, an overflow in `+`, `-`, and `*`
+  panics, an overshift panics, and a signed `MIN / -1` panics;
+  unchecked, `+ - *` wrap, a shift count rides modulo the type's width,
+  and `MIN / -1` wraps. Division or remainder by zero always panics,
+  `MIN % -1` is zero, and no arithmetic operation is undefined. The
+  policy belongs to the build, not to the module (ADR-0062), so one
+  lowered program serves every profile; `wrapping_add`, `wrapping_sub`,
+  and `wrapping_mul` name the wrapping forms for code that wants them
+  in every profile. A constant expression is always evaluated checked,
+  so an overflow or a zero divisor there is an error.
 
 ## Tuples
 

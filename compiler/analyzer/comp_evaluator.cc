@@ -1631,19 +1631,20 @@ bool CompEvaluator::comp_eval_binary(u32 mod,
       return true;
     case ast::BinaryOp::Shl:
     case ast::BinaryOp::Shr: {
-      if (right >= 64) {
-        return fail(node.span, "shift out of range in comp evaluation");
-      }
+      // A shift count rides modulo the type's width, the same rule the
+      // runtime and both backends obey.
+      const u64 amount =
+          right & ((static_cast<u64>(comp::int_bytes(tag)) * 8) - 1);
       if (bin.op == ast::BinaryOp::Shl) {
-        out.value.int_value = (left << right) & mask;
+        out.value.int_value = (left << amount) & mask;
         return true;
       }
       if (comp::is_signed(tag)) {
         out.value.int_value =
-            static_cast<u64>(comp::sign_extend(left, tag) >> right) & mask;
+            static_cast<u64>(comp::sign_extend(left, tag) >> amount) & mask;
         return true;
       }
-      out.value.int_value = (left >> right) & mask;
+      out.value.int_value = (left >> amount) & mask;
       return true;
     }
     default: break;

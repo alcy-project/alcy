@@ -291,7 +291,9 @@ class Lowerer {
   // The one report a spent name table gets, which the gather path reaches
   // without an interning call of its own.
   str::StringPoolId report_name_table_exhausted();
-  Val lower_literal(ast::LiteralIdx lit_idx, const ir::TypeIdx* expected);
+  Val lower_literal(ast::LiteralIdx lit_idx,
+                    const ir::TypeIdx* expected,
+                    bool negate = false);
   ir::OperandIdx imm_from_u64(ir::TypeTag tag, ir::TypeIdx type, u64 value);
   Val place_addr(ast::ExprIdx expr);
   bool is_rooted_place(ast::ExprIdx expr) const;
@@ -325,6 +327,8 @@ class Lowerer {
   Val lower_subslice(Val base, Val range, bool exclusive, diag::Span span);
   // A `usize` immediate, sized for the target.
   ir::OperandIdx const_usize(u64 value);
+  // An integer immediate of any width, encoded for `type`.
+  ir::OperandIdx int_operand(u64 value, ir::TypeIdx type);
   ir::OperandIdx index_operand(u32 index);
   bool struct_field_index(ir::TypeIdx type,
                           std::string_view name,
@@ -480,6 +484,13 @@ class Lowerer {
   Val lower_tuple(ast::ExprIdx expr);
   Val lower_array(ast::ExprIdx expr);
   ir::Opcode int_binop(ast::BinaryOp op, ir::TypeTag tag);
+  // `a / b` and `a % b` with the defined semantics: a zero divisor
+  // panics, and a signed divisor of -1 wraps.
+  Val lower_int_division(diag::Span span,
+                         ast::BinaryOp op,
+                         Val lhs,
+                         Val rhs,
+                         ir::TypeTag tag);
   Val lower_binary(ast::ExprIdx expr);
   void store_result(Val slot, Val value);
   Val result_slot(ir::TypeIdx type, diag::Span span);
