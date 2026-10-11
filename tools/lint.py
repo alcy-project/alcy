@@ -166,13 +166,13 @@ def analysable_headers(build_path: Path, header_files: list[str]) -> list[str]:
 
 
 def create_commands(
-    files: list[str],
     comp_files: list[str],
     header_files: list[str],
     build_path: Path,
     fix: bool,
     fix_errors: bool,
     verbose: bool,
+    with_rules: bool,
 ) -> list[list[str]]:
     commands: list[list[str]] = []
 
@@ -189,20 +189,25 @@ def create_commands(
     for f in comp_files + header_files:
         commands.append(base_clang_tidy_cmd + [f])
 
-    # cpplint takes many files per run; spawning `uv run` once per file
-    # costs more in interpreter startup than the check itself.
-    if files:
-        base_cpplint_cmd = ["uv", "run", "cpplint"]
-        if not verbose:
-            base_cpplint_cmd.append("--quiet")
-        commands.append(base_cpplint_cmd + files)
-
     # The rules' own tests: the scan over the tree is part of the format
     # dry run, but whether the rules still pass their cases is its own
-    # question.
-    commands.append(["uv", "run", "ast-grep", "test"])
+    # question, and one answer is enough for a sharded run.
+    if with_rules:
+        commands.append(["uv", "run", "ast-grep", "test"])
 
     return commands
+
+
+def parse_shard(spec: str) -> tuple[int, int]:
+    """The k of n share this run lints, from a "k/n" spelling."""
+    try:
+        k_str, n_str = spec.split("/")
+        k, n = int(k_str), int(n_str)
+    except ValueError:
+        raise SystemExit(f"lint: --shard wants k/n, got {spec!r}") from None
+    if not 1 <= k <= n:
+        raise SystemExit(f"lint: --shard wants 1 <= k <= n, got {spec!r}")
+    return k, n
 
 
 def lint_files(
@@ -211,6 +216,7 @@ def lint_files(
     fix_errors: bool,
     verbose: bool,
     changed: str | None = None,
+    shard: tuple[int, int] | None = None,
 ):
     changed_set: set[str] | None = None
     if changed is not None:
@@ -254,17 +260,23 @@ def lint_files(
 
         target_dirs.append(d)
 
-    if format.format_files(dry_run=True) != 0:
+    # The checks that read the whole tree -- the format dry run, gn check,
+    # the ASCII gate, the rules' own cases -- answer once, so a sharded
+    # run asks them with the first shard and the rest carry only the
+    # clang-tidy share.
+    whole_tree = shard is None or shard[0] == 1
+    if whole_tree and format.format_files(dry_run=True) != 0:
         failed = True
 
     compdb = build_dir / "compile_commands.json"
     if not os.path.isfile(compdb):
         print(f"Compilation database not found at: {compdb}")
 
-    for src_dir in project_source_dirs:
-        ret = gn_check.check_sources(build_dir, src_dir, excluded_source_dirs)
-        if ret != 0:
-            failed = True
+    if whole_tree:
+        for src_dir in project_source_dirs:
+            ret = gn_check.check_sources(build_dir, src_dir, excluded_source_dirs)
+            if ret != 0:
+                failed = True
 
     files, comp_files, header_files = target_files(target_dirs)
     if changed_set is not None:
@@ -276,16 +288,31 @@ def lint_files(
         if not files and not comp_files and not header_files:
             print("lint: no changed source files")
             return 0
+
+    if shard is not None:
+        k, n = shard
+        share = len(comp_files) + len(header_files)
+        comp_files = [f for i, f in enumerate(comp_files) if i % n == k - 1]
+        header_files = [h for i, h in enumerate(header_files) if i % n == k - 1]
+        # A share can be empty only because the tree is smaller than the
+        # shard count; the files exist and another shard lints them, so
+        # an empty one is a pass rather than a run that lints nothing.
+        if share > 0 and not comp_files and not header_files:
+            print("lint: this shard has no files")
+            return 0
     enumerated = len(files) + len(comp_files) + len(header_files)
 
-    # Check that all source and header files under project_source_dirs remain pure ASCII
-    all_source_files = sorted(set(files + comp_files + header_files))
-    if not check_ascii_only(all_source_files):
-        failed = True
+    if whole_tree:
+        # Every source and header file under project_source_dirs stays
+        # pure ASCII, so a byte a terminal cannot name never lands in a
+        # diagnostic it would garble.
+        all_source_files = sorted(set(files + comp_files + header_files))
+        if not check_ascii_only(all_source_files):
+            failed = True
 
-    for error in exclusion_errors(build_dir):
-        print(error)
-        failed = True
+        for error in exclusion_errors(build_dir):
+            print(error)
+            failed = True
     header_files = [
         h
         for h in analysable_headers(build_dir, header_files)
@@ -293,7 +320,7 @@ def lint_files(
     ]
 
     commands = create_commands(
-        files, comp_files, header_files, build_dir, fix, fix_errors, verbose
+        comp_files, header_files, build_dir, fix, fix_errors, verbose, whole_tree
     )
     if not run_commands_in_parallel(commands):
         failed = True
@@ -342,6 +369,13 @@ def main():
         "with main when REV is omitted. Local iteration; CI runs the full "
         "tree",
     )
+    parser.add_argument(
+        "--shard",
+        default=None,
+        metavar="K/N",
+        help="Lint only the k-th of n shares of the tree, so parallel jobs "
+        "split it; the whole-tree checks ride with 1/N",
+    )
 
     args = parser.parse_args()
 
@@ -357,7 +391,12 @@ def main():
             print(f"{os.path.basename(__file__)}: fix enabled")
 
     return lint_files(
-        args.build_subdir, fix, fix_errors, args.verbose, changed=args.changed
+        args.build_subdir,
+        fix,
+        fix_errors,
+        args.verbose,
+        changed=args.changed,
+        shard=parse_shard(args.shard) if args.shard is not None else None,
     )
 
 

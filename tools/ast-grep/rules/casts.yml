@@ -1,6 +1,5 @@
 # A const_cast is a claim that the const is wrong; the fix belongs at the
-# source of the const. clang-tidy has no check for it enabled, and
-# cpplint sees only the C-style spelling.
+# source of the const. clang-tidy has no check for it enabled.
 
 id: no-const-cast
 language: Cpp

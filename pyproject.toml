@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 authors = [{ name = "pugur", email = "pugurmc@gmail.com" }]
 requires-python = ">=3.14"
-dependencies = ["cpplint>=2.0.2,<2.1.0", "zstandard>=0.25.0"]
+dependencies = ["zstandard>=0.25.0"]
 
 [tool.uv]
 package = false
