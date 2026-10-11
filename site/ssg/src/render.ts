@@ -76,14 +76,54 @@ function footer(): string {
     </footer>`;
 }
 
+// The slug a heading anchors at: lowercased, with every run a URL
+// dislikes collapsed to a single dash.
+function headingSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export interface GuideSection {
+  id: string;
+  text: string;
+  block: Block;
+}
+
+// The page's sections: its level-2 headings, each with an id unique on
+// the page. The reader gets the outline beside the article, a link can
+// cite a section, and the search index knows where the text lives.
+export function sectionsOf(page: GuidePage): GuideSection[] {
+  const used = new Set<string>();
+  const sections: GuideSection[] = [];
+  for (const block of page.blocks) {
+    if (block.type !== "heading" || block.level !== 2) {
+      continue;
+    }
+    const base = headingSlug(block.text);
+    let id = base;
+    for (let count = 2; used.has(id); count += 1) {
+      id = `${base}-${count}`;
+    }
+    used.add(id);
+    sections.push({ id, text: block.text, block });
+  }
+  return sections;
+}
+
 function blockHtml(
   block: Block,
   options: PageOptions,
   t: (key: MessageKey) => string,
+  headingIds: ReadonlyMap<Block, string>,
 ): string {
   switch (block.type) {
-    case "heading":
-      return `<h${block.level}>${renderInline(block.text, options.resolveLink)}</h${block.level}>`;
+    case "heading": {
+      const id = headingIds.get(block);
+      const anchor = id === undefined ? "" : ` id="${id}"`;
+      return `<h${block.level}${anchor}>${renderInline(block.text, options.resolveLink)}</h${block.level}>`;
+    }
     case "paragraph":
       return `<p>${renderInline(block.text, options.resolveLink)}</p>`;
     case "code": {
@@ -143,6 +183,30 @@ function contents(page: GuidePage, options: PageOptions): string {
     </nav>`;
 }
 
+// "On this page": the article's own sections. Two or more earn an
+// outline; fewer than that would only repeat the title.
+function outline(
+  sections: readonly GuideSection[],
+  options: PageOptions,
+  t: (key: MessageKey) => string,
+): string {
+  if (sections.length < 2) {
+    return "";
+  }
+  const items = sections
+    .map(
+      (section) =>
+        `<li><a href="#${section.id}">${renderInline(section.text, options.resolveLink)}</a></li>`,
+    )
+    .join("\n        ");
+  return `<details class="guide-outline">
+      <summary>${t("guide.onThisPage")}</summary>
+      <ol>
+        ${items}
+      </ol>
+    </details>`;
+}
+
 function pager(page: GuidePage, options: PageOptions): string {
   const t = (key: MessageKey): string => translate(page.language, key);
   const index = options.pages.indexOf(page);
@@ -171,8 +235,10 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
   const guideJs = hasCode
     ? `\n    <script type="module" src="${assets}shared/guide.js"></script>`
     : "";
+  const sections = sectionsOf(page);
+  const headingIds = new Map<Block, string>(sections.map((s) => [s.block, s.id]));
   const article = page.blocks
-    .map((block) => blockHtml(block, options, t))
+    .map((block) => blockHtml(block, options, t, headingIds))
     .join("\n      ");
   const description = `${page.title} · ${t("meta.guide")}`;
   return `<!doctype html>
@@ -194,7 +260,10 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
     ${header(page.route, page.language, page.path)}
 
     <div class="guide-layout">
-      ${contents(page, options)}
+      <div class="guide-aside">
+        ${contents(page, options)}
+        ${outline(sections, options, t)}
+      </div>
 
       <main class="guide-article">
         ${article}

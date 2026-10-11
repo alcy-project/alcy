@@ -353,11 +353,36 @@ body.site {
   padding: 28px 20px 56px;
 }
 
-.guide-nav {
+/* The aside holds the chapter list and the page's own outline, and
+   follows the reader down the page under the sticky header. */
+.guide-aside {
   align-self: start;
   position: sticky;
   top: 72px;
   font-size: 13px;
+}
+
+/* "On this page", closed until the reader (or a wide screen's script)
+   opens it. */
+.guide-outline {
+  margin-top: 20px;
+}
+
+.guide-outline summary {
+  color: var(--fg-faint);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.guide-outline ol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
 }
 
 .guide-nav h2 {
@@ -377,12 +402,14 @@ body.site {
   list-style: none;
 }
 
-.guide-nav a {
+.guide-nav a,
+.guide-outline a {
   color: var(--fg-soft);
   text-decoration: none;
 }
 
-.guide-nav a:hover {
+.guide-nav a:hover,
+.guide-outline a:hover {
   color: var(--fg);
   text-decoration: underline;
 }
@@ -488,10 +515,14 @@ body.site {
     padding-top: 20px;
   }
 
-  /* The chapter list becomes one wrapping row above the article
-     rather than a stack that pushes the reading down. */
-  .guide-nav {
+  .guide-aside {
     position: static;
+  }
+
+  /* The chapter list becomes one wrapping row above the article
+     rather than a stack that pushes the reading down; the outline
+     follows it, closed. */
+  .guide-nav {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
@@ -507,6 +538,10 @@ body.site {
   .guide-nav ol {
     flex-direction: row;
     gap: 2px 18px;
+  }
+
+  .guide-outline {
+    margin: 14px 0 4px;
   }
 }
 

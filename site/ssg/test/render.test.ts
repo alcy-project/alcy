@@ -34,6 +34,28 @@ const sh: Block = { type: "code", language: "sh", text: "echo hi", line: 1 };
 const alcy: Block = { type: "code", language: "alcy", text: "fn main() {}", line: 1 };
 const prose: Block = { type: "paragraph", text: "hello", line: 1 };
 
+test("sections gain anchors and an outline beside the article", () => {
+  const html = render("en", [
+    { type: "heading", level: 1, text: "Title", line: 1 },
+    { type: "heading", level: 2, text: "Values", line: 3 },
+    prose,
+    { type: "heading", level: 2, text: "Functions", line: 5 },
+    prose,
+  ]);
+  match(html, /<h1>Title<\/h1>/);
+  match(html, /<h2 id="values">Values<\/h2>/);
+  match(html, /<h2 id="functions">Functions<\/h2>/);
+  match(html, /<div class="guide-aside">/);
+  match(html, /<details class="guide-outline">/);
+  match(html, /<summary>On this page<\/summary>/);
+  match(html, /<li><a href="#functions">Functions<\/a><\/li>/);
+});
+
+test("a page without sections carries no outline", () => {
+  const html = render("en", [prose]);
+  equal(html.includes("guide-outline"), false);
+});
+
 test("a code block gains a copy button, hidden until a script reveals it", () => {
   const html = render("en", [sh]);
   match(html, /<div class="code-block">/);

@@ -25,6 +25,7 @@ const en = {
   "guide.reset": "Reset",
   "guide.open": "Open",
   "guide.openTitle": "Open this program in the playground",
+  "guide.onThisPage": "On this page",
   "meta.guide": "the alcy guide",
   "noscript.playground": "The playground needs JavaScript to run.",
   "meta.playground":
@@ -107,6 +108,7 @@ const ja: Record<MessageKey, string> = {
   "guide.reset": "リセット",
   "guide.open": "開く",
   "guide.openTitle": "このプログラムをプレイグラウンドで開く",
+  "guide.onThisPage": "このページの内容",
   "meta.guide": "alcy ガイド",
   "noscript.playground": "プレイグラウンドの実行には JavaScript が必要です。",
   "meta.playground":
