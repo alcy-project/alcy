@@ -165,20 +165,17 @@ fn main() {
 ## Printing
 
 `print` and `println` take a compile-time format string and one
-argument per `{}` - the same call shape as `format`. `print` writes the
-expansion as it is; `println` writes it and then a newline:
+argument per `{}`, the same call shape as `format`, which builds the
+expansion as an owned `String` instead of writing it. `print` writes
+the expansion as it is; `println` writes it and then a newline:
 
 ```alcy
 fn main() {
   print("print leaves the line open, ")
   println("println closes it")
-  line := format("the answer is {}", 40 + 2)
-  println("{}", line.as_str())
+  println("the answer is {}", 40 + 2)
 }
 ```
-
-`format` builds the expansion as an owned `String`; `.as_str()` lends
-it wherever a `str` is wanted.
 
 ## Where to go next
 
