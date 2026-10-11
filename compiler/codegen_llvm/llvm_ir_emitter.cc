@@ -873,6 +873,37 @@ llvm::Function* LlvmIrEmitter::create_function(
   llvm::Function* llvm_function = llvm::Function::Create(
       func_type, llvm::Function::ExternalLinkage, func_name, module_);
   DCHECK_MSG(llvm_function, "Failed to create LLVM function");
+  // The parameter type already says how the reference behaves, so the
+  // ownership rules translate to one attribute per reference: an
+  // exclusive borrow is unaliased, a shared one read-only, and a
+  // reference is never null. A reference to a slice crosses as the fat
+  // pointer itself, where the attributes do not apply.
+  u32 index = 0;
+  for (const ir::TypeIdx id : function_meta.param_types) {
+    llvm::Type* param_type = parameter_types[index];
+    if (!param_type->isPointerTy()) {
+      ++index;
+      continue;
+    }
+    const ir::TypeTag tag = storage_->types()[id.idx].tag;
+    if (tag == ir::TypeTag::MutRef) {
+      llvm_function->addParamAttr(index, llvm::Attribute::NoAlias);
+      llvm_function->addParamAttr(index, llvm::Attribute::NonNull);
+    } else if (tag == ir::TypeTag::Ref) {
+      llvm_function->addParamAttr(index, llvm::Attribute::ReadOnly);
+      llvm_function->addParamAttr(index, llvm::Attribute::NonNull);
+    }
+    ++index;
+  }
+  if (func_type->getReturnType()->isPointerTy()) {
+    const ir::TypeTag return_tag =
+        storage_->types()[function_meta.return_type.idx].tag;
+    if (return_tag == ir::TypeTag::Ref || return_tag == ir::TypeTag::MutRef) {
+      llvm_function->addRetAttr(llvm::Attribute::NonNull);
+    }
+  }
+  // There is no unwinding in alcy; `panic` aborts.
+  llvm_function->setDoesNotThrow();
   return llvm_function;
 }
 

@@ -3,6 +3,7 @@
 
 #include "codegen_llvm/runtime_ir.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -12,6 +13,7 @@
 #include "debug/dcheck.h"
 #include "fpag/base/numeric.h"
 #include "ir/type.h"
+#include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/ConstantFolder.h"
 #include "llvm/IR/Constants.h"
@@ -320,6 +322,7 @@ class RuntimeBuilder {
         {builder_.getInt32Ty(), builder_.getPtrTy(), usize_}, false);
     write_all_ = llvm::Function::Create(
         type, llvm::GlobalValue::InternalLinkage, "alcy_write_all", module_);
+    write_all_->setDoesNotThrow();
     llvm::Value* fd_value = write_all_->getArg(0);
     llvm::Value* data = write_all_->getArg(1);
     llvm::Value* len = write_all_->getArg(2);
@@ -415,6 +418,7 @@ class RuntimeBuilder {
     llvm::FunctionType* type = llvm::FunctionType::get(
         builder_.getVoidTy(), {builder_.getPtrTy(), usize_}, false);
     llvm::Function* function = runtime(name, type);
+    function->setDoesNotThrow();
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(module_.getContext(), "entry", function);
 
@@ -433,6 +437,8 @@ class RuntimeBuilder {
         builder_.getVoidTy(),
         {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
     llvm::Function* function = runtime("alcy_panic", type);
+    function->setDoesNotReturn();
+    function->setDoesNotThrow();
     if (backtrace_) {
       // The walk starts from this frame; inlining it into the caller
       // would start the walk one frame too deep and fold the walk into
@@ -489,7 +495,7 @@ class RuntimeBuilder {
     }
     builder_.CreateCall(
         libc("abort", llvm::FunctionType::get(builder_.getVoidTy(), false)));
-    builder_.CreateRetVoid();
+    builder_.CreateUnreachable();
   }
 
   // Loads the address table `slot_name` holds, or null when no table
@@ -757,6 +763,7 @@ class RuntimeBuilder {
         builder_.getVoidTy(),
         {builder_.getInt32Ty(), builder_.getPtrTy(), usize_}, false);
     llvm::Function* function = runtime("alcy_sys_write", type);
+    function->setDoesNotThrow();
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(module_.getContext(), "entry", function);
 
@@ -788,6 +795,16 @@ class RuntimeBuilder {
     llvm::FunctionType* type =
         llvm::FunctionType::get(builder_.getPtrTy(), {usize_, usize_}, false);
     llvm::Function* function = runtime("alcy_alloc", type);
+    // The result is a fresh block or the process ends; saying so lets
+    // the optimizer pair an allocation with its deallocation, promote
+    // one that never escapes, or drop it.
+    function->setDoesNotThrow();
+    function->setReturnDoesNotAlias();
+    function->addFnAttr(llvm::Attribute::getWithAllocSizeArgs(
+        module_.getContext(), 0, std::nullopt));
+    function->addFnAttr(llvm::Attribute::getWithAllocKind(
+        module_.getContext(),
+        llvm::AllocFnKind::Alloc | llvm::AllocFnKind::Uninitialized));
     if (freestanding_) {
       build_alloc_mmap(function);
       return;
@@ -877,6 +894,9 @@ class RuntimeBuilder {
     llvm::FunctionType* type = llvm::FunctionType::get(
         builder_.getVoidTy(), {builder_.getPtrTy(), usize_, usize_}, false);
     llvm::Function* function = runtime("alcy_dealloc", type);
+    function->setDoesNotThrow();
+    function->addFnAttr(llvm::Attribute::getWithAllocKind(
+        module_.getContext(), llvm::AllocFnKind::Free));
     if (freestanding_) {
       build_dealloc_mmap(function);
       return;

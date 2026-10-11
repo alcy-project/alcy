@@ -208,6 +208,63 @@ TEST_CASE("Emit Hello World") {
   module->print(os, nullptr);
 }
 
+TEST_CASE("Reference parameters carry the ownership attributes") {
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("llvm_ir_emitter_ref_attrs_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
+
+  ir::SymbolTable interner(mem::page_size());
+  ir::StorageBuilder builder;
+  const str::StringPoolId name = interner.intern("takes_refs");
+  const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
+  const ir::TypeIdx shared = builder.reference_type(i32_ty, false);
+  const ir::TypeIdx exclusive = builder.reference_type(i32_ty, true);
+  // The parameter range below is head-and-count, so the two reference
+  // types must be consecutive in the table.
+  CHECK(exclusive.idx == shared.idx + 1);
+
+  ir::InstrSeq instrs;
+  instrs.push(builder.instr({.op = ir::Opcode::Ret,
+                             .flags = {},
+                             .dst = ir::RegisterIdx(base::INVALID_IDX),
+                             .measure = ir::TypeIdx::invalid(),
+                             .operands = {}}));
+  const ir::BlockIdx block =
+      builder.block({.instrs = instrs.finish(), .block_params = {}});
+  builder.function({
+      .meta = {.return_type = ir::primitive_idx(ir::TypeTag::Void),
+               .param_types = {shared, 2},
+               .name = name,
+               .path = str::EMPTY_STRING_ID,
+               .kind = ir::SymbolKind::Free,
+               .generics = ir::TypeIdxRange{}},
+      .blocks = {block, 1},
+  });
+
+  LlvmIrEmitter emitter(module.get(), std::move(builder).build().unwrap(),
+                        &interner, host_target(), true);
+  std::move(emitter).emit();
+  CHECK(!llvm::verifyModule(*module));
+
+  llvm::Function* emitted = nullptr;
+  for (llvm::Function& function : *module) {
+    if (!function.isDeclaration()) {
+      emitted = &function;
+    }
+  }
+  CHECK(emitted != nullptr);
+  if (emitted == nullptr) {
+    return;
+  }
+  // `(shared, exclusive)` made the parameters consecutive.
+  CHECK(emitted->hasParamAttribute(0, llvm::Attribute::ReadOnly));
+  CHECK(emitted->hasParamAttribute(0, llvm::Attribute::NonNull));
+  CHECK(emitted->hasParamAttribute(1, llvm::Attribute::NoAlias));
+  CHECK(emitted->hasParamAttribute(1, llvm::Attribute::NonNull));
+  CHECK(emitted->hasFnAttribute(llvm::Attribute::NoUnwind));
+}
+
 TEST_CASE("Emit struct and array calls") {
   llvm::LLVMContext context;
   std::unique_ptr<llvm::Module> module =
