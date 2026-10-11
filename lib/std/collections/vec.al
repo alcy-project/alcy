@@ -165,6 +165,38 @@ impl<T> Iterator<T> for VecIntoIter<T> {
   }
 }
 
+// A shared cursor over a `Vec`. Elements are handed out by reference,
+// and the vector's loan held in the cursor is what keeps them valid.
+pub struct VecIter<T> {
+  buf: &MaybeUninit<T>,
+  len: usize,
+  pos: usize,
+}
+
+impl<T> Vec<T> {
+  // Borrows the vector for as long as the cursor lives.
+  pub fn iter(self: &Self) -> VecIter<T> {
+    ret VecIter { buf: self.buf, len: self.len, pos: 0 }
+  }
+}
+
+impl<T> VecIter<T> {
+  pub fn into_iter(self: VecIter<T>) -> VecIter<T> {
+    ret self
+  }
+}
+
+impl<T> Iterator<&T> for VecIter<T> {
+  fn next(mut self: &mut Self) -> Option<&T> {
+    if self.pos >= self.len {
+      ret Option::None
+    }
+    v := uninit_ref(unsafe { elem_ref(self.buf, self.pos) })
+    self.pos = self.pos + 1
+    ret Option::Some(v)
+  }
+}
+
 // `a[i]` reads through `at` and panics on a miss, which is what array
 // indexing does.
 impl<T> Index<usize, T> for Vec<T> {

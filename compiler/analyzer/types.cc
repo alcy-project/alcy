@@ -595,7 +595,8 @@ bool Checker::spec_targets_overlap(const SpecTarget& a, const SpecTarget& b) {
     return false;
   }
   for (usize i = 0; i < a.args.size(); ++i) {
-    if (a.args[i].is_param || b.args[i].is_param) {
+    if (a.args[i].is_param || b.args[i].is_param ||
+        a.args[i].shape.is_valid() || b.args[i].shape.is_valid()) {
       continue;
     }
     if (!types_equal(a.args[i].type, b.args[i].type)) {
@@ -763,6 +764,63 @@ NominalEntry* Checker::builtin_nominal(std::string_view name) {
   return nullptr;
 }
 
+// Whether a type expression names any of these parameters, directly or
+// under a constructor. A spec argument that does is stored as a shape
+// and resolved where the target's arguments bind them.
+static bool type_mentions_params(const ast::AstArena& ast,
+                                 ast::TypeIdx type,
+                                 std::span<const ast::GenericParam> params) {
+  const ast::TypeNode& node = ast.types[type.idx];
+  switch (node.kind) {
+    case ast::TypeKind::Path: {
+      const ast::TypePath& path = node.payload.get<ast::TypePath>();
+      if (path.path.is_valid() && ast.paths[path.path].segments.size() == 1) {
+        for (const ast::GenericParam& param : params) {
+          if (param.name.name == ast.paths[path.path].segments[0].name) {
+            return true;
+          }
+        }
+      }
+      for (ast::TypeIdx arg : path.args) {
+        if (type_mentions_params(ast, arg, params)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    case ast::TypeKind::Tuple: {
+      for (ast::TypeIdx element : node.payload.get<ast::TypeTuple>().elements) {
+        if (type_mentions_params(ast, element, params)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    case ast::TypeKind::Array:
+      return type_mentions_params(
+          ast, node.payload.get<ast::TypeArray>().element, params);
+    case ast::TypeKind::Slice:
+      return type_mentions_params(
+          ast, node.payload.get<ast::TypeSlice>().element, params);
+    case ast::TypeKind::Ref:
+      return type_mentions_params(ast, node.payload.get<ast::TypeRef>().inner,
+                                  params);
+    case ast::TypeKind::RawPtr:
+      return type_mentions_params(
+          ast, node.payload.get<ast::TypeRawPtr>().inner, params);
+    case ast::TypeKind::Func: {
+      const ast::TypeFunc& fn = node.payload.get<ast::TypeFunc>();
+      for (ast::TypeIdx param : fn.params) {
+        if (type_mentions_params(ast, param, params)) {
+          return true;
+        }
+      }
+      return fn.ret.is_valid() && type_mentions_params(ast, fn.ret, params);
+    }
+    default: return false;
+  }
+}
+
 void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
   const ast::ItemNode& node = ast.items[item];
   const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
@@ -896,6 +954,13 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       }
       if (direct) {
         spec_arg_shapes.push_back(SpecTarget::Arg{true, param, error_type()});
+        continue;
+      }
+      if (generic_impl && type_mentions_params(ast, arg, impl.params)) {
+        // `&T` and friends: the shape resolves where the target's
+        // arguments bind the parameters.
+        spec_arg_shapes.push_back(
+            SpecTarget::Arg{false, {}, error_type(), arg});
         continue;
       }
       const ir::TypeIdx resolved = resolve_type(module, arg, nullptr);
@@ -4638,6 +4703,23 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
           ast.items[entry.item].payload.get<ast::ItemImpl>();
       std::vector<ir::TypeIdx> record_spec_args;
       for (const SpecTarget::Arg& shape : entry.spec_args) {
+        if (shape.shape.is_valid()) {
+          const usize pushed = type_params.size();
+          for (const auto& binding : scope) {
+            type_params.emplace_back(binding.first, binding.second);
+          }
+          const ir::TypeIdx resolved =
+              resolve_type(entry.module, shape.shape, nullptr);
+          while (type_params.size() > pushed) {
+            type_params.pop_back();
+          }
+          if (is_error(resolved)) {
+            shape_ok = false;
+            break;
+          }
+          record_spec_args.push_back(resolved);
+          continue;
+        }
         if (!shape.is_param) {
           record_spec_args.push_back(shape.type);
           continue;
@@ -5253,7 +5335,7 @@ void Checker::check_spec_impl_bodies(u32 module, ast::ItemIdx item) {
     } else {
       std::vector<ir::TypeIdx> args;
       for (const SpecTarget::Arg& arg : entry.target.args) {
-        if (arg.is_param) {
+        if (arg.is_param || arg.shape.is_valid()) {
           return;
         }
         args.push_back(arg.type);

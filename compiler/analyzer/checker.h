@@ -62,6 +62,10 @@ struct SpecTarget {
     bool is_param = false;
     std::string_view param;
     ir::TypeIdx type = ir::TypeIdx::invalid();
+    // A spec argument that mentions an implementation parameter without
+    // being the parameter itself (`&T`, `Option<T>`): the AST shape is
+    // resolved where the target's arguments bind them.
+    ast::TypeIdx shape = ast::TypeIdx::invalid();
   };
   std::vector<Arg> args;
   bool is_primitive = false;
