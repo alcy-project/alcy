@@ -34,10 +34,9 @@
   still alive. A destructor that ends a value of a generic type is
   resolved per instantiation.
 - A type with no destructor of its own still ends what it holds: the
-  compiler ends each destructible struct field. Reaching a destructor
-  through an enum variant or an array element needs the containing type
-  to declare its own `drop`, and the compiler warns when it cannot place
-  one.
+  compiler ends each destructible struct field, the live variant's
+  destructible fields after a discriminant read, and each destructible
+  array element.
 - Discarding a value that holds something with a destructor (`_ := v`)
   is a compile-time error: nothing would be left to own it.
 - Destructors do not run on the panic path, which aborts (see

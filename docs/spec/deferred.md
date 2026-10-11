@@ -5,16 +5,13 @@ relied upon by MVP programs or by the MVP compiler implementation.
 
 ## Language
 
-- Destructor glue reaches a struct's fields, but not an enum variant's
-  payload or an array's elements: both need a discriminant read or a
-  loop, which the drop emitter does not build. A type reaching a
-  destructor that way must declare its own `drop`, and the compiler warns
-  when it cannot place one; a wildcard match discard of a payload is not
-  even warned about. Field-level move tracking landed for structs, and a
-  move out of a type with its own `drop` is refused by design.
-  `Vec::grow` moves elements rather than ending them, and `Vec::clear`
-  and `Vec::drop` release the buffer without ending the live elements, so
-  a `T` with a destructor leaks permanently there. See
+- Destructor glue reaches a struct's fields, an enum's live variant
+  after a discriminant read, and an array's elements in a loop. What
+  remains is a wildcard match discard, which moves the scrutinee
+  without ending the payload it leaves behind, and `Vec`, `Map`, and
+  `Set`, whose `clear` and `drop` release the buffer without ending the
+  live elements. A move out of a type with its own `drop` is refused by
+  design, and `Vec::grow` moves elements rather than ending them. See
   `docs/adr/0013-destructors-consume-their-value.md`.
 - Generic structs, generic enums, generic free functions, and generic
   intrinsics are MVP: they intern per instantiation, and `impl<T>

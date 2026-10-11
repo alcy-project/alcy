@@ -140,9 +140,11 @@ spellings.
 - S2. Re-owning stores and flag resets; the `Drop` marker and its
   consumption by the borrow checker. Acceptance cases: a loop that
   consumes and re-owns, and the guarded end of a loop-carried maybe.
-- S3. Enum payload and array element glue, and the wildcard discard
-  that ends its payload.
+- S3. Enum payload and array element glue. A wildcard match discard
+  still moves the scrutinee without ending the payload it leaves
+  behind; that lands with the discard rule.
 - S4. `drop_in_place`, and `Vec`/`Map`/`Set` ending live elements in
   `clear` and `drop`.
 - S5. The discard rule: `_ := x` and a bare statement both end the
-  value, with the error retired.
+  value, with the error retired, and a wildcard binding of a droppable
+  place ends what it discards.

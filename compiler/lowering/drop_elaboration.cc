@@ -25,6 +25,7 @@
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/seq_builder.h"
+#include "ir/storage.h"
 #include "ir/type.h"
 #include "lowering/diag_code.h"
 #include "lowering/lowerer.h"
@@ -460,6 +461,137 @@ void Lowerer::place_ends() {
       }
     }
     const ir::TypeNode& node = builder.types()[type];
+    if (node.tag == ir::TypeTag::Enum) {
+      // The discriminant selects the live variant; only that variant's
+      // destructible fields are there to end.
+      const ir::EnumType& shape = builder.enum_types()[node.as_enum()];
+      const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
+      const ir::RegisterIdx disc_addr =
+          pass_emit(seq_of(out), ir::Opcode::GetElementPtr, i32_ty,
+                    {place, zero_i32, index_operand(0)}, span);
+      const ir::RegisterIdx disc =
+          pass_emit(seq_of(out), ir::Opcode::Load, i32_ty,
+                    {to_operand(disc_addr, i32_ty)}, span);
+      const u32 exit_index = spawn(out);
+      std::vector<u32> variant_blocks(shape.variants.size(), exit_index);
+      for (u32 v = 0; v < shape.variants.size(); ++v) {
+        const ir::TypeIdxRange fields = variant_fields(type, v);
+        bool any = false;
+        for (ir::TypeIdx field : fields) {
+          if (runs_destructor(field)) {
+            any = true;
+            break;
+          }
+        }
+        if (any) {
+          variant_blocks[v] = spawn(out);
+        }
+      }
+      std::vector<ir::OperandIdx> ops;
+      ops.push_back(to_operand(disc, i32_ty));
+      ops.push_back(builder.operand(
+          ir::Operand::from_block(out.blocks[exit_index].block, void_ty)));
+      for (u32 v = 0; v < shape.variants.size(); ++v) {
+        ops.push_back(imm_from_u64(ir::TypeTag::I32, i32_ty, v));
+        ops.push_back(builder.operand(ir::Operand::from_block(
+            out.blocks[variant_blocks[v]].block, void_ty)));
+      }
+      pass_emit_void(seq_of(out), ir::Opcode::Switch, ops, span);
+      const ir::TypeIdx byte = builder.primitive(ir::TypeTag::U8);
+      for (u32 v = 0; v < shape.variants.size(); ++v) {
+        if (variant_blocks[v] == exit_index) {
+          continue;
+        }
+        out.current = variant_blocks[v];
+        const ir::TypeIdxRange fields = variant_fields(type, v);
+        const ir::RegisterIdx area =
+            pass_emit(seq_of(out), ir::Opcode::GetElementPtr, byte,
+                      {place, zero_i32, index_operand(1)}, span);
+        for (u32 fi = 0; fi < fields.size(); ++fi) {
+          const ir::TypeIdx field = fields[fi];
+          if (!runs_destructor(field)) {
+            continue;
+          }
+          const ir::RegisterIdx field_addr =
+              pass_emit(seq_of(out), ir::Opcode::GetElementPtr, byte,
+                        {to_operand(area, byte),
+                         index_operand(static_cast<u32>(ir::field_offset(
+                             builder.state(), fields, fi, width)))},
+                        span);
+          emit_end(
+              out, local, path, field, to_operand(field_addr, field),
+              [](const std::vector<u32>&) { return State::Owned; }, span);
+        }
+        pass_emit_void(seq_of(out), ir::Opcode::Br,
+                       {builder.operand(ir::Operand::from_block(
+                           out.blocks[exit_index].block, void_ty))},
+                       span);
+      }
+      out.current = exit_index;
+      return;
+    }
+    if (node.tag == ir::TypeTag::Array) {
+      // Every element is there to end, walked with a counter.
+      const ir::ArrayType& shape = builder.array_types()[node.as_array()];
+      if (shape.count == 0) {
+        return;
+      }
+      const ir::TypeIdx usize_ty = usize_type();
+      const ir::TypeTag usize_tag = tag_of(usize_ty);
+      const ir::RegisterIdx counter = pass_emit(seq_of(out), ir::Opcode::Alloca,
+                                                usize_ty, {size_one}, span);
+      pass_emit_void(
+          seq_of(out), ir::Opcode::Store,
+          {imm_from_u64(usize_tag, usize_ty, 0), to_operand(counter, usize_ty)},
+          span);
+      const u32 header_index = spawn(out);
+      const u32 body_index = spawn(out);
+      const u32 exit_index = spawn(out);
+      pass_emit_void(seq_of(out), ir::Opcode::Br,
+                     {builder.operand(ir::Operand::from_block(
+                         out.blocks[header_index].block, void_ty))},
+                     span);
+      out.current = header_index;
+      const ir::RegisterIdx at =
+          pass_emit(seq_of(out), ir::Opcode::Load, usize_ty,
+                    {to_operand(counter, usize_ty)}, span);
+      const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
+      const ir::RegisterIdx more =
+          pass_emit(seq_of(out), ir::Opcode::Lt, i1,
+                    {to_operand(at, usize_ty),
+                     imm_from_u64(usize_tag, usize_ty, shape.count)},
+                    span);
+      pass_emit_void(seq_of(out), ir::Opcode::CondBr,
+                     {to_operand(more, i1),
+                      builder.operand(ir::Operand::from_block(
+                          out.blocks[body_index].block, void_ty)),
+                      builder.operand(ir::Operand::from_block(
+                          out.blocks[exit_index].block, void_ty))},
+                     span);
+      out.current = body_index;
+      const ir::RegisterIdx index =
+          pass_emit(seq_of(out), ir::Opcode::Load, usize_ty,
+                    {to_operand(counter, usize_ty)}, span);
+      const ir::RegisterIdx element =
+          pass_emit(seq_of(out), ir::Opcode::GetElementPtr, shape.element,
+                    {place, zero_i32, to_operand(index, usize_ty)}, span);
+      emit_end(
+          out, local, path, shape.element, to_operand(element, shape.element),
+          [](const std::vector<u32>&) { return State::Owned; }, span);
+      const ir::RegisterIdx next = pass_emit(
+          seq_of(out), ir::Opcode::IntAdd, usize_ty,
+          {to_operand(index, usize_ty), imm_from_u64(usize_tag, usize_ty, 1)},
+          span);
+      pass_emit_void(
+          seq_of(out), ir::Opcode::Store,
+          {to_operand(next, usize_ty), to_operand(counter, usize_ty)}, span);
+      pass_emit_void(seq_of(out), ir::Opcode::Br,
+                     {builder.operand(ir::Operand::from_block(
+                         out.blocks[header_index].block, void_ty))},
+                     span);
+      out.current = exit_index;
+      return;
+    }
     if (node.tag != ir::TypeTag::Struct) {
       const u32 index = bag.emit<i18n::Key::LowerDestructorNotRun>(
           diag::Severity::Warning, diag::Stage::Lowering,
