@@ -1314,6 +1314,38 @@ Val Lowerer::lower_io_print(ast::ExprIdx expr,
     unsupported(node.span, "invalid format string");
     return Val{size_one, error_type(), false, false};
   }
+  // No placeholders: the text is one compile-time string, so it prints
+  // from the constant pool with nothing measured, allocated, or freed.
+  if (parsed.placeholders == 0 && args.size() == 1) {
+    std::string text;
+    for (const analyzer::FmtPiece& piece : parsed.pieces) {
+      text.append(piece.literal);
+    }
+    const ir::TypeIdx str_ty = builder.primitive(ir::TypeTag::Str);
+    const str::StringPoolId id = intern_copied(text);
+    if (id == str::INVALID_STRING_POOL_ID) {
+      internal(node.span, "format text without bytes");
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::ImmutableIdx imm =
+        builder.immutable({.type = str_ty, .data = {.str_id_value = id}});
+    const ir::OperandIdx str_op = to_operand(imm, str_ty);
+    const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+    const ir::TypeIdx usize_ty = usize_type();
+    const ir::RegisterIdx bytes =
+        emit(ir::Opcode::ExtractValue, ptr_ty, {str_op, index_operand(0)});
+    const ir::RegisterIdx len =
+        emit(ir::Opcode::ExtractValue, usize_ty, {str_op, index_operand(1)});
+    const bool newline = sig.name == "println";
+    const ir::ExternalFunctionIdx write_ext = declare_external(
+        newline ? "alcy_println" : "alcy_print",
+        builder.primitive(ir::TypeTag::Void), {ptr_ty, usize_ty});
+    emit_void(ir::Opcode::Call,
+              {builder.operand(ir::Operand::from_external_function(
+                   write_ext, builder.primitive(ir::TypeTag::Function))),
+               to_operand(bytes, ptr_ty), to_operand(len, usize_ty)});
+    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+  }
   if (parsed.placeholders != elem_types.size()) {
     unsupported(node.span, "placeholder count does not match arguments");
     return Val{size_one, error_type(), false, false};
@@ -1325,6 +1357,59 @@ Val Lowerer::lower_io_print(ast::ExprIdx expr,
   const ir::TypeIdx u8_ty = builder.primitive(ir::TypeTag::U8);
   const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
   const ir::TypeIdx buf_ty = builder.reference_type(u8_ty, true);
+  // Every argument with a fixed width makes the total statically
+  // bounded, and a bounded total writes once into a stack buffer:
+  // nothing is measured, allocated, or freed. A `str` argument has no
+  // static bound, so it keeps the measuring heap path.
+  u64 bound = 0;
+  bool bounded = true;
+  for (const analyzer::FmtPiece& piece : parsed.pieces) {
+    if (!piece.is_arg) {
+      bound += piece.literal.size();
+      continue;
+    }
+    switch (tag_of(elem_types[piece.arg])) {
+      case ir::TypeTag::I1: bound += 5; break;
+      case ir::TypeTag::I8: bound += 4; break;
+      case ir::TypeTag::U8: bound += 3; break;
+      case ir::TypeTag::I16: bound += 6; break;
+      case ir::TypeTag::U16: bound += 5; break;
+      case ir::TypeTag::I32: bound += 11; break;
+      case ir::TypeTag::U32: bound += 10; break;
+      case ir::TypeTag::I64:
+      case ir::TypeTag::U64: bound += 20; break;
+      default: bounded = false; break;
+    }
+    if (!bounded) {
+      break;
+    }
+  }
+  if (bounded) {
+    const ir::TypeIdx usize_ty = usize_type();
+    const ir::RegisterIdx slot =
+        emit(ir::Opcode::Alloca, u8_ty, {const_usize(bound)});
+    FmtState state;
+    if (!emit_fmt_pieces(node.span, parsed.pieces, tup.op, elem_types,
+                         args.subspan(1), to_operand(slot, buf_ty),
+                         const_usize(bound), state, false)) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::RegisterIdx len = emit(ir::Opcode::Load, usize_ty,
+                                     {to_operand(state.tot_addr, usize_ty)});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const bool newline = sig.name == "println";
+    const ir::ExternalFunctionIdx write_ext =
+        declare_external(newline ? "alcy_println" : "alcy_print",
+                         builder.primitive(ir::TypeTag::Void),
+                         {builder.primitive(ir::TypeTag::Ptr), usize_ty});
+    emit_void(ir::Opcode::Call,
+              {builder.operand(ir::Operand::from_external_function(
+                   write_ext, builder.primitive(ir::TypeTag::Function))),
+               to_operand(slot, buf_ty), to_operand(len, usize_ty)});
+    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+  }
   // Phase one measures; the total is the exact reservation. The tuple
   // is lowered once up front, so its side effects happen once and both
   // passes read the same values.
