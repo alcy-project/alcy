@@ -430,6 +430,10 @@ body.site {
 }
 
 .guide-article pre {
+  /* The block's own size decides the strut, and the strut decides the
+     line rhythm -- the editing overlay's caret rides the same lines, so
+     the two must agree here or the caret drifts off its glyphs. */
+  font-size: 12.5px;
   padding: 10px 12px;
   background: var(--bg-code);
   border: 1px solid var(--line);
