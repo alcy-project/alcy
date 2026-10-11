@@ -30,6 +30,7 @@ if (is_wasm) {
   config("playground_wasm") {
     ldflags = [
       "--no-entry",
+      "-O3",
       "-sEXPORTED_FUNCTIONS=_alcy_check,_alcy_compile,_alcy_release,_malloc,_free",
       "-sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAPU32,UTF8ToString",
       "-sMODULARIZE=1",
