@@ -38,6 +38,34 @@ replaced. The foundations are in `roadmap.md`.
   element-ending walk, either in the container's own `drop` once the
   language can end a moved-out value, or as compiler glue over a
   container's elements.
+- [ ] IR cache shared across profiles and machines. The lowered IR is
+  one artifact per pointer width: a test lowers one source under two
+  64-bit triples and compares the bytes (`pipeline/ir_emit_test.cc`),
+  the release passes run after this boundary (ADR-0063), and the
+  serialized form states the width in its header. The cache itself —
+  a store keyed by package digest, dependency closure, format
+  version, and pointer width, serving debug and release and every
+  machine of a width — is the work. What it needs first is the
+  summary-carrying artifact story (a library object is still opaque,
+  `roadmap.md` item 1) and an answer for comp-folded `usize`
+  constants, which currently bake the width into the immutables.
+- [ ] Inbounds GEPs and memcopy alignment. The verifier and the
+  instruction flags have room; lowering knows where an address is
+  proved in bounds (the checked-access paths) and what alignment a
+  copy has (the element type), while the LLVM emitter hardcodes
+  `inbounds false` and `align 1`. This wires a flag through
+  serialization, both backends, and the text form.
+- [ ] Devirtualization of function values. A call through a value is
+  an indirect call in both backends; LLVM sometimes folds it after
+  inlining, and the direct backend never does. The adapters store
+  their function in a struct field the caller fills, so the pass
+  needs cross-function facts and lands once the pass stage grows a
+  module pass.
+- [ ] Bounds-check elision. Every indexed access emits its own
+  compare, branch, and panic block; a range analysis over `0..len`
+  loops and repeated indices would remove the checks an earlier one
+  dominates, and the `Switch` opcode stays unemitted for match
+  chains.
 - [ ] Index the side tables the proportionality work left behind. Most
   landed (ADR-0046); the tail is `expr_types` in both readers, the
   per-module closure, closure-fn, and indirect-call tables,
