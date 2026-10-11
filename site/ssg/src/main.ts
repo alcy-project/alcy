@@ -198,7 +198,11 @@ function templateSocial(language: Language, treePath: string, route: string): st
 // assets are, where the language tree's root is, the link to the same
 // page in the other language, the settings menu, the absolute links a
 // crawler reads, and the social card.
-function templateValues(language: Language, treePath: string): TemplateValues {
+function templateValues(
+  language: Language,
+  treePath: string,
+  boot: string,
+): TemplateValues {
   const route = prefixOf(language) + treePath;
   const dir = posix.dirname(route);
   const dist = posix.relative(dir, ".");
@@ -215,6 +219,7 @@ function templateValues(language: Language, treePath: string): TemplateValues {
     settings: renderSettings({ language, switchHref }),
     pageLinks: pageLinks(language, treePath),
     social: templateSocial(language, treePath, route),
+    boot: `<script>${boot}</script>`,
   };
 }
 
@@ -226,8 +231,12 @@ function writePage(dist: string, route: string, html: string): void {
 
 // The files that belong to the site rather than to one page tree: the
 // 404 page, the icon, and the two files crawlers read.
-function writeSiteRootFiles(options: Options, pages: readonly GuidePage[]): void {
-  writeFileSync(join(options.dist, "404.html"), renderNotFound());
+function writeSiteRootFiles(
+  options: Options,
+  pages: readonly GuidePage[],
+  boot: string,
+): void {
+  writeFileSync(join(options.dist, "404.html"), renderNotFound(boot));
   writeFileSync(
     join(options.dist, "favicon.svg"),
     readFileSync(join(options.site, "favicon.svg")),
@@ -275,6 +284,18 @@ function writeSiteRootFiles(options: Options, pages: readonly GuidePage[]): void
   );
 }
 
+// The theme bootstrap travels inline in every page's head rather than
+// as its own request: a render-blocking script is a round trip before
+// first paint on every cold load. It must contain nothing a script tag
+// ends on.
+function readBoot(site: string): string {
+  const boot = readFileSync(join(site, "shared", "boot.js"), "utf8");
+  if (boot.includes("</script")) {
+    throw new Error("shared/boot.js cannot be inlined: it contains </script");
+  }
+  return boot;
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const sources = discoverGuide(options.docs);
@@ -308,6 +329,7 @@ async function main(): Promise<void> {
     join(options.site, "playground", "index.html"),
     "utf8",
   );
+  const boot = readBoot(options.site);
   const templates: Array<{ treePath: string; source: string }> = [
     { treePath: "index.html", source: landingTemplate },
     { treePath: "playground/index.html", source: playgroundTemplate },
@@ -323,13 +345,17 @@ async function main(): Promise<void> {
     writePage(
       options.dist,
       `${prefixOf(language)}guide/index.html`,
-      renderGuideIndex(pages, language),
+      renderGuideIndex(pages, language, boot),
     );
     for (const template of templates) {
       writePage(
         options.dist,
         prefixOf(language) + template.treePath,
-        stampTemplate(template.source, language, templateValues(language, template.treePath)),
+        stampTemplate(
+          template.source,
+          language,
+          templateValues(language, template.treePath, boot),
+        ),
       );
     }
   }
@@ -346,12 +372,13 @@ async function main(): Promise<void> {
           pages,
           highlight,
           resolveLink: (url) => checker.resolve(url, page),
+          boot,
         }),
       );
     }
   }
 
-  writeSiteRootFiles(options, allPages);
+  writeSiteRootFiles(options, allPages, boot);
 
   const errors = [...fences.errors, ...checker.errors];
   if (errors.length > 0) {

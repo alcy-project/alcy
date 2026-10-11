@@ -13,7 +13,9 @@ site is shaped this way.
 - `index.html` - the landing page's template; the generator stamps it
   once per language.
 - `shared/` - the shell every page loads: `boot.js` resolves the color
-  theme before first paint, `site.css` holds the design tokens and the
+  theme before first paint, inlined into every page's head by the
+  generator so no request stands between the HTML and the paint;
+  `site.css` holds the design tokens and the
   shared styles, and `site.ts` holds the theme store, the settings
   toggle, the page's language, and the service-worker registration that
   keeps the compiler and tree-sitter assets warm. `sw.ts` builds to

@@ -23,6 +23,10 @@ export interface PageOptions {
   pages: readonly GuidePage[];
   highlight(code: string): string;
   resolveLink(url: string): string;
+  // The theme bootstrap, inlined into the head: a render-blocking
+  // request before first paint is a round trip on every cold load, and
+  // the script changes only when the pages do.
+  boot: string;
 }
 
 // The prefix from a page's directory to the built site's root, where the
@@ -251,7 +255,7 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="${escapeHtml(description)}" />
     <title>${escapeHtml(page.title)} · alcy</title>
-    <script src="${assets}shared/boot.js"></script>
+    <script>${options.boot}</script>
     <link rel="stylesheet" href="${assets}shared/site.css" />${guideCss}
     <link rel="icon" href="${assets}favicon.svg" />
     ${pageLinks(page.language, page.path)}
@@ -285,6 +289,7 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
 export function renderGuideIndex(
   pages: readonly GuidePage[],
   language: Language,
+  boot: string,
 ): string {
   const route = `${prefixOf(language)}guide/index.html`;
   const assets = assetPrefix(route);
@@ -304,7 +309,7 @@ export function renderGuideIndex(
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="${escapeHtml(t("meta.guide"))}" />
     <title>${t("site.guide")} · alcy</title>
-    <script src="${assets}shared/boot.js"></script>
+    <script>${boot}</script>
     <link rel="stylesheet" href="${assets}shared/site.css" />
     <link rel="icon" href="${assets}favicon.svg" />
     ${pageLinks(language, "guide/index.html")}
@@ -333,7 +338,7 @@ export function renderGuideIndex(
 // content, so every URL here is written from the deployment root and the
 // script below picks that root: the project's path on Pages, or the
 // server's root when the built directory is served locally.
-export function renderNotFound(): string {
+export function renderNotFound(boot: string): string {
   return `<!doctype html>
 <!-- Copyright 2026 The Alcy Project Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception -->
@@ -350,7 +355,7 @@ export function renderNotFound(): string {
         document.head.append(base);
       })();
     </script>
-    <script src="shared/boot.js"></script>
+    <script>${boot}</script>
     <link rel="stylesheet" href="shared/site.css" />
     <link rel="icon" href="favicon.svg" />
   </head>

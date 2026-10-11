@@ -27,6 +27,7 @@ function render(language: "en" | "ja", blocks: Block[]): string {
     pages: [target],
     highlight: (code) => code,
     resolveLink: (url) => url,
+    boot: "INLINE_BOOT",
   });
 }
 
@@ -54,6 +55,12 @@ test("sections gain anchors and an outline beside the article", () => {
 test("a page without sections carries no outline", () => {
   const html = render("en", [prose]);
   equal(html.includes("guide-outline"), false);
+});
+
+test("the theme bootstrap rides inline in the head", () => {
+  const html = render("en", [prose]);
+  match(html, /<script>INLINE_BOOT<\/script>/);
+  equal(html.includes("boot.js"), false);
 });
 
 test("a code block gains a copy button, hidden until a script reveals it", () => {
@@ -125,7 +132,9 @@ test("an index route is named at its directory", () => {
 });
 
 test("the 404 page keeps its links on the deployment root", () => {
-  const html = renderNotFound();
+  const html = renderNotFound("INLINE_BOOT");
+  match(html, /<script>INLINE_BOOT<\/script>/);
+  equal(html.includes("boot.js"), false);
   match(html, /name="robots" content="noindex"/);
   match(html, /location\.pathname\.startsWith\("\/alcy\/"\)/);
   match(html, /href="guide\/"/);
