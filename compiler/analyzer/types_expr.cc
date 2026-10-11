@@ -742,14 +742,10 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
       }
       const ir::TypeIdx closure_type =
           builder.func_type(seq.finish(), storage_copy(fn->ret));
-      for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
-        for (u32 i = 0; i < static_cast<u32>(modules[m].functions.size());
-             ++i) {
-          if (&modules[m].functions[i] == fn) {
-            modules[module].closure_fns.push_back({expr, m, i, cur_inst});
-            break;
-          }
-        }
+      const auto where = position_by_address_.find(fn);
+      if (where != position_by_address_.end()) {
+        modules[module].closure_fns.push_back(
+            {expr, where->second.first, where->second.second, cur_inst});
       }
       if (expected != nullptr) {
         return unify(*expected, closure_type, span, "path");
