@@ -1590,20 +1590,6 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
       return error_type();
     }
   }
-  // A function type in a type argument has no symbol encoding yet, so two
-  // instantiations that differ only there would share a mangled name.
-  // Refusing is the whole rule until the encoding lands.
-  for (const ir::TypeIdx arg : args) {
-    if (is_error(arg) || tag_of(arg) != ir::TypeTag::Func) {
-      continue;
-    }
-    const u32 index =
-        bag.emit<i18n::Key::AnalyzerFunctionTypeAsGenericArgument>(
-            diag::Severity::Error, diag::Stage::Analyzer,
-            DiagCode::UnsupportedType, span);
-    (void)index;
-    return error_type();
-  }
   // An instance already minted for these arguments is the one to reuse. The
   // search is over the instances of this nominal: an instantiation request
   // scans them, and a package requests one per site that spells it.

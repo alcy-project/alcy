@@ -3499,10 +3499,10 @@ TEST_CASE("Check rejects a function type as a generic argument") {
   CHECK(f.bag.has_errors());
 }
 
-// A generic argument is refused in a type position too, not only when a
-// generic call infers one: the mangle has no encoding for the signature,
-// so two instantiations that differ there would share a symbol.
-TEST_CASE("Check rejects a function type as a nominal type argument") {
+// A function type is a type argument like any other now that the mangle
+// encodes its signature; two instantiations that differ there mangle
+// apart.
+TEST_CASE("Check accepts a function type as a nominal type argument") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct Box<T> {\n"
@@ -3523,8 +3523,8 @@ TEST_CASE("Check rejects a function type as a nominal type argument") {
   }
   Fixture f;
   const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
-  CHECK(!result.package.has_value());
-  CHECK(f.bag.has_errors());
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
 }
 
 // Two function types differ in their signature, not merely in where they
