@@ -69,11 +69,18 @@ PHASES = ("parse", "targets", "analyze", "lower", "borrow")
 
 SHAPES = ["plain", "generic", "drop", "adapt", "print", "comp"]
 
+# How many compile-time calls one module of the comp shape makes.
+COMP_CALLS = 8
+
 INSTRUCTIONS = re.compile(r"^(\d+),,.*instructions")
 
 # One line of `perf report --no-children`, which is a share, a few columns, the
 # object kind, and the symbol.
 PROFILE_LINE = re.compile(r"^\s*([0-9]+\.[0-9]+)%\s+.*?\[([.k])\]\s+(.*)$")
+
+# One line of `perf report -g folded`: a share and a call chain, leaf first,
+# joined by semicolons. The plain self-time lines carry no semicolon.
+FOLDED_LINE = re.compile(r"^\s*([0-9]+\.[0-9]+)%\s+(\S.*)$")
 
 
 def module_source(shape: str, index: int) -> str:
@@ -210,15 +217,20 @@ pub fn say{i}(n: i32) -> i32 {{
 }}
 """
     if shape == "comp":
-        return f"""// A compile-time call, which the evaluator answers during checking
-// and again while lowering.
+        calls = "\n".join(
+            f"  total = total + comp {{ twice{i}({j}) + {j} }}"
+            for j in range(COMP_CALLS)
+        )
+        return f"""// Compile-time calls, answered during checking and again while
+// lowering: the density is what makes a per-call cost add up.
 comp fn twice{i}(x: i32) -> i32 {{
   ret x * 2
 }}
 
 pub fn use{i}(k: i32) -> i32 {{
-  c := comp {{ twice{i}(21) + 1 }}
-  ret c + k
+  mut total := k
+{calls}
+  ret total
 }}
 """
     raise SystemExit(f"unknown shape: {shape}")
@@ -574,6 +586,80 @@ def cmd_ab(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_callers(args: argparse.Namespace) -> int:
+    """Who reaches a symbol, and what runs under it, from call chains."""
+    binary = binary_for(args.binary)
+    corpus = corpus_dir(args.corpus)
+    validate(binary, corpus)
+    if shutil.which("perf") is None:
+        raise SystemExit("perf is not on PATH; call graphs need it")
+    with tempfile.TemporaryDirectory() as scratch:
+        recorded = Path(scratch) / "perf.data"
+        inner = (
+            f"for i in $(seq 1 {args.runs}); do {binary} check -j {args.jobs} ."
+            f" >/dev/null 2>&1; done"
+        )
+        subprocess.run(
+            [
+                "perf",
+                "record",
+                "-F",
+                "999",
+                "-g",
+                "--call-graph",
+                "fp",
+                "-o",
+                str(recorded),
+                "bash",
+                "-c",
+                inner,
+            ],
+            cwd=corpus,
+            capture_output=True,
+            text=True,
+            timeout=3600,
+        )
+        report = subprocess.run(
+            [
+                "perf",
+                "report",
+                "--stdio",
+                "-g",
+                "folded",
+                "--no-children",
+                "-i",
+                str(recorded),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=3600,
+        ).stdout
+    callers: dict[str, float] = {}
+    under: dict[str, float] = {}
+    matched = 0.0
+    for line in report.splitlines():
+        found = FOLDED_LINE.match(line)
+        if not found or ";" not in found.group(2):
+            continue
+        share = float(found.group(1))
+        frames = [frame.split(" (inlined)")[0] for frame in found.group(2).split(";")]
+        for i, frame in enumerate(frames):
+            if args.symbol not in frame:
+                continue
+            matched += share
+            if i > 0:
+                under[frames[i - 1]] = under.get(frames[i - 1], 0.0) + share
+            if i + 1 < len(frames):
+                callers[frames[i + 1]] = callers.get(frames[i + 1], 0.0) + share
+            break
+    print(f"{corpus.name}: {matched:.2f}% of samples reach {args.symbol}")
+    for title, table in (("callers", callers), ("inlined under it", under)):
+        print(f"  {title}:")
+        for symbol, share in sorted(table.items(), key=lambda kv: -kv[1])[: args.limit]:
+            print(f"    {share:6.2f}%  {symbol[:88]}")
+    return 0
+
+
 def cmd_determinism(args: argparse.Namespace) -> int:
     corpus = corpus_dir(args.corpus)
     binary = binary_for(args.binary)
@@ -687,6 +773,18 @@ def parse_args() -> argparse.Namespace:
     ab.add_argument("--jobs", nargs="+", default=["1", "4"])
     ab.add_argument("--reps", type=int, default=5)
     ab.set_defaults(func=cmd_ab)
+
+    callers = subparsers.add_parser(
+        "callers",
+        parents=[common],
+        help="who reaches a symbol, and what runs under it",
+    )
+    callers.add_argument("corpus", help="corpus directory or name under out/perf")
+    callers.add_argument("--symbol", required=True, help="substring to match")
+    callers.add_argument("--jobs", type=int, default=1)
+    callers.add_argument("--runs", type=int, default=3)
+    callers.add_argument("--limit", type=int, default=8)
+    callers.set_defaults(func=cmd_callers)
 
     determinism = subparsers.add_parser(
         "determinism",
