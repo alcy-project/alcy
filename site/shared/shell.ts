@@ -6,6 +6,7 @@
 // the same store to its own settings button.
 
 import { elements } from "./elements.js";
-import { initThemeToggle } from "./site.js";
+import { initThemeToggle, registerAssetWorker } from "./site.js";
 
 initThemeToggle(elements.theme);
+registerAssetWorker();

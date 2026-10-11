@@ -5,7 +5,7 @@
 // callbacks, and start the flows. Everything else lives in the feature
 // modules next to this file.
 
-import { initThemeToggle } from "../shared/site.js";
+import { initThemeToggle, registerAssetWorker } from "../shared/site.js";
 
 import { elements } from "./elements.js";
 import * as editor from "./editor.js";
@@ -26,6 +26,7 @@ function onInput(): void {
 
 function init(): void {
   initThemeToggle(elements.theme);
+  registerAssetWorker();
   splitter.initSplitter();
   tabs.initTabs();
   status.renderStatus();

@@ -82,3 +82,19 @@ export function initThemeToggle(button: HTMLButtonElement): void {
     }
   });
 }
+
+// Registers the service worker that keeps the compiler and tree-sitter
+// assets warm across pages. The script resolves against this module's
+// own URL, so every language tree reaches the one file at the site
+// root; a page that cannot register -- no workers, a plain file open --
+// simply runs without the warm cache.
+export function registerAssetWorker(): void {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+  addEventListener("load", () => {
+    void navigator.serviceWorker
+      .register(new URL("../sw.js", import.meta.url).href)
+      .catch(() => undefined);
+  });
+}

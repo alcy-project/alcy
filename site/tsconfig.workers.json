@@ -16,6 +16,7 @@
     "playground/wasm-api.ts",
     "playground/wasi.ts",
     "playground/compiler.worker.ts",
-    "playground/runner.worker.ts"
+    "playground/runner.worker.ts",
+    "shared/sw.ts"
   ]
 }

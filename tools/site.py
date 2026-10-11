@@ -32,6 +32,7 @@ with bun into `out/site-cache/`, at the versions `config.toml` pins;
 
 import argparse
 import gzip
+import hashlib
 import http.server
 import io
 import json
@@ -227,10 +228,54 @@ def copy_shared(dist_dir: Path) -> None:
             raise FileNotFoundError(f"{source} is missing")
         shutil.copy2(source, target / name)
     for source in sorted((BUILD_DIR / "shared").glob("*.js")):
+        if source.name == "sw.js":
+            # The service worker serves from the site's root, not here:
+            # its scope is its own directory and the whole site needs it.
+            continue
         shutil.copy2(source, target / source.name)
         source_map = source.with_suffix(".js.map")
         if source_map.is_file():
             shutil.copy2(source_map, target / source_map.name)
+
+
+# The service worker must sit at the site's root for its scope.
+def copy_service_worker(dist_dir: Path) -> None:
+    source = BUILD_DIR / "shared" / "sw.js"
+    if not source.is_file():
+        raise FileNotFoundError(f"{source} is missing; run the TypeScript build")
+    shutil.copy2(source, dist_dir / "sw.js")
+    source_map = source.with_suffix(".js.map")
+    if source_map.is_file():
+        shutil.copy2(source_map, dist_dir / "sw.js.map")
+
+
+# The assets the service worker keeps warm; the version file beside its
+# script names the cache from exactly these, so a deploy that changes
+# any of them retires the cache on the next page load.
+ASSET_PATHS = (
+    "playground/compiler/alcy_playground.js",
+    "playground/compiler/alcy_playground.wasm",
+    "playground/vendor/web-tree-sitter.js",
+    "playground/vendor/web-tree-sitter.wasm",
+    "playground/grammar/tree-sitter-alcy.wasm",
+)
+
+
+def write_asset_version(dist_dir: Path) -> None:
+    digest = hashlib.sha256()
+    for part in ASSET_PATHS:
+        path = dist_dir / part
+        if not path.is_file():
+            continue
+        digest.update(path.name.encode("utf-8"))
+        with open(path, "rb") as handle:
+            for block in iter(lambda: handle.read(1 << 16), b""):
+                digest.update(block)
+    version = digest.hexdigest()[:16]
+    (dist_dir / "asset-version.json").write_text(
+        json.dumps({"v": version}) + "\n", encoding="utf-8"
+    )
+    log(f"asset cache: {version}")
 
 
 def copy_samples(dist_dir: Path) -> None:
@@ -393,6 +438,7 @@ def command_build(args: argparse.Namespace) -> int:
 
     copy_static(dist_dir)
     copy_shared(dist_dir)
+    copy_service_worker(dist_dir)
     copy_samples(dist_dir)
 
     if not args.skip_grammar:
@@ -401,6 +447,7 @@ def command_build(args: argparse.Namespace) -> int:
     copy_compiler(
         dist_dir, project_root_dir / "out" / args.build_subdir, args.compiler_dir
     )
+    write_asset_version(dist_dir)
     build_guide(dist_dir)
 
     log(f"site ready: {dist_dir}")

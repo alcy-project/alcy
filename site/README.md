@@ -15,8 +15,13 @@ site is shaped this way.
 - `shared/` - the shell every page loads: `boot.js` resolves the color
   theme before first paint, `site.css` holds the design tokens and the
   shared styles, and `site.ts` holds the theme store, the settings
-  toggle, and the page's language. The playground's editor and the
-  guide's build-time highlighting share `shared/highlight.ts`, and
+  toggle, the page's language, and the service-worker registration that
+  keeps the compiler and tree-sitter assets warm. `sw.ts` builds to
+  `sw.js` at the site's root, so its scope covers every tree;
+  `tools/site.py` stamps `asset-version.json` beside it, and the worker
+  names its cache from that file, so a deploy retires the old cache on
+  the next page load. The playground's editor and the guide's
+  build-time highlighting share `shared/highlight.ts`, and
   `shared/i18n.ts` is the one catalog the generator stamps from.
   `guide.ts` wires the guide's code blocks -- Copy everywhere, Run and
   Edit on the `alcy` ones -- and `compiler-client.ts` is the shared
