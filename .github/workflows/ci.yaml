@@ -254,6 +254,32 @@ jobs:
         shell: bash
         run: uv run ./tools/run_fuzz.py
 
+  # The matrix builds the host and the wasm target; the other operating
+  # systems a manifest can name are only ever configured here, which is
+  # where a toolchain definition that cannot produce one of them would
+  # otherwise surface. Gen-only asks nothing of the compilers it
+  # configures for, so the answer costs a minute.
+  cross-gen:
+    name: Cross-Target Gen
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build
+        with:
+          nix: "false"
+          os: Linux
+
+      - name: Configure Every Target Operating System
+        shell: bash
+        run: uv run ./tools/cross.sh --gen-only
+
   summary:
     needs: [debug, release, wasm-debug, wasm-release]
     if: always()
