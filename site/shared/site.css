@@ -7,9 +7,10 @@
    code use. The playground's own sheet loads after this one and carries
    its layout on top.
 
-   The palette follows the radio galaxy the language is named for: the
-   lobes' amber, muted so it reads as an instrument rather than a flame,
-   over a night and a paper that keep only a trace of warmth. */
+   The palette keeps a quiet chrome -- paper and night with only a
+   trace of warmth -- and concentrates its color in one saturated
+   crimson accent; the semantic reds stay warmer and more muted than
+   the brand, which is what keeps them apart. */
 
 :root {
   color-scheme: light;
@@ -20,13 +21,13 @@
   --fg-soft: #635e52;
   --fg-faint: #8d887b;
   --line: #e5e2da;
-  --accent: #935a17;
+  --accent: #e6002d;
   --accent-fg: #ffffff;
   --error: #b3261e;
   --warning: #8a5a00;
   --note: #1a5fa8;
-  --selection: rgba(147, 90, 23, 0.22);
-  --accent-strong: #70420e;
+  --selection: rgba(230, 0, 45, 0.2);
+  --accent-strong: #b30024;
   --focus: rgba(38, 36, 32, 0.55);
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
@@ -47,13 +48,13 @@
   --fg-soft: #9f9a93;
   --fg-faint: #726e66;
   --line: #282623;
-  --accent: #d6a466;
-  --accent-fg: #211704;
-  --error: #f2857d;
+  --accent: #f2485f;
+  --accent-fg: #2a0a10;
+  --error: #f59078;
   --warning: #e0b55c;
   --note: #7db4ea;
-  --selection: rgba(214, 164, 102, 0.24);
-  --accent-strong: #e6c290;
+  --selection: rgba(242, 72, 95, 0.26);
+  --accent-strong: #ff8098;
   --focus: rgba(235, 233, 228, 0.6);
 }
 
