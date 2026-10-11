@@ -41,6 +41,7 @@
 #include "pipeline/std_select.h"
 #include "pipeline/target.h"
 #include "pkg/manifest.h"
+#include "pkg/profile.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -251,6 +252,7 @@ base::Result<void, diag::Reported> emit_package_output(
       .target = ctx.target,
       .emit_entry = !is_lib,
       .freestanding = ctx.freestanding,
+      .backtrace = profile.on_panic == pkg::OnPanic::Backtrace,
       .optimize = profile.optimize,
       .kind = kind,
       .profiler = ctx.profiler,

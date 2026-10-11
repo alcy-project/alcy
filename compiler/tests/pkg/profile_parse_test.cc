@@ -120,6 +120,52 @@ TEST_CASE("Profile rejects a mistyped optimize") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Profile parses an on-panic behavior") {
+  Fixture f;
+  base::Result<Profiles, diag::Reported> result =
+      parse(f, "[debug]\non-panic = \"backtrace\"\n");
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  const Profiles profiles = std::move(result).unwrap();
+  CHECK(profiles.tables.size() == 1);
+  if (profiles.tables.size() != 1) {
+    return;
+  }
+  CHECK(profiles.tables[0].name == "debug");
+  CHECK(profiles.tables[0].settings.on_panic == OnPanic::Backtrace);
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Profile leaves on-panic unset when unnamed") {
+  Fixture f;
+  base::Result<Profiles, diag::Reported> result = parse(f, "[fast]\n");
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  const Profiles profiles = std::move(result).unwrap();
+  CHECK(profiles.tables.size() == 1);
+  if (profiles.tables.size() != 1) {
+    return;
+  }
+  CHECK(!profiles.tables[0].settings.on_panic.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Profile rejects an unknown on-panic behavior") {
+  Fixture f;
+  CHECK(parse(f, "[debug]\non-panic = \"unwind\"\n").is_err());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Profile rejects a mistyped on-panic behavior") {
+  Fixture f;
+  CHECK(parse(f, "[debug]\non-panic = true\n").is_err());
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Profile rejects a key that is not a table") {
   Fixture f;
   CHECK(parse(f, "optimize = true\n").is_err());

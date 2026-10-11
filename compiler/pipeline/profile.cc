@@ -88,11 +88,20 @@ base::Result<BuildProfile, diag::Reported> resolve_profile(
     return base::make_err(diag::Reported{});
   }
   pkg::ProfileSettings settings = builtin_base(name);
-  if (table != nullptr && table->settings.optimize.has_value()) {
-    settings.optimize = table->settings.optimize;
+  if (table != nullptr) {
+    if (table->settings.optimize.has_value()) {
+      settings.optimize = table->settings.optimize;
+    }
+    if (table->settings.on_panic.has_value()) {
+      settings.on_panic = table->settings.on_panic;
+    }
   }
-  return base::make_ok(
-      BuildProfile{.optimize = settings.optimize.value_or(false)});
+  if (request.on_panic.has_value()) {
+    settings.on_panic = request.on_panic;
+  }
+  return base::make_ok(BuildProfile{
+      .optimize = settings.optimize.value_or(false),
+      .on_panic = settings.on_panic.value_or(pkg::OnPanic::Abort)});
 }
 
 }  // namespace pipeline

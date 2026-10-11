@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -16,6 +17,7 @@
 #include "pipeline/pipeline_context.h"
 #include "pipeline/profile.h"
 #include "pipeline/vcs.h"
+#include "pkg/profile.h"
 #include "pkg/toolchain.h"
 
 namespace cli {
@@ -50,6 +52,9 @@ struct CliConfig {
   // Whether `--profile` was named explicitly, which `--release` must
   // not silently stand in for.
   bool profile_given = false;
+  // A panic-behavior override for this invocation; unset keeps what the
+  // selected profile says.
+  std::optional<pkg::OnPanic> on_panic = std::nullopt;
   // First positional, read as each subcommand's target (empty when
   // absent; the cli substitutes "."). Borrows argv storage, so a config
   // must not outlive the argument vector it was parsed from.

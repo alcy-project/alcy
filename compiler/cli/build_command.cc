@@ -59,7 +59,9 @@ ResultCode run_build(const CliConfig& config,
   const pkg::Profiles tables = std::move(profiles).unwrap();
   base::Result<pipeline::BuildProfile, diag::Reported> profile =
       pipeline::resolve_profile(
-          pipeline::ProfileRequest{.name = config.profile}, tables, ctx.bag);
+          pipeline::ProfileRequest{.name = config.profile,
+                                   .on_panic = config.on_panic},
+          tables, ctx.bag);
   if (profile.is_err()) {
     return failed;
   }

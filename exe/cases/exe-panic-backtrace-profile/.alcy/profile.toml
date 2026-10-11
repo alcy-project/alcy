@@ -1,0 +1,4 @@
+# The goal package selects the backtrace through its own profile,
+# so no flag is needed on the command line.
+[debug]
+on-panic = "backtrace"

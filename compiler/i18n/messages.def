@@ -333,6 +333,7 @@
   F(PkgManifestInvalid, "Manifest '{}': {}") \
   F(PkgProfileKeyNotTable, "Profile '{}': key '{}' is not a profile table") \
   F(PkgProfileNotLoaded, "Profile '{}' is not a loaded file") \
+  F(PkgProfileOnPanicUnknown, "Profile '{}': on-panic must be 'abort' or 'backtrace'") \
   F(PkgProfileOptimizeNotBool, "Profile '{}': optimize must be a bool") \
   F(PkgProfileTomlSyntaxError, "Profile '{}': TOML syntax error: {}") \
   F(PkgSpecImplementDuplicate, "Manifest '{}': duplicate [spec] implement entry '{}'") \
@@ -466,6 +467,7 @@
   F(CliNewAbout, "Create a new package") \
   F(CliNoStdHelp, "Start with no standard library instead of the default suite. Add back with --deps.") \
   F(CliNoSubcommand, "No subcommand given") \
+  F(CliOnPanicHelp, "What a panic does before it aborts: abort (the default) writes the message, and backtrace also names the frames it can walk. Overrides the selected profile's on-panic.") \
   F(CliPackageAddedToSuite, " (added to suite {})") \
   F(CliPackageCreatedAt, "'{}' in {}") \
   F(CliProfileHelp, "Build profile to use: debug (the default), release, or one that .alcy/profile.toml defines.") \

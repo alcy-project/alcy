@@ -31,12 +31,14 @@ optimize = true
 ```
 
 - Profile keys are code-generation semantics: settings under which the
-  same source produces a different program. Today that is `optimize`.
-  A future key (a pinned `backend`, debug information) arrives with the
-  ADR that justifies it. Selection-only knobs (`--target`, `--emit`,
-  `--deps`, `--backend` on the command line) and machine configuration
-  (the link driver in `toolchain.toml`) are not profile keys: a profile
-  has to mean the same thing on every machine.
+  same source produces a different program. Today those are `optimize`
+  and `on-panic` (which makes a panic walk the frame chain before it
+  aborts; see ADR-0063). A future key (a pinned `backend`, debug
+  information) arrives with the ADR that justifies it. Selection-only
+  knobs (`--target`, `--emit`, `--deps`, `--backend` on the command
+  line) and machine configuration (the link driver in `toolchain.toml`)
+  are not profile keys: a profile has to mean the same thing on every
+  machine.
 - Unknown keys are ignored, like alcy.toml; a known key with the wrong
   type is an error, and a key at the top level that is not a table is
   not a profile.

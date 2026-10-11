@@ -1,0 +1,11 @@
+[package]
+name = "tracecase"
+version = "0.1.0"
+license = ""
+
+[dependencies]
+"alcy/std/*" = {}
+
+[[bin]]
+name = "tracecase"
+path = "main.al"

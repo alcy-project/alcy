@@ -14,6 +14,7 @@
 #include "i18n/language.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/vcs.h"
+#include "pkg/profile.h"
 
 template <>
 struct arg::Converter<i18n::Language> {
@@ -109,6 +110,19 @@ struct arg::Converter<pipeline::Vcs> {
     } else {
       return make_err(GetError::InvalidArgument);
     }
+  }
+};
+
+template <>
+struct arg::Converter<pkg::OnPanic> {
+  static base::Result<pkg::OnPanic, arg::GetError> from_string(
+      std::string_view v) {
+    using arg::GetError, base::make_err, base::make_ok, pkg::OnPanic;
+    const std::optional<OnPanic> found = pkg::on_panic_from_name(v);
+    if (!found.has_value()) {
+      return make_err(GetError::InvalidArgument);
+    }
+    return make_ok(*found);
   }
 };
 

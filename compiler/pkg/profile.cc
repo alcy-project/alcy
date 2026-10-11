@@ -3,6 +3,7 @@
 
 #include "pkg/profile.h"
 
+#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -54,11 +55,34 @@ base::Result<ProfileSettings, diag::Reported> parse_settings(
       }
       settings.optimize = *flag;
     }
+    if (name == "on-panic") {
+      const auto text = node.value<std::string_view>();
+      const std::optional<OnPanic> value =
+          text.has_value() ? on_panic_from_name(*text) : std::nullopt;
+      if (!value.has_value()) {
+        const u32 index = bag.emit<i18n::Key::PkgProfileOnPanicUnknown>(
+            diag::Severity::Error, diag::Stage::Pkg,
+            DiagCode::ProfileSemanticError, filename);
+        (void)index;
+        return base::make_err(diag::Reported{});
+      }
+      settings.on_panic = *value;
+    }
   }
   return base::make_ok(settings);
 }
 
 }  // namespace
+
+std::optional<OnPanic> on_panic_from_name(std::string_view name) {
+  if (name == "abort") {
+    return OnPanic::Abort;
+  }
+  if (name == "backtrace") {
+    return OnPanic::Backtrace;
+  }
+  return std::nullopt;
+}
 
 base::Result<Profiles, diag::Reported> parse_profile(std::string_view bytes,
                                                      std::string_view filename,

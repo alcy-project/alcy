@@ -130,4 +130,49 @@ TEST_CASE("Profile refuses a name nothing declares") {
                     "and release, and .alcy/profile.toml defines the rest"));
 }
 
+TEST_CASE("Profile aborts a panic unless told otherwise") {
+  Fixture f;
+  base::Result<BuildProfile, diag::Reported> result =
+      resolve_profile(ProfileRequest{}, pkg::Profiles{}, f.bag);
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  CHECK(std::move(result).unwrap().on_panic == pkg::OnPanic::Abort);
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Profile applies a declared on-panic behavior") {
+  Fixture f;
+  const pkg::ProfileTable table{
+      .name = "trace",
+      .settings = pkg::ProfileSettings{.on_panic = pkg::OnPanic::Backtrace}};
+  const std::span<const pkg::ProfileTable> tables(&table, 1);
+  base::Result<BuildProfile, diag::Reported> result = resolve_profile(
+      ProfileRequest{.name = "trace"}, pkg::Profiles{.tables = tables}, f.bag);
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  CHECK(std::move(result).unwrap().on_panic == pkg::OnPanic::Backtrace);
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Profile lets a flag override the table's on-panic") {
+  Fixture f;
+  const pkg::ProfileTable table{
+      .name = "trace",
+      .settings = pkg::ProfileSettings{.on_panic = pkg::OnPanic::Backtrace}};
+  const std::span<const pkg::ProfileTable> tables(&table, 1);
+  base::Result<BuildProfile, diag::Reported> result = resolve_profile(
+      ProfileRequest{.name = "trace", .on_panic = pkg::OnPanic::Abort},
+      pkg::Profiles{.tables = tables}, f.bag);
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  CHECK(std::move(result).unwrap().on_panic == pkg::OnPanic::Abort);
+  CHECK(!f.bag.has_errors());
+}
+
 }  // namespace pipeline

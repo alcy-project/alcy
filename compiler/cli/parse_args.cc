@@ -32,6 +32,7 @@
 #include "i18n/messages.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/vcs.h"
+#include "pkg/profile.h"
 
 namespace cli {
 
@@ -83,6 +84,11 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
     c.profile = matches.get<std::string_view>("profile").unwrap_or(c.profile);
   } else if (c.release) {
     c.profile = "release";
+  }
+  // `--on-panic` overrides the selected profile's key; the choices above
+  // already rejected any other spelling.
+  if (auto behavior = matches.get<pkg::OnPanic>("on-panic"); behavior.is_ok()) {
+    c.on_panic = std::move(behavior).unwrap();
   }
   // The choices above already rejected anything else, so an unknown value
   // here means the default, not an error to report a second time.
@@ -246,6 +252,11 @@ arg::Parser build_parser(i18n::Language language) {
                        .help(usage.text(i18n::Key::CliProfileHelp))
                        .value_name("NAME")
                        .build())
+          .add_arg(arg::ArgBuilder("on-panic")
+                       .help(usage.text(i18n::Key::CliOnPanicHelp))
+                       .choices({"abort", "backtrace"})
+                       .value_name("BEHAVIOR")
+                       .build())
           .add_arg(arg::ArgBuilder("output")
                        .short_name('o')
                        .help(usage.text(i18n::Key::CliBuildOutputHelp))
@@ -286,6 +297,11 @@ arg::Parser build_parser(i18n::Language language) {
           .add_arg(arg::ArgBuilder("profile")
                        .help(usage.text(i18n::Key::CliProfileHelp))
                        .value_name("NAME")
+                       .build())
+          .add_arg(arg::ArgBuilder("on-panic")
+                       .help(usage.text(i18n::Key::CliOnPanicHelp))
+                       .choices({"abort", "backtrace"})
+                       .value_name("BEHAVIOR")
                        .build())
           .add_arg(arg::ArgBuilder("output")
                        .short_name('o')
@@ -338,6 +354,11 @@ arg::Parser build_parser(i18n::Language language) {
           .add_arg(arg::ArgBuilder("profile")
                        .help(usage.text(i18n::Key::CliProfileHelp))
                        .value_name("NAME")
+                       .build())
+          .add_arg(arg::ArgBuilder("on-panic")
+                       .help(usage.text(i18n::Key::CliOnPanicHelp))
+                       .choices({"abort", "backtrace"})
+                       .value_name("BEHAVIOR")
                        .build())
           .add_arg(arg::ArgBuilder("linker")
                        .help(usage.text(i18n::Key::CliLinkerOverrideHelp))

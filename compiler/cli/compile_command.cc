@@ -111,8 +111,9 @@ ResultCode run_compile(const CliConfig& config,
   // unknown here.
   base::Result<pipeline::BuildProfile, diag::Reported> resolved =
       pipeline::resolve_profile(
-          pipeline::ProfileRequest{.name = config.profile}, pkg::Profiles{},
-          ctx.bag);
+          pipeline::ProfileRequest{.name = config.profile,
+                                   .on_panic = config.on_panic},
+          pkg::Profiles{}, ctx.bag);
   if (resolved.is_err()) {
     return failed;
   }

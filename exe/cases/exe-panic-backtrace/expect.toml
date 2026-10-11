@@ -1,0 +1,5 @@
+# A panic under --on-panic=backtrace names the frames the walk can
+# find, innermost first, after the message and its site.
+exit = "non-zero"
+args = ["--on-panic=backtrace"]
+stderr_contains = ["panic at main.al:2:3: boom", "  at g", "  at f", "  at main"]

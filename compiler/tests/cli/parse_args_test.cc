@@ -17,6 +17,7 @@
 #include "pipeline/emit_mode.h"
 #include "pipeline/profile.h"
 #include "pipeline/vcs.h"
+#include "pkg/profile.h"
 
 namespace cli {
 
@@ -80,6 +81,20 @@ TEST_CASE("Parse release as the release profile") {
   CHECK(config.profile == "release");
   CHECK(config.release);
   CHECK(!config.profile_given);
+}
+
+TEST_CASE("Parse on-panic as a behavior override") {
+  const std::string_view args[] = {"alcy", "build", "--on-panic", "backtrace",
+                                   "mydir"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.on_panic == pkg::OnPanic::Backtrace);
+  CHECK(config.profile == pipeline::DEFAULT_PROFILE_NAME);
+}
+
+TEST_CASE("Parse without on-panic leaves the profile standing") {
+  const std::string_view args[] = {"alcy", "build", "mydir"};
+  const CliConfig config = parse_ok(args);
+  CHECK(!config.on_panic.has_value());
 }
 
 TEST_CASE("Parse compile standard library flags") {

@@ -33,6 +33,12 @@
   source position - the entry thunk's fixed message, an allocation
   failure - writes `panic: <message>`. The runtime's text is fixed and
   not localized; only compiler diagnostics follow `--lang`.
+- A profile with `on-panic = "backtrace"` additionally prints one
+  `at <name>` line per program frame the panic walked through,
+  innermost first, before aborting (see `docs/adr/0063-a-panic-can-carry-a-backtrace.md`).
+  An optimized build shows the frames that survived inlining, which can
+  be just `main`; a target other than x86-64 or AArch64, and the wasm
+  backend everywhere, write the message and its site only.
 - The `!` (never) type exists from MVP: `panic` has type `!`, and `!`
   coerces to any type. Looping constructs that cannot fall through
   also produce `!`.

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string_view>
 
 #include "diag/bag.h"
@@ -20,12 +21,15 @@ constexpr std::string_view DEFAULT_PROFILE_NAME = "debug";
 // never a profile name.
 struct BuildProfile {
   bool optimize = false;
+  pkg::OnPanic on_panic = pkg::OnPanic::Abort;
 };
 
 // What the command line selected: a profile name, and the keys an
-// explicit flag overrides. An empty name selects the default.
+// explicit flag overrides. An empty name selects the default; an unset
+// override leaves the profile's value standing.
 struct ProfileRequest {
   std::string_view name = DEFAULT_PROFILE_NAME;
+  std::optional<pkg::OnPanic> on_panic = std::nullopt;
 };
 
 // Loads `.alcy/profile.toml` beside `root`. An absent file is an empty

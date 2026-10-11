@@ -15,7 +15,9 @@ expect.toml:
 
 `exit` is required (integer value or "non-zero"). `stdout` must match
 exactly when present; `*_contains` lists must all appear in the
-respective stream.
+respective stream. An optional `args` list is passed to the alcy build
+itself, so a single-file case can select what a package case declares
+in its own files.
 
 Cases are copied to a scratch directory, built to executables with
 `alcy compile` for a single file or `alcy build` for a package, executed,
@@ -51,7 +53,13 @@ def parse_expect(path: Path):
     stdout_contains = data.get("stdout_contains", [])
     stderr_contains = data.get("stderr_contains", [])
 
-    return expected_exit, expected_stdout, stdout_contains, stderr_contains
+    # Extra arguments for the alcy build itself, so a single-file case
+    # can select what a package case declares in its own files.
+    args = data.get("args", [])
+    if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+        sys.exit(f"{path}: 'args' must be a list of strings")
+
+    return expected_exit, expected_stdout, stdout_contains, stderr_contains, args
 
 
 # Sanitizers for a generated program. Address is the one that finds
@@ -66,7 +74,7 @@ SANITIZERS = ["-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-g"]
 SYSTEM_CLANG = shutil.which("clang")
 
 
-def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path):
+def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path, args):
     """Builds the case through textual IR so the sanitizers can reach it.
 
     alcy writes an object straight from an LLVM TargetMachine, with no
@@ -81,6 +89,7 @@ def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path):
         str(alcy),
         command,
         "." if is_package else "main.al",
+        *args,
         "--emit=llvm-ir",
         "-o",
         str(ir),
@@ -134,8 +143,8 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
         # runtime, so it runs uninstrumented rather than not at all.
         sanitize = False
 
-    expected_exit, expected_stdout, stdout_contains, stderr_contains = parse_expect(
-        expect_path
+    expected_exit, expected_stdout, stdout_contains, stderr_contains, extra_args = (
+        parse_expect(expect_path)
     )
     problems = []
 
@@ -157,11 +166,13 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
 
         command = "build" if is_package else "compile"
         if sanitize:
-            proc, why = build_sanitized(alcy, work, is_package, work / exe_name)
+            proc, why = build_sanitized(
+                alcy, work, is_package, work / exe_name, extra_args
+            )
             if why:
                 return False, f"{why}\n--- stderr ---\n{proc.stderr}"
         else:
-            build_argv = [str(alcy), command, target, "-o", exe_name]
+            build_argv = [str(alcy), command, target, *extra_args, "-o", exe_name]
             proc = subprocess.run(
                 build_argv,
                 capture_output=True,

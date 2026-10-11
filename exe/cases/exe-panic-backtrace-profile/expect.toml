@@ -1,0 +1,4 @@
+# A panic under a profile that sets on-panic names the frames the
+# walk can find, innermost first, after the message and its site.
+exit = "non-zero"
+stderr_contains = ["panic at main.al:2:3: boom", "  at g", "  at f", "  at main"]
