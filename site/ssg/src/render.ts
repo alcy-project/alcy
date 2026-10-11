@@ -64,7 +64,6 @@ function header(route: string, language: Language, treePath: string): string {
       <nav class="site-nav">
         <a href="${home}guide/" aria-current="page">${t("site.guide")}</a>
         <a href="${home}playground/">${t("site.playground")}</a>
-        <a href="https://github.com/alcy-project/alcy" rel="noopener">GitHub</a>
       </nav>
       ${settings}
     </header>`;
@@ -288,7 +287,6 @@ export function renderNotFound(): string {
       <nav class="site-nav">
         <a href="guide/">Guide</a>
         <a href="playground/">Playground</a>
-        <a href="https://github.com/alcy-project/alcy" rel="noopener">GitHub</a>
       </nav>
     </header>
 
