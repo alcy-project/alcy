@@ -7,32 +7,27 @@ peripheral work lives in `backlog.md`. The language record lives in
 
 ## Next
 
-- [ ] Ownership and drops per CFG path.
+- [x] Ownership and drops per CFG path.
 
-  A loan's extent is a region, solved per path; ownership is not.
-  Lowering tracks a moved flag per local with a one-bit latch, so a
-  value consumed on one arm of an `if` and not the other reports "use
-  of moved" - the in-tree case is `Option::filter` over a non-Copy
-  `T` - a store that re-owns a place leaks the new value, and a
-  destructor that needs a variant's discriminant or an array's
-  elements cannot be placed: a droppable local or field warns, a
-  wildcard match discard leaks its payload silently, and `Vec`,
-  `Map`, and `Set` release a buffer without ending the live elements
-  in it. In slices: lowering journals an end site per place and stops
-  placing ends; a `drop` pass beside lowering reads the `Move`
+  Lowering placed ends with a flag per local and a one-bit latch, so a
+  value consumed on one arm of an `if` and not the other reported "use
+  of moved" (`Option::filter` over a non-Copy `T`), a store that
+  re-owned a place leaked the new value, and a destructor that needed
+  a variant's discriminant or an array's elements could not be placed
+  at all. Lowering now journals an end site per place and the
+  ownership events, and a `drop` pass beside it reads the `Move`
   markers and the stores, solves ownership per place (owned, moved,
-  maybe), appends an end where every path owns, splits the edges
-  where the paths differ, and keeps a per-place flag only where a
-  loop carries both states; the `Drop` opcode becomes the marker a
-  placed end carries, and the borrow checker consumes it as an
-  authoritative boundary, which retires the remaining false
-  positives; then drop glue for enum payloads (a discriminant
-  switch) and array elements (an element loop), ending a wildcard
-  discard's payload and giving the `drop_in_place` the owning
-  pointers of the fifth item need; then the containers end live
-  elements in `clear` and `drop`; and one rule replaces today's
-  `_ := expr` error beside a bare statement's warning, both ending
-  the value. Designed in
+  maybe), and appends an end where every path owns; paths that differ
+  decide at run time behind a per-place flag, and splitting the edge
+  instead is the refinement ADR-0062 records. The `Drop` opcode is the
+  marker a placed end carries, and the borrow checker consumes it as
+  an authoritative boundary. Glue reaches a struct's or tuple's
+  fields, an enum's live variant, and an array's elements; the unsafe
+  intrinsic `drop_in_place<T>(p: &mut T)` lets `Vec` end its live
+  elements in `clear` and `drop` (`Map` and `Set` already did by
+  moving entries into bindings); and discarding - `_ := expr`, a bare
+  statement, or a wildcard binding - ends the value where it stands.
+  Designed in
   `docs/adr/0062-a-values-end-follows-the-path-that-owns-it.md`.
 
 - [ ] Container iteration.

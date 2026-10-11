@@ -62,8 +62,8 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] Explicit spec call with a temporary: `a.eq(&2)` fails lowering with
   "Construct 'borrowed temporary' is not supported in this lowering slice".
 - [ ] `Option::is_some`/`is_none`/`is_ok`/`is_err` take the receiver by
-  value, so the option cannot be consulted twice and a payload ends only
-  through the enum walk. `&Self` receivers would fix both.
+  value, so the option cannot be consulted twice. `&Self` receivers
+  would fix that.
 - [ ] Standard dependency selection: `--deps alcy/std/collections` on top
   of the default suite errors "Dependency 'alcy/std/*' overlaps
   'collections'". Make the default suite and the glob rule visible in
