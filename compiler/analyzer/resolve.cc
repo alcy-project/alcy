@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -20,6 +21,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
+#include "fpag/hash/xxh3_hasher.h"
 #include "i18n/messages.h"
 #include "path/path.h"
 #include "source/source.h"
@@ -46,6 +48,22 @@ struct FileData {
 
 struct NameEntry {
   std::string_view name;
+};
+
+// A name in one of the three namespaces: the key a module's own declarations
+// are gathered under, and the key the prelude injection remembers a name by.
+struct NameKey {
+  std::string_view name;
+  Namespace ns = Namespace::Value;
+
+  bool operator==(const NameKey&) const = default;
+};
+
+struct NameKeyHash {
+  usize operator()(const NameKey& key) const {
+    const hash::Xxh3Hasher64 hash;
+    return hash(key.name) * 31u + static_cast<usize>(key.ns);
+  }
 };
 
 class Resolver {
@@ -399,6 +417,27 @@ class Resolver {
   // every non-prelude module. Locals and explicit uses win silently;
   // the imports never re-export (is_pub false).
   void inject_prelude() {
+    // Every module's own declarations by name, and how many imports each
+    // wrote itself. The injection below asks both questions of every module
+    // for every name the prelude offers, and answering them by scanning items
+    // and a list that grows with the injection is what made the prelude cost
+    // the square of its own surface.
+    std::vector<std::unordered_set<NameKey, NameKeyHash>> own_names(
+        modules.size());
+    std::vector<u32> explicit_imports(modules.size(), 0);
+    for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+      for (const NameEntry& entry : local_types[m]) {
+        own_names[m].insert(NameKey{entry.name, Namespace::Type});
+      }
+      for (const NameEntry& entry : local_values[m]) {
+        own_names[m].insert(NameKey{entry.name, Namespace::Value});
+      }
+      for (const NameEntry& entry : local_modules[m]) {
+        own_names[m].insert(NameKey{entry.name, Namespace::Module});
+      }
+      explicit_imports[m] = static_cast<u32>(module_imports[m].size());
+    }
+    std::unordered_set<NameKey, NameKeyHash> injected;
     for (u32 prelude : prelude_modules) {
       // A facade's re-exports resolve first: a `pub use` names the
       // surface the facade stands in for, and resolution is idempotent,
@@ -425,7 +464,8 @@ class Resolver {
           if (!declared) {
             continue;
           }
-          inject_name(name, ns, prelude, name, prelude);
+          inject_name(name, ns, prelude, name, prelude, own_names,
+                      explicit_imports, injected);
         }
       }
       // A facade re-exports what its siblings declare, so the resolved
@@ -436,7 +476,8 @@ class Resolver {
           continue;
         }
         inject_name(reexport.name, reexport.ns, reexport.target_module,
-                    reexport.member, prelude);
+                    reexport.member, prelude, own_names, explicit_imports,
+                    injected);
       }
     }
   }
@@ -444,24 +485,30 @@ class Resolver {
   // Makes `name` visible in every module but `skip`, unless a local or
   // an earlier import already claims it. Locals win over the prelude,
   // and the first prelude to claim a name keeps it.
-  void inject_name(std::string_view name,
-                   Namespace ns,
-                   u32 target,
-                   std::string_view member,
-                   u32 skip) {
+  void inject_name(
+      std::string_view name,
+      Namespace ns,
+      u32 target,
+      std::string_view member,
+      u32 skip,
+      const std::vector<std::unordered_set<NameKey, NameKeyHash>>& own_names,
+      const std::vector<u32>& explicit_imports,
+      std::unordered_set<NameKey, NameKeyHash>& injected) {
+    // A name is injected once: the first facade to offer it wins, which is
+    // what every module finding the import already there decided too.
+    const NameKey key{name, ns};
+    if (!injected.insert(key).second) {
+      return;
+    }
     for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
-      if (m == skip) {
+      if (m == skip || own_names[m].contains(key)) {
         continue;
       }
-      const std::vector<NameEntry>& locals =
-          ns == Namespace::Type    ? local_types[m]
-          : ns == Namespace::Value ? local_values[m]
-                                   : local_modules[m];
-      if (has_name(locals, name)) {
-        continue;
-      }
+      // Only the imports the module wrote itself can be in the way; the ones
+      // after that prefix are this injection's own, and the name is new here.
       bool imported = false;
-      for (const Import& prior : module_imports[m]) {
+      for (u32 i = 0; i < explicit_imports[m]; ++i) {
+        const Import& prior = module_imports[m][i];
         if (prior.ns == ns && prior.name == name) {
           imported = true;
           break;
