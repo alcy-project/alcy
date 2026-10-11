@@ -19,3 +19,8 @@ intrinsic fn sys_write(fd: i32, buf: str);
 pub intrinsic fn size_of<T>() -> usize;
 
 pub intrinsic fn align_of<T>() -> usize;
+
+// Runs the value's destructor in place. The caller guarantees the
+// value behind `p` is initialized and owns what it holds; the value is
+// consumed, so the caller must not read it again.
+pub unsafe intrinsic fn drop_in_place<T>(p: &mut T);

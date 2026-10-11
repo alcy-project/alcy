@@ -2159,7 +2159,7 @@ bool Checker::is_known_intrinsic(std::string_view name) {
          name == "elem_ref" || name == "size_of" || name == "align_of" ||
          name == "uninit_write" || name == "uninit_assume" ||
          name == "uninit_ref" || name == "ptr_offset" ||
-         name == "ptr_offset_mut";
+         name == "ptr_offset_mut" || name == "drop_in_place";
 }
 
 // The intrinsics whose preconditions the compiler cannot check
@@ -2170,7 +2170,7 @@ static bool intrinsic_is_unsafe(std::string_view name) {
          name == "elem_ref" || name == "memcopy" || name == "uninit_assume" ||
          name == "str_from_parts" || name == "slice_from_parts" ||
          name == "slice_from_parts_mut" || name == "ptr_offset" ||
-         name == "ptr_offset_mut";
+         name == "ptr_offset_mut" || name == "drop_in_place";
 }
 
 // What may cross a C boundary in the first ABI slice (ADR-0051):
@@ -2310,6 +2310,13 @@ bool Checker::check_intrinsic_signature(u32 module,
         params.size() == 2 && builder.types()[params[0].idx].tag == want &&
         is_isize(params[1]) && builder.types()[ret.idx].tag == want &&
         same(pointee(params[0]), pointee(ret)));
+  }
+  if (name == "drop_in_place") {
+    // `drop_in_place<T>(p: &mut T)`: the value behind the reference is
+    // initialized and owned here, which is the gate's precondition.
+    return or_wrong(params.size() == 1 &&
+                    builder.types()[params[0].idx].tag == ir::TypeTag::MutRef &&
+                    builder.types()[ret.idx].tag == ir::TypeTag::Void);
   }
   // A slice reference of either kind: what `slice_len` reads and
   // what the slice constructors return through.

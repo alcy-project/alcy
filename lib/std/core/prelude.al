@@ -27,6 +27,7 @@ pub use package::mem::ptr_offset_mut;
 pub use package::mem::panic;
 pub use package::mem::size_of;
 pub use package::mem::align_of;
+pub use package::mem::drop_in_place;
 pub use package::option::Option;
 pub use package::range::Bound;
 pub use package::range::Range;

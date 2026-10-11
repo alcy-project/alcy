@@ -1407,6 +1407,22 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
               {use_value(dst), use_value(src), use_value(len)});
     return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
   }
+  if (name == "drop_in_place") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    if (call.args.size() != 1 || type_args.size() != 1) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    Val ptr = lower_expr(call.args[0], nullptr);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const Val material = materialize(ptr);
+    // The end runs wherever the pass visits this point; the pointer is
+    // the caller's guarantee that the value is there.
+    record_drop_in_place(material.op, type_args[0], node.span);
+    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+  }
   if (name == "str_len" || name == "str_byte" || name == "str_slice") {
     return lower_str_intrinsic(expr, name);
   }

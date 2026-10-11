@@ -96,8 +96,9 @@ payload ends it on the way out.
 
 **Library code can ask for one end.**
 
-An unsafe intrinsic `drop_in_place<T>(p: *mut T)` runs the same glue
-for the value at `p`, resolved per instantiation the way `size_of` is.
+An unsafe intrinsic `drop_in_place<T>(p: &mut T)` runs the same glue
+for the value behind the reference, resolved per instantiation the way
+`size_of` is.
 `Vec`, `Map`, and `Set` end their live elements in `clear` and `drop`
 through it. A `Drop` spec stays the direction ADR-0028 records - one
 coherence-unique impl the compiler calls as glue - and waits for
@@ -143,8 +144,9 @@ spellings.
 - S3. Enum payload and array element glue. A wildcard match discard
   still moves the scrutinee without ending the payload it leaves
   behind; that lands with the discard rule.
-- S4. `drop_in_place`, and `Vec`/`Map`/`Set` ending live elements in
-  `clear` and `drop`.
+- S4. `drop_in_place`, and `Vec` ending live elements in `clear` and
+  `drop` (`Map` and `Set` already end theirs by moving them into
+  bindings).
 - S5. The discard rule: `_ := x` and a bare statement both end the
   value, with the error retired, and a wildcard binding of a droppable
   place ends what it discards.

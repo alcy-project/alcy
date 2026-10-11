@@ -114,6 +114,23 @@ void Lowerer::record_event(OwnershipEvent::Kind kind,
   ownership_.push_back(std::move(event));
 }
 
+void Lowerer::record_drop_in_place(ir::OperandIdx place,
+                                   ir::TypeIdx type,
+                                   diag::Span span) {
+  if (failed) {
+    return;
+  }
+  OwnershipEvent event;
+  event.kind = OwnershipEvent::Kind::DropInPlace;
+  event.place = place;
+  event.place_type = type;
+  event.block = cur_;
+  event.offset = streams_[at(cur_)].size();
+  event.seq = record_seq_++;
+  event.span = span;
+  ownership_.push_back(std::move(event));
+}
+
 ir::RegisterIdx Lowerer::pass_emit(ir::InstrSeq& seq,
                                    ir::Opcode op,
                                    ir::TypeIdx type,
@@ -185,6 +202,9 @@ void Lowerer::place_ends() {
     return static_cast<u32>(places.size() - 1);
   };
   for (const OwnershipEvent& event : ownership_) {
+    if (event.kind == OwnershipEvent::Kind::DropInPlace) {
+      continue;
+    }
     place_of(event.local, event.path);
   }
   for (const EndSite& site : end_sites_) {
@@ -252,12 +272,18 @@ void Lowerer::place_ends() {
       case OwnershipEvent::Kind::Bind:
       case OwnershipEvent::Kind::Store: return State::Owned;
       case OwnershipEvent::Kind::Move: return State::Moved;
+      case OwnershipEvent::Kind::DropInPlace: return state;
     }
     return state;
   };
   auto step_point = [&](State state, const Point& point, const Place& place) {
     if (point.kind == Point::Kind::Event) {
       const OwnershipEvent& event = ownership_[point.index];
+      if (event.kind == OwnershipEvent::Kind::DropInPlace) {
+        // The pointer names no tracked place; what it points at is the
+        // caller's guarantee, not this function's ownership.
+        return state;
+      }
       return applies(place, event) ? step(state, event) : state;
     }
     // Ending a value consumes it, so a site is a move for every local
@@ -451,7 +477,12 @@ void Lowerer::place_ends() {
         pass_emit_void(seq_of(out), ir::Opcode::Drop, {place}, span);
         const ir::RegisterIdx value =
             pass_emit(seq_of(out), ir::Opcode::Load, type, {place}, span);
-        pass_emit_void(seq_of(out), ir::Opcode::Move, {place}, span);
+        // A binding's end marks the place moved; an explicit end does
+        // not, because the reference names a value borrow should not
+        // retire for the rest of the buffer.
+        if (local < locals.size()) {
+          pass_emit_void(seq_of(out), ir::Opcode::Move, {place}, span);
+        }
         pass_emit_void(seq_of(out), ir::Opcode::Call,
                        {builder.operand(ir::Operand::from_function(
                             fn, builder.primitive(ir::TypeTag::Function))),
@@ -593,10 +624,14 @@ void Lowerer::place_ends() {
       return;
     }
     if (node.tag != ir::TypeTag::Struct) {
-      const u32 index = bag.emit<i18n::Key::LowerDestructorNotRun>(
-          diag::Severity::Warning, diag::Stage::Lowering,
-          DiagCode::DropUnplaced, span, locals[local].name);
-      (void)index;
+      // A place no walk reaches; the caller's value is left alone. The
+      // sites name a binding, the explicit end does not.
+      if (local < locals.size()) {
+        const u32 index = bag.emit<i18n::Key::LowerDestructorNotRun>(
+            diag::Severity::Warning, diag::Stage::Lowering,
+            DiagCode::DropUnplaced, span, locals[local].name);
+        (void)index;
+      }
       return;
     }
     const ir::StructType& fields = builder.struct_types()[node.as_struct()];
@@ -631,7 +666,7 @@ void Lowerer::place_ends() {
 
   // One action at one boundary of a block.
   struct Action {
-    enum class Kind : u8 { Site, Bind, Move, StoreEnd, StoreClear };
+    enum class Kind : u8 { Site, Bind, Move, StoreEnd, StoreClear, DropHere };
     u32 offset = 0;
     u32 seq = 0;
     Kind kind = Kind::Site;
@@ -660,6 +695,10 @@ void Lowerer::place_ends() {
             Action{event.offset - 1, event.seq, Action::Kind::StoreEnd, ei});
         actions[b].push_back(
             Action{event.offset, event.seq, Action::Kind::StoreClear, ei});
+        break;
+      case OwnershipEvent::Kind::DropInPlace:
+        actions[b].push_back(
+            Action{event.offset, event.seq, Action::Kind::DropHere, ei});
         break;
     }
   }
@@ -819,6 +858,15 @@ void Lowerer::place_ends() {
             break;
           }
           case Action::Kind::StoreEnd: run_store_end(action.index, out); break;
+          case Action::Kind::DropHere: {
+            const OwnershipEvent& event = ownership_[action.index];
+            const auto owned = [](const std::vector<u32>&) {
+              return State::Owned;
+            };
+            emit_end(out, base::INVALID_IDX, {}, event.place_type, event.place,
+                     owned, event.span);
+            break;
+          }
           case Action::Kind::StoreClear: {
             const OwnershipEvent& event = ownership_[action.index];
             for (u32 pi = 0; pi < place_count; ++pi) {

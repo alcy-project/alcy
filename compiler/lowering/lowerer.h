@@ -529,7 +529,7 @@ class Lowerer {
   // the event was recorded: a Bind is after the binding's store, a Move
   // after the marker, a Store after the store.
   struct OwnershipEvent {
-    enum class Kind : u8 { Bind, Move, Store };
+    enum class Kind : u8 { Bind, Move, Store, DropInPlace };
     Kind kind = Kind::Bind;
     u32 local = 0;
     std::vector<u32> path;
@@ -537,6 +537,10 @@ class Lowerer {
     u32 offset = 0;
     u32 seq = 0;
     diag::Span span;
+    // DropInPlace only: the value at this pointer is ended where it
+    // stands, whatever place (if any) it names.
+    ir::OperandIdx place = ir::OperandIdx::invalid();
+    ir::TypeIdx place_type = ir::TypeIdx(base::INVALID_IDX);
   };
 
   // Where a place goes out of scope: a block and a position in it, and
@@ -559,6 +563,9 @@ class Lowerer {
                     u32 local,
                     std::vector<u32> path,
                     diag::Span span);
+  void record_drop_in_place(ir::OperandIdx place,
+                            ir::TypeIdx type,
+                            diag::Span span);
 
   // Solves ownership per place over this function's CFG and rewrites
   // its streams to carry the ends. Runs after a body is lowered and

@@ -110,13 +110,18 @@ impl<T> Vec<T> {
     ret Option::Some(unsafe { *uninit_assume(elem_ptr(self.buf, self.len)) })
   }
 
-  // Forgets every element, keeping the room already reserved. A `T`
-  // carrying a destructor is not ended.
+  // Ends every element, keeping the room already reserved.
   pub fn clear(mut self: &mut Self) {
+    mut i := 0 as usize
+    while i < self.len {
+      unsafe { drop_in_place::<T>(uninit_assume(elem_ptr(self.buf, i))) }
+      i = i + 1
+    }
     self.len = 0
   }
 
-  pub fn drop(self: Vec<T>) {
+  pub fn drop(mut self: Vec<T>) {
+    self.clear()
     unsafe { dealloc(self.buf, self.cap) }
   }
 }
