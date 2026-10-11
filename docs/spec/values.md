@@ -37,8 +37,10 @@
   compiler ends each destructible struct field, the live variant's
   destructible fields after a discriminant read, and each destructible
   array element.
-- Discarding a value that holds something with a destructor (`_ := v`)
-  is a compile-time error: nothing would be left to own it.
+- Discarding a value ends it where it stands: `_ := v` runs the
+  destructor, and a bare expression statement whose value is not `()`
+  warns and does the same. A wildcard binding in a pattern ends what it
+  discards the same way.
 - Destructors do not run on the panic path, which aborts (see
   `errors.md`). An `alloc` block whose owning value is lost to a panic
   or a crash is leaked.

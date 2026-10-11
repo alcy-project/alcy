@@ -124,6 +124,17 @@ void Lowerer::record_drop_in_place(ir::OperandIdx place,
   event.kind = OwnershipEvent::Kind::DropInPlace;
   event.place = place;
   event.place_type = type;
+  // A discarded binding is spent; a value behind a reference or a
+  // container's element is not this function's place to retire.
+  const ir::Operand& operand = builder.state().operands[place.idx];
+  if (operand.is<ir::RegisterIdx>()) {
+    u32 local = 0;
+    std::vector<u32> path;
+    if (place_of_register(operand.as_register().idx, local, path)) {
+      event.local = local;
+      event.path = std::move(path);
+    }
+  }
   event.block = cur_;
   event.offset = streams_[at(cur_)].size();
   event.seq = record_seq_++;
@@ -280,9 +291,12 @@ void Lowerer::place_ends() {
     if (point.kind == Point::Kind::Event) {
       const OwnershipEvent& event = ownership_[point.index];
       if (event.kind == OwnershipEvent::Kind::DropInPlace) {
-        // The pointer names no tracked place; what it points at is the
-        // caller's guarantee, not this function's ownership.
-        return state;
+        // A discarded binding is spent; a value behind a reference or a
+        // container's element names no tracked place.
+        if (event.local == base::INVALID_IDX) {
+          return state;
+        }
+        return applies(place, event) ? State::Moved : state;
       }
       return applies(place, event) ? step(state, event) : state;
     }
@@ -863,8 +877,8 @@ void Lowerer::place_ends() {
             const auto owned = [](const std::vector<u32>&) {
               return State::Owned;
             };
-            emit_end(out, base::INVALID_IDX, {}, event.place_type, event.place,
-                     owned, event.span);
+            emit_end(out, event.local, event.path, event.place_type,
+                     event.place, owned, event.span);
             break;
           }
           case Action::Kind::StoreClear: {

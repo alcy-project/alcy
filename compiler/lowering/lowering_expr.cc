@@ -514,7 +514,15 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
   const base::NestingScope scope(nesting_);
   const ast::PatternNode& node = ast.patterns[pattern];
   switch (node.kind) {
-    case ast::PatternKind::Wildcard: break;
+    case ast::PatternKind::Wildcard:
+      // A wildcard binding of a droppable place discards it by ending
+      // it, so a destructured field nothing binds still runs its
+      // destructor. A wildcard parameter keeps the value for the
+      // function's own scope exit.
+      if (!binding_param_ && init.address && runs_destructor(init.type)) {
+        record_drop_in_place(init.op, init.type, node.span);
+      }
+      break;
     case ast::PatternKind::Ident:
     case ast::PatternKind::MutIdent: {
       std::string_view name;
@@ -2985,6 +2993,15 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
       }
       const ir::TypeIdxRange fields = variant_fields(scrut_type, variant);
       for (usize i = 0; i < payloads.size() && !failed; ++i) {
+        if (ast.patterns[elements[i]].kind == ast::PatternKind::Wildcard &&
+            runs_destructor(fields[i])) {
+          // The arm discards this payload: end it in place rather than
+          // loading a copy nothing owns.
+          const ir::RegisterIdx addr =
+              payload_field_addr(scrut_addr, fields, static_cast<u32>(i));
+          record_drop_in_place(to_operand(addr, fields[i]), fields[i], span);
+          continue;
+        }
         Val field = load_payload_field(scrut_addr, fields, static_cast<u32>(i));
         bind_pattern(elements[i], field);
       }
@@ -3778,18 +3795,19 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
       if (failed) {
         return;
       }
-      // Moving into the binding consumes a non-Copy place.
-      const ir::OperandIdx moved = use_value(init);
       if (ast.patterns[decl.pattern].kind == ast::PatternKind::Wildcard &&
           runs_destructor(init.type)) {
-        // Nothing is left to own the value once the binding discards it,
-        // so its destructor would never run and whatever it holds would
-        // be lost.
-        const u32 index = bag.emit<i18n::Key::LowerDiscardedDestructor>(
-            diag::Severity::Error, diag::Stage::Lowering,
-            DiagCode::DiscardedDestructor, node.span);
-        (void)index;
+        // Discarding ends the value where it stands; the pass runs the
+        // glue over the slot the value lands in.
+        Val slot = init.address ? init : address_of(init);
+        if (failed) {
+          return;
+        }
+        record_drop_in_place(slot.op, init.type, node.span);
+        return;
       }
+      // Moving into the binding consumes a non-Copy place.
+      const ir::OperandIdx moved = use_value(init);
       bind_pattern(decl.pattern, Val{moved, init.type, false, false});
       return;
     }
@@ -3846,7 +3864,21 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
     }
     case ast::StmtKind::Expr: {
       const ast::StmtExpr& expr = node.payload.get<ast::StmtExpr>();
-      mark_move(lower_expr(expr.value, nullptr));
+      Val value = lower_expr(expr.value, nullptr);
+      if (failed) {
+        return;
+      }
+      if (runs_destructor(value.type)) {
+        // The checker warns about the unused value; ending it is what
+        // discarding means.
+        Val slot = value.address ? value : address_of(value);
+        if (failed) {
+          return;
+        }
+        record_drop_in_place(slot.op, value.type, node.span);
+        return;
+      }
+      mark_move(value);
       return;
     }
   }

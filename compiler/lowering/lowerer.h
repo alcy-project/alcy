@@ -531,7 +531,7 @@ class Lowerer {
   struct OwnershipEvent {
     enum class Kind : u8 { Bind, Move, Store, DropInPlace };
     Kind kind = Kind::Bind;
-    u32 local = 0;
+    u32 local = base::INVALID_IDX;
     std::vector<u32> path;
     ir::BlockIdx block = ir::BlockIdx(0);
     u32 offset = 0;

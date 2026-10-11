@@ -1,2 +1,0 @@
-exit = 4
-contains = ["Discarded value holds something with a destructor"]
