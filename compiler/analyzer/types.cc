@@ -4986,8 +4986,8 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
     }
   }
   // Calling through a type parameter needs a callable bound, which
-  // waits on specs: a function type bound to one has no signature
-  // its instantiations could mangle distinctly.
+  // waits on specs: until a bound says what a parameter can be called
+  // as, a function type stays refused as an inferred argument.
   for (const ir::TypeIdx arg : bound) {
     if (!is_error(arg) && builder.types()[arg.idx].tag == ir::TypeTag::Func) {
       const u32 index =

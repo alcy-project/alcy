@@ -146,8 +146,7 @@ value.
 What it costs is one environment per closure creation, indirect
 call overhead everywhere a value is called, and an explicit
 list on every closure that sees outer scope. Deferred on
-purpose: generic closures (and function types as generic
-arguments, which cannot mangle apart yet), destructuring
+purpose: generic closures, destructuring
 parameters, `comp` closures, `Fn`-style specs, monomorphized
 representations, non-Copy captures and closures that escape
 their frame (the owning environment), and recursion, which
@@ -173,6 +172,13 @@ borrowed capture is refused. The environment slot's own borrow
 is what keeps a capturing closure inside its frame.
 
 **Follow-up:** the owning environment, which adopts non-Copy
-values and lets a capturing closure escape its frame. A
-function type bound as a generic argument stays rejected
-because its symbol cannot be mangled apart yet.
+values and lets a capturing closure escape its frame.
+
+Amended at the adapters' landing: a function type is a nominal
+type argument like any other. The mangler encodes its signature
+under its own tag, so two instantiations that differ only there
+mangle apart, and the type-position refusal retires; `core`'s
+adapters are the acceptance case, each holding a function-typed
+field its `Iterator` implementation calls. An inferred argument
+that is a function type stays refused until a callable bound says
+what a parameter may be called as.
