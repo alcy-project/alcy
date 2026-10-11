@@ -659,6 +659,26 @@ class Lowerer {
   // every call site, and walking the entries so far to compare keys charged
   // one call site for every function lowered before it.
   std::unordered_map<std::string, u32> fn_by_key_;
+  // Where a closure body's entry already is. What names one body is the
+  // module, the expression, and the instantiation, so those are the key and
+  // the entries under it are compared the way the walk compared them: a
+  // bucket can only ever cost a comparison.
+  struct ClosureKey {
+    u32 mod = 0;
+    u32 expr = 0;
+    u32 inst = 0;
+    bool operator==(const ClosureKey&) const = default;
+  };
+  struct ClosureKeyHash {
+    usize operator()(const ClosureKey& key) const {
+      usize hash = key.expr;
+      hash = hash * 0x9E3779B97F4A7C15ull ^ key.mod;
+      hash = hash * 0x9E3779B97F4A7C15ull ^ key.inst;
+      return hash;
+    }
+  };
+  std::unordered_map<ClosureKey, std::vector<u32>, ClosureKeyHash>
+      closures_by_key_;
   // Every `comp fn` call the AST engine answered (ADR-0054), so the IR
   // engine can be asked the same question once lowering is complete.
   std::vector<analyzer::CompCallRecord> comp_calls_;

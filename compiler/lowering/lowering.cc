@@ -723,18 +723,22 @@ ir::FunctionIdx Lowerer::closure_fn_index(
     ir::TypeIdx ret,
     u32 inst,
     ir::TypeIdx env) {
-  for (const FnEntry& entry : fns) {
-    if (!entry.closure.is_valid() || entry.mod != mod || entry.closure != key ||
-        entry.inst != inst || entry.ret.idx != ret.idx ||
-        entry.params.size() != params.size() + 1) {
-      continue;
-    }
-    bool match = true;
-    for (usize i = 0; match && i < params.size(); ++i) {
-      match = entry.params[i + 1].idx == params[i].idx;
-    }
-    if (match) {
-      return entry.idx;
+  const ClosureKey lookup{mod, key.idx, inst};
+  const auto found = closures_by_key_.find(lookup);
+  if (found != closures_by_key_.end()) {
+    for (const u32 candidate : found->second) {
+      const FnEntry& entry = fns[candidate];
+      if (entry.ret.idx != ret.idx ||
+          entry.params.size() != params.size() + 1) {
+        continue;
+      }
+      bool match = true;
+      for (usize i = 0; match && i < params.size(); ++i) {
+        match = entry.params[i + 1].idx == params[i].idx;
+      }
+      if (match) {
+        return entry.idx;
+      }
     }
   }
   static constexpr usize MAX_FN_ENTRIES = 8192;
@@ -766,6 +770,11 @@ ir::FunctionIdx Lowerer::closure_fn_index(
   entry.kind = ir::SymbolKind::Free;
   fns.push_back(std::move(entry));
   worklist_.push_back(fns.size() - 1);
+  if (found != closures_by_key_.end()) {
+    found->second.push_back(idx.idx);
+  } else {
+    closures_by_key_.emplace(lookup, std::vector<u32>{idx.idx});
+  }
   return idx;
 }
 
