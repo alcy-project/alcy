@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// `alcy/std/alloc`: an owned, growable sequence.
+// `alcy/std/collections`: an owned, growable sequence.
 
 // A growable sequence of `T` values, owning the buffer it reads
 // through.

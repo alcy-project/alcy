@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// `alcy/std/alloc`: a hash table from `str` keys to owned values.
+// `alcy/std/collections`: a hash table from `str` keys to owned values.
 
 // A map keyed by `str` and hashed by its bytes. Keys are copied, so
 // the table owns them: changing or ending the string an entry was

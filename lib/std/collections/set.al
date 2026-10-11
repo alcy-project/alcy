@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// `alcy/std/alloc`: a set of `str` keys.
+// `alcy/std/collections`: a set of `str` keys.
 
 // A set of strings, backed by `Map`. Keys are copied and hashed the
 // same way the map does it, and `insert` reports whether the key was
@@ -52,9 +52,7 @@ impl Set {
 }
 
 // The backing map's equality is the set's: same length and every key of
-// one present in the other. A `Set` field read carries a storage copy,
-// which the operator's spec lookup does not see through, so the maps
-// meet as parameters first.
+// one present in the other.
 fn maps_equal(a: &Map<u8>, b: &Map<u8>) -> bool {
   ret *a == *b
 }
