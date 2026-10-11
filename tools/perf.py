@@ -67,6 +67,8 @@ WORK_DIR = "out/perf"
 # compare a phase with itself across two runs, not with its neighbour.
 PHASES = ("parse", "targets", "analyze", "lower", "borrow")
 
+SHAPES = ["plain", "generic", "drop", "adapt", "print", "comp"]
+
 INSTRUCTIONS = re.compile(r"^(\d+),,.*instructions")
 
 # One line of `perf report --no-children`, which is a share, a few columns, the
@@ -182,22 +184,57 @@ pub fn make{i}(k: i32) -> Point{i} {{
   ret Point{i} {{ x: k, y: k, label: "p", buf: unsafe {{ alloc::<u8>(1) }} }}
 }}
 """
+    if shape == "adapt":
+        return f"""// A function value crosses a call: the checker finds the named
+// function by walking the package, and the lowerer keys the closure the
+// expression becomes.
+pub fn inc{i}(x: i32) -> i32 {{
+  ret x + 1
+}}
+
+pub fn apply{i}(f: (i32) -> i32, x: i32) -> i32 {{
+  ret f(x)
+}}
+
+pub fn run{i}(x: i32) -> i32 {{
+  g := (v: i32) -> v + 2
+  ret apply{i}(g, x) + apply{i}(inc{i}, x)
+}}
+"""
+    if shape == "print":
+        return f"""// The call is a staged io one, so every call site asks the tree
+// whether the callee is the toolchain's.
+pub fn say{i}(n: i32) -> i32 {{
+  println("hello")
+  ret n + 1
+}}
+"""
+    if shape == "comp":
+        return f"""// A compile-time call, which the evaluator answers during checking
+// and again while lowering.
+comp fn twice{i}(x: i32) -> i32 {{
+  ret x * 2
+}}
+
+pub fn use{i}(k: i32) -> i32 {{
+  c := comp {{ twice{i}(21) + 1 }}
+  ret c + k
+}}
+"""
     raise SystemExit(f"unknown shape: {shape}")
 
 
 def main_source(shape: str, modules: int, main_calls: int) -> str:
     """The entry module, which names every module the corpus has."""
-    if shape in ("plain", "drop"):
-        calls = "\n".join(
-            f"  total = total + m{i % modules}::describe{i % modules}"
-            f"(m{i % modules}::make{i % modules}({i % 7}))"
-            for i in range(main_calls)
-        )
-    else:
-        calls = "\n".join(
-            f"  total = total + m{i % modules}::use{i % modules}({i % 7})"
-            for i in range(main_calls)
-        )
+    call = {
+        "plain": "  total = total + m{i}::describe{i}(m{i}::make{i}({k}))",
+        "drop": "  total = total + m{i}::describe{i}(m{i}::make{i}({k}))",
+        "generic": "  total = total + m{i}::use{i}({k})",
+        "comp": "  total = total + m{i}::use{i}({k})",
+        "adapt": "  total = total + m{i}::run{i}({k})",
+        "print": "  total = total + m{i}::say{i}({k})",
+    }[shape]
+    calls = "\n".join(call.format(i=i % modules, k=i % 7) for i in range(main_calls))
     return f"""fn main() -> i32 {{
   mut total := 0
 {calls}
@@ -209,7 +246,16 @@ def main_source(shape: str, modules: int, main_calls: int) -> str:
 def manifest_source(shape: str, modules: int) -> str:
     includes = ", ".join(f'"m{i}"' for i in range(modules))
     dependencies = ""
-    if shape != "plain":
+    if shape == "print":
+        dependencies = """
+[dependencies]
+"alcy/std/core" = {}
+"alcy/std/alloc" = {}
+"alcy/std/arch" = {}
+"alcy/std/fmt" = {}
+"alcy/std/io" = {}
+"""
+    elif shape != "plain":
         dependencies = """
 [dependencies]
 "alcy/std/core" = {}
@@ -587,9 +633,7 @@ def parse_args() -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     corpus = subparsers.add_parser("corpus", parents=[common], help="write one corpus")
-    corpus.add_argument(
-        "--shape", default="plain", choices=["plain", "generic", "drop"]
-    )
+    corpus.add_argument("--shape", default="plain", choices=SHAPES)
     corpus.add_argument("--modules", type=int, default=300)
     corpus.add_argument(
         "--main-calls",
@@ -608,7 +652,7 @@ def parse_args() -> argparse.Namespace:
     scale = subparsers.add_parser(
         "scale", parents=[common], help="instructions per module at several sizes"
     )
-    scale.add_argument("--shape", default="plain", choices=["plain", "generic", "drop"])
+    scale.add_argument("--shape", default="plain", choices=SHAPES)
     scale.add_argument("--sizes", type=int, nargs="+", default=[300, 600, 1200])
     scale.add_argument(
         "--main-calls",
