@@ -112,7 +112,7 @@ fn area{i}(s: Shape{i}) -> i32 {{
   }}
 }}
 
-fn describe{i}(p: Point{i}) -> i32 {{
+pub fn describe{i}(p: Point{i}) -> i32 {{
   mut total := 0
   mut n := p.x
   while n > 0 {{
@@ -122,7 +122,7 @@ fn describe{i}(p: Point{i}) -> i32 {{
   ret total
 }}
 
-fn make{i}(k: i32) -> Point{i} {{
+pub fn make{i}(k: i32) -> Point{i} {{
   ret Point{i} {{ x: k, y: k, label: "p" }}
 }}
 """
@@ -143,7 +143,7 @@ impl<T> Box{i}<T> {{
   }}
 }}
 
-fn use{i}(k: i32) -> i32 {{
+pub fn use{i}(k: i32) -> i32 {{
   big: Box{i}<i32> := Box{i} {{ item: k, buf: unsafe {{ alloc::<u8>(1) }} }}
   small: Box{i}<u8> := Box{i} {{ item: 3 as u8, buf: unsafe {{ alloc::<u8>(1) }} }}
   ret big.peek() + (small.peek() as i32)
@@ -168,7 +168,7 @@ impl Point{i} {{
   }}
 }}
 
-fn describe{i}(p: Point{i}) -> i32 {{
+pub fn describe{i}(p: Point{i}) -> i32 {{
   mut total := 0
   mut n := p.x
   while n > 0 {{
@@ -178,7 +178,7 @@ fn describe{i}(p: Point{i}) -> i32 {{
   ret total
 }}
 
-fn make{i}(k: i32) -> Point{i} {{
+pub fn make{i}(k: i32) -> Point{i} {{
   ret Point{i} {{ x: k, y: k, label: "p", buf: unsafe {{ alloc::<u8>(1) }} }}
 }}
 """
@@ -187,7 +187,7 @@ fn make{i}(k: i32) -> Point{i} {{
 
 def main_source(shape: str, modules: int, main_calls: int) -> str:
     """The entry module, which names every module the corpus has."""
-    if shape == "plain":
+    if shape in ("plain", "drop"):
         calls = "\n".join(
             f"  total = total + m{i % modules}::describe{i % modules}"
             f"(m{i % modules}::make{i % modules}({i % 7}))"
@@ -246,10 +246,42 @@ def binary_for(binary: str) -> Path:
     return path
 
 
+MEASURED: set[tuple[Path, Path]] = set()
+
+
+def validate(binary: Path, corpus: Path) -> None:
+    """Refuses to measure a corpus the compiler reports on.
+
+    A corpus that does not check cleanly measures the diagnostic path: the
+    renderer and its formatting take over the run, and the growth a
+    measurement reads is the errors' rather than the compiler's.
+    """
+    key = (binary, corpus)
+    if key in MEASURED:
+        return
+    done = subprocess.run(
+        [str(binary), "check", "-j", "1", "--json", "."],
+        cwd=corpus,
+        capture_output=True,
+        text=True,
+        timeout=3600,
+    )
+    report = json.loads(done.stdout) if done.stdout.startswith("{") else {}
+    said = report.get("diagnostics", [])
+    if said or not report:
+        first = said[0].get("message", done.stdout[:200]) if said else done.stdout[:200]
+        raise SystemExit(
+            f"{corpus} does not check cleanly ({len(said)} diagnostic(s));"
+            f" first: {first}"
+        )
+    MEASURED.add(key)
+
+
 def instructions(binary: Path, corpus: Path, jobs: int) -> int:
     """Retired instructions for one check, which is the same number every run."""
     if shutil.which("perf") is None:
         raise SystemExit("perf is not on PATH; instruction counts need it")
+    validate(binary, corpus)
     argv = [
         "perf",
         "stat",
