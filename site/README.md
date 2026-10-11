@@ -25,9 +25,10 @@ site is shaped this way.
   `shared/i18n.ts` is the one catalog the generator stamps from.
   `guide.ts` wires the guide's code blocks -- Copy everywhere, Run and
   Edit on the `alcy` ones -- with the edit colored by the same
-  tree-sitter grammar the playground uses, fetched on the first Edit,
-  and `compiler-client.ts` is the shared client for the playground's two
-  workers.
+  tree-sitter grammar the playground uses, fetched on the first Edit;
+  Open hands the working copy to the playground through `handoff.ts`,
+  and `compiler-client.ts` is the shared client for the playground's
+  two workers.
 - `playground/` - the browser playground. Its `index.html` is a template
   too; the launch scripts resolve the page's assets against their own
   URL, so a page in another language's tree finds the one set of assets.

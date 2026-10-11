@@ -8,6 +8,8 @@
 // construction -- the build compiles them -- so Run is the playground's
 // compiler and runner over the block's own text, loaded on first use.
 
+import { writeClipboard } from "./clipboard.js";
+import { handOffToPlayground } from "./handoff.js";
 import { openCompiler, runProgram } from "./compiler-client.js";
 import type {
   CompilerClient,
@@ -96,31 +98,6 @@ function findBlocks(): CodeBlock[] {
     }
   }
   return found;
-}
-
-async function writeClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    // A denied clipboard or an insecure context: the old path still
-    // copies, and a failure just leaves the button as it was.
-    const scratch = document.createElement("textarea");
-    scratch.value = text;
-    scratch.setAttribute("readonly", "");
-    scratch.style.position = "fixed";
-    scratch.style.opacity = "0";
-    document.body.append(scratch);
-    scratch.select();
-    let copied = false;
-    try {
-      copied = document.execCommand("copy");
-    } catch {
-      copied = false;
-    }
-    scratch.remove();
-    return copied;
-  }
 }
 
 function copy(block: CodeBlock, button: HTMLButtonElement): void {
@@ -338,7 +315,8 @@ function wireAlcy(block: CodeBlock): void {
   const edit = block.actions.querySelector<HTMLButtonElement>('[data-action="edit"]');
   const reset = block.actions.querySelector<HTMLButtonElement>('[data-action="reset"]');
   const run = block.actions.querySelector<HTMLButtonElement>('[data-action="run"]');
-  if (edit === null || reset === null || run === null) {
+  const open = block.actions.querySelector<HTMLButtonElement>('[data-action="open"]');
+  if (edit === null || reset === null || run === null || open === null) {
     return;
   }
 
@@ -429,6 +407,13 @@ function wireAlcy(block: CodeBlock): void {
 
   run.addEventListener("click", () => {
     void compileAndRun(block, block.source(), run);
+  });
+
+  // The handoff rides sessionStorage, and the reader keeps their own
+  // tree's playground, one directory up from this page.
+  open.addEventListener("click", () => {
+    handOffToPlayground(block.source());
+    window.location.assign(new URL("../playground/", window.location.href).href);
   });
 }
 

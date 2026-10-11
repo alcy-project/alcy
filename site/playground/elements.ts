@@ -34,6 +34,7 @@ export const elements = {
   theme: mustGet<HTMLButtonElement>("theme"),
   check: mustGet<HTMLButtonElement>("check"),
   run: mustGet<HTMLButtonElement>("run"),
+  copyLink: mustGet<HTMLButtonElement>("copy-link"),
   compilerState: mustGet<HTMLElement>("compiler-state"),
   compilerStateText: mustGet<HTMLElement>("compiler-state-text"),
   status: mustGet<HTMLElement>("status"),

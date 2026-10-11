@@ -5,7 +5,8 @@
 // callbacks, and start the flows. Everything else lives in the feature
 // modules next to this file.
 
-import { initThemeToggle, registerAssetWorker } from "../shared/site.js";
+import { initThemeToggle, registerAssetWorker, t } from "../shared/site.js";
+import { writeClipboard } from "../shared/clipboard.js";
 
 import { elements } from "./elements.js";
 import * as editor from "./editor.js";
@@ -18,6 +19,20 @@ import * as splitter from "./splitter.js";
 import { state } from "./state.js";
 import * as status from "./status.js";
 import * as tabs from "./tabs.js";
+
+const LINK_COPIED_MS = 1500;
+
+function copyLink(): void {
+  void writeClipboard(session.shareLink(elements.source.value)).then((copied) => {
+    if (!copied) {
+      return;
+    }
+    elements.copyLink.textContent = t("playground.linkCopied");
+    window.setTimeout(() => {
+      elements.copyLink.textContent = t("playground.copyLink");
+    }, LINK_COPIED_MS);
+  });
+}
 
 function onInput(): void {
   runtime.scheduleCheck();
@@ -43,6 +58,7 @@ function init(): void {
   elements.check.addEventListener("click", () => {
     void runtime.runCheck({ automatic: false });
   });
+  elements.copyLink.addEventListener("click", copyLink);
 
   // A reload or a tab switch right after a keystroke must not lose it:
   // both events flush the pending debounced save.

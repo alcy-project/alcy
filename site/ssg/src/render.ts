@@ -97,6 +97,7 @@ function blockHtml(
               `<button type="button" data-action="edit" aria-pressed="false">${t("guide.edit")}</button>`,
               `<button type="button" data-action="reset" hidden>${t("guide.reset")}</button>`,
               `<button type="button" data-action="run">${t("button.run")}</button>`,
+              `<button type="button" data-action="open" title="${t("guide.openTitle")}">${t("guide.open")}</button>`,
             ]
           : []),
       ].join("\n          ");

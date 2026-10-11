@@ -59,6 +59,7 @@ test("an alcy block gains edit, run, and an output panel", () => {
   match(html, /data-action="edit" aria-pressed="false">Edit</);
   match(html, /data-action="reset" hidden>Reset</);
   match(html, /data-action="run">Run</);
+  match(html, /data-action="open" title="Open this program in the playground">Open</);
   match(html, /<div class="code-output" hidden><\/div>/);
 });
 

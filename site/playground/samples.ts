@@ -10,8 +10,9 @@ import { FALLBACK_SOURCE, setText } from "./editor.js";
 import { elements } from "./elements.js";
 import { renderDiagnostics } from "./problems.js";
 import { scheduleCheck } from "./runtime.js";
-import { readSavedCode, saveCodeNow } from "./session.js";
+import { clearLinkHash, readSavedCode, saveCodeNow, takeIncomingSource } from "./session.js";
 import { setStatus } from "./status.js";
+import { t } from "../shared/site.js";
 
 interface SampleEntry {
   file: string;
@@ -66,6 +67,22 @@ export async function loadSamples(): Promise<void> {
   const initial = manifest.samples.some((sample) => sample.file === first)
     ? first
     : (manifest.samples[0]?.file ?? "");
+  const incoming = takeIncomingSource();
+  if (incoming !== null) {
+    if (incoming.origin === "link") {
+      clearLinkHash();
+    }
+    // The picker names where the program came from until the reader
+    // chooses an example of their own.
+    const origin = document.createElement("option");
+    origin.value = "";
+    origin.textContent =
+      incoming.origin === "link" ? t("samples.fromLink") : t("samples.fromGuide");
+    elements.samples.prepend(origin);
+    elements.samples.value = "";
+    applySource(incoming.source);
+    return;
+  }
   const saved = readSavedCode();
   const restored =
     saved !== null &&
@@ -79,6 +96,12 @@ export async function loadSamples(): Promise<void> {
     await loadSample(elements.samples.value);
   }
   elements.samples.addEventListener("change", () => {
+    // The origin option only names the arriving program; picking a
+    // real example retires it.
+    const origin = elements.samples.querySelector<HTMLOptionElement>('option[value=""]');
+    if (origin !== null) {
+      origin.remove();
+    }
     void loadSample(elements.samples.value);
   });
 }
