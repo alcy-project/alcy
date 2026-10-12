@@ -26,6 +26,7 @@
 #include "fpag/debug/profiler/profiler.h"
 #include "ir/common.h"
 #include "ir/function.h"
+#include "ir/instruction_flags.h"
 #include "ir/opcode.h"
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
@@ -206,8 +207,11 @@ class Lowerer {
   ir::OperandIdx to_operand(ir::ImmutableIdx imm, ir::TypeIdx type);
   ir::RegisterIdx emit(ir::Opcode op,
                        ir::TypeIdx type,
-                       const std::vector<ir::OperandIdx>& ops);
-  void emit_void(ir::Opcode op, const std::vector<ir::OperandIdx>& ops);
+                       const std::vector<ir::OperandIdx>& ops,
+                       ir::InstructionFlags flags = {});
+  void emit_void(ir::Opcode op,
+                 const std::vector<ir::OperandIdx>& ops,
+                 ir::InstructionFlags flags = {});
   // Emits a type query, which measures a type instead of consuming
   // operands: the measured type rides on the instruction.
   ir::RegisterIdx emit_type_query(ir::Opcode op, ir::TypeIdx measure);

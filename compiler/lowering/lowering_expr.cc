@@ -29,6 +29,7 @@
 #include "ir/external_function.h"
 #include "ir/function.h"
 #include "ir/immutable.h"
+#include "ir/instruction_flags.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/seq_builder.h"
@@ -438,7 +439,8 @@ Val Lowerer::checked_index_addr(Val base, Val position, diag::Span span) {
     const ir::TypeIdx elem_ref =
         builder.reference_type(shape.element, exclusive);
     const ir::RegisterIdx elem =
-        emit(ir::Opcode::ElemOffset, elem_ref, {bytes, use_value(wide)});
+        emit(ir::Opcode::ElemOffset, elem_ref, {bytes, use_value(wide)},
+             {.inbounds = true});
     if (failed) {
       return Val{size_one, error_type(), true, false};
     }
@@ -481,8 +483,9 @@ Val Lowerer::checked_index_addr(Val base, Val position, diag::Span span) {
   if (failed) {
     return Val{size_one, error_type(), true, false};
   }
-  const ir::RegisterIdx gep = emit(ir::Opcode::GetElementPtr, shape.element,
-                                   {base.op, zero_i32, use_value(wide)});
+  const ir::RegisterIdx gep =
+      emit(ir::Opcode::GetElementPtr, shape.element,
+           {base.op, zero_i32, use_value(wide)}, {.inbounds = true});
   return Val{to_operand(gep, shape.element), shape.element, true, base.place};
 }
 
@@ -594,7 +597,7 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
         const ir::TypeIdx element_type = field_type_of(base.type, i, node.span);
         const ir::RegisterIdx gep =
             emit(ir::Opcode::GetElementPtr, element_type,
-                 {base.op, zero_i32, index_operand(i)});
+                 {base.op, zero_i32, index_operand(i)}, {.inbounds = true});
         Val element{to_operand(gep, element_type), element_type, true,
                     init.place};
         bind_pattern(node.payload.tuple.elements[i], element);
@@ -619,7 +622,7 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
             field_type_of(base.type, index, node.span);
         const ir::RegisterIdx gep =
             emit(ir::Opcode::GetElementPtr, element_type,
-                 {base.op, zero_i32, index_operand(index)});
+                 {base.op, zero_i32, index_operand(index)}, {.inbounds = true});
         bind_pattern(field.pattern, Val{to_operand(gep, element_type),
                                         element_type, true, init.place});
         if (failed) {
@@ -1446,8 +1449,25 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
+    // Both pointers are the same storage type, so the element's
+    // alignment is the copy's: the backend may use it, and does not
+    // have to.
+    ir::InstructionFlags flags;
+    if (tag_of(dst.type) == ir::TypeTag::MutRef) {
+      const ir::TypeIdx pointee =
+          builder.ref_types()[builder.types()[dst.type.idx].as_ref()].pointee;
+      const u64 align =
+          ir::type_layout(builder.state(), type_origin(pointee), width).align;
+      u32 log2 = 0;
+      while (log2 < 15 && (static_cast<u64>(1) << log2) < align) {
+        ++log2;
+      }
+      if ((static_cast<u64>(1) << log2) == align) {
+        flags.mem_align_log2 = static_cast<u8>(log2);
+      }
+    }
     emit_void(ir::Opcode::Memcopy,
-              {use_value(dst), use_value(src), use_value(len)});
+              {use_value(dst), use_value(src), use_value(len)}, flags);
     return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
   }
   if (name == "drop_in_place") {
@@ -2114,7 +2134,7 @@ Val Lowerer::lower_subslice(Val base,
     // the borrow covers the whole array while the run is live.
     const ir::RegisterIdx element =
         emit(ir::Opcode::GetElementPtr, shape.element,
-             {base.op, zero_i32, bounds.start});
+             {base.op, zero_i32, bounds.start}, {.inbounds = true});
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
@@ -2437,8 +2457,9 @@ ir::OperandIdx Lowerer::arg_for(Val arg, ir::TypeIdx param) {
 
 Val Lowerer::load_disc(Val slot_addr) {
   const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
-  const ir::RegisterIdx gep = emit(ir::Opcode::GetElementPtr, i32,
-                                   {slot_addr.op, zero_i32, index_operand(0)});
+  const ir::RegisterIdx gep =
+      emit(ir::Opcode::GetElementPtr, i32,
+           {slot_addr.op, zero_i32, index_operand(0)}, {.inbounds = true});
   const ir::RegisterIdx loaded =
       emit(ir::Opcode::Load, i32, {to_operand(gep, i32)});
   return Val{to_operand(loaded, i32), i32, false, false};
@@ -2900,8 +2921,9 @@ Val Lowerer::field_addr(Val base, std::string_view name, diag::Span span) {
     return Val{size_one, error_type(), true, false};
   }
   const ir::TypeIdx field_type = field_type_of(struct_ty, index, span);
-  const ir::RegisterIdx gep = emit(ir::Opcode::GetElementPtr, field_type,
-                                   {ptr_op, zero_i32, index_operand(index)});
+  const ir::RegisterIdx gep =
+      emit(ir::Opcode::GetElementPtr, field_type,
+           {ptr_op, zero_i32, index_operand(index)}, {.inbounds = true});
   return Val{to_operand(gep, field_type), field_type, true, base.place};
 }
 
@@ -2959,12 +2981,13 @@ Val Lowerer::lower_struct(ast::ExprIdx expr) {
       const ir::TypeIdx element_type = field_type_of(struct_type, i, node.span);
       const ir::RegisterIdx src =
           emit(ir::Opcode::GetElementPtr, element_type,
-               {base_addr.op, zero_i32, index_operand(i)});
+               {base_addr.op, zero_i32, index_operand(i)}, {.inbounds = true});
       const ir::RegisterIdx loaded =
           emit(ir::Opcode::Load, element_type, {to_operand(src, element_type)});
       const ir::RegisterIdx dst =
           emit(ir::Opcode::GetElementPtr, element_type,
-               {to_operand(addr, struct_type), zero_i32, index_operand(i)});
+               {to_operand(addr, struct_type), zero_i32, index_operand(i)},
+               {.inbounds = true});
       emit_void(ir::Opcode::Store, {to_operand(loaded, element_type),
                                     to_operand(dst, element_type)});
     }
@@ -3033,7 +3056,8 @@ Val Lowerer::lower_array(ast::ExprIdx expr) {
     for (u64 i = 0; i < shape.count && !failed; ++i) {
       const ir::RegisterIdx gep = emit(ir::Opcode::GetElementPtr, shape.element,
                                        {to_operand(addr, array_type), zero_i32,
-                                        index_operand(static_cast<u32>(i))});
+                                        index_operand(static_cast<u32>(i))},
+                                       {.inbounds = true});
       emit_void(ir::Opcode::Store, {stored, to_operand(gep, shape.element)});
     }
   } else {
@@ -3049,7 +3073,8 @@ Val Lowerer::lower_array(ast::ExprIdx expr) {
       }
       const ir::RegisterIdx gep =
           emit(ir::Opcode::GetElementPtr, shape.element,
-               {to_operand(addr, array_type), zero_i32, index_operand(i)});
+               {to_operand(addr, array_type), zero_i32, index_operand(i)},
+               {.inbounds = true});
       emit_void(ir::Opcode::Store,
                 {use_value(value), to_operand(gep, shape.element)});
     }
@@ -3328,9 +3353,9 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
              i < static_cast<u32>(node.payload.tuple.elements.size()) &&
              !failed;
              ++i) {
-          const ir::RegisterIdx gep =
-              emit(ir::Opcode::GetElementPtr, shape.elements[i],
-                   {scrut_addr.op, zero_i32, index_operand(i)});
+          const ir::RegisterIdx gep = emit(
+              ir::Opcode::GetElementPtr, shape.elements[i],
+              {scrut_addr.op, zero_i32, index_operand(i)}, {.inbounds = true});
           bind_pattern(node.payload.tuple.elements[i],
                        Val{to_operand(gep, shape.elements[i]),
                            shape.elements[i], true, scrut_addr.place});

@@ -463,7 +463,8 @@ class Serializer {
     for (const Instruction& instr : state_.instrs) {
       out.put_u8(static_cast<u8>(instr.op));
       const u8 flags = static_cast<u8>(static_cast<u8>(instr.flags.rmw_op)) |
-                       static_cast<u8>(instr.flags.some_flag ? 1u : 0u) << 3;
+                       static_cast<u8>(instr.flags.inbounds ? 1u : 0u) << 3 |
+                       static_cast<u8>(instr.flags.mem_align_log2) << 4;
       out.put_u8(flags);
       out.zeros(2);
       out.put_u32(instr.dst.is_valid() ? instr.dst.idx : NONE);

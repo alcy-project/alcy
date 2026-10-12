@@ -24,6 +24,8 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profiler.h"
+#include "ir/instruction.h"
+#include "ir/opcode.h"
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/verifier.h"
@@ -705,6 +707,42 @@ TEST_CASE("Lower answers an all-terminated match or if with never") {
 }
 
 // A package whose names outgrow the shared table is refused with a
+TEST_CASE("Checked indexing and field access mark addresses inbounds") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "struct Pair {\n"
+                   "  a: i32,\n"
+                   "  b: i32,\n"
+                   "}\n"
+                   "fn main() -> i32 {\n"
+                   "  arr := [10i32, 20i32, 30i32]\n"
+                   "  p := Pair { a: 1, b: 2 }\n"
+                   "  mut i := 1\n"
+                   "  ret arr[i] + p.b\n"
+                   "}\n"}});
+  Fixture f;
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  // The checked index, the array literal's elements, and the field
+  // projection each promise the address stays inside its object, which
+  // is what the emitter turns into an inbounds GEP.
+  usize inbounds = 0;
+  for (const ir::Instruction& instr : result.lowered->storage->instrs()) {
+    if (instr.op != ir::Opcode::GetElementPtr &&
+        instr.op != ir::Opcode::ElemOffset) {
+      continue;
+    }
+    if (instr.flags.inbounds) {
+      ++inbounds;
+    }
+  }
+  CHECK(inbounds >= 3);
+}
+
 // diagnostic: the interner answers with nothing so a caller that can
 // report exhaustion does, rather than aborting.
 TEST_CASE("Lowering reports a spent name table") {

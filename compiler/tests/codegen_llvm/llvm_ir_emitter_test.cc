@@ -265,6 +265,99 @@ TEST_CASE("Reference parameters carry the ownership attributes") {
   CHECK(emitted->hasFnAttribute(llvm::Attribute::NoUnwind));
 }
 
+TEST_CASE("Inbounds addresses and copy alignment reach the module") {
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("llvm_ir_emitter_flags_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
+
+  ir::SymbolTable interner(mem::page_size());
+  ir::StorageBuilder builder;
+  const str::StringPoolId name = interner.intern("flagged");
+  const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
+  const ir::TypeIdx u64_ty = builder.primitive(ir::TypeTag::U64);
+  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+  ir::TypeSeq fields;
+  fields.push(builder.ref_type(i32_ty));
+  fields.push(builder.ref_type(i32_ty));
+  const ir::TypeIdx pair_ty = builder.struct_type(
+      interner.intern("FlagPair"), fields.finish(), ir::TypeIdxRange{});
+
+  const ir::ImmutableIdx zero =
+      builder.immutable({.type = i32_ty, .data = {.i32_value = 0}});
+  const ir::ImmutableIdx one =
+      builder.immutable({.type = i32_ty, .data = {.i32_value = 1}});
+  const ir::ImmutableIdx four =
+      builder.immutable({.type = u64_ty, .data = {.u64_value = 4}});
+  const auto imm_op = [&](ir::ImmutableIdx imm, ir::TypeIdx type) {
+    return builder.operand(ir::Operand::from_immutable(imm, type));
+  };
+  const auto reg_op = [&](ir::RegisterIdx reg, ir::TypeIdx type) {
+    return builder.operand(ir::Operand::from_register(reg, type));
+  };
+
+  ir::InstrSeq instrs;
+  const ir::InstructionIdx alloca =
+      builder.instr({.op = ir::Opcode::Alloca,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(0),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = {imm_op(one, i32_ty), 1}});
+  instrs.push(alloca);
+  builder.reg({.type = pair_ty, .def_idx = alloca});
+  ir::OperandSeq gep_args;
+  gep_args.push(reg_op(ir::RegisterIdx(0), pair_ty));
+  gep_args.push(imm_op(zero, i32_ty));
+  gep_args.push(imm_op(one, i32_ty));
+  const ir::InstructionIdx gep =
+      builder.instr({.op = ir::Opcode::GetElementPtr,
+                     .flags = {.inbounds = true},
+                     .dst = ir::RegisterIdx(1),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = gep_args.finish()});
+  instrs.push(gep);
+  builder.reg({.type = i32_ty, .def_idx = gep});
+  ir::OperandSeq copy_args;
+  copy_args.push(reg_op(ir::RegisterIdx(1), ptr_ty));
+  copy_args.push(reg_op(ir::RegisterIdx(1), ptr_ty));
+  copy_args.push(imm_op(four, u64_ty));
+  instrs.push(builder.instr({.op = ir::Opcode::Memcopy,
+                             .flags = {.mem_align_log2 = 3},
+                             .dst = ir::RegisterIdx(base::INVALID_IDX),
+                             .measure = ir::TypeIdx::invalid(),
+                             .operands = copy_args.finish()}));
+  ir::OperandSeq ret_args;
+  ret_args.push(imm_op(zero, i32_ty));
+  instrs.push(builder.instr({.op = ir::Opcode::Ret,
+                             .flags = {},
+                             .dst = ir::RegisterIdx(base::INVALID_IDX),
+                             .measure = ir::TypeIdx::invalid(),
+                             .operands = ret_args.finish()}));
+  const ir::BlockIdx block =
+      builder.block({.instrs = instrs.finish(), .block_params = {}});
+  builder.function({
+      .meta = {.return_type = i32_ty,
+               .param_types = {},
+               .name = name,
+               .path = str::EMPTY_STRING_ID,
+               .kind = ir::SymbolKind::Free,
+               .generics = ir::TypeIdxRange{}},
+      .blocks = {block, 1},
+  });
+
+  LlvmIrEmitter emitter(module.get(), std::move(builder).build().unwrap(),
+                        &interner, host_target(), true);
+  std::move(emitter).emit();
+  CHECK(!llvm::verifyModule(*module));
+
+  std::string text;
+  llvm::raw_string_ostream out(text);
+  module->print(out, nullptr);
+  CHECK(text.find("getelementptr inbounds") != std::string::npos);
+  CHECK(text.find("llvm.memcpy") != std::string::npos);
+  CHECK(text.find("align 8") != std::string::npos);
+}
+
 TEST_CASE("Emit struct and array calls") {
   llvm::LLVMContext context;
   std::unique_ptr<llvm::Module> module =

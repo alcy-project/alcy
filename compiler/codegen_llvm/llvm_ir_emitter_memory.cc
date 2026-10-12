@@ -96,11 +96,13 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
     case Op::Memcopy: {
       DCHECK(ops.size() == 3);
       DCHECK(!i.dst.is_valid());
+      // The IR's alignment is the element's; zero means byte alignment.
+      const llvm::Align align(static_cast<u64>(1) << i.flags.mem_align_log2);
       builder_->CreateMemCpy(
           resolve_operand_value(storage_->operands()[ops.head()]),
-          llvm::MaybeAlign(1),
+          llvm::MaybeAlign(align),
           resolve_operand_value(storage_->operands()[ops.head() + 1]),
-          llvm::MaybeAlign(1),
+          llvm::MaybeAlign(align),
           resolve_operand_value(storage_->operands()[ops.head() + 2]));
       break;
     }
@@ -132,8 +134,10 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
         indices.push_back(
             resolve_operand_value(storage_->operands()[ops.head() + idx]));
       }
+      llvm::Value* base = resolve_operand_value(base_op);
       llvm::Value* gep =
-          builder_->CreateGEP(elem_ty, resolve_operand_value(base_op), indices);
+          i.flags.inbounds ? builder_->CreateInBoundsGEP(elem_ty, base, indices)
+                           : builder_->CreateGEP(elem_ty, base, indices);
       if (i.dst.is_valid()) {
         values_.add_register(i.dst, gep);
       }
@@ -157,9 +161,11 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
                    .pointee);
       llvm::SmallVector<llvm::Value*, 1> indices{
           resolve_operand_value(storage_->operands()[ops.head() + 1])};
+      llvm::Value* base = resolve_operand_value(base_op);
       values_.add_register(
-          i.dst, builder_->CreateGEP(elem_ty, resolve_operand_value(base_op),
-                                     indices));
+          i.dst, i.flags.inbounds
+                     ? builder_->CreateInBoundsGEP(elem_ty, base, indices)
+                     : builder_->CreateGEP(elem_ty, base, indices));
       break;
     }
     case Op::ExtractValue: {

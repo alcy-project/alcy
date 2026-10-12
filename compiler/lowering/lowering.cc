@@ -36,6 +36,7 @@
 #include "ir/common.h"
 #include "ir/function.h"
 #include "ir/immutable.h"
+#include "ir/instruction_flags.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/seq_builder.h"
@@ -191,7 +192,8 @@ ir::OperandIdx Lowerer::to_operand(ir::ImmutableIdx imm, ir::TypeIdx type) {
 
 ir::RegisterIdx Lowerer::emit(ir::Opcode op,
                               ir::TypeIdx type,
-                              const std::vector<ir::OperandIdx>& ops) {
+                              const std::vector<ir::OperandIdx>& ops,
+                              ir::InstructionFlags flags) {
   const ir::RegisterIdx dst = claim_reg();
   // Operand ranges must be consecutive in storage, but inputs are
   // built bottom-up at arbitrary positions; re-append copies so the
@@ -204,7 +206,7 @@ ir::RegisterIdx Lowerer::emit(ir::Opcode op,
   const ir::OperandIdxRange range = {head, static_cast<u32>(ops.size())};
   const ir::InstructionIdx instr =
       builder.instr({.op = op,
-                     .flags = {},
+                     .flags = flags,
                      .dst = dst,
                      .measure = ir::TypeIdx::invalid(),
                      .operands = range});
@@ -246,7 +248,9 @@ const std::vector<ir::TypeIdx>& Lowerer::fn_instance_args(u32 module,
   return pkg.fn_insts[found->second].args;
 }
 
-void Lowerer::emit_void(ir::Opcode op, const std::vector<ir::OperandIdx>& ops) {
+void Lowerer::emit_void(ir::Opcode op,
+                        const std::vector<ir::OperandIdx>& ops,
+                        ir::InstructionFlags flags) {
   const ir::OperandIdx head =
       ir::OperandIdx(static_cast<u32>(builder.state().operands.size()));
   for (ir::OperandIdx op_idx : ops) {
@@ -255,7 +259,7 @@ void Lowerer::emit_void(ir::Opcode op, const std::vector<ir::OperandIdx>& ops) {
   const ir::OperandIdxRange range = {head, static_cast<u32>(ops.size())};
   const ir::InstructionIdx void_instr =
       builder.instr({.op = op,
-                     .flags = {},
+                     .flags = flags,
                      .dst = ir::RegisterIdx(base::INVALID_IDX),
                      .measure = ir::TypeIdx::invalid(),
                      .operands = range});

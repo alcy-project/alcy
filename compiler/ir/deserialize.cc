@@ -609,7 +609,8 @@ bool read_instructions(Parsed& parsed, std::span<const u8> payload) {
     }
     InstructionFlags instruction_flags{};
     instruction_flags.rmw_op = static_cast<AtomicRmwOp>(flags & 0x07u);
-    instruction_flags.some_flag = (flags & 0x08u) != 0;
+    instruction_flags.inbounds = (flags & 0x08u) != 0;
+    instruction_flags.mem_align_log2 = static_cast<u8>(flags >> 4) & 0x0fu;
     parsed.state.instrs.emplace_back(Instruction{
         .op = static_cast<Opcode>(op),
         .flags = instruction_flags,
