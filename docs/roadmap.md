@@ -49,10 +49,12 @@ peripheral work lives in `backlog.md`. The language record lives in
   `impl<T, N: usize> [T; N]` register through a shape the checker
   matches against a receiver, so slices and arrays answer `len`,
   `is_empty`, `as_slice`, and `iter`, and `for x in s.iter()` walks
-  either one by reference through `slice_at`. What remains: consuming
-  an array (`for x in a`, as opposed to `for x in a.iter()`), which
-  needs a way to read an element out, and the std cleanup that
-  replaces index loops with the algorithms.
+  either one by reference through `slice_at`; `slice_at_mut` and
+  `iter_mut` walk them exclusively. What remains: consuming an array
+  (`for x in a`, as opposed to `for x in a.iter()`), whose cursor
+  would need a way to read an element out and a destructor the
+  structural `Copy` rule refuses when the element type is Copy, and
+  the std cleanup that replaces index loops with the algorithms.
 
 - [ ] Operator specs: `Display`, floats, arithmetic, and ordering.
 
