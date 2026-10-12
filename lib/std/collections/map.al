@@ -286,6 +286,119 @@ impl<V> Map<V> {
     unsafe { dealloc(self.values, self.cap) }
     unsafe { dealloc(self.states, self.cap) }
   }
+
+  // Shared cursors over the live entries. The borrows of the three
+  // buffers are what keep an entry readable while the cursor lives.
+  pub fn iter(self: &Self) -> MapEntryIter<V> {
+    ret MapEntryIter {
+      keys: self.keys,
+      values: self.values,
+      states: self.states,
+      cap: self.cap,
+      pos: 0,
+    }
+  }
+
+  pub fn keys(self: &Self) -> MapKeys<V> {
+    ret MapKeys { keys: self.keys, states: self.states, cap: self.cap, pos: 0 }
+  }
+
+  pub fn values(self: &Self) -> MapValues<V> {
+    ret MapValues { values: self.values, states: self.states, cap: self.cap, pos: 0 }
+  }
+}
+
+// The first live slot at or after `pos`, or `cap` when there is none.
+fn next_live(states: &MaybeUninit<u8>, cap: usize, pos: usize) -> usize {
+  mut at := pos
+  while at < cap {
+    if *uninit_ref(unsafe { elem_ref(states, at) }) == 1 {
+      ret at
+    }
+    at = at + 1
+  }
+  ret cap
+}
+
+// A shared cursor over a map's entries, yielding the key as `str` and
+// the value by reference.
+pub struct MapEntryIter<V> {
+  keys: &MaybeUninit<String>,
+  values: &MaybeUninit<V>,
+  states: &MaybeUninit<u8>,
+  cap: usize,
+  pos: usize,
+}
+
+impl<V> MapEntryIter<V> {
+  pub fn into_iter(self: MapEntryIter<V>) -> MapEntryIter<V> {
+    ret self
+  }
+}
+
+impl<V> Iterator<(str, &V)> for MapEntryIter<V> {
+  fn next(mut self: &mut Self) -> Option<(str, &V)> {
+    self.pos = next_live(self.states, self.cap, self.pos)
+    if self.pos >= self.cap {
+      ret Option::None
+    }
+    k := uninit_ref(unsafe { elem_ref(self.keys, self.pos) })
+    v := uninit_ref(unsafe { elem_ref(self.values, self.pos) })
+    self.pos = self.pos + 1
+    ret Option::Some((k.as_str(), v))
+  }
+}
+
+// A shared cursor over a map's keys.
+pub struct MapKeys<V> {
+  keys: &MaybeUninit<String>,
+  states: &MaybeUninit<u8>,
+  cap: usize,
+  pos: usize,
+}
+
+impl<V> MapKeys<V> {
+  pub fn into_iter(self: MapKeys<V>) -> MapKeys<V> {
+    ret self
+  }
+}
+
+impl<V> Iterator<str> for MapKeys<V> {
+  fn next(mut self: &mut Self) -> Option<str> {
+    self.pos = next_live(self.states, self.cap, self.pos)
+    if self.pos >= self.cap {
+      ret Option::None
+    }
+    k := uninit_ref(unsafe { elem_ref(self.keys, self.pos) })
+    self.pos = self.pos + 1
+    ret Option::Some(k.as_str())
+  }
+}
+
+// A shared cursor over a map's values.
+pub struct MapValues<V> {
+  values: &MaybeUninit<V>,
+  states: &MaybeUninit<u8>,
+  cap: usize,
+  pos: usize,
+}
+
+impl<V> MapValues<V> {
+  pub fn into_iter(self: MapValues<V>) -> MapValues<V> {
+    ret self
+  }
+}
+
+impl<V> Iterator<&V> for MapValues<V> {
+  fn next(mut self: &mut Self) -> Option<&V> {
+    self.pos = next_live(self.states, self.cap, self.pos)
+    if self.pos >= self.cap {
+      ret Option::None
+    }
+    v := uninit_ref(unsafe { elem_ref(self.values, self.pos) })
+    self.pos = self.pos + 1
+    ret Option::Some(v)
+  }
 }
 
 // `m[key]` reads and writes the value under `key`, panicking when the

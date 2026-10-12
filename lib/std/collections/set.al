@@ -49,6 +49,11 @@ impl Set {
   pub fn clear(mut self: &mut Self) {
     self.map.clear()
   }
+
+  // Keys end when the set does; `iter` hands them out while it lives.
+  pub fn iter(self: &Self) -> MapKeys<u8> {
+    ret self.map.keys()
+  }
 }
 
 // The backing map's equality is the set's: same length and every key of
