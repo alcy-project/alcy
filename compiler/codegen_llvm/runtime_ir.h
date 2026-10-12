@@ -29,7 +29,7 @@ namespace codegen_llvm {
 //
 // With `backtrace`, `alcy_panic` also walks the frame chain and names
 // the program functions `define_backtrace_table` listed, before it
-// aborts (ADR-0063). The walk reads the x86-64 and AArch64 frame
+// aborts (ADR-0070). The walk reads the x86-64 and AArch64 frame
 // layout; on any other target the panic carries its message and site
 // only. The walk is only as good as the frames: every generated
 // function keeps a frame pointer, and inlined or tail-called ones have

@@ -22,7 +22,7 @@ does with them.
   binary and what arguments it is given.
 - `profile` parses `.alcy/profile.toml`: the named build profiles the
   goal package declares, and the keys that override the built-in
-  `debug` and `release` profiles (ADR-0062).
+  `debug` and `release` profiles (ADR-0069).
 
 Nothing here opens a file, walks a directory, or decides which sources
 are modules. The bytes are the caller's, which is what keeps the parser

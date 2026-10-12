@@ -1,4 +1,4 @@
-# ADR-0062: Build settings live in named profiles
+# ADR-0069: Build settings live in named profiles
 
 - Subject: the compiler
 - Status: Accepted
@@ -33,7 +33,7 @@ optimize = true
 - Profile keys are code-generation semantics: settings under which the
   same source produces a different program. Today those are `optimize`
   and `on-panic` (which makes a panic walk the frame chain before it
-  aborts; see ADR-0063). A future key (a pinned `backend`, debug
+  aborts; see ADR-0070). A future key (a pinned `backend`, debug
   information) arrives with the ADR that justifies it. Selection-only
   knobs (`--target`, `--emit`, `--deps`, `--backend` on the command
   line) and machine configuration (the link driver in `toolchain.toml`)

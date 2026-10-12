@@ -536,7 +536,7 @@ for testing the filesystem or writing an output artifact.
   is built: targets, dependencies, and package identity. `.alcy/` beside
   it holds how the goal package is built on this machine: the link
   driver and its arguments in `toolchain.toml`, and the named build
-  profiles in `profile.toml` (ADR-0062); a dependency's `.alcy/` is
+  profiles in `profile.toml` (ADR-0069); a dependency's `.alcy/` is
   never read. CLI flags carry invocation-scoped, user-specific
   configuration: presentation (`--color`, `--lang`, verbosity), local
   paths, parallelism, and the selection of a build profile, whose

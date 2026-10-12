@@ -32,7 +32,7 @@ namespace codegen_llvm {
 
 // One program function of the runtime backtrace table the unwinder
 // reads: the LLVM function and the source spelling a frame shows
-// (ADR-0063).
+// (ADR-0070).
 struct BacktraceName {
   llvm::Function* function = nullptr;
   std::string name;
@@ -47,7 +47,7 @@ void define_backtrace_table(llvm::Module& module,
                             const std::vector<BacktraceName>& visible);
 
 // One call a backtrace names: the block holding only that call, and the
-// rendered site the frame shows beside the function name (ADR-0063).
+// rendered site the frame shows beside the function name (ADR-0070).
 struct CallSiteName {
   llvm::BasicBlock* block = nullptr;
   std::string site;
@@ -167,7 +167,7 @@ class LlvmIrEmitter {
   bool freestanding_ = false;
   // Whether the panic walker gets a table to read; the emitter creates
   // the slot it lands in, and define_backtrace_table fills it once the
-  // runtime exists (ADR-0063).
+  // runtime exists (ADR-0070).
   bool backtrace_ = false;
   std::vector<BacktraceName> visible_functions_;
   // Source spans parallel to storage instructions, and the rendered

@@ -1,4 +1,4 @@
-# ADR-0063: A panic can carry a backtrace
+# ADR-0070: A panic can carry a backtrace
 
 - Subject: the compiler
 - Status: Accepted
@@ -65,7 +65,7 @@ The mechanism is frame pointers plus two tables, LLVM only:
   not merged away, so the surviving frame still resolves to the call
   it returns to.
 
-Resolution follows the profile order (ADR-0062): built-in `abort`,
+Resolution follows the profile order (ADR-0069): built-in `abort`,
 the selected table's `on-panic`, then `--on-panic`, which every verb
 carries. `compile` reads no profile file, so a custom profile's key is
 unreachable there and `--on-panic` is the whole override.
@@ -117,5 +117,5 @@ unreachable there and `--on-panic` is the whole override.
   profile value a backend sees.
 - `docs/adr/0011-symbol-mangling.md`: encoded names stay; the table
   carries the readable ones.
-- `docs/adr/0062-build-settings-live-in-named-profiles.md`: where
+- `docs/adr/0069-build-settings-live-in-named-profiles.md`: where
   `on-panic` resolves.
