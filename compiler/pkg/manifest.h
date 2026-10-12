@@ -132,6 +132,11 @@ struct PackageManifest {
   // declaring package's suite (ADR-0053).
   const std::string_view* suite_only = nullptr;
   u32 suite_only_count = 0;
+  // Specs this package's seal lets it implement, from the same table
+  // (`implement = [...]`): the implementing side of another package's
+  // seal. An arena-owned array, possibly empty.
+  const std::string_view* implement = nullptr;
+  u32 implement_count = 0;
 };
 
 // A suite manifest ([suite] table): a named set of packages under one
@@ -164,12 +169,14 @@ enum class ManifestError : u8 {
   NullModuleInclude,
   NullModuleExport,
   NullSuiteOnly,
+  NullImplement,
   EmptyDependencyName,
   EmptyDependencyPath,
   EmptyBinPath,
   EmptyLibPath,
   EmptyModuleEntry,
   EmptySuiteOnlyEntry,
+  EmptyImplementEntry,
   UnresolvedInheritance,
 };
 

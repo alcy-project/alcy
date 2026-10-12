@@ -258,9 +258,14 @@ TEST_CASE("Manifest rejects bad [spec] tables") {
        "Manifest 'alcy.toml': [spec] suite-only must be a list of strings"},
       {head + "[spec]\nsuite-only = [\"Index\", \"Index\"]\n",
        "Manifest 'alcy.toml': duplicate [spec] suite-only entry 'Index'"},
-      {head + "[spec]\nimplement = [\"Index\"]\n",
-       "Manifest 'alcy.toml': [spec] implement is reserved and not accepted "
-       "yet"},
+      {head + "[spec]\nimplement = \"Index\"\n",
+       "Manifest 'alcy.toml': [spec] implement must be a list of strings"},
+      {head + "[spec]\nimplement = [\"Index\", 3]\n",
+       "Manifest 'alcy.toml': [spec] implement must be a list of strings"},
+      {head + "[spec]\nimplement = [\"Index\", \"\"]\n",
+       "Manifest 'alcy.toml': [spec] implement must be a list of strings"},
+      {head + "[spec]\nimplement = [\"Index\", \"Index\"]\n",
+       "Manifest 'alcy.toml': duplicate [spec] implement entry 'Index'"},
       {head + "[spec]\nfrobnicate = []\n",
        "Manifest 'alcy.toml': unknown key in [spec]: 'frobnicate'"},
   };
@@ -280,6 +285,23 @@ TEST_CASE("Manifest rejects bad [spec] tables") {
       continue;
     }
     CHECK(diag->message == test_case.message);
+  }
+  // The implementing side parses into its own list beside the seal.
+  Fixture f;
+  constexpr std::string_view bytes =
+      "[package]\nname = \"x\"\nversion = \"0.1.0\"\nlicense = \"\"\n"
+      "[spec]\nimplement = [\"PartialEq\", \"Index\"]\n";
+  base::Result<PackageManifest, diag::Reported> result =
+      parse_manifest(bytes, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
+  CHECK(result.is_ok());
+  if (result.is_ok()) {
+    const PackageManifest manifest = std::move(result).unwrap();
+    CHECK(manifest.implement_count == 2);
+    CHECK(manifest.implement != nullptr);
+    if (manifest.implement_count == 2 && manifest.implement != nullptr) {
+      CHECK(manifest.implement[0] == "PartialEq");
+      CHECK(manifest.implement[1] == "Index");
+    }
   }
 }
 

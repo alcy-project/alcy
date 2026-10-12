@@ -1,0 +1,6 @@
+# The implementing side of the seal: `app` lists `Index` in its
+# own `[spec] implement`, so the sealed spec may be implemented
+# from outside `alcy/std` (ADR-0053).
+exit = 0
+contains = ["Checked   1 file, 1 module, 2 functions"]
+not_contains = ["error"]

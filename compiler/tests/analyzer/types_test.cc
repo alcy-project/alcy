@@ -3812,8 +3812,8 @@ TEST_CASE("Check refuses a sealed spec implementation outside its package") {
   }
   const std::string_view seals[] = {"Sealed"};
   const PackagePolicy policies[] = {
-      {"core", "alcy/std", seals},
-      {"testpkg", "", {}},
+      {"core", "alcy/std", seals, {}},
+      {"testpkg", "", {}, {}},
   };
   Fixture f;
   const CheckOutcome result =
@@ -3826,8 +3826,7 @@ TEST_CASE("Check refuses a sealed spec implementation outside its package") {
   }
   CHECK(f.bag.at(0)->message ==
         "Spec 'Sealed' is sealed by package 'core'; implementing it from "
-        "outside needs the [spec] implement key, which is not accepted "
-        "yet");
+        "outside needs the [spec] implement key");
 }
 
 TEST_CASE("Check admits a sealed spec implementation from the same suite") {
@@ -3846,8 +3845,8 @@ TEST_CASE("Check admits a sealed spec implementation from the same suite") {
   }
   const std::string_view seals[] = {"Sealed"};
   const PackagePolicy policies[] = {
-      {"core", "alcy/std", seals},
-      {"testpkg", "alcy/std", {}},
+      {"core", "alcy/std", seals, {}},
+      {"testpkg", "alcy/std", {}, {}},
   };
   Fixture f;
   const CheckOutcome result =
@@ -3868,7 +3867,7 @@ TEST_CASE("Check reports a seal that names no declared spec") {
   }
   const std::string_view seals[] = {"Shown", "Missing"};
   const PackagePolicy policies[] = {
-      {"testpkg", "", seals},
+      {"testpkg", "", seals, {}},
   };
   Fixture f;
   const CheckOutcome result =

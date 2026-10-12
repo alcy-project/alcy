@@ -1,0 +1,17 @@
+[package]
+name = "app"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[spec]
+implement = ["Index"]
+
+[dependencies]
+"alcy/std/core" = {}
+
+[[bin]]
+name = "app"
+path = "main.al"

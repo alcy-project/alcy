@@ -3,5 +3,5 @@
 # manifest key exists (ADR-0053).
 exit = 4
 contains = [
-  "Spec 'Sealed' is sealed by package 'acme_base'; implementing it from outside needs the [spec] implement key, which is not accepted yet",
+  "Spec 'Sealed' is sealed by package 'acme_base'; implementing it from outside needs the [spec] implement key",
 ]

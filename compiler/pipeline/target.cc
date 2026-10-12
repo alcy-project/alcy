@@ -424,13 +424,17 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
       manifest.name,
       {},
       std::span<const std::string_view>(manifest.suite_only,
-                                        manifest.suite_only_count)});
+                                        manifest.suite_only_count),
+      std::span<const std::string_view>(manifest.implement,
+                                        manifest.implement_count)});
   for (usize i = 0; i < dependencies.size(); ++i) {
     const pkg::PackageManifest& dependency = dependencies[i].manifest;
     sources.policies.push_back(analyzer::PackagePolicy{
         identities[i], dependencies[i].suite,
         std::span<const std::string_view>(dependency.suite_only,
-                                          dependency.suite_only_count)});
+                                          dependency.suite_only_count),
+        std::span<const std::string_view>(dependency.implement,
+                                          dependency.implement_count)});
   }
   // Every selected staged member has the one embedded suite's identity,
   // so a member's implementation may reach a spec another member seals.

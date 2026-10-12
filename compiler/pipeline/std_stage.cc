@@ -82,11 +82,13 @@ std::vector<analyzer::PackagePolicy> std_package_policies(
   for (std::string_view member : selection.members) {
     const StdPackageSeals* const seals = std_seals_for(member);
     policies.push_back(analyzer::PackagePolicy{
-        member, STD_SUITE_IDENTITY,
+        member,
+        STD_SUITE_IDENTITY,
         seals == nullptr ? std::span<const std::string_view>{}
                          : std::span<const std::string_view>(
                                seals->suite_only,
-                               static_cast<usize>(seals->suite_only_count))});
+                               static_cast<usize>(seals->suite_only_count)),
+        {}});
   }
   return policies;
 }

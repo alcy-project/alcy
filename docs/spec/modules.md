@@ -91,6 +91,11 @@ that package declares, an unknown key in `[spec]` is an error, and an
 implementation from outside the seal is an error. A spec the list does
 not name stays open.
 
+**A package may opt in to a seal.** `[spec] implement = [...]` lists
+the specs another package's seal lets this one implement. Each entry
+is a spec name, the list may be empty, and an implementation the list
+does not cover is refused where it is written.
+
 The standard library is the `alcy/std` suite; see `docs/adr/0016-suites-and-the-std-split.md` for the
 member list and the dependency graph.
 

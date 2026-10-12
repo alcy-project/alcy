@@ -65,8 +65,8 @@ peripheral work lives in `backlog.md`. The language record lives in
   and `x op= y` routed through them; then `Ordering`, `PartialOrd`,
   and `Ord` with comparison dispatch, which is what `Vec::sort` waits
   for. Floats stay `PartialOrd` only. The implementing side of a seal
-  (`[spec] implement`) ships when the first sealed spec a user
-  package must implement needs it. Designed in
+  (`[spec] implement`) landed ahead of the rest, so a package outside
+  a seal can list the specs it implements. Designed in
   `docs/adr/0053-operators-are-sealed-specs.md`.
 
 - [ ] Spec bounds and checked generics.

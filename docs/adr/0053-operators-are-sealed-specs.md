@@ -54,6 +54,12 @@ users keep implementing their own specs and standard-library specs
 like `Iterator` for their own types; the operator specs are declared
 in `core` and implemented by `alloc`'s types within the same suite.
 
+Amended at the implementing side's landing: `[spec] implement =
+[...]` is accepted. Its entries are spec names, non-empty and unique
+the way the seal's are, and a package that lists a spec may implement
+it even from outside the seal; the diagnostic that refuses the
+implementation no longer says the key is unaccepted.
+
 **A spec may name a super-spec.** `spec Eq: PartialEq {}` says that
 implementing `Eq` requires an implementation of `PartialEq`, and a
 bound on `Eq` admits `PartialEq`'s method. `Eq` is the reflexive

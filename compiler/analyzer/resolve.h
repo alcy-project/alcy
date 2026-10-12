@@ -75,6 +75,9 @@ struct PackagePolicy {
   std::string_view package;
   std::string_view suite;
   std::span<const std::string_view> suite_only;
+  // Specs another package's seal lets this one implement
+  // (`[spec] implement = [...]`).
+  std::span<const std::string_view> implement;
 };
 
 struct ModuleNode {

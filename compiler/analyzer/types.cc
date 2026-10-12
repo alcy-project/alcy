@@ -906,7 +906,18 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       const bool same_suite = implementing != nullptr &&
                               !declaring->suite.empty() &&
                               implementing->suite == declaring->suite;
-      if (!same_package && !same_suite) {
+      // The implementing side of the seal: a package outside it may
+      // list the spec in its own `[spec] implement`.
+      bool listed = false;
+      if (implementing != nullptr) {
+        for (std::string_view allowed : implementing->implement) {
+          if (allowed == spec_entry->name) {
+            listed = true;
+            break;
+          }
+        }
+      }
+      if (!same_package && !same_suite && !listed) {
         const u32 index = bag.emit<i18n::Key::AnalyzerSpecSealed>(
             diag::Severity::Error, diag::Stage::Analyzer, DiagCode::SpecSealed,
             spec_node.span, spec_entry->name, declaring->package);
