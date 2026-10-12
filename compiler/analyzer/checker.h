@@ -129,6 +129,14 @@ class Checker {
   // Every spec implementation in the tree, in registration order.
   // Coherence is checked against this as each impl registers.
   std::vector<SpecImplEntry> spec_impls;
+  // Inherent impls whose target is a compound shape (`impl<T> [T]`):
+  // there is no nominal to index them by, so each block's shape is
+  // matched against a receiver at lookup.
+  struct CompoundImplEntry {
+    u32 module = 0;
+    ast::ItemIdx item = ast::ItemIdx::invalid();
+  };
+  std::vector<CompoundImplEntry> compound_impls_;
   std::vector<GenericInstance> generic_instances;
   // The same instances, by the type each minted and by the nominal each
   // instantiates. Both questions were answered by walking every instance the
@@ -615,6 +623,15 @@ class Checker {
                                                           std::string_view name,
                                                           u32 module,
                                                           diag::Span span);
+  // Whether a compound impl target (`[T]`, `[T; N]`) matches a receiver,
+  // binding the implementation's parameters to the receiver's parts.
+  bool match_compound_target(
+      u32 module,
+      ast::TypeIdx target,
+      std::span<const ast::GenericParam> params,
+      ir::TypeIdx self,
+      std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
+      std::vector<ValueParam>& value_scope);
   // Collects the generic impls of the package, by the nominal each targets.
   // Built on the first generic lookup and rebuilt if a nominal was interned
   // since, because a lookup may come before the last one is.

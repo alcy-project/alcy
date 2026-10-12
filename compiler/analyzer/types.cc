@@ -2752,6 +2752,20 @@ void Checker::process_module(u32 module) {
           // standard library owns the methods on it.
           self_type = builder.primitive(ir::TypeTag::Str);
           self_ok = true;
+        } else if (self_node.kind == ast::TypeKind::Slice ||
+                   self_node.kind == ast::TypeKind::Array) {
+          if (node.payload.get<ast::ItemImpl>().params.empty()) {
+            // `impl [i32]`: a concrete compound target registers like a
+            // nominal's methods, keyed by the interned shape.
+            self_type = resolve_type(
+                module, node.payload.get<ast::ItemImpl>().type, nullptr);
+            self_ok = !is_error(self_type);
+          } else {
+            // `impl<T> [T]`: no nominal keys it, so the block waits and
+            // its shape is matched against a receiver at lookup.
+            generic_impl = true;
+            compound_impls_.push_back(CompoundImplEntry{module, item});
+          }
         } else {
           const u32 index =
               bag.emit<i18n::Key::AnalyzerInherentImplNeedsNominalType>(
@@ -4500,6 +4514,74 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
   return nullptr;
 }
 
+bool Checker::match_compound_target(
+    u32 module,
+    ast::TypeIdx target,
+    std::span<const ast::GenericParam> params,
+    ir::TypeIdx self,
+    std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
+    std::vector<ValueParam>& value_scope) {
+  const ast::TypeNode& node = ast.types[target.idx];
+  const ir::TypeNode& actual = builder.types()[self];
+  switch (node.kind) {
+    case ast::TypeKind::Str: return actual.tag == ir::TypeTag::Str;
+    case ast::TypeKind::Slice: {
+      if (actual.tag != ir::TypeTag::Slice) {
+        return false;
+      }
+      const ir::SliceType& slice = builder.slice_types()[actual.as_slice()];
+      return match_compound_target(module,
+                                   node.payload.get<ast::TypeSlice>().element,
+                                   params, slice.element, scope, value_scope);
+    }
+    case ast::TypeKind::Array: {
+      if (actual.tag != ir::TypeTag::Array) {
+        return false;
+      }
+      const ast::TypeArray& array = node.payload.get<ast::TypeArray>();
+      const ir::ArrayType& shape = builder.array_types()[actual.as_array()];
+      if (array.length_path.is_valid()) {
+        const ast::Path& path = ast.paths[array.length_path];
+        if (path.segments.size() != 1) {
+          return false;
+        }
+        const std::string_view name = path.segments[0].name;
+        bool bound = false;
+        for (const ast::GenericParam& param : params) {
+          if (param.name.name == name && param.type.is_valid()) {
+            value_scope.push_back(
+                ValueParam{name, shape.count, module, param.type});
+            bound = true;
+            break;
+          }
+        }
+        if (!bound) {
+          return false;
+        }
+      } else if (array.count != shape.count) {
+        return false;
+      }
+      return match_compound_target(module, array.element, params, shape.element,
+                                   scope, value_scope);
+    }
+    case ast::TypeKind::Path: {
+      const ast::TypePath& path = node.payload.get<ast::TypePath>();
+      if (path.args.empty() && ast.paths[path.path].segments.size() == 1) {
+        const std::string_view name = ast.paths[path.path].segments[0].name;
+        for (const ast::GenericParam& param : params) {
+          if (param.name.name == name && !param.type.is_valid()) {
+            scope.emplace_back(name, self);
+            return true;
+          }
+        }
+      }
+      const ir::TypeIdx resolved = resolve_type(module, target, nullptr);
+      return !is_error(resolved) && types_equal(resolved, self);
+    }
+    default: return false;
+  }
+}
+
 const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
     ir::TypeIdx self,
     std::string_view name,
@@ -4591,6 +4673,26 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
         (void)check_item_access(module, m, is_pub, span, name);
         return method;
       }
+    }
+  }
+  // A compound target has no nominal to index by: match each recorded
+  // block's shape against the receiver.
+  for (const CompoundImplEntry& entry : compound_impls_) {
+    const ast::ItemImpl& impl =
+        ast.items[entry.item].payload.get<ast::ItemImpl>();
+    std::vector<std::pair<std::string_view, ir::TypeIdx>> scope;
+    std::vector<ValueParam> value_scope;
+    if (!match_compound_target(entry.module, impl.type, impl.params, self,
+                               scope, value_scope)) {
+      continue;
+    }
+    const CheckedModule::MethodInfo* method =
+        instantiate_method(entry.module, self, scope, value_scope, impl, name);
+    if (method != nullptr) {
+      const bool is_pub =
+          !method->item.is_valid() || ast.items[method->item].is_pub;
+      (void)check_item_access(module, entry.module, is_pub, span, name);
+      return method;
     }
   }
   return nullptr;
@@ -5192,6 +5294,14 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     // of its own: two instances share the receiver's nominal, and the
     // side tables record a body's calls per instantiation.
     u32 inst = inst_index(self_type);
+    if (inst == NO_INST) {
+      // A compound receiver has no nominal instance: one number per
+      // concrete self type keeps the call tables and the symbol key
+      // apart from every other instantiation.
+      inst = static_cast<u32>(inst_numbering.size());
+      inst_numbering.emplace_back(base::INVALID_IDX);
+      inst_by_type_.emplace(self_type.idx, inst);
+    }
     if (!method_args.empty()) {
       inst = static_cast<u32>(inst_numbering.size());
       inst_numbering.emplace_back(base::INVALID_IDX);

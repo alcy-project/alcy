@@ -1221,7 +1221,9 @@ void Lowerer::run() {
       if (!ast.items[method.item].payload.get<ast::ItemFn>().generic.empty()) {
         continue;
       }
-      const u32 inst = generic_inst_index(method.self_type);
+      const u32 inst = method.method_inst != analyzer::NO_INST
+                           ? method.method_inst
+                           : generic_inst_index(method.self_type);
       // The kind comes from the receiver, not from which call site
       // reserved the body first, so a symbol does not depend on
       // lowering order.
