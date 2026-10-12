@@ -137,24 +137,6 @@ impl<T> Vec<T> {
     }
   }
 
-  // Sorts by `Ord`'s total order: the same loop `sort_by` runs, with
-  // `cmp`'s answer deciding. A type that only has `PartialOrd` sorts
-  // through `sort_by`.
-  pub fn sort(mut self: &mut Self) {
-    mut i := 1 as usize
-    while i < self.len {
-      mut j := i
-      while j > 0 {
-        if !self[j].cmp(&self[j - 1]).is_lt() {
-          break
-        }
-        self.swap(j - 1, j)
-        j = j - 1
-      }
-      i = i + 1
-    }
-  }
-
   // Removes and returns the last element, or `None` when empty.
   pub fn pop(mut self: &mut Self) -> Option<T> {
     if self.len == 0 {
@@ -182,6 +164,27 @@ impl<T> Vec<T> {
   // Consumes the vector; the cursor owns what is left.
   pub fn into_iter(self: Vec<T>) -> VecIntoIter<T> {
     ret VecIntoIter { v: self, pos: 0 }
+  }
+}
+
+// The total order has to exist for the sort to, so the method sits in
+// a block that says so: `v.sort()` on a `Vec<Plain>` names `Plain` at
+// the call rather than a line in here (ADR-0028). A type that only has
+// `PartialOrd` sorts through `sort_by`.
+impl<T: Ord> Vec<T> {
+  pub fn sort(mut self: &mut Self) {
+    mut i := 1 as usize
+    while i < self.len {
+      mut j := i
+      while j > 0 {
+        if !self[j].cmp(&self[j - 1]).is_lt() {
+          break
+        }
+        self.swap(j - 1, j)
+        j = j - 1
+      }
+      i = i + 1
+    }
   }
 }
 

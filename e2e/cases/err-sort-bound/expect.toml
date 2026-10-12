@@ -1,0 +1,4 @@
+# `sort`'s bound is the reason it is a separate impl block: the refusal
+# names `Plain` at the call rather than a line in `vec.al`.
+exit = 4
+contains = ["Type 'Plain' does not implement 'Ord', which the bound requires"]
