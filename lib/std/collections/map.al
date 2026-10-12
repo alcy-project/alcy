@@ -401,6 +401,58 @@ impl<V> Iterator<&V> for MapValues<V> {
   }
 }
 
+impl<V> Map<V> {
+  // Consumes the map; the cursor owns the entries that remain.
+  pub fn into_iter(self: Map<V>) -> MapIntoIter<V> {
+    ret MapIntoIter { m: self, pos: 0 }
+  }
+}
+
+// A consuming cursor over a map. The taken entry leaves as its key and
+// value; the cursor's destructor ends the entries a loop never took
+// and releases the three buffers.
+pub struct MapIntoIter<V> {
+  m: Map<V>,
+  pos: usize,
+}
+
+impl<V> MapIntoIter<V> {
+  pub fn into_iter(self: MapIntoIter<V>) -> MapIntoIter<V> {
+    ret self
+  }
+
+  pub fn drop(self: MapIntoIter<V>) {
+    mut i := self.pos
+    while i < self.m.cap {
+      if *uninit_ref(unsafe { elem_ref(self.m.states, i) }) == 1 {
+        unsafe {
+          drop_in_place::<String>(uninit_assume(elem_ptr(self.m.keys, i)))
+        }
+        unsafe {
+          drop_in_place::<V>(uninit_assume(elem_ptr(self.m.values, i)))
+        }
+      }
+      i = i + 1
+    }
+    unsafe { dealloc(self.m.keys, self.m.cap) }
+    unsafe { dealloc(self.m.values, self.m.cap) }
+    unsafe { dealloc(self.m.states, self.m.cap) }
+  }
+}
+
+impl<V> Iterator<(String, V)> for MapIntoIter<V> {
+  fn next(mut self: &mut Self) -> Option<(String, V)> {
+    at := next_live(self.m.states, self.m.cap, self.pos)
+    if at >= self.m.cap {
+      ret Option::None
+    }
+    k := unsafe { *uninit_assume(elem_ptr(self.m.keys, at)) }
+    v := unsafe { *uninit_assume(elem_ptr(self.m.values, at)) }
+    self.pos = at + 1
+    ret Option::Some((k, v))
+  }
+}
+
 // `m[key]` reads and writes the value under `key`, panicking when the
 // key is absent.
 impl<V> Index<str, V> for Map<V> {

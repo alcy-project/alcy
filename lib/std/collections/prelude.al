@@ -16,6 +16,7 @@ pub use package::vec::VecIter;
 pub use package::vec::VecIterMut;
 pub use package::map::Map;
 pub use package::map::MapEntryIter;
+pub use package::map::MapIntoIter;
 pub use package::map::MapKeys;
 pub use package::map::MapValues;
 pub use package::set::Set;

@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "codegen_llvm/common.h"
 #include "codegen_llvm/target.h"
@@ -322,7 +323,43 @@ void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
     }
   }
 
+  // Emit in control-flow order from the entry, not index order: a
+  // register's definition must be emitted before the block that reads
+  // it, and a pass that inserts blocks after lowering leaves some
+  // definitions in blocks with higher indexes than their uses.
+  std::vector<ir::BlockIdx> pending{function.blocks.head()};
+  std::vector<bool> emitted(storage_->blocks().size(), false);
+  while (!pending.empty()) {
+    const ir::BlockIdx block_idx = pending.back();
+    pending.pop_back();
+    if (emitted[block_idx.idx]) {
+      continue;
+    }
+    emitted[block_idx.idx] = true;
+    const ir::Block& block = storage_->blocks()[block_idx];
+    builder_->SetInsertPoint(values_.block(block_idx));
+    emit_block(block);
+    std::vector<ir::BlockIdx> succs;
+    const base::IdxRange<ir::InstructionIdx> range = block.instrs;
+    if (!range.empty()) {
+      const ir::Instruction& last = storage_->instrs()[range[range.size() - 1]];
+      for (ir::OperandIdx o : last.operands) {
+        const ir::Operand& operand = storage_->operands()[o.idx];
+        if (operand.is<ir::BlockIdx>()) {
+          succs.push_back(operand.as_block());
+        }
+      }
+    }
+    // Reversed so the first branch target is emitted first.
+    for (usize i = succs.size(); i > 0; --i) {
+      pending.push_back(succs[i - 1]);
+    }
+  }
+  // A block nothing branches to still needs its instructions emitted.
   for (const ir::BlockIdx block_idx : function.blocks) {
+    if (emitted[block_idx.idx]) {
+      continue;
+    }
     const ir::Block& block = storage_->blocks()[block_idx];
     builder_->SetInsertPoint(values_.block(block_idx));
     emit_block(block);
