@@ -443,6 +443,13 @@ body.site {
   font-size: 18px;
 }
 
+/* The article's anchored headings are link targets, and the header
+   sticks over the scroll: a jump must land the heading below the
+   header, not behind it. The offset matches the guide aside's. */
+.guide-article [id] {
+  scroll-margin-top: 72px;
+}
+
 .guide-article h3 {
   margin: 24px 0 8px;
   font-size: 15px;
