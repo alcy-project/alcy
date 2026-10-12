@@ -9,6 +9,8 @@ source_set("codegen_llvm") {
     "declaration.h",
     "emit.cc",
     "emit.h",
+    "emit_lto.cc",
+    "emit_lto.h",
     "llvm_backend.cc",
     "llvm_backend.h",
     "llvm_ir_emitter.cc",

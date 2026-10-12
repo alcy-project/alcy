@@ -55,6 +55,11 @@ llvm_backend_components = [
   "LLVMCFGuard",
   "LLVMMCDisassembler",
   "LLVMIRPrinter",
+  # The middle end's link-time half: the parts of one module are optimized
+  # per part, for every target the LLVM backend writes for.
+  "LLVMDTLTO",
+  "LLVMLTO",
+  "LLVMPlugins",
 ]
 
 llvm_backend_components += [

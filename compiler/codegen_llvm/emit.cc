@@ -13,6 +13,7 @@
 #include "codegen/backend.h"
 #include "codegen/target.h"
 #include "codegen_llvm/common.h"
+#include "codegen_llvm/emit_lto.h"
 #include "codegen_llvm/llvm_backend.h"
 #include "codegen_llvm/llvm_ir_emitter.h"
 #include "codegen_llvm/runtime_ir.h"
@@ -113,6 +114,11 @@ struct EmittedModule {
   }
 };
 
+// How many threads a split may use: the request's count, and never none.
+u32 workers_of(const codegen::EmitRequest& request) {
+  return request.workers == 0 ? 1 : request.workers;
+}
+
 }  // namespace
 
 bool Llvm::supports(codegen::OutputKind kind, const codegen::Target& target) {
@@ -184,6 +190,12 @@ Llvm::emit_artifacts(codegen::EmitRequest request) {
   // today, and only code generation - which is per function either way - is
   // spread. `SplitModule` writes partitions a linker accepts, which is what
   // lets the caller link them back into one image.
+  // A split request carries its optimization to the parts: the ThinLTO
+  // backend runs the middle end per part, on the thread that writes it, and
+  // imports what the other parts define. A request that asked for no
+  // optimization has nothing to link and only the code generation is spread.
+  const bool optimize_parts = request.optimize;
+  request.optimize = false;
   EmittedModule emitted;
   base::Result<void, codegen::EmitError> built = emitted.build(request);
   if (built.is_err()) {
@@ -200,6 +212,9 @@ Llvm::emit_artifacts(codegen::EmitRequest request) {
   // generation takes: written to bitcode where they stand, and read back
   // into a context of their own by the thread that will use it. Carrying IR
   // across contexts by hand is not a path LLVM supports; this is.
+  if (optimize_parts) {
+    return optimize_in_parts(split, workers_of(request));
+  }
   std::vector<std::vector<u8>> bitcode(split.size());
   std::vector<std::unique_ptr<llvm::LLVMContext>> contexts(split.size());
   for (usize at = 0; at < split.size(); ++at) {
@@ -211,7 +226,7 @@ Llvm::emit_artifacts(codegen::EmitRequest request) {
   }
   std::vector<std::vector<u8>> objects(split.size());
   std::atomic<bool> failed{false};
-  const u32 workers = request.workers == 0 ? 1 : request.workers;
+  const u32 workers = workers_of(request);
   base::for_each(0, bitcode.size(), workers, [&](usize at, usize worker) {
     (void)worker;
     const llvm::StringRef bytes(
