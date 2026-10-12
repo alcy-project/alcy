@@ -2140,6 +2140,57 @@ ir::TypeIdx Checker::check_spec_equality(u32 module,
   return boolean;
 }
 
+// The spec an arithmetic operator names, its method, and how many
+// parameters the method takes with its receiver; empty for an
+// operator that has no spec (bitwise, shifts).
+struct ArithmeticNames {
+  std::string_view spec;
+  std::string_view method;
+  u32 params = 0;
+};
+
+static ArithmeticNames arithmetic_names(ast::BinaryOp op) {
+  switch (op) {
+    case ast::BinaryOp::Add: return {"Add", "add", 2};
+    case ast::BinaryOp::Sub: return {"Sub", "sub", 2};
+    case ast::BinaryOp::Mul: return {"Mul", "mul", 2};
+    case ast::BinaryOp::Div: return {"Div", "div", 2};
+    case ast::BinaryOp::Mod: return {"Rem", "rem", 2};
+    default: return {};
+  }
+}
+
+ir::TypeIdx Checker::check_spec_arithmetic(u32 module,
+                                           ast::ExprIdx expr,
+                                           ir::TypeIdx type,
+                                           std::string_view spec_name,
+                                           std::string_view method_name,
+                                           u32 params,
+                                           const ir::TypeIdx* expected) {
+  const u32 spec = operator_spec(spec_name);
+  const CheckedModule::MethodInfo* method =
+      spec == U32_MAX ? nullptr
+                      : lookup_method(type, method_name, module,
+                                      ast.exprs[expr].span, true, spec);
+  if (method == nullptr ||
+      method->receiver != CheckedModule::ReceiverKind::ByValue ||
+      method->params.size() != params) {
+    const u32 diag = bag.emit<i18n::Key::AnalyzerMissingOperatorSpec>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::InvalidOperation, ast.exprs[expr].span, spec_name);
+    (void)diag;
+    return error_type();
+  }
+  record_call(module, expr, method);
+  if (is_error(unify(type, method->ret, ast.exprs[expr].span, "arithmetic"))) {
+    return error_type();
+  }
+  if (expected != nullptr) {
+    return unify(*expected, method->ret, ast.exprs[expr].span, "arithmetic");
+  }
+  return method->ret;
+}
+
 ir::TypeIdx Checker::check_run_index(ir::TypeIdx receiver,
                                      ir::TypeIdx element,
                                      const ir::TypeIdx* expected,
@@ -2808,6 +2859,10 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
             }
             return inner;
           }
+          if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum) {
+            return check_spec_arithmetic(module, expr, inner, "Neg", "neg", 1,
+                                         expected);
+          }
           break;
         case ast::UnaryOp::Not:
           if (tag == ir::TypeTag::I1) {
@@ -2989,6 +3044,12 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
             }
             return operands;
           }
+          if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum) {
+            const ArithmeticNames names =
+                arithmetic_names(node.payload.get<ast::ExprBinary>().op);
+            return check_spec_arithmetic(module, expr, operands, names.spec,
+                                         names.method, names.params, expected);
+          }
           break;
         case ast::BinaryOp::Pow: {
           // The backend has no power operation yet; refuse it here
@@ -3001,7 +3062,14 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
         }
         default:
           // Remainder and the bitwise and shift operators are
-          // integer-only.
+          // integer-only; a nominal remainder reaches the `Rem` spec.
+          if (node.payload.get<ast::ExprBinary>().op == ast::BinaryOp::Mod &&
+              (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum)) {
+            const ArithmeticNames names =
+                arithmetic_names(node.payload.get<ast::ExprBinary>().op);
+            return check_spec_arithmetic(module, expr, operands, names.spec,
+                                         names.method, names.params, expected);
+          }
           if (is_integer_tag(tag)) {
             if (expected != nullptr) {
               return unify(*expected, operands, node.span, "arithmetic");
@@ -3415,13 +3483,27 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
       }
       if (node.payload.get<ast::StmtReassign>().compound) {
         const ir::TypeTag tag = tag_of(place);
+        const ast::BinaryOp op = node.payload.get<ast::StmtReassign>().op;
         if (!is_integer_tag(tag) && !is_float_tag(tag)) {
-          const u32 index =
-              bag.emit<i18n::Key::AnalyzerCompoundAssignNeedsNumeric>(
-                  diag::Severity::Error, diag::Stage::Analyzer,
-                  DiagCode::InvalidOperation, node.span);
-          (void)index;
-          return builder.primitive(ir::TypeTag::Void);
+          // A nominal place reaches the operator spec the way the
+          // binary form does; the call is recorded on the place for
+          // lowering to find.
+          const ArithmeticNames names = arithmetic_names(op);
+          const bool nominal =
+              tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum;
+          if (!nominal || names.params == 0) {
+            const u32 index =
+                bag.emit<i18n::Key::AnalyzerCompoundAssignNeedsNumeric>(
+                    diag::Severity::Error, diag::Stage::Analyzer,
+                    DiagCode::InvalidOperation, node.span);
+            (void)index;
+            return builder.primitive(ir::TypeTag::Void);
+          }
+          if (is_error(check_spec_arithmetic(module, reassign.place, place,
+                                             names.spec, names.method,
+                                             names.params, nullptr))) {
+            return builder.primitive(ir::TypeTag::Void);
+          }
         }
       }
       unify(place, value,

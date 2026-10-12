@@ -52,21 +52,23 @@ peripheral work lives in `backlog.md`. The language record lives in
   walk a slot table (the map's sweeps), which the cursors do not
   replace.
 
-- [ ] Operator specs: `Display`, floats, arithmetic, and ordering.
+- [ ] Operator specs: `Display` and ordering.
 
   The first slice sealed `Index`/`IndexMut` and `PartialEq`/`Eq`;
-  ADR-0053 left the rest for their own slices. In order: floats join
-  the convertible types (integers, `bool`, and `str` today) so
-  `println("{}", 3.5)` compiles; `Display` for `{}` needs a signature
-  a user type can implement, a decision on whether the two-pass
-  measure/expand expansion may run a user method twice, and a
-  decision on whether the spec is sealed; then arithmetic (`Add`,
-  `Sub`, `Mul`, `Div`, `Rem`, `Neg`) with canonical operator shapes
-  and `x op= y` routed through them; then `Ordering`, `PartialOrd`,
-  and `Ord` with comparison dispatch, which is what `Vec::sort` waits
-  for. Floats stay `PartialOrd` only. The implementing side of a seal
-  (`[spec] implement`) landed ahead of the rest, so a package outside
-  a seal can list the specs it implements. Designed in
+  floats and arithmetic landed after it. Floats joined the
+  convertible types: `{}` prints a decimal magnitude with up to six
+  fractional digits, rounded half-up and trimmed, and a mantissa with
+  an exponent outside [1e-4, 1e16); `{:.Nf}` fixes the fractional
+  digits and `{:.N}` is the same piece. Arithmetic landed as `Add`,
+  `Sub`, `Mul`, `Div`, `Rem`, and `Neg` in `core` with the canonical
+  by-value shape, `x op= y` stored back through the same
+  implementation, and the implementing side (`[spec] implement`)
+  reaching user packages. What remains: `Display` for `{}` needs a
+  signature a user type can implement, a decision on whether the
+  two-pass measure/expand expansion may run a user method twice, and
+  a decision on whether the spec is sealed; then `Ordering`,
+  `PartialOrd`, and `Ord` with comparison dispatch, which is what
+  `Vec::sort` waits for. Floats stay `PartialOrd` only. Designed in
   `docs/adr/0053-operators-are-sealed-specs.md`.
 
 - [ ] Spec bounds and checked generics.

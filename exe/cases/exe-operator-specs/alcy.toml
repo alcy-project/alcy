@@ -1,0 +1,20 @@
+[package]
+name = "ops"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+# The implementing side of the seal: the arithmetic specs live with
+# the operators they name, so a package outside the standard library
+# lists the ones it implements (ADR-0053).
+[spec]
+implement = ["Add", "Sub", "Mul", "Div", "Rem", "Neg"]
+
+[dependencies]
+"alcy/std/*" = {}
+
+[[bin]]
+name = "ops"
+path = "main.al"

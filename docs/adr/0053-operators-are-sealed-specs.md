@@ -60,6 +60,16 @@ the way the seal's are, and a package that lists a spec may implement
 it even from outside the seal; the diagnostic that refuses the
 implementation no longer says the key is unaccepted.
 
+Amended at arithmetic's landing: `Add`, `Sub`, `Mul`, `Div`, `Rem`,
+and `Neg` joined the sealed operator specs in `core`, each with the
+canonical shape `fn add(self: Self, other: Self) -> Self` - the
+operands pass by value, so an operator consumes what it reads, which
+for a `Copy` type is a copy. `x op= y` runs the binary spec and
+stores the result back into the place. A package outside the suite
+implements them by listing them in its own `[spec] implement`, and
+the checker then records the call for lowering the way `PartialEq`
+does.
+
 **A spec may name a super-spec.** `spec Eq: PartialEq {}` says that
 implementing `Eq` requires an implementation of `PartialEq`, and a
 bound on `Eq` admits `PartialEq`'s method. `Eq` is the reflexive

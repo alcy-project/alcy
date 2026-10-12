@@ -2582,29 +2582,15 @@ Val Lowerer::lower_spec_index(ast::ExprIdx expr,
   return as_place ? place : materialize(place);
 }
 
-Val Lowerer::lower_spec_equality(
-    ast::ExprIdx expr,
-    const analyzer::CheckedModule::CallTarget* target) {
-  const ast::ExprNode& node = ast.exprs[expr];
-  const ast::ExprBinary& bin = node.payload.get<ast::ExprBinary>();
+Val Lowerer::emit_spec_call(const analyzer::CheckedModule::CallTarget* target,
+                            diag::Span span,
+                            Val receiver,
+                            Val argument,
+                            bool has_argument) {
   const analyzer::CheckedModule& def = pkg.modules[target->module];
   const analyzer::CheckedModule::MethodInfo& info = def.methods[target->index];
   if (!comp_positions(info.item).empty()) {
-    internal(node.span, "comp equality method");
-    return Val{size_one, error_type(), false, false};
-  }
-  // `eq` takes both operands by shared reference, so a rooted place is
-  // borrowed and anything else is materialized into one.
-  Val receiver = is_ref_tag(tag_of(info.params[0])) && is_rooted_place(bin.lhs)
-                     ? place_addr(bin.lhs)
-                     : lower_expr(bin.lhs, nullptr);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
-  }
-  Val argument = is_ref_tag(tag_of(info.params[1])) && is_rooted_place(bin.rhs)
-                     ? place_addr(bin.rhs)
-                     : lower_expr(bin.rhs, nullptr);
-  if (failed) {
+    internal(span, "comp operator method");
     return Val{size_one, error_type(), false, false};
   }
   const ir::FunctionIdx fn = fn_index(
@@ -2617,15 +2603,65 @@ Val Lowerer::lower_spec_equality(
   ops.push_back(builder.operand(ir::Operand::from_function(
       fn, builder.primitive(ir::TypeTag::Function))));
   ops.push_back(arg_for(receiver, info.params[0]));
-  ops.push_back(arg_for(argument, info.params[1]));
+  if (has_argument) {
+    ops.push_back(arg_for(argument, info.params[1]));
+  }
   const ir::RegisterIdx dst = emit(ir::Opcode::Call, info.ret, ops);
-  const Val result{to_operand(dst, info.ret), info.ret, false, false};
+  return Val{to_operand(dst, info.ret), info.ret, false, false};
+}
+
+Val Lowerer::lower_spec_binary(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::CallTarget* target) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprBinary& bin = node.payload.get<ast::ExprBinary>();
+  const analyzer::CheckedModule& def = pkg.modules[target->module];
+  const analyzer::CheckedModule::MethodInfo& info = def.methods[target->index];
+  // `eq` takes both operands by shared reference, so a rooted place is
+  // borrowed and anything else is materialized into one; an arithmetic
+  // method reads them by value.
+  Val receiver = is_ref_tag(tag_of(info.params[0])) && is_rooted_place(bin.lhs)
+                     ? place_addr(bin.lhs)
+                     : lower_expr(bin.lhs, nullptr);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  Val argument = is_ref_tag(tag_of(info.params[1])) && is_rooted_place(bin.rhs)
+                     ? place_addr(bin.rhs)
+                     : lower_expr(bin.rhs, nullptr);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const Val result = emit_spec_call(target, node.span, receiver, argument,
+                                    /*has_argument=*/true);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
   if (bin.op == ast::BinaryOp::NotEq) {
     const ir::RegisterIdx negated =
         emit(ir::Opcode::Not, result.type, {result.op});
     return Val{to_operand(negated, result.type), result.type, false, false};
   }
   return result;
+}
+
+Val Lowerer::lower_spec_unary(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::CallTarget* target) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprUnary& unary = node.payload.get<ast::ExprUnary>();
+  const analyzer::CheckedModule& def = pkg.modules[target->module];
+  const analyzer::CheckedModule::MethodInfo& info = def.methods[target->index];
+  Val receiver =
+      is_ref_tag(tag_of(info.params[0])) && is_rooted_place(unary.inner)
+          ? place_addr(unary.inner)
+          : lower_expr(unary.inner, nullptr);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const Val argument{size_one, error_type(), false, false};
+  return emit_spec_call(target, node.span, receiver, argument,
+                        /*has_argument=*/false);
 }
 
 // Address of `base.name`: sees through references to the nominal
@@ -2860,7 +2896,7 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
   const ast::ExprBinary& bin = node.payload.get<ast::ExprBinary>();
   if (const analyzer::CheckedModule::CallTarget* target = call_target(expr);
       target != nullptr) {
-    return lower_spec_equality(expr, target);
+    return lower_spec_binary(expr, target);
   }
   if (bin.op == ast::BinaryOp::Pow) {
     unsupported(node.span, "power operator");
@@ -3616,6 +3652,10 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     case ast::ExprKind::Unary: {
       const ast::ExprUnary& unary = node.payload.get<ast::ExprUnary>();
+      if (const analyzer::CheckedModule::CallTarget* target = call_target(expr);
+          target != nullptr) {
+        return lower_spec_unary(expr, target);
+      }
       Val inner = lower_expr(unary.inner, nullptr);
       if (failed) {
         return Val{size_one, error_type(), false, false};
@@ -3923,12 +3963,25 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
           op = int_binop(reassign.op, tag);
         }
         if (op == ir::Opcode::Noop) {
-          unsupported(node.span, "compound assignment");
-          return;
+          // A nominal place has no backend operator: the checker
+          // recorded the operator method on the place.
+          const analyzer::CheckedModule::CallTarget* target =
+              call_target(reassign.place);
+          if (target == nullptr) {
+            unsupported(node.span, "compound assignment");
+            return;
+          }
+          value = emit_spec_call(target, node.span, loaded, value,
+                                 /*has_argument=*/true);
+          if (failed) {
+            return;
+          }
+        } else {
+          const ir::RegisterIdx result =
+              emit(op, loaded.type, {use_value(loaded), use_value(value)});
+          value =
+              Val{to_operand(result, loaded.type), loaded.type, false, false};
         }
-        const ir::RegisterIdx result =
-            emit(op, loaded.type, {use_value(loaded), use_value(value)});
-        value = Val{to_operand(result, loaded.type), loaded.type, false, false};
       }
       ir::OperandIdx stored = use_value(value);
       emit_void(ir::Opcode::Store, {stored, place.op});

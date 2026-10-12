@@ -929,6 +929,17 @@ class Checker {
                                   ast::ExprIdx expr,
                                   ir::TypeIdx type,
                                   const ir::TypeIdx* expected);
+  // `a op b` (and `-a`) over a nominal type: resolves the operator
+  // spec's implementation and records the call lowering emits. The
+  // spec is named by the operator's spelling (`Add`, `neg`), which is
+  // what its canonical shape fixed.
+  ir::TypeIdx check_spec_arithmetic(u32 module,
+                                    ast::ExprIdx expr,
+                                    ir::TypeIdx type,
+                                    std::string_view spec_name,
+                                    std::string_view method_name,
+                                    u32 params,
+                                    const ir::TypeIdx* expected);
   // Element access: `receiver[integer]`, already checked. The expected
   // type, when given, is the element type.
   ir::TypeIdx check_element_index(ir::TypeIdx receiver,

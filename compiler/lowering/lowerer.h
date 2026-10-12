@@ -435,11 +435,22 @@ class Lowerer {
   Val lower_spec_index(ast::ExprIdx expr,
                        const analyzer::CheckedModule::CallTarget* target,
                        bool as_place);
-  // `a == b` where the checker resolved a `PartialEq` impl: the
-  // recorded call takes both operands by shared reference, and `!=`
-  // negates its result.
-  Val lower_spec_equality(ast::ExprIdx expr,
-                          const analyzer::CheckedModule::CallTarget* target);
+  // `a op b` where the checker resolved an operator spec's impl: the
+  // recorded call takes its operands the way the method declares them,
+  // and `!=` negates its result.
+  Val lower_spec_binary(ast::ExprIdx expr,
+                        const analyzer::CheckedModule::CallTarget* target);
+  // `-a` where the checker resolved the `Neg` impl.
+  Val lower_spec_unary(ast::ExprIdx expr,
+                       const analyzer::CheckedModule::CallTarget* target);
+  // Calls the operator method a recorded target names with the
+  // receiver and (when the method takes one) the argument already
+  // lowered.
+  Val emit_spec_call(const analyzer::CheckedModule::CallTarget* target,
+                     diag::Span span,
+                     Val receiver,
+                     Val argument,
+                     bool has_argument);
   Val field_addr(Val base, std::string_view name, diag::Span span);
   Val lower_struct(ast::ExprIdx expr);
   Val lower_tuple(ast::ExprIdx expr);

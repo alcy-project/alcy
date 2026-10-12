@@ -370,23 +370,30 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
   // shape is part of the operator's meaning, so a staged declaration
   // that does not match the canonical shape is an error rather than a
   // different operator. Index and IndexMut take `<I, O>` and one
-  // method, PartialEq has one `eq` method over `&Self`, and Eq is a
-  // marker over PartialEq that declares nothing.
+  // method, PartialEq has one `eq` method over `&Self`, the
+  // arithmetic specs one by-value method named after the operator, and
+  // Eq is a marker over PartialEq that declares nothing.
   enum class Shape : u8 {
     Index,
     IndexMut,
     Equality,
+    Arithmetic,
+    Negation,
     Marker,
   };
   struct Canonical {
     std::string_view spec;
     Shape shape;
+    // The method name for the shapes whose specs differ only in
+    // spelling (`Add`/`add`); empty for the shapes that own theirs.
+    std::string_view method;
   };
   static constexpr Canonical CANONICAL[] = {
-      {"Index", Shape::Index},
-      {"IndexMut", Shape::IndexMut},
-      {"PartialEq", Shape::Equality},
-      {"Eq", Shape::Marker},
+      {"Index", Shape::Index, {}},        {"IndexMut", Shape::IndexMut, {}},
+      {"PartialEq", Shape::Equality, {}}, {"Add", Shape::Arithmetic, "add"},
+      {"Sub", Shape::Arithmetic, "sub"},  {"Mul", Shape::Arithmetic, "mul"},
+      {"Div", Shape::Arithmetic, "div"},  {"Rem", Shape::Arithmetic, "rem"},
+      {"Neg", Shape::Negation, "neg"},    {"Eq", Shape::Marker, {}},
   };
   const Canonical* canonical = nullptr;
   for (const Canonical& candidate : CANONICAL) {
@@ -429,6 +436,30 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
       return wrong();
     }
     if (!is_bool_type(ast, method.return_type)) {
+      return wrong();
+    }
+    return true;
+  }
+  if (canonical->shape == Shape::Arithmetic ||
+      canonical->shape == Shape::Negation) {
+    // `fn add(self: Self, other: Self) -> Self`, and `Neg` drops the
+    // second operand. The receiver goes by value, so an operator
+    // consumes its operands.
+    const bool unary = canonical->shape == Shape::Negation;
+    if (!declaration.params.empty() || declaration.methods.size() != 1) {
+      return wrong();
+    }
+    const ast::SpecMethod& method = declaration.methods[0];
+    if (method.name.name != canonical->method || method.is_unsafe ||
+        !method.generic.empty() || method.params.size() != (unary ? 1 : 2)) {
+      return wrong();
+    }
+    for (const ast::ItemFnParam& param : method.params) {
+      if (bare_path_name(ast, param.type) != "Self") {
+        return wrong();
+      }
+    }
+    if (bare_path_name(ast, method.return_type) != "Self") {
       return wrong();
     }
     return true;

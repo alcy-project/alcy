@@ -3935,6 +3935,87 @@ TEST_CASE("Check admits a sealed spec implementation from the same suite") {
   CHECK(!f.bag.has_errors());
 }
 
+// The arithmetic operators reach a nominal type through `core`'s
+// specs; a package outside the seal lists the ones it implements.
+TEST_CASE("Check reads an arithmetic spec implementation") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"ops.al",
+             "pub spec Add {\n  fn add(self: Self, other: Self) -> Self;\n}\n"},
+            {"main.al",
+             "struct Vec2 {\n  x: i32,\n  y: i32,\n}\n"
+             "impl Add for Vec2 {\n"
+             "  fn add(self: Vec2, other: Vec2) -> Vec2 {\n"
+             "    ret Vec2 { x: self.x + other.x, y: self.y + other.y }\n"
+             "  }\n}\n"
+             "fn main() -> i32 {\n"
+             "  a := Vec2 { x: 1, y: 2 }\n"
+             "  b := Vec2 { x: 3, y: 4 }\n"
+             "  c := a + b\n"
+             "  ret c.x\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  const std::string_view seals[] = {"Add"};
+  const std::string_view implemented[] = {"Add"};
+  const PackagePolicy policies[] = {
+      {"core", "alcy/std", seals, {}},
+      {"testpkg", "", {}, implemented},
+  };
+  Fixture f;
+  const CheckOutcome result =
+      check_with_policies(dir, "main.al", {{"core", "ops.al"}}, policies, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects arithmetic without its spec") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"ops.al",
+             "pub spec Add {\n  fn add(self: Self, other: Self) -> Self;\n}\n"},
+            {"main.al",
+             "struct Vec2 {\n  x: i32,\n  y: i32,\n}\n"
+             "fn main() -> i32 {\n"
+             "  a := Vec2 { x: 1, y: 2 }\n"
+             "  b := Vec2 { x: 3, y: 4 }\n"
+             "  c := a + b\n"
+             "  ret c.x\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "ops.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(has_message(f.bag, "Type does not implement the 'Add' spec"));
+}
+
+TEST_CASE("Check rejects a non-canonical arithmetic spec") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"ops.al",
+                       "pub spec Add {\n  fn plus(self: Self, other: Self) -> "
+                       "Self;\n}\n"},
+                      {"main.al", "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "ops.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(
+      has_message(f.bag, "Spec 'Add' must keep the compiler's operator shape"));
+}
+
 TEST_CASE("Check reports a seal that names no declared spec") {
   VirtualDir dir;
   const bool setup =

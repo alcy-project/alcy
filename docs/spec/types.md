@@ -63,8 +63,8 @@
 - The standard containers implement the pair: `Vec<T>` with `usize`
   and `T`, `String` with `usize` and `u8`, and `Map<V>` with `str` and
   `V`. The specs are sealed to the `alcy/std` suite, so the operator
-  covers these types and no others until the implementing-side
-  manifest key ships (see `deferred.md`).
+  covers these types until a package lists the spec in its own
+  `[spec] implement` (see `modules.md`).
 
 ## Equality over specs
 
@@ -82,6 +82,23 @@
   land (see `deferred.md`), so comparing a vector of a type without
   `PartialEq` is an error at that use rather than at the
   implementation.
+
+## Arithmetic over specs
+
+- `a + b`, `a - b`, `a * b`, `a / b`, `a % b`, and `-a` over a
+  nominal type resolve through the sealed specs in `core`: `Add`,
+  `Sub`, `Mul`, `Div`, `Rem`, and `Neg`. Every method takes its
+  operands by value (`fn add(self: Self, other: Self) -> Self`), so an
+  operator consumes them, which for a `Copy` type reads as a copy.
+  Scalars keep their builtin arithmetic, and a nominal type with no
+  implementation has no operator. See
+  `docs/adr/0053-operators-are-sealed-specs.md`.
+- `x op= y` runs the binary spec and stores its result back into the
+  place, so a nominal place reaches `Add` and its siblings through the
+  same implementation.
+- The seal works like the other operators': the standard library
+  implements them, and a package outside the suite lists the ones it
+  implements in `[spec] implement = [...]` (see `modules.md`).
 
 ## Text (staged)
 

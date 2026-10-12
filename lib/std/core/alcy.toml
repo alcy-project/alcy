@@ -19,6 +19,7 @@ include = [
   "string",
   "index",
   "cmp",
+  "ops",
 ]
 # The public surface, in the form `docs/adr/0007-manifest-driven-modules.md` specifies. Nothing
 # enforces it yet. Its `pub` items are also the implicit surface:
@@ -34,10 +35,11 @@ export = [
   "string",
   "index",
   "cmp",
+  "ops",
 ]
 
 # Specs only this suite may implement (ADR-0053). Indexing and
 # equality are operators, so their capabilities are the compiler's,
-# not a user's.
+# not a user's; arithmetic joins them.
 [spec]
-suite-only = ["Index", "IndexMut", "PartialEq", "Eq"]
+suite-only = ["Index", "IndexMut", "PartialEq", "Eq", "Add", "Sub", "Mul", "Div", "Rem", "Neg"]
