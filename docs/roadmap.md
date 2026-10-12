@@ -32,21 +32,20 @@ peripheral work lives in `backlog.md`. The language record lives in
 
 - [ ] Container iteration.
 
-  The adapters landed, and no standard container can be walked: `Vec`,
-  `Map`, and `Set` have no cursor, so `for x in v` is "No method
-  'into_iter'" and std algorithms index in loops. In slices: `Vec`
-  cursors in the item-parameter shape the adapters already use
-  (`VecIter<T, Item>`), with the identity `into_iter` the `for`
-  desugar needs; `Map`'s `keys`, `values`, and `iter` over `str` and
-  `&V`, and `Set` behind them; the free algorithms the cursors make
-  writable (`count`, `any`, `all`, `position`, and `find`/`last`
-  with the item type spelled); and one compiler slice extends
-  inherent impl targets beyond nominals to `[T]`, `[T; N]`, and
-  `str`, which ADR-0028 leaves for a later extension, so arrays,
-  slices, and strings get their own methods (`.len()`, `.iter()`,
-  `into_iter`) at all. `collect` in its bound-shaped form waits for
-  the fourth item; a `collect_into(it, &mut Vec<T>)` free function
-  does not. Designed in `docs/adr/0028-spec-system.md`.
+  The adapters landed, and the standard containers now have cursors:
+  `Vec` consumes (`VecIntoIter`), borrows (`VecIter`), and borrows
+  exclusively (`VecIterMut`); `Map` and `Set` hand out entries, keys,
+  and values from shared cursors, and `Map` consumes (`MapIntoIter`).
+  `for x in v` and `for (k, v) in m` walk them, a break ends what the
+  loop never took, and the free algorithms (`count`, `any`, `all`,
+  `position`, `find`, `last`, `collect_into`) ride any iterator -
+  `collect_into` is the shape `collect` waits on bounds for. A cursor
+  that yields a reference needed the checker to accept a spec argument
+  naming one of the implementation's parameters (`Iterator<&T>`),
+  which it now does. What remains: inherent impls whose target is
+  `[T]`, `[T; N]`, or `str`, so arrays, slices, and strings get
+  `.len()`, `.iter()`, and `into_iter` themselves, and the std cleanup
+  that replaces index loops with the algorithms.
 
 - [ ] Operator specs: `Display`, floats, arithmetic, and ordering.
 
