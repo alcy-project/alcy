@@ -88,6 +88,12 @@ skips value binding for any producer with an invalid `dst`.
 | `Move` / `Drop` | Register alias / ownership marker; no code emitted. |
 | `Select` | `[cond, true_value, false_value]`. |
 
+`InstructionFlags` carries the per-opcode facts that are not operands:
+`rmw_op` for `AtomicRmw`, `inbounds` for `GetElementPtr` and `ElemOffset`
+(the address is proved to stay inside the object it indexes), and
+`mem_align_log2` for `Memcopy` (the log2 of the alignment both pointers
+promise; zero means a backend may assume byte alignment only).
+
 Aggregate-typed immediates and `Str`/`Function`-typed lowering are not
 supported; struct/array values travel through calls, allocas, and
 extract/insert only.

@@ -49,12 +49,11 @@ replaced. The foundations are in `roadmap.md`.
   summary-carrying artifact story (a library object is still opaque,
   `roadmap.md` item 1) and an answer for comp-folded `usize`
   constants, which currently bake the width into the immutables.
-- [ ] Inbounds GEPs and memcopy alignment. The verifier and the
-  instruction flags have room; lowering knows where an address is
-  proved in bounds (the checked-access paths) and what alignment a
-  copy has (the element type), while the LLVM emitter hardcodes
-  `inbounds false` and `align 1`. This wires a flag through
-  serialization, both backends, and the text form.
+- [x] Inbounds GEPs and memcopy alignment. Lowering marks checked
+  indexing, field projections, and aggregate construction inbounds,
+  and the memcopy intrinsic carries the element alignment its two
+  pointers share; serialization, the LLVM emitter, and the IR guide
+  follow. The direct backend ignores both.
 - [ ] Devirtualization of function values. A call through a value is
   an indirect call in both backends; LLVM sometimes folds it after
   inlining, and the direct backend never does. The adapters store
