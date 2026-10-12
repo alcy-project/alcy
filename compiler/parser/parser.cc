@@ -1071,13 +1071,23 @@ bool Parser::parse_generic_params(std::vector<ast::GenericParam>& params) {
       }
     }
     ast::TypeIdx type = ast::TypeIdx::invalid();
+    std::vector<ast::TypeIdx> extra_bounds;
     if (match(lexer::TokenKind::Colon)) {
       type = parse_type();
       if (!type.is_valid()) {
         return false;
       }
+      // `T: A + B`: the annotations after the first are bounds too.
+      while (match(lexer::TokenKind::Plus)) {
+        const ast::TypeIdx bound = parse_type();
+        if (!bound.is_valid()) {
+          return false;
+        }
+        extra_bounds.push_back(bound);
+      }
     }
-    params.push_back(ast::GenericParam{name, type});
+    params.push_back(ast::GenericParam{
+        name, type, ast::copy_to_arena(ast_.spans, extra_bounds)});
     // A nested generic annotation absorbs the `>` that closes the list
     // as part of its own `>>`; the banked half is that closer.
     if (banked_gt_ > 0) {

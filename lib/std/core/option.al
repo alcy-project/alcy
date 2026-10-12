@@ -103,7 +103,7 @@ impl<T> Option<T> {
 // payloads are, two `None`s are equal, and mixed shapes are not.
 // Whether `T` compares is checked where the generic body is
 // instantiated.
-impl<T> PartialEq for Option<T> {
+impl<T: PartialEq> PartialEq for Option<T> {
   fn eq(self: &Self, other: &Self) -> bool {
     ret match *self {
       Option::Some(a) => match *other {
@@ -118,5 +118,5 @@ impl<T> PartialEq for Option<T> {
   }
 }
 
-impl<T> Eq for Option<T> {
+impl<T: Eq> Eq for Option<T> {
 }

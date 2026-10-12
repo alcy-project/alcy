@@ -460,7 +460,7 @@ impl<V> IndexMut<str, V> for Map<V> {
 // `==` compares the live entries: same length, and every key of one
 // map present in the other with an equal value. Keys compare by the
 // byte equality `locate` uses, and values through `PartialEq`.
-impl<V> PartialEq for Map<V> {
+impl<V: PartialEq> PartialEq for Map<V> {
   fn eq(self: &Self, other: &Self) -> bool {
     if self.len() != other.len() {
       ret false

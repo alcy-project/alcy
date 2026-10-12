@@ -79,19 +79,19 @@ peripheral work lives in `backlog.md`. The language record lives in
   ADR-0028's last slice: bounds where a parameter is declared - on
   functions, methods, spec methods, and impls, never on structs or
   enums - multiple bounds joined with `+`, `where` still reserved,
-  each call checked against them. Today a generic body is checked
-  only when instantiated, so an incomparable element's error appears
-  inside `collections/vec.al` rather than at the user's `==`, and an
-  uninstantiated body is never checked at all. In slices: bounds in
-  the parameter list, where the annotation today means a value
-  parameter; a check of each instantiation's type arguments, with
-  super-spec implication; a check of a generic impl's bounds before
-  its body specializes, so the operator case names the user's type;
-  bounds across `core` and `collections`, which gives `collect` its
-  shape and needs a decision on inferring an item type through an
-  `Iterator<T>` bound; spec methods with type parameters; and one ADR
-  deciding definition-site body checking (which needs a symbolic
-  type parameter the IR does not have) against call-site-only
+  each call checked against them. The first slices landed: `T: A + B`
+  parses and a declaration validates that each annotation names a
+  spec (a single primitive integer is a value parameter, as before);
+  a call checks each instantiation's type arguments, with super-spec
+  implication; and a generic impl's bounds are checked before its body
+  specializes, so `Vec<Plain> == Vec<Plain>` names `Plain` at the
+  user's `==` rather than `vec.al` - the standard library's generic
+  `PartialEq`/`Eq` implementations carry their bounds now. What
+  remains: bounds on a method's own type parameters; bounds across
+  `core` and `collections`, which gives `collect` its shape and needs
+  a decision on inferring an item type through an `Iterator<T>` bound;
+  and one ADR deciding definition-site body checking (which needs a
+  symbolic type parameter the IR does not have) against call-site-only
   checking. Callable bounds follow once the vocabulary exists; an
   inferred argument that is a function type waits for them. Designed
   in `docs/adr/0028-spec-system.md`.

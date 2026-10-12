@@ -1,0 +1,17 @@
+[package]
+name = "bounds"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[spec]
+implement = ["Display", "PartialEq", "Eq"]
+
+[dependencies]
+"alcy/std/*" = {}
+
+[[bin]]
+name = "bounds"
+path = "main.al"

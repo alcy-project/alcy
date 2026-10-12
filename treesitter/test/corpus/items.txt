@@ -632,6 +632,38 @@ struct ArrayVec<T, N: usize> {
           (identifier))))))
 
 ================================================================================
+A `+` joins several bounds on a type parameter
+================================================================================
+
+fn show<T: Display + PartialEq, N: usize>(x: T) {}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (type_parameters
+      (type_parameter
+        (identifier)
+        (path_type
+          (path
+            (identifier)))
+        (path_type
+          (path
+            (identifier))))
+      (type_parameter
+        (identifier)
+        (primitive_type)))
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)))))
+    (block)))
+
+================================================================================
 A variadic parameter is last
 ================================================================================
 

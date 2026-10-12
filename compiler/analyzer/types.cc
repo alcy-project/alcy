@@ -15,6 +15,7 @@
 #include "analyzer/checker.h"
 #include "analyzer/comp_evaluator.h"
 #include "analyzer/diag_code.h"
+#include "analyzer/fmt.h"
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
 #include "ast/verify.h"
@@ -125,22 +126,56 @@ void Checker::record_comp_call(void* context, const CompCallRecord& record) {
   static_cast<Checker*>(context)->comp_calls_.push_back(record);
 }
 
-void Checker::validate_value_parameter_types() {
+void Checker::validate_generic_annotations() {
+  // A parameter's annotation is a value type (`N: usize`) or a bound
+  // (`T: Display + PartialEq`). The first is a primitive integer; every
+  // other annotation has to name a spec (ADR-0028).
   const auto check = [&](u32 module,
                          std::span<const ast::GenericParam> params) {
     for (const ast::GenericParam& param : params) {
-      if (!param.type.is_valid()) {
+      if (is_value_param(ast, param)) {
         continue;
       }
-      const ir::TypeIdx annotation = resolve_type(module, param.type, nullptr);
-      if (is_error(annotation) || is_integer_tag(tag_of(annotation))) {
-        continue;
+      std::vector<ast::TypeIdx> annotations;
+      if (param.type.is_valid()) {
+        annotations.push_back(param.type);
       }
-      const u32 index =
-          bag.emit<i18n::Key::AnalyzerValueParameterTypeNotInteger>(
+      for (ast::TypeIdx extra : param.bounds) {
+        annotations.push_back(extra);
+      }
+      for (ast::TypeIdx annotation : annotations) {
+        if (!annotation.is_valid()) {
+          continue;
+        }
+        if (ast.types[annotation].kind == ast::TypeKind::Primitive) {
+          const u32 index =
+              bag.emit<i18n::Key::AnalyzerValueParameterTypeNotInteger>(
+                  diag::Severity::Error, diag::Stage::Analyzer,
+                  DiagCode::TypeMismatch, param.name.span, param.name.name);
+          (void)index;
+          continue;
+        }
+        if (ast.types[annotation].kind != ast::TypeKind::Path) {
+          const u32 index = bag.emit<i18n::Key::AnalyzerBoundNotASpec>(
               diag::Severity::Error, diag::Stage::Analyzer,
-              DiagCode::TypeMismatch, param.name.span, param.name.name);
-      (void)index;
+              DiagCode::SpecSuperBadTarget, ast.types[annotation].span,
+              param.name.name);
+          (void)index;
+          continue;
+        }
+        const ast::TypePath& path =
+            ast.types[annotation].payload.get<ast::TypePath>();
+        const std::span<const ast::Ident> segments =
+            ast.paths[path.path].segments;
+        const std::string_view name =
+            segments.empty() ? std::string_view{} : segments.back().name;
+        if (segments.empty() || bound_spec(module, name) == U32_MAX) {
+          const u32 index = bag.emit<i18n::Key::AnalyzerBoundUnknownSpec>(
+              diag::Severity::Error, diag::Stage::Analyzer,
+              DiagCode::SpecSuperBadTarget, ast.types[annotation].span, name);
+          (void)index;
+        }
+      }
     }
   };
   for (const NominalEntry& entry : nominals) {
@@ -823,6 +858,196 @@ bool Checker::spec_target_shapes_match(const SpecImplEntry& a,
   return true;
 }
 
+u32 Checker::bound_spec(u32 module, std::string_view name) {
+  if (const SpecEntry* entry = find_spec_in_scope(module, name)) {
+    return static_cast<u32>(entry - specs.data());
+  }
+  for (u32 i = 0; i < static_cast<u32>(specs.size()); ++i) {
+    if (specs[i].name == name) {
+      return i;
+    }
+  }
+  return U32_MAX;
+}
+
+std::string_view Checker::type_name(ir::TypeIdx type) const {
+  const ir::TypeIdx origin = type_origin(type);
+  const ir::TypeTag tag = tag_of(origin);
+  if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum) {
+    if (const GenericInstance* instance = generic_find(origin)) {
+      return nominals[instance->nominal].name;
+    }
+    const auto declaring = nominal_by_type_.find(origin.idx);
+    if (declaring != nominal_by_type_.end()) {
+      return nominals[declaring->second].name;
+    }
+  }
+  return pretty_tag(tag);
+}
+
+bool Checker::implements_spec(ir::TypeIdx type,
+                              u32 spec,
+                              std::span<const ir::TypeIdx> spec_args,
+                              u32 module) {
+  (void)module;
+  const ir::TypeIdx origin = type_origin(type);
+  const ir::TypeTag tag = tag_of(origin);
+  bool is_scalar = false;
+  u32 nominal = 0;
+  std::vector<ir::TypeIdx> args;
+  if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum) {
+    if (const GenericInstance* instance = generic_find(origin)) {
+      nominal = instance->nominal;
+      args = instance->args;
+    } else {
+      const auto declaring = nominal_by_type_.find(origin.idx);
+      if (declaring == nominal_by_type_.end()) {
+        return false;
+      }
+      nominal = declaring->second;
+    }
+  } else {
+    is_scalar = true;
+  }
+  for (const SpecImplEntry& candidate : spec_impls) {
+    if (candidate.target.is_primitive) {
+      if (!is_scalar || !types_equal(candidate.target.primitive, origin)) {
+        continue;
+      }
+    } else {
+      if (is_scalar || candidate.target.nominal != nominal ||
+          candidate.target.args.size() != args.size()) {
+        continue;
+      }
+      bool match = true;
+      for (usize i = 0; i < args.size(); ++i) {
+        const SpecTarget::Arg& want = candidate.target.args[i];
+        if (want.is_param || want.is_value) {
+          continue;
+        }
+        if (!types_equal(want.type, args[i])) {
+          match = false;
+          break;
+        }
+      }
+      if (!match) {
+        continue;
+      }
+    }
+    if (candidate.spec == spec) {
+      if (candidate.spec_args.size() != spec_args.size()) {
+        continue;
+      }
+      bool same = true;
+      for (usize i = 0; i < spec_args.size(); ++i) {
+        const SpecTarget::Arg& want = candidate.spec_args[i];
+        if (want.is_param || want.is_value || want.shape.is_valid() ||
+            !types_equal(want.type, spec_args[i])) {
+          same = false;
+          break;
+        }
+      }
+      if (same) {
+        return true;
+      }
+      continue;
+    }
+    // A refined spec carries the ones it refines: `impl Eq for T`
+    // satisfies a `PartialEq` bound.
+    for (u32 node = candidate.spec; node < spec_supers_.size();) {
+      node = spec_supers_[node];
+      if (node == U32_MAX) {
+        break;
+      }
+      if (node == spec) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool Checker::check_declared_bounds(
+    u32 module,
+    std::span<const ast::GenericParam> params,
+    const std::vector<std::pair<std::string_view, ir::TypeIdx>>& bindings,
+    diag::Span span) {
+  for (const ast::GenericParam& param : params) {
+    if (is_value_param(ast, param)) {
+      continue;
+    }
+    const ir::TypeIdx* bound_type = nullptr;
+    for (const auto& binding : bindings) {
+      if (binding.first == param.name.name) {
+        bound_type = &binding.second;
+        break;
+      }
+    }
+    if (bound_type == nullptr || !bound_type->is_valid()) {
+      continue;
+    }
+    std::vector<ast::TypeIdx> annotations;
+    if (param.type.is_valid()) {
+      annotations.push_back(param.type);
+    }
+    for (ast::TypeIdx extra : param.bounds) {
+      annotations.push_back(extra);
+    }
+    for (ast::TypeIdx annotation : annotations) {
+      if (ast.types[annotation].kind != ast::TypeKind::Path) {
+        // The declaration check owns a spelling that is no spec.
+        continue;
+      }
+      const ast::TypePath& path =
+          ast.types[annotation].payload.get<ast::TypePath>();
+      const std::span<const ast::Ident> segments =
+          ast.paths[path.path].segments;
+      if (segments.empty()) {
+        continue;
+      }
+      const u32 spec = bound_spec(module, segments.back().name);
+      if (spec == U32_MAX) {
+        continue;
+      }
+      // The bound's own arguments resolve under the instantiation's
+      // bindings (`Iterator<T>`), the way a spec argument's shape does.
+      std::vector<ir::TypeIdx> spec_args;
+      for (ast::TypeIdx arg : path.args) {
+        const usize pushed = type_params.size();
+        for (const auto& binding : bindings) {
+          type_params.emplace_back(binding.first, binding.second);
+        }
+        const ir::TypeIdx resolved = resolve_type(module, arg, nullptr);
+        while (type_params.size() > pushed) {
+          type_params.pop_back();
+        }
+        if (is_error(resolved)) {
+          bound_failure_ = true;
+          return false;
+        }
+        spec_args.push_back(resolved);
+      }
+      // `{}` formats a builtin convertible with no impl at all, so a
+      // `Display` bound accepts those types too.
+      const bool builtin_display =
+          analyzer::is_formattable_tag(tag_of(*bound_type)) &&
+          specs[spec].name == "Display" &&
+          tree.is_staged_item("fmt", specs[spec].item);
+      if (!builtin_display &&
+          !implements_spec(*bound_type, spec, spec_args, module)) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerTypeBoundNotSatisfied>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::InvalidOperation, span, type_name(*bound_type),
+            specs[spec].name);
+        (void)index;
+        bound_failure_ = true;
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 void Checker::check_superspecs() {
   constexpr u32 NO_SUPER = U32_MAX;
   std::vector<u32> super_of(specs.size(), NO_SUPER);
@@ -901,6 +1126,7 @@ void Checker::check_superspecs() {
       state[on_path] = 2;
     }
   }
+  spec_supers_ = super_of;
   // Every implementation needs an implementation of its spec's direct
   // super for the same target; the chain holds because each super's own
   // implementation owes the next.
@@ -1280,7 +1506,9 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
               if (candidate.name.name == path.segments[0].name) {
                 direct = true;
                 param = candidate.name.name;
-                annotation = candidate.type;
+                annotation = is_value_param(ast, candidate)
+                                 ? candidate.type
+                                 : ast::TypeIdx::invalid();
                 break;
               }
             }
@@ -1715,7 +1943,7 @@ Checker::GenericScope Checker::push_generic_scope(
   const NominalEntry& entry = nominals[instance.nominal];
   const std::span<const ast::GenericParam> params = nominal_params(entry);
   for (usize i = 0; i < params.size(); ++i) {
-    if (params[i].type.is_valid()) {
+    if (is_value_param(ast, params[i])) {
       value_params.push_back({params[i].name.name,
                               const_type_value(instance.args[i]), entry.module,
                               params[i].type});
@@ -1791,7 +2019,7 @@ const GenericInstance* Checker::infer_from_payload_args(
     if (slot == decl.params.size()) {
       continue;
     }
-    if (decl.params[slot].type.is_valid()) {
+    if (is_value_param(ast, decl.params[slot])) {
       // A value slot binds from a value argument, not from a payload's
       // type; the annotation path is the one that resolves it.
       return nullptr;
@@ -1837,7 +2065,7 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   // itself, so a value-declared slot must hold the const type a value
   // was lowered to. Anything else is a type argument in that slot.
   for (usize i = 0; i < params.size(); ++i) {
-    if (!params[i].type.is_valid()) {
+    if (!is_value_param(ast, params[i])) {
       continue;
     }
     if (is_error(args[i]) || tag_of(args[i]) != ir::TypeTag::Const) {
@@ -1921,7 +2149,7 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   const usize pushed_values = value_params.size();
   const auto push_bindings = [&](std::span<const ast::GenericParam> declared) {
     for (usize i = 0; i < declared.size(); ++i) {
-      if (declared[i].type.is_valid()) {
+      if (is_value_param(ast, declared[i])) {
         value_params.push_back({declared[i].name.name,
                                 const_type_value(args[i]), entry.module,
                                 declared[i].type});
@@ -2387,7 +2615,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
       args.reserve(arg_count);
       for (usize i = 0; i < arg_count; ++i) {
         const ast::TypeIdx arg = node.payload.get<ast::TypePath>().args[i];
-        if (params[i].type.is_valid()) {
+        if (is_value_param(ast, params[i])) {
           u64 value = 0;
           if (!resolve_value_argument(module, arg, params[i].name.name,
                                       node.span, value)) {
@@ -4694,7 +4922,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
             if (param.name.name != path.segments[0].name) {
               continue;
             }
-            if (param.type.is_valid()) {
+            if (is_value_param(ast, param)) {
               if (tag_of(target_args[i]) != ir::TypeTag::Const) {
                 shape_ok = false;
                 break;
@@ -4787,7 +5015,7 @@ bool Checker::match_compound_target(
         const std::string_view name = path.segments[0].name;
         bool bound = false;
         for (const ast::GenericParam& param : params) {
-          if (param.name.name == name && param.type.is_valid()) {
+          if (param.name.name == name && is_value_param(ast, param)) {
             value_scope.push_back(
                 ValueParam{name, shape.count, module, param.type});
             bound = true;
@@ -4808,7 +5036,7 @@ bool Checker::match_compound_target(
       if (path.args.empty() && ast.paths[path.path].segments.size() == 1) {
         const std::string_view name = ast.paths[path.path].segments[0].name;
         for (const ast::GenericParam& param : params) {
-          if (param.name.name == name && !param.type.is_valid()) {
+          if (param.name.name == name && !is_value_param(ast, param)) {
             scope.emplace_back(name, self);
             return true;
           }
@@ -4887,7 +5115,7 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
           if (param.name.name != path.segments[0].name) {
             continue;
           }
-          if (!param.type.is_valid()) {
+          if (!is_value_param(ast, param)) {
             scope.emplace_back(param.name.name, args[i]);
             found = true;
             break;
@@ -4902,6 +5130,12 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
         shape_ok = found;
       }
       if (!shape_ok) {
+        continue;
+      }
+      // The impl's bounds have to hold for this instantiation before
+      // its body specializes (ADR-0028): the refusal names the type
+      // the caller passed rather than a line inside the library.
+      if (!check_declared_bounds(m, impl.params, scope, span)) {
         continue;
       }
       const CheckedModule::MethodInfo* method =
@@ -4943,6 +5177,7 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
                                                         diag::Span span,
                                                         bool spec_only,
                                                         u32 spec_filter) {
+  bound_failure_ = false;
   // A field's type is a storage copy of the declared type, so a method or
   // operator reached through a field follows the copy back to its origin.
   self = type_origin(self);
@@ -5094,6 +5329,12 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
         record_spec_args.push_back(bound);
       }
       if (!shape_ok) {
+        continue;
+      }
+      // The impl's bounds have to hold for this instantiation before
+      // its body specializes (ADR-0028): the refusal names the type
+      // the caller passed rather than a line inside the library.
+      if (!check_declared_bounds(entry.module, impl.params, scope, span)) {
         continue;
       }
       candidate =
@@ -5255,7 +5496,7 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
   type_params.clear();
   value_params.clear();
   for (usize i = 0; i < params.size() && i < args.size(); ++i) {
-    if (params[i].type.is_valid()) {
+    if (is_value_param(ast, params[i])) {
       value_params.push_back({params[i].name.name, const_type_value(args[i]),
                               module, params[i].type});
       continue;
@@ -5334,7 +5575,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   }
   std::vector<ir::TypeIdx> bound(params.size(), ir::TypeIdx(base::INVALID_IDX));
   for (usize i = 0; i < explicit_args.size(); ++i) {
-    if (params[i].type.is_valid()) {
+    if (is_value_param(ast, params[i])) {
       u64 value = 0;
       if (!resolve_value_argument(module, explicit_args[i], params[i].name.name,
                                   span, value)) {
@@ -5351,7 +5592,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
     // Only a type slot binds from an argument's type; a value slot is
     // never inferred and waits for its turbofish argument.
     if (declared.slot >= params.size() ||
-        params[declared.slot].type.is_valid() ||
+        is_value_param(ast, params[declared.slot]) ||
         bound[declared.slot].is_valid()) {
       continue;
     }
@@ -5419,7 +5660,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   // A value slot never infers, so an unfilled one is named first: the
   // type message below would suggest spelling only a type argument.
   for (usize i = 0; i < bound.size(); ++i) {
-    if (!params[i].type.is_valid()) {
+    if (!is_value_param(ast, params[i])) {
       continue;
     }
     if (bound[i].is_valid() && tag_of(bound[i]) == ir::TypeTag::Const) {
@@ -5453,6 +5694,13 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
       (void)index;
       return nullptr;
     }
+  }
+  std::vector<std::pair<std::string_view, ir::TypeIdx>> bounds;
+  for (usize i = 0; i < params.size() && i < bound.size(); ++i) {
+    bounds.emplace_back(params[i].name.name, bound[i]);
+  }
+  if (!check_declared_bounds(module, params, bounds, span)) {
+    return nullptr;
   }
   return instantiate_fn(module, item, bound);
 }
@@ -5963,7 +6211,7 @@ bool Checker::resolve_value_path(u32 module,
         std::vector<ir::TypeIdx> args;
         args.reserve(type_args.size());
         for (usize i = 0; i < type_args.size(); ++i) {
-          if (i < params.size() && params[i].type.is_valid()) {
+          if (i < params.size() && is_value_param(ast, params[i])) {
             u64 value = 0;
             if (!resolve_value_argument(module, type_args[i],
                                         params[i].name.name, node.span,
@@ -6664,7 +6912,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
       checker.root_by_identity_.emplace(tree.package_roots[i].identity, i);
     }
   }
-  checker.validate_value_parameter_types();
+  checker.validate_generic_annotations();
   checker.validate_variadic_parameters();
   // Every slot exists before any module processes: a signature can
   // resolve a name into a module the sweep has not reached, and a slot

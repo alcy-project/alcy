@@ -2889,6 +2889,88 @@ TEST_CASE("Check rejects a non-canonical display spec") {
                     "Spec 'Display' must keep the compiler's operator shape"));
 }
 
+// A bound says what a parameter answers, and a call instantiates only
+// when the argument's type implements each bound (ADR-0028).
+TEST_CASE("Check reads a bounded generic call") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir,
+      {{"main.al",
+        "struct Tag {\n  n: i32,\n}\n"
+        "impl Shown for Tag {\n"
+        "  fn show(self: &Self) -> i32 {\n    ret self.n\n  }\n}\n"
+        "fn dump<T: Shown>(x: T) -> i32 {\n"
+        "  ret x.show()\n"
+        "}\n"
+        "fn main() -> i32 {\n"
+        "  t := Tag { n: 1 }\n"
+        "  ret dump(t)\n"
+        "}\n"},
+       {"core.al", "pub spec Shown {\n  fn show(self: &Self) -> i32;\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a call whose type misses a bound") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir,
+      {{"main.al",
+        "struct Tag {\n  n: i32,\n}\n"
+        "fn dump<T: Shown>(x: T) -> i32 {\n"
+        "  ret x.show()\n"
+        "}\n"
+        "fn main() -> i32 {\n"
+        "  t := Tag { n: 1 }\n"
+        "  ret dump(t)\n"
+        "}\n"},
+       {"core.al", "pub spec Shown {\n  fn show(self: &Self) -> i32;\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(has_message(
+      f.bag,
+      "Type 'Tag' does not implement 'Shown', which the bound requires"));
+}
+
+TEST_CASE("Check rejects a bound that names no spec") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir,
+      {{"main.al",
+        "fn dump<T: Nope>(x: T) -> i32 {\n"
+        "  ret 0\n"
+        "}\n"
+        "fn main() -> i32 {\n"
+        "  ret dump(1i32)\n"
+        "}\n"},
+       {"core.al", "pub spec Shown {\n  fn show(self: &Self) -> i32;\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(has_message(f.bag, "Bound 'Nope' names no spec"));
+}
+
 TEST_CASE("Check rejects a fmt call without its buffer") {
   VirtualDir dir;
   const bool setup = write_all(

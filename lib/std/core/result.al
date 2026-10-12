@@ -55,7 +55,7 @@ impl<T, E> Result<T, E> {
 // `Ok` through `T`, `Err` with `Err` through `E`, and mixed shapes are
 // not equal. Whether the payload compares is checked where the generic
 // body is instantiated.
-impl<T, E> PartialEq for Result<T, E> {
+impl<T: PartialEq, E: PartialEq> PartialEq for Result<T, E> {
   fn eq(self: &Self, other: &Self) -> bool {
     ret match *self {
       Result::Ok(a) => match *other {
@@ -70,5 +70,5 @@ impl<T, E> PartialEq for Result<T, E> {
   }
 }
 
-impl<T, E> Eq for Result<T, E> {
+impl<T: Eq, E: Eq> Eq for Result<T, E> {
 }

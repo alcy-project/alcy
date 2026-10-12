@@ -1,0 +1,4 @@
+# `Vec<T>`'s equality carries a `T: PartialEq` bound, so the refusal
+# names `Plain` at the caller's `==` rather than a line in `vec.al`.
+exit = 4
+contains = ["Type 'Plain' does not implement 'PartialEq', which the bound requires"]

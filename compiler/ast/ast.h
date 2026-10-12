@@ -855,7 +855,14 @@ struct Item {
 // the declaration annotates it (`N: usize`).
 struct GenericParam {
   Ident name;
+  // The annotation after `:`: a value parameter's type (`N: usize`) or
+  // a bounded parameter's first bound (`T: Display`). Invalid when the
+  // parameter writes none. A primitive scalar annotation is what makes
+  // the parameter a value (ADR-0028).
   TypeIdx type = TypeIdx::invalid();
+  // The bounds after the first, from `T: A + B`; empty when the
+  // annotation is the whole of it.
+  std::span<const TypeIdx> bounds;
 };
 
 struct ItemFnParam {

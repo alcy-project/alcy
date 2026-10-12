@@ -2109,10 +2109,12 @@ ir::TypeIdx Checker::check_spec_index(u32 module,
   if (method == nullptr ||
       method->receiver == CheckedModule::ReceiverKind::None ||
       method->params.size() != 2) {
-    const u32 diag = bag.emit<i18n::Key::AnalyzerMissingOperatorSpec>(
-        diag::Severity::Error, diag::Stage::Analyzer,
-        DiagCode::InvalidOperation, ast.exprs[index_expr].span, spec_name);
-    (void)diag;
+    if (!bound_failure_) {
+      const u32 diag = bag.emit<i18n::Key::AnalyzerMissingOperatorSpec>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidOperation, ast.exprs[index_expr].span, spec_name);
+      (void)diag;
+    }
     return error_type();
   }
   // The spec fixes the index type, so a bare literal adopts it rather
@@ -2158,10 +2160,12 @@ ir::TypeIdx Checker::check_spec_equality(u32 module,
   if (method == nullptr ||
       method->receiver != CheckedModule::ReceiverKind::Shared ||
       method->params.size() != 2) {
-    const u32 diag = bag.emit<i18n::Key::AnalyzerMissingOperatorSpec>(
-        diag::Severity::Error, diag::Stage::Analyzer,
-        DiagCode::InvalidOperation, ast.exprs[expr].span, "PartialEq");
-    (void)diag;
+    if (!bound_failure_) {
+      const u32 diag = bag.emit<i18n::Key::AnalyzerMissingOperatorSpec>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidOperation, ast.exprs[expr].span, "PartialEq");
+      (void)diag;
+    }
     return error_type();
   }
   record_call(module, expr, method);
@@ -2207,10 +2211,12 @@ ir::TypeIdx Checker::check_spec_arithmetic(u32 module,
   if (method == nullptr ||
       method->receiver != CheckedModule::ReceiverKind::ByValue ||
       method->params.size() != params) {
-    const u32 diag = bag.emit<i18n::Key::AnalyzerMissingOperatorSpec>(
-        diag::Severity::Error, diag::Stage::Analyzer,
-        DiagCode::InvalidOperation, ast.exprs[expr].span, spec_name);
-    (void)diag;
+    if (!bound_failure_) {
+      const u32 diag = bag.emit<i18n::Key::AnalyzerMissingOperatorSpec>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidOperation, ast.exprs[expr].span, spec_name);
+      (void)diag;
+    }
     return error_type();
   }
   record_call(module, expr, method);
@@ -2238,10 +2244,12 @@ ir::TypeIdx Checker::check_spec_ordering(u32 module,
   if (method == nullptr ||
       method->receiver != CheckedModule::ReceiverKind::Shared ||
       method->params.size() != 2) {
-    const u32 diag = bag.emit<i18n::Key::AnalyzerMissingOperatorSpec>(
-        diag::Severity::Error, diag::Stage::Analyzer,
-        DiagCode::InvalidOperation, ast.exprs[expr].span, "PartialOrd");
-    (void)diag;
+    if (!bound_failure_) {
+      const u32 diag = bag.emit<i18n::Key::AnalyzerMissingOperatorSpec>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidOperation, ast.exprs[expr].span, "PartialOrd");
+      (void)diag;
+    }
     return error_type();
   }
   record_call(module, expr, method);

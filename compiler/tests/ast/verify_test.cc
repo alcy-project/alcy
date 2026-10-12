@@ -146,7 +146,8 @@ TEST_CASE("Verification accepts a value parameter annotation") {
   annotation.payload.set(TypePrimitive{.primitive = PrimitiveKind::Usize});
   const TypeIdx annotation_idx = f.ast.types.emplace_back(annotation);
   const GenericParam param{.name = {.name = "N", .span = test_span()},
-                           .type = annotation_idx};
+                           .type = annotation_idx,
+                           .bounds = {}};
   ItemNode item;
   item.kind = ItemKind::Fn;
   item.span = test_span();
@@ -163,7 +164,8 @@ TEST_CASE("Verification accepts a value parameter annotation") {
 TEST_CASE("Verification rejects a dangling value parameter annotation") {
   Fixture f;
   const GenericParam param{.name = {.name = "N", .span = test_span()},
-                           .type = TypeIdx(6)};
+                           .type = TypeIdx(6),
+                           .bounds = {}};
   ItemNode item;
   item.kind = ItemKind::Fn;
   item.span = test_span();

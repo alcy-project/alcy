@@ -131,6 +131,19 @@ record — item and type nodes, the impl table beside the method
 tables, the dispatch phases in lookup order, the catalog keys —
 arrives with the first slice, as this log keeps the two apart.
 
+Amended at bounds' landing: `T: A + B` parses in a declaration's
+parameter list, and the annotation is a value parameter's type when it
+is a single primitive integer and a bound otherwise. Every declaration
+site validates that each annotation names a spec; a call checks each
+instantiation's type arguments against the bounds; and a generic
+impl's bounds are checked before its body specializes, so the refusal
+names the caller's type - `Vec<Plain> == Vec<Plain>` - rather than a
+line inside `vec.al`. An implementation of a refined spec carries its
+supers, and `Display` accepts the builtin convertibles without an
+impl. What remains: bounds on a method's own type parameters, bounds
+across `core` and `collections` (which is what `collect` waits for),
+and the definition-site body-checking decision.
+
 What is explicitly out of scope: associated types (specs take type
 parameters instead), supertraits, default bodies, spec objects
 (`dyn` stays reserved), operator overloading, bounds on struct and

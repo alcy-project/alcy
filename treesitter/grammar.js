@@ -308,10 +308,17 @@ module.exports = grammar({
     ),
 
     // An annotation names the kind at the declaration: `N: usize` is a
-    // value rather than a type (grammar.ebnf, `type_param`).
+    // value rather than a type (grammar.ebnf, `type_param`). A `+`
+    // joins further bounds onto the first annotation, so
+    // `T: Display + PartialEq` names two of them (types.md, "Bounds
+    // over specs").
     type_parameter: $ => seq(
       field('name', $.identifier),
-      optional(seq(':', field('type', $._type))),
+      optional(seq(
+        ':',
+        field('type', $._type),
+        repeat(seq('+', field('type', $._type))),
+      )),
     ),
 
     parameters: $ => seq(

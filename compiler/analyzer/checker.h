@@ -30,6 +30,34 @@
 
 namespace analyzer {
 
+// Whether a parameter's annotation makes it a value parameter: exactly
+// one annotation, and that annotation a primitive scalar (`N: usize`).
+// A `+` list and every other annotation are bounds (ADR-0028), so a
+// declaration's `T: Display` is a bounded type parameter.
+inline bool is_value_param(const ast::AstArena& ast,
+                           const ast::GenericParam& param) {
+  if (!param.bounds.empty() || !param.type.is_valid() ||
+      ast.types[param.type].kind != ast::TypeKind::Primitive) {
+    return false;
+  }
+  using ast::PrimitiveKind;
+  switch (ast.types[param.type].payload.get<ast::TypePrimitive>().primitive) {
+    case PrimitiveKind::I8:
+    case PrimitiveKind::I16:
+    case PrimitiveKind::I32:
+    case PrimitiveKind::I64:
+    case PrimitiveKind::I128:
+    case PrimitiveKind::Isize:
+    case PrimitiveKind::U8:
+    case PrimitiveKind::U16:
+    case PrimitiveKind::U32:
+    case PrimitiveKind::U64:
+    case PrimitiveKind::U128:
+    case PrimitiveKind::Usize: return true;
+    default: return false;
+  }
+}
+
 struct NominalEntry {
   u32 module;
   std::string_view name;
@@ -220,6 +248,12 @@ class Checker {
   // annotated (`N: usize`) bind their compile-time value here while
   // the declaration's members resolve.
   std::vector<ValueParam> value_params;
+  // Every spec's direct super, by index, or U32_MAX; filled with the
+  // rest of the super-spec walk before bounds are checked.
+  std::vector<u32> spec_supers_;
+  // Set when a bound check refused an instantiation, so the caller
+  // reports the missing capability rather than a missing method.
+  bool bound_failure_ = false;
   // Index into generic_instances while checking an instantiated
   // method body (NO_INST otherwise); keys the lowering side tables.
   u32 cur_inst = NO_INST;
@@ -294,7 +328,7 @@ class Checker {
   void register_nominals();
   // Every annotated generic parameter names the type of a compile-time
   // value, so the annotation must resolve to an integer.
-  void validate_value_parameter_types();
+  void validate_generic_annotations();
   // Only a compiler-expanded function may declare `args: ..`
   // (ADR-0055); the expansion is what gives the slot meaning.
   void validate_variadic_parameters();
@@ -355,6 +389,28 @@ class Checker {
   // with alpha-equivalent arguments. The super-spec requirement needs
   // the identical shape, which overlap is too weak to state.
   bool spec_target_shapes_match(const SpecImplEntry& a, const SpecImplEntry& b);
+  // The spec a bound names: in scope first, then the single spec of
+  // that name anywhere, so a standard bound resolves at a call site
+  // that never named it. U32_MAX when no spec carries the name.
+  u32 bound_spec(u32 module, std::string_view name);
+  // Whether `type` implements `spec`, directly or through a refined
+  // spec (`Eq` carries `PartialEq`, ADR-0028). `spec_args` are the
+  // bound's arguments, empty when it names none.
+  bool implements_spec(ir::TypeIdx type,
+                       u32 spec,
+                       std::span<const ir::TypeIdx> spec_args,
+                       u32 module);
+  // Checks every declared bound of `params` against the type the
+  // instantiation bound each parameter to. Reports each unmet bound,
+  // sets the bound-failure latch, and answers false.
+  bool check_declared_bounds(
+      u32 module,
+      std::span<const ast::GenericParam> params,
+      const std::vector<std::pair<std::string_view, ir::TypeIdx>>& bindings,
+      diag::Span span);
+  // The name a diagnostic uses for a type: the nominal's, else the
+  // scalar spelling.
+  std::string_view type_name(ir::TypeIdx type) const;
   // Resolves every declared super-spec, rejects cycles, and requires an
   // implementation of each ancestor beside every implementation of a
   // spec (ADR-0053). Runs after every module's signatures registered,

@@ -250,6 +250,9 @@
   F(AnalyzerTryNeedsValueVariant, "A '?' needs a first variant carrying a value") \
   F(AnalyzerTryTypeMismatch, "The '?' type does not match the function return type") \
   F(AnalyzerTuplePatternArity, "Tuple pattern has {} elements, type has {}") \
+  F(AnalyzerBoundNotASpec, "Bound '{}' does not name a spec") \
+  F(AnalyzerBoundUnknownSpec, "Bound '{}' names no spec") \
+  F(AnalyzerTypeBoundNotSatisfied, "Type '{}' does not implement '{}', which the bound requires") \
   F(AnalyzerTypeArgumentNeedsPointer, "Type `{}` needs a pointer to bind its type argument") \
   F(AnalyzerTypeArgumentNeedsReference, "Type `{}` needs a reference to bind its type argument") \
   F(AnalyzerTypeArgumentNeedsSequence, "Type `{}` needs an array or a slice to bind its type argument") \

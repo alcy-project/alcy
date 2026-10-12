@@ -99,6 +99,26 @@
   implements the specs, and a package outside the suite lists the ones
   it implements in `[spec] implement = [...]` (see `modules.md`).
 
+## Bounds over specs
+
+- A type parameter takes bounds where it is declared - on free
+  functions, methods, spec methods, and impl blocks, never on structs
+  or enums: `fn show_all<T: Display + PartialEq>(items: &[T])`. Inside
+  the body `T` answers the bound specs' methods, and a call
+  instantiates only when each argument's type implements each bound.
+  The refusal names the caller's type at the call rather than a line
+  inside the library, which is where an unbounded body's failure used
+  to surface. Multiple bounds join with `+`; `where` stays reserved.
+  See `docs/adr/0028-spec-system.md`.
+- An annotation is a value parameter's type when it is a single
+  primitive integer (`N: usize`); every other annotation is a bound,
+  and a declaration validates that each one names a spec.
+- An implementation of a refined spec carries its supers, so
+  `impl Eq for T` satisfies a `PartialEq` bound.
+- `Display` accepts the builtin convertibles (`i8`-`u64`, `f32`/`f64`,
+  `bool`, `str`) without an implementation, because `{}` formats them
+  with no impl at all.
+
 ## Arithmetic over specs
 
 - `a + b`, `a - b`, `a * b`, `a / b`, `a % b`, and `-a` over a
