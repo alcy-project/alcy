@@ -60,11 +60,12 @@ replaced. The foundations are in `roadmap.md`.
   their function in a struct field the caller fills, so the pass
   needs cross-function facts and lands once the pass stage grows a
   module pass.
-- [ ] Bounds-check elision. Every indexed access emits its own
-  compare, branch, and panic block; a range analysis over `0..len`
-  loops and repeated indices would remove the checks an earlier one
-  dominates, and the `Switch` opcode stays unemitted for match
-  chains.
+- [ ] Bounds-check elision. Checking an index at every access costs a
+  compare, a branch, and a panic block; a literal index the array's
+  own length admits now skips the check entirely. What remains is the
+  range analysis: `0..len` loops and repeated indices would remove
+  the checks an earlier one dominates, and the `Switch` opcode stays
+  unemitted for match chains.
 - [ ] Index the side tables the proportionality work left behind. Most
   landed (ADR-0046); the tail is `expr_types` in both readers, the
   per-module closure, closure-fn, and indirect-call tables,

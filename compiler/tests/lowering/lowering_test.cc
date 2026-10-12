@@ -743,6 +743,37 @@ TEST_CASE("Checked indexing and field access mark addresses inbounds") {
   CHECK(inbounds >= 3);
 }
 
+TEST_CASE("A literal index inside the array's bounds needs no check") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "fn main() -> i32 {\n"
+                   "  a := [1i32, 2i32]\n"
+                   "  const i := 1\n"
+                   "  ret a[1] + a[i]\n"
+                   "}\n"}});
+  Fixture f;
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  // Both indexes are compile-time values the array admits, so no
+  // compare or panic path is emitted at all.
+  usize branches = 0;
+  usize inbounds = 0;
+  for (const ir::Instruction& instr : result.lowered->storage->instrs()) {
+    if (instr.op == ir::Opcode::CondBr) {
+      ++branches;
+    }
+    if (instr.op == ir::Opcode::GetElementPtr && instr.flags.inbounds) {
+      ++inbounds;
+    }
+  }
+  CHECK(branches == 0);
+  CHECK(inbounds >= 2);
+}
+
 // diagnostic: the interner answers with nothing so a caller that can
 // report exhaustion does, rather than aborting.
 TEST_CASE("Lowering reports a spent name table") {

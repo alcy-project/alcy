@@ -453,6 +453,21 @@ Val Lowerer::checked_index_addr(Val base, Val position, diag::Span span) {
   }
   const ir::ArrayType& shape =
       builder.state().array_types[builder.state().types[base.type].as_array()];
+  // A literal index the array's own length admits needs no check: the
+  // address is in bounds by arithmetic, not by test.
+  const ir::Operand& position_operand = builder.state().operands[position.op];
+  if (position_operand.is<ir::ImmutableIdx>()) {
+    const u64 value = builder.state()
+                          .immutables[position_operand.as_immutable()]
+                          .as_u64_integer(tag_of(position.type));
+    if (value < shape.count) {
+      const ir::RegisterIdx gep =
+          emit(ir::Opcode::GetElementPtr, shape.element,
+               {base.op, zero_i32, position.op}, {.inbounds = true});
+      return Val{to_operand(gep, shape.element), shape.element, true,
+                 base.place};
+    }
+  }
   const ir::TypeIdx usize_ty = usize_type();
   Val wide = position;
   if (tag_of(position.type) != tag_of(usize_ty)) {
