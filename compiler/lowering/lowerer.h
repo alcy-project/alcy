@@ -495,6 +495,11 @@ class Lowerer {
     ir::RegisterIdx tot_addr = ir::RegisterIdx::invalid();
     ir::OperandIdx capacity = ir::OperandIdx::invalid();
   };
+  // Whether every placeholder's argument is convertible and every
+  // `{:.N}` precision names a float; reports the reason when not.
+  bool check_fmt_arguments(diag::Span span,
+                           const analyzer::FmtTemplate& parsed,
+                           const std::vector<ir::TypeIdx>& elem_types);
   bool emit_fmt_pieces(diag::Span span,
                        const std::vector<analyzer::FmtPiece>& pieces,
                        ir::OperandIdx tup_op,

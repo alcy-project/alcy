@@ -9,6 +9,9 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] Manifest lint: flag `0.x` dependency requirements. The grammar
   accepts them, but a pre-1.0 minor may break, so the advice belongs
   to a lint rather than to the parser (ADR-0057).
+- [ ] Format-string lint: require the explicit `f` conversion
+  (`{:.2f}` over `{:.2}`). The two spellings are the same piece, so
+  only a project-level lint rule can insist on the explicit one.
 - [ ] Link-time measurement: a benchmark reporting where a link goes —
   driver startup, the object write, the linker — and asserting nothing
   about wall time.

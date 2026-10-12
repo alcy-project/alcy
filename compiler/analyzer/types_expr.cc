@@ -805,11 +805,23 @@ bool Checker::verify_fmt_literal(ast::ExprIdx fmt_expr,
     (void)index;
     return false;
   }
-  for (ir::TypeIdx element : elements) {
-    if (!is_formattable_tag(tag_of(element))) {
+  for (const FmtPiece& piece : parsed.pieces) {
+    if (!piece.is_arg) {
+      continue;
+    }
+    const ir::TypeIdx element = elements[piece.arg];
+    const ir::TypeTag tag = tag_of(element);
+    if (!is_formattable_tag(tag)) {
       const u32 index = bag.emit<i18n::Key::CodegenArgumentNotFormattable>(
           diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::InvalidOperation, args_span);
+      (void)index;
+      return false;
+    }
+    if (!fmt_piece_matches_argument(piece, tag)) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerFormatPrecisionNotFloat>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidOperation, ast.exprs[fmt_expr].span);
       (void)index;
       return false;
     }

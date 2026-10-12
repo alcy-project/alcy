@@ -17,10 +17,19 @@ namespace analyzer {
 // and expansion (lowering, which reuses these over evaluated bytes).
 // Decoding MUST match the runtime literal rules byte for byte.
 
+// A placeholder without a `{:.N}` precision.
+inline constexpr u8 FMT_NO_PRECISION = 0xFF;
+// The largest accepted precision. The expansion's scratch buffers are
+// compile-time constants sized from it.
+inline constexpr u8 FMT_MAX_PRECISION = 17;
+
 struct FmtPiece {
   bool is_arg = false;
   std::string literal;
   u32 arg = 0;
+  // Fractional digits for a float argument, from `{:.N}`; the default
+  // when the placeholder names none.
+  u8 precision = FMT_NO_PRECISION;
 };
 
 enum class FmtError : u8 {
@@ -67,9 +76,38 @@ inline FmtTemplate parse_format_string(const std::string& bytes) {
         continue;
       }
       if (bytes[i + 1] != '}') {
-        result.error = FmtError::Specifier;
-        result.error_pos = i;
-        return result;
+        // `{:.Nf}`: the fixed-point fractional digits of a float
+        // argument. The `f` names the conversion explicitly and is
+        // optional: `{:.N}` is the same piece. A linter may later
+        // require the explicit spelling.
+        if (bytes[i + 1] != ':' || i + 2 >= bytes.size() ||
+            bytes[i + 2] != '.') {
+          result.error = FmtError::Specifier;
+          result.error_pos = i;
+          return result;
+        }
+        usize j = i + 3;
+        u32 value = 0;
+        u32 count = 0;
+        while (j < bytes.size() && bytes[j] >= '0' && bytes[j] <= '9') {
+          value = value * 10 + static_cast<u32>(bytes[j] - '0');
+          ++count;
+          ++j;
+        }
+        if (count > 0 && j < bytes.size() && bytes[j] == 'f') {
+          ++j;
+        }
+        if (count == 0 || value > FMT_MAX_PRECISION || j >= bytes.size() ||
+            bytes[j] != '}') {
+          result.error = FmtError::Specifier;
+          result.error_pos = i;
+          return result;
+        }
+        flush();
+        result.pieces.push_back(
+            FmtPiece{true, {}, result.placeholders++, static_cast<u8>(value)});
+        i = j + 1;
+        continue;
       }
       flush();
       result.pieces.push_back(FmtPiece{true, {}, result.placeholders++});
@@ -93,10 +131,20 @@ inline FmtTemplate parse_format_string(const std::string& bytes) {
   return result;
 }
 
-// Closed convertible set: integers, bools, and strings.
+// Closed convertible set: integers, bools, strings, and floats.
 inline bool is_formattable_tag(ir::TypeTag tag) {
   return tag == ir::TypeTag::I1 || tag == ir::TypeTag::Str ||
+         tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64 ||
          (tag >= ir::TypeTag::I8 && tag <= ir::TypeTag::U64);
+}
+
+// A `{:.N}` precision applies to floats only: no other convertible
+// type has fractional digits to fill.
+inline bool fmt_piece_matches_argument(const FmtPiece& piece, ir::TypeTag tag) {
+  if (piece.precision == FMT_NO_PRECISION) {
+    return true;
+  }
+  return tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64;
 }
 
 }  // namespace analyzer

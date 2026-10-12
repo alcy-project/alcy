@@ -2720,6 +2720,86 @@ TEST_CASE("Check reads the fmt package's variadic call") {
   CHECK(result.package.has_value());
 }
 
+TEST_CASE("Check reads a float format with a precision") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "fn main() {\n"
+             "  mut buf := [0u8; 8]\n"
+             "  _ := write(\"{:.2f} {} {:.3}\", &mut buf, 3.5, 2.5, 1.5)\n"
+             "}\n"},
+            {"fmt.al",
+             "pub intrinsic fn panic(msg: str) -> !;\n"
+             "pub struct WriteOutcome { written: usize, total: usize }\n"
+             "pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ..) -> "
+             "WriteOutcome {\n"
+             "  panic(\"x\")\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"fmt", "fmt.al"}});
+  CHECK(result.package.has_value());
+}
+
+TEST_CASE("Check rejects a format precision on a non-float") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "fn main() {\n"
+             "  mut buf := [0u8; 8]\n"
+             "  _ := write(\"{:.2f}\", &mut buf, 1i32)\n"
+             "}\n"},
+            {"fmt.al",
+             "pub intrinsic fn panic(msg: str) -> !;\n"
+             "pub struct WriteOutcome { written: usize, total: usize }\n"
+             "pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ..) -> "
+             "WriteOutcome {\n"
+             "  panic(\"x\")\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"fmt", "fmt.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(has_message(f.bag, "A format precision applies to floats only"));
+}
+
+TEST_CASE("Check rejects a malformed format precision") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "fn main() {\n"
+             "  mut buf := [0u8; 8]\n"
+             "  _ := write(\"{:.2x}\", &mut buf, 3.5)\n"
+             "}\n"},
+            {"fmt.al",
+             "pub intrinsic fn panic(msg: str) -> !;\n"
+             "pub struct WriteOutcome { written: usize, total: usize }\n"
+             "pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ..) -> "
+             "WriteOutcome {\n"
+             "  panic(\"x\")\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"fmt", "fmt.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(has_message(f.bag, "Invalid format string"));
+}
+
 TEST_CASE("Check rejects a fmt call without its buffer") {
   VirtualDir dir;
   const bool setup = write_all(
