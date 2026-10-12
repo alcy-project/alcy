@@ -2664,6 +2664,106 @@ Val Lowerer::lower_spec_unary(
                         /*has_argument=*/false);
 }
 
+Val Lowerer::lower_spec_ordering(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::CallTarget* target,
+    ast::BinaryOp op) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprBinary& bin = node.payload.get<ast::ExprBinary>();
+  const analyzer::CheckedModule& def = pkg.modules[target->module];
+  const analyzer::CheckedModule::MethodInfo& info = def.methods[target->index];
+  Val receiver = is_ref_tag(tag_of(info.params[0])) && is_rooted_place(bin.lhs)
+                     ? place_addr(bin.lhs)
+                     : lower_expr(bin.lhs, nullptr);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  Val argument = is_ref_tag(tag_of(info.params[1])) && is_rooted_place(bin.rhs)
+                     ? place_addr(bin.rhs)
+                     : lower_expr(bin.rhs, nullptr);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const Val call = emit_spec_call(target, node.span, receiver, argument,
+                                  /*has_argument=*/true);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  // The result is an `Option<Ordering>`: the option's discriminant
+  // says whether the pair compares at all, and the payload's own
+  // discriminant names the outcome.
+  Val slot = call.address ? call : address_of(call);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx option_ty = call.type;
+  const ir::TypeIdx option_origin = type_origin(option_ty);
+  u32 some = 0;
+  if (!variant_index(option_origin, "Some", some)) {
+    internal(node.span, "comparison without Option::Some");
+    return Val{size_one, error_type(), false, false};
+  }
+  const std::vector<ir::TypeIdx> payloads =
+      variant_payload(option_origin, some);
+  if (payloads.size() != 1) {
+    internal(node.span, "comparison payload arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx ordering_ty = type_origin(payloads[0]);
+  u32 less = 0;
+  u32 equal = 0;
+  u32 greater = 0;
+  if (!variant_index(ordering_ty, "Less", less) ||
+      !variant_index(ordering_ty, "Equal", equal) ||
+      !variant_index(ordering_ty, "Greater", greater)) {
+    internal(node.span, "comparison without an ordering");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+  const Val tag = load_disc(slot);
+  const ir::RegisterIdx is_some =
+      emit(ir::Opcode::Eq, boolean, {use_value(tag), disc_operand(some)});
+  // The payload area is byte-addressed; an `Ordering` sits at its
+  // start, its own discriminant first.
+  const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
+  const ir::TypeIdx byte_ty = builder.primitive(ir::TypeTag::U8);
+  const ir::RegisterIdx ordering_addr =
+      payload_field_addr(slot, variant_fields(option_origin, some), 0);
+  const ir::RegisterIdx disc_addr =
+      emit(ir::Opcode::GetElementPtr, byte_ty,
+           {to_operand(ordering_addr, byte_ty), index_operand(0)});
+  const ir::RegisterIdx disc =
+      emit(ir::Opcode::Load, i32_ty, {to_operand(disc_addr, i32_ty)});
+  const Val outcome{to_operand(disc, i32_ty), i32_ty, false, false};
+  const ir::RegisterIdx is_less =
+      emit(ir::Opcode::Eq, boolean, {use_value(outcome), disc_operand(less)});
+  const ir::RegisterIdx is_equal =
+      emit(ir::Opcode::Eq, boolean, {use_value(outcome), disc_operand(equal)});
+  const ir::RegisterIdx is_greater = emit(
+      ir::Opcode::Eq, boolean, {use_value(outcome), disc_operand(greater)});
+  ir::RegisterIdx within = is_equal;
+  switch (op) {
+    case ast::BinaryOp::Lt: within = is_less; break;
+    case ast::BinaryOp::Gt: within = is_greater; break;
+    case ast::BinaryOp::LtEq:
+      within =
+          emit(ir::Opcode::Or, boolean,
+               {to_operand(is_less, boolean), to_operand(is_equal, boolean)});
+      break;
+    case ast::BinaryOp::GtEq:
+      within = emit(
+          ir::Opcode::Or, boolean,
+          {to_operand(is_greater, boolean), to_operand(is_equal, boolean)});
+      break;
+    default: break;
+  }
+  // A `None` makes every comparison false.
+  const ir::RegisterIdx result =
+      emit(ir::Opcode::And, boolean,
+           {to_operand(is_some, boolean), to_operand(within, boolean)});
+  return Val{to_operand(result, boolean), boolean, false, false};
+}
+
 // Address of `base.name`: sees through references to the nominal
 // carrying the field. Works for values and places alike.
 Val Lowerer::field_addr(Val base, std::string_view name, diag::Span span) {
@@ -2896,6 +2996,10 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
   const ast::ExprBinary& bin = node.payload.get<ast::ExprBinary>();
   if (const analyzer::CheckedModule::CallTarget* target = call_target(expr);
       target != nullptr) {
+    if (bin.op == ast::BinaryOp::Gt || bin.op == ast::BinaryOp::Lt ||
+        bin.op == ast::BinaryOp::GtEq || bin.op == ast::BinaryOp::LtEq) {
+      return lower_spec_ordering(expr, target, bin.op);
+    }
     return lower_spec_binary(expr, target);
   }
   if (bin.op == ast::BinaryOp::Pow) {

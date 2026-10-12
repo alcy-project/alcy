@@ -4016,6 +4016,106 @@ TEST_CASE("Check rejects a non-canonical arithmetic spec") {
       has_message(f.bag, "Spec 'Add' must keep the compiler's operator shape"));
 }
 
+// The comparison operators reach `PartialOrd`, whose result wraps the
+// ordering in an `Option` so an incomparable pair has an answer.
+TEST_CASE("Check reads a comparison spec implementation") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"cmp.al",
+                       "pub enum Ordering {\n  Less,\n  Equal,\n  Greater,\n}\n"
+                       "pub enum Option<T> {\n  Some(T),\n  None,\n}\n"
+                       "pub spec PartialOrd {\n"
+                       "  fn partial_cmp(self: &Self, other: &Self) -> "
+                       "Option<Ordering>;\n}\n"},
+                      {"main.al",
+                       "struct T {\n  n: i32,\n}\n"
+                       "impl PartialOrd for T {\n"
+                       "  fn partial_cmp(self: &Self, other: &Self) -> "
+                       "Option<Ordering> {\n"
+                       "    if self.n < other.n {\n"
+                       "      ret Option::Some(Ordering::Less)\n"
+                       "    }\n"
+                       "    if self.n > other.n {\n"
+                       "      ret Option::Some(Ordering::Greater)\n"
+                       "    }\n"
+                       "    ret Option::Some(Ordering::Equal)\n"
+                       "  }\n}\n"
+                       "fn main() -> i32 {\n"
+                       "  a := T { n: 1 }\n"
+                       "  b := T { n: 2 }\n"
+                       "  if a > b {\n"
+                       "    ret 1\n"
+                       "  }\n"
+                       "  ret 0\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  const std::string_view seals[] = {"PartialOrd"};
+  const std::string_view implemented[] = {"PartialOrd"};
+  const PackagePolicy policies[] = {
+      {"core", "alcy/std", seals, {}},
+      {"testpkg", "", {}, implemented},
+  };
+  Fixture f;
+  const CheckOutcome result =
+      check_with_policies(dir, "main.al", {{"core", "cmp.al"}}, policies, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a comparison without its spec") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"cmp.al",
+                       "pub enum Ordering {\n  Less,\n  Equal,\n  Greater,\n}\n"
+                       "pub enum Option<T> {\n  Some(T),\n  None,\n}\n"
+                       "pub spec PartialOrd {\n"
+                       "  fn partial_cmp(self: &Self, other: &Self) -> "
+                       "Option<Ordering>;\n}\n"},
+                      {"main.al",
+                       "struct T {\n  n: i32,\n}\n"
+                       "fn main() -> i32 {\n"
+                       "  a := T { n: 1 }\n"
+                       "  b := T { n: 2 }\n"
+                       "  if a > b {\n"
+                       "    ret 1\n"
+                       "  }\n"
+                       "  ret 0\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "cmp.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(has_message(f.bag, "Type does not implement the 'PartialOrd' spec"));
+}
+
+TEST_CASE("Check rejects a non-canonical comparison spec") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"cmp.al",
+             "pub spec PartialOrd {\n"
+             "  fn partial_cmp(self: &Self, other: &Self) -> bool;\n}\n"},
+            {"main.al", "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "cmp.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(has_message(
+      f.bag, "Spec 'PartialOrd' must keep the compiler's operator shape"));
+}
+
 TEST_CASE("Check reports a seal that names no declared spec") {
   VirtualDir dir;
   const bool setup =

@@ -11,7 +11,10 @@
 // docs/adr/0016-suites-and-the-std-split.md.
 
 pub use package::cmp::Eq;
+pub use package::cmp::Ordering;
+pub use package::cmp::Ord;
 pub use package::cmp::PartialEq;
+pub use package::cmp::PartialOrd;
 pub use package::index::Index;
 pub use package::index::IndexMut;
 pub use package::iterator::EnumerateIter;

@@ -1,7 +1,31 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// `alcy/std/core`: equality as a capability.
+// `alcy/std/core`: equality and order as capabilities.
+
+// The result of a comparison, three-valued so that `Ord` can name all
+// the outcomes and `PartialOrd` can wrap it in an `Option` for the
+// pairs that have no order at all (a NaN, say).
+pub enum Ordering {
+  Less,
+  Equal,
+  Greater,
+}
+
+// `a < b`, `a <= b`, `a > b`, and `a >= b` reach `partial_cmp`; a
+// `None` makes all four false, which is what an incomparable pair
+// means. A nominal type implements this when some of its values are
+// incomparable; `Ord` is for the ones where every pair compares.
+pub spec PartialOrd {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering>;
+}
+
+// A total order: every pair compares, so `partial_cmp` never returns
+// `None` and `cmp` names the single answer. `Ord` requires
+// `PartialOrd` for the same type (ADR-0053).
+pub spec Ord: PartialOrd {
+  fn cmp(self: &Self, other: &Self) -> Ordering;
+}
 
 // `==` reaches `eq` and `!=` its negation, so an implementation
 // defines both. There is no type parameter: an equality is between two

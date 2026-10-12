@@ -1,0 +1,19 @@
+[package]
+name = "cmp"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+# The comparison specs are sealed to the standard library's suite
+# (ADR-0053), so this package lists the ones it implements.
+[spec]
+implement = ["PartialOrd", "Ord"]
+
+[dependencies]
+"alcy/std/*" = {}
+
+[[bin]]
+name = "cmp"
+path = "main.al"

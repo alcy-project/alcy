@@ -70,6 +70,14 @@ implements them by listing them in its own `[spec] implement`, and
 the checker then records the call for lowering the way `PartialEq`
 does.
 
+Amended at ordering's landing: `Ordering` joined `core` as the
+three-variant enum, `PartialOrd` declares `fn partial_cmp(self:
+&Self, other: &Self) -> Option<Ordering>`, and `Ord: PartialOrd`
+declares `fn cmp(self: &Self, other: &Self) -> Ordering`. The four
+comparison operators reach `partial_cmp` and fold the option: a
+`None` makes all four false, which is what an incomparable pair means.
+`Vec::sort` is the ordering item's own remaining slice.
+
 **A spec may name a super-spec.** `spec Eq: PartialEq {}` says that
 implementing `Eq` requires an implementation of `PartialEq`, and a
 bound on `Eq` admits `PartialEq`'s method. `Eq` is the reflexive

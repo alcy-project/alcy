@@ -443,6 +443,12 @@ class Lowerer {
   // `-a` where the checker resolved the `Neg` impl.
   Val lower_spec_unary(ast::ExprIdx expr,
                        const analyzer::CheckedModule::CallTarget* target);
+  // `a < b` and its siblings where the checker resolved the
+  // `PartialOrd` impl: the call returns `Option<Ordering>` and the
+  // operator folds it into a bool.
+  Val lower_spec_ordering(ast::ExprIdx expr,
+                          const analyzer::CheckedModule::CallTarget* target,
+                          ast::BinaryOp op);
   // Calls the operator method a recorded target names with the
   // receiver and (when the method takes one) the argument already
   // lowered.

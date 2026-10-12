@@ -338,6 +338,28 @@ static std::string_view bare_path_name(const ast::AstArena& ast,
   return segments[0].name;
 }
 
+// Whether `type` spells `Option<inner>` with `inner` a bare path
+// (`Option<Ordering>`): the shape the comparison specs return.
+static bool is_option_of(const ast::AstArena& ast,
+                         ast::TypeIdx type,
+                         std::string_view inner) {
+  if (!type.is_valid()) {
+    return false;
+  }
+  const ast::TypeNode& node = ast.types[type];
+  if (node.kind != ast::TypeKind::Path) {
+    return false;
+  }
+  const ast::TypePath& path = node.payload.get<ast::TypePath>();
+  if (ast.paths[path.path].segments.size() != 1 || path.args.size() != 1) {
+    return false;
+  }
+  if (ast.paths[path.path].segments[0].name != "Option") {
+    return false;
+  }
+  return bare_path_name(ast, path.args[0]) == inner;
+}
+
 // Whether `type` is `&T` or `&mut T` over the bare path `name`.
 static bool is_ref_to(const ast::AstArena& ast,
                       ast::TypeIdx type,
@@ -377,6 +399,8 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
     Index,
     IndexMut,
     Equality,
+    PartialOrder,
+    TotalOrder,
     Arithmetic,
     Negation,
     Marker,
@@ -389,11 +413,18 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
     std::string_view method;
   };
   static constexpr Canonical CANONICAL[] = {
-      {"Index", Shape::Index, {}},        {"IndexMut", Shape::IndexMut, {}},
-      {"PartialEq", Shape::Equality, {}}, {"Add", Shape::Arithmetic, "add"},
-      {"Sub", Shape::Arithmetic, "sub"},  {"Mul", Shape::Arithmetic, "mul"},
-      {"Div", Shape::Arithmetic, "div"},  {"Rem", Shape::Arithmetic, "rem"},
-      {"Neg", Shape::Negation, "neg"},    {"Eq", Shape::Marker, {}},
+      {"Index", Shape::Index, {}},
+      {"IndexMut", Shape::IndexMut, {}},
+      {"PartialEq", Shape::Equality, {}},
+      {"PartialOrd", Shape::PartialOrder, {}},
+      {"Ord", Shape::TotalOrder, {}},
+      {"Add", Shape::Arithmetic, "add"},
+      {"Sub", Shape::Arithmetic, "sub"},
+      {"Mul", Shape::Arithmetic, "mul"},
+      {"Div", Shape::Arithmetic, "div"},
+      {"Rem", Shape::Arithmetic, "rem"},
+      {"Neg", Shape::Negation, "neg"},
+      {"Eq", Shape::Marker, {}},
   };
   const Canonical* canonical = nullptr;
   for (const Canonical& candidate : CANONICAL) {
@@ -436,6 +467,32 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
       return wrong();
     }
     if (!is_bool_type(ast, method.return_type)) {
+      return wrong();
+    }
+    return true;
+  }
+  if (canonical->shape == Shape::PartialOrder ||
+      canonical->shape == Shape::TotalOrder) {
+    // `fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering>`,
+    // and `cmp` returning the bare `Ordering` for the total order.
+    const bool total = canonical->shape == Shape::TotalOrder;
+    if (!declaration.params.empty() || declaration.methods.size() != 1) {
+      return wrong();
+    }
+    const ast::SpecMethod& method = declaration.methods[0];
+    if (method.name.name != (total ? "cmp" : "partial_cmp") ||
+        method.is_unsafe || !method.generic.empty() ||
+        method.params.size() != 2) {
+      return wrong();
+    }
+    if (!is_ref_to(ast, method.params[0].type, false, "Self") ||
+        !is_ref_to(ast, method.params[1].type, false, "Self")) {
+      return wrong();
+    }
+    const bool spell =
+        total ? bare_path_name(ast, method.return_type) == "Ordering"
+              : is_option_of(ast, method.return_type, "Ordering");
+    if (!spell) {
       return wrong();
     }
     return true;

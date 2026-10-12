@@ -42,4 +42,17 @@ export = [
 # equality are operators, so their capabilities are the compiler's,
 # not a user's; arithmetic joins them.
 [spec]
-suite-only = ["Index", "IndexMut", "PartialEq", "Eq", "Add", "Sub", "Mul", "Div", "Rem", "Neg"]
+suite-only = [
+  "Index",
+  "IndexMut",
+  "PartialEq",
+  "Eq",
+  "PartialOrd",
+  "Ord",
+  "Add",
+  "Sub",
+  "Mul",
+  "Div",
+  "Rem",
+  "Neg",
+]

@@ -2191,6 +2191,35 @@ ir::TypeIdx Checker::check_spec_arithmetic(u32 module,
   return method->ret;
 }
 
+ir::TypeIdx Checker::check_spec_ordering(u32 module,
+                                         ast::ExprIdx expr,
+                                         ir::TypeIdx type,
+                                         const ir::TypeIdx* expected) {
+  // Every ordered comparison reaches `partial_cmp`; a `None` makes all
+  // four false, which lowering folds in. `Ord`'s `cmp` answers the
+  // same question for a type that never returns `None`.
+  const u32 spec = operator_spec("PartialOrd");
+  const CheckedModule::MethodInfo* method =
+      spec == U32_MAX ? nullptr
+                      : lookup_method(type, "partial_cmp", module,
+                                      ast.exprs[expr].span, true, spec);
+  if (method == nullptr ||
+      method->receiver != CheckedModule::ReceiverKind::Shared ||
+      method->params.size() != 2) {
+    const u32 diag = bag.emit<i18n::Key::AnalyzerMissingOperatorSpec>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::InvalidOperation, ast.exprs[expr].span, "PartialOrd");
+    (void)diag;
+    return error_type();
+  }
+  record_call(module, expr, method);
+  const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+  if (expected != nullptr) {
+    return unify(*expected, boolean, ast.exprs[expr].span, "comparison");
+  }
+  return boolean;
+}
+
 ir::TypeIdx Checker::check_run_index(ir::TypeIdx receiver,
                                      ir::TypeIdx element,
                                      const ir::TypeIdx* expected,
@@ -3032,6 +3061,9 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
               return unify(*expected, boolean, node.span, "comparison");
             }
             return boolean;
+          }
+          if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum) {
+            return check_spec_ordering(module, expr, operands, expected);
           }
           break;
         case ast::BinaryOp::Add:

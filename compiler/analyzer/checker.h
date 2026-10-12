@@ -940,6 +940,12 @@ class Checker {
                                     std::string_view method_name,
                                     u32 params,
                                     const ir::TypeIdx* expected);
+  // `a < b` and its siblings over a nominal type: resolves the
+  // `PartialOrd` implementation and records the call lowering emits.
+  ir::TypeIdx check_spec_ordering(u32 module,
+                                  ast::ExprIdx expr,
+                                  ir::TypeIdx type,
+                                  const ir::TypeIdx* expected);
   // Element access: `receiver[integer]`, already checked. The expected
   // type, when given, is the element type.
   ir::TypeIdx check_element_index(ir::TypeIdx receiver,

@@ -83,6 +83,22 @@
   `PartialEq` is an error at that use rather than at the
   implementation.
 
+## Comparison over specs
+
+- `<`, `<=`, `>`, and `>=` over a nominal type resolve through the
+  sealed `PartialOrd` spec: `fn partial_cmp(self: &Self, other: &Self)
+  -> Option<Ordering>`. A `None` - an incomparable pair, a NaN below
+  the surface - makes all four comparisons false; a `Some` compares
+  the `Ordering` it carries. Scalars keep their builtin comparison.
+- `Ordering` is `core`'s three-variant enum (`Less`, `Equal`,
+  `Greater`), and `Ord` is the total-order spec over `PartialOrd`:
+  `fn cmp(self: &Self, other: &Self) -> Ordering` never answers
+  "incomparable", and implementing it requires a `PartialOrd`
+  implementation for the same type (ADR-0053).
+- The seal works like the other operators': the standard library
+  implements the specs, and a package outside the suite lists the ones
+  it implements in `[spec] implement = [...]` (see `modules.md`).
+
 ## Arithmetic over specs
 
 - `a + b`, `a - b`, `a * b`, `a / b`, `a % b`, and `-a` over a
