@@ -158,4 +158,15 @@ TEST_CASE("A node table reports its reservation nearly spent") {
   CHECK(table.size() > room - room / ast::RESERVATION_HEADROOM);
 }
 
+// A share is a parts-per-thousand product of the reservation. A 32-bit
+// build multiplies in 64 bits: the product of the larger shares wraps a
+// 32-bit `usize`, and a wrapped share would reserve a table far smaller
+// than the measured figure wants.
+TEST_CASE("A node share survives a 32-bit product") {
+  CHECK(AstArena::node_share(64ull << 20, 571) == 38319161);
+  CHECK(AstArena::node_share(64ull << 20, 136) == 9126805);
+  CHECK(AstArena::node_share(64ull << 20, 65) == 4362076);
+  CHECK(AstArena::node_share(512ull << 20, 571) == 306553290);
+}
+
 }  // namespace ast

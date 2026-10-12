@@ -1117,6 +1117,14 @@ struct AstArena {
   static constexpr usize DEFAULT_NODE_CAPACITY = 64ull << 20;
 #endif
 
+  // A table's share of the reservation, in parts per thousand. The
+  // product runs in 64 bits: `capacity * parts` wraps a 32-bit `usize`
+  // for the larger shares, and a wrapped share reserves a table far
+  // smaller than the measured figure wants.
+  [[nodiscard]] static constexpr usize node_share(usize capacity, u32 parts) {
+    return static_cast<usize>((static_cast<u64>(capacity) * parts) / 1000u);
+  }
+
   // The capacity is a parameter so a caller - a case that has to spend it
   // - can say how much it wants rather than working around the default.
   explicit AstArena(usize span_capacity = DEFAULT_SPAN_CAPACITY) {
@@ -1172,15 +1180,16 @@ struct AstArena {
   // literals 0.4, blocks 0.4, conditions 0.02. The shares are the measured
   // ones rounded to whole parts, and a source of a different shape moves
   // them around - which is what the reservation above is sized to absorb.
-  NodeVec<Literal, LiteralIdx> literals{DEFAULT_NODE_CAPACITY * 31 / 1000};
-  NodeVec<Path, PathIdx> paths{DEFAULT_NODE_CAPACITY * 136 / 1000};
-  NodeVec<Cond, CondIdx> conds{DEFAULT_NODE_CAPACITY / 1000};
-  NodeVec<Block, BlockIdx> blocks{DEFAULT_NODE_CAPACITY * 28 / 1000};
-  NodeVec<TypeNode, TypeIdx> types{DEFAULT_NODE_CAPACITY * 65 / 1000};
-  NodeVec<PatternNode, PatternIdx> patterns{DEFAULT_NODE_CAPACITY * 59 / 1000};
-  NodeVec<ExprNode, ExprIdx> exprs{DEFAULT_NODE_CAPACITY * 571 / 1000};
-  NodeVec<StmtNode, StmtIdx> stmts{DEFAULT_NODE_CAPACITY * 42 / 1000};
-  NodeVec<ItemNode, ItemIdx> items{DEFAULT_NODE_CAPACITY * 67 / 1000};
+  NodeVec<Literal, LiteralIdx> literals{node_share(DEFAULT_NODE_CAPACITY, 31)};
+  NodeVec<Path, PathIdx> paths{node_share(DEFAULT_NODE_CAPACITY, 136)};
+  NodeVec<Cond, CondIdx> conds{node_share(DEFAULT_NODE_CAPACITY, 1)};
+  NodeVec<Block, BlockIdx> blocks{node_share(DEFAULT_NODE_CAPACITY, 28)};
+  NodeVec<TypeNode, TypeIdx> types{node_share(DEFAULT_NODE_CAPACITY, 65)};
+  NodeVec<PatternNode, PatternIdx> patterns{
+      node_share(DEFAULT_NODE_CAPACITY, 59)};
+  NodeVec<ExprNode, ExprIdx> exprs{node_share(DEFAULT_NODE_CAPACITY, 571)};
+  NodeVec<StmtNode, StmtIdx> stmts{node_share(DEFAULT_NODE_CAPACITY, 42)};
+  NodeVec<ItemNode, ItemIdx> items{node_share(DEFAULT_NODE_CAPACITY, 67)};
 };
 
 }  // namespace ast
