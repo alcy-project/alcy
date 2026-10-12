@@ -61,11 +61,6 @@ replaced. The foundations are in `roadmap.md`.
   iteration site wants one clear diagnostic instead of std internals.
 - [ ] Explicit spec call with a temporary: `a.eq(&2)` fails lowering with
   "Construct 'borrowed temporary' is not supported in this lowering slice".
-- [ ] A generic type cannot declare an unconditional destructor when
-  its fields make it structurally `Copy` for some instantiation: an
-  array cursor (`ArrayIntoIter<T, N>`) needs one. Decide whether a
-  declared destructor should exclude `Copy`, the way Rust's `Drop`
-  does, or whether such a type stays refused.
 - [ ] `Option::is_some`/`is_none`/`is_ok`/`is_err` take the receiver by
   value, so the option cannot be consulted twice. `&Self` receivers
   would fix that.

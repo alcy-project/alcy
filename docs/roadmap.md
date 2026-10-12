@@ -30,7 +30,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   Designed in
   `docs/adr/0062-a-values-end-follows-the-path-that-owns-it.md`.
 
-- [ ] Container iteration.
+- [x] Container iteration.
 
   The adapters landed, and the standard containers now have cursors:
   `Vec` consumes (`VecIntoIter`), borrows (`VecIter`), and borrows
@@ -41,20 +41,16 @@ peripheral work lives in `backlog.md`. The language record lives in
   `position`, `find`, `last`, `collect_into`) ride any iterator -
   `collect_into` is the shape `collect` waits on bounds for. A cursor
   that yields a reference needed the checker to accept a spec argument
-  naming one of the implementation's parameters (`Iterator<&T>`),
-  which it now does. `impl str` landed too: the string view has
-  `len`, `is_empty`, `byte`, and byte iteration after it, so `for b in
-  s` reads bytes and `s.len()` replaces the free intrinsic call. And
-  inherent impls may target compound shapes: `impl<T> [T]` and
-  `impl<T, N: usize> [T; N]` register through a shape the checker
-  matches against a receiver, so slices and arrays answer `len`,
-  `is_empty`, `as_slice`, and `iter`, and `for x in s.iter()` walks
-  either one by reference through `slice_at`; `slice_at_mut` and
-  `iter_mut` walk them exclusively. What remains: consuming an array
-  (`for x in a`, as opposed to `for x in a.iter()`), whose cursor
-  would need a way to read an element out and a destructor the
-  structural `Copy` rule refuses when the element type is Copy, and
-  the std cleanup that replaces index loops with the algorithms.
+  naming one of the implementation's parameters (`Iterator<&T>`); a
+  cursor whose element may be Copy needed a declared destructor to
+  make its type move-only (ADR-0013, amended). `impl str` landed with
+  `len`, `is_empty`, `byte`, and byte iteration; inherent impls may
+  target compound shapes (`impl<T> [T]`, `impl<T, N: usize> [T; N]`),
+  so slices and arrays answer `len`, `is_empty`, `as_slice`,
+  `as_mut_slice`, `iter`, `iter_mut`, and `into_iter`. The index loops
+  that remain either pair two sequences (the vector's own `==`) or
+  walk a slot table (the map's sweeps), which the cursors do not
+  replace.
 
 - [ ] Operator specs: `Display`, floats, arithmetic, and ordering.
 

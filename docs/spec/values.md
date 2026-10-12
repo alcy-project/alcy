@@ -11,7 +11,9 @@
 - `Copy` is structural and opt-out-free: a type is `Copy` if and only
   if all of its fields are `Copy`. Primitive machine types and
   shared references (`&T`) are `Copy`; exclusive references (`&mut T`)
-  are move-only. No syntax exists to declare or suppress `Copy`.
+  are move-only. No syntax exists to declare or suppress `Copy`. A
+  declared destructor is the one exception: it makes the type
+  move-only, whatever its fields are.
 
 ## Destruction
 
@@ -26,9 +28,9 @@
 - Writing over a place that still owns a value ends that value before
   the new one lands. Writing into a place whose value has already left
   is re-initialization, and ends nothing.
-- A type that is `Copy` cannot have a destructor. `Copy` is structural
-  (see above), so such a type has nothing a destructor could release,
-  and every copy of it would be ended.
+- A view (`str`, a slice, a reference) cannot have a destructor; it
+  has nothing to end. Any other type may declare one, and the
+  declaration makes it move-only.
 - Scope exit runs the destructors of the values that block declared,
   innermost first, and a `return` runs the destructors of everything
   still alive. A destructor that ends a value of a generic type is

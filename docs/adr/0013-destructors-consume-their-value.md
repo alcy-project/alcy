@@ -73,6 +73,16 @@ valid where the type is move-only and an error where it is not. A
 container's own state decides this, not the element type, so the
 container case is unaffected.
 
+Amended at the array cursor's landing: a declared destructor makes
+its type move-only, whatever its fields are. The per-instantiation
+rule above cannot decide a generic type whose fields are `Copy` for
+some instantiations only - `ArrayIntoIter<T, N>` holds `[T; N]` and
+ends the elements a loop never took - and a destructor that exists
+for every instantiation is what lets such a type be written at all.
+A view (`str`, a slice, a reference) still cannot declare one,
+because it has nothing to end: the refusal is about the view, not
+about `Copy`.
+
 ### Why the name is reserved
 
 `drop` as a method name with a fixed signature means a destructor cannot
