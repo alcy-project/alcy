@@ -101,6 +101,60 @@ impl<T> Vec<T> {
     ret Option::Some(unsafe { uninit_assume(elem_ptr(self.buf, index)) })
   }
 
+  // Exchanges the elements at `i` and `j`, both below the length.
+  // Both values are read out first and written back crossed, so the
+  // two slots are briefly uninitialized - which is what `read` leaves
+  // behind and what `uninit_write` expects.
+  pub fn swap(mut self: &mut Self, i: usize, j: usize) {
+    if i == j {
+      ret
+    }
+    mut a := unsafe { slice_at_mut(self.as_mut_slice(), i) as *mut T }
+    mut b := unsafe { slice_at_mut(self.as_mut_slice(), j) as *mut T }
+    va := unsafe { read(a as *T) }
+    vb := unsafe { read(b as *T) }
+    unsafe {
+      *a = vb
+      *b = va
+    }
+  }
+
+  // Sorts in place with a stable insertion sort: `less` decides the
+  // order and equal elements keep theirs. Elements move by swapping
+  // through the buffer, so a move-only `T` never copies.
+  pub fn sort_by(mut self: &mut Self, less: (&T, &T) -> bool) {
+    mut i := 1 as usize
+    while i < self.len {
+      mut j := i
+      while j > 0 {
+        if !less(&self[j], &self[j - 1]) {
+          break
+        }
+        self.swap(j - 1, j)
+        j = j - 1
+      }
+      i = i + 1
+    }
+  }
+
+  // Sorts by `Ord`'s total order: the same loop `sort_by` runs, with
+  // `cmp`'s answer deciding. A type that only has `PartialOrd` sorts
+  // through `sort_by`.
+  pub fn sort(mut self: &mut Self) {
+    mut i := 1 as usize
+    while i < self.len {
+      mut j := i
+      while j > 0 {
+        if !self[j].cmp(&self[j - 1]).is_lt() {
+          break
+        }
+        self.swap(j - 1, j)
+        j = j - 1
+      }
+      i = i + 1
+    }
+  }
+
   // Removes and returns the last element, or `None` when empty.
   pub fn pop(mut self: &mut Self) -> Option<T> {
     if self.len == 0 {

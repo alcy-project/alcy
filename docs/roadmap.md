@@ -66,7 +66,10 @@ peripheral work lives in `backlog.md`. The language record lives in
   reaching user packages. Ordering landed too: `Ordering`,
   `PartialOrd` (`Option<Ordering>`, so an incomparable pair makes all
   four comparisons false), `Ord`, and the dispatch for `<`, `<=`, `>`,
-  and `>=`. What remains: `Vec::sort` over `Ord`, and `Display` for
+  and `>=`. `Vec::sort` landed over `Ord` (a stable insertion sort,
+  with `sort_by` taking the order as a predicate), so the scalars
+  carry the ordering impls and `Ordering` gained `is_lt` and its
+  siblings. What remains: `Display` for
   `{}`, which needs a signature a user type can implement, a decision
   on whether the two-pass measure/expand expansion may run a user
   method twice, and a decision on whether the spec is sealed. Floats

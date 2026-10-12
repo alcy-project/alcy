@@ -1,0 +1,17 @@
+[package]
+name = "sort"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[spec]
+implement = ["PartialEq", "Eq", "PartialOrd", "Ord"]
+
+[dependencies]
+"alcy/std/*" = {}
+
+[[bin]]
+name = "sort"
+path = "main.al"

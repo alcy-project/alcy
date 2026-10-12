@@ -76,7 +76,9 @@ three-variant enum, `PartialOrd` declares `fn partial_cmp(self:
 declares `fn cmp(self: &Self, other: &Self) -> Ordering`. The four
 comparison operators reach `partial_cmp` and fold the option: a
 `None` makes all four false, which is what an incomparable pair means.
-`Vec::sort` is the ordering item's own remaining slice.
+`Vec::sort` landed over `Ord`, with `sort_by` taking the order as a
+predicate, and the scalars carry the same ordering implementations so
+a generic body can call `cmp`.
 
 **A spec may name a super-spec.** `spec Eq: PartialEq {}` says that
 implementing `Eq` requires an implementation of `PartialEq`, and a

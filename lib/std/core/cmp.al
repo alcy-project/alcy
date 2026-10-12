@@ -12,6 +12,34 @@ pub enum Ordering {
   Greater,
 }
 
+impl Ordering {
+  // The three outcomes as predicates, so a caller that only needs
+  // "strictly less" (an insertion sort, say) names it directly.
+  pub fn is_lt(self: Self) -> bool {
+    ret match self {
+      Ordering::Less => true,
+      Ordering::Equal => false,
+      Ordering::Greater => false,
+    }
+  }
+
+  pub fn is_eq(self: Self) -> bool {
+    ret match self {
+      Ordering::Less => false,
+      Ordering::Equal => true,
+      Ordering::Greater => false,
+    }
+  }
+
+  pub fn is_gt(self: Self) -> bool {
+    ret match self {
+      Ordering::Less => false,
+      Ordering::Equal => false,
+      Ordering::Greater => true,
+    }
+  }
+}
+
 // `a < b`, `a <= b`, `a > b`, and `a >= b` reach `partial_cmp`; a
 // `None` makes all four false, which is what an incomparable pair
 // means. A nominal type implements this when some of its values are
@@ -162,4 +190,231 @@ impl PartialEq for str {
 }
 
 impl Eq for str {
+}
+
+// The scalar orderings compare the pointed-to values, the way their
+// equality does. Integers are totally ordered and carry `Ord`; floats
+// carry `PartialOrd` alone, because a NaN compares with nothing and
+// the answer is `None`.
+
+impl PartialOrd for i8 {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering> {
+    if *self < *other {
+      ret Option::Some(Ordering::Less)
+    }
+    if *self > *other {
+      ret Option::Some(Ordering::Greater)
+    }
+    ret Option::Some(Ordering::Equal)
+  }
+}
+
+impl Ord for i8 {
+  fn cmp(self: &Self, other: &Self) -> Ordering {
+    if *self < *other {
+      ret Ordering::Less
+    }
+    if *self > *other {
+      ret Ordering::Greater
+    }
+    ret Ordering::Equal
+  }
+}
+
+impl PartialOrd for i16 {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering> {
+    if *self < *other {
+      ret Option::Some(Ordering::Less)
+    }
+    if *self > *other {
+      ret Option::Some(Ordering::Greater)
+    }
+    ret Option::Some(Ordering::Equal)
+  }
+}
+
+impl Ord for i16 {
+  fn cmp(self: &Self, other: &Self) -> Ordering {
+    if *self < *other {
+      ret Ordering::Less
+    }
+    if *self > *other {
+      ret Ordering::Greater
+    }
+    ret Ordering::Equal
+  }
+}
+
+impl PartialOrd for i32 {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering> {
+    if *self < *other {
+      ret Option::Some(Ordering::Less)
+    }
+    if *self > *other {
+      ret Option::Some(Ordering::Greater)
+    }
+    ret Option::Some(Ordering::Equal)
+  }
+}
+
+impl Ord for i32 {
+  fn cmp(self: &Self, other: &Self) -> Ordering {
+    if *self < *other {
+      ret Ordering::Less
+    }
+    if *self > *other {
+      ret Ordering::Greater
+    }
+    ret Ordering::Equal
+  }
+}
+
+impl PartialOrd for i64 {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering> {
+    if *self < *other {
+      ret Option::Some(Ordering::Less)
+    }
+    if *self > *other {
+      ret Option::Some(Ordering::Greater)
+    }
+    ret Option::Some(Ordering::Equal)
+  }
+}
+
+impl Ord for i64 {
+  fn cmp(self: &Self, other: &Self) -> Ordering {
+    if *self < *other {
+      ret Ordering::Less
+    }
+    if *self > *other {
+      ret Ordering::Greater
+    }
+    ret Ordering::Equal
+  }
+}
+
+impl PartialOrd for u8 {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering> {
+    if *self < *other {
+      ret Option::Some(Ordering::Less)
+    }
+    if *self > *other {
+      ret Option::Some(Ordering::Greater)
+    }
+    ret Option::Some(Ordering::Equal)
+  }
+}
+
+impl Ord for u8 {
+  fn cmp(self: &Self, other: &Self) -> Ordering {
+    if *self < *other {
+      ret Ordering::Less
+    }
+    if *self > *other {
+      ret Ordering::Greater
+    }
+    ret Ordering::Equal
+  }
+}
+
+impl PartialOrd for u16 {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering> {
+    if *self < *other {
+      ret Option::Some(Ordering::Less)
+    }
+    if *self > *other {
+      ret Option::Some(Ordering::Greater)
+    }
+    ret Option::Some(Ordering::Equal)
+  }
+}
+
+impl Ord for u16 {
+  fn cmp(self: &Self, other: &Self) -> Ordering {
+    if *self < *other {
+      ret Ordering::Less
+    }
+    if *self > *other {
+      ret Ordering::Greater
+    }
+    ret Ordering::Equal
+  }
+}
+
+impl PartialOrd for u32 {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering> {
+    if *self < *other {
+      ret Option::Some(Ordering::Less)
+    }
+    if *self > *other {
+      ret Option::Some(Ordering::Greater)
+    }
+    ret Option::Some(Ordering::Equal)
+  }
+}
+
+impl Ord for u32 {
+  fn cmp(self: &Self, other: &Self) -> Ordering {
+    if *self < *other {
+      ret Ordering::Less
+    }
+    if *self > *other {
+      ret Ordering::Greater
+    }
+    ret Ordering::Equal
+  }
+}
+
+impl PartialOrd for u64 {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering> {
+    if *self < *other {
+      ret Option::Some(Ordering::Less)
+    }
+    if *self > *other {
+      ret Option::Some(Ordering::Greater)
+    }
+    ret Option::Some(Ordering::Equal)
+  }
+}
+
+impl Ord for u64 {
+  fn cmp(self: &Self, other: &Self) -> Ordering {
+    if *self < *other {
+      ret Ordering::Less
+    }
+    if *self > *other {
+      ret Ordering::Greater
+    }
+    ret Ordering::Equal
+  }
+}
+
+impl PartialOrd for f32 {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering> {
+    if *self < *other {
+      ret Option::Some(Ordering::Less)
+    }
+    if *self > *other {
+      ret Option::Some(Ordering::Greater)
+    }
+    if *self == *other {
+      ret Option::Some(Ordering::Equal)
+    }
+    ret Option::None
+  }
+}
+
+impl PartialOrd for f64 {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering> {
+    if *self < *other {
+      ret Option::Some(Ordering::Less)
+    }
+    if *self > *other {
+      ret Option::Some(Ordering::Greater)
+    }
+    if *self == *other {
+      ret Option::Some(Ordering::Equal)
+    }
+    ret Option::None
+  }
 }
