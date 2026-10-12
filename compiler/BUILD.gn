@@ -49,6 +49,7 @@ group("modules") {
     "lexer",
     "lowering",
     "opt",
+    "overlay",
     "parser",
     "path",
     "pkg",

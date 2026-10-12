@@ -178,4 +178,33 @@ TEST_CASE("Profile rejects broken TOML") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Profile parses an overflow-checks key") {
+  Fixture f;
+  base::Result<Profiles, diag::Reported> result =
+      parse(f, "[fast]\noverflow-checks = false\n");
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  const Profiles profiles = std::move(result).unwrap();
+  CHECK(profiles.tables.size() == 1);
+  if (profiles.tables.size() != 1) {
+    return;
+  }
+  CHECK(profiles.tables[0].settings.overflow_checks == false);
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Profile rejects a mistyped overflow-checks") {
+  Fixture f;
+  CHECK(parse(f, "[fast]\noverflow-checks = \"on\"\n").is_err());
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Profile names the on/off spellings the flags take") {
+  CHECK(on_off_from_name("on") == OnOff::On);
+  CHECK(on_off_from_name("off") == OnOff::Off);
+  CHECK(!on_off_from_name("yes").has_value());
+}
+
 }  // namespace pkg

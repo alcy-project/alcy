@@ -22,6 +22,9 @@ constexpr std::string_view DEFAULT_PROFILE_NAME = "debug";
 struct BuildProfile {
   bool optimize = false;
   pkg::OnPanic on_panic = pkg::OnPanic::Abort;
+  // Whether the source arithmetic's checks are materialized; `debug` and
+  // a profile the file defines say on, `release` says off (ADR-0068).
+  bool overflow_checks = true;
 };
 
 // What the command line selected: a profile name, and the keys an
@@ -30,6 +33,8 @@ struct BuildProfile {
 struct ProfileRequest {
   std::string_view name = DEFAULT_PROFILE_NAME;
   std::optional<pkg::OnPanic> on_panic = std::nullopt;
+  std::optional<bool> optimize = std::nullopt;
+  std::optional<bool> overflow_checks = std::nullopt;
 };
 
 // Loads `.alcy/profile.toml` beside `root`. An absent file is an empty

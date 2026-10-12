@@ -175,4 +175,66 @@ TEST_CASE("Profile lets a flag override the table's on-panic") {
   CHECK(!f.bag.has_errors());
 }
 
+TEST_CASE("Profile defaults the checks on, and the release turns them off") {
+  Fixture f;
+  base::Result<BuildProfile, diag::Reported> debug =
+      resolve_profile(ProfileRequest{}, pkg::Profiles{}, f.bag);
+  CHECK(debug.is_ok());
+  if (!debug.is_ok()) {
+    return;
+  }
+  CHECK(std::move(debug).unwrap().overflow_checks);
+
+  base::Result<BuildProfile, diag::Reported> release = resolve_profile(
+      ProfileRequest{.name = "release"}, pkg::Profiles{}, f.bag);
+  CHECK(release.is_ok());
+  if (!release.is_ok()) {
+    return;
+  }
+  CHECK(!std::move(release).unwrap().overflow_checks);
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Profile applies a declared overflow-checks key") {
+  Fixture f;
+  const pkg::ProfileTable table{
+      .name = "fast",
+      .settings = pkg::ProfileSettings{.overflow_checks = false}};
+  const std::span<const pkg::ProfileTable> tables(&table, 1);
+  base::Result<BuildProfile, diag::Reported> result = resolve_profile(
+      ProfileRequest{.name = "fast"}, pkg::Profiles{.tables = tables}, f.bag);
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  CHECK(!std::move(result).unwrap().overflow_checks);
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Profile lets a flag override the checks") {
+  Fixture f;
+  base::Result<BuildProfile, diag::Reported> result = resolve_profile(
+      ProfileRequest{.name = "release", .overflow_checks = true},
+      pkg::Profiles{}, f.bag);
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  CHECK(std::move(result).unwrap().overflow_checks);
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Profile lets a flag override optimize") {
+  Fixture f;
+  base::Result<BuildProfile, diag::Reported> result =
+      resolve_profile(ProfileRequest{.name = "debug", .optimize = true},
+                      pkg::Profiles{}, f.bag);
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  CHECK(std::move(result).unwrap().optimize);
+  CHECK(!f.bag.has_errors());
+}
+
 }  // namespace pipeline

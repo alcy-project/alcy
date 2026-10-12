@@ -68,6 +68,17 @@ base::Result<ProfileSettings, diag::Reported> parse_settings(
       }
       settings.on_panic = *value;
     }
+    if (name == "overflow-checks") {
+      const auto flag = node.value<bool>();
+      if (!flag.has_value()) {
+        const u32 index = bag.emit<i18n::Key::PkgProfileOverflowChecksNotBool>(
+            diag::Severity::Error, diag::Stage::Pkg,
+            DiagCode::ProfileSemanticError, filename);
+        (void)index;
+        return base::make_err(diag::Reported{});
+      }
+      settings.overflow_checks = *flag;
+    }
   }
   return base::make_ok(settings);
 }
@@ -80,6 +91,16 @@ std::optional<OnPanic> on_panic_from_name(std::string_view name) {
   }
   if (name == "backtrace") {
     return OnPanic::Backtrace;
+  }
+  return std::nullopt;
+}
+
+std::optional<OnOff> on_off_from_name(std::string_view name) {
+  if (name == "on") {
+    return OnOff::On;
+  }
+  if (name == "off") {
+    return OnOff::Off;
   }
   return std::nullopt;
 }

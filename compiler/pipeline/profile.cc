@@ -31,7 +31,7 @@ namespace {
 // values, and says `optimize = true` itself.
 pkg::ProfileSettings builtin_base(std::string_view name) {
   if (name == "release") {
-    return pkg::ProfileSettings{.optimize = true};
+    return pkg::ProfileSettings{.optimize = true, .overflow_checks = false};
   }
   return pkg::ProfileSettings{};
 }
@@ -95,13 +95,23 @@ base::Result<BuildProfile, diag::Reported> resolve_profile(
     if (table->settings.on_panic.has_value()) {
       settings.on_panic = table->settings.on_panic;
     }
+    if (table->settings.overflow_checks.has_value()) {
+      settings.overflow_checks = table->settings.overflow_checks;
+    }
   }
   if (request.on_panic.has_value()) {
     settings.on_panic = request.on_panic;
   }
-  return base::make_ok(BuildProfile{
-      .optimize = settings.optimize.value_or(false),
-      .on_panic = settings.on_panic.value_or(pkg::OnPanic::Abort)});
+  if (request.optimize.has_value()) {
+    settings.optimize = request.optimize;
+  }
+  if (request.overflow_checks.has_value()) {
+    settings.overflow_checks = request.overflow_checks;
+  }
+  return base::make_ok(
+      BuildProfile{.optimize = settings.optimize.value_or(false),
+                   .on_panic = settings.on_panic.value_or(pkg::OnPanic::Abort),
+                   .overflow_checks = settings.overflow_checks.value_or(true)});
 }
 
 }  // namespace pipeline

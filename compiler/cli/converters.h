@@ -47,6 +47,19 @@ struct arg::Converter<term::ColorMode> {
 };
 
 template <>
+struct arg::Converter<pkg::OnOff> {
+  static base::Result<pkg::OnOff, arg::GetError> from_string(
+      std::string_view v) {
+    using arg::GetError, base::make_err, base::make_ok;
+    const std::optional<pkg::OnOff> found = pkg::on_off_from_name(v);
+    if (!found.has_value()) {
+      return make_err(GetError::InvalidArgument);
+    }
+    return make_ok(*found);
+  }
+};
+
+template <>
 struct arg::Converter<pipeline::EmitMode> {
   static base::Result<pipeline::EmitMode, arg::GetError> from_string(
       std::string_view v) {

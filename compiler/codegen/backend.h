@@ -17,6 +17,7 @@
 #include "fpag/debug/profiler/profiler.h"
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
+#include "overlay/overlay.h"
 
 namespace codegen {
 
@@ -70,12 +71,11 @@ struct EmitRequest {
   // `NoOptimizer` rather than emitting unoptimized code under a release
   // command.
   bool optimize = false;
-  // Whether the source operations check overflow: a debug build
-  // aborts on `+ - * / %` and shift overflow, a release one wraps them
-  // (ADR-0065). The policy is a property of the build, not of the IR,
-  // so the same verified IR serves every profile; a backend that does
-  // not carry the checks yet ignores this.
-  bool overflow_checks = false;
+  // The build's arithmetic checks, parallel to the storage's
+  // instructions; null when the build checks nothing (ADR-0068). A
+  // backend reads an entry in place of the profile, which never reaches
+  // it.
+  const overlay::Overlay* overlay = nullptr;
   OutputKind kind = OutputKind::Object;
   debug::Profiler* profiler = nullptr;
   // How many objects code generation may be split into, for a backend that

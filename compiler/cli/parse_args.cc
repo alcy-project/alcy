@@ -90,6 +90,15 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
   if (auto behavior = matches.get<pkg::OnPanic>("on-panic"); behavior.is_ok()) {
     c.on_panic = std::move(behavior).unwrap();
   }
+  // The boolean profile keys, spelled on/off like every other key's
+  // override.
+  if (auto setting = matches.get<pkg::OnOff>("optimize"); setting.is_ok()) {
+    c.optimize = std::move(setting).unwrap() == pkg::OnOff::On;
+  }
+  if (auto setting = matches.get<pkg::OnOff>("overflow-checks");
+      setting.is_ok()) {
+    c.overflow_checks = std::move(setting).unwrap() == pkg::OnOff::On;
+  }
   // The choices above already rejected anything else, so an unknown value
   // here means the default, not an error to report a second time.
   c.stdin_source = matches.get<bool>("stdin").unwrap_or(false);
@@ -257,6 +266,16 @@ arg::Parser build_parser(i18n::Language language) {
                        .choices({"abort", "backtrace"})
                        .value_name("BEHAVIOR")
                        .build())
+          .add_arg(arg::ArgBuilder("optimize")
+                       .help(usage.text(i18n::Key::CliOptimizeHelp))
+                       .choices({"on", "off"})
+                       .value_name("ON|OFF")
+                       .build())
+          .add_arg(arg::ArgBuilder("overflow-checks")
+                       .help(usage.text(i18n::Key::CliOverflowChecksHelp))
+                       .choices({"on", "off"})
+                       .value_name("ON|OFF")
+                       .build())
           .add_arg(arg::ArgBuilder("output")
                        .short_name('o')
                        .help(usage.text(i18n::Key::CliBuildOutputHelp))
@@ -302,6 +321,16 @@ arg::Parser build_parser(i18n::Language language) {
                        .help(usage.text(i18n::Key::CliOnPanicHelp))
                        .choices({"abort", "backtrace"})
                        .value_name("BEHAVIOR")
+                       .build())
+          .add_arg(arg::ArgBuilder("optimize")
+                       .help(usage.text(i18n::Key::CliOptimizeHelp))
+                       .choices({"on", "off"})
+                       .value_name("ON|OFF")
+                       .build())
+          .add_arg(arg::ArgBuilder("overflow-checks")
+                       .help(usage.text(i18n::Key::CliOverflowChecksHelp))
+                       .choices({"on", "off"})
+                       .value_name("ON|OFF")
                        .build())
           .add_arg(arg::ArgBuilder("output")
                        .short_name('o')
@@ -359,6 +388,16 @@ arg::Parser build_parser(i18n::Language language) {
                        .help(usage.text(i18n::Key::CliOnPanicHelp))
                        .choices({"abort", "backtrace"})
                        .value_name("BEHAVIOR")
+                       .build())
+          .add_arg(arg::ArgBuilder("optimize")
+                       .help(usage.text(i18n::Key::CliOptimizeHelp))
+                       .choices({"on", "off"})
+                       .value_name("ON|OFF")
+                       .build())
+          .add_arg(arg::ArgBuilder("overflow-checks")
+                       .help(usage.text(i18n::Key::CliOverflowChecksHelp))
+                       .choices({"on", "off"})
+                       .value_name("ON|OFF")
                        .build())
           .add_arg(arg::ArgBuilder("linker")
                        .help(usage.text(i18n::Key::CliLinkerOverrideHelp))

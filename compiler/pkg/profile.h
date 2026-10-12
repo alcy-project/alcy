@@ -27,12 +27,18 @@ enum class OnPanic : u8 { Abort, Backtrace };
 // The two spellings the `on-panic` key accepts; nothing for another.
 std::optional<OnPanic> on_panic_from_name(std::string_view name);
 
+// The two spellings a boolean profile key takes on the command line.
+enum class OnOff : u8 { On, Off };
+
+std::optional<OnOff> on_off_from_name(std::string_view name);
+
 // One profile table's keys. A key that is unset keeps whatever the
 // profile it belongs to already had: the built-in value for `debug` and
 // `release`, the baseline for a profile the file defines.
 struct ProfileSettings {
   std::optional<bool> optimize = std::nullopt;
   std::optional<OnPanic> on_panic = std::nullopt;
+  std::optional<bool> overflow_checks = std::nullopt;
 };
 
 // One named table. The name is copied out of the parse's buffers, so it

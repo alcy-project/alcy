@@ -336,6 +336,7 @@
   F(PkgProfileNotLoaded, "Profile '{}' is not a loaded file") \
   F(PkgProfileOnPanicUnknown, "Profile '{}': on-panic must be 'abort' or 'backtrace'") \
   F(PkgProfileOptimizeNotBool, "Profile '{}': optimize must be a bool") \
+  F(PkgProfileOverflowChecksNotBool, "Profile '{}': overflow-checks must be a bool") \
   F(PkgProfileTomlSyntaxError, "Profile '{}': TOML syntax error: {}") \
   F(PkgSpecImplementDuplicate, "Manifest '{}': duplicate [spec] implement entry '{}'") \
   F(PkgSpecImplementNotStrings, "Manifest '{}': [spec] implement must be a list of strings") \
@@ -394,7 +395,6 @@
   F(PipelineInvalidSourcePath, "Invalid source path for file") \
   F(PipelineInvalidSuiteName, "Invalid suite name '{}'; write <name> or <owner>/<name>") \
   F(PipelineInvalidTarget, "Invalid target '{}'") \
-  F(PipelineIrNotOptimized, "The '{}' output is written unoptimized; build with a profile that does not optimize") \
   F(PipelineLibTargetNotDiscovered, "Lib target '{}' was not discovered") \
   F(PipelineLibTargetNotSelected, "Lib target '{}' is not in [modules]") \
   F(PipelineLinkFailed, "Linking '{}' failed") \
@@ -470,6 +470,8 @@
   F(CliNoStdHelp, "Start with no standard library instead of the default suite. Add back with --deps.") \
   F(CliNoSubcommand, "No subcommand given") \
   F(CliOnPanicHelp, "What a panic does before it aborts: abort (the default) writes the message, and backtrace also names the frames it can walk. Overrides the selected profile's on-panic.") \
+  F(CliOptimizeHelp, "Whether the middle end and the release passes run: on or off. Overrides the selected profile's optimize.") \
+  F(CliOverflowChecksHelp, "Whether the source arithmetic aborts on overflow: on or off. Overrides the selected profile's overflow-checks.") \
   F(CliPackageAddedToSuite, " (added to suite {})") \
   F(CliPackageCreatedAt, "'{}' in {}") \
   F(CliProfileHelp, "Build profile to use: debug (the default), release, or one that .alcy/profile.toml defines.") \

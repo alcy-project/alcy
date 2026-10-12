@@ -125,6 +125,9 @@ UsageText::UsageText(Language language)
   set(Key::CliReleaseHelp, i18n::format<Key::CliReleaseHelp>(language));
   set(Key::CliProfileHelp, i18n::format<Key::CliProfileHelp>(language));
   set(Key::CliOnPanicHelp, i18n::format<Key::CliOnPanicHelp>(language));
+  set(Key::CliOptimizeHelp, i18n::format<Key::CliOptimizeHelp>(language));
+  set(Key::CliOverflowChecksHelp,
+      i18n::format<Key::CliOverflowChecksHelp>(language));
   set(Key::CliTargetHelp, i18n::format<Key::CliTargetHelp>(language));
   set(Key::CliBuildOutputHelp, i18n::format<Key::CliBuildOutputHelp>(language));
   set(Key::CliEmitHelp, i18n::format<Key::CliEmitHelp>(language));

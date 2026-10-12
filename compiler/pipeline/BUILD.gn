@@ -123,6 +123,7 @@ source_set("pipeline") {
     "//compiler/lexer",
     "//compiler/lowering",
     "//compiler/opt",
+    "//compiler/overlay",
     "//compiler/parser",
     "//compiler/path",
     "//compiler/pkg",

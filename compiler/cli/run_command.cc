@@ -101,7 +101,9 @@ i32 run_run(const CliConfig& config,
   base::Result<pipeline::BuildProfile, diag::Reported> profile =
       pipeline::resolve_profile(
           pipeline::ProfileRequest{.name = config.profile,
-                                   .on_panic = config.on_panic},
+                                   .on_panic = config.on_panic,
+                                   .optimize = config.optimize,
+                                   .overflow_checks = config.overflow_checks},
           tables, ctx.bag);
   if (profile.is_err()) {
     return failed;

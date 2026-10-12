@@ -33,6 +33,7 @@
 #include "ir/write_input.h"
 #include "lowering/lowering.h"
 #include "opt/opt.h"
+#include "overlay/overlay.h"
 #include "path/path.h"
 #include "pipeline/backend_emit.h"
 #include "pipeline/call_sites.h"
@@ -264,10 +265,29 @@ base::Result<void, diag::Reported> emit_package_output(
       return base::make_err(diag::Reported{});
     }
   }
+  // The rendered sites serve both the checks' aborts and a backtrace's
+  // call sites; one rendering fills both. The table lives in this frame
+  // and the request only borrows it, which lasts exactly as long as the
+  // emission below.
+  const bool want_sites =
+      profile.overflow_checks || profile.on_panic == pkg::OnPanic::Backtrace;
+  std::vector<str::StringPoolId> site_names;
+  if (want_sites) {
+    site_names = render_instr_sites(ctx, package.instr_spans);
+  }
+  // The build's checks ride beside the IR (ADR-0068): one walk turns
+  // the profile into per-instruction entries the backend realizes. A
+  // build with the checks off computes nothing.
+  overlay::Overlay checks;
+  if (profile.overflow_checks) {
+    checks = overlay::build(*package.storage, true, site_names);
+  }
   codegen::EmitRequest request{
       .storage = std::move(package.storage),
       .instr_spans = package.instr_spans,
-      .instr_site_names = {},
+      .instr_site_names = profile.on_panic == pkg::OnPanic::Backtrace
+                              ? std::span<const str::StringPoolId>(site_names)
+                              : std::span<const str::StringPoolId>{},
       .strings = &ctx.strings,
       .bag = &ctx.bag,
       .target = ctx.target,
@@ -275,19 +295,10 @@ base::Result<void, diag::Reported> emit_package_output(
       .freestanding = ctx.freestanding,
       .backtrace = profile.on_panic == pkg::OnPanic::Backtrace,
       .optimize = profile.optimize,
-      .overflow_checks = ctx.overflow_checks,
+      .overlay = profile.overflow_checks ? &checks : nullptr,
       .kind = kind,
       .profiler = ctx.profiler,
   };
-  // A backtrace names call sites as well as functions, so the emission
-  // carries their rendered spellings. The table lives in this frame and
-  // the request only borrows it, which lasts exactly as long as the
-  // emission below.
-  std::vector<str::StringPoolId> site_names;
-  if (profile.on_panic == pkg::OnPanic::Backtrace) {
-    site_names = render_instr_sites(ctx, package.instr_spans);
-    request.instr_site_names = site_names;
-  }
   base::Result<std::vector<u8>, codegen::EmitError> bytes =
       emit_with_backend(ctx.backend, std::move(request));
   if (bytes.is_err()) {
@@ -313,10 +324,28 @@ base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
     u32 parts) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-object",
                                            "backend");
+  // The rendered sites serve both the checks' aborts and a backtrace's
+  // call sites; one rendering fills both. The table lives in this frame
+  // and the request only borrows it, which lasts exactly as long as the
+  // emission below.
+  const bool want_sites =
+      profile.overflow_checks || profile.on_panic == pkg::OnPanic::Backtrace;
+  std::vector<str::StringPoolId> site_names;
+  if (want_sites) {
+    site_names = render_instr_sites(ctx, package.instr_spans);
+  }
+  // The build's checks ride beside the IR (ADR-0068); the split
+  // emission carries the same table as the whole one.
+  overlay::Overlay checks;
+  if (profile.overflow_checks) {
+    checks = overlay::build(*package.storage, true, site_names);
+  }
   codegen::EmitRequest request{
       .storage = std::move(package.storage),
       .instr_spans = package.instr_spans,
-      .instr_site_names = {},
+      .instr_site_names = profile.on_panic == pkg::OnPanic::Backtrace
+                              ? std::span<const str::StringPoolId>(site_names)
+                              : std::span<const str::StringPoolId>{},
       .strings = &ctx.strings,
       .bag = &ctx.bag,
       .target = ctx.target,
@@ -324,21 +353,12 @@ base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
       .freestanding = ctx.freestanding,
       .backtrace = profile.on_panic == pkg::OnPanic::Backtrace,
       .optimize = profile.optimize,
-      .overflow_checks = ctx.overflow_checks,
+      .overlay = profile.overflow_checks ? &checks : nullptr,
       .kind = codegen::OutputKind::Object,
       .profiler = ctx.profiler,
       .parts = parts,
       .workers = ctx.requested_jobs(),
   };
-  // A backtrace names call sites as well as functions, so the emission
-  // carries their rendered spellings. The table lives in this frame and
-  // the request only borrows it, which lasts exactly as long as the
-  // emission below.
-  std::vector<str::StringPoolId> site_names;
-  if (profile.on_panic == pkg::OnPanic::Backtrace) {
-    site_names = render_instr_sites(ctx, package.instr_spans);
-    request.instr_site_names = site_names;
-  }
   base::Result<std::vector<std::vector<u8>>, codegen::EmitError> emitted =
       emit_artifacts_with_backend(ctx.backend, std::move(request));
   if (emitted.is_err()) {
@@ -415,17 +435,6 @@ struct IrWriteInput {
   }
 };
 
-// No IR form is optimized, so a profile that optimizes is refused
-// rather than answered with an unoptimized dump.
-base::Result<void, diag::Reported> refuse_ir_optimized(PipelineContext& ctx,
-                                                       std::string_view mode) {
-  const u32 index = ctx.bag.emit<i18n::Key::PipelineIrNotOptimized>(
-      diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IrNoOptimizer,
-      mode);
-  (void)index;
-  return base::make_err(diag::Reported{});
-}
-
 // The alcy IR text view. It runs before the backend is consulted, because
 // the form belongs to the pipeline: a build with no code generator still
 // writes it.
@@ -435,9 +444,7 @@ base::Result<void, diag::Reported> emit_package_ir_text(
     BuildProfile profile,
     const std::string& output_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "dump-ir", "backend");
-  if (profile.optimize) {
-    return refuse_ir_optimized(ctx, "ir");
-  }
+  (void)profile;
   IrWriteInput write_input(ctx, package);
   const std::string text = ir::write_text(write_input.input);
   const std::span<const u8> bytes(reinterpret_cast<const u8*>(text.data()),
@@ -453,9 +460,7 @@ base::Result<void, diag::Reported> emit_package_ir_binary(
     const std::string& output_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-ir-bc",
                                            "backend");
-  if (profile.optimize) {
-    return refuse_ir_optimized(ctx, "ir-bc");
-  }
+  (void)profile;
   IrWriteInput write_input(ctx, package);
   const std::vector<u8> bytes = ir::serialize(write_input.input);
   return write_output(ctx, "ir binary", output_path, bytes);

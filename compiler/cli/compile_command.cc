@@ -112,7 +112,9 @@ ResultCode run_compile(const CliConfig& config,
   base::Result<pipeline::BuildProfile, diag::Reported> resolved =
       pipeline::resolve_profile(
           pipeline::ProfileRequest{.name = config.profile,
-                                   .on_panic = config.on_panic},
+                                   .on_panic = config.on_panic,
+                                   .optimize = config.optimize,
+                                   .overflow_checks = config.overflow_checks},
           pkg::Profiles{}, ctx.bag);
   if (resolved.is_err()) {
     return failed;

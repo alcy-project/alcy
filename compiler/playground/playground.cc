@@ -23,7 +23,9 @@
 #include "fpag/base/result.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"
+#include "overlay/overlay.h"
 #include "pipeline/backend_emit.h"
+#include "pipeline/call_sites.h"
 #include "pipeline/check.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/frontend.h"
@@ -151,6 +153,12 @@ extern "C" i32 alcy_compile(const u8* src, usize len, AlcyResult* out) {
   out->module_count = package.module_count;
   out->function_count = package.function_count;
 
+  // The playground checks the arithmetic, the way a default build does
+  // (ADR-0068): one walk beside the IR, with the sites the aborts name.
+  std::vector<str::StringPoolId> sites =
+      pipeline::render_instr_sites(ctx, package.package.instr_spans);
+  overlay::Overlay checks =
+      overlay::build(*package.package.storage, true, sites);
   codegen::EmitRequest request{
       .storage = std::move(package.package.storage),
       .instr_spans = package.package.instr_spans,
@@ -160,6 +168,7 @@ extern "C" i32 alcy_compile(const u8* src, usize len, AlcyResult* out) {
       .target = ctx.target,
       .emit_entry = true,
       .optimize = false,
+      .overlay = &checks,
       .kind = codegen::OutputKind::Module,
       .profiler = ctx.profiler,
   };

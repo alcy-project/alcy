@@ -62,7 +62,7 @@ struct EmittedModule {
     // carries its items unwrapped, even one named `main`.
     LlvmIrEmitter emitter(module.get(), std::move(request.storage),
                           request.strings, request.target, request.emit_entry,
-                          request.freestanding, request.overflow_checks,
+                          request.freestanding, request.overlay,
                           request.profiler, request.backtrace,
                           request.instr_spans, request.instr_site_names);
     EmittedBacktrace named = std::move(emitter).emit();

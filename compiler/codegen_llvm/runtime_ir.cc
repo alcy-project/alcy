@@ -708,12 +708,13 @@ class RuntimeBuilder {
   }
 
   // One checked-arithmetic abort: the emitter's call carries the
-  // operation's overflow condition, a set condition prints the message
-  // and takes the panic path, and a clear one returns so the operation
-  // proceeds.
+  // operation's overflow condition and the site it names, a set
+  // condition prints the message and takes the panic path, and a clear
+  // one returns so the operation proceeds.
   void build_check(std::string_view name, std::string_view message) {
     llvm::FunctionType* type = llvm::FunctionType::get(
-        builder_.getVoidTy(), {builder_.getInt1Ty()}, false);
+        builder_.getVoidTy(),
+        {builder_.getInt1Ty(), builder_.getPtrTy(), usize_}, false);
     llvm::Function* function = runtime(name, type);
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(module_.getContext(), "entry", function);
@@ -730,8 +731,7 @@ class RuntimeBuilder {
     builder_.CreateCall(
         panic_function,
         {text_constant(message), llvm::ConstantInt::get(usize_, message.size()),
-         llvm::ConstantPointerNull::get(builder_.getPtrTy()),
-         llvm::ConstantInt::get(usize_, 0)});
+         function->getArg(1), function->getArg(2)});
     builder_.CreateUnreachable();
     builder_.SetInsertPoint(done);
     builder_.CreateRetVoid();

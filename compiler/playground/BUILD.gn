@@ -16,6 +16,7 @@ source_set("playground") {
     "//compiler/codegen",
     "//compiler/diag",
     "//compiler/i18n",
+    "//compiler/overlay",
     "//compiler/pipeline",
     "//compiler/source",
   ]

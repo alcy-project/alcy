@@ -38,6 +38,7 @@
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Module.h"
+#include "overlay/overlay.h"
 #include "source/source.h"
 #include "symbol/mangle.h"
 
@@ -53,7 +54,7 @@ LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
                              const Target& target,
                              bool emit_entry,
                              bool freestanding,
-                             bool overflow_checks,
+                             const overlay::Overlay* overlay,
                              debug::Profiler* profiler,
                              bool backtrace,
                              std::span<const diag::Span> instr_spans,
@@ -67,7 +68,7 @@ LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
       profiler_(profiler),
       emit_entry_(emit_entry),
       freestanding_(freestanding),
-      overflow_checks_(overflow_checks),
+      overlay_(overlay),
       backtrace_(backtrace),
       instr_spans_(instr_spans),
       site_names_(site_names) {}
@@ -487,6 +488,78 @@ void LlvmIrEmitter::emit_sited_call(ir::InstructionIdx instr_idx,
   split_blocks_.emplace_back(here, cont_block);
 }
 
+const overlay::Entry* LlvmIrEmitter::overlay_entry(
+    ir::InstructionIdx instr_idx) const {
+  if (overlay_ == nullptr || instr_idx.idx >= overlay_->entries.size()) {
+    return nullptr;
+  }
+  const overlay::Entry& entry = overlay_->entries[instr_idx.idx];
+  return entry.kind == overlay::Check::None ? nullptr : &entry;
+}
+
+void LlvmIrEmitter::emit_check(const overlay::Entry& entry,
+                               llvm::Value* condition,
+                               std::string_view helper) {
+  const std::string_view where = entry.site == str::EMPTY_STRING_ID
+                                     ? std::string_view{}
+                                     : interner_->get(entry.site);
+  llvm::Value* text =
+      builder_->CreateGlobalString(where, ".alcy.where", 0, module_);
+  llvm::Type* usize = width_ == ir::PointerWidth::W64 ? builder_->getInt64Ty()
+                                                      : builder_->getInt32Ty();
+  builder_->CreateCall(
+      check_function(helper),
+      {condition, text,
+       llvm::ConstantInt::get(usize, static_cast<u64>(where.size()))});
+}
+
+void LlvmIrEmitter::emit_check_prelude(const ir::Instruction& instr,
+                                       const overlay::Entry& entry) {
+  const ir::Operand& lhs = storage_->operands()[instr.operands.head()];
+  llvm::Value* left = resolve_operand_value(lhs);
+  llvm::Type* type = left->getType();
+  switch (entry.kind) {
+    case overlay::Check::ShiftRange: {
+      llvm::Value* count =
+          resolve_operand_value(storage_->operands()[entry.operand]);
+      llvm::Value* width =
+          llvm::ConstantInt::get(type, type->getIntegerBitWidth());
+      emit_check(entry, builder_->CreateICmpUGE(count, width),
+                 "alcy_check_shift");
+      return;
+    }
+    case overlay::Check::MinOverOne: {
+      llvm::Value* divisor =
+          resolve_operand_value(storage_->operands()[entry.operand]);
+      const u32 bits = type->getIntegerBitWidth();
+      llvm::Value* minimum =
+          llvm::ConstantInt::get(type, llvm::APInt::getSignedMinValue(bits));
+      llvm::Value* minus_one =
+          llvm::ConstantInt::get(type, llvm::APInt::getAllOnes(bits));
+      llvm::Value* condition =
+          builder_->CreateAnd(builder_->CreateICmpEQ(left, minimum),
+                              builder_->CreateICmpEQ(divisor, minus_one));
+      emit_check(entry, condition, "alcy_check_overflow");
+      return;
+    }
+    default: return;
+  }
+}
+
+llvm::Function* LlvmIrEmitter::check_function(std::string_view name) {
+  const llvm::StringRef llvm_name(name.data(), name.size());
+  if (llvm::Function* existing = module_->getFunction(llvm_name)) {
+    return existing;
+  }
+  llvm::Type* usize = width_ == ir::PointerWidth::W64 ? builder_->getInt64Ty()
+                                                      : builder_->getInt32Ty();
+  llvm::FunctionType* type = llvm::FunctionType::get(
+      builder_->getVoidTy(),
+      {builder_->getInt1Ty(), builder_->getPtrTy(), usize}, false);
+  return llvm::Function::Create(type, llvm::GlobalValue::ExternalLinkage,
+                                llvm_name, module_);
+}
+
 void LlvmIrEmitter::emit_instruction(ir::InstructionIdx instr_idx,
                                      const ir::Instruction& instr) {
   check_state();
@@ -496,6 +569,17 @@ void LlvmIrEmitter::emit_instruction(ir::InstructionIdx instr_idx,
   if (backtrace_ && instr.op == Op::Call && has_call_site(instr_idx)) {
     emit_sited_call(instr_idx, instr);
     return;
+  }
+  // The build's checks (ADR-0068): an overflow entry replaces the
+  // operation's own emission with the with-overflow form, and the other
+  // kinds emit their condition and the runtime call before it runs.
+  if (const overlay::Entry* entry = overlay_entry(instr_idx);
+      entry != nullptr) {
+    if (entry->kind == overlay::Check::Overflow) {
+      emit_checked_arith(instr, *entry);
+      return;
+    }
+    emit_check_prelude(instr, *entry);
   }
   switch (instr.op) {
     case Op::Noop: break;

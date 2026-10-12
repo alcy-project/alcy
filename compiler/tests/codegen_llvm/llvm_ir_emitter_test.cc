@@ -26,6 +26,7 @@
 #include "ir/storage_builder.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
+#include "overlay/overlay.h"
 
 namespace codegen_llvm {
 
@@ -1129,7 +1130,7 @@ TEST_CASE("Emit with backtrace names the entry for the walk") {
   ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         host_target(), /*emit_entry=*/true,
-                        /*freestanding=*/false, /*overflow_checks=*/false,
+                        /*freestanding=*/false, /*overlay=*/nullptr,
                         /*profiler=*/nullptr, /*backtrace=*/true);
 
   EmittedBacktrace named = std::move(emitter).emit();
@@ -1250,7 +1251,7 @@ TEST_CASE("Emit with backtrace records call sites") {
 
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         host_target(), /*emit_entry=*/false,
-                        /*freestanding=*/false, /*overflow_checks=*/false,
+                        /*freestanding=*/false, /*overlay=*/nullptr,
                         /*profiler=*/nullptr, /*backtrace=*/true, spans, sites);
 
   EmittedBacktrace named = std::move(emitter).emit();
@@ -1294,7 +1295,7 @@ TEST_CASE("Emit without backtrace records no call sites") {
 
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         host_target(), /*emit_entry=*/false,
-                        /*freestanding=*/false, /*overflow_checks=*/false,
+                        /*freestanding=*/false, /*overlay=*/nullptr,
                         /*profiler=*/nullptr, /*backtrace=*/false, spans,
                         sites);
 
@@ -1316,9 +1317,10 @@ TEST_CASE("A checked build emits the overflow check") {
 
   ir::SymbolTable interner(mem::page_size());
   ir::VerifiedStorage storage = add_one_ir(&interner);
+  overlay::Overlay checks = overlay::build(*storage, true, {});
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         host_target(), true, /*freestanding=*/false,
-                        /*overflow_checks=*/true);
+                        /*overlay=*/&checks);
   std::move(emitter).emit();
 
   CHECK(!llvm::verifyModule(*module));

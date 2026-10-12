@@ -144,20 +144,23 @@ TEST_CASE("Two 64-bit targets lower one source to the same IR") {
   }
 }
 
-TEST_CASE("The ir mode refuses a release build") {
+TEST_CASE("The ir mode answers a release build the same artifact") {
   io::TempDir dir = io::TempDir::create_unique("alcy_ir_release_test_");
   CHECK(dir.write_file("main.al", PROGRAM));
   PipelineContext ctx{i18n::Language::EnUs};
   const base::Result<std::string, diag::Reported> built = build_single_file(
       ctx, dir.join("main.al"), "", BuildProfile{.optimize = true},
       LinkOptions{}, EmitMode::Ir, full_std_selection());
-  CHECK(built.is_err());
+  // The unoptimized IR form is the cacheable artifact and does not
+  // follow the profile, so a release build is answered, not refused
+  // (ADR-0067, amended).
+  CHECK(built.is_ok());
 
   PipelineContext binary_ctx{i18n::Language::EnUs};
   const base::Result<std::string, diag::Reported> binary = build_single_file(
       binary_ctx, dir.join("main.al"), "", BuildProfile{.optimize = true},
       LinkOptions{}, EmitMode::IrBinary, full_std_selection());
-  CHECK(binary.is_err());
+  CHECK(binary.is_ok());
 }
 
 }  // namespace pipeline

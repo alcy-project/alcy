@@ -73,15 +73,12 @@ enum class DiagCode : u8 {
   // No backend was compiled in at all: the command can check, and a
   // build command says so here.
   NoBackend = 20,
-  // A release build asked for an IR form, and no IR form is optimized;
-  // the output would be silently unoptimized otherwise.
-  IrNoOptimizer = 21,
   // The command line named a profile neither built in nor declared by
   // the goal package's .alcy/profile.toml.
-  UnknownProfile = 22,
+  UnknownProfile = 21,
   // The pipeline's release passes rebuilt the IR and the verifier
   // refused it: a pass wrote something structurally invalid.
-  OptimizeFailed = 23,
+  OptimizeFailed = 22,
 };
 
 }  // namespace pipeline

@@ -22,6 +22,7 @@
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
+#include "overlay/overlay.h"
 
 namespace llvm {
 class BasicBlock;
@@ -83,7 +84,7 @@ class LlvmIrEmitter {
                 const Target& target,
                 bool emit_entry,
                 bool freestanding = false,
-                bool overflow_checks = false,
+                const overlay::Overlay* overlay = nullptr,
                 debug::Profiler* profiler = nullptr,
                 bool backtrace = false,
                 std::span<const diag::Span> instr_spans = {},
@@ -121,9 +122,19 @@ class LlvmIrEmitter {
   // the operation's overflow condition, calls the runtime check named
   // for it, and answers the operation's value. `emit_compute` takes
   // these only in a build whose `overflow_checks_` is set.
-  void emit_checked_arith(const ir::Instruction& instr);
-  void emit_checked_div(const ir::Instruction& instr);
-  void emit_checked_shift(const ir::Instruction& instr);
+  // The build's checks (ADR-0068): an overflow entry replaces the
+  // operation's own emission with the with-overflow form, and the other
+  // kinds emit their condition and the runtime call before it.
+  void emit_checked_arith(const ir::Instruction& instr,
+                          const overlay::Entry& entry);
+  void emit_check_prelude(const ir::Instruction& instr,
+                          const overlay::Entry& entry);
+  void emit_check(const overlay::Entry& entry,
+                  llvm::Value* condition,
+                  std::string_view helper);
+  // The entry this instruction carries, or nothing when the build checks
+  // nothing there.
+  const overlay::Entry* overlay_entry(ir::InstructionIdx instr_idx) const;
   // The declaration of a runtime check by name, created on first use so
   // `runtime_ir` defines only the checks a build's code reaches.
   llvm::Function* check_function(std::string_view name);
@@ -177,10 +188,9 @@ class LlvmIrEmitter {
   // Whether the entry is `_start`, ending through the exit syscall
   // instead of returning to a C runtime (ADR-0052).
   bool freestanding_ = false;
-  // Whether the source operations check overflow (ADR-0065): a debug
-  // build says yes and the checked forms above run; a release one says
-  // no and the plain operations wrap.
-  bool overflow_checks_ = false;
+  // The build's arithmetic checks, parallel to the storage's
+  // instructions; null when the build checks nothing (ADR-0068).
+  const overlay::Overlay* overlay_ = nullptr;
   // Whether the panic walker gets a table to read; the emitter creates
   // the slot it lands in, and define_backtrace_table fills it once the
   // runtime exists (ADR-0070).

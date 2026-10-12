@@ -16,6 +16,7 @@
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
+#include "overlay/overlay.h"
 
 #if BUILD_FLAG(IS_DEBUG)
 #include "ir/formatter.h"  // IWYU pragma: keep
@@ -143,26 +144,6 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
   const ir::OperandIdxRange& ops = i.operands;
 
   using Op = ir::Opcode;
-
-  // A build with overflow checks takes the checked form of every
-  // source operation; one without falls through to the plain table
-  // below, where a source operation and its wrap twin emit the same
-  // instruction.
-  if (overflow_checks_) {
-    switch (i.op) {
-      case Op::IntAdd:
-      case Op::IntSub:
-      case Op::IntMul: emit_checked_arith(instr); return;
-      case Op::IntDiv:
-      case Op::UintDiv:
-      case Op::IntRem:
-      case Op::UintRem: emit_checked_div(instr); return;
-      case Op::ShiftLeft:
-      case Op::ArithmeticShiftRight:
-      case Op::LogicalShiftRight: emit_checked_shift(instr); return;
-      default: break;
-    }
-  }
 
   for (const BinaryOp& entry : BINARY_OPS) {
     if (entry.op != i.op) {
@@ -402,12 +383,12 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
   }
 }
 
-// The checked source operations (ADR-0065): each computes the
-// operation's overflow condition, calls the runtime check named for it,
-// and answers the operation's value. A check returns when the
-// condition is false and aborts through the panic path when it is
-// true, so the caller keeps its block: no branch of its own.
-void LlvmIrEmitter::emit_checked_arith(const ir::Instruction& instr) {
+// The overflow form of `+`, `-`, and `*` (ADR-0068): LLVM answers the
+// wrapped value and the condition in one pair, and the runtime check
+// aborts when the condition is set and returns otherwise, so the caller
+// keeps its block and answers the operation's value.
+void LlvmIrEmitter::emit_checked_arith(const ir::Instruction& instr,
+                                       const overlay::Entry& entry) {
   const ir::OperandIdxRange& ops = instr.operands;
   DCHECK(ops.size() == 2);
   const ir::Operand& lhs = storage_->operands()[ops.head()];
@@ -421,101 +402,10 @@ void LlvmIrEmitter::emit_checked_arith(const ir::Instruction& instr) {
       builder_->CreateIntrinsic(id, {left->getType()}, {left, right});
   llvm::Value* value = builder_->CreateExtractValue(pair, {0u});
   llvm::Value* overflow = builder_->CreateExtractValue(pair, {1u});
-  builder_->CreateCall(check_function("alcy_check_overflow"), {overflow});
+  emit_check(entry, overflow, "alcy_check_overflow");
   if (instr.dst.is_valid()) {
     values_.add_register(instr.dst, value);
   }
-}
-
-void LlvmIrEmitter::emit_checked_div(const ir::Instruction& instr) {
-  const ir::OperandIdxRange& ops = instr.operands;
-  DCHECK(ops.size() == 2);
-  const ir::Operand& lhs = storage_->operands()[ops.head()];
-  const ir::Operand& rhs = storage_->operands()[ops.head() + 1];
-  llvm::Value* left = resolve_operand_value(lhs);
-  llvm::Value* right = resolve_operand_value(rhs);
-  llvm::Type* type = left->getType();
-  const bool is_signed =
-      instr.op == ir::Opcode::IntDiv || instr.op == ir::Opcode::IntRem;
-  llvm::Value* zero = llvm::ConstantInt::get(type, 0);
-  llvm::Value* one = llvm::ConstantInt::get(type, 1);
-  llvm::Value* by_zero = builder_->CreateICmpEQ(right, zero);
-  llvm::Value* failing = by_zero;
-  if (is_signed) {
-    // The one signed division LLVM leaves undefined besides zero:
-    // the minimum divided by minus one.
-    const u32 bits = type->getIntegerBitWidth();
-    llvm::Value* minimum =
-        llvm::ConstantInt::get(type, llvm::APInt::getSignedMinValue(bits));
-    llvm::Value* minus_one =
-        llvm::ConstantInt::get(type, llvm::APInt::getAllOnes(bits));
-    llvm::Value* overflows =
-        builder_->CreateAnd(builder_->CreateICmpEQ(left, minimum),
-                            builder_->CreateICmpEQ(right, minus_one));
-    builder_->CreateCall(check_function("alcy_check_overflow"), {overflows});
-    failing = builder_->CreateOr(by_zero, overflows);
-  }
-  builder_->CreateCall(check_function("alcy_check_divide_by_zero"), {by_zero});
-  // A divisor a check would have aborted on is replaced before the
-  // division, so the instruction never sees one LLVM leaves undefined.
-  llvm::Value* divisor = builder_->CreateSelect(failing, one, right);
-  llvm::Value* result = nullptr;
-  switch (instr.op) {
-    case ir::Opcode::IntDiv:
-      result = builder_->CreateSDiv(left, divisor);
-      break;
-    case ir::Opcode::UintDiv:
-      result = builder_->CreateUDiv(left, divisor);
-      break;
-    case ir::Opcode::IntRem:
-      result = builder_->CreateSRem(left, divisor);
-      break;
-    default: result = builder_->CreateURem(left, divisor); break;
-  }
-  if (instr.dst.is_valid()) {
-    values_.add_register(instr.dst, result);
-  }
-}
-
-void LlvmIrEmitter::emit_checked_shift(const ir::Instruction& instr) {
-  const ir::OperandIdxRange& ops = instr.operands;
-  DCHECK(ops.size() == 2);
-  const ir::Operand& lhs = storage_->operands()[ops.head()];
-  const ir::Operand& rhs = storage_->operands()[ops.head() + 1];
-  llvm::Value* left = resolve_operand_value(lhs);
-  llvm::Value* right = resolve_operand_value(rhs);
-  llvm::Type* type = left->getType();
-  llvm::Value* width = llvm::ConstantInt::get(type, type->getIntegerBitWidth());
-  llvm::Value* out_of_range = builder_->CreateICmpUGE(right, width);
-  llvm::Value* zero = llvm::ConstantInt::get(type, 0);
-  // An amount a check would have aborted on is zeroed before the
-  // shift, so the instruction never sees an oversized one.
-  llvm::Value* amount = builder_->CreateSelect(out_of_range, zero, right);
-  builder_->CreateCall(check_function("alcy_check_shift"), {out_of_range});
-  llvm::Value* result = nullptr;
-  switch (instr.op) {
-    case ir::Opcode::ShiftLeft:
-      result = builder_->CreateShl(left, amount);
-      break;
-    case ir::Opcode::ArithmeticShiftRight:
-      result = builder_->CreateAShr(left, amount);
-      break;
-    default: result = builder_->CreateLShr(left, amount); break;
-  }
-  if (instr.dst.is_valid()) {
-    values_.add_register(instr.dst, result);
-  }
-}
-
-llvm::Function* LlvmIrEmitter::check_function(std::string_view name) {
-  const llvm::StringRef llvm_name(name.data(), name.size());
-  if (llvm::Function* existing = module_->getFunction(llvm_name)) {
-    return existing;
-  }
-  llvm::FunctionType* type = llvm::FunctionType::get(
-      builder_->getVoidTy(), {builder_->getInt1Ty()}, false);
-  return llvm::Function::Create(type, llvm::GlobalValue::ExternalLinkage,
-                                llvm_name, module_);
 }
 
 }  // namespace codegen_llvm
