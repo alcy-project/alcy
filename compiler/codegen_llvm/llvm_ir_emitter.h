@@ -177,7 +177,7 @@ class LlvmIrEmitter {
   // Whether the entry is `_start`, ending through the exit syscall
   // instead of returning to a C runtime (ADR-0052).
   bool freestanding_ = false;
-  // Whether the source operations check overflow (ADR-0062): a debug
+  // Whether the source operations check overflow (ADR-0065): a debug
   // build says yes and the checked forms above run; a release one says
   // no and the plain operations wrap.
   bool overflow_checks_ = false;

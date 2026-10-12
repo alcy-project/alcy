@@ -1,4 +1,4 @@
-# ADR-0063: The release passes live in the pipeline
+# ADR-0067: The release passes live in the pipeline
 
 - Subject: the compiler
 - Status: Accepted
@@ -54,6 +54,8 @@ a release build pays one walk over each function. The first passes
 are small on purpose: larger ones — devirtualization, bounds-check
 elision, allocation pairing, drop elaboration — need cross-block or
 cross-function facts, and each lands as its own pass with its own
-tests. The unoptimized IR forms (`--emit=ir`, `--emit=ir-bc`) still
-refuse `--release`, because the form's contract is the cacheable,
-unoptimized artifact.
+tests. The unoptimized IR forms (`--emit=ir`, `--emit=ir-bc`) answer the
+same artifact under every profile: the form is the cacheable,
+unoptimized IR, and a release run only adds the passes and the
+overlay (ADR-0068) after it, so refusing `--release` had no meaning
+left.

@@ -1,4 +1,4 @@
-# ADR-0062: Overflow is a build policy, not an IR property
+# ADR-0065: Overflow is a build policy, not an IR property
 
 - Subject: the language
 - Status: Accepted
@@ -45,6 +45,17 @@ The overflow policy is a property of the build, never of the IR:
    compiler version, the target (a pointer width changes types), and
    options that change IR meaning; the profile and the optimization
    level are applied after a hit.
+
+Amended when the checks became an overlay (ADR-0068): the policy no
+longer rides as `EmitRequest::overflow_checks`. One walk over the
+shared IR turns `overflow-checks` into an overlay beside it, holding
+the checks the build wants, and each backend realizes a check from
+that table and never reads a profile. The definitions of ADR-0066
+apply to every build, so a release build is defined as well - `+ - *`
+wrap, a shift count masks, a zero divisor panics, and `MIN / -1`
+wraps - and the checks add only the aborts a debug build wants. The
+direct wasm backend realizes the checks too now, so the gap the
+consequences below record is closed.
 
 ## Consequences
 

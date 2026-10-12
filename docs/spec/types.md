@@ -12,7 +12,7 @@
   unchecked, `+ - *` wrap, a shift count rides modulo the type's width,
   and `MIN / -1` wraps. Division or remainder by zero always panics,
   `MIN % -1` is zero, and no arithmetic operation is undefined. The
-  policy belongs to the build, not to the module (ADR-0062), so one
+  policy belongs to the build, not to the module (ADR-0065), so one
   lowered program serves every profile; `wrapping_add`, `wrapping_sub`,
   and `wrapping_mul` name the wrapping forms for code that wants them
   in every profile. A constant expression is always evaluated checked,

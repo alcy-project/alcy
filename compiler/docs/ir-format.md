@@ -184,7 +184,7 @@ prints as a bare number.
 
 The arithmetic opcodes carry the language's operations, whose overflow
 behavior is the build's: a debug profile lowers them with checks, a
-release profile without (ADR-0062). The `*Wrap` opcodes are the
+release profile without (ADR-0065). The `*Wrap` opcodes are the
 program's explicit wrapping forms, so they wrap in every profile; a
 compiler-generated step that must wrap says so through them rather
 than through a source operator.

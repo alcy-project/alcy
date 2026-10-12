@@ -1,4 +1,4 @@
-# ADR-0062: Arithmetic is defined
+# ADR-0066: Arithmetic is defined
 
 - Subject: the language
 - Status: Accepted
@@ -38,6 +38,13 @@ undefined.
   divisor stays a compile error, since a program that always panics
   at its first execution is a mistake worth naming while it is
   being written.
+
+Amended when the checks became an overlay (ADR-0068): the
+definitions above are unconditional and stay in the IR. The
+diagnostics a checked build adds - an overflow in `+`, `-`, and `*`,
+an overshift, and a signed `MIN / -1` - are the build's overlay
+entries, realized by each backend from that table; ADR-0065 remains
+the policy's ADR.
 
 ## Consequences
 

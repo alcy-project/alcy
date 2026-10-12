@@ -83,7 +83,7 @@ allocator, and the emitter itself has no optimizer: `--release` with a direct
 backend used to be an error rather than a silently unoptimized binary.
 
 Amended at the IR passes' landing: the pipeline runs the release passes over
-the IR before any backend is chosen (ADR-0063), so a direct backend now
+the IR before any backend is chosen (ADR-0067), so a direct backend now
 accepts `--release` and its module is the optimized one; what the emitter
 still lacks is a register allocator, and that stays true. Link-visible
 functions --

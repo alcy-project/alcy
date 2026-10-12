@@ -98,7 +98,7 @@ The following are compile-time errors inside comp evaluation:
   back edge spends one unit of a fixed quota (one million at this
   stage), so evaluation terminates deterministically; the quota cannot
   be raised yet.
-- An integer overflow in `+ - *` (ADR-0062). The checks are always on
+- An integer overflow in `+ - *` (ADR-0065). The checks are always on
   during evaluation, so a constant that would wrap at runtime is
   refused; `wrapping_add`, `wrapping_sub`, and `wrapping_mul` name the
   wrapping forms for code that wants the wrap.

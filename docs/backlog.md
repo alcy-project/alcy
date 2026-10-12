@@ -41,7 +41,7 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] IR cache shared across profiles and machines. The lowered IR is
   one artifact per pointer width: a test lowers one source under two
   64-bit triples and compares the bytes (`pipeline/ir_emit_test.cc`),
-  the release passes run after this boundary (ADR-0063), and the
+  the release passes run after this boundary (ADR-0067), and the
   serialized form states the width in its header. The cache itself —
   a store keyed by package digest, dependency closure, format
   version, and pointer width, serving debug and release and every
@@ -127,7 +127,7 @@ replaced. The foundations are in `roadmap.md`.
   hostile symbol can exhaust the stack. Latent while only tests call it.
 - [ ] A debug build through `--backend=direct-wasm` wraps: the direct
   wasm backend does not lower the checked arithmetic yet, so only the
-  LLVM backend honors the debug policy (ADR-0062).
+  LLVM backend honors the debug policy (ADR-0065).
 
 ## Shipped
 

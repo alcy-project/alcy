@@ -805,7 +805,7 @@ TEST_CASE("Lowering reports a spent name table") {
 
 // A constant expression the compiler evaluates overflows its type: the
 // program is refused with the check's own code rather than a
-// not-supported report (ADR-0062).
+// not-supported report (ADR-0065).
 TEST_CASE("Lowering reports an overflow in a constant") {
   VirtualDir dir;
   write_all(dir, {{"main.al",

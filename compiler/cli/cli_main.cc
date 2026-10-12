@@ -155,7 +155,7 @@ i32 cli_main(i32 argc, char** argv) {
       // mismatch.
       ctx.version = alcy_version();
       // A debug build checks the source arithmetic; `--release` turns
-      // the checks off and the operations wrap (ADR-0062).
+      // the checks off and the operations wrap (ADR-0065).
       ctx.overflow_checks = !config.release;
       Envelope envelope;
       envelope.command = command_name(config.subcommand);

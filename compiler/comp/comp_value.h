@@ -63,7 +63,7 @@ u32 int_bytes(ir::TypeTag tag);
 u64 mask(ir::TypeTag tag);
 i64 sign_extend(u64 bits, ir::TypeTag tag);
 // Whether the checked source operation overflows at `tag`'s width
-// (ADR-0062). The operands are masked to the width already; the AST
+// (ADR-0065). The operands are masked to the width already; the AST
 // evaluator and the IR interpreter share these, so a compile-time
 // `+ - *` stops at the same place whichever engine reads it.
 bool add_overflows(u64 left, u64 right, ir::TypeTag tag);

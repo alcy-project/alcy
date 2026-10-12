@@ -402,7 +402,7 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
   }
 }
 
-// The checked source operations (ADR-0062): each computes the
+// The checked source operations (ADR-0065): each computes the
 // operation's overflow condition, calls the runtime check named for it,
 // and answers the operation's value. A check returns when the
 // condition is false and aborts through the panic path when it is

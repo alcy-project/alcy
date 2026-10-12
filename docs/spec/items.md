@@ -92,7 +92,7 @@
     `wrapping_mul<T>` name the wrapping forms of the source
     arithmetic: the result is the mathematical one reduced modulo 2^N
     in every build. `T` is an integer type; a hash that relies on the
-    wrap says so through these (ADR-0062).
+    wrap says so through these (ADR-0065).
   - `elem_ptr<T>(ptr: &mut MaybeUninit<T>, index: usize) -> &mut
     MaybeUninit<T>` offsets a pointer by whole elements. It is
     unchecked: the result is in bounds exactly when the caller keeps
