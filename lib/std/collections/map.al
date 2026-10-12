@@ -40,19 +40,9 @@ fn hash(s: str) -> u64 {
   ret h
 }
 
-// Byte equality, because `str` has no comparison yet.
+// Key equality through `str`'s `PartialEq`.
 fn key_eq(a: str, b: str) -> bool {
-  if str_len(a) != str_len(b) {
-    ret false
-  }
-  mut i := 0 as usize
-  while i < str_len(a) {
-    if str_byte(a, i) != str_byte(b, i) {
-      ret false
-    }
-    i = i + 1
-  }
-  ret true
+  ret a == b
 }
 
 // The slot count that backs `n` inserts under the three-quarters load
