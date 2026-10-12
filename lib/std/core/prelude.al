@@ -47,3 +47,4 @@ pub use package::string::str_len;
 pub use package::string::str_byte;
 pub use package::string::str_slice;
 pub use package::string::str_from_parts;
+pub use package::string::StrIter;

@@ -2747,6 +2747,11 @@ void Checker::process_module(u32 module) {
               }
             }
           }
+        } else if (self_node.kind == ast::TypeKind::Str) {
+          // `impl str`: the string view is a primitive, and the
+          // standard library owns the methods on it.
+          self_type = builder.primitive(ir::TypeTag::Str);
+          self_ok = true;
         } else {
           const u32 index =
               bag.emit<i18n::Key::AnalyzerInherentImplNeedsNominalType>(
@@ -6086,8 +6091,11 @@ void Checker::check_bodies() {
           const ir::TypeIdx* self_ptr = nullptr;
           const ast::TypeNode& self_node =
               ast.types[node.payload.get<ast::ItemImpl>().type];
-          if (self_node.kind == ast::TypeKind::Path &&
-              self_node.payload.get<ast::TypePath>().args.empty()) {
+          if (self_node.kind == ast::TypeKind::Str) {
+            self = builder.primitive(ir::TypeTag::Str);
+            self_ptr = &self;
+          } else if (self_node.kind == ast::TypeKind::Path &&
+                     self_node.payload.get<ast::TypePath>().args.empty()) {
             u32 target_module = NO_MODULE;
             std::string_view target_name;
             if (resolve_type_path(m,
