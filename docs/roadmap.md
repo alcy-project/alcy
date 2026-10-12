@@ -102,13 +102,16 @@ peripheral work lives in `backlog.md`. The language record lives in
   ADR-0044's follow-up, and the recursive types an indirection
   unblocks. A function value is structurally typed, `Copy`, and
   carries no destructor glue, so whether a closure owns its captures
-  cannot be a property of its type yet; the first slice is that
-  decision, in an ADR (move-only function values, nominal per-literal
-  closure types, or a value carrying an environment-drop entry).
-  Then `Box<T>` over the allocator's `MaybeUninit<T>` - a
-  hand-written box compiles today - whose destructor ends its pointee
-  with the first item's `drop_in_place`, with a recursive enum or
-  struct built through it as the acceptance case. Then the owning
+  cannot be a property of its type yet. The decision landed
+  (ADR-0064): a closure literal interns a nominal type whose field is
+  its environment tuple, so its `Copy`-ness is the environment's and a
+  closure coerces to a bare function type as a borrow of it. What
+  remains of it: interning the type per literal, the coercion rule,
+  and ending a closure value through its environment. Then `Box<T>`
+  over the allocator's `MaybeUninit<T>` - a hand-written box compiles
+  today - whose destructor ends its pointee with the first item's
+  `drop_in_place`, with a recursive enum or struct built through it as
+  the acceptance case. Then the owning
   environment: non-Copy captures move in, the environment is
   allocated where the closure value can own and drop it, the `Copy`
   restriction and the frame-escape refusal retire, and frame-crossing
