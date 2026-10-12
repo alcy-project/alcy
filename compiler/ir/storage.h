@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <span>
 #include <utility>
 
 #include "debug/fatal.h"
@@ -244,8 +245,15 @@ inline TypeLayout type_layout(const StorageState& state,
 
 // Structural Copy query over raw state, shared by Storage and passes
 // that read through a builder before build() (see lowering). Cycle-free
-// input required (see Storage::is_copy_type).
-inline bool is_copy_type(const StorageState& state, TypeIdx idx) {
+// input required (see Storage::is_copy_type). `has_drop` marks the
+// types a declaration gives a destructor: such a type is move-only,
+// whatever its fields are.
+inline bool is_copy_type(const StorageState& state,
+                         TypeIdx idx,
+                         std::span<const u8> has_drop) {
+  if (idx.idx < has_drop.size() && has_drop[idx.idx] != 0) {
+    return false;
+  }
   const TypeNode& node = state.types[idx];
   switch (node.tag) {
     case TypeTag::MutRef: return false;
@@ -275,16 +283,18 @@ inline bool is_copy_type(const StorageState& state, TypeIdx idx) {
     case TypeTag::Struct: {
       const StructType& struct_type = state.struct_types[node.as_struct()];
       for (TypeIdx field : struct_type.fields) {
-        if (!is_copy_type(state, field)) {
+        if (!is_copy_type(state, field, has_drop)) {
           return false;
         }
       }
       return true;
     }
     case TypeTag::Array:
-      return is_copy_type(state, state.array_types[node.as_array()].element);
+      return is_copy_type(state, state.array_types[node.as_array()].element,
+                          has_drop);
     case TypeTag::Slice:
-      return is_copy_type(state, state.slice_types[node.as_slice()].element);
+      return is_copy_type(state, state.slice_types[node.as_slice()].element,
+                          has_drop);
     case TypeTag::Enum: {
       const EnumType& enum_type = state.enum_types[node.as_enum()];
       for (EnumVariantTypeIdx vidx = enum_type.variants.head();
@@ -292,7 +302,7 @@ inline bool is_copy_type(const StorageState& state, TypeIdx idx) {
            vidx = EnumVariantTypeIdx(vidx.idx + 1)) {
         const EnumVariantType& variant = state.enum_variant_types[vidx];
         for (TypeIdx field : variant.fields) {
-          if (!is_copy_type(state, field)) {
+          if (!is_copy_type(state, field, has_drop)) {
             return false;
           }
         }
@@ -302,7 +312,7 @@ inline bool is_copy_type(const StorageState& state, TypeIdx idx) {
     case TypeTag::Tuple: {
       const TupleType& tuple = state.tuple_types[node.as_tuple()];
       for (TypeIdx element : tuple.elements) {
-        if (!is_copy_type(state, element)) {
+        if (!is_copy_type(state, element, has_drop)) {
           return false;
         }
       }
@@ -318,6 +328,12 @@ inline bool is_copy_type(const StorageState& state, TypeIdx idx) {
     }
     default: UNREACHABLE();
   }
+}
+
+// The structural question alone, for the callers that have no
+// destructor table in hand.
+inline bool is_copy_type(const StorageState& state, TypeIdx idx) {
+  return is_copy_type(state, idx, std::span<const u8>{});
 }
 
 class Storage {

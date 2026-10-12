@@ -66,6 +66,10 @@ struct SpecTarget {
     // being the parameter itself (`&T`, `Option<T>`): the AST shape is
     // resolved where the target's arguments bind them.
     ast::TypeIdx shape = ast::TypeIdx::invalid();
+    // A target argument that names a value parameter (`[T; N]`): the
+    // receiver's const argument is what binds it.
+    bool is_value = false;
+    ast::TypeIdx annotation = ast::TypeIdx::invalid();
   };
   std::vector<Arg> args;
   bool is_primitive = false;
@@ -191,7 +195,7 @@ class Checker {
   std::vector<std::pair<ir::TypeIdx, ir::TypeIdx>> uninit_types_;
   // Destructor resolution, aligned with the type table by index.
   std::vector<CheckedModule::DropGlue> drop_glue_;
-  std::vector<bool> needs_drop_;
+  std::vector<u8> needs_drop_;
   // Comp fn calls the const pre-pass answered, carried on the checked
   // package so lowering can compare them against the IR engine once the
   // storage exists (ADR-0054).
@@ -365,6 +369,7 @@ class Checker {
       std::span<const ir::TypeIdx> spec_args,
       ir::TypeIdx self_type,
       const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
+      std::span<const ValueParam> value_scope,
       const ast::ItemImpl& impl,
       std::string_view name);
   // Checks the bodies of a concrete `impl S for T` under the target.

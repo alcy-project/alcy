@@ -24,3 +24,7 @@ pub intrinsic fn align_of<T>() -> usize;
 // value behind `p` is initialized and owns what it holds; the value is
 // consumed, so the caller must not read it again.
 pub unsafe intrinsic fn drop_in_place<T>(p: &mut T);
+
+// Reads the value at `p` and leaves the place uninitialized. The
+// caller owns the result and must not use or end `p` again.
+pub unsafe intrinsic fn read<T>(p: *T) -> T;

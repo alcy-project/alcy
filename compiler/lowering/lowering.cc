@@ -382,7 +382,7 @@ bool Lowerer::is_destructor(ast::ItemIdx item) const {
 }
 
 bool Lowerer::runs_destructor(ir::TypeIdx type) const {
-  return type.idx < pkg.needs_drop.size() && pkg.needs_drop[type.idx];
+  return type.idx < pkg.needs_drop.size() && pkg.needs_drop[type.idx] != 0;
 }
 
 ir::OperandIdx Lowerer::use_value(Val v) {

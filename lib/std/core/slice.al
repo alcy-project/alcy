@@ -91,6 +91,45 @@ impl<T, N: usize> [T; N] {
   pub fn iter_mut(mut self: &mut Self) -> SliceIterMut<T> {
     ret SliceIterMut { s: self.as_mut_slice(), pos: 0 }
   }
+
+  // Consumes the array; the cursor owns what is left.
+  pub fn into_iter(self: [T; N]) -> ArrayIntoIter<T, N> {
+    ret ArrayIntoIter { a: self, pos: 0 }
+  }
+}
+
+// A consuming cursor over an array. Each element leaves by value; the
+// cursor's destructor ends the ones still there, so a loop that stops
+// early leaks nothing.
+pub struct ArrayIntoIter<T, N: usize> {
+  a: [T; N],
+  pos: usize,
+}
+
+impl<T, N: usize> ArrayIntoIter<T, N> {
+  pub fn into_iter(self: ArrayIntoIter<T, N>) -> ArrayIntoIter<T, N> {
+    ret self
+  }
+
+  pub fn drop(mut self: ArrayIntoIter<T, N>) {
+    mut i := self.pos
+    while i < N {
+      unsafe { drop_in_place(slice_at_mut(self.a.as_mut_slice(), i)) }
+      i = i + 1
+    }
+  }
+}
+
+impl<T, N: usize> Iterator<T> for ArrayIntoIter<T, N> {
+  fn next(mut self: &mut Self) -> Option<T> {
+    if self.pos >= N {
+      ret Option::None
+    }
+    at := unsafe { slice_at(self.a.as_slice(), self.pos) } as *T
+    v := unsafe { read(at) }
+    self.pos = self.pos + 1
+    ret Option::Some(v)
+  }
 }
 
 // An exclusive cursor over a slice's elements.

@@ -595,8 +595,9 @@ bool Checker::spec_targets_overlap(const SpecTarget& a, const SpecTarget& b) {
     return false;
   }
   for (usize i = 0; i < a.args.size(); ++i) {
-    if (a.args[i].is_param || b.args[i].is_param ||
-        a.args[i].shape.is_valid() || b.args[i].shape.is_valid()) {
+    if (a.args[i].is_param || b.args[i].is_param || a.args[i].is_value ||
+        b.args[i].is_value || a.args[i].shape.is_valid() ||
+        b.args[i].shape.is_valid()) {
       continue;
     }
     if (!types_equal(a.args[i].type, b.args[i].type)) {
@@ -633,6 +634,12 @@ bool Checker::spec_target_shapes_match(const SpecImplEntry& a,
   for (usize i = 0; i < a.target.args.size(); ++i) {
     const SpecTarget::Arg& left = a.target.args[i];
     const SpecTarget::Arg& right = b.target.args[i];
+    if (left.is_value != right.is_value) {
+      return false;
+    }
+    if (left.is_value) {
+      continue;
+    }
     if (left.is_param != right.is_param) {
       return false;
     }
@@ -1085,6 +1092,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
         const ast::TypeNode& arg_node = ast.types[arg];
         bool direct = false;
         std::string_view param;
+        ast::TypeIdx annotation = ast::TypeIdx::invalid();
         if (arg_node.kind == ast::TypeKind::Path) {
           const ast::Path& path =
               ast.paths[arg_node.payload.get<ast::TypePath>().path];
@@ -1094,6 +1102,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
               if (candidate.name.name == path.segments[0].name) {
                 direct = true;
                 param = candidate.name.name;
+                annotation = candidate.type;
                 break;
               }
             }
@@ -1106,7 +1115,13 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
           (void)index;
           return;
         }
-        target.args.push_back(SpecTarget::Arg{true, param, error_type()});
+        if (annotation.is_valid()) {
+          target.args.push_back(SpecTarget::Arg{false, param, error_type(),
+                                                ast::TypeIdx::invalid(), true,
+                                                annotation});
+        } else {
+          target.args.push_back(SpecTarget::Arg{true, param, error_type()});
+        }
       }
     } else {
       std::vector<ir::TypeIdx> args;
@@ -2225,7 +2240,7 @@ bool Checker::is_known_intrinsic(std::string_view name) {
          name == "uninit_write" || name == "uninit_assume" ||
          name == "uninit_ref" || name == "ptr_offset" ||
          name == "ptr_offset_mut" || name == "drop_in_place" ||
-         name == "slice_at" || name == "slice_at_mut";
+         name == "slice_at" || name == "slice_at_mut" || name == "read";
 }
 
 // The intrinsics whose preconditions the compiler cannot check
@@ -2237,7 +2252,7 @@ static bool intrinsic_is_unsafe(std::string_view name) {
          name == "str_from_parts" || name == "slice_from_parts" ||
          name == "slice_from_parts_mut" || name == "ptr_offset" ||
          name == "ptr_offset_mut" || name == "drop_in_place" ||
-         name == "slice_at" || name == "slice_at_mut";
+         name == "slice_at" || name == "slice_at_mut" || name == "read";
 }
 
 // What may cross a C boundary in the first ABI slice (ADR-0051):
@@ -2426,6 +2441,13 @@ bool Checker::check_intrinsic_signature(u32 module,
         builder.slice_types()[builder.types()[pointee(params[0])].as_slice()];
     return or_wrong(params.size() == 2 && is_usize(params[1]) &&
                     same(slice.element, pointee(ret)));
+  }
+  if (name == "read") {
+    // `read<T>(p: *T) -> T`: the caller keeps the place initialized and
+    // gives up ownership of what it reads.
+    return or_wrong(params.size() == 1 &&
+                    builder.types()[params[0].idx].tag == ir::TypeTag::RawPtr &&
+                    same(pointee(params[0]), ret));
   }
   if (name == "slice_from_parts" || name == "slice_from_parts_mut") {
     // `slice_from_parts<T>(ptr: &T, len: usize) -> &[T]`, and the
@@ -2888,10 +2910,17 @@ bool Checker::check_drop_signature(u32 module,
     (void)index;
     return false;
   }
-  if (ir::is_copy_type(builder.state(), self_type)) {
-    // `Copy` is structural, so a Copy type has no owned resource for a
-    // destructor to release; a copy of it would be dropped too.
-    const u32 index = bag.emit<i18n::Key::AnalyzerCopyTypeCannotHaveDestructor>(
+  const ir::TypeTag self_tag = tag_of(self_type);
+  const bool view_like =
+      self_tag == ir::TypeTag::Str || self_tag == ir::TypeTag::Slice ||
+      self_tag == ir::TypeTag::Ref || self_tag == ir::TypeTag::MutRef ||
+      self_tag == ir::TypeTag::RawPtr || self_tag == ir::TypeTag::RawMutPtr ||
+      self_tag == ir::TypeTag::Func || self_tag == ir::TypeTag::Function;
+  if (view_like) {
+    // A view is a window on storage someone else owns; it has nothing
+    // to end, so a destructor on it is refused. Any other type may
+    // declare one, and the declaration makes it move-only.
+    const u32 index = bag.emit<i18n::Key::AnalyzerViewCannotHaveDestructor>(
         diag::Severity::Error, diag::Stage::Analyzer, DiagCode::DropOnCopy,
         name.span);
     (void)index;
@@ -2915,7 +2944,7 @@ void Checker::resolve_drops() {
 bool Checker::drop_scan(ir::TypeIdx type, std::vector<u32>& stack) {
   if (needs_drop_.size() <= type.idx) {
     drop_glue_.resize(type.idx + 1, CheckedModule::DropGlue{});
-    needs_drop_.resize(type.idx + 1, false);
+    needs_drop_.resize(type.idx + 1, 0);
   }
   if (needs_drop_[type.idx]) {
     return true;
@@ -4767,6 +4796,7 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
   for (const SpecImplEntry& entry : spec_impls) {
     bool generic_record = false;
     std::vector<std::pair<std::string_view, ir::TypeIdx>> scope;
+    std::vector<ValueParam> value_scope;
     bool shape_ok = true;
     if (entry.target.is_primitive) {
       // A scalar target has no arguments and is never generic: the
@@ -4780,7 +4810,16 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
         continue;
       }
       for (usize i = 0; i < target_args.size() && shape_ok; ++i) {
-        if (entry.target.args[i].is_param) {
+        if (entry.target.args[i].is_value) {
+          generic_record = true;
+          if (tag_of(target_args[i]) != ir::TypeTag::Const) {
+            shape_ok = false;
+            break;
+          }
+          value_scope.push_back({entry.target.args[i].param,
+                                 const_type_value(target_args[i]), entry.module,
+                                 entry.target.args[i].annotation});
+        } else if (entry.target.args[i].is_param) {
           generic_record = true;
           scope.emplace_back(entry.target.args[i].param, target_args[i]);
         } else if (!types_equal(entry.target.args[i].type, target_args[i])) {
@@ -4879,8 +4918,9 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
       if (!shape_ok) {
         continue;
       }
-      candidate = instantiate_spec_method(
-          entry.module, entry.spec, record_spec_args, self, scope, impl, name);
+      candidate =
+          instantiate_spec_method(entry.module, entry.spec, record_spec_args,
+                                  self, scope, value_scope, impl, name);
       if (candidate == nullptr) {
         return nullptr;
       }
@@ -5368,6 +5408,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     std::span<const ir::TypeIdx> spec_args,
     ir::TypeIdx self_type,
     const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
+    std::span<const ValueParam> value_scope,
     const ast::ItemImpl& impl,
     std::string_view name) {
   for (ast::ItemIdx method_item : impl.methods) {
@@ -5395,6 +5436,9 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     value_params.clear();
     for (const auto& binding : scope) {
       type_params.push_back(binding);
+    }
+    for (const auto& binding : value_scope) {
+      value_params.push_back(binding);
     }
     if (!spec_method_sig(spec, name, spec_args, self_type, impl_module,
                          declared_params, declared_ret, declared_receiver)) {
@@ -5482,7 +5526,7 @@ void Checker::check_spec_impl_bodies(u32 module, ast::ItemIdx item) {
     } else {
       std::vector<ir::TypeIdx> args;
       for (const SpecTarget::Arg& arg : entry.target.args) {
-        if (arg.is_param || arg.shape.is_valid()) {
+        if (arg.is_param || arg.is_value || arg.shape.is_valid()) {
           return;
         }
         args.push_back(arg.type);
@@ -6022,6 +6066,19 @@ bool Checker::capture_is_copy(ir::TypeIdx idx, std::vector<u32>& visited) {
     }
   }
   visited.push_back(idx.idx);
+  // A type whose declaration gives it a destructor is move-only,
+  // whatever its fields are; the glue sweep has not run yet, so the
+  // registered method is what answers here. A storage copy is checked
+  // at its origin.
+  const ir::TypeIdx origin = type_origin(idx);
+  const auto own = methods_by_self_.find(origin.idx);
+  if (own != methods_by_self_.end()) {
+    for (const auto& [owner, position] : own->second) {
+      if (modules[owner].methods[position].is_drop) {
+        return false;
+      }
+    }
+  }
   const ir::TypeNode& node = builder.types()[idx];
   switch (node.tag) {
     case ir::TypeTag::MutRef: return false;

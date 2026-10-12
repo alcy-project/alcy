@@ -300,7 +300,7 @@ struct CheckedPackage {
   // destructible have no glue of their own; the destructor of the
   // containing value walks them.
   std::vector<CheckedModule::DropGlue> drop_glue;
-  std::vector<bool> needs_drop;
+  std::vector<u8> needs_drop;
   // Comp fn calls the checker's evaluator answered, for the IR engine's
   // differential run after lowering built the storage (ADR-0054). The
   // checker's own reader has no lowered IR to offer while it runs.

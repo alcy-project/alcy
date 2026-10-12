@@ -151,7 +151,7 @@
   F(AnalyzerConstCycle, "Const '{}' is defined in terms of itself") \
   F(AnalyzerConstDeclarationInitializer, "Const declaration initializer is not comp-known") \
   F(AnalyzerContinueOutsideLoop, "Continue outside of a loop") \
-  F(AnalyzerCopyTypeCannotHaveDestructor, "Type is Copy because all of its fields are, so it cannot have a destructor") \
+  F(AnalyzerViewCannotHaveDestructor, "A view has nothing to end, so it cannot have a destructor") \
   F(AnalyzerDeclarationSpelling, "no local or item named '{}'; if this declares, write '{} := ...'") \
   F(AnalyzerDuplicateDefinition, "Duplicate definition of '{}'") \
   F(AnalyzerDuplicateField, "Field '{}' is initialized more than once") \

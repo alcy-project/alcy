@@ -60,7 +60,7 @@ ir::TypeIdx Lowerer::error_type() {
 }
 
 bool Lowerer::is_copy(ir::TypeIdx type) const {
-  return ir::is_copy_type(builder.state(), type);
+  return ir::is_copy_type(builder.state(), type, pkg.needs_drop);
 }
 
 ir::TypeTag Lowerer::tag_of(ir::TypeIdx idx) const {
@@ -1494,6 +1494,24 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{size_one, error_type(), false, false};
     }
     return Val{to_operand(element, elem_ref), elem_ref, false, false};
+  }
+  if (name == "read") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    if (call.args.size() != 1) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    Val ptr = lower_expr(call.args[0], &sig.params[0]);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const Val material = materialize(ptr);
+    const ir::RegisterIdx value =
+        emit(ir::Opcode::Load, sig.ret, {material.op});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(value, sig.ret), sig.ret, false, false};
   }
   if (name == "str_len" || name == "str_byte" || name == "str_slice") {
     return lower_str_intrinsic(expr, name);
