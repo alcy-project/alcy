@@ -3169,9 +3169,9 @@ Val Lowerer::lower_int_division(diag::Span span,
       emit(div_op, lhs.type, {use_value(lhs), to_operand(safe, lhs.type)});
   const ir::OperandIdx wrapped =
       op == ast::BinaryOp::Div
-          ? to_operand(emit(ir::Opcode::IntSubWrap, lhs.type,
-                            {zero, use_value(lhs)}),
-                       lhs.type)
+          ? to_operand(
+                emit(ir::Opcode::IntSubWrap, lhs.type, {zero, use_value(lhs)}),
+                lhs.type)
           : zero;
   const ir::RegisterIdx result = emit(
       ir::Opcode::Select, lhs.type,

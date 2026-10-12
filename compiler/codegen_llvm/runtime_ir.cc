@@ -729,8 +729,7 @@ class RuntimeBuilder {
     DCHECK_MSG(panic_function != nullptr, "checked arithmetic has no panic");
     builder_.CreateCall(
         panic_function,
-        {text_constant(message),
-         llvm::ConstantInt::get(usize_, message.size()),
+        {text_constant(message), llvm::ConstantInt::get(usize_, message.size()),
          llvm::ConstantPointerNull::get(builder_.getPtrTy()),
          llvm::ConstantInt::get(usize_, 0)});
     builder_.CreateUnreachable();

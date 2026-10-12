@@ -1295,7 +1295,8 @@ TEST_CASE("Emit without backtrace records no call sites") {
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         host_target(), /*emit_entry=*/false,
                         /*freestanding=*/false, /*overflow_checks=*/false,
-                        /*profiler=*/nullptr, /*backtrace=*/false, spans, sites);
+                        /*profiler=*/nullptr, /*backtrace=*/false, spans,
+                        sites);
 
   EmittedBacktrace named = std::move(emitter).emit();
 
