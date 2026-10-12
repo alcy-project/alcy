@@ -2971,6 +2971,68 @@ TEST_CASE("Check rejects a bound that names no spec") {
   CHECK(has_message(f.bag, "Bound 'Nope' names no spec"));
 }
 
+TEST_CASE("Check reads a bounded method call") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir,
+      {{"main.al",
+        "struct Tag {\n  n: i32,\n}\n"
+        "impl Shown for Tag {\n"
+        "  fn show(self: &Self) -> i32 {\n    ret self.n\n  }\n}\n"
+        "struct Wrap {\n  n: i32,\n}\n"
+        "impl Wrap {\n"
+        "  pub fn dump<T: Shown>(self: &Self, x: T) -> i32 {\n"
+        "    ret x.show()\n"
+        "  }\n}\n"
+        "fn main() -> i32 {\n"
+        "  w := Wrap { n: 0 }\n"
+        "  t := Tag { n: 1 }\n"
+        "  ret w.dump::<Tag>(t)\n"
+        "}\n"},
+       {"core.al", "pub spec Shown {\n  fn show(self: &Self) -> i32;\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a bounded method call whose type misses the bound") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir,
+      {{"main.al",
+        "struct Tag {\n  n: i32,\n}\n"
+        "struct Wrap {\n  n: i32,\n}\n"
+        "impl Wrap {\n"
+        "  pub fn dump<T: Shown>(self: &Self, x: T) -> i32 {\n"
+        "    ret x.show()\n"
+        "  }\n}\n"
+        "fn main() -> i32 {\n"
+        "  w := Wrap { n: 0 }\n"
+        "  t := Tag { n: 1 }\n"
+        "  ret w.dump::<Tag>(t)\n"
+        "}\n"},
+       {"core.al", "pub spec Shown {\n  fn show(self: &Self) -> i32;\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(has_message(
+      f.bag,
+      "Type 'Tag' does not implement 'Shown', which the bound requires"));
+}
+
 TEST_CASE("Check rejects a fmt call without its buffer") {
   VirtualDir dir;
   const bool setup = write_all(

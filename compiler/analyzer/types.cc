@@ -4975,6 +4975,18 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
       }
       method_args.push_back(resolved);
     }
+    // The method's own bounds have to hold for the arguments it was
+    // spelled with, the way a free function's do (ADR-0028).
+    std::vector<std::pair<std::string_view, ir::TypeIdx>> method_bounds;
+    for (usize i = 0; i < method_fn.generic.size() && i < method_args.size();
+         ++i) {
+      method_bounds.emplace_back(method_fn.generic[i].name.name,
+                                 method_args[i]);
+    }
+    if (!check_declared_bounds(entry.module, method_fn.generic, method_bounds,
+                               span)) {
+      return nullptr;
+    }
     return instantiate_method(entry.module, self, scope, value_scope, impl,
                               name, method_args);
   }

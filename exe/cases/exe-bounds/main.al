@@ -34,6 +34,14 @@ fn same<T: Display + PartialEq>(a: T, b: T) -> bool {
   ret a == b
 }
 
+impl Point {
+  // A method declaring its own bounded parameter; a call spells the
+  // type argument (method generics are turbofish-only).
+  fn describe<T: Display>(self: &Self, label: T) {
+    println("{}={}", label, *self)
+  }
+}
+
 struct Wrap<T> {
   value: T,
 }
@@ -58,6 +66,9 @@ fn main() -> i32 {
   if same(p, other) {
     ret 2
   }
+
+  p.describe::<i32>(7)
+  p.describe::<str>("p")
 
   w: Wrap<Point> := Wrap { value: p }
   w.show()

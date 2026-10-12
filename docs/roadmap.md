@@ -87,9 +87,9 @@ peripheral work lives in `backlog.md`. The language record lives in
   specializes, so `Vec<Plain> == Vec<Plain>` names `Plain` at the
   user's `==` rather than `vec.al` - the standard library's generic
   `PartialEq`/`Eq` implementations carry their bounds now. What
-  remains: bounds on a method's own type parameters; bounds across
-  `core` and `collections`, which gives `collect` its shape and needs
-  a decision on inferring an item type through an `Iterator<T>` bound;
+  remains: bounds across `core` and `collections`, which gives
+  `collect` its shape and needs a decision on inferring an item type
+  through an `Iterator<T>` bound; spec methods with type parameters;
   and one ADR deciding definition-site body checking (which needs a
   symbolic type parameter the IR does not have) against call-site-only
   checking. Callable bounds follow once the vocabulary exists; an

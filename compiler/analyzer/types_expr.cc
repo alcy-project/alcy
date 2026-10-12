@@ -1573,6 +1573,7 @@ ir::TypeIdx Checker::check_method_call(u32 module,
           ? lookup_method(nominal, name, module, node.span, spec_only)
           : nullptr;
   if (method == nullptr && !spec_only) {
+    bound_failure_ = false;
     method = instantiate_generic_method(module, nominal, name, method_type_args,
                                         span);
   }
@@ -1585,7 +1586,9 @@ ir::TypeIdx Checker::check_method_call(u32 module,
           diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownValue,
           span);
       (void)index;
-    } else {
+    } else if (!bound_failure_) {
+      // A bound that refused the instantiation already named the type;
+      // a second "no method" would only repeat it.
       const u32 index = bag.emit<i18n::Key::AnalyzerUnknownMethod>(
           diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownValue,
           node.payload.get<ast::ExprMethodCall>().name.span, name);
