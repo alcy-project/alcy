@@ -1431,6 +1431,38 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     record_drop_in_place(material.op, type_args[0], node.span);
     return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
   }
+  if (name == "slice_at") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    if (call.args.size() != 2) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    Val s = lower_expr(call.args[0], nullptr);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    Val index = lower_expr(call.args[1], &sig.params[1]);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const Val material = materialize(s);
+    ir::OperandIdx bytes = ir::OperandIdx::invalid();
+    ir::OperandIdx len = ir::OperandIdx::invalid();
+    if (!slice_parts(material, bytes, len)) {
+      unsupported(node.span, "slice_at receiver");
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::TypeIdx slice_ty = slice_pointee(material.type);
+    const ir::SliceType& shape =
+        builder.state().slice_types[builder.state().types[slice_ty].as_slice()];
+    const ir::TypeIdx elem_ref = builder.reference_type(shape.element, false);
+    const ir::RegisterIdx element =
+        emit(ir::Opcode::ElemOffset, elem_ref, {bytes, use_value(index)});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(element, elem_ref), elem_ref, false, false};
+  }
   if (name == "str_len" || name == "str_byte" || name == "str_slice") {
     return lower_str_intrinsic(expr, name);
   }

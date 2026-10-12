@@ -2224,7 +2224,8 @@ bool Checker::is_known_intrinsic(std::string_view name) {
          name == "elem_ref" || name == "size_of" || name == "align_of" ||
          name == "uninit_write" || name == "uninit_assume" ||
          name == "uninit_ref" || name == "ptr_offset" ||
-         name == "ptr_offset_mut" || name == "drop_in_place";
+         name == "ptr_offset_mut" || name == "drop_in_place" ||
+         name == "slice_at";
 }
 
 // The intrinsics whose preconditions the compiler cannot check
@@ -2235,7 +2236,8 @@ static bool intrinsic_is_unsafe(std::string_view name) {
          name == "elem_ref" || name == "memcopy" || name == "uninit_assume" ||
          name == "str_from_parts" || name == "slice_from_parts" ||
          name == "slice_from_parts_mut" || name == "ptr_offset" ||
-         name == "ptr_offset_mut" || name == "drop_in_place";
+         name == "ptr_offset_mut" || name == "drop_in_place" ||
+         name == "slice_at";
 }
 
 // What may cross a C boundary in the first ABI slice (ADR-0051):
@@ -2394,6 +2396,21 @@ bool Checker::check_intrinsic_signature(u32 module,
     return or_wrong(params.size() == 1 && slice_ref(params[0]) &&
                     tag_of(pointee(params[0])) == ir::TypeTag::Slice &&
                     is_usize(ret));
+  }
+  if (name == "slice_at") {
+    // `slice_at<T>(s: &[T], i: usize) -> &T`: the caller keeps `i`
+    // within the slice, which is the gate's precondition.
+    if (!slice_ref(params[0]) ||
+        builder.types()[ret.idx].tag != ir::TypeTag::Ref) {
+      return wrong();
+    }
+    if (tag_of(pointee(params[0])) != ir::TypeTag::Slice) {
+      return wrong();
+    }
+    const ir::SliceType& slice =
+        builder.slice_types()[builder.types()[pointee(params[0])].as_slice()];
+    return or_wrong(params.size() == 2 && is_usize(params[1]) &&
+                    same(slice.element, pointee(ret)));
   }
   if (name == "slice_from_parts" || name == "slice_from_parts_mut") {
     // `slice_from_parts<T>(ptr: &T, len: usize) -> &[T]`, and the
