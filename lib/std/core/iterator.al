@@ -127,3 +127,117 @@ pub fn fold<I, T, A>(mut iter: I, init: A, f: (A, T) -> A) -> A {
   }
   ret acc
 }
+
+// How many values the iterator yields. The element type does not
+// appear, so `count::<I>(iter)` is enough.
+pub fn count<I>(mut iter: I) -> usize {
+  mut n := 0 as usize
+  loop {
+    match iter.next() {
+      Option::Some(_) => {
+        n = n + 1
+      }
+      Option::None => break,
+    }
+  }
+  ret n
+}
+
+// Whether any value passes. The element is consumed by the predicate,
+// so the call spells both (`any::<I, T>(iter, f)`).
+pub fn any<I, T>(mut iter: I, f: (T) -> bool) -> bool {
+  mut found := false
+  loop {
+    match iter.next() {
+      Option::Some(v) => {
+        if f(v) {
+          found = true
+          break
+        }
+      }
+      Option::None => break,
+    }
+  }
+  ret found
+}
+
+// Whether every value passes.
+pub fn all<I, T>(mut iter: I, f: (T) -> bool) -> bool {
+  mut every := true
+  loop {
+    match iter.next() {
+      Option::Some(v) => {
+        if !f(v) {
+          every = false
+          break
+        }
+      }
+      Option::None => break,
+    }
+  }
+  ret every
+}
+
+// The position of the first value that passes, counting from zero.
+pub fn position<I, T>(mut iter: I, f: (T) -> bool) -> Option<usize> {
+  mut found: Option<usize> := Option::None
+  mut at := 0 as usize
+  loop {
+    match iter.next() {
+      Option::Some(v) => {
+        if f(v) {
+          found = Option::Some(at)
+          break
+        }
+        at = at + 1
+      }
+      Option::None => break,
+    }
+  }
+  ret found
+}
+
+// The first value that passes.
+pub fn find<I, T>(mut iter: I, f: (T) -> bool) -> Option<T> {
+  mut found: Option<T> := Option::None
+  loop {
+    match iter.next() {
+      Option::Some(v) => {
+        if f(v) {
+          found = Option::Some(v)
+          break
+        }
+      }
+      Option::None => break,
+    }
+  }
+  ret found
+}
+
+// The last value, or `None` when the iterator is empty.
+pub fn last<I, T>(mut iter: I) -> Option<T> {
+  mut found: Option<T> := Option::None
+  loop {
+    match iter.next() {
+      Option::Some(v) => {
+        found = Option::Some(v)
+      }
+      Option::None => break,
+    }
+  }
+  ret found
+}
+
+// Pushes every value into a container the caller owns. The target's
+// element type is what the call spells (`collect_into::<I, T>(iter,
+// out)`), which is the part `collect` would ask a bound for.
+pub fn collect_into<I, T>(mut iter: I, out: &mut Vec<T>) {
+  loop {
+    match iter.next() {
+      Option::Some(v) => {
+        out.push(v)
+      }
+      Option::None => break,
+    }
+  }
+}
