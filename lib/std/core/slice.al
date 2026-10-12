@@ -16,6 +16,9 @@ pub unsafe intrinsic fn slice_from_parts_mut<T>(ptr: &mut T, len: usize) -> &mut
 // The element at `i`; in bounds exactly when `i < slice_len(s)`.
 pub unsafe intrinsic fn slice_at<T>(s: &[T], i: usize) -> &T;
 
+// The mutable element at `i`; in bounds exactly when `i < slice_len(s)`.
+pub unsafe intrinsic fn slice_at_mut<T>(s: &mut [T], i: usize) -> &mut T;
+
 impl<T> [T] {
   // The element count.
   pub fn len(self: &Self) -> usize {
@@ -30,6 +33,11 @@ impl<T> [T] {
   // them valid.
   pub fn iter(self: &Self) -> SliceIter<T> {
     ret SliceIter { s: self, pos: 0 }
+  }
+
+  // An exclusive cursor over the elements.
+  pub fn iter_mut(mut self: &mut Self) -> SliceIterMut<T> {
+    ret SliceIterMut { s: self, pos: 0 }
   }
 }
 
@@ -71,7 +79,39 @@ impl<T, N: usize> [T; N] {
     ret unsafe { slice_from_parts(&(*self)[0], N) }
   }
 
+  // The array as a mutable view.
+  pub fn as_mut_slice(mut self: &mut Self) -> &mut [T] {
+    ret unsafe { slice_from_parts_mut(&mut (*self)[0], N) }
+  }
+
   pub fn iter(self: &Self) -> SliceIter<T> {
     ret self.as_slice().iter()
+  }
+
+  pub fn iter_mut(mut self: &mut Self) -> SliceIterMut<T> {
+    ret SliceIterMut { s: self.as_mut_slice(), pos: 0 }
+  }
+}
+
+// An exclusive cursor over a slice's elements.
+pub struct SliceIterMut<T> {
+  s: &mut [T],
+  pos: usize,
+}
+
+impl<T> SliceIterMut<T> {
+  pub fn into_iter(self: SliceIterMut<T>) -> SliceIterMut<T> {
+    ret self
+  }
+}
+
+impl<T> Iterator<&mut T> for SliceIterMut<T> {
+  fn next(mut self: &mut Self) -> Option<&mut T> {
+    if self.pos >= slice_len(self.s) {
+      ret Option::None
+    }
+    v := unsafe { slice_at_mut(self.s, self.pos) }
+    self.pos = self.pos + 1
+    ret Option::Some(v)
   }
 }
