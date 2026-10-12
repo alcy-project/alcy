@@ -23,7 +23,7 @@ fn main() -> i32 {
   }
 
   s := 10..=12
-  mut e: EnumerateIter<RangeIter<i32>, (usize, i32)> := EnumerateIter { iter: s.into_iter(), index: 0 }
+  mut e: EnumerateIter<RangeIter<i32>, i32> := EnumerateIter { iter: s.into_iter(), index: 0 }
   mut positions := 0
   loop {
     match e.next() {

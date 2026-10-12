@@ -59,8 +59,8 @@ pub struct EnumerateIter<I, E> {
   pub index: usize,
 }
 
-impl<I, E> Iterator<E> for EnumerateIter<I, E> {
-  fn next(mut self: &mut Self) -> Option<E> {
+impl<I, E> Iterator<(usize, E)> for EnumerateIter<I, E> {
+  fn next(mut self: &mut Self) -> Option<(usize, E)> {
     ret match self.iter.next() {
       Option::Some(v) => {
         at := self.index
@@ -231,6 +231,27 @@ pub fn last<I, T>(mut iter: I) -> Option<T> {
 // Pushes every value into a container the caller owns. The target's
 // element type is what the call spells (`collect_into::<I, T>(iter,
 // out)`), which is the part `collect` would ask a bound for.
+// The adapters' constructors. The element type comes from the bound
+// (`I: Iterator<T>`), so a call spells only the predicate or the count
+// (`filter(v.iter(), (x: &i32) -> *x > 1)`); `map` waits for the
+// return type of a closure to take part in inference.
+
+pub fn filter<I: Iterator<T>, T>(iter: I, f: (T) -> bool) -> FilterIter<I, T> {
+  ret FilterIter { iter: iter, f: f }
+}
+
+pub fn enumerate<I: Iterator<E>, E>(iter: I) -> EnumerateIter<I, E> {
+  ret EnumerateIter { iter: iter, index: 0 }
+}
+
+pub fn take<I: Iterator<T>, T>(iter: I, n: usize) -> TakeIter<I, T> {
+  ret TakeIter { iter: iter, remaining: n }
+}
+
+pub fn skip<I: Iterator<T>, T>(iter: I, n: usize) -> SkipIter<I, T> {
+  ret SkipIter { iter: iter, remaining: n, started: false }
+}
+
 // `collect`'s shape: the item type comes from the bound, so the call
 // spells nothing (`collect(v.iter())`). `T` appears only in
 // `I: Iterator<T>`, and the checker infers it from the iterator's

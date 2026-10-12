@@ -6,6 +6,10 @@ replaced. The foundations are in `roadmap.md`.
 ## Open
 
 - [ ] Doc-comment collection in the parser (the SSG itself waits).
+- [ ] `map` has no constructor: its result type comes from a closure's
+  return type, which inference cannot read before the closure is
+  checked. A slice that checks a closure argument first, or that lets
+  the adapter be spelled with a turbofish, gives it one.
 - [ ] A discarded temporary that owns memory leaks: `_ := format("x")`
   allocates the string and the drop pass never ends it, because the
   value is not a binding the pass can schedule. The `fmt` expansion
