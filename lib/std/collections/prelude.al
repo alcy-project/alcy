@@ -13,5 +13,6 @@
 pub use package::vec::Vec;
 pub use package::vec::VecIntoIter;
 pub use package::vec::VecIter;
+pub use package::vec::VecIterMut;
 pub use package::map::Map;
 pub use package::set::Set;

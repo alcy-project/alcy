@@ -197,6 +197,39 @@ impl<T> Iterator<&T> for VecIter<T> {
   }
 }
 
+// An exclusive cursor over a `Vec`. Each element is handed out by
+// exclusive reference; the vector's loan held in the cursor is what
+// keeps them valid.
+pub struct VecIterMut<T> {
+  buf: &mut MaybeUninit<T>,
+  len: usize,
+  pos: usize,
+}
+
+impl<T> Vec<T> {
+  // Borrows the vector exclusively for as long as the cursor lives.
+  pub fn iter_mut(mut self: &mut Self) -> VecIterMut<T> {
+    ret VecIterMut { buf: self.buf, len: self.len, pos: 0 }
+  }
+}
+
+impl<T> VecIterMut<T> {
+  pub fn into_iter(self: VecIterMut<T>) -> VecIterMut<T> {
+    ret self
+  }
+}
+
+impl<T> Iterator<&mut T> for VecIterMut<T> {
+  fn next(mut self: &mut Self) -> Option<&mut T> {
+    if self.pos >= self.len {
+      ret Option::None
+    }
+    v := unsafe { uninit_assume(elem_ptr(self.buf, self.pos)) }
+    self.pos = self.pos + 1
+    ret Option::Some(v)
+  }
+}
+
 // `a[i]` reads through `at` and panics on a miss, which is what array
 // indexing does.
 impl<T> Index<usize, T> for Vec<T> {
