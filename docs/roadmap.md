@@ -42,10 +42,13 @@ peripheral work lives in `backlog.md`. The language record lives in
   `collect_into` is the shape `collect` waits on bounds for. A cursor
   that yields a reference needed the checker to accept a spec argument
   naming one of the implementation's parameters (`Iterator<&T>`),
-  which it now does. What remains: inherent impls whose target is
-  `[T]`, `[T; N]`, or `str`, so arrays, slices, and strings get
-  `.len()`, `.iter()`, and `into_iter` themselves, and the std cleanup
-  that replaces index loops with the algorithms.
+  which it now does. `impl str` landed too: the string view has
+  `len`, `is_empty`, `byte`, and byte iteration after it, so `for b in
+  s` reads bytes and `s.len()` replaces the free intrinsic call. What
+  remains: inherent impls whose target is a compound generic shape
+  (`[T]`, `[T; N]`), so arrays and slices get `.len()`, `.iter()`, and
+  `into_iter` themselves, and the std cleanup that replaces index
+  loops with the algorithms.
 
 - [ ] Operator specs: `Display`, floats, arithmetic, and ordering.
 
