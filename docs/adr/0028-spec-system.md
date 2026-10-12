@@ -140,9 +140,11 @@ impl's bounds are checked before its body specializes, so the refusal
 names the caller's type - `Vec<Plain> == Vec<Plain>` - rather than a
 line inside `vec.al`. An implementation of a refined spec carries its
 supers, and `Display` accepts the builtin convertibles without an
-impl. What remains: bounds on a method's own type parameters, bounds
-across `core` and `collections` (which is what `collect` waits for),
-and the definition-site body-checking decision.
+impl. Bounds also infer: a parameter no argument binds but a bound
+mentions (`fn collect<I: Iterator<T>, T>(iter: I) -> Vec<T>`) comes
+from the first declared method's signature and the implementation the
+bound-covered parameter has. What remains: spec methods with type
+parameters and the definition-site body-checking decision.
 
 What is explicitly out of scope: associated types (specs take type
 parameters instead), supertraits, default bodies, spec objects

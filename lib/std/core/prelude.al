@@ -25,6 +25,7 @@ pub use package::iterator::SkipIter;
 pub use package::iterator::TakeIter;
 pub use package::iterator::all;
 pub use package::iterator::any;
+pub use package::iterator::collect;
 pub use package::iterator::collect_into;
 pub use package::iterator::count;
 pub use package::iterator::find;

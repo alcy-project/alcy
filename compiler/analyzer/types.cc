@@ -395,6 +395,33 @@ static bool is_option_of(const ast::AstArena& ast,
   return bare_path_name(ast, path.args[0]) == inner;
 }
 
+// The argument path at which the bare path `name` appears in `type`,
+// or false when it appears somewhere else: `Option<T>` is [0], a bare
+// `T` is empty, and any other shape is not inferrable yet.
+static bool spec_arg_path(const ast::AstArena& ast,
+                          ast::TypeIdx type,
+                          std::string_view name,
+                          std::vector<u32>& path) {
+  if (!type.is_valid() || ast.types[type].kind != ast::TypeKind::Path) {
+    return false;
+  }
+  const ast::TypePath& declared = ast.types[type].payload.get<ast::TypePath>();
+  const std::span<const ast::Ident> segments =
+      ast.paths[declared.path].segments;
+  if (declared.args.empty() && segments.size() == 1 &&
+      segments[0].name == name) {
+    return true;
+  }
+  if (declared.args.size() == 1) {
+    path.push_back(0);
+    if (spec_arg_path(ast, declared.args[0], name, path)) {
+      return true;
+    }
+    path.pop_back();
+  }
+  return false;
+}
+
 // Whether `type` is `&T` or `&mut T` over the bare path `name`.
 static bool is_ref_to(const ast::AstArena& ast,
                       ast::TypeIdx type,
@@ -941,8 +968,13 @@ bool Checker::implements_spec(ir::TypeIdx type,
       bool same = true;
       for (usize i = 0; i < spec_args.size(); ++i) {
         const SpecTarget::Arg& want = candidate.spec_args[i];
-        if (want.is_param || want.is_value || want.shape.is_valid() ||
-            !types_equal(want.type, spec_args[i])) {
+        // A parameter or a shape is bound by the receiver match
+        // (`impl<T> Iterator<T> for VecIter<T>` matches `Iterator<i32>`
+        // once the receiver is `VecIter<i32>`).
+        if (want.is_param || want.is_value || want.shape.is_valid()) {
+          continue;
+        }
+        if (!types_equal(want.type, spec_args[i])) {
           same = false;
           break;
         }
@@ -965,6 +997,107 @@ bool Checker::implements_spec(ir::TypeIdx type,
     }
   }
   return false;
+}
+
+ir::TypeIdx Checker::arg_at_path(ir::TypeIdx type,
+                                 const std::vector<u32>& path) const {
+  ir::TypeIdx at = type;
+  for (u32 index : path) {
+    const GenericInstance* instance = generic_find(at);
+    if (instance == nullptr || index >= instance->args.size()) {
+      return ir::TypeIdx::invalid();
+    }
+    at = instance->args[index];
+  }
+  return at;
+}
+
+bool Checker::infer_bound_arguments(u32 module,
+                                    std::span<const ast::GenericParam> params,
+                                    std::vector<ir::TypeIdx>& bound,
+                                    diag::Span span) {
+  for (usize j = 0; j < params.size(); ++j) {
+    if (is_value_param(ast, params[j]) || bound[j].is_valid()) {
+      continue;
+    }
+    // A bound on a bound already known names this parameter as one of
+    // its spec's arguments (`I: Iterator<T>`): the implementation for
+    // `I` answers it, read through the spec method's signature.
+    for (usize i = 0; i < params.size() && !bound[j].is_valid(); ++i) {
+      if (i == j || is_value_param(ast, params[i]) || !bound[i].is_valid()) {
+        continue;
+      }
+      std::vector<ast::TypeIdx> annotations;
+      if (params[i].type.is_valid()) {
+        annotations.push_back(params[i].type);
+      }
+      for (ast::TypeIdx extra : params[i].bounds) {
+        annotations.push_back(extra);
+      }
+      for (ast::TypeIdx annotation : annotations) {
+        if (!annotation.is_valid() ||
+            ast.types[annotation].kind != ast::TypeKind::Path) {
+          continue;
+        }
+        const ast::TypePath& path =
+            ast.types[annotation].payload.get<ast::TypePath>();
+        const std::span<const ast::Ident> segments =
+            ast.paths[path.path].segments;
+        if (segments.empty()) {
+          continue;
+        }
+        const u32 spec = bound_spec(module, segments.back().name);
+        if (spec == U32_MAX) {
+          continue;
+        }
+        const ast::ItemSpec& declaration =
+            ast.items[specs[spec].item].payload.get<ast::ItemSpec>();
+        if (declaration.methods.empty()) {
+          continue;
+        }
+        // The parameter has to be one of the bound's arguments, named
+        // on its own (`Iterator<T>`, not `Iterator<Option<T>>`).
+        u32 position = 0;
+        bool at_argument = false;
+        for (usize k = 0; k < path.args.size(); ++k) {
+          const ast::TypeIdx arg = path.args[k];
+          if (!arg.is_valid() || ast.types[arg].kind != ast::TypeKind::Path) {
+            continue;
+          }
+          const ast::TypePath& arg_path =
+              ast.types[arg].payload.get<ast::TypePath>();
+          const std::span<const ast::Ident> arg_segments =
+              ast.paths[arg_path.path].segments;
+          if (arg_path.args.empty() && arg_segments.size() == 1 &&
+              arg_segments[0].name == params[j].name.name) {
+            position = static_cast<u32>(k);
+            at_argument = true;
+            break;
+          }
+        }
+        if (!at_argument) {
+          continue;
+        }
+        const CheckedModule::MethodInfo* method =
+            lookup_method(bound[i], declaration.methods[0].name.name, module,
+                          span, true, spec);
+        if (method == nullptr || is_error(method->ret)) {
+          continue;
+        }
+        std::vector<u32> arg_path;
+        if (!spec_arg_path(ast, declaration.methods[0].return_type,
+                           declaration.params[position].name.name, arg_path)) {
+          continue;
+        }
+        const ir::TypeIdx inferred = arg_at_path(method->ret, arg_path);
+        if (!inferred.is_valid() || is_error(inferred)) {
+          continue;
+        }
+        bound[j] = inferred;
+      }
+    }
+  }
+  return true;
 }
 
 bool Checker::check_declared_bounds(
@@ -5668,6 +5801,9 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
     // A wrapper's payload and a slice's element are storage copies;
     // the parameter binds the declared type behind them.
     bound[declared.slot] = type_origin(bound_type);
+  }
+  if (!infer_bound_arguments(module, params, bound, span)) {
+    return nullptr;
   }
   // A value slot never infers, so an unfilled one is named first: the
   // type message below would suggest spelling only a type argument.

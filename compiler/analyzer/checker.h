@@ -400,6 +400,16 @@ class Checker {
                        u32 spec,
                        std::span<const ir::TypeIdx> spec_args,
                        u32 module);
+  // Infers a parameter that no argument binds but a bound mentions
+  // (`collect`'s `I: Iterator<T>`): the first declared method's
+  // signature says where the spec's argument appears, and the
+  // implementation for the bound-covered parameter carries its value.
+  bool infer_bound_arguments(u32 module,
+                             std::span<const ast::GenericParam> params,
+                             std::vector<ir::TypeIdx>& bound,
+                             diag::Span span);
+  // The type at an argument path through nominal applications.
+  ir::TypeIdx arg_at_path(ir::TypeIdx type, const std::vector<u32>& path) const;
   // Checks every declared bound of `params` against the type the
   // instantiation bound each parameter to. Reports each unmet bound,
   // sets the bound-failure latch, and answers false.

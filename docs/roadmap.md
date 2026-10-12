@@ -87,12 +87,13 @@ peripheral work lives in `backlog.md`. The language record lives in
   specializes, so `Vec<Plain> == Vec<Plain>` names `Plain` at the
   user's `==` rather than `vec.al` - the standard library's generic
   `PartialEq`/`Eq` implementations carry their bounds now. What
-  remains: bounds across `core` and `collections`, which gives
-  `collect` its shape and needs a decision on inferring an item type
-  through an `Iterator<T>` bound; spec methods with type parameters;
-  and one ADR deciding definition-site body checking (which needs a
-  symbolic type parameter the IR does not have) against call-site-only
-  checking. Callable bounds follow once the vocabulary exists; an
+  remains: spec methods with type parameters, and one ADR deciding
+  definition-site body checking (which needs a symbolic type parameter
+  the IR does not have) against call-site-only checking. `collect`
+  landed with bound-driven inference: a parameter no argument binds
+  (`I: Iterator<T>`'s item type) comes from the first declared
+  method's signature and the implementation for the bound-covered
+  parameter, so `collect(v.iter())` spells nothing. Callable bounds follow once the vocabulary exists; an
   inferred argument that is a function type waits for them. Designed
   in `docs/adr/0028-spec-system.md`.
 

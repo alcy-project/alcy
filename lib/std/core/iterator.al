@@ -231,6 +231,16 @@ pub fn last<I, T>(mut iter: I) -> Option<T> {
 // Pushes every value into a container the caller owns. The target's
 // element type is what the call spells (`collect_into::<I, T>(iter,
 // out)`), which is the part `collect` would ask a bound for.
+// `collect`'s shape: the item type comes from the bound, so the call
+// spells nothing (`collect(v.iter())`). `T` appears only in
+// `I: Iterator<T>`, and the checker infers it from the iterator's
+// implementation.
+pub fn collect<I: Iterator<T>, T>(mut iter: I) -> Vec<T> {
+  mut out := Vec::<T>::new()
+  collect_into::<I, T>(iter, &mut out)
+  ret out
+}
+
 pub fn collect_into<I, T>(mut iter: I, out: &mut Vec<T>) {
   loop {
     match iter.next() {

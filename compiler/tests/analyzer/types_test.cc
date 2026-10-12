@@ -2947,6 +2947,41 @@ TEST_CASE("Check rejects a call whose type misses a bound") {
       "Type 'Tag' does not implement 'Shown', which the bound requires"));
 }
 
+// A parameter no argument binds but a bound mentions is inferred from
+// the first declared method's signature: `drain`'s item type comes
+// from `I: Stepper<T>` (ADR-0028).
+TEST_CASE("Check infers a bound's argument at a call") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct Counter {\n  n: i32,\n}\n"
+                       "impl Stepper<i32> for Counter {\n"
+                       "  fn step(self: &mut Self) -> Option<i32> {\n"
+                       "    ret Option::Some(self.n)\n"
+                       "  }\n}\n"
+                       "fn drain<I: Stepper<T>, T>(iter: I) -> i32 {\n"
+                       "  ret 0\n"
+                       "}\n"
+                       "fn main() -> i32 {\n"
+                       "  c := Counter { n: 1 }\n"
+                       "  ret drain(c)\n"
+                       "}\n"},
+                      {"core.al",
+                       "pub enum Option<T> {\n  Some(T),\n  None,\n}\n"
+                       "pub spec Stepper<T> {\n"
+                       "  fn step(self: &mut Self) -> Option<T>;\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
 TEST_CASE("Check rejects a bound that names no spec") {
   VirtualDir dir;
   const bool setup = write_all(

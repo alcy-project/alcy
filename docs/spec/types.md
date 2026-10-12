@@ -115,6 +115,12 @@
   and a declaration validates that each one names a spec.
 - An implementation of a refined spec carries its supers, so
   `impl Eq for T` satisfies a `PartialEq` bound.
+- A parameter that no argument binds but a bound mentions is inferred
+  from the bound (`fn collect<I: Iterator<T>, T>(iter: I) -> Vec<T>`):
+  the first declared method's signature says where the spec's argument
+  appears (`next` returns `Option<T>`), and the implementation the
+  bound-covered parameter has carries its value. Shapes beyond a bare
+  parameter under one nominal application wait for their own slice.
 - `Display` accepts the builtin convertibles (`i8`-`u64`, `f32`/`f64`,
   `bool`, `str`) without an implementation, because `{}` formats them
   with no impl at all.
