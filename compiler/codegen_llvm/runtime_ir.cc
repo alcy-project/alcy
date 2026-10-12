@@ -70,9 +70,8 @@ class RuntimeBuilder {
     // A checked source operation declares the runtime check it calls,
     // so a declaration of one asks for the panic path too, the way the
     // allocator's failure path does.
-    const bool checked = declared("alcy_check_overflow") ||
-                         declared("alcy_check_divide_by_zero") ||
-                         declared("alcy_check_shift");
+    const bool checked =
+        declared("alcy_check_overflow") || declared("alcy_check_shift");
     const bool panic = declared("alcy_panic") || alloc || checked;
     const bool sys_write = declared("alcy_sys_write");
     if (print || println || panic || sys_write) {
@@ -89,9 +88,6 @@ class RuntimeBuilder {
     }
     if (declared("alcy_check_overflow")) {
       build_check("alcy_check_overflow", "integer overflow");
-    }
-    if (declared("alcy_check_divide_by_zero")) {
-      build_check("alcy_check_divide_by_zero", "division by zero");
     }
     if (declared("alcy_check_shift")) {
       build_check("alcy_check_shift", "shift out of range");

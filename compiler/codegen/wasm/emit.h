@@ -24,6 +24,7 @@
 #include "ir/operand.h"
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
+#include "overlay/overlay.h"
 
 namespace codegen::wasm {
 
@@ -67,9 +68,11 @@ class Emitter {
   static constexpr u32 SYS_WRITE = 6;
   static constexpr u32 ALLOC = 7;
   static constexpr u32 DEALLOC = 8;
+  static constexpr u32 CHECK_OVERFLOW = 9;
+  static constexpr u32 CHECK_SHIFT = 10;
   // The runtime occupies [0, RUNTIME_FUNCTIONS); the program's functions
   // and `_start` follow it.
-  static constexpr u32 RUNTIME_FUNCTIONS = 9;
+  static constexpr u32 RUNTIME_FUNCTIONS = 11;
 
   // The globals the module defines: the shadow stack pointer and the
   // bump allocator's cursor.
@@ -96,7 +99,8 @@ class Emitter {
   EmitResult build_locals(const ir::Function& function);
   EmitResult emit_dispatch();
   EmitResult emit_block(ir::BlockIdx block);
-  EmitResult emit_instruction(const ir::Instruction& instr);
+  EmitResult emit_instruction(ir::InstructionIdx instr_idx,
+                              const ir::Instruction& instr);
   EmitResult emit_control(const ir::Instruction& instr);
   EmitResult emit_br(const ir::Instruction& instr);
   EmitResult emit_cond_br(const ir::Instruction& instr);
@@ -105,7 +109,21 @@ class Emitter {
   EmitResult emit_indirect_call(const ir::Instruction& instr,
                                 const ir::Operand& callee);
   EmitResult emit_ret(const ir::Instruction& instr);
-  EmitResult emit_compute(const ir::Instruction& instr);
+  EmitResult emit_compute(ir::InstructionIdx instr_idx,
+                          const ir::Instruction& instr);
+  // The build's check an instruction carries, or nothing (ADR-0068).
+  [[nodiscard]] const overlay::Entry* overlay_entry(
+      ir::InstructionIdx instr_idx) const;
+  // The checked form of `+`, `-`, `*`: the operation's value, its
+  // overflow condition, the runtime call, and the value as the result.
+  EmitResult emit_checked_overflow(const ir::Instruction& instr,
+                                   const overlay::Entry& entry);
+  // The checks that run before their operation does: an overshift's
+  // count, and a signed `MIN / -1`'s divisor.
+  EmitResult emit_check_prelude(const ir::Instruction& instr,
+                                const overlay::Entry& entry);
+  // Pushes the call to `helper` for a condition already on the stack.
+  void emit_check_call(u32 helper, str::StringPoolId site);
   EmitResult emit_memory(const ir::Instruction& instr);
   EmitResult emit_elem_offset(const ir::Operand& base,
                               const ir::Operand& index,
@@ -178,6 +196,9 @@ class Emitter {
   ir::Storage storage_;
   std::span<const diag::Span> spans_;
   ir::SymbolTable* strings_;
+  // The build's arithmetic checks, parallel to the storage's
+  // instructions; null when the build checks nothing (ADR-0068).
+  const overlay::Overlay* overlay_ = nullptr;
   diag::DiagBag* bag_;
   codegen::Target target_;
   bool emit_entry_;
@@ -200,6 +221,8 @@ class Emitter {
   u32 panic_text_ = NO_LOCAL;
   u32 at_text_ = NO_LOCAL;
   u32 colon_text_ = NO_LOCAL;
+  u32 overflow_text_ = NO_LOCAL;
+  u32 shift_text_ = NO_LOCAL;
 
   // --- per-function state, reset by emit_function ---
   BinaryWriter body_;
@@ -219,6 +242,10 @@ class Emitter {
   u32 state_local_ = NO_LOCAL;
   u32 scratch0_ = NO_LOCAL;
   u32 scratch1_ = NO_LOCAL;
+  // 64-bit slots for a checked wide operation's value and its
+  // replacement divisor.
+  u32 scratch_wide_ = NO_LOCAL;
+  u32 scratch_wide2_ = NO_LOCAL;
   u32 dispatch_depth_ = 0;
   diag::Span current_span_;
   bool failed_ = false;

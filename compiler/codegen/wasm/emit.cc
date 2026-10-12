@@ -37,6 +37,7 @@
 #include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
+#include "overlay/overlay.h"
 
 namespace codegen::wasm {
 namespace {
@@ -95,6 +96,10 @@ bool is_aggregate_tag(ir::TypeTag tag) {
 // What the allocator's failure path reports before it exits: the
 // memory could not grow to satisfy the request.
 constexpr std::string_view ALLOC_FAILURE = "allocation failed";
+// The checked arithmetic's aborts; the message matches the LLVM
+// runtime's (ADR-0068).
+constexpr std::string_view OVERFLOW_FAILURE = "integer overflow";
+constexpr std::string_view SHIFT_FAILURE = "shift out of range";
 
 #if BUILD_FLAG(IS_DEBUG)
 bool is_terminator(ir::Opcode op) {
@@ -129,6 +134,7 @@ Emitter::Emitter(codegen::EmitRequest request)
     : storage_(std::move(request.storage).unwrap()),
       spans_(request.instr_spans),
       strings_(request.strings),
+      overlay_(request.overlay),
       bag_(request.bag),
       target_(request.target),
       emit_entry_(request.emit_entry) {}
@@ -191,6 +197,8 @@ base::Result<std::vector<u8>, codegen::EmitError> Emitter::run() {
   panic_text_ = data_for("panic");
   at_text_ = data_for(" at ");
   colon_text_ = data_for(": ");
+  overflow_text_ = data_for(OVERFLOW_FAILURE);
+  shift_text_ = data_for(SHIFT_FAILURE);
   if (emit_start().is_err()) {
     return base::make_err(codegen::EmitError::Unsupported);
   }
@@ -219,6 +227,8 @@ void Emitter::declare_runtime() {
       FuncType{{ValType::I32, ValType::I32, ValType::I32, ValType::I32}, {}});
   const u32 write_all = builder_.add_type(
       FuncType{{ValType::I32, ValType::I32, ValType::I32}, {}});
+  const u32 check = builder_.add_type(
+      FuncType{{ValType::I32, ValType::I32, ValType::I32}, {}});
   const u32 alloc =
       builder_.add_type(FuncType{{ValType::I32, ValType::I32}, {ValType::I32}});
 
@@ -243,6 +253,10 @@ void Emitter::declare_runtime() {
   DCHECK_EQ(alloc_index, ALLOC);
   const u32 dealloc_index = builder_.add_function(write_all);
   DCHECK_EQ(dealloc_index, DEALLOC);
+  const u32 check_overflow_index = builder_.add_function(check);
+  DCHECK_EQ(check_overflow_index, CHECK_OVERFLOW);
+  const u32 check_shift_index = builder_.add_function(check);
+  DCHECK_EQ(check_shift_index, CHECK_SHIFT);
 }
 
 Emitter::EmitResult Emitter::choose_roots() {
@@ -448,6 +462,8 @@ Emitter::EmitResult Emitter::build_locals(const ir::Function& function) {
   state_local_ = allocate_local(ValType::I32);
   scratch0_ = allocate_local(ValType::I32);
   scratch1_ = allocate_local(ValType::I32);
+  scratch_wide_ = allocate_local(ValType::I64);
+  scratch_wide2_ = allocate_local(ValType::I64);
 
   // The entry block's parameters are the function's parameters; the wasm
   // parameters are already locals 0..param_words-1, so those registers
@@ -579,7 +595,7 @@ Emitter::EmitResult Emitter::emit_block(ir::BlockIdx block_index) {
   for (const ir::InstructionIdx instr_index : block.instrs) {
     current_span_ = span_of(instr_index);
     const ir::Instruction& instr = storage_.instrs()[instr_index];
-    if (emit_instruction(instr).is_err()) {
+    if (emit_instruction(instr_index, instr).is_err()) {
       return base::make_err(codegen::EmitError::Unsupported);
     }
   }
@@ -591,7 +607,8 @@ Emitter::EmitResult Emitter::emit_block(ir::BlockIdx block_index) {
   return base::make_ok();
 }
 
-Emitter::EmitResult Emitter::emit_instruction(const ir::Instruction& instr) {
+Emitter::EmitResult Emitter::emit_instruction(ir::InstructionIdx instr_idx,
+                                              const ir::Instruction& instr) {
   using O = ir::Opcode;
   switch (instr.op) {
     case O::Noop: return base::make_ok();
@@ -630,7 +647,7 @@ Emitter::EmitResult Emitter::emit_instruction(const ir::Instruction& instr) {
     case O::Select:
     case O::Move:
     case O::Borrow:
-    case O::Drop: return emit_compute(instr);
+    case O::Drop: return emit_compute(instr_idx, instr);
 
     case O::Alloca:
     case O::Load:
@@ -1209,6 +1226,37 @@ void Emitter::emit_runtime_bodies() {
     finish_body(PANIC);
   }
   {
+    // alcy_check_overflow(flag, where, where_len): a set condition
+    // prints the overflow message at the site and aborts; a clear one
+    // returns so the operation proceeds.
+    begin_body(3);
+    local_get(0);
+    if_void();
+    i32_const(static_cast<i32>(overflow_text_));
+    i32_const(static_cast<i32>(OVERFLOW_FAILURE.size()));
+    local_get(1);
+    local_get(2);
+    call(PANIC);
+    op(OP_UNREACHABLE);
+    end_op();
+    finish_body(CHECK_OVERFLOW);
+  }
+  {
+    // alcy_check_shift(flag, where, where_len): the count was at or past
+    // the width.
+    begin_body(3);
+    local_get(0);
+    if_void();
+    i32_const(static_cast<i32>(shift_text_));
+    i32_const(static_cast<i32>(SHIFT_FAILURE.size()));
+    local_get(1);
+    local_get(2);
+    call(PANIC);
+    op(OP_UNREACHABLE);
+    end_op();
+    finish_body(CHECK_SHIFT);
+  }
+  {
     // alcy_alloc(size, align)
     begin_body(2);
     const u32 block = allocate_local(ValType::I32);
@@ -1287,6 +1335,25 @@ void Emitter::guard_null_len(u32 ptr_local) {
   local_get(ptr_local);
   op(OP_I32_EQZ);
   op(OP_SELECT);
+}
+
+const overlay::Entry* Emitter::overlay_entry(
+    ir::InstructionIdx instr_idx) const {
+  if (overlay_ == nullptr || instr_idx.idx >= overlay_->entries.size()) {
+    return nullptr;
+  }
+  const overlay::Entry& entry = overlay_->entries[instr_idx.idx];
+  return entry.kind == overlay::Check::None ? nullptr : &entry;
+}
+
+void Emitter::emit_check_call(u32 helper, str::StringPoolId site) {
+  // The condition is already on the stack; the call takes the site as
+  // the `(ptr, len)` the runtime's panic prints.
+  const std::string_view where =
+      site == str::EMPTY_STRING_ID ? std::string_view{} : string_text(site);
+  i32_const(static_cast<i32>(where.empty() ? 0 : data_for(where)));
+  i32_const(static_cast<i32>(where.size()));
+  call(helper);
 }
 
 Emitter::EmitResult Emitter::emit_start() {

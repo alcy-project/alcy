@@ -20,7 +20,8 @@ parse stage owns the threads and the diagnostic merge order.
   `resolve_profile` -> the build settings the selected name resolves to
   (ADR-0069).
 - `render_instr_sites` -> the `file:line:column` spellings of lowered
-  instructions, interned for a backend that names call sites.
+  instructions, interned for a backend that names call sites and the
+  checks' aborts (ADR-0068).
 - `parse_files` -> the items of every file, once, which every target of a
   package then resolves against; `resolve_inputs` is the one-shot form.
 - `select_modules` -> the module inputs a manifest declares, from the

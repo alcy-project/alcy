@@ -1,6 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <limits>
 #include <optional>
 
 #include "codegen/backend.h"
@@ -17,6 +18,7 @@
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
+#include "overlay/overlay.h"
 
 namespace codegen::wasm {
 namespace {
@@ -123,7 +125,8 @@ void canonicalize(BinaryWriter& out, ir::TypeTag tag) {
 
 }  // namespace
 
-Emitter::EmitResult Emitter::emit_compute(const ir::Instruction& instr) {
+Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
+                                          const ir::Instruction& instr) {
   using O = ir::Opcode;
   const ir::OperandIdxRange ops = instr.operands;
   const auto store_dst = [this, &instr]() -> EmitResult {
@@ -132,6 +135,19 @@ Emitter::EmitResult Emitter::emit_compute(const ir::Instruction& instr) {
     }
     return base::make_ok();
   };
+
+  // The build's checks (ADR-0068): an overflow entry takes the checked
+  // form of the operation, and the other kinds run their condition and
+  // the runtime call before the operation does.
+  if (const overlay::Entry* entry = overlay_entry(instr_idx);
+      entry != nullptr) {
+    if (entry->kind == overlay::Check::Overflow) {
+      return emit_checked_overflow(instr, *entry);
+    }
+    if (emit_check_prelude(instr, *entry).is_err()) {
+      return base::make_err(codegen::EmitError::Unsupported);
+    }
+  }
 
   for (const BinaryOp& entry : BINARY_OPS) {
     if (entry.op != instr.op) {
@@ -346,6 +362,259 @@ Emitter::EmitResult Emitter::emit_compute(const ir::Instruction& instr) {
     }
     case O::Drop: return base::make_ok();
     default: return unsupported(current_span_, ir::opcode_to_str(instr.op));
+  }
+}
+
+namespace {
+
+// The opcode `BINARY_OPS` holds for a tag's container; zero when the
+// operation is not one of the checked ones.
+u8 binary_opcode(ir::Opcode op, bool wide) {
+  for (const BinaryOp& row : BINARY_OPS) {
+    if (row.op == op) {
+      return wide ? row.i64 : row.i32;
+    }
+  }
+  return 0;
+}
+
+// The width a shift count is checked against.
+u32 integer_bits(ir::TypeTag tag) {
+  switch (tag) {
+    case ir::TypeTag::I8:
+    case ir::TypeTag::U8: return 8;
+    case ir::TypeTag::I16:
+    case ir::TypeTag::U16: return 16;
+    case ir::TypeTag::I32:
+    case ir::TypeTag::U32: return 32;
+    default: return 64;
+  }
+}
+
+// The signed minimum an i32 container holds for a narrowed tag.
+i32 signed_minimum(ir::TypeTag tag) {
+  switch (tag) {
+    case ir::TypeTag::I8: return -128;
+    case ir::TypeTag::I16: return -32768;
+    default: return std::numeric_limits<i32>::min();
+  }
+}
+
+}  // namespace
+
+Emitter::EmitResult Emitter::emit_checked_overflow(
+    const ir::Instruction& instr,
+    const overlay::Entry& entry) {
+  using O = ir::Opcode;
+  DCHECK_EQ(instr.operands.size(), 2u);
+  const ir::Operand& lhs = storage_.operands()[instr.operands.head()];
+  const ir::Operand& rhs = storage_.operands()[instr.operands.head() + 1];
+  const ir::TypeTag tag = storage_.types()[lhs.type].tag;
+  const bool wide = is_wide_int(tag);
+  const bool word32 =
+      !wide && (tag == ir::TypeTag::I32 || tag == ir::TypeTag::U32);
+  const bool narrow = !wide && !word32;
+  const bool signed_op = ir::is_signed_integer_type(tag);
+  const u8 opcode = binary_opcode(instr.op, wide);
+  if (opcode == 0) {
+    return unsupported(current_span_, ir::opcode_to_str(instr.op));
+  }
+
+  if (word32) {
+    // A 32-bit operation widens into i64, where it cannot overflow, and
+    // wraps back: the value fits exactly when wrapping changes nothing.
+    const u8 extend = signed_op ? 0xAC : 0xAD;  // i64.extend_i32_s/_u
+    if (push_operand(lhs).is_err()) {
+      return base::make_err(codegen::EmitError::Unsupported);
+    }
+    op(extend);
+    if (push_operand(rhs).is_err()) {
+      return base::make_err(codegen::EmitError::Unsupported);
+    }
+    op(extend);
+    op(binary_opcode(instr.op, true));
+    local_set(scratch_wide_);
+    local_get(scratch_wide_);
+    op(0xA7);  // i32.wrap_i64
+    op(extend);
+    local_get(scratch_wide_);
+    op(0x52);  // i64.ne
+  } else if (narrow) {
+    // A narrowed value fits its container exactly when canonicalizing
+    // the result does not change it.
+    if (push_operand(lhs).is_err() || push_operand(rhs).is_err()) {
+      return base::make_err(codegen::EmitError::Unsupported);
+    }
+    op(opcode);
+    local_set(scratch0_);
+    local_get(scratch0_);
+    canonicalize(body_, tag);
+    local_get(scratch0_);
+    op(0x47);  // i32.ne
+  } else {
+    if (push_operand(lhs).is_err() || push_operand(rhs).is_err()) {
+      return base::make_err(codegen::EmitError::Unsupported);
+    }
+    op(opcode);
+    local_set(scratch_wide_);
+    switch (instr.op) {
+      case O::IntAdd:
+        if (signed_op) {
+          // ((a ^ s) & (b ^ s)) < 0
+          push_operand(lhs);
+          local_get(scratch_wide_);
+          op(0x85);  // i64.xor
+          push_operand(rhs);
+          local_get(scratch_wide_);
+          op(0x85);
+          op(0x83);  // i64.and
+          i64_const(0);
+          op(0x53);  // i64.lt_s
+        } else {
+          local_get(scratch_wide_);
+          push_operand(lhs);
+          op(0x54);  // i64.lt_u
+        }
+        break;
+      case O::IntSub:
+        if (signed_op) {
+          // ((a ^ b) & (a ^ s)) < 0
+          push_operand(lhs);
+          push_operand(rhs);
+          op(0x85);
+          push_operand(lhs);
+          local_get(scratch_wide_);
+          op(0x85);
+          op(0x83);
+          i64_const(0);
+          op(0x53);
+        } else {
+          push_operand(lhs);
+          push_operand(rhs);
+          op(0x54);  // i64.lt_u
+        }
+        break;
+      default: {  // IntMul
+        if (signed_op) {
+          // special = (a == -1); the overflow is `b == MIN` there, and
+          // `a != 0 && sdiv(s, a) != b` elsewhere with the divisor kept
+          // off zero and minus one.
+          push_operand(lhs);
+          i64_const(-1);
+          op(0x51);  // i64.eq
+          local_set(scratch0_);
+          local_get(scratch0_);
+          push_operand(rhs);
+          i64_const(std::numeric_limits<i64>::min());
+          op(0x51);
+          op(0x71);  // ovf1
+          i64_const(1);
+          push_operand(lhs);
+          local_get(scratch0_);
+          push_operand(lhs);
+          op(0x50);  // i64.eqz
+          op(0x72);  // i32.or
+          op(0x1B);
+          local_set(scratch_wide2_);  // safe
+          local_get(scratch0_);
+          op(0x45);  // !special
+          push_operand(lhs);
+          i64_const(0);
+          op(0x52);  // i64.ne
+          op(0x71);
+          local_get(scratch_wide_);
+          local_get(scratch_wide2_);
+          op(0x7F);  // i64.div_s
+          push_operand(rhs);
+          op(0x52);
+          op(0x71);
+          op(0x72);  // i32.or
+        } else {
+          // a != 0, and the quotient by the divisor kept off zero.
+          push_operand(lhs);
+          i64_const(0);
+          op(0x52);  // i64.ne
+          i64_const(1);
+          push_operand(lhs);
+          push_operand(lhs);
+          op(0x50);
+          op(0x1B);
+          local_set(scratch_wide2_);  // safe
+          local_get(scratch_wide_);
+          local_get(scratch_wide2_);
+          op(0x80);  // i64.div_u
+          push_operand(rhs);
+          op(0x52);
+          op(0x71);
+        }
+        break;
+      }
+    }
+  }
+
+  emit_check_call(CHECK_OVERFLOW, entry.site);
+  if (word32) {
+    local_get(scratch_wide_);
+    op(0xA7);  // i32.wrap_i64
+  } else {
+    local_get(wide ? scratch_wide_ : scratch0_);
+    if (narrow) {
+      canonicalize(body_, tag);
+    }
+  }
+  if (instr.dst.is_valid() && reg_shape_[instr.dst.idx].words > 0) {
+    pop_words(reg_base_[instr.dst.idx], reg_shape_[instr.dst.idx].words);
+  }
+  return base::make_ok();
+}
+
+Emitter::EmitResult Emitter::emit_check_prelude(const ir::Instruction& instr,
+                                                const overlay::Entry& entry) {
+  const ir::Operand& lhs = storage_.operands()[instr.operands.head()];
+  const ir::TypeTag tag = storage_.types()[lhs.type].tag;
+  const bool wide = is_wide_int(tag);
+  switch (entry.kind) {
+    case overlay::Check::ShiftRange: {
+      if (push_operand(storage_.operands()[entry.operand]).is_err()) {
+        return base::make_err(codegen::EmitError::Unsupported);
+      }
+      if (wide) {
+        i64_const(64);
+        op(0x54);  // i64.ge_u
+      } else {
+        i32_const(static_cast<i32>(integer_bits(tag)));
+        op(0x4F);  // i32.ge_u
+      }
+      emit_check_call(CHECK_SHIFT, entry.site);
+      return base::make_ok();
+    }
+    case overlay::Check::MinOverOne: {
+      // (the dividend is the minimum) & (the divisor is minus one)
+      if (push_operand(lhs).is_err()) {
+        return base::make_err(codegen::EmitError::Unsupported);
+      }
+      if (wide) {
+        i64_const(std::numeric_limits<i64>::min());
+        op(0x51);  // i64.eq
+      } else {
+        i32_const(signed_minimum(tag));
+        op(0x46);  // i32.eq
+      }
+      if (push_operand(storage_.operands()[entry.operand]).is_err()) {
+        return base::make_err(codegen::EmitError::Unsupported);
+      }
+      if (wide) {
+        i64_const(-1);
+        op(0x51);
+      } else {
+        i32_const(-1);
+        op(0x46);
+      }
+      op(0x71);
+      emit_check_call(CHECK_OVERFLOW, entry.site);
+      return base::make_ok();
+    }
+    default: return base::make_ok();
   }
 }
 
