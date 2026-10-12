@@ -132,7 +132,7 @@ jobs:
         run: uv run ./tools/site.py build --mode=release --build-subdir="$BUILD_SUBDIR"
 
       - name: Configure Pages
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
 
       - name: Upload the Site
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
