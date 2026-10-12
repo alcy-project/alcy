@@ -44,11 +44,15 @@ peripheral work lives in `backlog.md`. The language record lives in
   naming one of the implementation's parameters (`Iterator<&T>`),
   which it now does. `impl str` landed too: the string view has
   `len`, `is_empty`, `byte`, and byte iteration after it, so `for b in
-  s` reads bytes and `s.len()` replaces the free intrinsic call. What
-  remains: inherent impls whose target is a compound generic shape
-  (`[T]`, `[T; N]`), so arrays and slices get `.len()`, `.iter()`, and
-  `into_iter` themselves, and the std cleanup that replaces index
-  loops with the algorithms.
+  s` reads bytes and `s.len()` replaces the free intrinsic call. And
+  inherent impls may target compound shapes: `impl<T> [T]` and
+  `impl<T, N: usize> [T; N]` register through a shape the checker
+  matches against a receiver, so slices and arrays answer `len`,
+  `is_empty`, `as_slice`, and `iter`, and `for x in s.iter()` walks
+  either one by reference through `slice_at`. What remains: consuming
+  an array (`for x in a`, as opposed to `for x in a.iter()`), which
+  needs a way to read an element out, and the std cleanup that
+  replaces index loops with the algorithms.
 
 - [ ] Operator specs: `Display`, floats, arithmetic, and ordering.
 
