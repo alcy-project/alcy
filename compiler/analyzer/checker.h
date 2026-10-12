@@ -657,6 +657,14 @@ class Checker {
   // The compiler-owned operator spec `name` declared in staged core, or
   // U32_MAX when the standard library is not staged or declares none.
   u32 operator_spec(std::string_view name) const;
+  // The spec the `fmt` package declares under `name`, or U32_MAX when
+  // the package is not staged or declares none. `Display` is known by
+  // identity, the way `write` and `format` are (ADR-0055), so a
+  // placeholder needs no `use` of the package.
+  u32 fmt_spec(std::string_view name) const;
+  // Whether `type` formats through `fmt`'s `Display` spec: the method
+  // a `{}` placeholder reaches for a nominal argument.
+  bool has_display(ir::TypeIdx type, u32 module);
   // The nominal an index receiver names, looking through one reference,
   // or an error type when the receiver is no nominal.
   ir::TypeIdx index_nominal(ir::TypeIdx receiver);
@@ -852,10 +860,16 @@ class Checker {
                               ast::ExprIdx expr,
                               const ir::TypeIdx* expected,
                               const CheckedModule::FnSig* fn);
-  bool verify_fmt_literal(ast::ExprIdx fmt_expr,
+  bool verify_fmt_literal(u32 module,
+                          ast::ExprIdx fmt_expr,
                           diag::Span args_span,
                           const std::vector<ir::TypeIdx>& elements,
                           diag::Span span);
+  // Records the `Display` call a nominal format argument formats
+  // through, so the expansion can reach it; a non-nominal or an
+  // implementation-less argument records nothing (the literal check
+  // reports the latter).
+  void record_fmt_display(u32 module, ast::ExprIdx arg, ir::TypeIdx element);
   ir::TypeIdx check_fmt_format(u32 module,
                                ast::ExprIdx expr,
                                const ir::TypeIdx* expected,

@@ -2800,6 +2800,95 @@ TEST_CASE("Check rejects a malformed format precision") {
   CHECK(has_message(f.bag, "Invalid format string"));
 }
 
+// A nominal argument formats through `fmt`'s `Display` spec; the spec
+// and the implementation are what the expansion reads by identity.
+TEST_CASE("Check reads a Display implementation for a nominal") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "struct Tag {\n  n: i32,\n}\n"
+             "impl Display for Tag {\n"
+             "  fn display(self: &Self, out: &mut [u8]) -> usize {\n"
+             "    ret 0\n"
+             "  }\n}\n"
+             "fn main() {\n"
+             "  mut buf := [0u8; 8]\n"
+             "  t := Tag { n: 1 }\n"
+             "  _ := write(\"{}\", &mut buf, t)\n"
+             "}\n"},
+            {"fmt.al",
+             "pub intrinsic fn panic(msg: str) -> !;\n"
+             "pub struct WriteOutcome { written: usize, total: usize }\n"
+             "pub spec Display {\n"
+             "  fn display(self: &Self, out: &mut [u8]) -> usize;\n"
+             "}\n"
+             "pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ..) -> "
+             "WriteOutcome {\n"
+             "  panic(\"x\")\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"fmt", "fmt.al"}});
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a nominal format argument without Display") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "struct Tag {\n  n: i32,\n}\n"
+             "fn main() {\n"
+             "  mut buf := [0u8; 8]\n"
+             "  t := Tag { n: 1 }\n"
+             "  _ := write(\"{}\", &mut buf, t)\n"
+             "}\n"},
+            {"fmt.al",
+             "pub intrinsic fn panic(msg: str) -> !;\n"
+             "pub struct WriteOutcome { written: usize, total: usize }\n"
+             "pub spec Display {\n"
+             "  fn display(self: &Self, out: &mut [u8]) -> usize;\n"
+             "}\n"
+             "pub fn write(comp fmt: str, buf: &mut [u8; 0], args: ..) -> "
+             "WriteOutcome {\n"
+             "  panic(\"x\")\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"fmt", "fmt.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(has_message(f.bag, "Argument is not formattable"));
+}
+
+TEST_CASE("Check rejects a non-canonical display spec") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al", "fn main() {\n}\n"},
+            {"fmt.al",
+             "pub spec Display {\n  fn show(self: &Self) -> usize;\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"fmt", "fmt.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(has_message(f.bag,
+                    "Spec 'Display' must keep the compiler's operator shape"));
+}
+
 TEST_CASE("Check rejects a fmt call without its buffer") {
   VirtualDir dir;
   const bool setup = write_all(

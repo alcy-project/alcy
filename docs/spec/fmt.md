@@ -45,7 +45,17 @@ remaining arguments, one per placeholder.
 
 - Integers format as decimal, `bool` as `true`/`false`, `str` as its
   bytes, and `f32`/`f64` as decimal magnitudes. Any other argument
-  type is a compile-time error.
+  type is a compile-time error unless it implements `Display`.
+- A nominal type formats through `fmt`'s `Display` spec when it
+  implements it: `fn display(self: &Self, out: &mut [u8]) -> usize`
+  writes the prefix of its rendering that fits into `out` and returns
+  the total length, which is how the expansion learns the size for a
+  growable buffer (the measure pass calls it with an empty slice). One
+  placeholder may run the method twice, so it must not have effects
+  beyond `out`. A nominal without the implementation is a compile-time
+  error, and the spec is sealed like the operator specs, so a package
+  outside the standard library's suite lists `Display` in its own
+  `[spec] implement` (see `modules.md`).
 - Integer conversion is exact; truncation applies to the byte stream
   only, never to digits.
 - A float prints up to six fractional digits of its exact fraction,
@@ -75,4 +85,5 @@ remaining arguments, one per placeholder.
 - User-defined formattability.
 - A single-pass growable expansion for `format`: today it measures the
   output before reserving the heap buffer, so every value formats
-  twice (a precision does not change that).
+  twice, a `Display` implementation included (a precision does not
+  change that).

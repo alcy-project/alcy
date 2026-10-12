@@ -217,8 +217,13 @@ bool Lowerer::check_fmt_arguments(diag::Span span,
     const ir::TypeIdx element = elem_types[piece.arg];
     const ir::TypeTag tag = tag_of(element);
     if (!analyzer::is_formattable_tag(tag)) {
-      unsupported(span, "argument is not formattable");
-      return false;
+      // A nominal formats through `fmt`'s `Display`; the recorded call
+      // is what the expansion reads, and a missing one is reported
+      // where the piece is emitted.
+      if (tag != ir::TypeTag::Struct && tag != ir::TypeTag::Enum) {
+        unsupported(span, "argument is not formattable");
+        return false;
+      }
     }
     if (!analyzer::fmt_piece_matches_argument(piece, tag)) {
       unsupported(span, "format precision applies to floats only");
@@ -232,6 +237,7 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
                               const std::vector<analyzer::FmtPiece>& pieces,
                               ir::OperandIdx tup_op,
                               const std::vector<ir::TypeIdx>& elem_types,
+                              std::span<const ast::ExprIdx> arg_exprs,
                               ir::OperandIdx dst_base,
                               ir::OperandIdx capacity,
                               FmtState& state,
@@ -817,6 +823,67 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
     switch_to(float_join);
     return !failed;
   };
+  // A nominal argument formats through `fmt`'s `Display`: the method
+  // writes the prefix of its rendering that fits into the remaining
+  // destination and returns the total length. The measure pass hands
+  // it an empty slice, which is how a growable buffer learns the size;
+  // one placeholder may run the method twice.
+  auto emit_display_piece =
+      [&](diag::Span piece_span, ir::RegisterIdx elem_addr, ir::TypeIdx elem_ty,
+          const analyzer::CheckedModule::CallTarget* target) {
+        const ir::TypeIdx view_ty =
+            builder.reference_type(builder.slice_type(u8_ty), true);
+        Val receiver{to_operand(elem_addr, elem_ty), elem_ty, true, false};
+        if (measure_only) {
+          // An empty view: nothing is written and the total answers.
+          const ir::RegisterIdx scratch =
+              emit(ir::Opcode::Alloca, u8_ty, {size_one});
+          Val empty = build_slice_value(
+              to_operand(scratch, builder.reference_type(u8_ty, true)),
+              usize_imm(0), view_ty, piece_span);
+          if (failed) {
+            return false;
+          }
+          const Val call = emit_spec_call(target, piece_span, receiver, empty,
+                                          /*has_argument=*/true);
+          if (failed) {
+            return false;
+          }
+          accumulate(call.op);
+          return !failed;
+        }
+        const ir::RegisterIdx off = emit(
+            ir::Opcode::Load, usize_ty, {to_operand(state.off_addr, usize_ty)});
+        const ir::RegisterIdx remaining =
+            emit(ir::Opcode::IntSub, usize_ty,
+                 {state.capacity, to_operand(off, usize_ty)});
+        const ir::OperandIdx dst =
+            advance_ptr(dst_base, to_operand(off, usize_ty), piece_span);
+        if (failed) {
+          return false;
+        }
+        Val view = build_slice_value(dst, to_operand(remaining, usize_ty),
+                                     view_ty, piece_span);
+        if (failed) {
+          return false;
+        }
+        const Val call = emit_spec_call(target, piece_span, receiver, view,
+                                        /*has_argument=*/true);
+        if (failed) {
+          return false;
+        }
+        // The method writes at most what fits; the total is what a
+        // destination of its own would have taken.
+        const ir::RegisterIdx fits =
+            emit(ir::Opcode::Lt, boolean,
+                 {call.op, to_operand(remaining, usize_ty)});
+        const ir::RegisterIdx chunk = emit(ir::Opcode::Select, usize_ty,
+                                           {to_operand(fits, boolean), call.op,
+                                            to_operand(remaining, usize_ty)});
+        advance(to_operand(chunk, usize_ty));
+        accumulate(call.op);
+        return !failed;
+      };
   for (const analyzer::FmtPiece& piece : pieces) {
     if (failed) {
       return false;
@@ -888,6 +955,19 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
       }
       continue;
     }
+    if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum) {
+      const analyzer::CheckedModule::CallTarget* target =
+          piece.arg < arg_exprs.size() ? call_target(arg_exprs[piece.arg])
+                                       : nullptr;
+      if (target == nullptr) {
+        unsupported(span, "argument is not formattable");
+        return false;
+      }
+      if (failed || !emit_display_piece(span, elem_addr, elem_ty, target)) {
+        return false;
+      }
+      continue;
+    }
     // Integers format as decimal through a scratch buffer. A signed
     // value is split into sign and magnitude first: widening with a
     // sign-extending cast would print -1 as twenty digits.
@@ -940,7 +1020,8 @@ bool Lowerer::lower_rest_tuple(std::span<const ast::ExprIdx> args,
                                usize first,
                                diag::Span span,
                                Val& out,
-                               std::vector<ir::TypeIdx>& elem_types) {
+                               std::vector<ir::TypeIdx>& elem_types,
+                               std::vector<ir::TypeIdx>& arg_types) {
   if (first >= args.size()) {
     out = Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
     return true;
@@ -957,6 +1038,7 @@ bool Lowerer::lower_rest_tuple(std::span<const ast::ExprIdx> args,
     }
     const ir::TypeIdx slot = builder.ref_type(element);
     slots.push_back(slot);
+    arg_types.push_back(element);
     element_seq.push(slot);
   }
   const ir::TypeIdx tuple_type = builder.tuple_type(element_seq.finish());
@@ -1017,8 +1099,9 @@ Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
   // The arguments after the buffer are the format arguments; they are
   // collected into the tuple the pieces read (ADR-0055).
   std::vector<ir::TypeIdx> elem_types;
+  std::vector<ir::TypeIdx> arg_types;
   Val tup{size_one, error_type(), false, false};
-  if (!lower_rest_tuple(args, 2, node.span, tup, elem_types)) {
+  if (!lower_rest_tuple(args, 2, node.span, tup, elem_types, arg_types)) {
     return Val{size_one, error_type(), false, false};
   }
   const analyzer::FmtTemplate parsed =
@@ -1039,10 +1122,14 @@ Val Lowerer::lower_fmt_write(ast::ExprIdx expr,
       builder.immutable({.type = usize_ty, .data = {.u64_value = capacity}}),
       usize_ty);
   FmtState state;
-  if (!emit_fmt_pieces(node.span, parsed.pieces, tup.op, elem_types, buf.op,
-                       capacity_op, state, false)) {
+  if (!emit_fmt_pieces(node.span, parsed.pieces, tup.op, elem_types,
+                       args.subspan(2), buf.op, capacity_op, state, false)) {
     return Val{size_one, error_type(), false, false};
   }
+  // The arguments moved into the tuple are the expansion's to retire:
+  // nothing else owns them once the pieces ran, and the tuple is not a
+  // source binding the drop pass could schedule.
+  emit_collected_drop(tup.op, arg_types, node.span);
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
@@ -1092,8 +1179,9 @@ Val Lowerer::lower_fmt_format(ast::ExprIdx expr,
   // The arguments after the format string are collected into the tuple
   // the pieces read (ADR-0055).
   std::vector<ir::TypeIdx> elem_types;
+  std::vector<ir::TypeIdx> arg_types;
   Val tup{size_one, error_type(), false, false};
-  if (!lower_rest_tuple(args, 1, node.span, tup, elem_types)) {
+  if (!lower_rest_tuple(args, 1, node.span, tup, elem_types, arg_types)) {
     return Val{size_one, error_type(), false, false};
   }
   ir::OperandIdx tup_op = tup.op;
@@ -1133,8 +1221,9 @@ Val Lowerer::lower_fmt_format(ast::ExprIdx expr,
   const ir::OperandIdx no_capacity = to_operand(
       builder.immutable({.type = usize_ty, .data = {.u64_value = 0}}),
       usize_ty);
-  if (!emit_fmt_pieces(node.span, parsed.pieces, tup_op, elem_types, size_one,
-                       no_capacity, measured, true)) {
+  if (!emit_fmt_pieces(node.span, parsed.pieces, tup_op, elem_types,
+                       args.subspan(1), size_one, no_capacity, measured,
+                       true)) {
     return Val{size_one, error_type(), false, false};
   }
   if (failed) {
@@ -1171,10 +1260,12 @@ Val Lowerer::lower_fmt_format(ast::ExprIdx expr,
   // the bytes the second pass wrote.
   FmtState state;
   if (!emit_fmt_pieces(node.span, parsed.pieces, tup_op, elem_types,
-                       to_operand(heap, buf_field_ty),
+                       args.subspan(1), to_operand(heap, buf_field_ty),
                        to_operand(total, usize_ty), state, false)) {
     return Val{size_one, error_type(), false, false};
   }
+  // The arguments moved into the tuple are the expansion's to retire.
+  emit_collected_drop(tup_op, arg_types, node.span);
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
@@ -1208,8 +1299,9 @@ Val Lowerer::lower_io_print(ast::ExprIdx expr,
   // The arguments after the format string are collected into the tuple
   // the pieces read (ADR-0055).
   std::vector<ir::TypeIdx> elem_types;
+  std::vector<ir::TypeIdx> arg_types;
   Val tup{size_one, error_type(), false, false};
-  if (!lower_rest_tuple(args, 1, node.span, tup, elem_types)) {
+  if (!lower_rest_tuple(args, 1, node.span, tup, elem_types, arg_types)) {
     return Val{size_one, error_type(), false, false};
   }
   const analyzer::FmtTemplate parsed =
@@ -1236,8 +1328,9 @@ Val Lowerer::lower_io_print(ast::ExprIdx expr,
   const ir::OperandIdx no_capacity = to_operand(
       builder.immutable({.type = usize_ty, .data = {.u64_value = 0}}),
       usize_ty);
-  if (!emit_fmt_pieces(node.span, parsed.pieces, tup.op, elem_types, size_one,
-                       no_capacity, measured, true)) {
+  if (!emit_fmt_pieces(node.span, parsed.pieces, tup.op, elem_types,
+                       args.subspan(1), size_one, no_capacity, measured,
+                       true)) {
     return Val{size_one, error_type(), false, false};
   }
   if (failed) {
@@ -1253,10 +1346,12 @@ Val Lowerer::lower_io_print(ast::ExprIdx expr,
   // Phase two writes the whole measured total, so nothing truncates.
   FmtState state;
   if (!emit_fmt_pieces(node.span, parsed.pieces, tup.op, elem_types,
-                       to_operand(heap, buf_ty), to_operand(total, usize_ty),
-                       state, false)) {
+                       args.subspan(1), to_operand(heap, buf_ty),
+                       to_operand(total, usize_ty), state, false)) {
     return Val{size_one, error_type(), false, false};
   }
+  // The arguments moved into the tuple are the expansion's to retire.
+  emit_collected_drop(tup.op, arg_types, node.span);
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }

@@ -521,6 +521,7 @@ class Lowerer {
                        const std::vector<analyzer::FmtPiece>& pieces,
                        ir::OperandIdx tup_op,
                        const std::vector<ir::TypeIdx>& elem_types,
+                       std::span<const ast::ExprIdx> arg_exprs,
                        ir::OperandIdx dst_base,
                        ir::OperandIdx capacity,
                        FmtState& state,
@@ -533,7 +534,8 @@ class Lowerer {
                         usize first,
                         diag::Span span,
                         Val& out,
-                        std::vector<ir::TypeIdx>& elem_types);
+                        std::vector<ir::TypeIdx>& elem_types,
+                        std::vector<ir::TypeIdx>& arg_types);
   Val lower_fmt_write(ast::ExprIdx expr,
                       const analyzer::CheckedModule::FnSig& sig);
   Val lower_fmt_format(ast::ExprIdx expr,
@@ -588,6 +590,19 @@ class Lowerer {
   void record_drop_in_place(ir::OperandIdx place,
                             ir::TypeIdx type,
                             diag::Span span);
+  // Ends the value at `place` now by calling its glue, the way the
+  // drop pass ends a local. The expansion's collected tuple is not a
+  // source binding, so the pass cannot schedule its end; the call site
+  // ends it once every piece has read the arguments.
+  void emit_drop_glue_call(ir::OperandIdx place,
+                           ir::TypeIdx type,
+                           diag::Span span);
+  // Ends each collected argument at its field of the tuple. The
+  // fields hold lowering's slot copies, so the glue is looked up by
+  // the argument type the checker settled instead.
+  void emit_collected_drop(ir::OperandIdx tuple_place,
+                           std::span<const ir::TypeIdx> arg_types,
+                           diag::Span span);
 
   // Solves ownership per place over this function's CFG and rewrites
   // its streams to carry the ends. Runs after a body is lowered and

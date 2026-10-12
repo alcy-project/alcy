@@ -387,6 +387,41 @@ static bool is_bool_type(const ast::AstArena& ast, ast::TypeIdx type) {
              ast::PrimitiveKind::Bool;
 }
 
+// Whether `type` is the `usize` primitive.
+static bool is_usize_type(const ast::AstArena& ast, ast::TypeIdx type) {
+  if (!type.is_valid()) {
+    return false;
+  }
+  const ast::TypeNode& node = ast.types[type];
+  return node.kind == ast::TypeKind::Primitive &&
+         node.payload.get<ast::TypePrimitive>().primitive ==
+             ast::PrimitiveKind::Usize;
+}
+
+// Whether `type` is `&mut [u8]`: the buffer a `Display` implementation
+// writes its rendering into.
+static bool is_mut_slice_of_u8(const ast::AstArena& ast, ast::TypeIdx type) {
+  if (!type.is_valid() || ast.types[type].kind != ast::TypeKind::Ref) {
+    return false;
+  }
+  const ast::TypeRef& ref = ast.types[type].payload.get<ast::TypeRef>();
+  if (!ref.is_mut || !ref.inner.is_valid()) {
+    return false;
+  }
+  const ast::TypeNode& inner = ast.types[ref.inner];
+  if (inner.kind != ast::TypeKind::Slice) {
+    return false;
+  }
+  const ast::TypeIdx element = inner.payload.get<ast::TypeSlice>().element;
+  if (!element.is_valid()) {
+    return false;
+  }
+  const ast::TypeNode& element_node = ast.types[element];
+  return element_node.kind == ast::TypeKind::Primitive &&
+         element_node.payload.get<ast::TypePrimitive>().primitive ==
+             ast::PrimitiveKind::U8;
+}
+
 bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
   // The compiler owns the operator specs (ADR-0053): their declared
   // shape is part of the operator's meaning, so a staged declaration
@@ -401,6 +436,7 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
     Equality,
     PartialOrder,
     TotalOrder,
+    Formatting,
     Arithmetic,
     Negation,
     Marker,
@@ -418,6 +454,7 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
       {"PartialEq", Shape::Equality, {}},
       {"PartialOrd", Shape::PartialOrder, {}},
       {"Ord", Shape::TotalOrder, {}},
+      {"Display", Shape::Formatting, {}},
       {"Add", Shape::Arithmetic, "add"},
       {"Sub", Shape::Arithmetic, "sub"},
       {"Mul", Shape::Arithmetic, "mul"},
@@ -467,6 +504,27 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
       return wrong();
     }
     if (!is_bool_type(ast, method.return_type)) {
+      return wrong();
+    }
+    return true;
+  }
+  if (canonical->shape == Shape::Formatting) {
+    // `fn display(self: &Self, out: &mut [u8]) -> usize`, no
+    // parameters: the implementation writes the prefix that fits and
+    // returns the total length.
+    if (!declaration.params.empty() || declaration.methods.size() != 1) {
+      return wrong();
+    }
+    const ast::SpecMethod& method = declaration.methods[0];
+    if (method.name.name != "display" || method.is_unsafe ||
+        !method.generic.empty() || method.params.size() != 2) {
+      return wrong();
+    }
+    if (!is_ref_to(ast, method.params[0].type, false, "Self") ||
+        !is_mut_slice_of_u8(ast, method.params[1].type)) {
+      return wrong();
+    }
+    if (!is_usize_type(ast, method.return_type)) {
       return wrong();
     }
     return true;
@@ -556,6 +614,27 @@ u32 Checker::operator_spec(std::string_view name) const {
   return U32_MAX;
 }
 
+u32 Checker::fmt_spec(std::string_view name) const {
+  for (u32 i = 0; i < static_cast<u32>(specs.size()); ++i) {
+    if (specs[i].name == name && tree.is_staged_item("fmt", specs[i].item)) {
+      return i;
+    }
+  }
+  return U32_MAX;
+}
+
+bool Checker::has_display(ir::TypeIdx type, u32 module) {
+  const u32 spec = fmt_spec("Display");
+  if (spec == U32_MAX) {
+    return false;
+  }
+  const CheckedModule::MethodInfo* method =
+      lookup_method(type, "display", module, diag::Span{}, true, spec);
+  return method != nullptr &&
+         method->receiver == CheckedModule::ReceiverKind::Shared &&
+         method->params.size() == 2;
+}
+
 ir::TypeIdx Checker::index_nominal(ir::TypeIdx receiver) {
   ir::TypeIdx inner = receiver;
   const ir::TypeTag tag = tag_of(inner);
@@ -616,11 +695,11 @@ void Checker::register_spec(u32 module, ast::ItemIdx item) {
   }
   specs.push_back(SpecEntry{module, spec.name.name, item, node.span});
   specs_of_module[module].push_back(static_cast<u32>(specs.size() - 1));
-  // The compiler owns the operator specs (ADR-0053): a staged core
-  // declaration must keep the canonical shape. It still registers, so
-  // a wrong shape is one diagnostic rather than a flood of unresolved
-  // names at every use.
-  if (tree.is_staged_item("core", item)) {
+  // The compiler owns the operator specs (ADR-0053), and `fmt` owns
+  // `Display`: a staged declaration of either must keep the canonical
+  // shape. It still registers, so a wrong shape is one diagnostic
+  // rather than a flood of unresolved names at every use.
+  if (tree.is_staged_item("core", item) || tree.is_staged_item("fmt", item)) {
     (void)check_operator_spec(spec);
   }
 }

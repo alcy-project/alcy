@@ -11,6 +11,7 @@
 // than by their names; see docs/adr/0016-suites-and-the-std-split.md. Both are expanded at compile
 // time and neither declared body executes.
 
+pub use package::display::Display;
 pub use package::write::WriteOutcome;
 pub use package::write::write;
 pub use package::format::format;

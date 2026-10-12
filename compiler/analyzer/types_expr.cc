@@ -777,7 +777,8 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
 
 // Verifies a literal format string against argument element types;
 // other comp-known strings verify in lowering, which holds the bytes.
-bool Checker::verify_fmt_literal(ast::ExprIdx fmt_expr,
+bool Checker::verify_fmt_literal(u32 module,
+                                 ast::ExprIdx fmt_expr,
                                  diag::Span args_span,
                                  const std::vector<ir::TypeIdx>& elements,
                                  diag::Span span) {
@@ -811,7 +812,12 @@ bool Checker::verify_fmt_literal(ast::ExprIdx fmt_expr,
     }
     const ir::TypeIdx element = elements[piece.arg];
     const ir::TypeTag tag = tag_of(element);
-    if (!is_formattable_tag(tag)) {
+    // A nominal argument formats through `fmt`'s `Display` spec when it
+    // implements it; the recording pass in `check_fmt_write` is what
+    // lowering reads.
+    const bool nominal = tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum;
+    if (!is_formattable_tag(tag) &&
+        !(nominal && has_display(element, module))) {
       const u32 index = bag.emit<i18n::Key::CodegenArgumentNotFormattable>(
           diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::InvalidOperation, args_span);
@@ -828,6 +834,24 @@ bool Checker::verify_fmt_literal(ast::ExprIdx fmt_expr,
   }
   (void)span;
   return true;
+}
+
+void Checker::record_fmt_display(u32 module,
+                                 ast::ExprIdx arg,
+                                 ir::TypeIdx element) {
+  const ir::TypeTag tag = tag_of(element);
+  if (tag != ir::TypeTag::Struct && tag != ir::TypeTag::Enum) {
+    return;
+  }
+  const u32 spec = fmt_spec("Display");
+  if (spec == U32_MAX) {
+    return;
+  }
+  const CheckedModule::MethodInfo* method = lookup_method(
+      element, "display", module, ast.exprs[arg].span, true, spec);
+  if (method != nullptr) {
+    record_call(module, arg, method);
+  }
 }
 
 // Checks a core `fmt::write` call like the print intrinsics:
@@ -883,16 +907,20 @@ ir::TypeIdx Checker::check_fmt_write(u32 module,
     return error_type();
   }
   // Every argument after the buffer is a format argument; they are the
-  // tuple the expansion builds (ADR-0055).
+  // tuple the expansion builds (ADR-0055). A nominal argument formats
+  // through `Display`, and the call is recorded on the argument so
+  // lowering can reach it.
   std::vector<ir::TypeIdx> elements;
   elements.reserve(args.size() - 2);
   for (usize i = 2; i < args.size(); ++i) {
     const ir::TypeIdx element = check_expr(module, args[i], nullptr);
-    if (!is_error(element)) {
-      elements.push_back(element);
+    if (is_error(element)) {
+      continue;
     }
+    record_fmt_display(module, args[i], element);
+    elements.push_back(element);
   }
-  if (!verify_fmt_literal(args[0], span, elements, span)) {
+  if (!verify_fmt_literal(module, args[0], span, elements, span)) {
     return error_type();
   }
   record_call(module, node.payload.get<ast::ExprCall>().callee, fn);
@@ -950,11 +978,13 @@ ir::TypeIdx Checker::check_fmt_format(u32 module,
   elements.reserve(args.size() - 1);
   for (usize i = 1; i < args.size(); ++i) {
     const ir::TypeIdx element = check_expr(module, args[i], nullptr);
-    if (!is_error(element)) {
-      elements.push_back(element);
+    if (is_error(element)) {
+      continue;
     }
+    record_fmt_display(module, args[i], element);
+    elements.push_back(element);
   }
-  if (!verify_fmt_literal(args[0], span, elements, span)) {
+  if (!verify_fmt_literal(module, args[0], span, elements, span)) {
     return error_type();
   }
   record_call(module, node.payload.get<ast::ExprCall>().callee, fn);
@@ -1012,11 +1042,13 @@ ir::TypeIdx Checker::check_io_print(u32 module,
   elements.reserve(args.size() - 1);
   for (usize i = 1; i < args.size(); ++i) {
     const ir::TypeIdx element = check_expr(module, args[i], nullptr);
-    if (!is_error(element)) {
-      elements.push_back(element);
+    if (is_error(element)) {
+      continue;
     }
+    record_fmt_display(module, args[i], element);
+    elements.push_back(element);
   }
-  if (!verify_fmt_literal(args[0], span, elements, span)) {
+  if (!verify_fmt_literal(module, args[0], span, elements, span)) {
     return error_type();
   }
   record_call(module, node.payload.get<ast::ExprCall>().callee, fn);

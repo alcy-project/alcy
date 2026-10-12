@@ -6,6 +6,10 @@ replaced. The foundations are in `roadmap.md`.
 ## Open
 
 - [ ] Doc-comment collection in the parser (the SSG itself waits).
+- [ ] A discarded temporary that owns memory leaks: `_ := format("x")`
+  allocates the string and the drop pass never ends it, because the
+  value is not a binding the pass can schedule. The `fmt` expansion
+  calls its collected tuple's glue directly for the same reason.
 - [ ] Manifest lint: flag `0.x` dependency requirements. The grammar
   accepts them, but a pre-1.0 minor may break, so the advice belongs
   to a lint rather than to the parser (ADR-0057).

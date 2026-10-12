@@ -52,7 +52,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   walk a slot table (the map's sweeps), which the cursors do not
   replace.
 
-- [ ] Operator specs: sorting and `Display`.
+- [x] Operator specs: floats, `Display`, arithmetic, and ordering.
 
   The first slice sealed `Index`/`IndexMut` and `PartialEq`/`Eq`;
   floats and arithmetic landed after it. Floats joined the
@@ -66,14 +66,12 @@ peripheral work lives in `backlog.md`. The language record lives in
   reaching user packages. Ordering landed too: `Ordering`,
   `PartialOrd` (`Option<Ordering>`, so an incomparable pair makes all
   four comparisons false), `Ord`, and the dispatch for `<`, `<=`, `>`,
-  and `>=`. `Vec::sort` landed over `Ord` (a stable insertion sort,
-  with `sort_by` taking the order as a predicate), so the scalars
-  carry the ordering impls and `Ordering` gained `is_lt` and its
-  siblings. What remains: `Display` for
-  `{}`, which needs a signature a user type can implement, a decision
-  on whether the two-pass measure/expand expansion may run a user
-  method twice, and a decision on whether the spec is sealed. Floats
-  stay `PartialOrd` only. Designed in
+  and `>=`, with `Vec::sort` riding `Ord` and `sort_by` taking the
+  order as a predicate. `Display` landed last: a nominal argument
+  formats through `fmt`'s `fn display(self: &Self, out: &mut [u8]) ->
+  usize`, which writes the prefix that fits and returns the total the
+  measure pass learns from an empty slice, so `{}` reaches a type of
+  one's own. Floats stay `PartialOrd` only. Designed in
   `docs/adr/0053-operators-are-sealed-specs.md`.
 
 - [ ] Spec bounds and checked generics.

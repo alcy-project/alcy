@@ -114,6 +114,49 @@ void Lowerer::record_event(OwnershipEvent::Kind kind,
   ownership_.push_back(std::move(event));
 }
 
+void Lowerer::emit_drop_glue_call(ir::OperandIdx place,
+                                  ir::TypeIdx type,
+                                  diag::Span span) {
+  if (!runs_destructor(type) || type.idx >= pkg.drop_glue.size()) {
+    return;
+  }
+  const analyzer::CheckedModule::DropGlue& glue = pkg.drop_glue[type.idx];
+  if (glue.index == base::INVALID_IDX) {
+    return;
+  }
+  const analyzer::CheckedModule& def = pkg.modules[glue.module];
+  const analyzer::CheckedModule::MethodInfo& info = def.methods[glue.index];
+  const ir::FunctionIdx fn =
+      fn_index(glue.module, info.item, info.name, info.params, info.ret,
+               generic_inst_index(info.self_type), {}, ir::SymbolKind::Method);
+  if (!fn.is_valid() || failed) {
+    return;
+  }
+  const ir::RegisterIdx value = emit(ir::Opcode::Load, type, {place});
+  emit_void(ir::Opcode::Call,
+            {builder.operand(ir::Operand::from_function(
+                 fn, builder.primitive(ir::TypeTag::Function))),
+             to_operand(value, type)});
+  (void)span;
+}
+
+void Lowerer::emit_collected_drop(ir::OperandIdx tuple_place,
+                                  std::span<const ir::TypeIdx> arg_types,
+                                  diag::Span span) {
+  for (usize i = 0; i < arg_types.size() && !failed; ++i) {
+    const ir::TypeIdx type = arg_types[i];
+    const ir::TypeTag tag = tag_of(type);
+    if (tag == ir::TypeTag::Void || tag == ir::TypeTag::Error ||
+        !runs_destructor(type)) {
+      continue;
+    }
+    const ir::RegisterIdx field =
+        emit(ir::Opcode::GetElementPtr, type,
+             {tuple_place, zero_i32, index_operand(static_cast<u32>(i))});
+    emit_drop_glue_call(to_operand(field, type), type, span);
+  }
+}
+
 void Lowerer::record_drop_in_place(ir::OperandIdx place,
                                    ir::TypeIdx type,
                                    diag::Span span) {

@@ -80,6 +80,15 @@ comparison operators reach `partial_cmp` and fold the option: a
 predicate, and the scalars carry the same ordering implementations so
 a generic body can call `cmp`.
 
+Amended at `Display`'s landing: the first sealed spec that is not an
+operator lives in `fmt`, not `core` - `fn display(self: &Self, out:
+&mut [u8]) -> usize` writes the prefix that fits and returns the total
+length. The compiler knows it by identity the way it knows `write`,
+the canonical-shape check covers a staged `fmt` declaration too, and
+the seal works the same way: the standard library implements it, and a
+package outside the suite lists `Display` in its own `[spec]
+implement`.
+
 **A spec may name a super-spec.** `spec Eq: PartialEq {}` says that
 implementing `Eq` requires an implementation of `PartialEq`, and a
 bound on `Eq` admits `PartialEq`'s method. `Eq` is the reflexive

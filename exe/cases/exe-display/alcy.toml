@@ -1,0 +1,19 @@
+[package]
+name = "display"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+# `Display` is sealed like the operator specs (ADR-0053), so a package
+# outside the standard library's suite lists what it implements.
+[spec]
+implement = ["Display"]
+
+[dependencies]
+"alcy/std/*" = {}
+
+[[bin]]
+name = "display"
+path = "main.al"
