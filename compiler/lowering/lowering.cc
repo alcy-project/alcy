@@ -4,6 +4,7 @@
 #include "lowering/lowering.h"
 
 #include <cstdlib>
+#include <initializer_list>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -70,6 +71,18 @@ ir::BlockIdx Lowerer::reserve_block() {
 
 void Lowerer::switch_to(ir::BlockIdx block) {
   cur_ = block;
+}
+
+void Lowerer::seal_blocks(std::initializer_list<ir::BlockIdx> blocks) {
+  const ir::BlockIdx saved = cur_;
+  for (const ir::BlockIdx block : blocks) {
+    if (!block.is_valid()) {
+      continue;
+    }
+    switch_to(block);
+    emit_void(ir::Opcode::Unreachable, {});
+  }
+  switch_to(saved);
 }
 
 bool Lowerer::terminated(ir::BlockIdx block) {

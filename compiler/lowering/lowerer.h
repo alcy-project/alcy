@@ -3,6 +3,7 @@
 #pragma once
 
 #include <deque>
+#include <initializer_list>
 #include <optional>
 #include <span>
 #include <string>
@@ -182,6 +183,16 @@ class Lowerer {
   void switch_to(ir::BlockIdx block);
   bool terminated(ir::BlockIdx block);
   bool terminated_cur();
+  // Ends reserved blocks a divergent condition leaves behind: the paths
+  // they would have carried never run, so an unreachable terminator is
+  // their whole body. The current block is restored.
+  void seal_blocks(std::initializer_list<ir::BlockIdx> blocks);
+  // The value an expression answers with when a subexpression failed or
+  // ended the block: the error type for a failure, the never type for a
+  // divergence. A caller that still has instructions to emit returns
+  // this instead of touching a block that already carries its
+  // terminator.
+  Val stopped_value();
 
   ir::OperandIdx size_one = ir::OperandIdx(0);
   ir::OperandIdx zero_i32 = ir::OperandIdx(0);

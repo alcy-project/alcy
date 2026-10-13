@@ -89,6 +89,13 @@ ir::TypeIdx Lowerer::error_type() {
   return builder.error_type();
 }
 
+Val Lowerer::stopped_value() {
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{size_one, builder.never_type(), false, false};
+}
+
 bool Lowerer::is_copy(ir::TypeIdx type) const {
   return ir::is_copy_type(builder.state(), type, pkg.needs_drop);
 }
@@ -920,8 +927,8 @@ Val Lowerer::lower_variant_construct(
     for (usize i = 0; i < payloads.size(); ++i) {
       Val value =
           lower_expr(call.payload.get<ast::ExprCall>().args[i], &payloads[i]);
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
+      if (failed || terminated_cur()) {
+        return stopped_value();
       }
       mark_move(value);
     }
@@ -934,8 +941,8 @@ Val Lowerer::lower_variant_construct(
     for (usize i = 0; i < payloads.size(); ++i) {
       Val value =
           lower_expr(call.payload.get<ast::ExprCall>().args[i], &payloads[i]);
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
+      if (failed || terminated_cur()) {
+        return stopped_value();
       }
       const ir::RegisterIdx field =
           payload_field_addr(Val{to_operand(addr, slot), slot, true, false},
@@ -1092,8 +1099,8 @@ Val Lowerer::lower_indirect_call(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
   Val callee = lower_expr(call.callee, nullptr);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
+  if (failed || terminated_cur()) {
+    return stopped_value();
   }
   if (tag_of(callee.type) != ir::TypeTag::Func) {
     internal(node.span, "call without type");
@@ -1115,8 +1122,8 @@ Val Lowerer::lower_indirect_call(ast::ExprIdx expr) {
   ops.push_back(use_value(callee));
   for (usize i = 0; i < call.args.size(); ++i) {
     Val arg = lower_expr(call.args[i], &params[i]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     ops.push_back(arg_for(arg, params[i]));
   }
@@ -1234,8 +1241,8 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
       continue;
     }
     Val arg = lower_expr(call.args[i], &sig.params[i]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     ops.push_back(arg_for(arg, sig.params[i]));
   }
@@ -1300,8 +1307,8 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
       continue;
     }
     Val arg = lower_expr(args[i], &info.params[i]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     ops.push_back(arg_for(arg, info.params[i]));
   }
@@ -1394,8 +1401,8 @@ Val Lowerer::lower_extern_call(ast::ExprIdx expr,
       ext, builder.primitive(ir::TypeTag::Function))));
   for (usize i = 0; i < call.args.size(); ++i) {
     Val arg = lower_expr(call.args[i], &sig.params[i]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     ops.push_back(arg_for(arg, sig.params[i]));
   }
@@ -1422,12 +1429,12 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{size_one, error_type(), false, false};
     }
     Val fd = lower_expr(call.args[0], nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     Val buf = lower_expr(call.args[1], nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     const Val material = materialize(buf);
     const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
@@ -1453,16 +1460,16 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{size_one, error_type(), false, false};
     }
     Val dst = lower_expr(call.args[0], nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     Val src = lower_expr(call.args[1], nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     Val len = lower_expr(call.args[2], nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     // Both pointers are the same storage type, so the element's
     // alignment is the copy's: the backend may use it, and does not
@@ -1492,8 +1499,8 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{size_one, error_type(), false, false};
     }
     Val ptr = lower_expr(call.args[0], nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     const Val material = materialize(ptr);
     // The end runs wherever the pass visits this point; the pointer is
@@ -1508,12 +1515,12 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{size_one, error_type(), false, false};
     }
     Val s = lower_expr(call.args[0], nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     Val index = lower_expr(call.args[1], &sig.params[1]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     const Val material = materialize(s);
     ir::OperandIdx bytes = ir::OperandIdx::invalid();
@@ -1540,12 +1547,12 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{size_one, error_type(), false, false};
     }
     Val s = lower_expr(call.args[0], nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     Val index = lower_expr(call.args[1], &sig.params[1]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     const Val material = materialize(s);
     ir::OperandIdx bytes = ir::OperandIdx::invalid();
@@ -1572,8 +1579,8 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{size_one, error_type(), false, false};
     }
     Val ptr = lower_expr(call.args[0], &sig.params[0]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     const Val material = materialize(ptr);
     const ir::RegisterIdx value =
@@ -1596,8 +1603,8 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     std::vector<ir::OperandIdx> args;
     for (usize i = 0; i < 2; ++i) {
       Val arg = lower_expr(call.args[i], &sig.params[i]);
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
+      if (failed || terminated_cur()) {
+        return stopped_value();
       }
       args.push_back(arg_for(arg, sig.params[i]));
     }
@@ -1616,8 +1623,8 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{size_one, error_type(), false, false};
     }
     Val slot = lower_expr(call.args[0], &sig.params[0]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     const ir::OperandIdx slot_op = arg_for(slot, sig.params[0]);
     if (name == "uninit_assume" || name == "uninit_ref") {
@@ -1631,8 +1638,8 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{to_operand(held, sig.ret), sig.ret, false, false};
     }
     Val value = lower_expr(call.args[1], &sig.params[1]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     emit_void(ir::Opcode::Store, {use_value(value), slot_op});
     return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
@@ -1660,12 +1667,12 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     }
     const ir::TypeIdx type = type_args[0];
     Val left = lower_expr(call.args[0], &type);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     Val right = lower_expr(call.args[1], &type);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     const ir::Opcode op = name == "wrapping_add"   ? ir::Opcode::IntAddWrap
                           : name == "wrapping_sub" ? ir::Opcode::IntSubWrap
@@ -1689,8 +1696,8 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     std::vector<ir::OperandIdx> args;
     for (usize i = 0; i < arity; ++i) {
       Val arg = lower_expr(call.args[i], &sig.params[i]);
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
+      if (failed || terminated_cur()) {
+        return stopped_value();
       }
       args.push_back(arg_for(arg, sig.params[i]));
     }
@@ -1733,8 +1740,8 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{size_one, error_type(), false, false};
     }
     Val receiver = lower_expr(call.args[0], &sig.params[0]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     const Val material = materialize(receiver);
     ir::OperandIdx bytes = ir::OperandIdx::invalid();
@@ -1751,12 +1758,12 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{size_one, error_type(), false, false};
     }
     Val ptr = lower_expr(call.args[0], &sig.params[0]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     Val len = lower_expr(call.args[1], &sig.params[1]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     return build_slice_value(use_value(ptr), use_value(len), sig.ret,
                              node.span);
@@ -1768,12 +1775,12 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       return Val{size_one, error_type(), false, false};
     }
     Val ptr = lower_expr(call.args[0], nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     Val len = lower_expr(call.args[1], nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     const ir::TypeIdx str_ty = builder.primitive(ir::TypeTag::Str);
     const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
@@ -2101,7 +2108,7 @@ bool Lowerer::store_bound(ast::ExprIdx expr,
     return false;
   }
   Val value = lower_expr(endpoint, &payloads[0]);
-  if (failed) {
+  if (failed || terminated_cur()) {
     return false;
   }
   const ir::RegisterIdx payload_addr =
@@ -2122,10 +2129,10 @@ Val Lowerer::lower_range(ast::ExprIdx expr) {
   const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, range_ty, {size_one});
   Val slot{to_operand(addr, range_ty), range_ty, true, false};
   if (!store_bound(expr, slot, "start", range.start, true)) {
-    return Val{size_one, error_type(), false, false};
+    return stopped_value();
   }
   if (!store_bound(expr, slot, "end", range.end, range.inclusive)) {
-    return Val{size_one, error_type(), false, false};
+    return stopped_value();
   }
   return slot;
 }
@@ -2238,8 +2245,8 @@ Val Lowerer::lower_str_intrinsic(ast::ExprIdx expr, std::string_view name) {
   const ir::TypeIdx u8_ty = builder.primitive(ir::TypeTag::U8);
   const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
   Val receiver = lower_expr(call.args[0], &str_ty);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
+  if (failed || terminated_cur()) {
+    return stopped_value();
   }
   const Val material = materialize(receiver);
   ir::OperandIdx bytes = ir::OperandIdx::invalid();
@@ -2345,8 +2352,8 @@ Val Lowerer::lower_panic(ast::ExprIdx expr) {
   }
   const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
   Val arg = lower_expr(call.payload.get<ast::ExprCall>().args[0], &str);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
+  if (failed || terminated_cur()) {
+    return stopped_value();
   }
   const Val material = materialize(arg);
   // Fat strings cross the ABI as (bytes, len).
@@ -2620,8 +2627,8 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
       is_ref_tag(tag_of(info.params[0])) && is_rooted_place(receiver_expr)
           ? place_addr(receiver_expr)
           : lower_expr(receiver_expr, nullptr);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
+  if (failed || terminated_cur()) {
+    return stopped_value();
   }
   const std::vector<u32> comp = comp_positions(info.item);
   if (!comp.empty() && comp[0] == 0) {
@@ -2656,8 +2663,8 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
       continue;
     }
     Val arg = lower_expr(method_args[i], &info.params[i + 1]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     ops.push_back(arg_for(arg, info.params[i + 1]));
   }
@@ -2761,14 +2768,14 @@ Val Lowerer::lower_spec_binary(
   Val receiver = is_ref_tag(tag_of(info.params[0])) && is_rooted_place(bin.lhs)
                      ? place_addr(bin.lhs)
                      : lower_expr(bin.lhs, nullptr);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
+  if (failed || terminated_cur()) {
+    return stopped_value();
   }
   Val argument = is_ref_tag(tag_of(info.params[1])) && is_rooted_place(bin.rhs)
                      ? place_addr(bin.rhs)
                      : lower_expr(bin.rhs, nullptr);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
+  if (failed || terminated_cur()) {
+    return stopped_value();
   }
   const Val result = emit_spec_call(target, node.span, receiver, argument,
                                     /*has_argument=*/true);
@@ -2794,8 +2801,8 @@ Val Lowerer::lower_spec_unary(
       is_ref_tag(tag_of(info.params[0])) && is_rooted_place(unary.inner)
           ? place_addr(unary.inner)
           : lower_expr(unary.inner, nullptr);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
+  if (failed || terminated_cur()) {
+    return stopped_value();
   }
   const Val argument{size_one, error_type(), false, false};
   return emit_spec_call(target, node.span, receiver, argument,
@@ -2976,8 +2983,8 @@ Val Lowerer::lower_struct(ast::ExprIdx expr) {
     const ir::TypeIdx element_type =
         field_type_of(struct_type, index, ast.exprs[field.value].span);
     Val value = lower_expr(field.value, &element_type);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     const ir::RegisterIdx gep =
         emit(ir::Opcode::GetElementPtr, element_type,
@@ -2988,8 +2995,8 @@ Val Lowerer::lower_struct(ast::ExprIdx expr) {
   if (node.payload.get<ast::ExprStruct>().base_expr.is_valid()) {
     Val base =
         lower_expr(node.payload.get<ast::ExprStruct>().base_expr, nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     Val base_addr = address_of(base);
     // Update consumes the base value.
@@ -3037,8 +3044,8 @@ Val Lowerer::lower_tuple(ast::ExprIdx expr) {
       element_expected = &element_type;
     }
     Val value = lower_expr(tuple.elements[i], element_expected);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     const ir::TypeIdx stored =
         i < shape.elements.size() ? shape.elements[i] : value.type;
@@ -3069,8 +3076,8 @@ Val Lowerer::lower_array(ast::ExprIdx expr) {
       return Val{to_operand(addr, array_type), array_type, true, false};
     }
     Val value = lower_expr(array.repeat, &shape.element);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     const ir::OperandIdx stored = use_value(value);
     for (u64 i = 0; i < shape.count && !failed; ++i) {
@@ -3088,8 +3095,8 @@ Val Lowerer::lower_array(ast::ExprIdx expr) {
     for (u32 i = 0; i < static_cast<u32>(array.elements.size()) && !failed;
          ++i) {
       Val value = lower_expr(array.elements[i], &shape.element);
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
+      if (failed || terminated_cur()) {
+        return stopped_value();
       }
       const ir::RegisterIdx gep =
           emit(ir::Opcode::GetElementPtr, shape.element,
@@ -3207,30 +3214,30 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
   Val rhs = Val{size_one, error_type(), false, false};
   if (!lhs_literal && !rhs_literal) {
     lhs = lower_expr(bin.lhs, nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     rhs = lower_expr(bin.rhs, nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
   } else if (!lhs_literal) {
     lhs = lower_expr(bin.lhs, nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     rhs = lower_expr(bin.rhs, &lhs.type);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
   } else if (!rhs_literal) {
     rhs = lower_expr(bin.rhs, nullptr);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     lhs = lower_expr(bin.lhs, &rhs.type);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
   } else {
     // Both sides are literals, so neither carries the unified type: the
@@ -3239,12 +3246,12 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
     // to i32) and emit an operand the return type cannot hold.
     const ir::TypeIdx unified = expr_type(expr);
     lhs = lower_expr(bin.lhs, &unified);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
     rhs = lower_expr(bin.rhs, &unified);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
   }
   const ir::TypeTag tag = tag_of(lhs.type);
@@ -3535,8 +3542,8 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprMatch& match = node.payload.get<ast::ExprMatch>();
   Val scrut = lower_expr(match.scrutinee, nullptr);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
+  if (failed || terminated_cur()) {
+    return stopped_value();
   }
   Val addr = address_of(scrut);
   const ir::TypeIdx scrut_type = expr_type(match.scrutinee);
@@ -3676,7 +3683,11 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     ir::BlockIdx then_block = reserve_block();
     Val cond = lower_expr(cond_node.value, nullptr);
     if (failed) {
-      return Val{size_one, error_type(), false, false};
+      return stopped_value();
+    }
+    if (terminated_cur()) {
+      seal_blocks({then_block, else_block, then_epilogue, else_epilogue, join});
+      return stopped_value();
     }
     Val material = materialize(cond);
     emit_cond_br(material.op, then_block, else_block);
@@ -3708,7 +3719,11 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   } else {
     Val init = lower_expr(cond_node.init, nullptr);
     if (failed) {
-      return Val{size_one, error_type(), false, false};
+      return stopped_value();
+    }
+    if (terminated_cur()) {
+      seal_blocks({else_block, then_epilogue, else_epilogue, join});
+      return stopped_value();
     }
     Val addr = address_of(init);
     const ir::TypeIdx scrut_type = expr_type(cond_node.init);
@@ -3818,7 +3833,11 @@ Val Lowerer::lower_while(ast::ExprIdx expr) {
   if (!cond_node.is_pattern) {
     Val cond = lower_expr(cond_node.value, nullptr);
     if (failed) {
-      return Val{size_one, error_type(), false, false};
+      return stopped_value();
+    }
+    if (terminated_cur()) {
+      seal_blocks({body, exit});
+      return stopped_value();
     }
     emit_cond_br(materialize(cond).op, body, exit);
     switch_to(body);
@@ -3827,7 +3846,11 @@ Val Lowerer::lower_while(ast::ExprIdx expr) {
     // tests and binds, so continue re-enters the test.
     Val init = lower_expr(cond_node.init, nullptr);
     if (failed) {
-      return Val{size_one, error_type(), false, false};
+      return stopped_value();
+    }
+    if (terminated_cur()) {
+      seal_blocks({body, exit});
+      return stopped_value();
     }
     Val addr = address_of(init);
     const ir::TypeIdx scrut_type = expr_type(cond_node.init);
@@ -3865,8 +3888,8 @@ Val Lowerer::lower_question(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprQuestion& question = node.payload.get<ast::ExprQuestion>();
   Val scrut = lower_expr(question.inner, nullptr);
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
+  if (failed || terminated_cur()) {
+    return stopped_value();
   }
   Val addr = address_of(scrut);
   const ir::TypeIdx scrut_type = expr_type(question.inner);
@@ -3982,8 +4005,8 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
         return lower_literal(literal.value, hint, /*negate=*/true);
       }
       Val inner = lower_expr(unary.inner, nullptr);
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
+      if (failed || terminated_cur()) {
+        return stopped_value();
       }
       const ir::TypeTag tag = tag_of(inner.type);
       if (unary.op == ast::UnaryOp::Not) {
@@ -3997,8 +4020,8 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
         return Val{to_operand(dst, inner.type), inner.type, false, false};
       }
       Val zero = lower_literal_zero(inner.type, node.span);
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
+      if (failed || terminated_cur()) {
+        return stopped_value();
       }
       ir::Opcode op = ir::Opcode::IntSub;
       if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
@@ -4015,19 +4038,19 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
             ast.exprs[borrow.inner].payload.get<ast::ExprIndex>();
         if (is_range_type(expr_type(index.index))) {
           Val base = lower_expr(index.receiver, nullptr);
-          if (failed) {
-            return Val{size_one, error_type(), false, false};
+          if (failed || terminated_cur()) {
+            return stopped_value();
           }
           Val position = lower_expr(index.index, nullptr);
-          if (failed) {
-            return Val{size_one, error_type(), false, false};
+          if (failed || terminated_cur()) {
+            return stopped_value();
           }
           return lower_subslice(base, position, borrow.is_mut, node.span);
         }
       }
       Val place = place_addr(borrow.inner);
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
+      if (failed || terminated_cur()) {
+        return stopped_value();
       }
       const ir::TypeIdx ref = builder.reference_type(place.type, borrow.is_mut);
       const ir::RegisterIdx loan = emit(ir::Opcode::Borrow, ref, {place.op});
@@ -4039,8 +4062,8 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     case ast::ExprKind::Cast: {
       const ast::ExprCast& cast = node.payload.get<ast::ExprCast>();
       Val inner = lower_expr(cast.inner, nullptr);
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
+      if (failed || terminated_cur()) {
+        return stopped_value();
       }
       const ir::TypeIdx target = expr_type(expr);
       if (tag_of(target) == ir::TypeTag::Error) {
@@ -4060,8 +4083,8 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     case ast::ExprKind::Field: {
       const ast::ExprField& field = node.payload.get<ast::ExprField>();
       Val base = lower_expr(field.receiver, nullptr);
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
+      if (failed || terminated_cur()) {
+        return stopped_value();
       }
       return materialize(field_addr(base, field.name.name, node.span));
     }
@@ -4116,25 +4139,25 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       }
       if (is_range_type(expr_type(index.index))) {
         Val base = lower_expr(index.receiver, nullptr);
-        if (failed) {
-          return Val{size_one, error_type(), false, false};
+        if (failed || terminated_cur()) {
+          return stopped_value();
         }
         Val position = lower_expr(index.index, nullptr);
-        if (failed) {
-          return Val{size_one, error_type(), false, false};
+        if (failed || terminated_cur()) {
+          return stopped_value();
         }
         return lower_subslice(base, position, false, node.span);
       }
       Val base = lower_expr(index.receiver, nullptr);
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
+      if (failed || terminated_cur()) {
+        return stopped_value();
       }
       if (!base.address) {
         base = address_of(base);
       }
       Val position = lower_expr(index.index, nullptr);
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
+      if (failed || terminated_cur()) {
+        return stopped_value();
       }
       Val addr = checked_index_addr(base, position, node.span);
       if (failed) {
@@ -4164,8 +4187,8 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       bool carries_result = false;
       if (ret.value.is_valid()) {
         Val value = lower_expr(ret.value, nullptr);
-        if (failed) {
-          return Val{size_one, error_type(), false, false};
+        if (failed || terminated_cur()) {
+          return stopped_value();
         }
         if (tag_of(value.type) != ir::TypeTag::Void) {
           result = use_value(value);
@@ -4239,7 +4262,7 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
       Val init = ast.exprs[decl.init].kind == ast::ExprKind::Field
                      ? place_addr(decl.init)
                      : lower_expr(decl.init, nullptr);
-      if (failed) {
+      if (failed || terminated_cur()) {
         return;
       }
       if (ast.patterns[decl.pattern].kind == ast::PatternKind::Wildcard &&
@@ -4261,11 +4284,11 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
     case ast::StmtKind::Reassign: {
       const ast::StmtReassign& reassign = node.payload.get<ast::StmtReassign>();
       Val place = place_addr(reassign.place);
-      if (failed) {
+      if (failed || terminated_cur()) {
         return;
       }
       Val value = lower_expr(reassign.value, nullptr);
-      if (failed) {
+      if (failed || terminated_cur()) {
         return;
       }
       if (reassign.compound) {
@@ -4325,7 +4348,7 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
     case ast::StmtKind::Expr: {
       const ast::StmtExpr& expr = node.payload.get<ast::StmtExpr>();
       Val value = lower_expr(expr.value, nullptr);
-      if (failed) {
+      if (failed || terminated_cur()) {
         return;
       }
       if (runs_destructor(value.type)) {

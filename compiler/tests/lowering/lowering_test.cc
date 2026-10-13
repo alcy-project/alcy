@@ -830,4 +830,53 @@ TEST_CASE("Lowering reports an overflow in a constant") {
   CHECK(reported);
 }
 
+// A value of the never type ends the path where it stands. The
+// constructs that consume it (`ret`, a binding, an argument, a
+// condition) must not emit after the terminator, and the reserved
+// blocks a divergent condition leaves behind still need terminators of
+// their own.
+TEST_CASE("Lowering ends a path at a diverging value") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "pub intrinsic fn panic(msg: str) -> !;\n"
+                   "fn boom() -> ! {\n"
+                   "  panic(\"b\")\n"
+                   "}\n"
+                   "fn take(x: i32) -> i32 {\n"
+                   "  ret x\n"
+                   "}\n"
+                   "fn ret_case() -> i32 {\n"
+                   "  ret boom()\n"
+                   "}\n"
+                   "fn bind_case() -> i32 {\n"
+                   "  v := boom()\n"
+                   "  ret v\n"
+                   "}\n"
+                   "fn arg_case() -> i32 {\n"
+                   "  ret take(boom())\n"
+                   "}\n"
+                   "fn if_case(c: bool) -> i32 {\n"
+                   "  if boom() {\n"
+                   "    ret 1\n"
+                   "  } else {\n"
+                   "    ret 2\n"
+                   "  }\n"
+                   "}\n"
+                   "fn while_case() -> i32 {\n"
+                   "  while boom() {\n"
+                   "  }\n"
+                   "  ret 0\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "}\n"}});
+  Fixture f;
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  CHECK(ir::verify_storage(*result.lowered->storage).is_ok());
+}
+
 }  // namespace lowering
