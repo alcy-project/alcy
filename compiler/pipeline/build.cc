@@ -220,17 +220,14 @@ base::Result<void, diag::Reported> write_output(PipelineContext& ctx,
   return base::make_ok();
 }
 
-// Emits one lowered package through the backend the context names. The
-// kind is what the backend is asked for; `what` is the noun a write
-// failure uses ("object", "ir", "wasm module").
-base::Result<void, diag::Reported> emit_package_output(
-    PipelineContext& ctx,
-    lowering::LoweredPackage& package,
-    BuildProfile profile,
-    const std::string& output_path,
-    bool is_lib,
-    codegen::OutputKind kind,
-    std::string_view what) {
+// Refuses an emission the context cannot answer: no backend, a backend
+// this build does not carry, a kind the backend does not support, and a
+// freestanding executable on a target with no exit sequence. Every
+// object path runs it, single-part or split, so a refusal names the
+// reason rather than reaching an emitter that would guess.
+base::Result<void, diag::Reported> check_emission(PipelineContext& ctx,
+                                                  codegen::OutputKind kind,
+                                                  bool is_lib) {
   if (ctx.backend == codegen::Backend::None) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineNoBackend>(
         diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoBackend);
@@ -264,6 +261,23 @@ base::Result<void, diag::Reported> emit_package_output(
       (void)index;
       return base::make_err(diag::Reported{});
     }
+  }
+  return base::make_ok();
+}
+
+// Emits one lowered package through the backend the context names. The
+// kind is what the backend is asked for; `what` is the noun a write
+// failure uses ("object", "ir", "wasm module").
+base::Result<void, diag::Reported> emit_package_output(
+    PipelineContext& ctx,
+    lowering::LoweredPackage& package,
+    BuildProfile profile,
+    const std::string& output_path,
+    bool is_lib,
+    codegen::OutputKind kind,
+    std::string_view what) {
+  if (check_emission(ctx, kind, is_lib).is_err()) {
+    return base::make_err(diag::Reported{});
   }
   // The rendered sites serve both the checks' aborts and a backtrace's
   // call sites; one rendering fills both. The table lives in this frame
@@ -324,6 +338,9 @@ base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
     u32 parts) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-object",
                                            "backend");
+  if (check_emission(ctx, codegen::OutputKind::Object, is_lib).is_err()) {
+    return base::make_err(diag::Reported{});
+  }
   // The rendered sites serve both the checks' aborts and a backtrace's
   // call sites; one rendering fills both. The table lives in this frame
   // and the request only borrows it, which lasts exactly as long as the
