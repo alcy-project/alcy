@@ -24,7 +24,11 @@ using FileId = u32;
 constexpr FileId UNKNOWN_FILE = U32_MAX;
 
 enum class SourceError : u8 {
+  // No file exists at the path.
+  NotFound,
+  // A file exists, but it could not be read.
   OpenFailed,
+  // The file was opened, but its bytes could not be mapped.
   MapFailed,
 };
 

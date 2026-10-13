@@ -10,7 +10,8 @@ source text through `FileId`, never by path.
 ## Entry points
 
 - `SourceManager::load(path)` -> `base::Result<FileId, SourceError>`.
-  `SourceError::OpenFailed` when the file cannot be read.
+  `SourceError::NotFound` when no file exists at the path, and
+  `OpenFailed` when one does but cannot be read.
 - `SourceManager::bytes(id)` / `name(id)` ->
   `std::optional<std::string_view>`. `std::nullopt` names no loaded
   file; an engaged empty view is a loaded empty file. The two cases

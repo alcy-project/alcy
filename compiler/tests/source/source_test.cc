@@ -4,12 +4,19 @@
 #include "source/source.h"
 
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 
+#include "config/build_config.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
+
+#if BUILD_FLAG(IS_OS_POSIX)
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 namespace source {
 
@@ -60,8 +67,33 @@ TEST_CASE("SourceManager reports missing files") {
   if (!result.is_err()) {
     return;
   }
+  CHECK(std::move(result).unwrap_err() == SourceError::NotFound);
+}
+
+#if BUILD_FLAG(IS_OS_POSIX)
+TEST_CASE("SourceManager reports unreadable files") {
+  if (::geteuid() == 0) {
+    // Root reads past file permissions, so the case cannot be posed.
+    return;
+  }
+  io::TempDir dir = io::TempDir::create_unique("alcy_source_denied_test_");
+  const bool written = dir.write_file("denied.al", "let x = 1;\n");
+  CHECK(written);
+  if (!written) {
+    return;
+  }
+  const std::string path = dir.join("denied.al");
+  CHECK(::chmod(path.c_str(), 0) == 0);
+
+  SourceManager sources;
+  base::Result<FileId, SourceError> result = sources.load(path);
+  CHECK(result.is_err());
+  if (!result.is_err()) {
+    return;
+  }
   CHECK(std::move(result).unwrap_err() == SourceError::OpenFailed);
 }
+#endif
 
 TEST_CASE("SourceManager loads empty files") {
   io::TempDir dir = io::TempDir::create_unique("alcy_source_empty_test_");

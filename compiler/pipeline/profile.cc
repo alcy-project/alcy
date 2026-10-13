@@ -53,7 +53,17 @@ base::Result<pkg::Profiles, diag::Reported> load_profiles(
   base::Result<source::FileId, source::SourceError> file =
       ctx.sources.load(path.as_view());
   if (file.is_err()) {
-    return base::make_ok(pkg::Profiles{});
+    // An absent profile file is the ordinary case; one that exists and
+    // cannot be read is not, and a silently default profile would hide
+    // the settings it declared.
+    if (std::move(file).unwrap_err() == source::SourceError::NotFound) {
+      return base::make_ok(pkg::Profiles{});
+    }
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotRead>(
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
+        path.as_view());
+    (void)index;
+    return base::make_err(diag::Reported{});
   }
   const source::FileId loaded = std::move(file).unwrap();
   const std::optional<std::string_view> bytes = ctx.sources.bytes(loaded);

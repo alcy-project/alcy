@@ -63,6 +63,7 @@ i32 replace_descriptor(i32 from, i32 to) {
 }  // namespace
 #else
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <cstdio>
@@ -753,6 +754,34 @@ TEST_CASE("Build reports a broken profile file") {
   SilencedOutput silenced;
   CHECK(run_build_on(dir, "proj") != 0);
 }
+
+#if BUILD_FLAG(IS_OS_POSIX)
+TEST_CASE("Build reports an unreadable profile file") {
+  if (::geteuid() == 0) {
+    // Root reads past file permissions, so the case cannot be posed.
+    return;
+  }
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_cli_build_profile_denied_");
+  const bool setup =
+      write_package(dir, "proj",
+                    "fn main() -> i32 {\n"
+                    "  ret 0\n"
+                    "}\n") &&
+      write_profile(dir, "proj", "[debug]\non-panic = \"backtrace\"\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  const std::string profile = dir.join("proj/.alcy/profile.toml");
+  SilencedOutput silenced;
+  // Readable, the setting parses and the build stands; unreadable, the
+  // profile is refused rather than silently replaced by the default.
+  CHECK(run_build_on(dir, "proj") == 0);
+  CHECK(::chmod(profile.c_str(), 0) == 0);
+  CHECK(run_build_on(dir, "proj") != 0);
+}
+#endif
 
 TEST_CASE("Build refuses a profile nothing declares") {
   io::TempDir dir =

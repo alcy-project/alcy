@@ -11,6 +11,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/file_handle.h"
+#include "fpag/io/io_util.h"
 #include "fpag/io/memory_mapped_file.h"
 
 namespace source {
@@ -28,7 +29,10 @@ base::Result<FileId, SourceError> SourceManager::load(std::string_view path) {
 
   io::FileHandle handle;
   if (!handle.open(entry.path, io::FileAccess::Read)) {
-    return base::make_err(SourceError::OpenFailed);
+    // The handle cannot say why it failed, so the path is asked: an
+    // absent file is a different answer from one that cannot be read.
+    return base::make_err(io::is_file(entry.path) ? SourceError::OpenFailed
+                                                  : SourceError::NotFound);
   }
 
   const usize size = handle.get_size();
