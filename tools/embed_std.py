@@ -32,9 +32,16 @@ def main():
     parser = argparse.ArgumentParser(description="Embed std sources.")
     parser.add_argument("--std-dir", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--depfile", required=True)
     args = parser.parse_args()
 
     std_dir = Path(args.std_dir)
+
+    # Every file this run reads, so the depfile can name them: the
+    # action's declared inputs cannot keep step with the manifests by
+    # hand, and a module whose bytes are stale would be embedded as it
+    # was when the list last changed.
+    read_files = [std_dir / "alcy.toml"]
 
     # The suite manifest names the members in order; each package
     # manifest names its staged modules and its dependencies on other
@@ -53,6 +60,7 @@ def main():
     for name in members:
         with open(std_dir / name / "alcy.toml", "rb") as f:
             manifest = tomllib.load(f)
+        read_files.append(std_dir / name / "alcy.toml")
         if manifest["package"]["name"] != name:
             raise SystemExit(f"lib/std/{name}/alcy.toml names another package")
         pkg_modules[name] = manifest["modules"]["include"]
@@ -125,6 +133,7 @@ def main():
         for mod in pkg_modules[name]:
             symbol = f"STD_{name.upper()}_{mod.upper()}"
             files[symbol] = std_dir / name / (mod + ".al")
+    read_files.extend(files.values())
 
     with open(args.output, "w", encoding="utf-8") as out:
         out.write(
@@ -222,6 +231,12 @@ def main():
             "const usize STD_HINT_COUNT = sizeof(STD_HINTS) / sizeof(STD_HINTS[0]);\n\n"
         )
         out.write("}  // namespace pipeline\n")
+    # The depfile names every file the run read, so ninja re-runs the
+    # action when a module's bytes change. Paths stay relative to the
+    # build directory, where the action's arguments put them.
+    with open(args.depfile, "w", encoding="utf-8") as dep:
+        deps = " ".join(path.as_posix() for path in read_files)
+        dep.write(f"{args.output}: {deps}\n")
     return 0
 
 

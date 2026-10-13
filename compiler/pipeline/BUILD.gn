@@ -24,6 +24,7 @@ action("embed_std") {
     "//lib/std/core/index.al",
     "//lib/std/core/iterator.al",
     "//lib/std/core/mem.al",
+    "//lib/std/core/ops.al",
     "//lib/std/core/option.al",
     "//lib/std/core/range.al",
     "//lib/std/core/result.al",
@@ -31,12 +32,14 @@ action("embed_std") {
     "//lib/std/core/string.al",
     "//lib/std/alloc/prelude.al",
     "//lib/std/alloc/heap.al",
+    "//lib/std/alloc/box.al",
     "//lib/std/alloc/string.al",
     "//lib/std/collections/prelude.al",
     "//lib/std/collections/vec.al",
     "//lib/std/collections/map.al",
     "//lib/std/collections/set.al",
     "//lib/std/fmt/prelude.al",
+    "//lib/std/fmt/display.al",
     "//lib/std/fmt/write.al",
     "//lib/std/fmt/format.al",
     "//lib/std/atomic/prelude.al",
@@ -50,11 +53,17 @@ action("embed_std") {
     "//lib/std/time/prelude.al",
   ]
   outputs = [ "$target_gen_dir/embedded_std.cc" ]
+
+  # The script writes what it read: a module's bytes change without the
+  # list above changing, and stale bytes would be embedded silently.
+  depfile = "$target_gen_dir/embedded_std.d"
   args = [
     "--std-dir",
     rebase_path("//lib/std", root_build_dir),
     "--output",
     rebase_path("$target_gen_dir/embedded_std.cc", root_build_dir),
+    "--depfile",
+    rebase_path("$target_gen_dir/embedded_std.d", root_build_dir),
   ]
 }
 
