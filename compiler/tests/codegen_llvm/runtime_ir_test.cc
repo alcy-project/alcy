@@ -66,6 +66,22 @@ std::string module_text(const llvm::Module& module) {
   return text;
 }
 
+// Whether a runtime built for this target carries the panic walk: the
+// walk reads a frame layout, so the answer follows the machine rather
+// than the host the test runs on.
+bool builds_panic_walk(const codegen_llvm::Target& target) {
+  llvm::LLVMContext context;
+  llvm::Module module("runtime_ir_walk_test", context);
+  const auto usize = llvm::Type::getInt64Ty(context);
+  const auto void_ty = llvm::Type::getVoidTy(context);
+  const auto pointer = opaque_pointer(context);
+  declare(module, "alcy_panic",
+          signature(void_ty, {pointer, usize, pointer, usize}));
+  add_runtime_definitions(module, target,
+                          /*freestanding=*/false, /*backtrace=*/true);
+  return module_text(module).find("llvm.frameaddress") != std::string::npos;
+}
+
 }  // namespace
 
 TEST_CASE("Runtime defines every entry point") {
@@ -300,6 +316,10 @@ TEST_CASE("A panic with backtrace walks the frame chain") {
   if (panic != nullptr) {
     CHECK(panic->hasFnAttribute(llvm::Attribute::NoInline));
   }
+
+  // AArch64's frame layout is the pair the walk reads, on Apple too,
+  // which spells the machine `arm64`.
+  CHECK(builds_panic_walk({"arm64-apple-darwin", ir::PointerWidth::W64}));
 }
 
 TEST_CASE("A panic without walkable frames carries no walk") {
@@ -323,6 +343,13 @@ TEST_CASE("A panic without walkable frames carries no walk") {
   const std::string text = module_text(module);
   CHECK(text.find("llvm.frameaddress") == std::string::npos);
   CHECK(text.find("c\"  at \\00\"") == std::string::npos);
+
+  // Windows x64 is an x86-64 machine whose frame pointer is an
+  // RSP-relative point in the fixed frame by design, so the layout the
+  // walk reads is not there and its panic carries the message and its
+  // site only.
+  CHECK_FALSE(
+      builds_panic_walk({"x86_64-pc-windows-msvc", ir::PointerWidth::W64}));
 }
 
 TEST_CASE("Runtime reaches libc the way the platform expects") {

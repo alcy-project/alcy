@@ -1,4 +1,6 @@
-# A panic under a profile that sets on-panic names the frames the
-# walk can find, innermost first, after the message and its site.
+# A panic under a profile that sets on-panic names the frames the walk
+# can find, innermost first, after the message and its site. The frames
+# are for the hosts whose frame pointer is a chain (ADR-0070).
 exit = "non-zero"
-stderr_contains = ["panic at main.al:2:3: boom", "  at g", "  at f", "  at main"]
+stderr_contains = ["panic at main.al:2:3: boom"]
+walk_stderr_contains = ["  at g", "  at f", "  at main"]

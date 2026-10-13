@@ -55,9 +55,12 @@ The mechanism is frame pointers plus two tables, LLVM only:
   stops after 64 frames, on a null or non-advancing frame, and prints
   nothing when nothing matches rather than guessing. Each frame looks
   up both tables: the function name, then the site after it.
-- The walk reads the x86-64 and AArch64 frame layout (`[fp]` is the
-  caller's frame, `[fp+8]` its return address). On any other target the
-  panic carries its message and site only, even with backtrace on.
+- The walk reads the x86-64 SysV and AArch64 frame layout (`[fp]` is
+  the caller's frame, `[fp+8]` its return address; Apple spells AArch64
+  `arm64`). On any other target the panic carries its message and site
+  only, even with backtrace on: Windows x64's frame pointer is an
+  RSP-relative point in the fixed frame by design, which is not a chain
+  to walk.
 - An optimized build inlines and tail-calls less visibly: `release`
   with backtrace shows the frames that survived, which can be just
   `main`. That is best effort, not a second unwinder, and documented as

@@ -117,11 +117,16 @@ class RuntimeBuilder {
 
   // Whether the panic walker can read this target's frames: the walk
   // assumes the frame pointer addresses the caller's frame and the
-  // word above it holds the return address, which is the x86-64 and
-  // AArch64 layout. Anywhere else the walk stays off and the panic
-  // carries its message and site only.
+  // word above it holds the return address, which is the x86-64 SysV
+  // and AArch64 layout (Apple spells the latter `arm64`). Windows x64
+  // keeps its frame pointer at an RSP-relative point in the fixed frame
+  // by design, which is not a chain, so its panic carries its message
+  // and site only (ADR-0070).
   bool walkable_frames() const {
-    return arch_ == "x86_64" || arch_ == "aarch64";
+    if (windows_) {
+      return false;
+    }
+    return arch_ == "x86_64" || arch_ == "aarch64" || arch_ == "arm64";
   }
 
   // The kernel entry for one architecture: the instruction text and

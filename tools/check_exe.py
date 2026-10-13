@@ -15,9 +15,12 @@ expect.toml:
 
 `exit` is required (integer value or "non-zero"). `stdout` must match
 exactly when present; `*_contains` lists must all appear in the
-respective stream. An optional `args` list is passed to the alcy build
-itself, so a single-file case can select what a package case declares
-in its own files.
+respective stream. `walk_stderr_contains` is asserted where the host's
+panic walk runs: the walk reads the x86-64 SysV and AArch64 frame
+layout, and Windows x64's frame pointer is not that layout (ADR-0070).
+An optional `args` list is passed to the alcy build itself, so a
+single-file case can select what a package case declares in its own
+files.
 
 Cases are copied to a scratch directory, built to executables with
 `alcy compile` for a single file or `alcy build` for a package, executed,
@@ -26,6 +29,7 @@ and asserted. Directories holding alcy.toml build as packages.
 
 import argparse
 import os
+import platform
 import shutil
 import signal
 import subprocess
@@ -52,6 +56,7 @@ def parse_expect(path: Path):
     expected_stdout = data.get("stdout")
     stdout_contains = data.get("stdout_contains", [])
     stderr_contains = data.get("stderr_contains", [])
+    walk_stderr_contains = data.get("walk_stderr_contains", [])
 
     # Extra arguments for the alcy build itself, so a single-file case
     # can select what a package case declares in its own files.
@@ -59,7 +64,14 @@ def parse_expect(path: Path):
     if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
         sys.exit(f"{path}: 'args' must be a list of strings")
 
-    return expected_exit, expected_stdout, stdout_contains, stderr_contains, args
+    return (
+        expected_exit,
+        expected_stdout,
+        stdout_contains,
+        stderr_contains,
+        walk_stderr_contains,
+        args,
+    )
 
 
 # Sanitizers for a generated program. Address is the one that finds
@@ -128,6 +140,18 @@ def is_freestanding(case_dir: Path) -> bool:
     return bool(data.get("freestanding", False))
 
 
+def host_walks_frames() -> bool:
+    """Whether the host's panic walk runs (ADR-0070).
+
+    The walk reads the x86-64 SysV and AArch64 frame layout; Windows
+    x64's frame pointer is an RSP-relative point in the fixed frame by
+    design, and any other machine has no layout the walk knows.
+    """
+    if sys.platform == "win32":
+        return False
+    return platform.machine().lower() in {"x86_64", "aarch64", "arm64"}
+
+
 def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
     is_package = (case_dir / "alcy.toml").is_file()
     main_al = case_dir / "main.al"
@@ -143,9 +167,16 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
         # runtime, so it runs uninstrumented rather than not at all.
         sanitize = False
 
-    expected_exit, expected_stdout, stdout_contains, stderr_contains, extra_args = (
-        parse_expect(expect_path)
-    )
+    (
+        expected_exit,
+        expected_stdout,
+        stdout_contains,
+        stderr_contains,
+        walk_stderr_contains,
+        extra_args,
+    ) = parse_expect(expect_path)
+    if host_walks_frames():
+        stderr_contains = [*stderr_contains, *walk_stderr_contains]
     problems = []
 
     with tempfile.TemporaryDirectory(prefix="alcy_exe_case") as tmp:

@@ -1,10 +1,7 @@
 # An optimized backtrace shows the frames that survived. This input
-# keeps them all; a loop body does not inline away.
+# keeps them all; a loop body does not inline away. The frames are for
+# the hosts whose frame pointer is a chain (ADR-0070).
 exit = "non-zero"
 args = ["--release", "--on-panic=backtrace"]
-stderr_contains = [
-  "panic at main.al:2:3: boom",
-  "  at g (main.al:2:3)",
-  "  at f (main.al:10:7)",
-  "  at main (main.al:16:3)",
-]
+stderr_contains = ["panic at main.al:2:3: boom"]
+walk_stderr_contains = ["  at g (main.al:2:3)", "  at f (main.al:10:7)", "  at main (main.al:16:3)"]
