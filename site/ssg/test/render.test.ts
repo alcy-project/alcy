@@ -28,6 +28,7 @@ function render(language: "en" | "ja", blocks: Block[]): string {
     highlight: (code) => code,
     resolveLink: (url) => url,
     boot: "INLINE_BOOT",
+    stamp: { text: "TESTSTAMP", url: "https://example.test/commit/TESTSTAMP" },
   });
 }
 
@@ -55,6 +56,14 @@ test("sections gain anchors and an outline beside the article", () => {
 test("a page without sections carries no outline", () => {
   const html = render("en", [prose]);
   equal(html.includes("guide-outline"), false);
+});
+
+test("the footer carries the build's stamp, linked to its source", () => {
+  const html = render("en", [prose]);
+  match(
+    html,
+    /<span>alcy · <a href="https:\/\/example\.test\/commit\/TESTSTAMP" rel="noopener">TESTSTAMP<\/a><\/span>/,
+  );
 });
 
 test("the theme bootstrap rides inline in the head", () => {
@@ -132,9 +141,10 @@ test("an index route is named at its directory", () => {
 });
 
 test("the 404 page keeps its links on the deployment root", () => {
-  const html = renderNotFound("INLINE_BOOT");
+  const html = renderNotFound("INLINE_BOOT", { text: "TESTSTAMP", url: "" });
   match(html, /<script>INLINE_BOOT<\/script>/);
   equal(html.includes("boot.js"), false);
+  match(html, /<span>alcy · TESTSTAMP<\/span>/);
   match(html, /name="robots" content="noindex"/);
   match(html, /location\.pathname\.startsWith\("\/alcy\/"\)/);
   match(html, /href="guide\/"/);

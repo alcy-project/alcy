@@ -36,6 +36,8 @@ import { otherLanguages, prefixOf } from "./languages.js";
 import type { Language } from "./languages.js";
 import { createLinkChecker } from "./links.js";
 import { renderGuideIndex, renderGuidePage, renderNotFound, sectionsOf } from "./render.js";
+import type { Stamp } from "./render.js";
+import { stampMark } from "./render.js";
 import { renderSettings } from "./shell.js";
 import { stampTemplate } from "./templates.js";
 import type { TemplateValues } from "./templates.js";
@@ -51,6 +53,8 @@ interface Options {
   grammar?: string;
   highlights?: string;
   treeSitter?: string;
+  stamp: string;
+  stampUrl: string;
 }
 
 interface Diagnostic {
@@ -107,6 +111,8 @@ function parseArgs(argv: string[]): Options {
     grammar: values.get("--grammar"),
     highlights: values.get("--highlights"),
     treeSitter: values.get("--tree-sitter"),
+    stamp: values.get("--stamp") ?? "unknown",
+    stampUrl: values.get("--stamp-url") ?? "",
   };
   const grammarParts = [options.grammar, options.highlights, options.treeSitter];
   if (grammarParts.some((part) => part !== undefined) && grammarParts.some((part) => part === undefined)) {
@@ -202,6 +208,7 @@ function templateValues(
   language: Language,
   treePath: string,
   boot: string,
+  stamp: Stamp,
 ): TemplateValues {
   const route = prefixOf(language) + treePath;
   const dir = posix.dirname(route);
@@ -220,6 +227,7 @@ function templateValues(
     pageLinks: pageLinks(language, treePath),
     social: templateSocial(language, treePath, route),
     boot: `<script>${boot}</script>`,
+    stamp: stampMark(stamp),
   };
 }
 
@@ -235,8 +243,9 @@ function writeSiteRootFiles(
   options: Options,
   pages: readonly GuidePage[],
   boot: string,
+  stamp: Stamp,
 ): void {
-  writeFileSync(join(options.dist, "404.html"), renderNotFound(boot));
+  writeFileSync(join(options.dist, "404.html"), renderNotFound(boot, stamp));
   writeFileSync(
     join(options.dist, "favicon.svg"),
     readFileSync(join(options.site, "favicon.svg")),
@@ -298,6 +307,7 @@ function readBoot(site: string): string {
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
+  const stamp: Stamp = { text: options.stamp, url: options.stampUrl };
   const sources = discoverGuide(options.docs);
   if (sources.length === 0) {
     throw new Error(`${options.docs} has no guide pages`);
@@ -345,7 +355,7 @@ async function main(): Promise<void> {
     writePage(
       options.dist,
       `${prefixOf(language)}guide/index.html`,
-      renderGuideIndex(pages, language, boot),
+      renderGuideIndex(pages, language, boot, stamp),
     );
     for (const template of templates) {
       writePage(
@@ -354,7 +364,7 @@ async function main(): Promise<void> {
         stampTemplate(
           template.source,
           language,
-          templateValues(language, template.treePath, boot),
+          templateValues(language, template.treePath, boot, stamp),
         ),
       );
     }
@@ -373,12 +383,13 @@ async function main(): Promise<void> {
           highlight,
           resolveLink: (url) => checker.resolve(url, page),
           boot,
+          stamp,
         }),
       );
     }
   }
 
-  writeSiteRootFiles(options, allPages, boot);
+  writeSiteRootFiles(options, allPages, boot, stamp);
 
   const errors = [...fences.errors, ...checker.errors];
   if (errors.length > 0) {

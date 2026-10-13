@@ -374,6 +374,33 @@ def copy_compiler(dist_dir: Path, build_dir: Path, compiler_dir: Path | None) ->
     return True
 
 
+# The provenance every page's footer shows: the tag when the built
+# commit carries one (a release redeploy), the short sha otherwise. CI
+# passes a release build's tag through `ALCY_BUILD_STAMP`; everything
+# else asks git, and a build outside a repository says so.
+REPO_URL = "https://github.com/alcy-project/alcy"
+STAMP_SHA_LENGTH = 9
+
+
+def git_text(repo_root: Path, arguments: list[str]) -> str:
+    result = subprocess.run(
+        ["git", *arguments], cwd=repo_root, capture_output=True, text=True
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def build_stamp(repo_root: Path) -> tuple[str, str]:
+    tag = os.environ.get("ALCY_BUILD_STAMP", "").strip()
+    if tag == "":
+        tag = git_text(repo_root, ["describe", "--exact-match", "--tags", "HEAD"])
+    if tag != "":
+        return tag, f"{REPO_URL}/tree/{tag}"
+    sha = git_text(repo_root, ["rev-parse", f"--short={STAMP_SHA_LENGTH}", "HEAD"])
+    if sha != "":
+        return sha, f"{REPO_URL}/commit/{sha}"
+    return "unknown", ""
+
+
 def build_guide(dist_dir: Path) -> None:
     bun = shutil.which("bun")
     if bun is None:
@@ -381,6 +408,7 @@ def build_guide(dist_dir: Path) -> None:
     generator = BUILD_DIR / "ssg" / "src" / "main.js"
     if not generator.is_file():
         raise FileNotFoundError(f"{generator} is missing; run the TypeScript build")
+    stamp, stamp_url = build_stamp(project_root_dir)
     command = [
         bun,
         str(generator),
@@ -394,6 +422,10 @@ def build_guide(dist_dir: Path) -> None:
         str(project_root_dir),
         "--alcy",
         str(project_root_dir / "compiler" / "playground" / "js" / "alcy.mjs"),
+        "--stamp",
+        stamp,
+        "--stamp-url",
+        stamp_url,
     ]
     grammar = dist_dir / PAGE_SUBDIR / "grammar"
     if (grammar / "tree-sitter-alcy.wasm").is_file():

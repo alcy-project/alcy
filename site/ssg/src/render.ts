@@ -27,6 +27,15 @@ export interface PageOptions {
   // request before first paint is a round trip on every cold load, and
   // the script changes only when the pages do.
   boot: string;
+  // The build's provenance, shown in the footer.
+  stamp: Stamp;
+}
+
+// Where this build came from: the tag of a release build, the commit's
+// short sha otherwise.
+export interface Stamp {
+  text: string;
+  url: string;
 }
 
 // The prefix from a page's directory to the built site's root, where the
@@ -74,9 +83,18 @@ function header(route: string, language: Language, treePath: string): string {
     </header>`;
 }
 
-function footer(): string {
+// The footer's provenance: the build's stamp, linked to the commit or
+// tag it names when there is somewhere to point.
+export function stampMark(stamp: Stamp): string {
+  const text = escapeHtml(stamp.text);
+  return stamp.url === ""
+    ? text
+    : `<a href="${stamp.url}" rel="noopener">${text}</a>`;
+}
+
+function footer(stamp: Stamp): string {
   return `<footer class="site-footer">
-      <span>alcy · pre-MVP</span>
+      <span>alcy · ${stampMark(stamp)}</span>
       <a href="https://github.com/alcy-project/alcy" rel="noopener">GitHub</a>
     </footer>`;
 }
@@ -276,7 +294,7 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
       </main>
     </div>
 
-    ${footer()}
+    ${footer(options.stamp)}
 
     <script type="module" src="${assets}shared/shell.js"></script>${guideJs}
   </body>
@@ -290,6 +308,7 @@ export function renderGuideIndex(
   pages: readonly GuidePage[],
   language: Language,
   boot: string,
+  stamp: Stamp,
 ): string {
   const route = `${prefixOf(language)}guide/index.html`;
   const assets = assetPrefix(route);
@@ -325,7 +344,7 @@ export function renderGuideIndex(
       </ol>
     </main>
 
-    ${footer()}
+    ${footer(stamp)}
 
     <script type="module" src="${assets}shared/shell.js"></script>
   </body>
@@ -338,7 +357,7 @@ export function renderGuideIndex(
 // content, so every URL here is written from the deployment root and the
 // script below picks that root: the project's path on Pages, or the
 // server's root when the built directory is served locally.
-export function renderNotFound(boot: string): string {
+export function renderNotFound(boot: string, stamp: Stamp): string {
   return `<!doctype html>
 <!-- Copyright 2026 The Alcy Project Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception -->
@@ -381,7 +400,7 @@ export function renderNotFound(boot: string): string {
       </div>
     </main>
 
-    ${footer()}
+    ${footer(stamp)}
   </body>
 </html>
 `;

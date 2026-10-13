@@ -3,6 +3,9 @@ name: Site
 on:
   push:
     branches: [main]
+    # A release tag redeploys the same commit with the tag as the build's
+    # stamp, so the published footer names the release.
+    tags: ["v*"]
     paths: &site_paths
       - site/**
       - docs/guide/**
@@ -137,6 +140,11 @@ jobs:
 
       - name: Assemble the Site
         shell: bash
+        env:
+          # A tagged build names itself by the tag; a branch build falls
+          # back to its commit. The checkout is shallow, so the event's
+          # ref is the reliable source for the tag.
+          ALCY_BUILD_STAMP: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: uv run ./tools/site.py build --mode=release --build-subdir="$BUILD_SUBDIR"
 
       - name: Configure Pages

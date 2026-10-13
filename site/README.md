@@ -54,7 +54,9 @@ under the path that was asked for; `sitemap.xml` and `robots.txt` from
 the page list; `search-index.json`, the guide's pages and sections that
 `shared/search.ts` reads; `og.png`, the social card every page cites;
 and the icon. Every page carries its own canonical address and the
-opposite language's alternate.
+opposite language's alternate, and its footer names the build: the
+commit's short sha, or the tag when the build came from a tagged
+commit (`ALCY_BUILD_STAMP` lets CI hand the tag down).
 
 ## Languages
 
