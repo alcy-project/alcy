@@ -4,5 +4,6 @@ stdout = """
 drop 1
 drop 2
 cleared
+11
 drop 3
 """

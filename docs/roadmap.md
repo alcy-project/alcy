@@ -109,12 +109,11 @@ peripheral work lives in `backlog.md`. The language record lives in
   remains of it: interning the type per literal, the coercion rule,
   and ending a closure value through its environment. `Box<T>` landed
   over the allocator's `MaybeUninit<T>`: `new` moves the value in,
-  `get`/`get_mut` borrow it, and the destructor ends the pointee with
-  the first item's `drop_in_place` and releases the block - a chain of
-  boxes drops every link, which the sanitizer run checks. Its
-  acceptance case is narrower than planned: a recursive walk wants
-  either `into_inner` (a spent handle the destructor can recognize) or
-  by-reference pattern bindings, and both are recorded in the backlog. Then the owning
+  `get`/`get_mut` borrow it, `into_inner` moves the pointee out, and
+  the destructor ends the pointee with the first item's
+  `drop_in_place` and releases the block. A `live` flag is what a
+  spent handle says, so a recursive enum's consuming walk frees every
+  link exactly once - the sanitizer run checks it. Then the owning
   environment: non-Copy captures move in, the environment is
   allocated where the closure value can own and drop it, the `Copy`
   restriction and the frame-escape refusal retire, and frame-crossing

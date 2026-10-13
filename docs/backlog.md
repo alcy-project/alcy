@@ -6,12 +6,13 @@ replaced. The foundations are in `roadmap.md`.
 ## Open
 
 - [ ] Doc-comment collection in the parser (the SSG itself waits).
-- [ ] `Box::into_inner` (and a recursive walk through `Box`) waits for a
-  spent-handle representation: the destructor has to skip a block that
-  was released, and the assignment that would say so (`self.cell = 0
-  as *mut T`) does not appear in the emitted IR when a `read` and a
-  `dealloc` precede it, so the destructor still sees a live handle.
-  By-reference pattern bindings would cover the walk on their own.
+- [ ] Matching through a borrow mishandles ownership: `match *e` where
+  `e: &E` and `E` carries a non-Copy payload records the move in the
+  borrow, so the payload is ended inside the match and the borrow's
+  owner ends it again - the program double-frees at scope exit, with
+  nothing but a wildcard pattern in between, while the same match over
+  Copy payloads hides it. Either the move has to be diagnosed or the
+  payloads have to bind by reference.
 - [ ] `map` has no constructor: its result type comes from a closure's
   return type, which inference cannot read before the closure is
   checked. A slice that checks a closure argument first, or that lets

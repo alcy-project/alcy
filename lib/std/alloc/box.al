@@ -9,12 +9,12 @@
 // move-only, because a buffer behind an exclusive reference is not a
 // value to copy.
 //
-// The pointee is reached through `get`/`get_mut`: an owning deref is a
-// language slice of its own (see `docs/backlog.md`), and so is
-// releasing the block while moving the pointee out (`into_inner`),
-// which needs a spent handle the destructor can recognize.
+// `into_inner` moves the pointee out and releases the block; `live`
+// is what says so. The destructor reads it and skips a handle that
+// has nothing left to end, so the block is not released twice.
 pub struct Box<T> {
   cell: &mut MaybeUninit<T>,
+  live: bool,
 }
 
 impl<T> Box<T> {
@@ -22,7 +22,7 @@ impl<T> Box<T> {
   pub fn new(value: T) -> Box<T> {
     cell := unsafe { alloc::<T>(1) }
     uninit_write(cell, value)
-    ret Box { cell: cell }
+    ret Box { cell: cell, live: true }
   }
 
   // Borrows the pointee.
@@ -34,7 +34,18 @@ impl<T> Box<T> {
     ret unsafe { uninit_assume(self.cell) }
   }
 
+  // Moves the pointee out and releases the block; the handle is spent.
+  pub fn into_inner(mut self: Box<T>) -> T {
+    value := unsafe { read(uninit_ref(self.cell) as *T) }
+    unsafe { dealloc(self.cell, 1) }
+    self.live = false
+    ret value
+  }
+
   pub fn drop(self: Box<T>) {
+    if !self.live {
+      ret
+    }
     unsafe { drop_in_place::<T>(uninit_assume(self.cell)) }
     unsafe { dealloc(self.cell, 1) }
   }
