@@ -6,13 +6,21 @@ replaced. The foundations are in `roadmap.md`.
 ## Open
 
 - [ ] Doc-comment collection in the parser (the SSG itself waits).
-- [ ] Matching through a borrow mishandles ownership: `match *e` where
-  `e: &E` and `E` carries a non-Copy payload records the move in the
-  borrow, so the payload is ended inside the match and the borrow's
-  owner ends it again - the program double-frees at scope exit, with
-  nothing but a wildcard pattern in between, while the same match over
-  Copy payloads hides it. Either the move has to be diagnosed or the
-  payloads have to bind by reference.
+- [ ] Moving a non-Copy value out of a reference is undiagnosed:
+  `w := *r` where `r: &Vec<i32>` compiles, and `match *e` over an enum
+  with a non-Copy payload ends the payload inside the match while the
+  borrow's owner ends it again, so the program double-frees at scope
+  exit - a wildcard pattern is enough, and payloads that are all Copy
+  hide it. A `*` in a value position lowers to a plain load, a bitwise
+  copy, so the borrow pass's rule for a move out of a borrowed place
+  never sees a move, and the drop pass then owns the copy. The e2e
+  case `ok-match-ref-payload` is build-only, so its runtime went
+  unchecked. The copy is made where a value-position `*` lowers (the
+  deref case of `lower_expr`, through `place_addr` and `materialize`);
+  it becomes owned where it lands in a place, so `w := *r` stores it
+  into a local the drop pass then ends, while `(*r).n` reads a field
+  out of a scratch copy and stays sound. A diagnosis needs that
+  provenance, or the move has to reach the borrow pass as a place.
 - [ ] `map` has no constructor: its result type comes from a closure's
   return type, which inference cannot read before the closure is
   checked. A slice that checks a closure argument first, or that lets
