@@ -472,12 +472,13 @@ class RuntimeBuilder {
     builder_.CreateCall(write_all_, {fd(2), text_constant(": "),
                                      llvm::ConstantInt::get(usize_, 2)});
     builder_.CreateCall(write_all_, {fd(2), message.text, message.len});
+    // The report ends its line whether or not frames follow: a message
+    // glued to whatever prints next reads as a bug of its own.
+    builder_.CreateCall(
+        write_all_, {fd(2), newline_text_, llvm::ConstantInt::get(usize_, 1)});
     // The walk needs frames it can read; without them the message and
     // its site are the whole report.
     if (backtrace_ && walkable_frames()) {
-      // The frames start on their own line, after the message.
-      builder_.CreateCall(write_all_, {fd(2), newline_text_,
-                                       llvm::ConstantInt::get(usize_, 1)});
       build_panic_walk(end);
     } else {
       builder_.CreateBr(end);

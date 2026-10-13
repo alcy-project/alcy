@@ -1220,6 +1220,10 @@ void Emitter::emit_runtime_bodies() {
     local_get(0);
     guard_null_len(0);
     call(WRITE_ALL);
+    i32_const(2);
+    i32_const(static_cast<i32>(newline_offset()));
+    i32_const(1);
+    call(WRITE_ALL);
     i32_const(1);
     call(PROC_EXIT);
     op(OP_UNREACHABLE);
