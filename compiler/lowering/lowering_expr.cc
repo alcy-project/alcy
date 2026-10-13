@@ -352,8 +352,8 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
       // A reference local is a place that holds the address; the place
       // `*p` names is the one that address points at. A raw pointer is
       // the address itself and names the same kind of place.
-      Val inner = materialize(
-          lower_expr(node.payload.get<ast::ExprDeref>().inner, nullptr));
+      const ast::ExprIdx inner_expr = node.payload.get<ast::ExprDeref>().inner;
+      Val inner = materialize(lower_expr(inner_expr, nullptr));
       if (failed) {
         return Val{size_one, error_type(), true, false};
       }
@@ -365,12 +365,38 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
       }
       const ir::TypeIdx pointee =
           builder.ref_types()[builder.types()[inner.type.idx].as_ref()].pointee;
-      return Val{inner.op, pointee, true, true};
+      // A shared or exclusive reference names a place its taker still
+      // owns, unlike a raw pointer, which carries no owner. A reference
+      // an unsafe call produced is that call's to name: the contract it
+      // asks the caller to keep, not the borrow rule, governs reading
+      // what it points at.
+      bool borrowed = tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef;
+      if (borrowed && unsafe_call_result(inner_expr)) {
+        borrowed = false;
+      }
+      return Val{inner.op, pointee, true, true, borrowed};
     }
     default:
       unsupported(node.span, "borrowed temporary");
       return Val{size_one, error_type(), true, false};
   }
+}
+
+// Whether `expr` is a call to a function declared `unsafe`: such a call
+// is the caller's own contract with storage the borrow rule does not
+// name, which is what lets the allocator's accessors hand out a
+// reference whose pointee is read as a move (ADR-0050).
+bool Lowerer::unsafe_call_result(ast::ExprIdx expr) const {
+  const ast::ExprNode& node = ast.exprs[expr];
+  if (node.kind != ast::ExprKind::Call) {
+    return false;
+  }
+  const ast::ExprIdx callee = node.payload.get<ast::ExprCall>().callee;
+  const analyzer::CheckedModule::CallTarget* target = call_target(callee);
+  if (target == nullptr || target->is_method) {
+    return false;
+  }
+  return pkg.modules[target->module].functions[target->index].is_unsafe;
 }
 
 // Whether `expr` names storage rather than a temporary: a local or a
@@ -451,8 +477,9 @@ Val Lowerer::checked_index_addr(Val base, Val position, diag::Span span) {
     if (failed) {
       return Val{size_one, error_type(), true, false};
     }
-    return Val{to_operand(elem, shape.element), shape.element, true,
-               base.place};
+    // The elements belong to whatever owns the buffer the view reads.
+    return Val{to_operand(elem, shape.element), shape.element, true, base.place,
+               true};
   }
   if (!base.address || tag_of(base.type) != ir::TypeTag::Array) {
     unsupported(span, "index through reference");
@@ -472,7 +499,7 @@ Val Lowerer::checked_index_addr(Val base, Val position, diag::Span span) {
           emit(ir::Opcode::GetElementPtr, shape.element,
                {base.op, zero_i32, position.op}, {.inbounds = true});
       return Val{to_operand(gep, shape.element), shape.element, true,
-                 base.place};
+                 base.place, base.borrowed};
     }
   }
   const ir::TypeIdx usize_ty = usize_type();
@@ -508,7 +535,8 @@ Val Lowerer::checked_index_addr(Val base, Val position, diag::Span span) {
   const ir::RegisterIdx gep =
       emit(ir::Opcode::GetElementPtr, shape.element,
            {base.op, zero_i32, use_value(wide)}, {.inbounds = true});
-  return Val{to_operand(gep, shape.element), shape.element, true, base.place};
+  return Val{to_operand(gep, shape.element), shape.element, true, base.place,
+             base.borrowed};
 }
 
 ir::OperandIdx Lowerer::index_operand(u32 index) {
@@ -2720,10 +2748,11 @@ Val Lowerer::lower_spec_index(ast::ExprIdx expr,
     return Val{size_one, error_type(), as_place, false};
   }
   // The returned reference is the element's address, the way a
-  // dereference names the place a pointer points at.
+  // dereference names the place a pointer points at, and the element
+  // belongs to whoever owns the receiver.
   const ir::TypeIdx element =
       builder.ref_types()[builder.types()[info.ret.idx].as_ref()].pointee;
-  const Val place{to_operand(dst, info.ret), element, true, true};
+  const Val place{to_operand(dst, info.ret), element, true, true, true};
   return as_place ? place : materialize(place);
 }
 
@@ -2915,6 +2944,9 @@ Val Lowerer::field_addr(Val base, std::string_view name, diag::Span span) {
   ir::OperandIdx ptr_op = size_one;
   ir::TypeIdx struct_ty = error_type();
   const ir::TypeTag tag = tag_of(base.type);
+  // A field of a place reached through a reference is borrowed too: the
+  // value it holds belongs to whoever owns the referent.
+  bool borrowed = base.borrowed;
   if (base.address && !is_ref_tag(tag)) {
     ptr_op = base.op;
     struct_ty = base.type;
@@ -2924,6 +2956,9 @@ Val Lowerer::field_addr(Val base, std::string_view name, diag::Span span) {
     struct_ty = builder.state()
                     .ref_types[builder.state().types[base.type].as_ref()]
                     .pointee;
+    if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
+      borrowed = true;
+    }
   } else {
     const Val spilled = address_of(base);
     ptr_op = spilled.op;
@@ -2951,7 +2986,8 @@ Val Lowerer::field_addr(Val base, std::string_view name, diag::Span span) {
   const ir::RegisterIdx gep =
       emit(ir::Opcode::GetElementPtr, field_type,
            {ptr_op, zero_i32, index_operand(index)}, {.inbounds = true});
-  return Val{to_operand(gep, field_type), field_type, true, base.place};
+  return Val{to_operand(gep, field_type), field_type, true, base.place,
+             borrowed};
 }
 
 Val Lowerer::lower_struct(ast::ExprIdx expr) {
@@ -4082,7 +4118,12 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     case ast::ExprKind::Field: {
       const ast::ExprField& field = node.payload.get<ast::ExprField>();
-      Val base = lower_expr(field.receiver, nullptr);
+      // A rooted receiver is projected where it lives: reading a field
+      // out of a copy would copy the whole value, and a field of a
+      // borrowed place would look like a move out of the borrow.
+      Val base = is_rooted_place(field.receiver)
+                     ? place_addr(field.receiver)
+                     : lower_expr(field.receiver, nullptr);
       if (failed || terminated_cur()) {
         return stopped_value();
       }

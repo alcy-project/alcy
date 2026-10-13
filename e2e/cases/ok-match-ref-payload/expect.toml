@@ -1,3 +1,0 @@
-exit = 0
-subcommand = "build"
-not_contains = ["error"]

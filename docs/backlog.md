@@ -6,21 +6,11 @@ replaced. The foundations are in `roadmap.md`.
 ## Open
 
 - [ ] Doc-comment collection in the parser (the SSG itself waits).
-- [ ] Moving a non-Copy value out of a reference is undiagnosed:
-  `w := *r` where `r: &Vec<i32>` compiles, and `match *e` over an enum
-  with a non-Copy payload ends the payload inside the match while the
-  borrow's owner ends it again, so the program double-frees at scope
-  exit - a wildcard pattern is enough, and payloads that are all Copy
-  hide it. A `*` in a value position lowers to a plain load, a bitwise
-  copy, so the borrow pass's rule for a move out of a borrowed place
-  never sees a move, and the drop pass then owns the copy. The e2e
-  case `ok-match-ref-payload` is build-only, so its runtime went
-  unchecked. The copy is made where a value-position `*` lowers (the
-  deref case of `lower_expr`, through `place_addr` and `materialize`);
-  it becomes owned where it lands in a place, so `w := *r` stores it
-  into a local the drop pass then ends, while `(*r).n` reads a field
-  out of a scratch copy and stays sound. A diagnosis needs that
-  provenance, or the move has to reach the borrow pass as a place.
+- [ ] A pattern that binds a non-`Copy` payload of a borrowed
+  scrutinee is refused, so `match *e` over an enum that carries an
+  aggregate can only bind `Copy` payloads. Binding the payload by
+  reference - what a shared borrow would want - is the ergonomics that
+  would let the read through.
 - [ ] `map` has no constructor: its result type comes from a closure's
   return type, which inference cannot read before the closure is
   checked. A slice that checks a closure argument first, or that lets

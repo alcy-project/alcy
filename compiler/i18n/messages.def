@@ -301,6 +301,7 @@
   F(LowerCompEngineMismatch, "Internal error: the comp engines disagree on '{}'") \
   F(LowerCompOverflow, "Integer overflow in constant evaluation") \
   F(LowerIrVerificationFailed, "Lowered IR failed verification") \
+  F(LowerMoveOutOfBorrow, "Cannot move a non-`Copy` value out of a reference") \
   F(LowerMoveOutOfDestructor, "Cannot move a field out of '{}'; its type implements `drop`") \
   F(LowerNameTableExhausted, "The compiler's name table cannot hold the names this package interns") \
   F(LowerUnreachableExpression, "Unreachable expression") \

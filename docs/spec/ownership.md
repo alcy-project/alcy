@@ -5,6 +5,11 @@
 - `&T` (shared reference): freely duplicable; any number may coexist.
 - `&mut T` (exclusive reference): at most one live at a time, and no
   `&T` to the same place may be live while it is.
+- A non-`Copy` value cannot be moved out of a reference: reading `*r`
+  as a value, taking a field out of the referent, and a pattern that
+  binds a payload by value are all refused. A reference an `unsafe`
+  call produced is the caller's contract rather than a borrow
+  (ADR-0050), so reading through one is a move.
 - A closure's capture list declares what its environment holds: a
   bare name by value (a move, or a copy for a Copy type), `&name` as
   a shared borrow, and `&mut name` as an exclusive borrow. The

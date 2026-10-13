@@ -45,6 +45,7 @@
 #include "ir/storage_builder.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
+#include "ir/type_util.h"
 #include "ir/verifier.h"
 #include "lowering/diag_code.h"
 #include "lowering/lowerer.h"
@@ -284,6 +285,16 @@ void Lowerer::emit_void(ir::Opcode op,
 Val Lowerer::materialize(Val v) {
   if (!v.address || tag_of(v.type) == ir::TypeTag::Never) {
     return v;
+  }
+  // A borrowed place holds what its reference's owner still ends:
+  // reading a non-`Copy` value out of it would leave that value owned
+  // twice. A raw pointer names no owner, so its place reads as a move,
+  // and a reference is a pointer: moving it transfers no value.
+  if (v.borrowed && !is_copy(v.type) && !ir::is_pointer_type(tag_of(v.type))) {
+    const u32 index = bag.emit<i18n::Key::LowerMoveOutOfBorrow>(
+        diag::Severity::Error, diag::Stage::Lowering,
+        DiagCode::ValueOutOfBorrow, cur_span_);
+    (void)index;
   }
   const ir::RegisterIdx reg = emit(ir::Opcode::Load, v.type, {v.op});
   return Val{to_operand(reg, v.type), v.type, false, false};

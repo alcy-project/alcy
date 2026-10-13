@@ -47,6 +47,10 @@ struct Val {
   ir::TypeIdx type;
   bool address = false;
   bool place = false;
+  // A place named through a shared or exclusive reference: the value it
+  // holds belongs to whoever took the reference, so reading it out as a
+  // value would take what that owner still ends.
+  bool borrowed = false;
 };
 
 struct Local {
@@ -312,6 +316,7 @@ class Lowerer {
   ir::OperandIdx imm_from_u64(ir::TypeTag tag, ir::TypeIdx type, u64 value);
   Val place_addr(ast::ExprIdx expr);
   bool is_rooted_place(ast::ExprIdx expr) const;
+  bool unsafe_call_result(ast::ExprIdx expr) const;
   Val checked_index_addr(Val base, Val position, diag::Span span);
   // Whether a checked type is a `Range<T>` value. The interval types
   // are reserved to core, so the shape is the declaration's.
