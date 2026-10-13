@@ -30,6 +30,7 @@ and asserted. Directories holding alcy.toml build as packages.
 import argparse
 import os
 import platform
+import re
 import shutil
 import signal
 import subprocess
@@ -152,6 +153,94 @@ def host_walks_frames() -> bool:
     return platform.machine().lower() in {"x86_64", "aarch64", "arm64"}
 
 
+def run_tool(args: list[str]) -> str:
+    proc = subprocess.run(args, capture_output=True, text=True, errors="replace")
+    return proc.stdout
+
+
+def image_facts(exe: Path) -> str:
+    """What a failed walk resolution needs read back from the image.
+
+    A frame line is the frame chain and the two tables answering
+    together, so a line the source cannot explain is one of those three
+    answering differently than the compiler meant. The symbols, the
+    program functions' disassembly, and every word in the constant data
+    that names an address are printed, so the answer can be read back on
+    the host that produced it.
+    """
+    nm = run_tool(["llvm-nm", "-n", str(exe)])
+    names: list[str] = []
+    symbols: dict[int, str] = {}
+    for line in nm.splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        name = parts[-1]
+        try:
+            addr = int(parts[0], 16)
+        except ValueError:
+            continue
+        symbols[addr] = name
+        if name.endswith((":g", ":f", ":alcy_main")) or name in (
+            "alcy_panic",
+            "_alcy_panic",
+            "alcy_write_all",
+            "_alcy_write_all",
+        ):
+            names.append(name)
+
+    out = ["--- symbols ---", nm.rstrip()]
+    if names:
+        disassembly = run_tool(
+            [
+                "llvm-objdump",
+                "-d",
+                f"--disassemble-symbols={','.join(names)}",
+                str(exe),
+            ]
+        )
+        out += ["--- program ---", disassembly.rstrip()]
+
+    # Every eight-byte word naming an address, wherever it is: the tables
+    # are the ones that matter, and a word that names a function or a
+    # name string is one of their entries. Words are read from the
+    # constant sections, where the linker places both.
+    floor = min(symbols) if symbols else 0
+    lines: list[str] = []
+    in_constant = False
+    for line in run_tool(["llvm-objdump", "-s", str(exe)]).splitlines():
+        header = re.match(r"Contents of section (\S+):", line)
+        if header is not None:
+            name = header.group(1)
+            in_constant = "const" in name or ".data.rel.ro" in name
+            continue
+        if not in_constant:
+            continue
+        m = re.match(r"\s*([0-9a-f]{4,16})\s+((?:[0-9a-f]{2,8}\s*)+)", line)
+        if m is None:
+            continue
+        base = int(m.group(1), 16)
+        hexstr = m.group(2).split("  ")[0].replace(" ", "")
+        if len(hexstr) % 2:
+            hexstr = hexstr[:-1]
+        blob = bytes.fromhex(hexstr)
+        for offset in range(0, len(blob) - 7, 8):
+            raw = int.from_bytes(blob[offset : offset + 8], "little")
+            # A plain pointer, or a chained rebase fixup whose low 36
+            # bits are the address it will carry once dyld is done.
+            values = [raw]
+            if raw >> 63 == 0:
+                values.append(raw & ((1 << 36) - 1))
+            for value in values:
+                if floor <= value < floor + 0x10000000:
+                    near = max((a for a in symbols if a <= value), default=None)
+                    label = symbols.get(value, symbols.get(near, "?"))
+                    lines.append(f"{base + offset:#010x} {value:#010x} {label}")
+                    break
+    out += ["--- words naming an address ---", "\n".join(lines)]
+    return "\n".join(out) + "\n"
+
+
 def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
     is_package = (case_dir / "alcy.toml").is_file()
     main_al = case_dir / "main.al"
@@ -178,6 +267,7 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
     if host_walks_frames():
         stderr_contains = [*stderr_contains, *walk_stderr_contains]
     problems = []
+    missing_walk = False
 
     with tempfile.TemporaryDirectory(prefix="alcy_exe_case") as tmp:
         work = Path(tmp)
@@ -256,6 +346,8 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
         for needle in stderr_contains:
             if needle not in proc.stderr:
                 problems.append(f"missing stderr: {needle!r}")
+                if needle in walk_stderr_contains:
+                    missing_walk = True
 
         # A sanitizer writes its report to stderr and exits non-zero, which
         # the exit check may already have caught. This catches the case
@@ -270,9 +362,15 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
             if marker in proc.stderr:
                 problems.append(f"sanitizer report: {marker}")
 
+        # Read the image back while it still exists: a frame the walk
+        # resolved is a fact about the binary that resolved it.
+        facts = image_facts(exe_path) if missing_walk else ""
+
     if problems:
         detail = "; ".join(problems)
         detail += f"\n--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
+        if facts:
+            detail += "\n" + facts
         return False, detail
     return True, ""
 
