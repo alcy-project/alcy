@@ -1930,7 +1930,9 @@ bool Lowerer::is_range_type(ir::TypeIdx type) {
 // unconditionally, and `Unbounded` discards the payload with a `select`
 // rather than a branch, since its slot is never written. Exactly one of
 // the endpoint's value and its limit carries the `+1` that inclusion
-// needs, so the check always precedes the add and neither can wrap.
+// needs; both are the compiler's own glue and wrap (ADR-0065), so a
+// checked build never aborts on the slot an `Unbounded` endpoint leaves
+// unwritten.
 bool Lowerer::run_bounds(Val range,
                          ir::OperandIdx len,
                          RunBounds& out,
@@ -2004,16 +2006,19 @@ bool Lowerer::run_bounds(Val range,
     // An included end and an excluded start exclude the element one
     // past the bound, so their value is the bound plus one and the
     // limit is the length; the other spellings put the one on the
-    // limit instead.
+    // limit instead. Both adds are the compiler's own glue, and an
+    // `Unbounded` endpoint's payload slot is never written, so they
+    // wrap: the source asked for neither, and a checked build must not
+    // abort on a slot the decode reads and discards.
     const ir::RegisterIdx use_bump = is_start ? is_excluded : is_included;
     const ir::RegisterIdx bumped =
-        emit(ir::Opcode::IntAdd, usize_ty, {use_value(wide), one});
+        emit(ir::Opcode::IntAddWrap, usize_ty, {use_value(wide), one});
     const ir::RegisterIdx bounded =
         emit(ir::Opcode::Select, usize_ty,
              {to_operand(use_bump, boolean), to_operand(bumped, usize_ty),
               use_value(wide)});
     const ir::RegisterIdx crossed =
-        emit(ir::Opcode::IntAdd, usize_ty, {len, one});
+        emit(ir::Opcode::IntAddWrap, usize_ty, {len, one});
     const ir::RegisterIdx limit = emit(
         ir::Opcode::Select, usize_ty,
         {to_operand(use_bump, boolean), len, to_operand(crossed, usize_ty)});
