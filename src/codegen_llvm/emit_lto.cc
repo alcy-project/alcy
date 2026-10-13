@@ -20,6 +20,7 @@
 #include "llvm/LTO/LTO.h"
 #include "llvm/Support/Caching.h"
 #include "llvm/Support/MemoryBufferRef.h"
+#include "llvm/Support/ThreadPool.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/AssignGUID.h"
 
@@ -67,7 +68,12 @@ optimize_in_parts(std::vector<std::unique_ptr<llvm::Module>>& split,
                              /*ShouldPreserveUseListOrder=*/false, &index);
     bitcode[at].assign(buffer.begin(), buffer.end());
   }
-  llvm::lto::LTO lto(std::move(config), /*Backend=*/{}, workers);
+  // The backend whose threads run the parts, told how many to be: the
+  // default backend takes the whole machine, which would spend more threads
+  // than the command asked for and fewer than the policy allows.
+  llvm::lto::ThinBackend backend = llvm::lto::createInProcessThinBackend(
+      llvm::heavyweight_hardware_concurrency(workers));
+  llvm::lto::LTO lto(std::move(config), backend, workers);
   llvm::StringSet<> seen;
   std::vector<std::unique_ptr<llvm::lto::InputFile>> inputs;
   std::vector<std::vector<llvm::lto::SymbolResolution>> resolutions;
