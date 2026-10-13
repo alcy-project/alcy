@@ -510,6 +510,10 @@ body.resizing {
   color: var(--fg-faint);
 }
 
+.statusbar .build {
+  flex: none;
+}
+
 .noscript {
   margin: 16px;
 }
