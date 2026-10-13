@@ -3331,29 +3331,29 @@ void Checker::process_module(u32 module) {
                     DiagCode::GenericArguments, self_node.span);
             (void)index;
           } else {
-            if (resolve_type_path(module,
-                                  self_node.payload.get<ast::TypePath>().path,
-                                  target_module, target_name)) {
-              NominalEntry* entry = find_nominal(target_module, target_name);
-              if (entry != nullptr) {
-                (void)check_item_access(module, entry->module,
-                                        ast.items[entry->item].is_pub,
-                                        self_node.span, target_name);
-                target_known = true;
-                if (nominal_params(*entry).empty() &&
-                    node.payload.get<ast::ItemImpl>().params.empty()) {
-                  self_type = intern_nominal(*entry);
-                  self_ok = true;
-                } else {
-                  generic_impl = true;
-                }
+            bool resolved = false;
+            NominalEntry* entry =
+                find_impl_target(module, node.payload.get<ast::ItemImpl>().type,
+                                 target_name, &resolved);
+            if (entry != nullptr) {
+              target_module = entry->module;
+              (void)check_item_access(module, entry->module,
+                                      ast.items[entry->item].is_pub,
+                                      self_node.span, target_name);
+              target_known = true;
+              if (nominal_params(*entry).empty() &&
+                  node.payload.get<ast::ItemImpl>().params.empty()) {
+                self_type = intern_nominal(*entry);
+                self_ok = true;
               } else {
-                const u32 index =
-                    bag.emit<i18n::Key::AnalyzerInherentImplNeedsNominalType>(
-                        diag::Severity::Error, diag::Stage::Analyzer,
-                        DiagCode::UnknownType, self_node.span);
-                (void)index;
+                generic_impl = true;
               }
+            } else if (resolved) {
+              const u32 index =
+                  bag.emit<i18n::Key::AnalyzerInherentImplNeedsNominalType>(
+                      diag::Severity::Error, diag::Stage::Analyzer,
+                      DiagCode::UnknownType, self_node.span);
+              (void)index;
             }
           }
         } else if (self_node.kind == ast::TypeKind::Str) {
@@ -4897,6 +4897,39 @@ NominalEntry* Checker::find_nominal_in_scope(u32 module,
   return nullptr;
 }
 
+NominalEntry* Checker::find_impl_target(u32 module,
+                                        ast::TypeIdx type,
+                                        std::string_view& name,
+                                        bool* resolved) {
+  const ast::TypeNode& node = ast.types[type];
+  if (node.kind != ast::TypeKind::Path) {
+    return nullptr;
+  }
+  const std::span<const ast::Ident> segments =
+      ast.paths[node.payload.get<ast::TypePath>().path].segments;
+  if (segments.empty()) {
+    return nullptr;
+  }
+  name = segments.back().name;
+  if (segments.size() == 1) {
+    if (resolved != nullptr) {
+      *resolved = true;
+    }
+    return find_nominal_in_scope(module, name);
+  }
+  u32 target_module = NO_MODULE;
+  std::string_view target_name;
+  if (!resolve_type_path(module, node.payload.get<ast::TypePath>().path,
+                         target_module, target_name)) {
+    return nullptr;
+  }
+  if (resolved != nullptr) {
+    *resolved = true;
+  }
+  name = target_name;
+  return find_nominal(target_module, target_name);
+}
+
 bool Checker::check_item_access(u32 from,
                                 u32 declaring,
                                 bool is_pub,
@@ -4952,13 +4985,8 @@ void Checker::index_generic_impls() {
       if (target.kind != ast::TypeKind::Path) {
         continue;
       }
-      u32 target_module = NO_MODULE;
       std::string_view target_name;
-      if (!resolve_type_path(m, target.payload.get<ast::TypePath>().path,
-                             target_module, target_name)) {
-        continue;
-      }
-      NominalEntry* target_entry = find_nominal(target_module, target_name);
+      NominalEntry* target_entry = find_impl_target(m, impl.type, target_name);
       if (target_entry == nullptr) {
         continue;
       }
@@ -4986,13 +5014,8 @@ void Checker::index_generic_methods() {
       if (target.kind != ast::TypeKind::Path) {
         continue;
       }
-      u32 target_module = NO_MODULE;
       std::string_view target_name;
-      if (!resolve_type_path(m, target.payload.get<ast::TypePath>().path,
-                             target_module, target_name)) {
-        continue;
-      }
-      NominalEntry* target_entry = find_nominal(target_module, target_name);
+      NominalEntry* target_entry = find_impl_target(m, impl.type, target_name);
       if (target_entry == nullptr) {
         continue;
       }
@@ -6885,17 +6908,12 @@ void Checker::check_bodies() {
             self_ptr = &self;
           } else if (self_node.kind == ast::TypeKind::Path &&
                      self_node.payload.get<ast::TypePath>().args.empty()) {
-            u32 target_module = NO_MODULE;
             std::string_view target_name;
-            if (resolve_type_path(m,
-                                  self_node.payload.get<ast::TypePath>().path,
-                                  target_module, target_name)) {
-              if (NominalEntry* entry =
-                      find_nominal(target_module, target_name)) {
-                if (nominal_params(*entry).empty()) {
-                  self = intern_nominal(*entry);
-                  self_ptr = &self;
-                }
+            if (NominalEntry* entry = find_impl_target(
+                    m, node.payload.get<ast::ItemImpl>().type, target_name)) {
+              if (nominal_params(*entry).empty()) {
+                self = intern_nominal(*entry);
+                self_ptr = &self;
               }
             }
           }

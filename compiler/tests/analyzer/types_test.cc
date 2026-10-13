@@ -6236,4 +6236,36 @@ TEST_CASE("Check follows a spec method's visibility, not the impl's") {
       "with `pub`"));
 }
 
+TEST_CASE("Check resolves an inherent impl's imported target") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  t := b::make()\n"
+                                      "  ret t.peek()\n"
+                                      "}\n"},
+                                     {"a.al",
+                                      "use package::b::T;\n"
+                                      "impl T {\n"
+                                      "  pub fn peek(self: &Self) -> i32 {\n"
+                                      "    ret 7\n"
+                                      "  }\n"
+                                      "}\n"},
+                                     {"b.al",
+                                      "pub struct T {\n"
+                                      "  v: i32,\n"
+                                      "}\n"
+                                      "pub fn make() -> T {\n"
+                                      "  ret T { v: 1 }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al", "a.al", "b.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
 }  // namespace analyzer

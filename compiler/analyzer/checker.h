@@ -664,6 +664,15 @@ class Checker {
                     diag::Span span,
                     VariantMatch& out);
   NominalEntry* find_nominal_in_scope(u32 module, std::string_view name);
+  // The nominal an impl block names as its target: a single segment
+  // resolves through scope, imports included, the way a spec impl's
+  // target already does; a qualified path walks to its module. `name`
+  // is the spelling the diagnostics use, and `resolved` (when given) is
+  // false when a qualified path named no module.
+  NominalEntry* find_impl_target(u32 module,
+                                 ast::TypeIdx type,
+                                 std::string_view& name,
+                                 bool* resolved = nullptr);
   // Whether a declaration of `declaring` is reachable from `from`: its
   // own module always, every other module only when it is `pub`. A
   // module path that crossed a package boundary was already trimmed to
