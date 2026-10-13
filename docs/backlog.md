@@ -36,13 +36,12 @@ replaced. The foundations are in `roadmap.md`.
   the tool rather than the missing entry.
 - [ ] `alcy check --file /dev/stdin` (any non-regular, zero-length input)
   reports success without reading the pipe; `compile --stdin` reads it.
-- [ ] Container destructors do not end their elements. `Vec`'s and
-  `Map`'s `drop` release the buffer and never run an element's
-  destructor, so a one-element `Vec<String>` leaks that string's
-  block (LeakSanitizer reports 4 bytes). The fix needs an
-  element-ending walk, either in the container's own `drop` once the
-  language can end a moved-out value, or as compiler glue over a
-  container's elements.
+- [x] Container destructors end their elements. `Vec::drop` clears
+  through `drop_in_place` once per live element, and `Map::drop` moves
+  each live pair out of its slot into a binding the drop pass ends.
+  The sanitized runs of `exe-vec-drop` and `exe-map-drop-element`
+  report nothing left allocated; both walked a container of values
+  whose destructors own a block.
 - [ ] IR cache shared across profiles and machines. The lowered IR is
   one artifact per pointer width: a test lowers one source under two
   64-bit triples and compares the bytes (`pipeline/ir_emit_test.cc`),
