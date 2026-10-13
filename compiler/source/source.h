@@ -30,6 +30,10 @@ enum class SourceError : u8 {
   OpenFailed,
   // The file was opened, but its bytes could not be mapped.
   MapFailed,
+  // The path is not a regular file: a pipe or a device reports no size
+  // and cannot be mapped, so reading it needs a stream the sources do
+  // not have.
+  NotRegular,
 };
 
 // Owns loaded source files. Files are memory-mapped; a virtual source is

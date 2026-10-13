@@ -34,8 +34,12 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] Diagnose a binary with no free `main` while checking. Today the
   program reaches the linker and reports `Linking failed`, which names
   the tool rather than the missing entry.
-- [ ] `alcy check --file /dev/stdin` (any non-regular, zero-length input)
-  reports success without reading the pipe; `compile --stdin` reads it.
+- [x] A non-regular input is refused rather than read as empty: a pipe
+  or a device reports no size and cannot be mapped, so `check --file`
+  on one would check a program out as nothing. `SourceManager::load`
+  answers `NotRegular`, and `check` and `compile` name the path; the
+  POSIX-guarded unit test uses `/dev/null`. A pipe still reaches the
+  compiler through `compile --stdin`.
 - [x] Container destructors end their elements. `Vec::drop` clears
   through `drop_in_place` once per live element, and `Map::drop` moves
   each live pair out of its slot into a binding the drop pass ends.

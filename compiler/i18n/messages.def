@@ -420,6 +420,7 @@
   F(PipelinePathExists, "Path '{}' already exists; refusing to overwrite") \
   F(PipelineSpanArenaExhausted, "Parsing this input needs more than the {} bytes of arena the compiler reserves for syntax") \
   F(PipelineSourceDirectoryInaccessible, "Source directory '{}' is not accessible") \
+  F(PipelineSourceNotRegular, "Source '{}' is not a regular file; a pipe reaches the compiler through `compile --stdin`") \
   F(PipelineStdIsASuite, "The 'alcy/std' path is a suite, not a package; write \"alcy/std/*\" for every member or \"alcy/std/<package>\" for one") \
   F(PipelineStdPackageRequiresSuite, "Package 'alcy/std/{}' requires alcy/std/{}; add it to [dependencies]") \
   F(PipelineSuiteEmpty, "Suite '{}' lists no members") \

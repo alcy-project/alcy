@@ -39,6 +39,13 @@ base::Result<FileId, SourceError> SourceManager::load(std::string_view path) {
   if (size > 0 && !entry.mapping.map(handle, 0, size)) {
     return base::make_err(SourceError::MapFailed);
   }
+  // A pipe or a device reports no size and cannot be mapped, so it
+  // would load as empty, and a program that checks out as nothing is
+  // worse than a refusal: reading one needs a stream the sources do
+  // not have.
+  if (!io::is_file(entry.path)) {
+    return base::make_err(SourceError::NotRegular);
+  }
   entries_.push_back(std::move(entry));
   const FileId id = static_cast<FileId>(entries_.size() - 1);
   by_name_.emplace(entries_.back().path, id);

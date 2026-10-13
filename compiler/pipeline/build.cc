@@ -655,10 +655,18 @@ base::Result<std::string, diag::Reported> build_single_file(
     return ctx.sources.load(target);
   }();
   if (file.is_err()) {
-    const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotRead>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        target);
-    (void)index;
+    const source::SourceError reason = std::move(file).unwrap_err();
+    if (reason == source::SourceError::NotRegular) {
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineSourceNotRegular>(
+          diag::Severity::Error, diag::Stage::Pipeline,
+          DiagCode::SourceNotRegular, target);
+      (void)index;
+    } else {
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotRead>(
+          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
+          target);
+      (void)index;
+    }
     return base::make_err(diag::Reported{});
   }
   const source::FileId root = std::move(file).unwrap();

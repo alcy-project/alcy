@@ -119,4 +119,17 @@ TEST_CASE("SourceManager loads empty files") {
   CHECK(bytes->empty());
 }
 
+#if BUILD_FLAG(IS_OS_POSIX)
+TEST_CASE("SourceManager refuses a non-regular file") {
+  // A device reports no size and cannot be mapped, so loading one as
+  // empty would check a program out as nothing.
+  SourceManager sources;
+  base::Result<FileId, SourceError> device = sources.load("/dev/null");
+  CHECK(device.is_err());
+  if (device.is_err()) {
+    CHECK(std::move(device).unwrap_err() == SourceError::NotRegular);
+  }
+}
+#endif
+
 }  // namespace source

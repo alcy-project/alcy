@@ -79,6 +79,9 @@ enum class DiagCode : u8 {
   // The pipeline's release passes rebuilt the IR and the verifier
   // refused it: a pass wrote something structurally invalid.
   OptimizeFailed = 22,
+  // A named source is not a regular file: a pipe or a device reports
+  // no size and cannot be mapped, so it would load as empty.
+  SourceNotRegular = 23,
 };
 
 }  // namespace pipeline
