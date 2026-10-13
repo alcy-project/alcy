@@ -11,6 +11,7 @@
 // `collections` package above this one; see
 // docs/adr/0016-suites-and-the-std-split.md.
 
+pub use package::box::Box;
 pub use package::heap::alloc;
 pub use package::heap::dealloc;
 pub use package::heap::doubled_capacity;

@@ -107,11 +107,14 @@ peripheral work lives in `backlog.md`. The language record lives in
   its environment tuple, so its `Copy`-ness is the environment's and a
   closure coerces to a bare function type as a borrow of it. What
   remains of it: interning the type per literal, the coercion rule,
-  and ending a closure value through its environment. Then `Box<T>`
-  over the allocator's `MaybeUninit<T>` - a hand-written box compiles
-  today - whose destructor ends its pointee with the first item's
-  `drop_in_place`, with a recursive enum or struct built through it as
-  the acceptance case. Then the owning
+  and ending a closure value through its environment. `Box<T>` landed
+  over the allocator's `MaybeUninit<T>`: `new` moves the value in,
+  `get`/`get_mut` borrow it, and the destructor ends the pointee with
+  the first item's `drop_in_place` and releases the block - a chain of
+  boxes drops every link, which the sanitizer run checks. Its
+  acceptance case is narrower than planned: a recursive walk wants
+  either `into_inner` (a spent handle the destructor can recognize) or
+  by-reference pattern bindings, and both are recorded in the backlog. Then the owning
   environment: non-Copy captures move in, the environment is
   allocated where the closure value can own and drop it, the `Copy`
   restriction and the frame-escape refusal retire, and frame-crossing

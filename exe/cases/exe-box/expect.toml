@@ -1,0 +1,8 @@
+exit = 0
+stdout = """
+8
+drop 1
+drop 2
+cleared
+drop 3
+"""

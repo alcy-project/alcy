@@ -6,6 +6,11 @@ replaced. The foundations are in `roadmap.md`.
 ## Open
 
 - [ ] Doc-comment collection in the parser (the SSG itself waits).
+- [ ] `Box::into_inner` (and a recursive walk through `Box`) waits for a
+  spent-handle representation: the destructor has to skip a block that
+  was released, and an assignment to a parameter's field in that shape
+  does not reach the load the destructor reads. By-reference pattern
+  bindings would cover the walk on their own.
 - [ ] `map` has no constructor: its result type comes from a closure's
   return type, which inference cannot read before the closure is
   checked. A slice that checks a closure argument first, or that lets
