@@ -1,8 +1,8 @@
 // Floats format as decimal magnitudes: up to six fractional digits,
 // rounded half-up and trimmed of trailing zeros, and a mantissa with
 // an exponent once the magnitude leaves [1e-4, 1e16). `{:.Nf}` (and
-// its `{:.N}` sugar) fixes the fractional digits. The infinity and
-// NaN spellings ride the default form.
+// its `{:.N}` sugar, which the lint warns about) fixes the fractional
+// digits. The infinity and NaN spellings ride the default form.
 fn main() -> i32 {
   println("{}", 3.5)
   println("{}", 3.0)

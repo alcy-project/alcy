@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -826,6 +827,17 @@ bool Checker::verify_fmt_literal(u32 module,
           DiagCode::InvalidOperation, ast.exprs[fmt_expr].span);
       (void)index;
       return false;
+    }
+    // The `f` conversion is optional, and the lint asks for it: the
+    // explicit spelling says what the piece formats without reading the
+    // argument's type beside it.
+    if (piece.precision != FMT_NO_PRECISION && !piece.explicit_float) {
+      const std::string suggested =
+          "{:." + std::to_string(piece.precision) + "f}";
+      const u32 index = bag.emit<i18n::Key::AnalyzerFormatConversionExplicit>(
+          diag::Severity::Warning, diag::Stage::Analyzer,
+          DiagCode::FmtPrecisionImplicit, ast.exprs[fmt_expr].span, suggested);
+      (void)index;
     }
   }
   (void)span;

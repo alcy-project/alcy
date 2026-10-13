@@ -33,8 +33,8 @@ remaining arguments, one per placeholder.
 - `{:.Nf}` fixes the fractional digits of a float argument: exactly
   `N` after the point, rounded half-up, no trimming, and no point when
   `N` is zero. The `f` names the conversion explicitly and may be
-  omitted - `{:.N}` is the same piece - so a project that wants the
-  explicit spelling needs a lint rule, not a different parser. `N` is
+  omitted - `{:.N}` is the same piece, and the analyzer warns in favor
+  of the explicit spelling. `N` is
   at most 17, and a precision on any other type is a compile-time
   error. The magnitude cutoffs still apply: outside the fixed range
   the exponent form carries the fixed count.

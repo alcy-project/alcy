@@ -30,6 +30,9 @@ struct FmtPiece {
   // Fractional digits for a float argument, from `{:.N}`; the default
   // when the placeholder names none.
   u8 precision = FMT_NO_PRECISION;
+  // Whether the piece spelled the `f` conversion (`{:.Nf}`). The two
+  // spellings are one piece, and the lint asks for the explicit one.
+  bool explicit_float = false;
 };
 
 enum class FmtError : u8 {
@@ -78,8 +81,8 @@ inline FmtTemplate parse_format_string(const std::string& bytes) {
       if (bytes[i + 1] != '}') {
         // `{:.Nf}`: the fixed-point fractional digits of a float
         // argument. The `f` names the conversion explicitly and is
-        // optional: `{:.N}` is the same piece. A linter may later
-        // require the explicit spelling.
+        // optional: `{:.N}` is the same piece, and the analyzer warns
+        // in favor of the explicit spelling.
         if (bytes[i + 1] != ':' || i + 2 >= bytes.size() ||
             bytes[i + 2] != '.') {
           result.error = FmtError::Specifier;
@@ -94,7 +97,9 @@ inline FmtTemplate parse_format_string(const std::string& bytes) {
           ++count;
           ++j;
         }
+        bool explicit_float = false;
         if (count > 0 && j < bytes.size() && bytes[j] == 'f') {
+          explicit_float = true;
           ++j;
         }
         if (count == 0 || value > FMT_MAX_PRECISION || j >= bytes.size() ||
@@ -104,8 +109,11 @@ inline FmtTemplate parse_format_string(const std::string& bytes) {
           return result;
         }
         flush();
-        result.pieces.push_back(
-            FmtPiece{true, {}, result.placeholders++, static_cast<u8>(value)});
+        result.pieces.push_back(FmtPiece{true,
+                                         {},
+                                         result.placeholders++,
+                                         static_cast<u8>(value),
+                                         explicit_float});
         i = j + 1;
         continue;
       }

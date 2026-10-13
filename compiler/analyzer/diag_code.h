@@ -96,6 +96,10 @@ enum class DiagCode : u8 {
   // the module that declares it. A field follows the field's own
   // marker; an item or method follows the declaration's.
   PrivateAccess = 44,
+  // A fixed-point placeholder leaves the `f` conversion implicit
+  // (`{:.2}` for `{:.2f}`): the two are one piece, and the spelling
+  // that says what it formats is what the lint asks for.
+  FmtPrecisionImplicit = 45,
 };
 
 }  // namespace analyzer
