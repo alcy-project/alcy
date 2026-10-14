@@ -324,6 +324,8 @@ std::optional<ValueShape> Emitter::shape_of(ir::TypeIdx type) const {
     case T::U16:
     case T::U32:
     case T::Ptr:
+    case T::RawPtr:
+    case T::RawMutPtr:
     case T::Function: return ValueShape{ValType::I32, 1};
     case T::I64:
     case T::U64: return ValueShape{ValType::I64, 1};
@@ -1037,8 +1039,7 @@ Emitter::EmitResult Emitter::push_immutable(const ir::Immutable& immutable,
     i32_const(static_cast<i32>(text.size()));
     return base::make_ok();
   }
-  if (tag == ir::TypeTag::Ptr || tag == ir::TypeTag::Function ||
-      tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
+  if (is_thin_pointer(tag)) {
     i32_const(static_cast<i32>(static_cast<u32>(immutable.data.ptr)));
     return base::make_ok();
   }

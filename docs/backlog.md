@@ -16,9 +16,14 @@ replaced. The foundations are in `roadmap.md`.
   float emitted an invalid module. Addresses are words whatever they
   point at (`shape_of_definition`), `e2e/wasm/float-format` covers the
   spelling, and the guide's `{:.2f}` example is a runnable fence again.
-- [ ] Consuming `for x in a` over an array is refused on direct-wasm:
-  `core/slice.al`'s `raw_ptr` does not lower there (EK001), so the
-  guide walks arrays with `.iter()`. The by-reference form works.
+- [x] Consuming `for x in a` over an array failed on direct-wasm: the
+  backend's pointer lists named `Ptr`, `Ref`, `MutRef`, and `Function`
+  but not the two raw pointers, so the `*T` a cursor keeps in
+  `core/slice.al` was "not supported" (EK001). One predicate
+  (`is_thin_pointer`) names every tag that rides as an address word
+  now, and `e2e/wasm/for-array` walks an array and a `Vec` by value;
+  the guide keeps `.iter()` because a by-reference walk is what the
+  example wants, not because the other was refused.
 - [x] Moving a non-`Copy` element out of an owned array is refused now
   (`lower_moved` sees an array element under the value and answers
   `MoveOutOfElement`), where it used to load a copy that the array's

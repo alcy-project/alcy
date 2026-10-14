@@ -215,8 +215,7 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
                                 is_wide_int(tag));
       } else if (ir::is_float_type(tag)) {
         opcode = float_compare_opcode(instr.op, tag == ir::TypeTag::F64);
-      } else if (tag == ir::TypeTag::Ptr || tag == ir::TypeTag::Ref ||
-                 tag == ir::TypeTag::MutRef || tag == ir::TypeTag::Function) {
+      } else if (is_thin_pointer(tag)) {
         if (instr.op != O::Eq && instr.op != O::Ne) {
           return unsupported(current_span_, "this pointer comparison");
         }
@@ -288,31 +287,17 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
         } else {
           op(0xBB);  // f64.promote_f32
         }
-      } else if (is_word_int(src_tag) &&
-                 (dst_tag == ir::TypeTag::Ptr || dst_tag == ir::TypeTag::Ref ||
-                  dst_tag == ir::TypeTag::MutRef ||
-                  dst_tag == ir::TypeTag::Function)) {
+      } else if (is_word_int(src_tag) && is_thin_pointer(dst_tag)) {
         canonicalize(body_, dst_tag);
-      } else if ((src_tag == ir::TypeTag::Ptr || src_tag == ir::TypeTag::Ref ||
-                  src_tag == ir::TypeTag::MutRef ||
-                  src_tag == ir::TypeTag::Function) &&
-                 (dst_tag == ir::TypeTag::Ptr || dst_tag == ir::TypeTag::Ref ||
-                  dst_tag == ir::TypeTag::MutRef ||
-                  dst_tag == ir::TypeTag::Function)) {
+      } else if (is_thin_pointer(src_tag) && is_thin_pointer(dst_tag)) {
         // Relabelling: the address is unchanged, and the destination
         // names what it points at.
-      } else if ((src_tag == ir::TypeTag::Ptr || src_tag == ir::TypeTag::Ref ||
-                  src_tag == ir::TypeTag::MutRef ||
-                  src_tag == ir::TypeTag::Function) &&
-                 ir::is_integer_type(dst_tag)) {
+      } else if (is_thin_pointer(src_tag) && ir::is_integer_type(dst_tag)) {
         if (is_wide_int(dst_tag)) {
           op(0xAD);  // i64.extend_i32_u: the address zero-extends.
         }
         canonicalize(body_, dst_tag);
-      } else if (is_wide_int(src_tag) &&
-                 (dst_tag == ir::TypeTag::Ptr || dst_tag == ir::TypeTag::Ref ||
-                  dst_tag == ir::TypeTag::MutRef ||
-                  dst_tag == ir::TypeTag::Function)) {
+      } else if (is_wide_int(src_tag) && is_thin_pointer(dst_tag)) {
         op(0xA7);  // i32.wrap_i64
       } else {
         return unsupported(current_span_,

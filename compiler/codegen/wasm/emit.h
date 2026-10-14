@@ -35,6 +35,15 @@ struct ValueShape {
   u32 words = 0;
 };
 
+// One address word: `Ptr`, either raw pointer, a reference, and a
+// function. A reference to a slice is the fat pointer the callers
+// handle beside these, not one of them.
+inline bool is_thin_pointer(ir::TypeTag tag) {
+  return tag == ir::TypeTag::Ptr || tag == ir::TypeTag::RawPtr ||
+         tag == ir::TypeTag::RawMutPtr || tag == ir::TypeTag::Ref ||
+         tag == ir::TypeTag::MutRef || tag == ir::TypeTag::Function;
+}
+
 // Turns the program's reachable IR into one wasm module: the program's
 // functions, the `alcy_*` runtime they call, and a WASI `_start` when the
 // request owns the entry.

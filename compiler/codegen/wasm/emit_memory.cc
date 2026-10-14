@@ -54,6 +54,8 @@ std::optional<Access> access_for(ir::TypeTag tag) {
     case T::F32: return Access{0x2A, 2, 0x38, 2};
     case T::F64: return Access{0x2B, 3, 0x39, 3};
     case T::Ptr:
+    case T::RawPtr:
+    case T::RawMutPtr:
     case T::Function:
     case T::Ref:
     case T::MutRef: return Access{0x28, 2, 0x36, 2};
@@ -263,7 +265,7 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
         if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
           elem = storage_.ref_types()[storage_.types()[base_type].as_ref()]
                      .pointee;
-        } else if (tag != ir::TypeTag::Ptr && tag != ir::TypeTag::Function) {
+        } else if (!is_thin_pointer(tag)) {
           // A register whose own type names the pointee, which is how
           // the lowering carries pointers into payload bytes.
           elem = base_type;
