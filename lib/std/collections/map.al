@@ -168,6 +168,15 @@ impl<V> Map<V> {
     ret self.get_mut(key).unwrap()
   }
 
+  // The entry for `key`: the value when present, or the map and key to
+  // fill when absent.
+  pub fn entry(mut self: &mut Self, key: str) -> Entry<V> {
+    if self.contains(key) {
+      ret Entry::Occupied(self.get_mut(key).unwrap())
+    }
+    ret Entry::Vacant(self, key)
+  }
+
   pub fn contains(self: &Self, key: str) -> bool {
     if self.cap == 0 {
       ret false
@@ -502,5 +511,24 @@ impl<V: PartialEq> PartialEq for Map<V> {
       i = i + 1
     }
     ret true
+  }
+}
+
+// A place in a map's table: the value when the key is present, or the
+// map and key to insert into when it is not. `or_insert` is the single
+// call that fills an absent key.
+pub enum Entry<V> {
+  Occupied(&mut V),
+  Vacant(&mut Map<V>, str),
+}
+
+impl<V> Entry<V> {
+  // The value the entry names, inserting `default` first when the key
+  // was absent.
+  pub fn or_insert(self: Entry<V>, default: V) -> &mut V {
+    match self {
+      Entry::Occupied(v) => ret v,
+      Entry::Vacant(map, key) => ret map.get_or_insert(key, default),
+    }
   }
 }
