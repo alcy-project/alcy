@@ -5,7 +5,11 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
-- [ ] Doc-comment collection in the parser (the SSG itself waits).
+- [x] Doc-comment collection in the parser: `skip_insignificant` keeps
+  the span of each `DocComment` it walks past, the item loop hands an
+  item the ones written above it, and `ItemNode::docs` carries them as
+  spans into the same bytes. The lexer already tokenized them, so the
+  site generator is the only reader left to write.
 - [ ] A pattern that binds a non-`Copy` payload of a borrowed
   scrutinee is refused, so `match *e` over an enum that carries an
   aggregate can only bind `Copy` payloads. Binding the payload by

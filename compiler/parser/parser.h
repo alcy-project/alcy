@@ -218,6 +218,10 @@ class Parser {
   bool consume_gt();
 
   std::span<const lexer::Token> tokens_;
+
+  // Doc comments the cursor skipped since the last item took them. The
+  // parser hands each item the list as it stood when the item began.
+  std::vector<diag::Span> pending_docs_;
   std::string_view bytes_;
   source::FileId file_;
   ast::AstArena& ast_;

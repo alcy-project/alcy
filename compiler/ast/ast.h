@@ -68,7 +68,7 @@ using ItemIdx = details::Idx<ItemNode>;
 // span and marks itself, which is what the parser stops on: the empty
 // span is not read as a list of no items.
 template <typename T, typename Arena>
-std::span<T> copy_to_arena(Arena& arena, const std::vector<T>& items) {
+std::span<T> copy_to_arena(Arena& arena, std::span<const T> items) {
   if (items.empty()) {
     return {};
   }
@@ -79,6 +79,12 @@ std::span<T> copy_to_arena(Arena& arena, const std::vector<T>& items) {
   }
   std::uninitialized_copy(items.begin(), items.end(), out);
   return std::span<T>(out, items.size());
+}
+
+template <typename T, typename Arena>
+std::span<T> copy_to_arena(Arena& arena, const std::vector<T>& items) {
+  return copy_to_arena<T>(arena,
+                          std::span<const T>(items.data(), items.size()));
 }
 
 // Identifiers and paths
@@ -1002,6 +1008,11 @@ struct ItemNode {
   ItemKind kind;
   diag::Span span;
   bool is_pub;
+  // The doc comments written above the item, in source order, as spans
+  // into the same bytes the item's span names. Empty when it carries
+  // none; the parser is what collects them, and the site generator is
+  // the reader they wait for.
+  std::span<const diag::Span> docs;
 
   // Leaves members uninitialized; parsers set the active member
   // before pushing the node.

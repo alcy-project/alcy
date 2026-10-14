@@ -1963,4 +1963,31 @@ TEST_CASE("The phase-two shapes leave valid programs alone") {
   CHECK(result.ok);
 }
 
+TEST_CASE("Parser collects the doc comments above an item") {
+  Fixture f;
+  const std::string_view source =
+      "/// First line.\n"
+      "/// Second.\n"
+      "fn one() {\n"
+      "}\n"
+      "\n"
+      "fn two() {\n"
+      "}\n";
+  const ParseResult result = parse(source, f);
+  CHECK(result.ok);
+  CHECK(result.items.size() == 2);
+  if (result.items.size() != 2) {
+    return;
+  }
+  const std::span<const diag::Span> docs = f.ast.items[result.items[0]].docs;
+  CHECK(docs.size() == 2);
+  if (docs.size() == 2) {
+    // The spans name the comment text, so the site generator can print
+    // it without the parser keeping a copy.
+    CHECK(source.substr(docs[0].offset, docs[0].length) == "/// First line.");
+    CHECK(source.substr(docs[1].offset, docs[1].length) == "/// Second.");
+  }
+  CHECK(f.ast.items[result.items[1]].docs.empty());
+}
+
 }  // namespace parser

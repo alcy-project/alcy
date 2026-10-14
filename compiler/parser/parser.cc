@@ -159,8 +159,14 @@ lexer::Token Parser::previous() const {
 void Parser::skip_insignificant() {
   while (pos_ < tokens_.size()) {
     const lexer::TokenKind kind = tokens_[pos_].kind;
-    if (kind == lexer::TokenKind::Error ||
-        kind == lexer::TokenKind::DocComment) {
+    if (kind == lexer::TokenKind::Error) {
+      ++pos_;
+      continue;
+    }
+    if (kind == lexer::TokenKind::DocComment) {
+      // A doc comment is trivia, and the item it stands above claims
+      // it: the parser copies the spans onto the node it opens.
+      pending_docs_.push_back(tokens_[pos_].span);
       ++pos_;
       continue;
     }
@@ -391,14 +397,23 @@ base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
     if (match(lexer::TokenKind::Semicolon)) {
       continue;
     }
+    // The doc comments above the item are the item's own; the ones the
+    // parse skips inside it wait for the next item.
+    skip_insignificant();
+    const usize docs = pending_docs_.size();
     ast::ItemIdx item = parse_item();
     if (!item.is_valid()) {
+      pending_docs_.erase(pending_docs_.begin(), pending_docs_.begin() + docs);
       if (ast_.exhausted()) {
         break;
       }
       synchronize();
       continue;
     }
+    const std::span<const diag::Span> spans = ast::copy_to_arena(
+        ast_.spans, std::span<const diag::Span>(pending_docs_.data(), docs));
+    pending_docs_.erase(pending_docs_.begin(), pending_docs_.begin() + docs);
+    ast_.items[item].docs = spans;
     items.push_back(item);
   }
   return base::make_ok(
