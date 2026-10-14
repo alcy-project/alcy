@@ -3471,19 +3471,6 @@ void Checker::process_module(u32 module) {
         break;
       }
       case ast::ItemKind::Impl: {
-        // Unsafe methods wait for their own slice; the marker parses so
-        // the refusal is about the feature, not about the syntax.
-        for (ast::ItemIdx method : node.payload.get<ast::ItemImpl>().methods) {
-          const ast::ItemFn& fn = ast.items[method].payload.get<ast::ItemFn>();
-          if (!fn.is_unsafe) {
-            continue;
-          }
-          const u32 index =
-              bag.emit<i18n::Key::AnalyzerUnsafeMethodUnsupported>(
-                  diag::Severity::Error, diag::Stage::Analyzer,
-                  DiagCode::InvalidOperation, fn.name.span, fn.name.name);
-          (void)index;
-        }
         if (node.payload.get<ast::ItemImpl>().spec.is_valid()) {
           register_spec_impl(module, item);
           break;

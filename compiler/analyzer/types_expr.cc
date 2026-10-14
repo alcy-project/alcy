@@ -1678,6 +1678,15 @@ ir::TypeIdx Checker::check_method_call(u32 module,
     method = instantiate_generic_method(module, nominal, name, method_type_args,
                                         span);
   }
+  // A method whose declaration is `unsafe` needs the gate at its call
+  // site, the way a free function does (ADR-0050).
+  if (method != nullptr && method->item.is_valid() &&
+      fn_is_unsafe(method->item) && unsafe_depth == 0) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerUnsafeCall>(
+        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnsafeOperation,
+        node.span, name);
+    (void)index;
+  }
   if (method == nullptr) {
     if (spec_only) {
       // The `for` desugar's generated `next` reaches the cursor

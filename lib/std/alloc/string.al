@@ -42,7 +42,7 @@ impl String {
     if m < 0 {
       ret Option::None
     }
-    s.set_len(m as usize)
+    unsafe { s.set_len(m as usize) }
     ret Option::Some(s)
   }
 
@@ -254,7 +254,7 @@ impl String {
 
   // Records `n` written bytes. `n` must not pass the capacity and the
   // bytes below it must be initialized.
-  pub fn set_len(mut self: &mut Self, n: usize) {
+  pub unsafe fn set_len(mut self: &mut Self, n: usize) {
     self.len = n
   }
 

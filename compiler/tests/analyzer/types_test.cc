@@ -2448,14 +2448,17 @@ TEST_CASE("Check rejects an unsafe function as a value") {
   CHECK(f.bag.has_errors());
 }
 
-TEST_CASE("Check rejects unsafe methods") {
+TEST_CASE("Check gates unsafe method calls") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct S { n: i32 }\n"
                                       "impl S {\n"
                                       "  unsafe fn poke(self: &Self) {}\n"
                                       "}\n"
-                                      "fn main() {}\n"}});
+                                      "fn main() {\n"
+                                      "  s := S { n: 1 }\n"
+                                      "  s.poke()\n"
+                                      "}\n"}});
   CHECK(setup);
   if (!setup) {
     return;
