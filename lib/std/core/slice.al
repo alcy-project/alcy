@@ -29,6 +29,23 @@ impl<T> [T] {
     ret slice_len(self) == 0
   }
 
+  // The first element, or `None` when empty.
+  pub fn first(self: &Self) -> Option<&T> {
+    if slice_len(self) == 0 {
+      ret Option::None
+    }
+    ret Option::Some(unsafe { slice_at(self, 0) })
+  }
+
+  // The last element, or `None` when empty.
+  pub fn last(self: &Self) -> Option<&T> {
+    n := slice_len(self)
+    if n == 0 {
+      ret Option::None
+    }
+    ret Option::Some(unsafe { slice_at(self, n - 1) })
+  }
+
   // A shared cursor over the elements; the slice's loan is what keeps
   // them valid.
   pub fn iter(self: &Self) -> SliceIter<T> {
