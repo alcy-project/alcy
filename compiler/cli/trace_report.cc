@@ -297,11 +297,12 @@ TraceReport build_trace_report(const TraceCapture& trace) {
         return a->duration_ns > b->duration_ns;
       });
   // Each event nests under the smallest interval containing it, and an
-  // event no interval contains is a root. In start-time order that interval
-  // is the one on top of the parents still in play: intervals that ran on
-  // one thread are nested or disjoint, and one the event does not fit in has
-  // already ended before the event starts, so nothing that starts later fits
-  // in it either and it comes off for good.
+  // event no interval contains is a root. In start-time order the scan
+  // keeps every interval that may still contain something: one that ended
+  // before the event starts is off for good, while one the event spills
+  // out of can still hold a later, shorter one - two threads overlap
+  // without nesting - so the parent is the smallest span among the open
+  // intervals containing the event, not the innermost.
   std::vector<TraceReport::Node> nodes;
   nodes.reserve(ordered.size());
   std::vector<i32> parent(ordered.size(), -1);
@@ -311,16 +312,31 @@ TraceReport build_trace_report(const TraceCapture& trace) {
     while (!open.empty()) {
       const debug::ProfileEvent& top =
           *ordered[static_cast<usize>(open.back())];
-      // Equal spans contain each other, and nothing in the events says
-      // which wrapped which. They read as siblings, which is also the
-      // rule that keeps a threaded region's shape independent of the
-      // schedule: the top one makes room rather than becoming the parent.
-      if (contains(top, event) && top.duration_ns != event.duration_ns) {
+      if (top.start_time_ns + top.duration_ns > event.start_time_ns) {
         break;
       }
       open.pop_back();
     }
-    parent[i] = open.empty() ? -1 : open.back();
+    i32 found = -1;
+    for (i32 candidate_index : open) {
+      const debug::ProfileEvent& candidate =
+          *ordered[static_cast<usize>(candidate_index)];
+      // Equal spans contain each other, and nothing in the events says
+      // which wrapped which. They read as siblings, which is also the
+      // rule that keeps a threaded region's shape independent of the
+      // schedule.
+      if (!contains(candidate, event) ||
+          candidate.duration_ns == event.duration_ns) {
+        continue;
+      }
+      // Ties go to the later one, so the answer does not depend on the
+      // order the recorder saw them in.
+      if (found < 0 || candidate.duration_ns <=
+                           ordered[static_cast<usize>(found)]->duration_ns) {
+        found = candidate_index;
+      }
+    }
+    parent[i] = found;
     open.push_back(static_cast<i32>(i));
   }
   for (const debug::ProfileEvent* event : ordered) {

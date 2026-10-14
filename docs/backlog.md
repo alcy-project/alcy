@@ -191,10 +191,12 @@ replaced. The foundations are in `roadmap.md`.
   the `Option::unwrap` wording. Generic keys wait for a `Hash` spec and
   bounds; `keys()` traversal and `Vec` sorting moved to the roadmap's
   iteration and operator items.
-- [ ] Trace report nesting: the one-pass scan picks the innermost open
-  interval as parent, not the smallest containing one as its comment says,
-  so overlapping events from two threads reshape the tree. The tree stays
-  well formed; the rule and the code disagree.
+- [x] Trace report nesting: the scan kept only the interval on top of
+  the open stack, so an interval a later event spilled out of was gone
+  before a shorter event that still fitted inside it arrived, and two
+  threads reshaped the tree. The parent is the smallest span among the
+  open intervals containing the event now, which one thread cannot tell
+  apart from the old rule.
 - [ ] `demangle` recurses per type constructor with no depth limit; a
   hostile symbol can exhaust the stack. Latent while only tests call it.
 

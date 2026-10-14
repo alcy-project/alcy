@@ -111,6 +111,37 @@ TEST_CASE("A trace report builds a tree in start-time order") {
   CHECK(report.roots[1].event.duration_ns == 20);
 }
 
+// A region the event spills out of can still hold a later, shorter one:
+// two threads overlap without nesting, so the parent is the smallest
+// interval containing the event rather than the last one still open.
+TEST_CASE("A trace report nests under the smallest containing interval") {
+  Recorded recorded;
+  add_event(recorded, "run", "frontend", 0, 200, 1);
+  add_event(recorded, "first", "frontend", 10, 40, 1);  // [10, 50]
+  add_event(recorded, "wide", "frontend", 20, 79, 2);   // [20, 99]
+  add_event(recorded, "small", "frontend", 30, 10, 3);  // [30, 40]
+
+  recorded.trace.events = recorded.events;
+  const TraceReport report = build_trace_report(recorded.trace);
+  CHECK(report.roots.size() == 1);
+  if (report.roots.size() != 1) {
+    return;
+  }
+  const TraceReport::Node& root = report.roots[0];
+  CHECK(root.event.duration_ns == 200);
+  CHECK(root.children.size() == 2);
+  if (root.children.size() != 2) {
+    return;
+  }
+  // `small` fits inside both `first` and `wide`, and `first` is smaller.
+  CHECK(root.children[0].event.duration_ns == 40);
+  CHECK(root.children[0].children.size() == 1);
+  CHECK(root.children[1].event.duration_ns == 79);
+  if (root.children[0].children.size() == 1) {
+    CHECK(root.children[0].children[0].event.duration_ns == 10);
+  }
+}
+
 // Two regions can hold the same wall time on two threads, so the report
 // answers every share against the wall clock rather than the parent: the
 // shares can sum past one hundred percent, and the tree still reads.
