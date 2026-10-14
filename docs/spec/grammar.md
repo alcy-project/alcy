@@ -119,6 +119,9 @@ Declaration left-hand sides use this grammar with `:=`
 - `?` binds tighter than all binary operators.
 - `?` is a postfix operator, so it may be followed by a field or method
   access: `f()?.x` reads as `(f()?).x`, and so does `v.pop()?.0`.
+- `&&` and `||` short-circuit: the right side runs only when the left
+  has not decided. `false && x` is `false` and `true || x` is `true`,
+  and neither evaluates `x`.
 - `%`, `&`, `|`, `^`, `<<`, and `>>` are integer-only; applying one to
   a float is rejected. Floats admit `+ - * /` and the comparisons.
 - Unary `*` dereferences a reference into the place it names, and a

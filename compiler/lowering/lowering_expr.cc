@@ -3382,6 +3382,31 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
     unsupported(node.span, "power operator");
     return Val{size_one, error_type(), false, false};
   }
+  // `&&` and `||` are control flow: the right side runs only when the
+  // left did not decide. A result slot takes whichever branch ran.
+  if (bin.op == ast::BinaryOp::And || bin.op == ast::BinaryOp::Or) {
+    const bool is_and = bin.op == ast::BinaryOp::And;
+    Val lhs = lower_expr(bin.lhs, nullptr);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+    Val slot = result_slot(boolean, node.span);
+    store_result(slot, lhs);
+    const ir::BlockIdx rhs_block = reserve_block();
+    const ir::BlockIdx end_block = reserve_block();
+    emit_cond_br(use_value(lhs), is_and ? rhs_block : end_block,
+                 is_and ? end_block : rhs_block);
+    switch_to(rhs_block);
+    Val rhs = lower_expr(bin.rhs, nullptr);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    store_result(slot, rhs);
+    emit_br(end_block);
+    switch_to(end_block);
+    return materialize(slot);
+  }
   // A bare literal defaults its width; lower the non-literal
   // side first so literals coerce to it (checking unified them).
   const bool lhs_literal = ast.exprs[bin.lhs].kind == ast::ExprKind::Literal;
@@ -3431,12 +3456,6 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
     }
   }
   const ir::TypeTag tag = tag_of(lhs.type);
-  if (bin.op == ast::BinaryOp::And || bin.op == ast::BinaryOp::Or) {
-    const ir::RegisterIdx dst =
-        emit(bin.op == ast::BinaryOp::And ? ir::Opcode::And : ir::Opcode::Or,
-             lhs.type, {use_value(lhs), use_value(rhs)});
-    return Val{to_operand(dst, lhs.type), lhs.type, false, false};
-  }
   // The checker admits == and != on a tuple or array when its elements
   // compare directly; the walk below is that comparison.
   if ((bin.op == ast::BinaryOp::Eq || bin.op == ast::BinaryOp::NotEq) &&
