@@ -107,6 +107,9 @@ base::Result<RunOutcome, diag::Reported> run_package(
     return base::make_err(diag::Reported{});
   }
   PackageTarget& bin = resolved.front();
+  if (!check_entry_point(ctx, bin)) {
+    return base::make_err(diag::Reported{});
+  }
   base::Result<lowering::LoweredPackage, diag::Reported> package =
       compile_tree(ctx, bin.tree, profile.optimize);
   if (package.is_err() || ctx.bag.has_errors()) {

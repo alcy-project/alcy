@@ -1,0 +1,3 @@
+exit = 6
+subcommand = "run"
+contains = ["EI024", "declares no free `main`"]
