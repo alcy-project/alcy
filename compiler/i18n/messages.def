@@ -328,6 +328,7 @@
   F(PkgDependencyNeedsPath, "Manifest '{}': dependency '{}' needs {{ path = ... }}") \
   F(PkgDependencyNotASpecifier, "Manifest '{}': dependency '{}' must be a specifier or `specifier = {{ ... }}`") \
   F(PkgDependencyNotATable, "Manifest '{}': dependency '{}' must be a table") \
+  F(PkgDependencyPreMinor, "Manifest '{}': dependency '{}' requires a pre-1.0 version; a minor may break it") \
   F(PkgDependencyRefWithoutRemote, "Manifest '{}': dependency '{}' names a ref without a git remote") \
   F(PkgDependencyTooManyEntries, "Manifest '{}': dependency '{}' names more than one entry") \
   F(PkgDependencyTooManyRefs, "Manifest '{}': dependency '{}' names more than one of branch, tag, rev") \

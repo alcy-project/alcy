@@ -19,9 +19,9 @@ replaced. The foundations are in `roadmap.md`.
   allocates the string and the drop pass never ends it, because the
   value is not a binding the pass can schedule. The `fmt` expansion
   calls its collected tuple's glue directly for the same reason.
-- [ ] Manifest lint: flag `0.x` dependency requirements. The grammar
-  accepts them, but a pre-1.0 minor may break, so the advice belongs
-  to a lint rather than to the parser (ADR-0057).
+- [x] Manifest lint: a pre-1.0 version range warns (WH007), since a
+  minor may break under 1.0. An exact pin cannot drift and stays
+  silent, and both spellings parse, so the grammar is unchanged.
 - [x] Format-string lint: the explicit `f` conversion (`{:.2f}` over
   `{:.2}`). The analyzer warns (WC045) and names the spelling to
   write; both spellings stay one piece, so the parser is unchanged.

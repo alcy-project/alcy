@@ -825,4 +825,36 @@ TEST_CASE("Identity fields refuse shapes that are not a value or a marker") {
   }
 }
 
+TEST_CASE("Manifest warns about a pre-1.0 version range") {
+  constexpr std::string_view RANGE =
+      "[package]\n"
+      "name = \"hello\"\n"
+      "version = \"1.0.0\"\n"
+      "license = \"\"\n"
+      "\n"
+      "[dependencies]\n"
+      "\"hash/one\" = { version = \"0.5.x\" }\n";
+  constexpr std::string_view PINNED =
+      "[package]\n"
+      "name = \"hello\"\n"
+      "version = \"1.0.0\"\n"
+      "license = \"\"\n"
+      "\n"
+      "[dependencies]\n"
+      "\"hash/one\" = { version = \"=0.5.0\" }\n";
+  Fixture range;
+  base::Result<PackageManifest, diag::Reported> ranged = parse_manifest(
+      RANGE, "alcy.toml", source::UNKNOWN_FILE, range.bag, range.arena);
+  CHECK(ranged.is_ok());
+  CHECK(!range.bag.has_errors());
+  // The range admits a minor, and a minor may break before 1.0.
+  CHECK(range.bag.warning_count() == 1);
+  Fixture pinned;
+  base::Result<PackageManifest, diag::Reported> exact = parse_manifest(
+      PINNED, "alcy.toml", source::UNKNOWN_FILE, pinned.bag, pinned.arena);
+  CHECK(exact.is_ok());
+  // An exact pin cannot drift, so the lint stays silent.
+  CHECK(pinned.bag.warning_count() == 0);
+}
+
 }  // namespace pkg

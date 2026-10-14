@@ -384,6 +384,17 @@ base::Result<Dependency, diag::Reported> parse_dependency(
       return base::make_err(diag::Reported{});
     }
     version_req = std::move(parsed).unwrap();
+    // A pre-1.0 range may break on a minor. An exact pin cannot drift,
+    // so `=0.5.0` stays silent, and both spellings parse: the advice
+    // belongs to the lint (ADR-0057).
+    const bool pinned = !version_text.empty() && version_text.front() == '=';
+    const std::string_view range =
+        pinned ? version_text.substr(1) : version_text;
+    if (!pinned && (range == "0" || range.starts_with("0."))) {
+      bag.emit<i18n::Key::PkgDependencyPreMinor>(
+          diag::Severity::Warning, diag::Stage::Pkg,
+          DiagCode::PreMinorRequirement, filename, spec);
+    }
   }
   Dependency dep{
       .spec = copy_str(arena, spec),

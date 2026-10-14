@@ -1,0 +1,10 @@
+[package]
+name = "demo"
+version = "1.0.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[dependencies]
+"hash/one" = { version = "0.5.x" }
