@@ -439,6 +439,19 @@ impl str {
     ret Option::Some(value)
   }
 
+  // The number of times byte `b` appears.
+  pub fn count_byte(self: &Self, b: u8) -> usize {
+    mut n := 0 as usize
+    mut i := 0 as usize
+    while i < str_len(*self) {
+      if str_byte(*self, i) == b {
+        n = n + 1
+      }
+      i = i + 1
+    }
+    ret n
+  }
+
   // Whether every byte is ASCII (below 0x80).
   pub fn is_ascii(self: &Self) -> bool {
     n := str_len(*self)
