@@ -26,8 +26,12 @@ namespace pipeline {
 
 // Shared frontend: type checking, lowering, and borrow checking over a
 // resolved tree. Used by build and run so both lower identical IR.
-base::Result<lowering::LoweredPackage, diag::Reported>
-compile_tree(PipelineContext& ctx, analyzer::ModuleTree tree, bool optimize);
+base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
+    PipelineContext& ctx,
+    analyzer::ModuleTree tree,
+    bool optimize,
+    bool needs_entry,
+    std::string_view entry_name);
 
 // Emits one relocatable object for a lowered package. The module is
 // built, runtime included, and, when the profile optimizes it, put

@@ -9,6 +9,7 @@
 
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
+#include "ast/ast.h"
 #include "borrow/borrow.h"
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
@@ -99,6 +100,18 @@ base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
     return resolve_inputs(ctx, root, {&single_input, 1}, "", prelude,
                           std_hints(), {}, policies);
   }();
+}
+
+bool has_free_main(const PipelineContext& ctx,
+                   const analyzer::ModuleTree& tree) {
+  for (ast::ItemIdx item : tree.modules[tree.root]->items) {
+    const ast::ItemNode& node = ctx.ast.items[item];
+    if (node.kind == ast::ItemKind::Fn &&
+        node.payload.get<ast::ItemFn>().name.name == "main") {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace pipeline

@@ -28,6 +28,11 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
     PipelineContext& ctx,
     analyzer::ModuleTree tree);
 
+// Whether the root module declares the free `main` a binary links.
+// Check and build both reject a binary target without one.
+bool has_free_main(const PipelineContext& ctx,
+                   const analyzer::ModuleTree& tree);
+
 // Prelude plus module resolution for one root file. The three
 // single-file entries share it; packages resolve through their
 // manifest instead.

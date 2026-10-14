@@ -54,10 +54,22 @@
 
 namespace pipeline {
 
-base::Result<lowering::LoweredPackage, diag::Reported>
-compile_tree(PipelineContext& ctx, analyzer::ModuleTree tree, bool optimize) {
+base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
+    PipelineContext& ctx,
+    analyzer::ModuleTree tree,
+    bool optimize,
+    bool needs_entry,
+    std::string_view entry_name) {
+  const bool has_main = !needs_entry || has_free_main(ctx, tree);
   base::Result<FrontendOutput, diag::Reported> out = run_frontend(ctx, tree);
-  if (out.is_err()) {
+  if (out.is_err() || ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  if (!has_main) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineNoEntryPoint>(
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoEntryPoint,
+        entry_name);
+    (void)index;
     return base::make_err(diag::Reported{});
   }
   FrontendOutput done = std::move(out).unwrap();
@@ -716,7 +728,9 @@ base::Result<std::string, diag::Reported> build_single_root(
     return base::make_err(diag::Reported{});
   }
   base::Result<lowering::LoweredPackage, diag::Reported> package =
-      compile_tree(ctx, std::move(tree).unwrap(), profile.optimize);
+      compile_tree(ctx, std::move(tree).unwrap(), profile.optimize,
+                   mode == EmitMode::Executable,
+                   ctx.sources.name(root).value_or(std::string_view{}));
   if (package.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
@@ -814,7 +828,10 @@ base::Result<std::string, diag::Reported> build_package(
   for (PlannedTarget& planned_target : planned) {
     PackageTarget& target = *planned_target.target;
     base::Result<lowering::LoweredPackage, diag::Reported> package =
-        compile_tree(ctx, target.tree, profile.optimize);
+        compile_tree(
+            ctx, target.tree, profile.optimize,
+            !target.is_lib && planned_target.mode == EmitMode::Executable,
+            target.name);
     if (package.is_err() || ctx.bag.has_errors()) {
       failed = true;
       break;

@@ -1,0 +1,4 @@
+# Compile links an executable, so the missing entry is named here too.
+exit = 3
+contains = ["declares no free `main`"]
+subcommand = "build"
