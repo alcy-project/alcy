@@ -214,6 +214,18 @@ impl<T> Vec<T> {
     ret false
   }
 
+  // The index of the last element the predicate accepts, or `None`.
+  pub fn rposition(self: &Self, pred: (&T) -> bool) -> Option<usize> {
+    mut i := self.len
+    while i > 0 {
+      i = i - 1
+      if pred(self.at(i).unwrap()) {
+        ret Option::Some(i)
+      }
+    }
+    ret Option::None
+  }
+
   // The first element the predicate accepts, or `None`.
   pub fn find(self: &Self, pred: (&T) -> bool) -> Option<&T> {
     mut i := 0 as usize
