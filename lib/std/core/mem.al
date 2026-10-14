@@ -52,3 +52,6 @@ pub unsafe intrinsic fn read_file_into(path: str, out: &mut u8, out_len: usize) 
 // -1 when it cannot be opened. The path is NUL-terminated in a
 // temporary slot and an existing file is truncated.
 pub unsafe intrinsic fn write_file_all(path: str, data: str) -> i64;
+
+// The number of process arguments, the program name first.
+pub unsafe intrinsic fn arg_count() -> i64;

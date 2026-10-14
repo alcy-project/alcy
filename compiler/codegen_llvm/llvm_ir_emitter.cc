@@ -1109,13 +1109,28 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
   llvm::LLVMContext& context = module_->getContext();
   // A freestanding entry is the ELF entry symbol itself and never
   // returns to a runtime; a hosted one is the C `main` a crt calls.
-  llvm::Function* wrapper = llvm::Function::Create(
-      llvm::FunctionType::get(builder_->getInt32Ty(), false),
-      llvm::Function::ExternalLinkage, freestanding_ ? "_start" : "main",
-      module_);
+  // A hosted entry is the C `main`, which a crt calls with the process
+  // arguments; a freestanding one is the ELF entry, which has none.
+  llvm::FunctionType* wrapper_type =
+      freestanding_
+          ? llvm::FunctionType::get(builder_->getInt32Ty(), false)
+          : llvm::FunctionType::get(
+                builder_->getInt32Ty(),
+                {builder_->getInt32Ty(), builder_->getPtrTy()}, false);
+  llvm::Function* wrapper =
+      llvm::Function::Create(wrapper_type, llvm::Function::ExternalLinkage,
+                             freestanding_ ? "_start" : "main", module_);
   llvm::BasicBlock* entry_block =
       llvm::BasicBlock::Create(context, "", wrapper);
   builder_->SetInsertPoint(entry_block);
+  if (!freestanding_) {
+    builder_->CreateStore(
+        wrapper->getArg(0),
+        module_->getOrInsertGlobal("alcy_argc", builder_->getInt32Ty()));
+    builder_->CreateStore(
+        wrapper->getArg(1),
+        module_->getOrInsertGlobal("alcy_argv", builder_->getPtrTy()));
+  }
   llvm::Value* result = builder_->CreateCall(entry_function);
   if (freestanding_) {
     // The exit status is the i32 main returned; an enum main exits

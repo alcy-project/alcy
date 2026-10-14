@@ -1692,6 +1692,24 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
   if (name == "str_len" || name == "str_byte" || name == "str_slice") {
     return lower_str_intrinsic(expr, name);
   }
+  if (name == "arg_count") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    if (!call.args.empty()) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
+    const ir::ExternalFunctionIdx ext =
+        declare_external("alcy_arg_count", i64_ty, {});
+    const ir::RegisterIdx dst =
+        emit(ir::Opcode::Call, i64_ty,
+             {builder.operand(ir::Operand::from_external_function(
+                 ext, builder.primitive(ir::TypeTag::Function)))});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(dst, i64_ty), i64_ty, false, false};
+  }
   if (name == "file_size" || name == "read_file_into" ||
       name == "write_file_all") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();

@@ -91,6 +91,24 @@ class RuntimeBuilder {
     if (eprintln) {
       build_writer("alcy_eprintln", /*newline=*/true, /*out_fd=*/2);
     }
+    if (!freestanding_) {
+      // The entry wrapper stores `argc` and `argv` here, so the
+      // globals exist whether or not a count is asked for.
+      llvm::GlobalVariable* argc =
+          module_.getOrInsertGlobal("alcy_argc", builder_.getInt32Ty());
+      if (!argc->hasInitializer()) {
+        argc->setInitializer(llvm::ConstantInt::get(builder_.getInt32Ty(), 0));
+      }
+      llvm::GlobalVariable* argv =
+          module_.getOrInsertGlobal("alcy_argv", builder_.getPtrTy());
+      if (!argv->hasInitializer()) {
+        argv->setInitializer(
+            llvm::ConstantPointerNull::get(builder_.getPtrTy()));
+      }
+    }
+    if (declared("alcy_arg_count")) {
+      build_arg_count();
+    }
     if (freestanding_) {
       // No libc to open a file with; the std still links.
       build_file_stubs();
@@ -455,6 +473,27 @@ class RuntimeBuilder {
     builder_.CreateRetVoid();
   }
 
+  // `alcy_arg_count()` answers `argc` widened to i64. The globals are
+  // the entry wrapper's stores; a freestanding program is never given
+  // any arguments.
+  void build_arg_count() {
+    llvm::FunctionType* type =
+        llvm::FunctionType::get(builder_.getInt64Ty(), false);
+    llvm::Function* function = runtime("alcy_arg_count", type);
+    function->setDoesNotThrow();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(module_.getContext(), "entry", function);
+    builder_.SetInsertPoint(entry);
+    if (freestanding_) {
+      builder_.CreateRet(llvm::ConstantInt::get(builder_.getInt64Ty(), 0));
+      return;
+    }
+    llvm::Value* count = builder_.CreateLoad(
+        builder_.getInt32Ty(),
+        module_.getOrInsertGlobal("alcy_argc", builder_.getInt32Ty()), "argc");
+    builder_.CreateRet(
+        builder_.CreateSExt(count, builder_.getInt64Ty(), "wide"));
+  }
   // A `str` path is not NUL-terminated, so it is copied into a slot
   // with the terminator `fopen` wants.
   llvm::Value* nul_terminated_path(llvm::Value* data, llvm::Value* len) {
