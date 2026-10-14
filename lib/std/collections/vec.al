@@ -88,6 +88,19 @@ impl<T> Vec<T> {
 
   // The whole buffer as a shared view. The slice borrows the
   // vector, so it stays readable while the vector is not grown.
+  // The first element, or `None` when empty.
+  pub fn first(self: &Self) -> Option<&T> {
+    ret self.at(0)
+  }
+
+  // The last element, or `None` when empty.
+  pub fn last(self: &Self) -> Option<&T> {
+    if self.is_empty() {
+      ret Option::None
+    }
+    ret self.at(self.len - 1)
+  }
+
   pub fn as_slice(self: &Self) -> &[T] {
     ret unsafe { slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len) }
   }
