@@ -238,6 +238,29 @@ impl<T> Vec<T> {
     ret Option::None
   }
 
+  // Removes consecutive repeats the predicate says are equal, keeping
+  // the first of each run and the order. The predicate sees the kept
+  // element and the candidate.
+  pub fn dedup_by(mut self: &mut Self, same: (&T, &T) -> bool) {
+    if self.len < 2 {
+      ret
+    }
+    mut write := 1 as usize
+    mut scan := 1 as usize
+    while scan < self.len {
+      if !same(self.at(write - 1).unwrap(), self.at(scan).unwrap()) {
+        if write != scan {
+          self.swap(write, scan)
+        }
+        write = write + 1
+      }
+      scan = scan + 1
+    }
+    while self.len > write {
+      _ := self.pop()
+    }
+  }
+
   // The index of a value the comparator answers zero for, assuming the
   // elements are sorted by the sign it returns. `None` when none
   // matches.
