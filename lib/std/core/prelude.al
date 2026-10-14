@@ -51,6 +51,7 @@ pub use package::mem::file_size;
 pub use package::mem::read_file_into;
 pub use package::mem::write_file_all;
 pub use package::mem::arg_count;
+pub use package::mem::arg;
 pub use package::ops::Add;
 pub use package::ops::Div;
 pub use package::ops::Mul;

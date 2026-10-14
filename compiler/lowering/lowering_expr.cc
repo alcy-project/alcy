@@ -1692,6 +1692,30 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
   if (name == "str_len" || name == "str_byte" || name == "str_slice") {
     return lower_str_intrinsic(expr, name);
   }
+  if (name == "arg") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    if (call.args.size() != 1) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::TypeIdx str_ty = builder.primitive(ir::TypeTag::Str);
+    const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
+    Val index = lower_expr(call.args[0], &sig.params[0]);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    const ir::ExternalFunctionIdx ext =
+        declare_external("alcy_arg", str_ty, {i64_ty});
+    const ir::RegisterIdx dst =
+        emit(ir::Opcode::Call, str_ty,
+             {builder.operand(ir::Operand::from_external_function(
+                  ext, builder.primitive(ir::TypeTag::Function))),
+              arg_for(index, sig.params[0])});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(dst, str_ty), str_ty, false, false};
+  }
   if (name == "arg_count") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
     if (!call.args.empty()) {

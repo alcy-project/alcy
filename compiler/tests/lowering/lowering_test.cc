@@ -542,7 +542,7 @@ TEST_CASE("Lower wraps all main forms in a C entry") {
 
     // The user entry is renamed; a C-ABI `main` adapts its return.
     CHECK(ir_str.find("alcy_main") != std::string::npos);
-    CHECK(ir_str.find("define i32 @main()") != std::string::npos);
+    CHECK(ir_str.find("define i32 @main(i32") != std::string::npos);
   }
 }
 

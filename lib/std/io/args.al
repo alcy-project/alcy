@@ -7,3 +7,15 @@
 pub fn args_len() -> usize {
   ret unsafe { arg_count() } as usize
 }
+
+// Argument `i` copied into a new string, or `None` when the index is
+// past the end. The program name is index zero.
+pub fn arg_at(i: usize) -> Option<String> {
+  if (i as i64) >= unsafe { arg_count() } {
+    ret Option::None
+  }
+  view := unsafe { arg(i as i64) }
+  mut s := String::with_capacity(str_len(view))
+  s.push_str(view)
+  ret Option::Some(s)
+}

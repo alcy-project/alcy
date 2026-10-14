@@ -109,6 +109,9 @@ class RuntimeBuilder {
     if (declared("alcy_arg_count")) {
       build_arg_count();
     }
+    if (declared("alcy_arg")) {
+      build_arg();
+    }
     if (freestanding_) {
       // No libc to open a file with; the std still links.
       build_file_stubs();
@@ -493,6 +496,54 @@ class RuntimeBuilder {
         module_.getOrInsertGlobal("alcy_argc", builder_.getInt32Ty()), "argc");
     builder_.CreateRet(
         builder_.CreateSExt(count, builder_.getInt64Ty(), "wide"));
+  }
+  // `alcy_arg(i)` answers the i-th argument as a `str` view, or an empty
+  // view when `i` is out of range. The bytes belong to the process.
+  void build_arg() {
+    llvm::StructType* view = llvm::StructType::get(
+        module_.getContext(), {builder_.getPtrTy(), usize_});
+    llvm::FunctionType* type =
+        llvm::FunctionType::get(view, {builder_.getInt64Ty()}, false);
+    llvm::Function* function = runtime("alcy_arg", type);
+    function->setDoesNotThrow();
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", function);
+    builder_.SetInsertPoint(entry);
+    if (freestanding_) {
+      builder_.CreateRet(llvm::ConstantAggregateZero::get(view));
+      return;
+    }
+    llvm::BasicBlock* empty =
+        llvm::BasicBlock::Create(context, "empty", function);
+    llvm::BasicBlock* have =
+        llvm::BasicBlock::Create(context, "have", function);
+    llvm::Value* index = function->getArg(0);
+    llvm::Value* count = builder_.CreateLoad(
+        builder_.getInt32Ty(),
+        module_.getOrInsertGlobal("alcy_argc", builder_.getInt32Ty()), "argc");
+    llvm::Value* wide =
+        builder_.CreateSExt(count, builder_.getInt64Ty(), "wide");
+    llvm::Value* below = builder_.CreateICmpSGE(
+        index, llvm::ConstantInt::get(builder_.getInt64Ty(), 0), "below");
+    llvm::Value* inside = builder_.CreateICmpSLT(index, wide, "inside");
+    builder_.CreateCondBr(builder_.CreateAnd(below, inside, "ok"), have, empty);
+    builder_.SetInsertPoint(empty);
+    builder_.CreateRet(llvm::ConstantAggregateZero::get(view));
+    builder_.SetInsertPoint(have);
+    llvm::Value* argv = builder_.CreateLoad(
+        builder_.getPtrTy(),
+        module_.getOrInsertGlobal("alcy_argv", builder_.getPtrTy()), "argv");
+    llvm::Value* slot =
+        builder_.CreateGEP(builder_.getPtrTy(), argv, index, "slot");
+    llvm::Value* text = builder_.CreateLoad(builder_.getPtrTy(), slot, "text");
+    llvm::Function* strlen_fn =
+        libc("strlen",
+             llvm::FunctionType::get(usize_, {builder_.getPtrTy()}, false));
+    llvm::Value* len = builder_.CreateCall(strlen_fn, {text}, "len");
+    llvm::Value* with_ptr =
+        builder_.CreateInsertValue(llvm::UndefValue::get(view), text, 0);
+    builder_.CreateRet(builder_.CreateInsertValue(with_ptr, len, 1));
   }
   // A `str` path is not NUL-terminated, so it is copied into a slot
   // with the terminator `fopen` wants.

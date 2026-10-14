@@ -2940,7 +2940,7 @@ bool Checker::is_known_intrinsic(std::string_view name) {
          name == "wrapping_add" || name == "wrapping_sub" ||
          name == "wrapping_mul" || name == "file_size" ||
          name == "read_file_into" || name == "write_file_all" ||
-         name == "arg_count";
+         name == "arg_count" || name == "arg";
 }
 
 // The intrinsics whose preconditions the compiler cannot check
@@ -2954,7 +2954,7 @@ static bool intrinsic_is_unsafe(std::string_view name) {
          name == "ptr_offset_mut" || name == "drop_in_place" ||
          name == "slice_at" || name == "slice_at_mut" || name == "read" ||
          name == "file_size" || name == "read_file_into" ||
-         name == "write_file_all" || name == "arg_count";
+         name == "write_file_all" || name == "arg_count" || name == "arg";
 }
 
 // What may cross a C boundary in the first ABI slice (ADR-0051):
@@ -3230,6 +3230,9 @@ bool Checker::check_intrinsic_signature(u32 module,
     expected_ret = builder.primitive(ir::TypeTag::I64);
   } else if (name == "arg_count") {
     expected_ret = builder.primitive(ir::TypeTag::I64);
+  } else if (name == "arg") {
+    expected.push_back(builder.primitive(ir::TypeTag::I64));
+    expected_ret = str;
   } else {
     return wrong();
   }
