@@ -63,6 +63,18 @@ impl String {
     ret out
   }
 
+  // A new string that repeats these bytes `n` times. A zero `n` is
+  // empty.
+  pub fn repeat(self: &Self, n: usize) -> String {
+    mut out := String::with_capacity(self.len * n)
+    mut k := 0 as usize
+    while k < n {
+      out.push_str(self.as_str())
+      k = k + 1
+    }
+    ret out
+  }
+
   // Keeps the first `n` bytes, dropping the rest. A byte has no
   // destructor, so the length is the only thing to change.
   pub fn truncate(mut self: &mut Self, n: usize) {
