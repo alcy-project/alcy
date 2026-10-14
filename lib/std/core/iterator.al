@@ -232,9 +232,13 @@ pub fn last<I, T>(mut iter: I) -> Option<T> {
 // element type is what the call spells (`collect_into::<I, T>(iter,
 // out)`), which is the part `collect` would ask a bound for.
 // The adapters' constructors. The element type comes from the bound
-// (`I: Iterator<T>`), so a call spells only the predicate or the count
-// (`filter(v.iter(), (x: &i32) -> *x > 1)`); `map` waits for the
-// return type of a closure to take part in inference.
+// (`I: Iterator<T>`), and `map`'s result type comes from the closure's
+// return, so a call spells neither (`filter(v.iter(), (x: &i32) -> *x >
+// 1)`, `map(v.iter(), (x: i32) -> x + 1)`).
+
+pub fn map<I: Iterator<T>, T, U>(iter: I, f: (T) -> U) -> MapIter<I, T, U> {
+  ret MapIter { iter: iter, f: f }
+}
 
 pub fn filter<I: Iterator<T>, T>(iter: I, f: (T) -> bool) -> FilterIter<I, T> {
   ret FilterIter { iter: iter, f: f }

@@ -28,6 +28,7 @@ pub use package::iterator::any;
 pub use package::iterator::collect;
 pub use package::iterator::enumerate;
 pub use package::iterator::filter;
+pub use package::iterator::map;
 pub use package::iterator::skip;
 pub use package::iterator::take;
 pub use package::iterator::collect_into;
