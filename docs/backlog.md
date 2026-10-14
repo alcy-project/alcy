@@ -31,9 +31,11 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] The embedded linker beyond this host: startup discovery hard-codes
   Linux paths, only the ELF driver is embedded, and ADR-0049's M3 (the
   wasm lld driver and the portable full compiler) is unstarted.
-- [ ] Diagnose a binary with no free `main` while checking. Today the
-  program reaches the linker and reports `Linking failed`, which names
-  the tool rather than the missing entry.
+- [x] A binary with no free `main` is diagnosed before the linker
+  sees it: `check_entry_point` runs per resolved target, so `check`
+  and a `build` that would link both name the target (EI024). An
+  associated `main` is not an entry point, and a library target needs
+  none.
 - [x] A non-regular input is refused rather than read as empty: a pipe
   or a device reports no size and cannot be mapped, so `check --file`
   on one would check a program out as nothing. `SourceManager::load`

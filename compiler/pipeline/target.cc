@@ -19,6 +19,7 @@
 #endif
 
 #include "analyzer/resolve.h"
+#include "ast/ast.h"
 #include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -47,6 +48,40 @@
 #include "source/source.h"
 
 namespace pipeline {
+
+namespace {
+
+// Whether the root module declares a free `main`. A method named `main`
+// is not the entry point: the linker resolves the symbol, and an
+// associated function lives under its type's name.
+bool has_free_main(const ast::AstArena& ast, const analyzer::ModuleTree& tree) {
+  if (tree.root >= tree.modules.size()) {
+    return false;
+  }
+  for (ast::ItemIdx item : tree.modules[tree.root]->items) {
+    const ast::ItemNode& node = ast.items[item];
+    if (node.kind != ast::ItemKind::Fn) {
+      continue;
+    }
+    if (node.payload.get<ast::ItemFn>().name.name == "main") {
+      return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace
+
+bool check_entry_point(PipelineContext& ctx, const PackageTarget& target) {
+  if (target.is_lib || has_free_main(ctx.ast, target.tree)) {
+    return true;
+  }
+  const u32 index = ctx.bag.emit<i18n::Key::PipelineNoEntryPoint>(
+      diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoEntryPoint,
+      target.name);
+  (void)index;
+  return false;
+}
 
 base::Result<ManifestProbe, diag::Reported> require_package_manifest(
     PipelineContext& ctx,

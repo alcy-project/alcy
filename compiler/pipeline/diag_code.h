@@ -82,6 +82,9 @@ enum class DiagCode : u8 {
   // A named source is not a regular file: a pipe or a device reports
   // no size and cannot be mapped, so it would load as empty.
   SourceNotRegular = 23,
+  // A binary target declares no free `main`: the program reaches the
+  // linker, whose failure names the tool rather than the entry point.
+  NoEntryPoint = 24,
 };
 
 }  // namespace pipeline

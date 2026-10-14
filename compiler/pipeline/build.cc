@@ -743,6 +743,12 @@ base::Result<std::string, diag::Reported> build_package(
     // an object one.
     const EmitMode target_mode =
         target.is_lib && mode == EmitMode::Executable ? EmitMode::Object : mode;
+    // A binary that will be linked needs its entry point before the
+    // linker sees it.
+    if (target_mode == EmitMode::Executable &&
+        !check_entry_point(ctx, target)) {
+      return base::make_err(diag::Reported{});
+    }
     std::string output_path;
     if (output.empty()) {
       // Everything a build writes goes to the out/ the scaffold's own

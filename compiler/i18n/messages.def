@@ -411,6 +411,7 @@
   F(PipelineModuleSelectedTwice, "Module '{}' is selected by more than one file") \
   F(PipelineModuleSharedByTwoFiles, "Module '{}' is shared by two files relative to the target's directory '{}'") \
   F(PipelineMultipleTargetsWithOutput, "Cannot write multiple targets to '{}'; omit -o") \
+  F(PipelineNoEntryPoint, "Binary '{}' declares no free `main`") \
   F(PipelineNoManifest, "No manifest found at '{}'; add alcy.toml") \
   F(PipelineNoManifestInCurrentDirectory, "No manifest found at current directory; add alcy.toml") \
   F(PipelineNoManifestWithFileHint, "No manifest found at '{}'; pass a file with --file or add alcy.toml") \

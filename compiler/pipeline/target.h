@@ -37,6 +37,12 @@ struct PackageTarget {
   std::optional<path::Path> output_dir;
 };
 
+// Emits the missing-entry-point diagnostic when a binary target
+// declares no free `main`, and answers whether the target can go on. A
+// library needs no entry point; a binary without one reaches the
+// linker, whose failure names the tool rather than the declaration.
+bool check_entry_point(PipelineContext& ctx, const PackageTarget& target);
+
 // The suite a package sits inside: its root, its manifest, and the
 // suite-relative path the package's directory has there.
 struct EnclosingSuite {

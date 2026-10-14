@@ -122,6 +122,13 @@ base::Result<CheckOutcome, diag::Reported> check_package(
       ok = false;
       continue;
     }
+    // A binary needs an entry point: without one the program reaches
+    // the linker, whose "Linking failed" names the tool rather than the
+    // missing declaration.
+    if (!check_entry_point(ctx, target)) {
+      ok = false;
+      continue;
+    }
     // Every tree counts the same selection, so the first success
     // measures the package; summing would count its files twice.
     if (!have_outcome) {
