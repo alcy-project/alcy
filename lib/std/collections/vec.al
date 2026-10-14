@@ -163,6 +163,18 @@ impl<T> Vec<T> {
     }
   }
 
+  // A left fold: `acc` starts the state and `step` carries it across
+  // every element in order.
+  pub fn fold<A>(self: &Self, acc: A, step: (A, &T) -> A) -> A {
+    mut state := acc
+    mut i := 0 as usize
+    while i < self.len {
+      state = step(state, self.at(i).unwrap())
+      i = i + 1
+    }
+    ret state
+  }
+
   // Whether the predicate accepts every element; an empty vector is
   // `true`.
   pub fn all(self: &Self, pred: (&T) -> bool) -> bool {
