@@ -3625,9 +3625,11 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
                                  node.span);
     }
     case ast::ExprKind::Deref: {
-      // A reference the binding already holds is a place through its
-      // deref without `mut` on the binding, which gates reassigning the
-      // binding, not the write through the `&mut` it has.
+      // A reference a call answers is a place through its deref, the
+      // same as one a local holds: `*v.first_mut().unwrap() = 10`. A
+      // reference the binding already holds is a place without `mut` on
+      // the binding, which gates reassigning the binding, not the write
+      // through the `&mut` it has.
       const ast::ExprIdx deref_inner = node.payload.get<ast::ExprDeref>().inner;
       const ast::ExprKind deref_kind = ast.exprs[deref_inner].kind;
       bool borrow_inner = false;
@@ -3645,9 +3647,11 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
           }
         }
       }
-      const ir::TypeIdx inner = borrow_inner
-                                    ? check_expr(module, deref_inner, nullptr)
-                                    : check_place(module, deref_inner);
+      const ir::TypeIdx inner =
+          (deref_kind == ast::ExprKind::Call ||
+           deref_kind == ast::ExprKind::MethodCall || borrow_inner)
+              ? check_expr(module, deref_inner, nullptr)
+              : check_place(module, deref_inner);
       if (is_error(inner)) {
         return error_type();
       }
