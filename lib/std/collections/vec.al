@@ -163,6 +163,18 @@ impl<T> Vec<T> {
     }
   }
 
+  // The index of the first element the predicate accepts, or `None`.
+  pub fn position(self: &Self, pred: (&T) -> bool) -> Option<usize> {
+    mut i := 0 as usize
+    while i < self.len {
+      if pred(self.at(i).unwrap()) {
+        ret Option::Some(i)
+      }
+      i = i + 1
+    }
+    ret Option::None
+  }
+
   // Keeps the elements the predicate accepts and drops the rest, in
   // order. A write cursor follows a read cursor; the swaps leave the
   // kept prefix in place and the tail is popped, so each rejected
