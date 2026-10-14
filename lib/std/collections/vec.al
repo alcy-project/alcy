@@ -238,6 +238,27 @@ impl<T> Vec<T> {
     ret Option::None
   }
 
+  // The index of a value the comparator answers zero for, assuming the
+  // elements are sorted by the sign it returns. `None` when none
+  // matches.
+  pub fn binary_search_by(self: &Self, compare: (&T) -> i32) -> Option<usize> {
+    mut lo := 0 as usize
+    mut hi := self.len
+    while lo < hi {
+      mid := lo + (hi - lo) / 2
+      c := compare(self.at(mid).unwrap())
+      if c == 0 {
+        ret Option::Some(mid)
+      }
+      if c < 0 {
+        lo = mid + 1
+      } else {
+        hi = mid
+      }
+    }
+    ret Option::None
+  }
+
   // The index of the first element the predicate accepts, or `None`.
   pub fn position(self: &Self, pred: (&T) -> bool) -> Option<usize> {
     mut i := 0 as usize
