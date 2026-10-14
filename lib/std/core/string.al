@@ -26,6 +26,41 @@ impl str {
     ret str_byte(*self, at)
   }
 
+  // Whether the bytes begin with `prefix`. An empty prefix always
+  // matches.
+  pub fn starts_with(self: &Self, prefix: str) -> bool {
+    n := str_len(prefix)
+    if str_len(*self) < n {
+      ret false
+    }
+    mut i := 0 as usize
+    while i < n {
+      if str_byte(*self, i) != str_byte(prefix, i) {
+        ret false
+      }
+      i = i + 1
+    }
+    ret true
+  }
+
+  // Whether the bytes end with `suffix`. An empty suffix always
+  // matches.
+  pub fn ends_with(self: &Self, suffix: str) -> bool {
+    n := str_len(suffix)
+    m := str_len(*self)
+    if m < n {
+      ret false
+    }
+    mut i := 0 as usize
+    while i < n {
+      if str_byte(*self, m - n + i) != str_byte(suffix, i) {
+        ret false
+      }
+      i = i + 1
+    }
+    ret true
+  }
+
   // Byte iteration: `for b in s` reads each byte in order.
   pub fn into_iter(self: str) -> StrIter {
     ret StrIter { s: self, pos: 0 }

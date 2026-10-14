@@ -106,6 +106,16 @@ impl String {
     ret unsafe { slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len) }
   }
 
+  // The byte-level predicates, so a `String` reads like the `str`
+  // view it hands out.
+  pub fn starts_with(self: &Self, prefix: str) -> bool {
+    ret self.as_str().starts_with(prefix)
+  }
+
+  pub fn ends_with(self: &Self, suffix: str) -> bool {
+    ret self.as_str().ends_with(suffix)
+  }
+
   // Forgets every byte, keeping the room already reserved.
   pub fn clear(mut self: &mut Self) {
     self.len = 0
