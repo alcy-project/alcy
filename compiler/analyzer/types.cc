@@ -6117,19 +6117,6 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
       return nullptr;
     }
   }
-  // Calling through a type parameter needs a callable bound, which
-  // waits on specs: until a bound says what a parameter can be called
-  // as, a function type stays refused as an inferred argument.
-  for (const ir::TypeIdx arg : bound) {
-    if (!is_error(arg) && builder.types()[arg.idx].tag == ir::TypeTag::Func) {
-      const u32 index =
-          bag.emit<i18n::Key::AnalyzerFunctionTypeAsGenericArgument>(
-              diag::Severity::Error, diag::Stage::Analyzer,
-              DiagCode::UnsupportedType, span);
-      (void)index;
-      return nullptr;
-    }
-  }
   std::vector<std::pair<std::string_view, ir::TypeIdx>> bounds;
   for (usize i = 0; i < params.size() && i < bound.size(); ++i) {
     bounds.emplace_back(params[i].name.name, bound[i]);

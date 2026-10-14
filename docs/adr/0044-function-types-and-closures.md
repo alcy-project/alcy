@@ -180,5 +180,7 @@ under its own tag, so two instantiations that differ only there
 mangle apart, and the type-position refusal retires; `core`'s
 adapters are the acceptance case, each holding a function-typed
 field its `Iterator` implementation calls. An inferred argument
-that is a function type stays refused until a callable bound says
-what a parameter may be called as.
+that is a function type is an argument like any other: the body is
+checked at the call (ADR-0063), so the parameter is already the
+concrete function type where the body calls it and no callable bound
+is needed.

@@ -74,7 +74,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   one's own. Floats stay `PartialOrd` only. Designed in
   `docs/adr/0053-operators-are-sealed-specs.md`.
 
-- [ ] Spec bounds and checked generics.
+- [x] Spec bounds and checked generics.
 
   ADR-0028's last slice: bounds where a parameter is declared - on
   functions, methods, spec methods, and impls, never on structs or
@@ -96,9 +96,13 @@ peripheral work lives in `backlog.md`. The language record lives in
   landed with bound-driven inference: a parameter no argument binds
   (`I: Iterator<T>`'s item type) comes from the first declared
   method's signature and the implementation for the bound-covered
-  parameter, so `collect(v.iter())` spells nothing. Callable bounds
-  follow once the vocabulary exists; an inferred argument that is a
-  function type waits for them. Designed in
+  parameter, so `collect(v.iter())` spells nothing. The tail closed
+  without the callable bound the item predicted: a function-typed
+  argument instantiates like any other, because the body is checked at
+  the call and the parameter is already the concrete function type
+  there, so `id((a: i32) -> a)` and calling through `f(x)` need no
+  bound. Designed in
+>>>>>>> e3ca54db (feat(analyzer): a function-typed argument is a type argument like any other)
   `docs/adr/0028-spec-system.md`, and the body-checking decision is
   `docs/adr/0063-generic-bodies-are-checked-at-their-calls.md`.
 

@@ -143,8 +143,13 @@ supers, and `Display` accepts the builtin convertibles without an
 impl. Bounds also infer: a parameter no argument binds but a bound
 mentions (`fn collect<I: Iterator<T>, T>(iter: I) -> Vec<T>`) comes
 from the first declared method's signature and the implementation the
-bound-covered parameter has. What remains: spec methods with type
-parameters and the definition-site body-checking decision.
+bound-covered parameter has. A spec method may declare its own type
+parameters, spelled at the call and checked against its bounds before
+the body specializes; the definition-site body-checking decision is
+ADR-0063. A function-typed argument instantiates like any other: the
+body is checked at the call, so the parameter is the concrete function
+type where the body calls it and no callable bound is needed.
+>>>>>>> e3ca54db (feat(analyzer): a function-typed argument is a type argument like any other)
 
 What is explicitly out of scope: associated types (specs take type
 parameters instead), supertraits, default bodies, spec objects

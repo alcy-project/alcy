@@ -173,7 +173,6 @@
   F(AnalyzerFormatPlaceholderArity, "Format string has {} placeholders for {} arguments") \
   F(AnalyzerFormatPrecisionNotFloat, "A format precision applies to floats only") \
   F(AnalyzerFormatStringNotCompKnown, "Format string must be comp-known") \
-  F(AnalyzerFunctionTypeAsGenericArgument, "Function types cannot be generic arguments yet") \
   F(AnalyzerGenericArgumentsUnsupported, "Generic arguments are not supported") \
   F(AnalyzerGenericImplUnsupported, "Generic impl blocks are not supported") \
   F(AnalyzerIfWithoutElse, "If without else yields '()'") \

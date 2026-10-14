@@ -3807,19 +3807,15 @@ TEST_CASE("Check reports an inner capture the outer closure hides") {
   CHECK(f.bag.has_errors());
 }
 
-TEST_CASE("Check rejects a function type as a generic argument") {
+TEST_CASE("Check accepts a function type as an inferred generic argument") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn id<T>(x: T) -> T {\n"
                                       "  ret x\n"
                                       "}\n"
-                                      "fn one(x: i32) -> i32 {\n"
-                                      "  ret x\n"
-                                      "}\n"
                                       "fn main() -> i32 {\n"
-                                      "  f: (i32) -> i32 := one\n"
-                                      "  g := id(f)\n"
-                                      "  ret g(1)\n"
+                                      "  f := id((a: i32) -> a)\n"
+                                      "  ret f(1)\n"
                                       "}\n"}});
   CHECK(setup);
   if (!setup) {
@@ -3827,13 +3823,10 @@ TEST_CASE("Check rejects a function type as a generic argument") {
   }
   Fixture f;
   const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
-  CHECK(!result.package.has_value());
-  CHECK(f.bag.has_errors());
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
 }
 
-// A function type is a type argument like any other now that the mangle
-// encodes its signature; two instantiations that differ there mangle
-// apart.
 TEST_CASE("Check accepts a function type as a nominal type argument") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
