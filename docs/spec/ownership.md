@@ -14,11 +14,12 @@
   refused until the drop walk can name an element. A value without a
   destructor is read out by ordinary copy.
 - A non-`Copy` value cannot be moved out of a reference: reading `*r`
-  as a value, taking a field out of the referent, and a pattern that
-  binds a payload by value are all refused. Until a pattern can bind a
-  payload by reference, a `match` over a borrowed value whose type
-  carries a non-`Copy` payload is refused as a whole, even where every
-  arm binds only `Copy` payloads or nothing at all. The reference one of the
+  as a value, taking a field out of the referent, and moving a pattern's
+  payload out are all refused. A pattern over a borrowed value reads the
+  discriminant in place and binds what it takes behind a reference, so
+  `match *e { E::A(s) => s.len(), E::B => 0 }` reads the payload without
+  taking it; a `Copy` payload is a `&T` like any other, so a value needs
+  the `*` the reference is. The reference one of the
   compiler's own `unsafe` intrinsics hands out - the allocator's
   accessors - names storage the caller owns, so reading through one is
   a move; an ordinary `unsafe` function returns a borrow like any

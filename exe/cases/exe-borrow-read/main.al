@@ -60,7 +60,7 @@ fn main() -> i32 {
 
   c := C::Pair(7, 8)
   label := match *&c {
-    C::Pair(n, _) => n,
+    C::Pair(n, _) => *n,
     C::Zero => 0,
   }
   if label != 7 {

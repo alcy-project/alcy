@@ -35,14 +35,11 @@ replaced. The foundations are in `roadmap.md`.
   the pass needs an element step that ends the elements the move left
   behind. A value moved out of a temporary array (`f().a[0]`) is the
   same shape one level out.
-- [ ] Matching over a borrowed value whose type carries a non-`Copy`
-  payload is refused as a whole, even where every arm binds only
-  `Copy` payloads or nothing (`err-match-ref-payload` and
-  `err-match-ref-copy-only` pin both shapes). Binding a payload by
-  reference - what a shared borrow would want - is the ergonomics that
-  would let the read through: the lowering then carries the
-  scrutinee's borrow into the payload loads instead of materializing
-  the scrutinee.
+- [x] Matching over a borrowed value whose type carries a non-`Copy`
+  payload reads it in place: the discriminant is read where it lies, a
+  pattern's bindings are shared references, and moving a payload out
+  stays refused (`err-borrowed-move-out`). A `Copy` payload binds as
+  `&T` too, so one rule covers every arm.
 - [ ] `map` has no constructor: its result type comes from a closure's
   return type, which inference cannot read before the closure is
   checked. A slice that checks a closure argument first, or that lets

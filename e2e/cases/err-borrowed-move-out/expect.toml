@@ -1,2 +1,2 @@
 exit = 4
-contains = ["Cannot move out of"]
+contains = ["Cannot move a non-`Copy` value out of a reference"]
