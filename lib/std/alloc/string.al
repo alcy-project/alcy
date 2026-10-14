@@ -128,6 +128,10 @@ impl String {
     ret self.as_str().count(needle)
   }
 
+  pub fn lines(self: &Self) -> LinesIter {
+    ret self.as_str().lines()
+  }
+
   pub fn strip_suffix(self: &Self, suffix: str) -> Option<str> {
     ret self.as_str().strip_suffix(suffix)
   }

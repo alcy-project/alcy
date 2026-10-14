@@ -242,9 +242,49 @@ impl str {
     ret SplitIter { rest: self, delim: delim, done: false }
   }
 
+  // A cursor over the lines, `\n`-separated, with a trailing `\r`
+  // removed. A final empty line is not reported.
+  pub fn lines(self: str) -> LinesIter {
+    ret LinesIter { rest: self, done: false }
+  }
+
   // Byte iteration: `for b in s` reads each byte in order.
   pub fn into_iter(self: str) -> StrIter {
     ret StrIter { s: self, pos: 0 }
+  }
+}
+
+// A cursor over the lines a `\n` separates.
+pub struct LinesIter {
+  rest: str,
+  done: bool,
+}
+
+impl LinesIter {
+  pub fn into_iter(self: LinesIter) -> LinesIter {
+    ret self
+  }
+}
+
+impl Iterator<str> for LinesIter {
+  fn next(mut self: &mut Self) -> Option<str> {
+    if self.done || str_len(self.rest) == 0 {
+      ret Option::None
+    }
+    match self.rest.find("\n") {
+      Option::Some(i) => {
+        mut line := str_slice(self.rest, 0, i)
+        if line.ends_with("\r") {
+          line = str_slice(line, 0, str_len(line) - 1)
+        }
+        self.rest = str_slice(self.rest, i + 1, str_len(self.rest))
+        ret Option::Some(line)
+      }
+      Option::None => {
+        self.done = true
+        ret Option::Some(self.rest)
+      }
+    }
   }
 }
 
