@@ -3529,6 +3529,20 @@ Val Lowerer::result_slot(ir::TypeIdx type, diag::Span span) {
 // Whether bind_pattern alone can place a pattern: an irrefutable
 // binding, a wildcard, or a destructuring of those. A literal, a
 // variant, or an alternative needs a test instead.
+// Whether a match scrutinee reads through a reference: a place
+// reached by a dereference holds borrowed content.
+bool Lowerer::scrutinee_borrowed(ast::ExprIdx expr) const {
+  const ast::ExprNode& node = ast.exprs[expr];
+  switch (node.kind) {
+    case ast::ExprKind::Deref: return true;
+    case ast::ExprKind::Field:
+      return scrutinee_borrowed(node.payload.get<ast::ExprField>().receiver);
+    case ast::ExprKind::Index:
+      return scrutinee_borrowed(node.payload.get<ast::ExprIndex>().receiver);
+    default: return false;
+  }
+}
+
 bool Lowerer::pattern_bindable(ast::PatternIdx pattern) const {
   const ast::PatternNode& node = ast.patterns[pattern];
   switch (node.kind) {
@@ -3641,6 +3655,12 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
           // its nesting diagnostic from bind_pattern.
           for (u32 i = 0; i < static_cast<u32>(elements.size()) && !failed;
                ++i) {
+            if (arm_borrowed_ &&
+                ast.patterns[elements[i]].kind == ast::PatternKind::Wildcard) {
+              // A borrowed field is the owner to end and nothing to
+              // bind.
+              continue;
+            }
             const ir::RegisterIdx gep =
                 emit(ir::Opcode::GetElementPtr, shape.elements[i],
                      {scrut_addr.op, zero_i32, index_operand(i)},
@@ -3720,6 +3740,12 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
       const ir::TypeIdxRange fields = variant_fields(scrut_type, variant);
       if (!test_payloads) {
         for (usize i = 0; i < payloads.size() && !failed; ++i) {
+          if (arm_borrowed_ &&
+              ast.patterns[elements[i]].kind == ast::PatternKind::Wildcard) {
+            // A borrowed scrutinee keeps its payloads; a wildcard binds
+            // nothing to load and nothing to end.
+            continue;
+          }
           if (ast.patterns[elements[i]].kind == ast::PatternKind::Wildcard &&
               runs_destructor(fields[i])) {
             // The arm discards this payload: end it in place rather than
@@ -3748,7 +3774,8 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
         const ir::RegisterIdx addr =
             payload_field_slot_addr(scrut_addr, fields, i);
         addrs.push_back(addr);
-        discard.push_back(ast.patterns[elements[i]].kind ==
+        discard.push_back(!arm_borrowed_ &&
+                          ast.patterns[elements[i]].kind ==
                               ast::PatternKind::Wildcard &&
                           runs_destructor(payloads[i]));
         places.push_back(Val{to_operand(addr, payloads[i]), payloads[i], true,
@@ -3788,6 +3815,11 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
       }
       if (bindable || has_or) {
         for (const ast::FieldPattern& field : fields) {
+          if (arm_borrowed_ &&
+              ast.patterns[field.pattern].kind == ast::PatternKind::Wildcard) {
+            // A borrowed field is the owner to end and nothing to bind.
+            continue;
+          }
           u32 index = 0;
           if (!struct_field_index(scrut_type, field.name.name, index)) {
             internal(field.name.span, "pattern field without declaration");
@@ -3887,6 +3919,8 @@ void Lowerer::lower_condition_test(ast::PatternIdx pattern,
                                    ir::TypeIdx scrut_type,
                                    ir::BlockIdx body_block,
                                    ir::BlockIdx fail_block) {
+  const bool saved_borrowed = arm_borrowed_;
+  arm_borrowed_ = false;
   const std::vector<ast::PatternIdx> alternatives =
       condition_alternatives(pattern);
   for (usize i = 0; i + 1 < alternatives.size() && !failed; ++i) {
@@ -3903,16 +3937,28 @@ void Lowerer::lower_condition_test(ast::PatternIdx pattern,
     lower_arm_test(alternatives.back(), scrut_addr, scrut_type, body_block,
                    fail_block);
   }
+  arm_borrowed_ = saved_borrowed;
 }
 
 Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprMatch& match = node.payload.get<ast::ExprMatch>();
-  Val scrut = lower_expr(match.scrutinee, nullptr);
+  // A scrutinee read through a reference is a place to inspect, not a
+  // value to load: the discriminant test must not move the borrow.
+  const bool borrowed = scrutinee_borrowed(match.scrutinee);
+  Val addr = Val{size_one, error_type(), true, false};
+  if (borrowed) {
+    addr = place_addr(match.scrutinee);
+  } else {
+    Val scrut = lower_expr(match.scrutinee, nullptr);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    addr = address_of(scrut);
+  }
   if (failed || terminated_cur()) {
     return stopped_value();
   }
-  Val addr = address_of(scrut);
   const ir::TypeIdx scrut_type = expr_type(match.scrutinee);
   const ir::TypeIdx result_type = expr_type(expr);
   Val slot{size_one, result_type, false, false};
@@ -3961,6 +4007,8 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   for (usize i = 0; i < patterns.size(); ++i) {
     epilogues.push_back(reserve_block());
   }
+  const bool saved_borrowed = arm_borrowed_;
+  arm_borrowed_ = borrowed;
   for (usize i = 0; i < patterns.size() && !failed; ++i) {
     // The arm's pattern bindings end at the arm's own exit, or the sweep
     // would place their drops where their slots do not dominate.
@@ -4002,6 +4050,7 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       emit_br(epilogues[i]);
     }
   }
+  arm_borrowed_ = saved_borrowed;
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
@@ -4027,8 +4076,10 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   switch_to(join);
   // A by-value match consumes a non-Copy scrutinee, but the arms read
   // its discriminant and payloads to do so, so the move lands after
-  // them. Every arm that falls through reaches the join.
-  mark_move(addr);
+  // them. A scrutinee read through a reference stays its owner.
+  if (!borrowed) {
+    mark_move(addr);
+  }
   if (has_slot) {
     return materialize(slot);
   }

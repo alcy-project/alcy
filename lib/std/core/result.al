@@ -12,15 +12,17 @@ pub enum Result<T, E> {
 }
 
 impl<T, E> Result<T, E> {
-  pub fn is_ok(self: Self) -> bool {
-    ret match self {
+  // Consulted through a shared borrow, so the result is still there
+  // to ask again.
+  pub fn is_ok(self: &Self) -> bool {
+    ret match *self {
       Result::Ok(_) => true,
       Result::Err(_) => false,
     }
   }
 
-  pub fn is_err(self: Self) -> bool {
-    ret match self {
+  pub fn is_err(self: &Self) -> bool {
+    ret match *self {
       Result::Ok(_) => false,
       Result::Err(_) => true,
     }

@@ -9,15 +9,17 @@ pub enum Option<T> {
 }
 
 impl<T> Option<T> {
-  pub fn is_some(self: Self) -> bool {
-    ret match self {
+  // Consulted through a shared borrow, so the option is still there
+  // to ask again.
+  pub fn is_some(self: &Self) -> bool {
+    ret match *self {
       Option::Some(_) => true,
       Option::None => false,
     }
   }
 
-  pub fn is_none(self: Self) -> bool {
-    ret match self {
+  pub fn is_none(self: &Self) -> bool {
+    ret match *self {
       Option::Some(_) => false,
       Option::None => true,
     }

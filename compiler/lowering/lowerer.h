@@ -561,6 +561,10 @@ class Lowerer {
   // binding, a wildcard, or a destructuring of those. A refutable
   // sub-pattern needs a test, not a binding.
   bool pattern_bindable(ast::PatternIdx pattern) const;
+  // Whether a match scrutinee reads through a reference: its payload
+  // stays the owner to end, and a wildcard must not touch it.
+  bool scrutinee_borrowed(ast::ExprIdx expr) const;
+  bool arm_borrowed_ = false;
   void expand_or_arms(
       const ast::ExprMatchArm& arm,
       std::vector<std::pair<ast::PatternIdx, ast::ExprIdx>>& out);
