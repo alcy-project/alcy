@@ -163,6 +163,19 @@ impl<T> Vec<T> {
     }
   }
 
+  // Whether some element equals `value`, compared the way `==`
+  // compares two elements.
+  pub fn contains(self: &Self, value: &T) -> bool {
+    mut i := 0 as usize
+    while i < self.len {
+      if *self.at(i).unwrap() == *value {
+        ret true
+      }
+      i = i + 1
+    }
+    ret false
+  }
+
   // A left fold: `acc` starts the state and `step` carries it across
   // every element in order.
   pub fn fold<A>(self: &Self, acc: A, step: (A, &T) -> A) -> A {
