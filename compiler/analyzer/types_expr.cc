@@ -2784,7 +2784,12 @@ ir::TypeIdx Checker::check_match(u32 module,
   bool first = true;
   for (const ast::ExprMatchArm& arm : node.payload.get<ast::ExprMatch>().arms) {
     scopes.emplace_back();
-    if (!is_error(scrutinee)) {
+    // A scrutinee that failed to type still binds its arms' names: they
+    // are what the body refers to, and reporting each use again says
+    // nothing the first diagnostic did not.
+    if (is_error(scrutinee)) {
+      bind_error_idents(module, arm.pattern);
+    } else {
       const bool refutable = bind_pattern(module, arm.pattern, scrutinee);
       // The `for` desugar marks its `Some` arm: the item pattern must
       // match every item, so a refutable one is an error here rather

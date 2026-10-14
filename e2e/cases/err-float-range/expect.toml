@@ -1,5 +1,7 @@
 # Float ranges hold no sequence; the cursor arithmetic is integer-only
-# (docs/spec/types.md), so the `for` desugar is refused at the loop.
+# (docs/spec/types.md), so the `for` desugar is refused at the loop. The
+# body's use of the loop variable is not a second error: the arm of the
+# desugared `Some` match binds it against the failure.
 exit = 4
 contains = ["Float ranges do not iterate"]
-not_contains = []
+not_contains = ["Unresolved value", "not a member of the matched type"]

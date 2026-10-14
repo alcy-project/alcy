@@ -162,9 +162,12 @@ replaced. The foundations are in `roadmap.md`.
   scalars and addresses and spec-based for nominal types, so `(1, 2) ==
   (1, 2)` and `[1, 2] == [1, 2]` have no comparison. Decide the builtin
   element-wise rule or keep it explicit.
-- [ ] Float ranges: `for x in 0.5..<2.5` fails with type errors inside
-  `core/range.al`. `types.md` says float ranges have no iteration, so the
-  iteration site wants one clear diagnostic instead of std internals.
+- [x] Float ranges: `for x in 0.5..<2.5` answers one diagnostic ("Float
+  ranges do not iterate"). The arm of the desugared `Some` match binds
+  its names against the error type now instead of being skipped, so the
+  loop body no longer follows with an unresolved name (or a variant
+  that "is not a member of the matched type"). `err-float-range` pins
+  both halves.
 - [x] A borrow of a temporary that owns nothing works now (`a.eq(&2)`,
   `takes(&(1 + 1))`, `p.plus(&P { base: 6 })`): the lowering gives it a
   slot in the frame and loans that, where it used to refuse every
