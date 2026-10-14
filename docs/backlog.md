@@ -165,8 +165,13 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] Float ranges: `for x in 0.5..<2.5` fails with type errors inside
   `core/range.al`. `types.md` says float ranges have no iteration, so the
   iteration site wants one clear diagnostic instead of std internals.
-- [ ] Explicit spec call with a temporary: `a.eq(&2)` fails lowering with
-  "Construct 'borrowed temporary' is not supported in this lowering slice".
+- [x] A borrow of a temporary that owns nothing works now (`a.eq(&2)`,
+  `takes(&(1 + 1))`, `p.plus(&P { base: 6 })`): the lowering gives it a
+  slot in the frame and loans that, where it used to refuse every
+  borrowed temporary. One that owns memory is still refused, because
+  the drop walk ends it at the statement's end; `exe-borrow-temporary`
+  walks the accepted shapes and `err-borrow-owning-temporary` pins the
+  refusal.
 - [ ] `Option::is_some`/`is_none`/`is_ok`/`is_err` take the receiver by
   value, so the option cannot be consulted twice. `&Self` receivers
   would fix that.

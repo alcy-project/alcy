@@ -4198,9 +4198,29 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
           return lower_subslice(base, position, borrow.is_mut, node.span);
         }
       }
-      Val place = place_addr(borrow.inner);
-      if (failed || terminated_cur()) {
-        return stopped_value();
+      Val place = Val{size_one, error_type(), false, false};
+      if (is_rooted_place(borrow.inner)) {
+        place = place_addr(borrow.inner);
+        if (failed || terminated_cur()) {
+          return stopped_value();
+        }
+      } else {
+        // The slot holds the temporary for the reference's life, which
+        // is the enclosing expression's. A temporary that owns memory
+        // is still refused: the drop pass ends it at the statement's
+        // end, so a reference to it would outlive it.
+        place = lower_expr(borrow.inner, nullptr);
+        if (failed || terminated_cur()) {
+          return stopped_value();
+        }
+        if (runs_destructor(place.type)) {
+          unsupported(node.span, "a borrowed temporary that owns memory");
+          return stopped_value();
+        }
+        place = address_of(place);
+        if (failed || terminated_cur()) {
+          return stopped_value();
+        }
       }
       const ir::TypeIdx ref = builder.reference_type(place.type, borrow.is_mut);
       const ir::RegisterIdx loan = emit(ir::Opcode::Borrow, ref, {place.op});
