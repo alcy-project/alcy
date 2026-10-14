@@ -124,6 +124,10 @@ impl String {
     ret self.as_str().strip_prefix(prefix)
   }
 
+  pub fn count(self: &Self, needle: str) -> usize {
+    ret self.as_str().count(needle)
+  }
+
   pub fn strip_suffix(self: &Self, suffix: str) -> Option<str> {
     ret self.as_str().strip_suffix(suffix)
   }

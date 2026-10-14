@@ -81,6 +81,27 @@ impl str {
     ret true
   }
 
+  // The number of non-overlapping occurrences of `needle`. An empty
+  // needle counts the gaps: one more than the byte length.
+  pub fn count(self: &Self, needle: str) -> usize {
+    n := str_len(needle)
+    m := str_len(*self)
+    if n == 0 {
+      ret m + 1
+    }
+    mut total := 0 as usize
+    mut rest := *self
+    loop {
+      match rest.find(needle) {
+        Option::Some(i) => {
+          total = total + 1
+          rest = str_slice(rest, i + n, str_len(rest))
+        }
+        Option::None => { ret total }
+      }
+    }
+  }
+
   // `self` without `prefix`, or `None` when it does not start with
   // it. An empty prefix strips nothing.
   pub fn strip_prefix(self: &Self, prefix: str) -> Option<str> {
