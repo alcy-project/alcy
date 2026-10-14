@@ -206,6 +206,23 @@ impl String {
     ret unsafe { slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len) }
   }
 
+  // The unused bytes after the length, for a call that fills them. The
+  // length is not changed; `set_len` records how many were written.
+  pub fn spare_capacity_mut(mut self: &mut Self) -> &mut [u8] {
+    ret unsafe {
+      slice_from_parts_mut(
+          uninit_assume(elem_ptr(self.buf, self.len)),
+          self.cap - self.len,
+      )
+    }
+  }
+
+  // Records `n` written bytes. `n` must not pass the capacity and the
+  // bytes below it must be initialized.
+  pub fn set_len(mut self: &mut Self, n: usize) {
+    self.len = n
+  }
+
   // The bytes as an exclusive view over the current length. Growing
   // while it is live reallocates under it, so the checker reports the
   // conflict.
