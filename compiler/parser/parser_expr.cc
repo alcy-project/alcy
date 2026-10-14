@@ -1169,6 +1169,16 @@ ast::ExprIdx Parser::parse_match() {
       synchronize();
       continue;
     }
+    // A guard follows the pattern and sees its bindings:
+    // `Some(v) if v > 0 => ...`.
+    ast::ExprIdx guard = ast::ExprIdx::invalid();
+    if (match(lexer::TokenKind::If)) {
+      guard = parse_expr();
+      if (!guard.is_valid()) {
+        synchronize();
+        continue;
+      }
+    }
     if (!expect(lexer::TokenKind::FatArrow, "`=>`")) {
       synchronize();
       continue;
@@ -1178,7 +1188,7 @@ ast::ExprIdx Parser::parse_match() {
       synchronize();
       continue;
     }
-    arms.push_back(ast::ExprMatchArm{pattern, body});
+    arms.push_back(ast::ExprMatchArm{pattern, body, guard});
   }
   if (!expect(lexer::TokenKind::RBrace, "`}`")) {
     return ast::ExprIdx::invalid();

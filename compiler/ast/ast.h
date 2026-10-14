@@ -533,6 +533,9 @@ struct ExprIf {
 struct ExprMatchArm {
   PatternIdx pattern = PatternIdx::invalid();
   ExprIdx body = ExprIdx::invalid();
+  // A guard tests after the pattern binds; an invalid expression
+  // means the arm matches unconditionally.
+  ExprIdx guard = ExprIdx::invalid();
 };
 
 struct ExprMatch {

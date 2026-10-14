@@ -199,7 +199,7 @@ Declaration left-hand sides use this grammar with `:=`
 - `if cond block (else (if | block))?` and `if pattern := expr block
   (else (if | block))?`; `while` mirrors `if` (both accept
   pattern-declarations).
-- `match scrutinee "{" (pattern "=>" expr ("," | ";")?)* "}"`
+- `match scrutinee "{" (pattern ("if" expr)? "=>" expr ("," | ";")?)* "}"`
 - `loop block`, `while cond block`, `for pattern "in" expr block`;
   `break`, `continue` (unlabeled); loops evaluate to `()`. The `for`
   rule lives in `control.md`.

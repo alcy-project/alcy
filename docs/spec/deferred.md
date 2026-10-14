@@ -50,7 +50,7 @@ relied upon by MVP programs or by the MVP compiler implementation.
   erased `void*` spelling. The gate, its precondition-carrying
   intrinsics, raw pointers, and `extern "C"` declarations are
   Bootstrap; see `ffi.md`.
-- `match` guards, string literal patterns, slice patterns.
+- String literal patterns, slice patterns.
 - An or-pattern nested inside another pattern (`(A | B, x) => ...`),
   which needs the distributive expansion `(A, x) | (B, x)`. The
   top-level form works in `match` arms and in `if`/`while`

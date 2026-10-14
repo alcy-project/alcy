@@ -3732,19 +3732,33 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   if (has_slot) {
     slot = result_slot(result_type, node.span);
   }
-  std::vector<std::pair<ast::PatternIdx, ast::ExprIdx>> arms;
+  // Or-pattern arms expand to one test each, and a guard is copied
+  // onto every alternative that shares its body.
+  std::vector<ast::PatternIdx> patterns;
+  std::vector<ast::ExprIdx> guards;
+  std::vector<ast::ExprIdx> arm_bodies;
   for (const ast::ExprMatchArm& arm : match.arms) {
-    expand_or_arms(arm, arms);
+    std::vector<std::pair<ast::PatternIdx, ast::ExprIdx>> expanded;
+    expand_or_arms(arm, expanded);
+    for (const auto& [pattern, body] : expanded) {
+      patterns.push_back(pattern);
+      guards.push_back(arm.guard);
+      arm_bodies.push_back(body);
+    }
   }
   std::vector<ir::BlockIdx> tests;
   std::vector<ir::BlockIdx> bodies;
-  for (usize i = 0; i < arms.size(); ++i) {
+  std::vector<ir::BlockIdx> guard_blocks;
+  for (usize i = 0; i < patterns.size(); ++i) {
     tests.push_back(reserve_block());
     bodies.push_back(reserve_block());
+    guard_blocks.push_back(guards[i].is_valid()
+                               ? reserve_block()
+                               : ir::BlockIdx(base::INVALID_IDX));
   }
   const ir::BlockIdx fail = reserve_block();
   ir::BlockIdx join = ir::BlockIdx(base::INVALID_IDX);
-  if (arms.empty()) {
+  if (patterns.empty()) {
     internal(node.span, "match without arms");
     return Val{size_one, error_type(), false, false};
   }
@@ -3753,24 +3767,36 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   // The ends of the enclosing scope's values are the drop pass's to
   // place (ADR-0062).
   std::vector<ir::BlockIdx> epilogues;
-  std::vector<bool> arm_live(arms.size(), false);
-  epilogues.reserve(arms.size());
-  for (usize i = 0; i < arms.size(); ++i) {
+  std::vector<bool> arm_live(patterns.size(), false);
+  epilogues.reserve(patterns.size());
+  for (usize i = 0; i < patterns.size(); ++i) {
     epilogues.push_back(reserve_block());
   }
-  for (usize i = 0; i < arms.size() && !failed; ++i) {
+  for (usize i = 0; i < patterns.size() && !failed; ++i) {
     // The arm's pattern bindings end at the arm's own exit, or the sweep
     // would place their drops where their slots do not dominate.
     const u32 arm_mark = static_cast<u32>(locals.size());
     switch_to(tests[i]);
-    const ir::BlockIdx next = i + 1 < arms.size() ? tests[i + 1] : fail;
-    lower_arm_test(arms[i].first, addr, scrut_type, bodies[i], next);
+    const ir::BlockIdx next = i + 1 < patterns.size() ? tests[i + 1] : fail;
+    const bool has_guard = guard_blocks[i].is_valid();
+    const ir::BlockIdx matched = has_guard ? guard_blocks[i] : bodies[i];
+    lower_arm_test(patterns[i], addr, scrut_type, matched, next);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
+    // A guard tests after the pattern binds and falls through to the
+    // next arm when it is false.
+    if (has_guard) {
+      switch_to(guard_blocks[i]);
+      const Val guard = lower_expr(guards[i], nullptr);
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      emit_cond_br(use_value(guard), bodies[i], next);
+    }
     // Arm testing always leaves lowering at the body block.
     switch_to(bodies[i]);
-    Val produced = lower_expr(arms[i].second, expected);
+    Val produced = lower_expr(arm_bodies[i], expected);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
@@ -3790,7 +3816,7 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
-  for (usize i = 0; i < arms.size(); ++i) {
+  for (usize i = 0; i < patterns.size(); ++i) {
     switch_to(epilogues[i]);
     if (!arm_live[i]) {
       // Nothing reaches this block; it still needs a terminator.

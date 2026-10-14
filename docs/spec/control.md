@@ -31,7 +31,12 @@
 - A negative integer or float literal is a pattern (`-1 => ...`), and
   compares by value after the sign is applied, so `-1` does not match
   `1`.
-- Deferred: guards, string literal patterns.
+- An arm may carry a guard: `pattern if cond => body`. The guard is
+  checked with the arm's bindings in scope and must be a bool. A
+  false guard falls through to the next arm, and a guarded arm does
+  not count toward exhaustiveness, so an unconditional arm is still
+  required.
+- Deferred: string literal patterns.
 
 ## Blocks, values, and sequencing
 

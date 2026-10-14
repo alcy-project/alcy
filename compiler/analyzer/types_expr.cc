@@ -2581,7 +2581,12 @@ void Checker::check_exhaustive(u32 module,
   (void)module;
   bool wildcard = false;
   std::vector<bool> covered_bool{false, false};
+  // A guarded arm may not match, so it covers nothing: the match
+  // still needs an unconditional arm for every case.
   for (const ast::ExprMatchArm& arm : arms) {
+    if (arm.guard.is_valid()) {
+      continue;
+    }
     if (pattern_is_wildcard(arm.pattern)) {
       wildcard = true;
     }
@@ -2634,6 +2639,9 @@ void Checker::check_exhaustive(u32 module,
     const std::span<const ast::ItemEnumVariant> variants =
         decl->payload.get<ast::ItemEnum>().variants;
     for (const ast::ExprMatchArm& arm : arms) {
+      if (arm.guard.is_valid()) {
+        continue;
+      }
       mark_variant_covered(arm.pattern, variants, covered);
     }
     for (usize i = 0; i < covered.size(); ++i) {
@@ -2656,6 +2664,9 @@ void Checker::check_exhaustive(u32 module,
   }
   if (tag == ir::TypeTag::Tuple) {
     for (const ast::ExprMatchArm& arm : arms) {
+      if (arm.guard.is_valid()) {
+        continue;
+      }
       if (ast.patterns[arm.pattern].kind == ast::PatternKind::Tuple &&
           !ast.patterns[arm.pattern].payload.tuple.path.is_valid()) {
         return;
@@ -2669,6 +2680,9 @@ void Checker::check_exhaustive(u32 module,
   }
   if (tag == ir::TypeTag::Struct) {
     for (const ast::ExprMatchArm& arm : arms) {
+      if (arm.guard.is_valid()) {
+        continue;
+      }
       if (ast.patterns[arm.pattern].kind == ast::PatternKind::Struct) {
         return;
       }
@@ -2800,6 +2814,13 @@ ir::TypeIdx Checker::check_match(u32 module,
             DiagCode::RefutableLet, ast.patterns[arm.pattern].span);
         (void)index;
       }
+    }
+    if (arm.guard.is_valid()) {
+      // The guard sees the arm's bindings, so it is checked in the
+      // arm scope and must be a bool.
+      const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+      const ir::TypeIdx guard = check_expr(module, arm.guard, &boolean);
+      unify(boolean, guard, ast.exprs[arm.guard].span, "match guard");
     }
     const ir::TypeIdx body = check_expr(module, arm.body, expected);
     scopes.pop_back();
