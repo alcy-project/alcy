@@ -413,10 +413,23 @@ void Lexer::lex_number(std::vector<Token>& out) {
       advance();
     }
     if (peek() == '.' && peek(1) != '.') {
-      is_float = true;
-      advance();
-      while (!at_end() && (is_digit(peek()) || peek() == '_')) {
+      // A `.` is a decimal point when a digit follows it, when what
+      // follows is the float suffix itself, or when nothing that
+      // could name a member follows at all. A member name after a
+      // tuple index (`t.0.len()`) leaves the `.` to the parser.
+      const bool ident_after = is_alpha(peek(1)) || peek(1) == '_';
+      // The only member names a float suffix can be are `f32` and
+      // `f64`; any other name after the point is a member.
+      const bool f32 = peek(1) == 'f' && peek(2) == '3' && peek(3) == '2';
+      const bool f64 = peek(1) == 'f' && peek(2) == '6' && peek(3) == '4';
+      const bool suffix_after =
+          (f32 || f64) && !is_alnum_or_underscore(peek(4));
+      if (is_digit(peek(1)) || suffix_after || !ident_after) {
+        is_float = true;
         advance();
+        while (!at_end() && (is_digit(peek()) || peek() == '_')) {
+          advance();
+        }
       }
     }
     if ((peek() == 'e' || peek() == 'E') &&
