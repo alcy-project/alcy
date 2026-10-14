@@ -382,11 +382,26 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
   }
 }
 
-// Whether `expr` is a call to a function declared `unsafe`: such a call
-// is the caller's own contract with storage the borrow rule does not
-// name, which is what lets the allocator's accessors hand out a
-// reference whose pointee is read as a move (ADR-0050).
+// Whether `expr` is a call to an intrinsic the compiler owns whose
+// signature is `unsafe`: only those hand out a reference to storage
+// the caller owns, which is what lets the allocator's accessors be
+// read as a move. An ordinary `unsafe fn` returns a borrow like any
+// other, and ADR-0050 keeps the move rule for it.
 bool Lowerer::unsafe_call_result(ast::ExprIdx expr) const {
+  // An `unsafe { ... }` block is a spelling of the same call, so the
+  // rule sees through it.
+  while (ast.exprs[expr].kind == ast::ExprKind::Block) {
+    const ast::ExprNode& block_node = ast.exprs[expr];
+    if (!block_node.payload.get<ast::ExprBlock>().is_unsafe) {
+      return false;
+    }
+    const ast::Block& block =
+        ast.blocks[block_node.payload.get<ast::ExprBlock>().block];
+    if (!block.value.is_valid()) {
+      return false;
+    }
+    expr = block.value;
+  }
   const ast::ExprNode& node = ast.exprs[expr];
   if (node.kind != ast::ExprKind::Call) {
     return false;
@@ -396,7 +411,9 @@ bool Lowerer::unsafe_call_result(ast::ExprIdx expr) const {
   if (target == nullptr || target->is_method) {
     return false;
   }
-  return pkg.modules[target->module].functions[target->index].is_unsafe;
+  const analyzer::CheckedModule::FnSig& sig =
+      pkg.modules[target->module].functions[target->index];
+  return sig.is_unsafe && ast.items[sig.item].kind == ast::ItemKind::Intrinsic;
 }
 
 // Whether `expr` names storage rather than a temporary: a local or a

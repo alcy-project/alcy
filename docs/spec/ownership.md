@@ -7,9 +7,11 @@
   `&T` to the same place may be live while it is.
 - A non-`Copy` value cannot be moved out of a reference: reading `*r`
   as a value, taking a field out of the referent, and a pattern that
-  binds a payload by value are all refused. A reference an `unsafe`
-  call produced is the caller's contract rather than a borrow
-  (ADR-0050), so reading through one is a move.
+  binds a payload by value are all refused. The reference one of the
+  compiler's own `unsafe` intrinsics hands out - the allocator's
+  accessors - names storage the caller owns, so reading through one is
+  a move; an ordinary `unsafe` function returns a borrow like any
+  other, and ADR-0050 keeps the move rule for it.
 - A closure's capture list declares what its environment holds: a
   bare name by value (a move, or a copy for a Copy type), `&name` as
   a shared borrow, and `&mut name` as an exclusive borrow. The
