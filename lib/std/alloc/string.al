@@ -355,3 +355,32 @@ impl PartialEq for String {
 // Byte equality is reflexive, so `String` is `Eq`.
 impl Eq for String {
 }
+
+// A view can build a replacement too, so a reader need not own the
+// source first.
+impl str {
+  // A new string with every non-overlapping occurrence of `from`
+  // replaced by `to`. An empty pattern would never advance, so it
+  // answers a copy.
+  pub fn replace(self: str, from: str, to: str) -> String {
+    mut out := String::new()
+    if str_len(from) == 0 {
+      out.push_str(self)
+      ret out
+    }
+    mut rest := self
+    loop {
+      match rest.find(from) {
+        Option::Some(i) => {
+          out.push_str(str_slice(rest, 0, i))
+          out.push_str(to)
+          rest = str_slice(rest, i + str_len(from), str_len(rest))
+        }
+        Option::None => {
+          out.push_str(rest)
+          ret out
+        }
+      }
+    }
+  }
+}
