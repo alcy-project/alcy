@@ -216,6 +216,10 @@ impl String {
     ret self.as_str().is_ascii()
   }
 
+  pub fn parse_i64(self: &Self) -> Option<i64> {
+    ret self.as_str().parse_i64()
+  }
+
   pub fn split_whitespace(self: &Self) -> SplitWhitespace {
     ret self.as_str().split_whitespace()
   }

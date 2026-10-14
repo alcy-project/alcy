@@ -271,6 +271,52 @@ impl str {
     ret SplitIter { rest: self, delim: delim, done: false }
   }
 
+  // Parses a decimal integer with an optional leading `+` or `-`.
+  // `None` when the bytes are not a number or the magnitude overflows
+  // `i64`, so no wrap is read as a value.
+  pub fn parse_i64(self: &Self) -> Option<i64> {
+    n := str_len(*self)
+    if n == 0 {
+      ret Option::None
+    }
+    mut i := 0 as usize
+    mut negative := false
+    b := str_byte(*self, 0)
+    if b == 0x2du8 {
+      negative = true
+      i = 1
+    } else if b == 0x2bu8 {
+      i = 1
+    }
+    if i >= n {
+      ret Option::None
+    }
+    mut limit := 9223372036854775807u64
+    if negative {
+      limit = 9223372036854775808u64
+    }
+    mut value := 0u64
+    while i < n {
+      d := str_byte(*self, i)
+      if d < 0x30u8 || d > 0x39u8 {
+        ret Option::None
+      }
+      digit := (d - 0x30u8) as u64
+      if value > (limit - digit) / 10u64 {
+        ret Option::None
+      }
+      value = value * 10u64 + digit
+      i = i + 1
+    }
+    if negative {
+      if value == 9223372036854775808u64 {
+        ret Option::Some(0i64 - 9223372036854775807i64 - 1i64)
+      }
+      ret Option::Some(0i64 - (value as i64))
+    }
+    ret Option::Some(value as i64)
+  }
+
   // Whether every byte is ASCII (below 0x80).
   pub fn is_ascii(self: &Self) -> bool {
     n := str_len(*self)
