@@ -102,7 +102,6 @@ peripheral work lives in `backlog.md`. The language record lives in
   the call and the parameter is already the concrete function type
   there, so `id((a: i32) -> a)` and calling through `f(x)` need no
   bound. Designed in
->>>>>>> e3ca54db (feat(analyzer): a function-typed argument is a type argument like any other)
   `docs/adr/0028-spec-system.md`, and the body-checking decision is
   `docs/adr/0063-generic-bodies-are-checked-at-their-calls.md`.
 

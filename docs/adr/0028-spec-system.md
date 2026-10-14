@@ -149,7 +149,6 @@ the body specializes; the definition-site body-checking decision is
 ADR-0063. A function-typed argument instantiates like any other: the
 body is checked at the call, so the parameter is the concrete function
 type where the body calls it and no callable bound is needed.
->>>>>>> e3ca54db (feat(analyzer): a function-typed argument is a type argument like any other)
 
 What is explicitly out of scope: associated types (specs take type
 parameters instead), supertraits, default bodies, spec objects
