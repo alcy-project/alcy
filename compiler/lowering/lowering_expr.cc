@@ -1015,6 +1015,15 @@ ir::RegisterIdx Lowerer::payload_field_addr(Val slot_addr,
                                    builder.state(), fields, field, width)))});
 }
 
+ir::RegisterIdx Lowerer::payload_field_slot_addr(Val slot_addr,
+                                                 ir::TypeIdxRange fields,
+                                                 u32 field) {
+  const ir::TypeIdx byte = builder.primitive(ir::TypeTag::U8);
+  const ir::RegisterIdx at = payload_field_addr(slot_addr, fields, field);
+  const ir::TypeIdx ptr = builder.reference_type(fields[field], false);
+  return emit(ir::Opcode::TypeCast, ptr, {to_operand(at, byte)});
+}
+
 ir::OperandIdx Lowerer::disc_operand(u32 discriminant) {
   const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
   ir::Immutable imm{.type = i32_ty, .data = {}};
@@ -3676,13 +3685,6 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
         internal(span, "variant without declaration");
         return;
       }
-      ir::BlockIdx bind_block = body_block;
-      Val tag = load_disc(scrut_addr);
-      const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
-      const ir::RegisterIdx test =
-          emit(ir::Opcode::Eq, boolean, {tag.op, disc_operand(variant)});
-      emit_cond_br(to_operand(test, boolean), bind_block, fail_block);
-      switch_to(bind_block);
       const std::vector<ir::TypeIdx> payloads =
           variant_payload(scrut_type, variant);
       const std::span<const ast::PatternIdx> elements =
@@ -3691,6 +3693,24 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
         internal(span, "variant arity");
         return;
       }
+      bool bindable = true;
+      bool has_or = false;
+      for (ast::PatternIdx element : elements) {
+        bindable = bindable && pattern_bindable(element);
+        has_or = has_or || ast.patterns[element].kind == ast::PatternKind::Or;
+      }
+      // A refutable payload tests in a block of its own; an irrefutable
+      // one binds straight into the body, as before.
+      const bool test_payloads =
+          !bindable && !has_or && !is_unit_payload(payloads);
+      const ir::BlockIdx bind_block =
+          test_payloads ? reserve_block() : body_block;
+      Val tag = load_disc(scrut_addr);
+      const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+      const ir::RegisterIdx test =
+          emit(ir::Opcode::Eq, boolean, {tag.op, disc_operand(variant)});
+      emit_cond_br(to_operand(test, boolean), bind_block, fail_block);
+      switch_to(bind_block);
       if (is_unit_payload(payloads)) {
         for (usize i = 0; i < payloads.size() && !failed; ++i) {
           bind_pattern(elements[i], void_value());
@@ -3698,18 +3718,61 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
         return;
       }
       const ir::TypeIdxRange fields = variant_fields(scrut_type, variant);
-      for (usize i = 0; i < payloads.size() && !failed; ++i) {
-        if (ast.patterns[elements[i]].kind == ast::PatternKind::Wildcard &&
-            runs_destructor(fields[i])) {
-          // The arm discards this payload: end it in place rather than
-          // loading a copy nothing owns.
-          const ir::RegisterIdx addr =
-              payload_field_addr(scrut_addr, fields, static_cast<u32>(i));
-          record_drop_in_place(to_operand(addr, fields[i]), fields[i], span);
-          continue;
+      if (!test_payloads) {
+        for (usize i = 0; i < payloads.size() && !failed; ++i) {
+          if (ast.patterns[elements[i]].kind == ast::PatternKind::Wildcard &&
+              runs_destructor(fields[i])) {
+            // The arm discards this payload: end it in place rather than
+            // loading a copy nothing owns.
+            const ir::RegisterIdx addr =
+                payload_field_addr(scrut_addr, fields, static_cast<u32>(i));
+            record_drop_in_place(to_operand(addr, fields[i]), fields[i], span);
+            continue;
+          }
+          Val field =
+              load_payload_field(scrut_addr, fields, static_cast<u32>(i));
+          bind_pattern(elements[i], field);
         }
-        Val field = load_payload_field(scrut_addr, fields, static_cast<u32>(i));
-        bind_pattern(elements[i], field);
+        return;
+      }
+      // Refutable payloads: project every field first, test in turn, and
+      // end a discarded destructible payload once the arm commits, so a
+      // later failure never ends a payload the scrutinee still owns.
+      std::vector<ir::RegisterIdx> addrs;
+      std::vector<Val> places;
+      std::vector<bool> discard;
+      addrs.reserve(payloads.size());
+      places.reserve(payloads.size());
+      discard.reserve(payloads.size());
+      for (u32 i = 0; i < static_cast<u32>(payloads.size()) && !failed; ++i) {
+        const ir::RegisterIdx addr =
+            payload_field_slot_addr(scrut_addr, fields, i);
+        addrs.push_back(addr);
+        discard.push_back(ast.patterns[elements[i]].kind ==
+                              ast::PatternKind::Wildcard &&
+                          runs_destructor(payloads[i]));
+        places.push_back(Val{to_operand(addr, payloads[i]), payloads[i], true,
+                             scrut_addr.place});
+      }
+      if (failed) {
+        return;
+      }
+      bool any_discard = false;
+      for (bool d : discard) {
+        any_discard = any_discard || d;
+      }
+      const ir::BlockIdx commit = any_discard ? reserve_block() : body_block;
+      lower_arm_sequence(elements, places, commit, fail_block);
+      if (any_discard && !failed) {
+        switch_to(commit);
+        for (u32 i = 0; i < static_cast<u32>(payloads.size()); ++i) {
+          if (discard[i]) {
+            record_drop_in_place(to_operand(addrs[i], payloads[i]), payloads[i],
+                                 span);
+          }
+        }
+        emit_br(body_block);
+        switch_to(body_block);
       }
       return;
     }

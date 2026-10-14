@@ -51,10 +51,6 @@ relied upon by MVP programs or by the MVP compiler implementation.
   intrinsics, raw pointers, and `extern "C"` declarations are
   Bootstrap; see `ffi.md`.
 - String literal patterns, slice patterns.
-- An or-pattern nested inside another pattern (`(A | B, x) => ...`),
-  which needs the distributive expansion `(A, x) | (B, x)`. The
-  top-level form works in `match` arms and in `if`/`while`
-  conditions.
 - Struct variants for enums; tuple struct declarations.
 - `async`, parallel constructs, `union` types, `register` operations.
 - `From`-style error conversion; `Debug` printing; the combinators

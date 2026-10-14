@@ -473,6 +473,11 @@ class Lowerer {
   ir::RegisterIdx payload_field_addr(Val slot_addr,
                                      ir::TypeIdxRange fields,
                                      u32 field);
+  // The same address cast to the field's own pointer, so a nested
+  // pattern can project into it (a variant reads its discriminant).
+  ir::RegisterIdx payload_field_slot_addr(Val slot_addr,
+                                          ir::TypeIdxRange fields,
+                                          u32 field);
   ir::TypeIdxRange variant_fields(ir::TypeIdx enum_type, u32 variant);
   void emit_br(ir::BlockIdx target);
   void emit_cond_br(ir::OperandIdx cond,

@@ -400,6 +400,131 @@ class Desugarer {
     }
   }
 
+  // Replaces every arm whose pattern nests an or-pattern with one arm
+  // per disjunct: (A | B, x) => ... becomes (A, x) => ... and
+  // (B, x) => .... The visit above already checked that alternatives
+  // bind the same names, so the copies share their bindings.
+  void distribute_match_arms(ast::ExprIdx expr) {
+    ast::ExprMatch match = ast.exprs[expr].payload.get<ast::ExprMatch>();
+    std::vector<ast::ExprMatchArm> arms;
+    for (const ast::ExprMatchArm& arm : match.arms) {
+      if (ast.patterns[arm.pattern].kind == ast::PatternKind::Or) {
+        // A top-level alternative keeps its sibling expansion; only a
+        // pattern nested inside a part is distributed here.
+        arms.push_back(arm);
+        continue;
+      }
+      std::vector<ast::PatternIdx> disjuncts;
+      pattern_disjuncts(arm.pattern, disjuncts);
+      for (ast::PatternIdx pattern : disjuncts) {
+        arms.push_back(ast::ExprMatchArm{pattern, arm.body, arm.guard});
+      }
+    }
+    match.arms = ast::copy_to_arena(ast.spans, arms);
+    ast.exprs[expr].payload.set(match);
+  }
+
+  // The alternatives a pattern denotes once nested or-patterns are
+  // distributed: the pattern itself when it has none, and the
+  // cartesian product of its parts otherwise.
+  void pattern_disjuncts(ast::PatternIdx pattern,
+                         std::vector<ast::PatternIdx>& out) {
+    const ast::PatternNode& node = ast.patterns[pattern];
+    switch (node.kind) {
+      case ast::PatternKind::Or: {
+        for (ast::PatternIdx alt : node.payload.or_pat.alternatives) {
+          pattern_disjuncts(alt, out);
+        }
+        return;
+      }
+      case ast::PatternKind::Ref: {
+        std::vector<ast::PatternIdx> inner;
+        pattern_disjuncts(node.payload.ref.inner, inner);
+        if (inner.size() == 1 && inner[0] == node.payload.ref.inner) {
+          out.push_back(pattern);
+          return;
+        }
+        for (ast::PatternIdx d : inner) {
+          ast::PatternNode copy = node;
+          copy.payload.ref.inner = d;
+          out.push_back(ast.patterns.push_back(copy));
+        }
+        return;
+      }
+      case ast::PatternKind::Tuple: {
+        std::vector<std::vector<ast::PatternIdx>> choices;
+        bool nested = false;
+        for (ast::PatternIdx element : node.payload.tuple.elements) {
+          std::vector<ast::PatternIdx> options;
+          pattern_disjuncts(element, options);
+          nested = nested || options.size() > 1;
+          choices.push_back(std::move(options));
+        }
+        if (!nested) {
+          out.push_back(pattern);
+          return;
+        }
+        std::vector<ast::PatternIdx> combo(node.payload.tuple.elements.size(),
+                                           ast::PatternIdx::invalid());
+        combine_tuple(node, choices, 0, combo, out);
+        return;
+      }
+      case ast::PatternKind::Struct: {
+        std::vector<std::vector<ast::PatternIdx>> choices;
+        bool nested = false;
+        for (const ast::FieldPattern& field : node.payload.strukt.fields) {
+          std::vector<ast::PatternIdx> options;
+          pattern_disjuncts(field.pattern, options);
+          nested = nested || options.size() > 1;
+          choices.push_back(std::move(options));
+        }
+        if (!nested) {
+          out.push_back(pattern);
+          return;
+        }
+        std::vector<ast::FieldPattern> combo(node.payload.strukt.fields.begin(),
+                                             node.payload.strukt.fields.end());
+        combine_struct(node, choices, 0, combo, out);
+        return;
+      }
+      default: out.push_back(pattern); return;
+    }
+  }
+
+  void combine_tuple(const ast::PatternNode& base,
+                     const std::vector<std::vector<ast::PatternIdx>>& choices,
+                     usize index,
+                     std::vector<ast::PatternIdx>& combo,
+                     std::vector<ast::PatternIdx>& out) {
+    if (index == choices.size()) {
+      ast::PatternNode copy = base;
+      copy.payload.tuple.elements = ast::copy_to_arena(ast.spans, combo);
+      out.push_back(ast.patterns.push_back(copy));
+      return;
+    }
+    for (ast::PatternIdx option : choices[index]) {
+      combo[index] = option;
+      combine_tuple(base, choices, index + 1, combo, out);
+    }
+  }
+
+  void combine_struct(const ast::PatternNode& base,
+                      const std::vector<std::vector<ast::PatternIdx>>& choices,
+                      usize index,
+                      std::vector<ast::FieldPattern>& combo,
+                      std::vector<ast::PatternIdx>& out) {
+    if (index == choices.size()) {
+      ast::PatternNode copy = base;
+      copy.payload.strukt.fields = ast::copy_to_arena(ast.spans, combo);
+      out.push_back(ast.patterns.push_back(copy));
+      return;
+    }
+    for (ast::PatternIdx option : choices[index]) {
+      combo[index].pattern = option;
+      combine_struct(base, choices, index + 1, combo, out);
+    }
+  }
+
   void visit_cond(ast::CondIdx cond, bool* pushed) {
     if (!cond.is_valid() || ast.exhausted()) {
       return;
@@ -547,6 +672,7 @@ class Desugarer {
           visit_expr(arm.body);
           pop_scope();
         }
+        distribute_match_arms(expr);
         break;
       }
       case ast::ExprKind::Loop: {
