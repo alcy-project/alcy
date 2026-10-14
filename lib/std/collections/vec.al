@@ -276,6 +276,17 @@ impl<T> Vec<T> {
     }
   }
 
+  // Removes and answers the element at `index`, shifting the rest
+  // down and keeping their order. `index` is in bounds.
+  pub fn remove(mut self: &mut Self, index: usize) -> T {
+    mut i := index
+    while i + 1 < self.len {
+      self.swap(i, i + 1)
+      i = i + 1
+    }
+    ret self.pop().unwrap()
+  }
+
   // Removes and answers the element at `index`, moving the last
   // element into its place. The order of the rest is not kept, which
   // is what makes it a swap rather than a shift. `index` is in
