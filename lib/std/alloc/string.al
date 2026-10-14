@@ -124,6 +124,20 @@ impl String {
     ret self.as_str().find(needle)
   }
 
+  // The trims answer a `str` view, so they borrow the buffer rather
+  // than allocate.
+  pub fn trim(self: &Self) -> str {
+    ret self.as_str().trim()
+  }
+
+  pub fn trim_start(self: &Self) -> str {
+    ret self.as_str().trim_start()
+  }
+
+  pub fn trim_end(self: &Self) -> str {
+    ret self.as_str().trim_end()
+  }
+
   // Forgets every byte, keeping the room already reserved.
   pub fn clear(mut self: &mut Self) {
     self.len = 0

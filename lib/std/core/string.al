@@ -11,6 +11,18 @@ pub intrinsic fn str_slice(s: str, start: usize, end: usize) -> str;
 
 pub unsafe intrinsic fn str_from_parts(ptr: &u8, len: usize) -> str;
 
+// The ASCII whitespace `trim` strips: space, tab, newline, vertical
+// tab, form feed, and carriage return.
+fn is_ascii_space(b: u8) -> bool {
+  if b == 0x20u8 { ret true }
+  if b == 0x09u8 { ret true }
+  if b == 0x0au8 { ret true }
+  if b == 0x0bu8 { ret true }
+  if b == 0x0cu8 { ret true }
+  if b == 0x0du8 { ret true }
+  ret false
+}
+
 impl str {
   // The byte length.
   pub fn len(self: &Self) -> usize {
@@ -90,6 +102,32 @@ impl str {
       i = i + 1
     }
     ret Option::None
+  }
+
+  // The view with leading ASCII whitespace removed.
+  pub fn trim_start(self: &Self) -> str {
+    n := str_len(*self)
+    mut i := 0 as usize
+    while i < n && is_ascii_space(str_byte(*self, i)) {
+      i = i + 1
+    }
+    ret str_slice(*self, i, n)
+  }
+
+  // The view with trailing ASCII whitespace removed.
+  pub fn trim_end(self: &Self) -> str {
+    n := str_len(*self)
+    mut end := n
+    while end > 0 && is_ascii_space(str_byte(*self, end - 1)) {
+      end = end - 1
+    }
+    ret str_slice(*self, 0, end)
+  }
+
+  // The view with both ends trimmed. Only whitespace outside the
+  // bytes is removed, so the result is a sub-view of the original.
+  pub fn trim(self: &Self) -> str {
+    ret self.trim_start().trim_end()
   }
 
   // Byte iteration: `for b in s` reads each byte in order.
