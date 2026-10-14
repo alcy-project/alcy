@@ -446,6 +446,8 @@ struct ExprFieldInit {
 
 struct ExprStruct {
   PathIdx path = PathIdx::invalid();
+  // The path's explicit type arguments, `Holder<i32> { ... }`.
+  std::span<const TypeIdx> type_args;
   std::span<const ExprFieldInit> init;
   ExprIdx base_expr = ExprIdx::invalid();
 };

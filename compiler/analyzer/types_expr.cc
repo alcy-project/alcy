@@ -1930,11 +1930,23 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
   if (nominal_params(*nominal).empty()) {
     struct_type = intern_nominal(*nominal);
   } else {
-    // A generic struct takes its instantiation from the expectation;
-    // there is no path-level type argument to carry it. The expectation
-    // may be a field storage copy, so it is followed to its origin.
-    instance =
-        expected != nullptr ? generic_find(type_origin(*expected)) : nullptr;
+    // A generic struct takes its instantiation from the path's type
+    // arguments when it has them, otherwise from the expectation. The
+    // expectation may be a field storage copy, so it is followed to
+    // its origin.
+    std::vector<ir::TypeIdx> explicit_args;
+    for (ast::TypeIdx arg : node.payload.get<ast::ExprStruct>().type_args) {
+      const ir::TypeIdx resolved = resolve_type(module, arg, nullptr);
+      if (is_error(resolved)) {
+        return error_type();
+      }
+      explicit_args.push_back(resolved);
+    }
+    instance = !explicit_args.empty()
+                   ? generic_find(instantiate_generic(nominal_index(nominal),
+                                                      explicit_args, node.span))
+               : expected != nullptr ? generic_find(type_origin(*expected))
+                                     : nullptr;
     if (instance == nullptr || instance->nominal != nominal_index(nominal)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerCannotInferType>(
           diag::Severity::Error, diag::Stage::Analyzer,

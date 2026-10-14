@@ -823,6 +823,7 @@ ast::ExprIdx Parser::parse_primary() {
     init_node.span = span_from(mark);
     init_node.payload.set(ast::ExprStruct{
         .path = path,
+        .type_args = ast::copy_to_arena(ast_.spans, type_args),
         .init = ast::copy_to_arena(ast_.spans, fields),
         .base_expr = base_expr,
     });
