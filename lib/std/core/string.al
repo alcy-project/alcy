@@ -102,6 +102,35 @@ impl str {
     }
   }
 
+  // `self` with every leading occurrence of `pat` removed. An empty
+  // pattern is left alone, since it would never advance.
+  pub fn trim_start_matches(self: str, pat: str) -> str {
+    if str_len(pat) == 0 {
+      ret self
+    }
+    mut s := self
+    loop {
+      match s.strip_prefix(pat) {
+        Option::Some(rest) => { s = rest }
+        Option::None => { ret s }
+      }
+    }
+  }
+
+  // `self` with every trailing occurrence of `pat` removed.
+  pub fn trim_end_matches(self: str, pat: str) -> str {
+    if str_len(pat) == 0 {
+      ret self
+    }
+    mut s := self
+    loop {
+      match s.strip_suffix(pat) {
+        Option::Some(rest) => { s = rest }
+        Option::None => { ret s }
+      }
+    }
+  }
+
   // `self` without `prefix`, or `None` when it does not start with
   // it. An empty prefix strips nothing.
   pub fn strip_prefix(self: &Self, prefix: str) -> Option<str> {

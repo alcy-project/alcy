@@ -133,6 +133,14 @@ impl String {
     ret self.as_str().strip_prefix(prefix)
   }
 
+  pub fn trim_start_matches(self: &Self, pat: str) -> str {
+    ret self.as_str().trim_start_matches(pat)
+  }
+
+  pub fn trim_end_matches(self: &Self, pat: str) -> str {
+    ret self.as_str().trim_end_matches(pat)
+  }
+
   pub fn count(self: &Self, needle: str) -> usize {
     ret self.as_str().count(needle)
   }
