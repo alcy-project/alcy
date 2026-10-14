@@ -32,7 +32,8 @@ relied upon by MVP programs or by the MVP compiler implementation.
   conformance suite runs. See `docs/adr/0012-reborrow-on-reference-read.md`.
 - `spec` (trait) bounds on type parameters, `where` clauses, and
   monomorphization beyond today's per-instantiation interning (enums,
-  structs, free functions, and methods). Declarations, implementations,
+  structs, free functions, methods, and spec methods where the impl is
+  generic). Declarations, implementations,
   dispatch, and coherence are settled (see `items.md` and
   `grammar.md`); a bound admitting a super-spec's methods, and generic
   super-specs, arrive with this work.

@@ -232,6 +232,8 @@ class Checker {
   str::StringPoolId uninit_name_id = str::INVALID_STRING_POOL_ID;
   // Interned name every closure literal's nominal type carries.
   str::StringPoolId closure_name_id = str::INVALID_STRING_POOL_ID;
+  // Interned name every method type parameter's stand-in carries.
+  str::StringPoolId method_param_name_id = str::INVALID_STRING_POOL_ID;
   // Set once the shared table has no room for another name; the sweep
   // that saw it stops, and `check_package` refuses the package.
   bool name_table_exhausted_ = false;
@@ -381,13 +383,15 @@ class Checker {
                               std::string_view target_name,
                               std::string_view method);
   // Declared signature of spec method `name` under `self_type`, with
-  // the spec's parameters bound to `spec_args`. False when the spec
-  // declares no such method.
+  // the spec's parameters bound to `spec_args` and the method's own
+  // bound to `method_args`. False when the spec declares no such
+  // method, or declares one whose parameter count does not line up.
   bool spec_method_sig(u32 spec,
                        std::string_view name,
                        std::span<const ir::TypeIdx> spec_args,
                        ir::TypeIdx self_type,
                        u32 module,
+                       std::span<const ir::TypeIdx> method_args,
                        std::vector<ir::TypeIdx>& params_out,
                        ir::TypeIdx& ret_out,
                        CheckedModule::ReceiverKind& receiver_out);
@@ -471,6 +475,12 @@ class Checker {
   // whose field is its environment tuple (ADR-0064). Every literal
   // gets its own, because the code a value calls is the literal's.
   ir::TypeIdx intern_closure(ir::TypeIdx env);
+  // One anonymous nominal per method type parameter, so a declaration
+  // and an implementation compare without either side's names.
+  ir::TypeIdx method_param_stand_in();
+  // The spec a spec side names through the type grammar, or null when
+  // the spelling is not a path or names no spec in scope.
+  SpecEntry* spec_of_impl_path(u32 module, ast::TypeIdx spec_side);
   // The environment tuple a literal's captures lay out, in list order.
   ir::TypeIdx closure_env_type(std::span<const CaptureEntry> captures);
   // The signature a closure nominal carries, or null when the type is

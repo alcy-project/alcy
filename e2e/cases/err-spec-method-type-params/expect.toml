@@ -1,2 +1,0 @@
-exit = 4
-contains = ["Spec method 'f' must not declare type parameters"]

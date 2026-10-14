@@ -53,9 +53,9 @@ are rejected with guidance diagnostics.
 Methods take explicit receivers: `self`, `&self`, `&mut self`.
 `Self` denotes the implementing type inside `impl` blocks, and the
 spec's own type inside `spec` declarations. An omitted
-return type means `()`; only free functions take type parameters, and
-a parameter annotated with an integer type (`N: usize`) is a value
-parameter. A last parameter written `args: ..` collects the call's
+return type means `()`; free functions, methods, and spec methods take
+type parameters, and a parameter annotated with an integer type
+(`N: usize`) is a value parameter. A last parameter written `args: ..` collects the call's
 remaining arguments; only the compiler-expanded functions declare one,
 and its declared body never runs.
 

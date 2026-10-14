@@ -86,8 +86,13 @@ peripheral work lives in `backlog.md`. The language record lives in
   implication; and a generic impl's bounds are checked before its body
   specializes, so `Vec<Plain> == Vec<Plain>` names `Plain` at the
   user's `==` rather than `vec.al` - the standard library's generic
-  `PartialEq`/`Eq` implementations carry their bounds now. What
-  remains: spec methods with type parameters. `collect`
+  `PartialEq`/`Eq` implementations carry their bounds now. A concrete
+  impl's spec method may declare type parameters of its own: the
+  declaration and the implementation compare under one anonymous
+  stand-in per parameter, so the names need not match, and a call that
+  spells them resolves one instantiation through the generic method
+  registry. What remains: a generic impl carrying a method's own
+  parameters. `collect`
   landed with bound-driven inference: a parameter no argument binds
   (`I: Iterator<T>`'s item type) comes from the first declared
   method's signature and the implementation for the bound-covered
