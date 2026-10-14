@@ -45,6 +45,17 @@ impl Set {
     }
   }
 
+  // Whether every key of this set is also in `other`; the empty set
+  // is a subset of any.
+  pub fn is_subset(self: &Self, other: &Set) -> bool {
+    for key in self.iter() {
+      if !other.contains(key) {
+        ret false
+      }
+    }
+    ret true
+  }
+
   pub fn contains(self: &Self, key: str) -> bool {
     ret self.map.contains(key)
   }
