@@ -101,6 +101,9 @@ class RuntimeBuilder {
       if (declared("alcy_read_file_into")) {
         build_read_file_into();
       }
+      if (declared("alcy_write_file")) {
+        build_write_file();
+      }
     }
     if (panic) {
       build_panic();
@@ -561,6 +564,52 @@ class RuntimeBuilder {
     builder_.CreateRet(count);
   }
 
+  // `alcy_write_file(path, len, data, data_len)` answers the bytes
+  // written or -1 when the path cannot be opened.
+  void build_write_file() {
+    llvm::FunctionType* type = llvm::FunctionType::get(
+        builder_.getInt64Ty(),
+        {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
+    llvm::Function* function = runtime("alcy_write_file", type);
+    function->setDoesNotThrow();
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", function);
+    llvm::BasicBlock* fail =
+        llvm::BasicBlock::Create(context, "fail", function);
+    llvm::BasicBlock* done =
+        llvm::BasicBlock::Create(context, "done", function);
+    builder_.SetInsertPoint(entry);
+    llvm::Value* path =
+        nul_terminated_path(function->getArg(0), function->getArg(1));
+    llvm::Function* open_fn =
+        libc("fopen", llvm::FunctionType::get(
+                          builder_.getPtrTy(),
+                          {builder_.getPtrTy(), builder_.getPtrTy()}, false));
+    llvm::Value* file =
+        builder_.CreateCall(open_fn, {path, text_constant("wb")}, "file");
+    llvm::Value* missing = builder_.CreateICmpEQ(
+        file, llvm::ConstantPointerNull::get(builder_.getPtrTy()), "missing");
+    builder_.CreateCondBr(missing, fail, done);
+    builder_.SetInsertPoint(fail);
+    builder_.CreateRet(llvm::ConstantInt::get(builder_.getInt64Ty(), -1));
+    builder_.SetInsertPoint(done);
+    llvm::Function* write_fn = libc(
+        "fwrite",
+        llvm::FunctionType::get(
+            usize_, {builder_.getPtrTy(), usize_, usize_, builder_.getPtrTy()},
+            false));
+    llvm::Value* count = builder_.CreateCall(
+        write_fn,
+        {function->getArg(2), llvm::ConstantInt::get(usize_, 1),
+         function->getArg(3), file},
+        "count");
+    llvm::Function* close_fn =
+        libc("fclose", llvm::FunctionType::get(builder_.getInt32Ty(),
+                                               {builder_.getPtrTy()}, false));
+    builder_.CreateCall(close_fn, {file});
+    builder_.CreateRet(count);
+  }
   // A freestanding program has no libc to open a file with, so the
   // file answers are the error and the std still links.
   void build_file_stubs() {
@@ -579,6 +628,17 @@ class RuntimeBuilder {
           builder_.getInt64Ty(),
           {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
       llvm::Function* function = runtime("alcy_read_file_into", type);
+      function->setDoesNotThrow();
+      llvm::BasicBlock* entry =
+          llvm::BasicBlock::Create(module_.getContext(), "entry", function);
+      builder_.SetInsertPoint(entry);
+      builder_.CreateRet(llvm::ConstantInt::get(builder_.getInt64Ty(), -1));
+    }
+    if (declared("alcy_write_file")) {
+      llvm::FunctionType* type = llvm::FunctionType::get(
+          builder_.getInt64Ty(),
+          {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
+      llvm::Function* function = runtime("alcy_write_file", type);
       function->setDoesNotThrow();
       llvm::BasicBlock* entry =
           llvm::BasicBlock::Create(module_.getContext(), "entry", function);

@@ -1692,9 +1692,11 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
   if (name == "str_len" || name == "str_byte" || name == "str_slice") {
     return lower_str_intrinsic(expr, name);
   }
-  if (name == "file_size" || name == "read_file_into") {
+  if (name == "file_size" || name == "read_file_into" ||
+      name == "write_file_all") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    const usize arity = name == "file_size" ? 1 : 3;
+    const usize arity =
+        name == "file_size" ? 1 : (name == "read_file_into" ? 3 : 2);
     if (call.args.size() != arity) {
       internal(node.span, "intrinsic arity");
       return Val{size_one, error_type(), false, false};
@@ -1719,6 +1721,24 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
           ext, builder.primitive(ir::TypeTag::Function))));
       ops.push_back(to_operand(bytes, ptr_ty));
       ops.push_back(to_operand(len, usize_ty));
+    } else if (name == "write_file_all") {
+      Val data = lower_expr(call.args[1], &sig.params[1]);
+      if (failed || terminated_cur()) {
+        return stopped_value();
+      }
+      const ir::OperandIdx data_val = arg_for(data, sig.params[1]);
+      const ir::RegisterIdx data_bytes =
+          emit(ir::Opcode::ExtractValue, ptr_ty, {data_val, index_operand(0)});
+      const ir::RegisterIdx data_len = emit(ir::Opcode::ExtractValue, usize_ty,
+                                            {data_val, index_operand(1)});
+      const ir::ExternalFunctionIdx ext = declare_external(
+          "alcy_write_file", i64_ty, {ptr_ty, usize_ty, ptr_ty, usize_ty});
+      ops.push_back(builder.operand(ir::Operand::from_external_function(
+          ext, builder.primitive(ir::TypeTag::Function))));
+      ops.push_back(to_operand(bytes, ptr_ty));
+      ops.push_back(to_operand(len, usize_ty));
+      ops.push_back(to_operand(data_bytes, ptr_ty));
+      ops.push_back(to_operand(data_len, usize_ty));
     } else {
       Val out = lower_expr(call.args[1], &sig.params[1]);
       if (failed || terminated_cur()) {

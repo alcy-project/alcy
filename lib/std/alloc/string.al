@@ -46,6 +46,12 @@ impl String {
     ret Option::Some(s)
   }
 
+  // Writes `contents` to the file at `path`, answering whether it
+  // could. An existing file is truncated.
+  pub fn write_file(path: str, contents: str) -> bool {
+    ret unsafe { write_file_all(path, contents) } >= 0
+  }
+
   // A new string with `A`-`Z` folded to lower case; other bytes copy.
   pub fn to_ascii_lowercase(self: &Self) -> String {
     mut out := String::with_capacity(self.len)
