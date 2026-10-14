@@ -133,9 +133,10 @@ Declaration left-hand sides use this grammar with `:=`
 - Array indexing is builtin with panic-on-out-of-bounds semantics;
   indexing a nominal type resolves through the sealed `Index` and
   `IndexMut` specs (see `types.md`).
-- `==` and `!=` are builtin over scalars and addresses; over a
-  nominal type they resolve through the sealed `PartialEq` spec, with
-  `!=` the negation of `eq` (see `types.md`).
+- `==` and `!=` are builtin over scalars and addresses, and walk a
+  tuple or array element-wise when every element is itself builtin
+  comparable; over a nominal type they resolve through the sealed
+  `PartialEq` spec, with `!=` the negation of `eq` (see `types.md`).
   A float is IEEE: `nan == nan` is false, `nan != nan` is true, and
   every ordering that names a NaN is false.
 - Calls to `panic(...)` diverge with type `!`.

@@ -155,17 +155,18 @@ replaced. The foundations are in `roadmap.md`.
   type arguments", and over a generic one the arguments bind the owner.
   The AST keeps one type-argument list per path, so the parser has to
   say which segment the turbofish followed.
-- [ ] Read-before-write through an operator: `v[i] = v[i] + 1` and
-  `m[k] = m[k] + 1` are rejected as conflicting borrows; binding the read
-  to a temporary first works. Two-phase borrows would let the idiomatic
-  form compile.
-- [ ] A returned error from `main() -> Result` aborts (SIGABRT, status 134)
-  with "main returned Err". Decide whether the error variant is an exit
-  status instead of a panic.
-- [ ] Structural equality for tuples and arrays: `==` is builtin for
-  scalars and addresses and spec-based for nominal types, so `(1, 2) ==
-  (1, 2)` and `[1, 2] == [1, 2]` have no comparison. Decide the builtin
-  element-wise rule or keep it explicit.
+- [x] Read-before-write through an operator: an assignment reads its
+  value before it takes the place, so `v[i] = v[i] + 1`,
+  `m[k] = m[k] + 1`, and the compound forms compile without a
+  temporary. Two-phase borrows are still the general answer for a call
+  that both reads and writes.
+- [x] A returned error from `main() -> Result` is an exit status: the
+  message goes to stderr and the process exits 1, matching the direct
+  backend, where LLVM's entry used to call `alcy_panic` and abort with
+  status 134.
+- [x] Structural equality for tuples and arrays: `==` and `!=` walk the
+  elements when every element is itself builtin comparable, which is the
+  rule `docs/spec/types.md` already stated.
 - [x] Float ranges: `for x in 0.5..<2.5` answers one diagnostic ("Float
   ranges do not iterate"). The arm of the desugared `Some` match binds
   its names against the error type now instead of being skipped, so the
