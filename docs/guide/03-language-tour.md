@@ -200,6 +200,11 @@ fn main() {
 `&name` captures a shared borrow and `&mut name` an exclusive one, so
 the closure reads or writes the live value instead of a copy.
 
+A capture whose type owns memory moves in instead: the value keeps what
+it took and ends it when the value ends, so a closure over a `String`
+is a value like any other. A body may read what it captured and borrow
+it, but not consume it, because the closure can run again.
+
 ## Printing
 
 `print` and `println` take a compile-time format string and one

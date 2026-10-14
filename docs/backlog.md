@@ -10,6 +10,14 @@ replaced. The foundations are in `roadmap.md`.
   item the ones written above it, and `ItemNode::docs` carries them as
   spans into the same bytes. The lexer already tokenized them, so the
   site generator is the only reader left to write.
+- [ ] The direct-wasm backend miscompiles a float format placeholder: a
+  program that formats an `f64` emits an invalid module (`local.set[0]
+  expected type f64, found local.get of type i32`), so the guide
+  documents `{:.2f}` in prose instead of a runnable fence and no wasm
+  case covers the default float spelling.
+- [ ] Consuming `for x in a` over an array is refused on direct-wasm:
+  `core/slice.al`'s `raw_ptr` does not lower there (EK001), so the
+  guide walks arrays with `.iter()`. The by-reference form works.
 - [ ] Moving a non-`Copy` element out of an owned array still copies:
   `w := a[0]` loads the element, and the array's glue ends it again,
   which is a double free in safe code. The drop walk's paths name
