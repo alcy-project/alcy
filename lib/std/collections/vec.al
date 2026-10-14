@@ -154,6 +154,15 @@ impl<T> Vec<T> {
     }
   }
 
+  // Removes and answers the element at `index`, moving the last
+  // element into its place. The order of the rest is not kept, which
+  // is what makes it a swap rather than a shift. `index` is in
+  // bounds.
+  pub fn swap_remove(mut self: &mut Self, index: usize) -> T {
+    self.swap(index, self.len - 1)
+    ret self.pop().unwrap()
+  }
+
   // Removes and returns the last element, or `None` when empty.
   pub fn pop(mut self: &mut Self) -> Option<T> {
     if self.len == 0 {
