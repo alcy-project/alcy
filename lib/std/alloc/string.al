@@ -206,6 +206,13 @@ impl String {
     ret unsafe { slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len) }
   }
 
+  // The bytes as an exclusive view over the current length. Growing
+  // while it is live reallocates under it, so the checker reports the
+  // conflict.
+  pub fn as_mut_slice(mut self: &mut Self) -> &mut [u8] {
+    ret unsafe { slice_from_parts_mut(uninit_assume(elem_ptr(self.buf, 0)), self.len) }
+  }
+
   // The byte-level predicates, so a `String` reads like the `str`
   // view it hands out.
   pub fn starts_with(self: &Self, prefix: str) -> bool {

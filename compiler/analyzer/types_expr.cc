@@ -3548,7 +3548,27 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
     }
     case ast::ExprKind::Index: {
       const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
-      const ir::TypeIdx receiver = check_place(module, index.receiver);
+      // A receiver the binding holds as a reference is written through
+      // without `mut` on the binding, the way `*r` is: `b[0] = x` for
+      // `b: &mut [u8]`. The shared case is refused just below.
+      bool ref_receiver = false;
+      if (ast.exprs[index.receiver].kind == ast::ExprKind::Path) {
+        const ast::PathIdx recv_path =
+            ast.exprs[index.receiver].payload.get<ast::ExprPath>().idx;
+        const std::span<const ast::Ident> recv_segments =
+            ast.paths[recv_path].segments;
+        if (recv_segments.size() == 1) {
+          const Local* recv_local = lookup_local(recv_segments[0].name);
+          if (recv_local != nullptr &&
+              (tag_of(recv_local->type) == ir::TypeTag::Ref ||
+               tag_of(recv_local->type) == ir::TypeTag::MutRef)) {
+            ref_receiver = true;
+          }
+        }
+      }
+      const ir::TypeIdx receiver =
+          ref_receiver ? check_expr(module, index.receiver, nullptr)
+                       : check_place(module, index.receiver);
       if (is_error(receiver)) {
         return error_type();
       }
