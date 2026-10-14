@@ -534,6 +534,9 @@ class Lowerer {
                          Val rhs,
                          ir::TypeTag tag);
   Val lower_binary(ast::ExprIdx expr);
+  // The element-wise equality of two aggregates the checker admitted to
+  // == or !=, walking tuples and arrays and comparing leaves directly.
+  Val emit_element_eq(Val lhs, Val rhs, diag::Span span);
   void store_result(Val slot, Val value);
   Val result_slot(ir::TypeIdx type, diag::Span span);
   void lower_arm_test(ast::PatternIdx pattern,

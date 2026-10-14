@@ -3898,6 +3898,35 @@ bool Checker::is_error(ir::TypeIdx idx) const {
   return tag_of(idx) == ir::TypeTag::Error;
 }
 
+// Whether the backend compares the type directly. A nominal type or
+// `str` compares through `PartialEq` (ADR-0053); a tuple or array does
+// so when each element can be compared directly, because the builtin
+// comparison is element-wise.
+bool Checker::is_builtin_comparable(ir::TypeIdx type) const {
+  const ir::TypeTag tag = tag_of(type);
+  if (is_integer_tag(tag) || is_float_tag(tag) || tag == ir::TypeTag::I1 ||
+      tag == ir::TypeTag::Ptr || tag == ir::TypeTag::Ref ||
+      tag == ir::TypeTag::MutRef || ir::is_raw_ptr_type(tag)) {
+    return true;
+  }
+  if (tag == ir::TypeTag::Tuple) {
+    const ir::TupleType& tuple =
+        builder.tuple_types()[builder.types()[type].as_tuple()];
+    for (const ir::TypeIdx element : tuple.elements) {
+      if (!is_builtin_comparable(element)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (tag == ir::TypeTag::Array) {
+    const ir::ArrayType& array =
+        builder.array_types()[builder.types()[type].as_array()];
+    return is_builtin_comparable(array.element);
+  }
+  return false;
+}
+
 // User-facing type names: the table spells bool as `i1` and unit as
 // `void`, which read poorly in diagnostics.
 const char* Checker::pretty_tag(ir::TypeTag tag) {

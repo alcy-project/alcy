@@ -89,6 +89,13 @@ the seal works the same way: the standard library implements it, and a
 package outside the suite lists `Display` in its own `[spec]
 implement`.
 
+Amended at structural equality's landing: `==` and `!=` are builtin
+over a tuple or array when every element is itself builtin
+comparable, walking the fields or elements in order. A nominal
+element or a `str` is not reached, because it compares through
+`PartialEq` or its own bytes; routing an element through `eq` is a
+later slice.
+
 **A spec may name a super-spec.** `spec Eq: PartialEq {}` says that
 implementing `Eq` requires an implementation of `PartialEq`, and a
 bound on `Eq` admits `PartialEq`'s method. `Eq` is the reflexive

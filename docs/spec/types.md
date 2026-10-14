@@ -79,7 +79,9 @@
 
 - `==` over a nominal type resolves through the sealed `PartialEq`
   spec, and `!=` is its negation; a type with no implementation has no
-  equality. Scalars and addresses keep their builtin comparison. See
+  equality. Scalars and addresses keep their builtin comparison, and a
+  tuple or array compares element-wise when every element is itself
+  builtin comparable. See
   `docs/adr/0053-operators-are-sealed-specs.md`.
 - `Eq` is the reflexivity marker over `PartialEq` and declares no
   method of its own: implementing it requires a `PartialEq`

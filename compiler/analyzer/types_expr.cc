@@ -3137,11 +3137,9 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
               return error_type();
             }
           }
-          const bool comparable =
-              is_integer_tag(tag) || is_float_tag(tag) ||
-              tag == ir::TypeTag::I1 || tag == ir::TypeTag::Ptr ||
-              tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef ||
-              ir::is_raw_ptr_type(tag);
+          // A tuple or array is comparable when its elements are:
+          // the builtin comparison walks it element-wise.
+          const bool comparable = is_builtin_comparable(operands);
           if (!comparable) {
             // A nominal type compares through the sealed `PartialEq`
             // spec (ADR-0053); `str` does too, byte comparison the core

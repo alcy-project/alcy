@@ -3294,6 +3294,66 @@ Val Lowerer::lower_int_division(diag::Span span,
   return Val{to_operand(result, lhs.type), lhs.type, false, false};
 }
 
+// The element-wise comparison the checker admitted for == and != on a
+// tuple or array. A leaf is a scalar or a thin address the backend
+// compares; an aggregate recurses over its fields or elements, and
+// every leaf comparison has to hold.
+Val Lowerer::emit_element_eq(Val lhs, Val rhs, diag::Span span) {
+  const ir::TypeTag tag = tag_of(lhs.type);
+  const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+  if (tag != ir::TypeTag::Tuple && tag != ir::TypeTag::Array) {
+    const ir::RegisterIdx cmp =
+        emit(ir::Opcode::Eq, boolean, {use_value(lhs), use_value(rhs)});
+    return Val{to_operand(cmp, boolean), boolean, false, false};
+  }
+  const Val left = address_of(lhs);
+  const Val right = address_of(rhs);
+  if (failed) {
+    return Val{size_one, boolean, false, false};
+  }
+  const bool is_array = tag == ir::TypeTag::Array;
+  const u32 count =
+      is_array
+          ? static_cast<u32>(
+                builder.state()
+                    .array_types[builder.state().types[lhs.type].as_array()]
+                    .count)
+          : static_cast<u32>(
+                builder.state()
+                    .tuple_types[builder.state().types[lhs.type].as_tuple()]
+                    .elements.size());
+  ir::OperandIdx result = bool_operand(true);
+  for (u32 i = 0; i < count && !failed; ++i) {
+    const ir::TypeIdx field =
+        is_array ? builder.state()
+                       .array_types[builder.state().types[lhs.type].as_array()]
+                       .element
+                 : builder.state()
+                       .tuple_types[builder.state().types[lhs.type].as_tuple()]
+                       .elements[i];
+    const ir::RegisterIdx left_field =
+        emit(ir::Opcode::GetElementPtr, field,
+             {left.op, zero_i32, index_operand(i)}, {.inbounds = true});
+    const ir::RegisterIdx right_field =
+        emit(ir::Opcode::GetElementPtr, field,
+             {right.op, zero_i32, index_operand(i)}, {.inbounds = true});
+    if (failed) {
+      break;
+    }
+    const Val left_val{to_operand(left_field, field), field, true, left.place};
+    const Val right_val{to_operand(right_field, field), field, true,
+                        right.place};
+    const Val cmp = emit_element_eq(left_val, right_val, span);
+    if (failed) {
+      break;
+    }
+    const ir::RegisterIdx both =
+        emit(ir::Opcode::And, boolean, {result, cmp.op});
+    result = to_operand(both, boolean);
+  }
+  return Val{result, boolean, false, false};
+}
+
 Val Lowerer::lower_binary(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprBinary& bin = node.payload.get<ast::ExprBinary>();
@@ -3363,6 +3423,21 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
         emit(bin.op == ast::BinaryOp::And ? ir::Opcode::And : ir::Opcode::Or,
              lhs.type, {use_value(lhs), use_value(rhs)});
     return Val{to_operand(dst, lhs.type), lhs.type, false, false};
+  }
+  // The checker admits == and != on a tuple or array when its elements
+  // compare directly; the walk below is that comparison.
+  if ((bin.op == ast::BinaryOp::Eq || bin.op == ast::BinaryOp::NotEq) &&
+      (tag == ir::TypeTag::Tuple || tag == ir::TypeTag::Array)) {
+    Val equal = emit_element_eq(lhs, rhs, node.span);
+    if (failed) {
+      return stopped_value();
+    }
+    if (bin.op == ast::BinaryOp::NotEq) {
+      const ir::RegisterIdx negated =
+          emit(ir::Opcode::Not, equal.type, {equal.op});
+      equal = Val{to_operand(negated, equal.type), equal.type, false, false};
+    }
+    return equal;
   }
   if (bin.op == ast::BinaryOp::Eq || bin.op == ast::BinaryOp::NotEq ||
       bin.op == ast::BinaryOp::Gt || bin.op == ast::BinaryOp::Lt ||

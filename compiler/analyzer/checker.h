@@ -601,6 +601,9 @@ class Checker {
   bool is_void(ir::TypeIdx idx) const;
   bool is_never(ir::TypeIdx idx) const;
   bool is_error(ir::TypeIdx idx) const;
+  // Whether the backend compares the operand type directly: a scalar,
+  // a thin address, or a tuple or array of comparable elements.
+  bool is_builtin_comparable(ir::TypeIdx type) const;
   static const char* pretty_tag(ir::TypeTag tag);
   bool types_equal(ir::TypeIdx a, ir::TypeIdx b);
   bool types_equal_inner(ir::TypeIdx a, ir::TypeIdx b, std::vector<u64>& seen);
