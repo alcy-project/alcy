@@ -7,7 +7,10 @@
   `&T` to the same place may be live while it is.
 - A non-`Copy` value cannot be moved out of a reference: reading `*r`
   as a value, taking a field out of the referent, and a pattern that
-  binds a payload by value are all refused. The reference one of the
+  binds a payload by value are all refused. Until a pattern can bind a
+  payload by reference, a `match` over a borrowed value whose type
+  carries a non-`Copy` payload is refused as a whole, even where every
+  arm binds only `Copy` payloads or nothing at all. The reference one of the
   compiler's own `unsafe` intrinsics hands out - the allocator's
   accessors - names storage the caller owns, so reading through one is
   a move; an ordinary `unsafe` function returns a borrow like any

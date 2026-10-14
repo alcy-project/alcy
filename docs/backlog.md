@@ -10,11 +10,14 @@ replaced. The foundations are in `roadmap.md`.
   item the ones written above it, and `ItemNode::docs` carries them as
   spans into the same bytes. The lexer already tokenized them, so the
   site generator is the only reader left to write.
-- [ ] A pattern that binds a non-`Copy` payload of a borrowed
-  scrutinee is refused, so `match *e` over an enum that carries an
-  aggregate can only bind `Copy` payloads. Binding the payload by
+- [ ] Matching over a borrowed value whose type carries a non-`Copy`
+  payload is refused as a whole, even where every arm binds only
+  `Copy` payloads or nothing (`err-match-ref-payload` and
+  `err-match-ref-copy-only` pin both shapes). Binding a payload by
   reference - what a shared borrow would want - is the ergonomics that
-  would let the read through.
+  would let the read through: the lowering then carries the
+  scrutinee's borrow into the payload loads instead of materializing
+  the scrutinee.
 - [ ] `map` has no constructor: its result type comes from a closure's
   return type, which inference cannot read before the closure is
   checked. A slice that checks a closure argument first, or that lets
