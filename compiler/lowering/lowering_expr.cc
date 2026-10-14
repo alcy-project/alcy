@@ -3136,7 +3136,9 @@ Val Lowerer::lower_tuple(ast::ExprIdx expr) {
     internal(node.span, "tuple without type");
     return Val{size_one, error_type(), false, false};
   }
-  const ir::TupleType& shape =
+  // A copy, not a reference: lowering an element can intern a type and
+  // grow the tuple table under it.
+  const ir::TupleType shape =
       builder.state().tuple_types[builder.state().types[tuple_type].as_tuple()];
   const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, tuple_type, {size_one});
   for (u32 i = 0; i < static_cast<u32>(tuple.elements.size()) && !failed; ++i) {
@@ -3171,7 +3173,9 @@ Val Lowerer::lower_array(ast::ExprIdx expr) {
     internal(node.span, "array without type");
     return Val{size_one, error_type(), false, false};
   }
-  const ir::ArrayType& shape =
+  // A copy, not a reference: lowering an element can intern a type and
+  // grow the array table under it.
+  const ir::ArrayType shape =
       builder.state().array_types[builder.state().types[array_type].as_array()];
   const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, array_type, {size_one});
   if (array.repeat.is_valid()) {
@@ -3513,6 +3517,67 @@ Val Lowerer::result_slot(ir::TypeIdx type, diag::Span span) {
 // pattern binds at the start of body_block and lowering continues
 // there; on failure control jumps to fail_block. Or-patterns expand
 // into sibling arms beforehand.
+// Whether bind_pattern alone can place a pattern: an irrefutable
+// binding, a wildcard, or a destructuring of those. A literal, a
+// variant, or an alternative needs a test instead.
+bool Lowerer::pattern_bindable(ast::PatternIdx pattern) const {
+  const ast::PatternNode& node = ast.patterns[pattern];
+  switch (node.kind) {
+    case ast::PatternKind::Wildcard:
+    case ast::PatternKind::Ident:
+    case ast::PatternKind::MutIdent: return true;
+    case ast::PatternKind::Ref: return pattern_bindable(node.payload.ref.inner);
+    case ast::PatternKind::Tuple: {
+      if (node.payload.tuple.path.is_valid()) {
+        return false;
+      }
+      for (ast::PatternIdx element : node.payload.tuple.elements) {
+        if (!pattern_bindable(element)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case ast::PatternKind::Struct: {
+      for (const ast::FieldPattern& field : node.payload.strukt.fields) {
+        if (!pattern_bindable(field.pattern)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case ast::PatternKind::Literal:
+    case ast::PatternKind::Or: return false;
+  }
+  return false;
+}
+
+// Tests a run of sub-patterns against their places in order. On the
+// first failure it branches to fail; when every test passes it
+// branches to body. The caller reaches this in a block that already
+// computed the places, and each test runs in the block the previous
+// one left current.
+void Lowerer::lower_arm_sequence(
+    const std::span<const ast::PatternIdx>& patterns,
+    const std::vector<Val>& places,
+    ir::BlockIdx body,
+    ir::BlockIdx fail) {
+  for (usize i = 0; i < patterns.size() && !failed; ++i) {
+    const ir::BlockIdx next = i + 1 == patterns.size() ? body : reserve_block();
+    // A projected field carries a contiguity copy; the test needs the
+    // type it stands for (the enum a variant names, the pointee a
+    // reference pattern reads).
+    const ir::TypeIdx type = type_origin(places[i].type);
+    lower_arm_test(patterns[i],
+                   Val{places[i].op, type, places[i].address, places[i].place},
+                   type, next, fail);
+  }
+  if (patterns.empty() && !failed) {
+    emit_br(body);
+    switch_to(body);
+  }
+}
+
 void Lowerer::lower_arm_test(ast::PatternIdx pattern,
                              Val scrut_addr,
                              ir::TypeIdx scrut_type,
@@ -3554,22 +3619,49 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
         const ir::TupleType& shape =
             builder.state()
                 .tuple_types[builder.state().types[scrut_type].as_tuple()];
-        for (u32 i = 0;
-             i < static_cast<u32>(node.payload.tuple.elements.size()) &&
-             !failed;
-             ++i) {
+        const std::span<const ast::PatternIdx> elements =
+            node.payload.tuple.elements;
+        bool bindable = true;
+        bool has_or = false;
+        for (ast::PatternIdx element : elements) {
+          bindable = bindable && pattern_bindable(element);
+          has_or = has_or || ast.patterns[element].kind == ast::PatternKind::Or;
+        }
+        if (bindable || has_or) {
+          // Every field is a binding, or an alternative still needs
+          // its nesting diagnostic from bind_pattern.
+          for (u32 i = 0; i < static_cast<u32>(elements.size()) && !failed;
+               ++i) {
+            const ir::RegisterIdx gep =
+                emit(ir::Opcode::GetElementPtr, shape.elements[i],
+                     {scrut_addr.op, zero_i32, index_operand(i)},
+                     {.inbounds = true});
+            bind_pattern(elements[i],
+                         Val{to_operand(gep, shape.elements[i]),
+                             shape.elements[i], true, scrut_addr.place});
+            if (failed) {
+              return;
+            }
+          }
+          emit_br(body_block);
+          switch_to(body_block);
+          return;
+        }
+        // A refutable field is a test, not a binding: project every
+        // field first and chain the tests to the fail block.
+        std::vector<Val> places;
+        places.reserve(elements.size());
+        for (u32 i = 0; i < static_cast<u32>(elements.size()) && !failed; ++i) {
           const ir::RegisterIdx gep = emit(
               ir::Opcode::GetElementPtr, shape.elements[i],
               {scrut_addr.op, zero_i32, index_operand(i)}, {.inbounds = true});
-          bind_pattern(node.payload.tuple.elements[i],
-                       Val{to_operand(gep, shape.elements[i]),
-                           shape.elements[i], true, scrut_addr.place});
-          if (failed) {
-            return;
-          }
+          places.push_back(Val{to_operand(gep, shape.elements[i]),
+                               shape.elements[i], true, scrut_addr.place});
         }
-        emit_br(body_block);
-        switch_to(body_block);
+        if (failed) {
+          return;
+        }
+        lower_arm_sequence(elements, places, body_block, fail_block);
         return;
       }
       if (ast.paths[node.payload.tuple.path].segments.empty()) {
@@ -3622,7 +3714,41 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
       return;
     }
     case ast::PatternKind::Struct: {
-      for (const ast::FieldPattern& field : node.payload.strukt.fields) {
+      const std::span<const ast::FieldPattern> fields =
+          node.payload.strukt.fields;
+      bool bindable = true;
+      bool has_or = false;
+      for (const ast::FieldPattern& field : fields) {
+        bindable = bindable && pattern_bindable(field.pattern);
+        has_or =
+            has_or || ast.patterns[field.pattern].kind == ast::PatternKind::Or;
+      }
+      if (bindable || has_or) {
+        for (const ast::FieldPattern& field : fields) {
+          u32 index = 0;
+          if (!struct_field_index(scrut_type, field.name.name, index)) {
+            internal(field.name.span, "pattern field without declaration");
+            return;
+          }
+          const ir::TypeIdx field_type = field_type_of(scrut_type, index, span);
+          const ir::RegisterIdx gep =
+              emit(ir::Opcode::GetElementPtr, field_type,
+                   {scrut_addr.op, zero_i32, index_operand(index)});
+          bind_pattern(field.pattern, Val{to_operand(gep, field_type),
+                                          field_type, true, scrut_addr.place});
+          if (failed) {
+            return;
+          }
+        }
+        emit_br(body_block);
+        switch_to(body_block);
+        return;
+      }
+      std::vector<ast::PatternIdx> patterns;
+      std::vector<Val> places;
+      patterns.reserve(fields.size());
+      places.reserve(fields.size());
+      for (const ast::FieldPattern& field : fields) {
         u32 index = 0;
         if (!struct_field_index(scrut_type, field.name.name, index)) {
           internal(field.name.span, "pattern field without declaration");
@@ -3632,14 +3758,14 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
         const ir::RegisterIdx gep =
             emit(ir::Opcode::GetElementPtr, field_type,
                  {scrut_addr.op, zero_i32, index_operand(index)});
-        bind_pattern(field.pattern, Val{to_operand(gep, field_type), field_type,
-                                        true, scrut_addr.place});
-        if (failed) {
-          return;
-        }
+        patterns.push_back(field.pattern);
+        places.push_back(Val{to_operand(gep, field_type), field_type, true,
+                             scrut_addr.place});
       }
-      emit_br(body_block);
-      switch_to(body_block);
+      if (failed) {
+        return;
+      }
+      lower_arm_sequence(patterns, places, body_block, fail_block);
       return;
     }
     case ast::PatternKind::Ref: {

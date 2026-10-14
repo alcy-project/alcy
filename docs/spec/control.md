@@ -36,6 +36,10 @@
   false guard falls through to the next arm, and a guarded arm does
   not count toward exhaustiveness, so an unconditional arm is still
   required.
+- A tuple or struct field pattern may itself be refutable: a
+  literal, a unit variant, or a variant whose payloads bind. An
+  or-pattern nested inside another pattern still waits for the
+  distributive expansion.
 - Deferred: string literal patterns.
 
 ## Blocks, values, and sequencing

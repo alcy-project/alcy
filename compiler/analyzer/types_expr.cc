@@ -175,7 +175,10 @@ bool Checker::bind_pattern(u32 module,
       }
       bool refutable = false;
       for (u32 i = 0; i < static_cast<u32>(elements.size()); ++i) {
-        if (bind_pattern(module, elements[i], tuple_type.elements[i])) {
+        // A field slot is a contiguity copy; a nested pattern names
+        // the type behind it (a generic variant instance most of all).
+        if (bind_pattern(module, elements[i],
+                         type_origin(tuple_type.elements[i]))) {
           refutable = true;
         }
       }
@@ -236,7 +239,7 @@ bool Checker::bind_pattern(u32 module,
                                  field.name.span, field.name.name,
                                  nominal->name);
         if (bind_pattern(module, field.pattern,
-                         struct_type_shape.fields[index])) {
+                         type_origin(struct_type_shape.fields[index]))) {
           refutable = true;
         }
       }

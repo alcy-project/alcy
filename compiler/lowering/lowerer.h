@@ -544,6 +544,18 @@ class Lowerer {
                       ir::TypeIdx scrut_type,
                       ir::BlockIdx body_block,
                       ir::BlockIdx fail_block);
+  // Tests a run of sub-patterns against their places in order,
+  // branching to `body` when all match and to `fail` on the first
+  // failure. Each test runs in its own block; the caller reaches this
+  // in a block whose places the GEPs already computed.
+  void lower_arm_sequence(const std::span<const ast::PatternIdx>& patterns,
+                          const std::vector<Val>& places,
+                          ir::BlockIdx body,
+                          ir::BlockIdx fail);
+  // Whether `bind_pattern` alone can place a pattern: an irrefutable
+  // binding, a wildcard, or a destructuring of those. A refutable
+  // sub-pattern needs a test, not a binding.
+  bool pattern_bindable(ast::PatternIdx pattern) const;
   void expand_or_arms(
       const ast::ExprMatchArm& arm,
       std::vector<std::pair<ast::PatternIdx, ast::ExprIdx>>& out);
