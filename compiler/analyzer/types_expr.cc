@@ -1718,6 +1718,30 @@ ir::TypeIdx Checker::check_method_call(u32 module,
   // The receiver coerces to a declared borrow; coercion itself is
   // erased at this level and materialized by lowering.
   const ir::TypeIdx declared = method->params[0];
+  // A method that takes `&mut self` needs a `mut` binding when the
+  // receiver owns the value: a `&mut T` the binding already holds
+  // reborrows without one.
+  if (tag_of(declared) == ir::TypeTag::MutRef) {
+    const ast::ExprIdx recv_expr =
+        node.payload.get<ast::ExprMethodCall>().receiver;
+    if (ast.exprs[recv_expr].kind == ast::ExprKind::Path) {
+      const ast::PathIdx recv_path =
+          ast.exprs[recv_expr].payload.get<ast::ExprPath>().idx;
+      const std::span<const ast::Ident> recv_segments =
+          ast.paths[recv_path].segments;
+      if (recv_segments.size() == 1) {
+        const Local* recv_local = lookup_local(recv_segments[0].name);
+        if (recv_local != nullptr && !recv_local->is_mut &&
+            tag_of(recv_local->type) != ir::TypeTag::Ref &&
+            tag_of(recv_local->type) != ir::TypeTag::MutRef) {
+          const u32 index = bag.emit<i18n::Key::AnalyzerMutMethodNeedsMut>(
+              diag::Severity::Error, diag::Stage::Analyzer,
+              DiagCode::BadAssignment, recv_segments[0].span, name);
+          (void)index;
+        }
+      }
+    }
+  }
   if (receiver.idx != declared.idx) {
     bool coerced = false;
     if (tag != ir::TypeTag::Ref && tag != ir::TypeTag::MutRef) {

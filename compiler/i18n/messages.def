@@ -107,6 +107,7 @@
   F(AnalyzerArrayRunNeedsBorrow, "A run of a fixed array must be borrowed (`&a[..]`)") \
   F(AnalyzerAssignThroughShared, "Cannot assign through a shared reference") \
   F(AnalyzerAssignToImmutable, "Cannot assign to an immutable binding") \
+  F(AnalyzerMutMethodNeedsMut, "Cannot call '{}' on an immutable binding; declare it `mut`") \
   F(AnalyzerAssociatedFunctionAsMethod, "Associated function '{}' called as a method") \
   F(AnalyzerAssociatedFunctionNeedsTypeArguments, "Calling '{}' needs type arguments to name an associated function; write '{}::<T>::{}'") \
   F(AnalyzerBadDestructorSignature, "Destructor must be 'fn drop(self: Self)' returning nothing") \

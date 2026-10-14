@@ -3,7 +3,7 @@ fn main() -> i32 {
   if !"hello".is_ascii() { ret 1 }
   if !"".is_ascii() { ret 2 }
   if !"a\tb".is_ascii() { ret 3 }
-  s := String::new()
+  mut s := String::new()
   s.push(0xC3u8)
   s.push(0xA9u8)
   if s.is_ascii() { ret 4 }
