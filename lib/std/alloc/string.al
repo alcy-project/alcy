@@ -63,6 +63,12 @@ impl String {
     ret out
   }
 
+  // Moves the bytes of `other` on, ending `other`. The bytes are
+  // copied; the source buffer ends here.
+  pub fn extend(mut self: &mut Self, other: String) {
+    self.push_str(other.as_str())
+  }
+
   // A new string with every non-overlapping occurrence of `from`
   // replaced by `to`. An empty `from` would never advance, so it
   // answers a copy.
