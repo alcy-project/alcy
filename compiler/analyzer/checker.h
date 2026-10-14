@@ -1120,7 +1120,6 @@ class Checker {
   // The checker's own walk so an in-progress recursive type cannot
   // recurse forever; a revisit answers Copy, because the cycle itself
   // is the error the checker reports elsewhere.
-  bool capture_is_copy(ir::TypeIdx idx, std::vector<u32>& visited);
   void check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self);
   void check_main(u32 module, ast::ItemIdx fn);
   void check_bodies();

@@ -3804,29 +3804,6 @@ TEST_CASE("Check reports an inner capture the outer closure hides") {
   CHECK(f.bag.has_errors());
 }
 
-TEST_CASE("Check reports a non-Copy move capture") {
-  VirtualDir dir;
-  const bool setup = write_all(dir, {{"main.al",
-                                      "struct R { x: i32, m: &mut i32 }\n"
-                                      "fn take(r: R) -> i32 {\n"
-                                      "  ret r.x\n"
-                                      "}\n"
-                                      "fn main() -> i32 {\n"
-                                      "  mut n := 0\n"
-                                      "  r := R { x: 1, m: &mut n }\n"
-                                      "  f := [r] () -> { ret take(r) }\n"
-                                      "  ret f()\n"
-                                      "}\n"}});
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
-  Fixture f;
-  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
-  CHECK(!result.package.has_value());
-  CHECK(f.bag.has_errors());
-}
-
 TEST_CASE("Check rejects a function type as a generic argument") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",

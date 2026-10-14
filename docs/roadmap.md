@@ -105,19 +105,21 @@ peripheral work lives in `backlog.md`. The language record lives in
   cannot be a property of its type yet. The decision landed
   (ADR-0064): a closure literal interns a nominal type whose field is
   its environment tuple, so its `Copy`-ness is the environment's and a
-  closure coerces to a bare function type as a borrow of it. What
-  remains of it: interning the type per literal, the coercion rule,
-  and ending a closure value through its environment. `Box<T>` landed
+  closure coerces to a bare function type as a borrow of it. The first
+  half landed with `Box<T>`: a literal's type is that struct, a value
+  coerces to a bare function type as a view that borrows it, and the
+  drop walk ends the value through the field - so a non-`Copy` capture
+  moves in, is owned like any other field, and moving one out of the
+  body is refused as moving out of borrowed content. `Box<T>` landed
   over the allocator's `MaybeUninit<T>`: `new` moves the value in,
   `get`/`get_mut` borrow it, `into_inner` moves the pointee out, and
   the destructor ends the pointee with the first item's
   `drop_in_place` and releases the block. A `live` flag is what a
   spent handle says, so a recursive enum's consuming walk frees every
-  link exactly once - the sanitizer run checks it. Then the owning
-  environment: non-Copy captures move in, the environment is
-  allocated where the closure value can own and drop it, the `Copy`
-  restriction and the frame-escape refusal retire, and frame-crossing
-  iterators close the adapters' frame-bound caveat. Designed in
+  link exactly once - the sanitizer run checks it. What remains is the
+  owning environment where the view must own it: the environment is
+  allocated on the heap, the frame-escape refusal retires, and
+  frame-crossing iterators close the adapters' frame-bound caveat. Designed in
   `docs/adr/0044-function-types-and-closures.md`.
 
 - [ ] Package artifacts: a cache and resolution summaries.

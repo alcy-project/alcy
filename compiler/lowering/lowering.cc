@@ -1201,7 +1201,10 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
                {to_operand(pregs[0], env_ty), zero_i32, index_operand(i)});
       if (capture.mode == ast::CaptureMode::Move) {
         locals.emplace_back(capture.name, field, capture.type);
-        addr_names_.push_back({field, capture.name, false, false});
+        // The environment owns this field, and the closure may run
+        // again: moving it out is moving out of borrowed content, which
+        // is what the borrow pass refuses (ADR-0064).
+        addr_names_.push_back({field, capture.name, false, true});
         continue;
       }
       const ir::RegisterIdx ref =

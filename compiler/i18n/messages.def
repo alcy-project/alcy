@@ -199,7 +199,6 @@
   F(AnalyzerMissingOperatorSpec, "Type does not implement the '{}' spec") \
   F(AnalyzerMissingSpecMethod, "Missing method '{}' in implementation of '{}'") \
   F(AnalyzerNameTableExhausted, "The compiler's name table cannot hold the names this package declares") \
-  F(AnalyzerMoveCaptureUnsupported, "Capturing the non-Copy value '{}' by value is not implemented yet") \
   F(AnalyzerNoFields, "No fields on '{}'") \
   F(AnalyzerNotAnAssignablePlace, "Cannot assign to this place") \
   F(AnalyzerNotCallable, "Not callable") \

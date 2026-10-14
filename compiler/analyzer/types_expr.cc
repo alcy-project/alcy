@@ -1149,15 +1149,6 @@ ir::TypeIdx Checker::check_closure(u32 module,
           DiagCode::InvalidCapture, capture.name.span, name);
       (void)index;
     }
-    if (capture.mode == ast::CaptureMode::Move) {
-      std::vector<u32> visited;
-      if (!capture_is_copy(local->type, visited)) {
-        const u32 index = bag.emit<i18n::Key::AnalyzerMoveCaptureUnsupported>(
-            diag::Severity::Error, diag::Stage::Analyzer,
-            DiagCode::InvalidCapture, capture.name.span, name);
-        (void)index;
-      }
-    }
     // A name the enclosing closure binds is a use of its capture:
     // the inner environment is built from the outer one.
     if (!closure_bounds.empty() && local->capture != NO_CAPTURE &&

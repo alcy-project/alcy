@@ -21,7 +21,6 @@
 #include "ast/verify.h"
 #include "base/nesting.h"
 #include "comp/comp_value.h"
-#include "debug/fatal.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -6728,101 +6727,6 @@ bool Checker::contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited) {
     }
     default: return false;
   }
-}
-
-// Whether a value of the type copies, in the checker's own walk: the
-// table's `ir::is_copy_type` runs on cycle-free storage only, and a
-// type under checking is not settled yet. A revisit answers Copy,
-// because the cycle itself is the error the checker reports
-// elsewhere, and mirroring `is_copy_type` is what keeps the two
-// answers from drifting.
-bool Checker::capture_is_copy(ir::TypeIdx idx, std::vector<u32>& visited) {
-  for (u32 seen : visited) {
-    if (seen == idx.idx) {
-      return true;
-    }
-  }
-  visited.push_back(idx.idx);
-  // A type whose declaration gives it a destructor is move-only,
-  // whatever its fields are; the glue sweep has not run yet, so the
-  // registered method is what answers here. A storage copy is checked
-  // at its origin.
-  const ir::TypeIdx origin = type_origin(idx);
-  const auto own = methods_by_self_.find(origin.idx);
-  if (own != methods_by_self_.end()) {
-    for (const auto& [owner, position] : own->second) {
-      if (modules[owner].methods[position].is_drop) {
-        return false;
-      }
-    }
-  }
-  const ir::TypeNode& node = builder.types()[idx];
-  switch (node.tag) {
-    case ir::TypeTag::MutRef: return false;
-    case ir::TypeTag::Error: return true;
-    // A const argument is never a value, so no value of it is captured;
-    // a reachable call is a bug, as in ir::is_copy_type.
-    case ir::TypeTag::Const: UNREACHABLE();
-    case ir::TypeTag::Ref:
-    case ir::TypeTag::Void:
-    case ir::TypeTag::Never:
-    case ir::TypeTag::I1:
-    case ir::TypeTag::I8:
-    case ir::TypeTag::I16:
-    case ir::TypeTag::I32:
-    case ir::TypeTag::I64:
-    case ir::TypeTag::U8:
-    case ir::TypeTag::U16:
-    case ir::TypeTag::U32:
-    case ir::TypeTag::U64:
-    case ir::TypeTag::F32:
-    case ir::TypeTag::F64:
-    case ir::TypeTag::Str:
-    case ir::TypeTag::Ptr:
-    case ir::TypeTag::RawPtr:
-    case ir::TypeTag::RawMutPtr:
-    case ir::TypeTag::Function:
-    case ir::TypeTag::Func: return true;
-    case ir::TypeTag::Struct: {
-      const ir::StructType& struct_type =
-          builder.struct_types()[node.as_struct()];
-      for (ir::TypeIdx field : struct_type.fields) {
-        if (!capture_is_copy(field, visited)) {
-          return false;
-        }
-      }
-      return true;
-    }
-    case ir::TypeTag::Array:
-      return capture_is_copy(builder.array_types()[node.as_array()].element,
-                             visited);
-    case ir::TypeTag::Slice:
-      return capture_is_copy(builder.slice_types()[node.as_slice()].element,
-                             visited);
-    case ir::TypeTag::Enum: {
-      const ir::EnumType& enum_type = builder.enum_types()[node.as_enum()];
-      for (ir::EnumVariantTypeIdx vidx = enum_type.variants.head();
-           vidx.idx < enum_type.variants.head().idx + enum_type.variants.size();
-           vidx = ir::EnumVariantTypeIdx(vidx.idx + 1)) {
-        for (ir::TypeIdx field : builder.enum_variant_types()[vidx].fields) {
-          if (!capture_is_copy(field, visited)) {
-            return false;
-          }
-        }
-      }
-      return true;
-    }
-    case ir::TypeTag::Tuple: {
-      const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
-      for (ir::TypeIdx element : tuple.elements) {
-        if (!capture_is_copy(element, visited)) {
-          return false;
-        }
-      }
-      return true;
-    }
-  }
-  return true;
 }
 
 void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {

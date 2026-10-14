@@ -1148,10 +1148,15 @@ Val Lowerer::lower_closure(ast::ExprIdx expr) {
   if (!captures.empty()) {
     // The environment: the borrows and copies here are what the view
     // carries, and borrowing the slot itself is what keeps the closure
-    // from outliving the frame.
+    // from outliving the frame. An environment that owns anything
+    // becomes a named local, so the drop pass ends it with the scope
+    // the closure was written in (ADR-0064).
     const ir::RegisterIdx slot = emit(ir::Opcode::Alloca, env_ty, {size_one});
     if (failed) {
       return Val{size_one, error_type(), false, false};
+    }
+    if (runs_destructor(env_ty)) {
+      locals.emplace_back("$closure", slot, env_ty);
     }
     if (!store_captures(to_operand(slot, env_ty))) {
       return Val{size_one, error_type(), false, false};
