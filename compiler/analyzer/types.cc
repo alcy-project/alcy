@@ -4292,6 +4292,31 @@ bool Checker::classify_suffix(std::string_view spelling,
   return true;
 }
 
+// Whether an integer literal's magnitude fits the type it was given.
+// A signed minimum is one past the positive maximum, so a negation has
+// room the positive form does not.
+static bool int_literal_fits(std::string_view spelling,
+                             ir::TypeTag tag,
+                             bool negative) {
+  const u64 magnitude = comp::parse_numeric_value(spelling);
+  switch (tag) {
+    case ir::TypeTag::U8: return magnitude <= (negative ? 0ull : 0xFFull);
+    case ir::TypeTag::U16: return magnitude <= (negative ? 0ull : 0xFFFFull);
+    case ir::TypeTag::U32:
+      return magnitude <= (negative ? 0ull : 0xFFFFFFFFull);
+    case ir::TypeTag::U64: return !negative || magnitude == 0;
+    case ir::TypeTag::I8: return magnitude <= (negative ? 0x80ull : 0x7Full);
+    case ir::TypeTag::I16:
+      return magnitude <= (negative ? 0x8000ull : 0x7FFFull);
+    case ir::TypeTag::I32:
+      return magnitude <= (negative ? 0x80000000ull : 0x7FFFFFFFull);
+    case ir::TypeTag::I64:
+      return magnitude <=
+             (negative ? 0x8000000000000000ull : 0x7FFFFFFFFFFFFFFFull);
+    default: return true;
+  }
+}
+
 ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
                                    const ir::TypeIdx* expected) {
   using LK = ast::LiteralKind;
@@ -4333,9 +4358,26 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
         (void)index;
         return error_type();
       }
+      const bool negative = lit.is_negative != literal_negated_;
       if (!has_suffix && expected != nullptr &&
           is_integer_tag(tag_of(*expected))) {
+        const ir::TypeTag wanted = tag_of(*expected);
+        if (!int_literal_fits(lit.spelling, wanted, negative)) {
+          const u32 index =
+              bag.emit<i18n::Key::AnalyzerIntegerLiteralOutOfRange>(
+                  diag::Severity::Error, diag::Stage::Analyzer,
+                  DiagCode::TypeMismatch, lit.span);
+          (void)index;
+          return error_type();
+        }
         return *expected;
+      }
+      if (has_suffix && !int_literal_fits(lit.spelling, tag, negative)) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerIntegerLiteralOutOfRange>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::TypeMismatch, lit.span);
+        (void)index;
+        return error_type();
       }
       const ir::TypeIdx type = builder.primitive(tag);
       if (expected != nullptr) {

@@ -2981,8 +2981,22 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
       return check_array(module, expr, expected);
     }
     case ast::ExprKind::Unary: {
-      const ir::TypeIdx inner =
-          check_expr(module, node.payload.get<ast::ExprUnary>().inner, nullptr);
+      const ast::ExprUnary& unary = node.payload.get<ast::ExprUnary>();
+      // A negated integer literal is checked as a negative magnitude:
+      // the signed minimum fits even though its positive form does not.
+      const bool negates_literal =
+          unary.op == ast::UnaryOp::Neg &&
+          ast.exprs[unary.inner].kind == ast::ExprKind::Literal &&
+          ast.literals
+                  [ast.exprs[unary.inner].payload.get<ast::ExprLiteral>().value]
+                      .kind == ast::LiteralKind::Integer;
+      if (negates_literal) {
+        literal_negated_ = true;
+      }
+      const ir::TypeIdx inner = check_expr(module, unary.inner, nullptr);
+      if (negates_literal) {
+        literal_negated_ = false;
+      }
       if (is_error(inner)) {
         return error_type();
       }

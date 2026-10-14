@@ -623,6 +623,9 @@ class Checker {
                        bool& is_float,
                        diag::Span span);
   ir::TypeIdx check_literal(ast::LiteralIdx value, const ir::TypeIdx* expected);
+  // Set while a negated integer literal is checked, so the range check
+  // reads the value the negation produces.
+  bool literal_negated_ = false;
   void validate_cycles(const ir::Storage& storage);
   const CheckedModule::StaticInfo* lookup_static(u32 module,
                                                  std::string_view name);

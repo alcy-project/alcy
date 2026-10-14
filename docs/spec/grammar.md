@@ -41,6 +41,10 @@ are rejected with guidance diagnostics.
 - Integer literals accept `_` separators between digits. Suffixes
   (`42i32`, `1.5f64`) select the type; unsuffixed integers default
   to `i32`, floats to `f64`.
+- An integer literal must fit its type. A suffix or an annotated
+  position checks the magnitude (`256u8` and `2147483648i32` are
+  errors), and a negated literal may name the signed minimum, one
+  past the positive maximum.
 - A float literal may carry an exponent, with or without a fraction:
   `2e9`, `1.5e-3`, `6.02E23`. The exponent needs at least one digit, and
   its sign is optional.

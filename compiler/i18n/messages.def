@@ -178,6 +178,7 @@
   F(AnalyzerIfWithoutElse, "If without else yields '()'") \
   F(AnalyzerImportNotQualified, "Imports must be module-qualified (`self::foo`)") \
   F(AnalyzerInherentImplNeedsNominalType, "Inherent impl requires a nominal type") \
+  F(AnalyzerIntegerLiteralOutOfRange, "Integer literal is out of range for its type") \
   F(AnalyzerIntegerSuffixOnFloat, "Integer suffix on a float literal") \
   F(AnalyzerIntrinsicMissingUnsafe, "Intrinsic '{}' is unsafe; declare it `unsafe`") \
   F(AnalyzerIntrinsicSignature, "Intrinsic '{}' has the wrong signature") \

@@ -5843,11 +5843,11 @@ TEST_CASE("Check rejects a type parameter used as an array length") {
   CHECK(has_message(f.bag, "Type parameter 'N' cannot be used as a value"));
 }
 
-TEST_CASE("Check narrows a const array length to its declared type") {
+TEST_CASE("Check accepts a narrow const as an array length") {
   VirtualDir dir;
   const bool setup =
       write_all(dir, {{"main.al",
-                       "const N: u8 = 300u8\n"
+                       "const N: u8 = 44u8\n"
                        "fn f(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
                        "fn main() -> i32 {\n  ret 0\n}\n"}});
   CHECK(setup);

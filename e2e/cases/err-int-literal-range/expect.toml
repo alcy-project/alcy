@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Integer literal is out of range"]
