@@ -179,6 +179,18 @@ impl String {
     self.len = self.len + n
   }
 
+  // Inserts `b` at `at`, shifting the bytes after it up one. `at`
+  // must not pass the length.
+  pub fn insert_byte(mut self: &mut Self, at: usize, b: u8) {
+    self.push(0)
+    mut i := self.len - 1
+    while i > at {
+      self[i] = self[i - 1]
+      i = i - 1
+    }
+    self[at] = b
+  }
+
   // Reserves room for `extra` more bytes.
   fn reserve(mut self: &mut Self, extra: usize) {
     needed := self.len + extra
