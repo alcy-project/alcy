@@ -4515,8 +4515,11 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
       }
       if (ast.patterns[decl.pattern].kind == ast::PatternKind::Wildcard &&
           runs_destructor(init.type)) {
-        // Discarding ends the value where it stands; the pass runs the
-        // glue over the slot the value lands in.
+        // Discarding ends the value where it stands: the place is
+        // consumed first, so a later use is refused and the owner does
+        // not end it again, and the pass runs the glue over the slot
+        // the value lands in.
+        mark_move(init);
         Val slot = init.address ? init : address_of(init);
         if (failed) {
           return;
@@ -4601,7 +4604,9 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
       }
       if (runs_destructor(value.type)) {
         // The checker warns about the unused value; ending it is what
-        // discarding means.
+        // discarding means. The place is consumed first so a later use
+        // is refused and the owner does not end it again.
+        mark_move(value);
         Val slot = value.address ? value : address_of(value);
         if (failed) {
           return;
