@@ -83,6 +83,24 @@ fn main() {
 }
 ```
 
+`for` walks a head item by item. Over an array, `.iter()` borrows the
+elements, so each `x` below is a reference and `*x` reads the value it
+points at:
+
+```alcy
+fn main() {
+  a := [1i32, 2i32, 3i32]
+  mut total := 0
+  for x in a.iter() {
+    total = total + *x
+  }
+  println("total = {}", total)
+}
+```
+
+A range counts instead of walking a collection: `for n in 0..<3` yields
+`0`, `1`, and `2`, and `for n in 0..=3` includes the end.
+
 ## Tuples and structs
 
 A tuple groups values of different types; `.0`, `.1`, and so on read
@@ -162,6 +180,26 @@ fn main() {
 }
 ```
 
+## Closures
+
+A closure is a function value written where it is used; a `[...]` list
+in front of the parameters names what it takes from its surroundings. A
+bare name captures by value, and for a `Copy` type like `i32` that
+capture is a copy: `add` below keeps the `base` it saw when it was
+made, so assigning 100 to `base` afterwards does not change it:
+
+```alcy
+fn main() {
+  mut base := 10
+  add := [base] (x: i32) -> x + base
+  base = 100
+  println("add(1) = {}, base = {}", add(1), base)
+}
+```
+
+`&name` captures a shared borrow and `&mut name` an exclusive one, so
+the closure reads or writes the live value instead of a copy.
+
 ## Printing
 
 `print` and `println` take a compile-time format string and one
@@ -176,6 +214,27 @@ fn main() {
   println("the answer is {}", 40 + 2)
 }
 ```
+
+A float placeholder can fix its fractional digits: `{:.2f}` keeps two
+of them. Write the conversion out, because the shorthand `{:.2}` is the
+same piece and the analyzer warns (WC045): the `f` says what the
+placeholder formats without reading the argument beside it.
+
+## Packages
+
+A package describes itself in an `alcy.toml`, and its `[dependencies]`
+table names what it needs with the version range that dependency may
+drift within. Fetching them is still to come, but the manifest checks
+what it reads: a pre-1.0 range warns (WH007), because a minor upgrade
+may break the dependency, while an exact pin cannot drift and stays
+silent:
+
+```toml
+[dependencies]
+"hash/one" = { version = "0.5.x" }
+```
+
+Write `=0.5.0` in place of `0.5.x` to pin the version exactly.
 
 ## Where to go next
 
