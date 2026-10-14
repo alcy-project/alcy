@@ -159,6 +159,15 @@ impl<V> Map<V> {
     ret Option::Some(unsafe { uninit_assume(elem_ptr(self.values, slot)) })
   }
 
+  // The value under `key`, inserting `value` first when the key is
+  // absent. The value is dropped when the key is already present.
+  pub fn get_or_insert(mut self: &mut Self, key: str, value: V) -> &mut V {
+    if !self.contains(key) {
+      _ := self.insert(key, value)
+    }
+    ret self.get_mut(key).unwrap()
+  }
+
   pub fn contains(self: &Self, key: str) -> bool {
     if self.cap == 0 {
       ret false
