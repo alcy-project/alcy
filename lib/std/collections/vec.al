@@ -556,3 +556,18 @@ impl<T: PartialEq> PartialEq for Vec<T> {
     ret true
   }
 }
+
+// A new string that joins string elements with `sep` between each.
+// An empty vector answers an empty string.
+pub fn join(parts: &Vec<String>, sep: str) -> String {
+  mut out := String::new()
+  mut i := 0 as usize
+  while i < parts.len() {
+    if i > 0 {
+      out.push_str(sep)
+    }
+    out.push_str(parts.at(i).unwrap().as_str())
+    i = i + 1
+  }
+  ret out
+}
