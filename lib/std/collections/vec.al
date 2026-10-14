@@ -163,6 +163,32 @@ impl<T> Vec<T> {
     }
   }
 
+  // Whether the predicate accepts every element; an empty vector is
+  // `true`.
+  pub fn all(self: &Self, pred: (&T) -> bool) -> bool {
+    mut i := 0 as usize
+    while i < self.len {
+      if !pred(self.at(i).unwrap()) {
+        ret false
+      }
+      i = i + 1
+    }
+    ret true
+  }
+
+  // Whether the predicate accepts any element; an empty vector is
+  // `false`.
+  pub fn any(self: &Self, pred: (&T) -> bool) -> bool {
+    mut i := 0 as usize
+    while i < self.len {
+      if pred(self.at(i).unwrap()) {
+        ret true
+      }
+      i = i + 1
+    }
+    ret false
+  }
+
   // The first element the predicate accepts, or `None`.
   pub fn find(self: &Self, pred: (&T) -> bool) -> Option<&T> {
     mut i := 0 as usize
