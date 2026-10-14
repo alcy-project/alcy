@@ -571,6 +571,9 @@ class Desugarer {
                 .idx = ast.paths.push_back(renamed),
                 .type_args =
                     ast.exprs[expr].payload.get<ast::ExprPath>().type_args,
+                .type_args_segment = ast.exprs[expr]
+                                         .payload.get<ast::ExprPath>()
+                                         .type_args_segment,
             });
           }
         }

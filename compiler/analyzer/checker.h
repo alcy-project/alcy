@@ -529,6 +529,14 @@ class Checker {
       const std::span<const ast::ExprIdx>& args,
       const std::span<const ast::TypeIdx>& explicit_args,
       diag::Span span);
+  // Binds a function-typed parameter's return slot from the checked
+  // argument, whose return type only the closure body names.
+  bool bind_fn_slots(u32 module,
+                     std::span<const ast::GenericParam> params,
+                     ast::TypeIdx declared,
+                     ast::ExprIdx arg,
+                     std::vector<ir::TypeIdx>& bound,
+                     diag::Span span);
   const CheckedModule::FnSig* instantiate_fn(
       u32 module,
       ast::ItemIdx item,

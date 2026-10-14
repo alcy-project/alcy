@@ -583,7 +583,8 @@ base::Result<ast::Ident, diag::Reported> Parser::parse_ident(
   return base::make_ok(id);
 }
 
-ast::PathIdx Parser::parse_path(std::vector<ast::TypeIdx>* type_args) {
+ast::PathIdx Parser::parse_path(std::vector<ast::TypeIdx>* type_args,
+                                u32* type_args_segment) {
   const usize mark = pos_;
   std::vector<ast::Ident> segments;
   while (true) {
@@ -617,6 +618,9 @@ ast::PathIdx Parser::parse_path(std::vector<ast::TypeIdx>* type_args) {
       break;
     }
     advance();
+    if (type_args_segment != nullptr) {
+      *type_args_segment = static_cast<u32>(segments.size() - 1);
+    }
     if (!match(lexer::TokenKind::Less)) {
       expect(lexer::TokenKind::Less, "`<`");
       return ast::PathIdx::invalid();

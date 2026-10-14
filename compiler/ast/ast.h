@@ -437,6 +437,11 @@ struct ExprPath {
   PathIdx idx = PathIdx::invalid();
   // Turbofish arguments from `Name::<T>::member`; empty otherwise.
   std::span<const TypeIdx> type_args;
+  // The segment index the turbofish followed, or `base::INVALID_IDX`
+  // when there is none. `P::<T>::id` names the owner's arguments and
+  // `P::id::<U>` names the member's, so the analyzer reads the
+  // position rather than treating every turbofish as the owner's.
+  u32 type_args_segment = base::INVALID_IDX;
 };
 
 struct ExprFieldInit {

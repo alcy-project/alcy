@@ -741,7 +741,8 @@ ast::ExprIdx Parser::parse_primary() {
     default: break;
   }
   std::vector<ast::TypeIdx> type_args;
-  ast::PathIdx path = parse_path(&type_args);
+  u32 type_args_segment = base::INVALID_IDX;
+  ast::PathIdx path = parse_path(&type_args, &type_args_segment);
   if (!path.is_valid()) {
     return ast::ExprIdx::invalid();
   }
@@ -771,6 +772,7 @@ ast::ExprIdx Parser::parse_primary() {
     callee_node.payload.set(ast::ExprPath{
         .idx = path,
         .type_args = ast::copy_to_arena(ast_.spans, type_args),
+        .type_args_segment = type_args_segment,
     });
     ast::ExprNode call_node;
     call_node.kind = ast::ExprKind::Call;
@@ -835,6 +837,7 @@ ast::ExprIdx Parser::parse_primary() {
   path_node.payload.set(ast::ExprPath{
       .idx = path,
       .type_args = ast::copy_to_arena(ast_.spans, type_args),
+      .type_args_segment = type_args_segment,
   });
   return ast_.exprs.push_back(path_node);
 }

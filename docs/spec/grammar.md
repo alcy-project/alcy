@@ -132,7 +132,8 @@ Declaration left-hand sides use this grammar with `:=`
   so in prefix position the pair is two dereferences.
 - A turbofish supplies explicit type arguments to a generic call or
   method call; without one, the parameters bind from the argument
-  types.
+  types. Its position names what it binds: `P::<T>::member` supplies
+  the owner's arguments and `P::member::<U>` the member's.
 - Array indexing is builtin with panic-on-out-of-bounds semantics;
   indexing a nominal type resolves through the sealed `Index` and
   `IndexMut` specs (see `types.md`).

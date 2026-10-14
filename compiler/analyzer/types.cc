@@ -5899,6 +5899,46 @@ Checker::DeclaredBinding Checker::declared_binding(
                          false, false};
 }
 
+bool Checker::bind_fn_slots(u32 module,
+                            std::span<const ast::GenericParam> params,
+                            ast::TypeIdx declared,
+                            ast::ExprIdx arg,
+                            std::vector<ir::TypeIdx>& bound,
+                            diag::Span span) {
+  const ast::TypeNode& node = ast.types[declared];
+  if (node.kind != ast::TypeKind::Func) {
+    return true;
+  }
+  const ast::TypeFunc& shape = node.payload.get<ast::TypeFunc>();
+  // The return slot lives nowhere in the receiver, only in the
+  // closure body, so the first pass over arguments cannot see it.
+  if (!shape.ret.is_valid() ||
+      ast.types[shape.ret].kind != ast::TypeKind::Path) {
+    return true;
+  }
+  const ast::TypePath& path = ast.types[shape.ret].payload.get<ast::TypePath>();
+  if (!path.args.empty() || ast.paths[path.path].segments.size() != 1) {
+    return true;
+  }
+  const u32 slot = param_slot(params, ast.paths[path.path].segments[0].name);
+  if (slot >= params.size() || bound[slot].is_valid() ||
+      is_value_param(ast, params[slot])) {
+    return true;
+  }
+  const ir::TypeIdx actual = check_expr(module, arg, nullptr);
+  if (is_error(actual)) {
+    return false;
+  }
+  if (tag_of(actual) != ir::TypeTag::Func) {
+    return true;
+  }
+  const ir::FuncType& actual_shape =
+      builder.func_types()[builder.types()[actual.idx].as_func()];
+  bound[slot] = type_origin(actual_shape.ret);
+  (void)span;
+  return true;
+}
+
 // Instantiates a generic function or intrinsic against `args` and
 // checks its body. Returns null when the signature does not match the
 // intrinsic's canonical shape.
@@ -6088,6 +6128,12 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
     // A wrapper's payload and a slice's element are storage copies;
     // the parameter binds the declared type behind them.
     bound[declared.slot] = type_origin(bound_type);
+  }
+  for (usize i = 0; i < fn_params(item).size() && i < args.size(); ++i) {
+    if (!bind_fn_slots(module, params, fn_params(item)[i].type, args[i], bound,
+                       span)) {
+      return nullptr;
+    }
   }
   if (!infer_bound_arguments(module, params, bound, span)) {
     return nullptr;
