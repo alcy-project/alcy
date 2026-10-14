@@ -254,6 +254,10 @@ impl String {
     ret self.as_str().parse_i32()
   }
 
+  pub fn parse_u32(self: &Self) -> Option<u32> {
+    ret self.as_str().parse_u32()
+  }
+
   pub fn split_whitespace(self: &Self) -> SplitWhitespace {
     ret self.as_str().split_whitespace()
   }

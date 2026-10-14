@@ -363,6 +363,21 @@ impl str {
     }
   }
 
+  // Parses a decimal integer that must also fit `u32`.
+  pub fn parse_u32(self: &Self) -> Option<u32> {
+    match self.parse_u64() {
+      Option::Some(v) => {
+        if v > 4294967295u64 {
+          ret Option::None
+        }
+        ret Option::Some(v as u32)
+      }
+      Option::None => {
+        ret Option::None
+      }
+    }
+  }
+
   // Whether every byte is ASCII (below 0x80).
   pub fn is_ascii(self: &Self) -> bool {
     n := str_len(*self)
