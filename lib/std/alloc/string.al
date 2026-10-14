@@ -150,6 +150,10 @@ impl String {
     ret self.as_str().eq_ignore_ascii_case(other)
   }
 
+  pub fn rfind(self: &Self, needle: str) -> Option<usize> {
+    ret self.as_str().rfind(needle)
+  }
+
   // Forgets every byte, keeping the room already reserved.
   pub fn clear(mut self: &mut Self) {
     self.len = 0

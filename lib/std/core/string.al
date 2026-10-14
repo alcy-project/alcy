@@ -138,6 +138,38 @@ impl str {
     ret self.trim_start().trim_end()
   }
 
+  // The byte offset where `needle` last appears, or `None`. An empty
+  // needle is at the end.
+  pub fn rfind(self: &Self, needle: str) -> Option<usize> {
+    n := str_len(needle)
+    m := str_len(*self)
+    if n == 0 {
+      ret Option::Some(m)
+    }
+    if n > m {
+      ret Option::None
+    }
+    mut i := m - n
+    mut found := false
+    mut at := 0 as usize
+    while !found {
+      mut j := 0 as usize
+      while j < n && str_byte(*self, i + j) == str_byte(needle, j) {
+        j = j + 1
+      }
+      if j == n {
+        found = true
+        at = i
+      } else {
+        if i == 0 {
+          ret Option::None
+        }
+        i = i - 1
+      }
+    }
+    ret Option::Some(at)
+  }
+
   // Whether the bytes match `other` ignoring ASCII case.
   pub fn eq_ignore_ascii_case(self: &Self, other: str) -> bool {
     n := str_len(*self)
