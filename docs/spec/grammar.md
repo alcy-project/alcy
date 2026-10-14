@@ -182,7 +182,10 @@ Declaration left-hand sides use this grammar with `:=`
   whether it names a place is decided after the whole line is read. So
   `g() = 1` is a diagnostic about the place rather than a syntax error,
   which is what lets the diagnostic point at the expression that cannot be
-  assigned to.
+  assigned to. The value is evaluated before the place, so
+  `v[i] = v[i] + 1` reads through a shared borrow and only then asks for
+  the place's exclusive one; a value that changes the index or the
+  container is seen by the place.
 - A block's value is its last expression; `{}` evaluates to `()`.
   A function body is not one of the positions that reads a block's
   value: a non-`()` body must diverge, ending every path in `ret` or

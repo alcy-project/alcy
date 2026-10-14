@@ -4534,11 +4534,14 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
     }
     case ast::StmtKind::Reassign: {
       const ast::StmtReassign& reassign = node.payload.get<ast::StmtReassign>();
-      Val place = place_addr(reassign.place);
+      // The value is read before the place is taken: `v[i] = v[j] + 1`
+      // reads through a shared borrow before the place asks for the
+      // exclusive one, so the two do not overlap.
+      Val value = lower_moved(reassign.value, nullptr);
       if (failed || terminated_cur()) {
         return;
       }
-      Val value = lower_moved(reassign.value, nullptr);
+      Val place = place_addr(reassign.place);
       if (failed || terminated_cur()) {
         return;
       }
