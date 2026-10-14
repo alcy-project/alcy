@@ -5,6 +5,10 @@
 - `&T` (shared reference): freely duplicable; any number may coexist.
 - `&mut T` (exclusive reference): at most one live at a time, and no
   `&T` to the same place may be live while it is.
+- A non-`Copy` value cannot be moved out from under an array's element
+  either: an array ends its elements whole, so a move out of one is
+  refused until the drop walk can name an element. A value without a
+  destructor is read out by ordinary copy.
 - A non-`Copy` value cannot be moved out of a reference: reading `*r`
   as a value, taking a field out of the referent, and a pattern that
   binds a payload by value are all refused. Until a pattern can bind a

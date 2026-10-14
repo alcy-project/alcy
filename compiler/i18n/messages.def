@@ -303,6 +303,7 @@
   F(LowerIrVerificationFailed, "Lowered IR failed verification") \
   F(LowerMoveOutOfBorrow, "Cannot move a non-`Copy` value out of a reference") \
   F(LowerMoveOutOfDestructor, "Cannot move a field out of '{}'; its type implements `drop`") \
+  F(LowerMoveOutOfElement, "Moving a non-`Copy` value out from under an array's element is not implemented yet") \
   F(LowerNameTableExhausted, "The compiler's name table cannot hold the names this package interns") \
   F(LowerUnreachableExpression, "Unreachable expression") \
   F(LowerUnreachableStatement, "Unreachable statement") \

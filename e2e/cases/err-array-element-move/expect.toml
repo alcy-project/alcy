@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Moving a non-`Copy` value out from under an array's element"]

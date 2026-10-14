@@ -461,6 +461,9 @@ class Lowerer {
   // records the partial move; a plain load would copy the field, and
   // the owner that still ends it would free the same buffer twice.
   Val lower_moved(ast::ExprIdx expr, const ir::TypeIdx* expected);
+  // Whether `expr` names storage under an array's element, directly or
+  // through a field of one.
+  bool reads_through_array_element(ast::ExprIdx expr);
   ir::OperandIdx arg_for(Val arg, ir::TypeIdx param);
   Val load_disc(Val slot_addr);
   bool is_unit_payload(const std::vector<ir::TypeIdx>& payloads);

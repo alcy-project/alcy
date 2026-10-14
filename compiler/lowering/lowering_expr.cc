@@ -4044,7 +4044,38 @@ bool Lowerer::report_nesting(diag::Span span) {
   return true;
 }
 
+// An array ends its elements whole, because the drop walk's paths name
+// fields and tuple slots and an element is neither; a value with a
+// destructor that a caller takes out from under one would be ended
+// twice.
+bool Lowerer::reads_through_array_element(ast::ExprIdx expr) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  switch (node.kind) {
+    case ast::ExprKind::Index: {
+      const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
+      const ir::TypeIdx receiver = expr_type(index.receiver);
+      if (receiver.is_valid() && tag_of(receiver) == ir::TypeTag::Array) {
+        return true;
+      }
+      return reads_through_array_element(index.receiver);
+    }
+    case ast::ExprKind::Field:
+      return reads_through_array_element(
+          node.payload.get<ast::ExprField>().receiver);
+    default: return false;
+  }
+}
+
 Val Lowerer::lower_moved(ast::ExprIdx expr, const ir::TypeIdx* expected) {
+  const ir::TypeIdx moved = expr_type(expr);
+  if (moved.is_valid() && runs_destructor(moved) &&
+      reads_through_array_element(expr)) {
+    const u32 index = bag.emit<i18n::Key::LowerMoveOutOfElement>(
+        diag::Severity::Error, diag::Stage::Lowering,
+        DiagCode::MoveOutOfElement, ast.exprs[expr].span);
+    (void)index;
+    return Val{size_one, error_type(), false, false};
+  }
   // Only a rooted projection names storage: the field of a call's
   // result is a temporary, and reading it is what it always was.
   if (ast.exprs[expr].kind != ast::ExprKind::Field || !is_rooted_place(expr)) {
@@ -4054,8 +4085,7 @@ Val Lowerer::lower_moved(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   // loaded, because moving one out of its owner is the conflict those
   // rules read. An owned field is handed over as a place, so the drop
   // walk records the partial move.
-  const ir::TypeIdx field_type = expr_type(expr);
-  if (field_type.is_valid() && ir::is_pointer_type(tag_of(field_type))) {
+  if (moved.is_valid() && ir::is_pointer_type(tag_of(moved))) {
     return lower_expr(expr, expected);
   }
   return place_addr(expr);

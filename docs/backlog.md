@@ -18,13 +18,17 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] Consuming `for x in a` over an array is refused on direct-wasm:
   `core/slice.al`'s `raw_ptr` does not lower there (EK001), so the
   guide walks arrays with `.iter()`. The by-reference form works.
-- [ ] Moving a non-`Copy` element out of an owned array still copies:
-  `w := a[0]` loads the element, and the array's glue ends it again,
-  which is a double free in safe code. The drop walk's paths name
-  fields, not elements, so the fix is an element step there - or a
-  refusal while one is missing. An intrinsic's by-value argument is the
-  other road: `uninit_write(slot, s.field)` still copies the way a
-  field read did before `lower_moved`.
+- [x] Moving a non-`Copy` element out of an owned array is refused now
+  (`lower_moved` sees an array element under the value and answers
+  `MoveOutOfElement`), where it used to load a copy that the array's
+  glue ended a second time - a double free in safe code. The refusal
+  covers a field of an element too (`a[0].name`), and an intrinsic's
+  by-value argument takes the same road.
+- [ ] Moving an element out of an owned array, which the refusal above
+  stands in for: the drop walk's paths name fields and tuple slots, so
+  the pass needs an element step that ends the elements the move left
+  behind. A value moved out of a temporary array (`f().a[0]`) is the
+  same shape one level out.
 - [ ] Matching over a borrowed value whose type carries a non-`Copy`
   payload is refused as a whole, even where every arm binds only
   `Copy` payloads or nothing (`err-match-ref-payload` and

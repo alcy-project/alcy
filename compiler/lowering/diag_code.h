@@ -39,6 +39,10 @@ enum class DiagCode : u8 {
   // A non-`Copy` value read through a shared or exclusive reference:
   // taking it would leave the referent owned twice.
   ValueOutOfBorrow = 10,
+  // A non-`Copy` value moved out from under an array's element: the
+  // drop walk's paths name fields and tuple slots, so the array's glue
+  // would end what the move took a second time.
+  MoveOutOfElement = 11,
 };
 
 }  // namespace lowering
