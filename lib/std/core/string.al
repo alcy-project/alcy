@@ -348,6 +348,21 @@ impl str {
     ret Option::Some(value)
   }
 
+  // Parses a decimal integer that must also fit `i32`.
+  pub fn parse_i32(self: &Self) -> Option<i32> {
+    match self.parse_i64() {
+      Option::Some(v) => {
+        if v < 0i64 - 2147483647i64 - 1i64 || v > 2147483647i64 {
+          ret Option::None
+        }
+        ret Option::Some(v as i32)
+      }
+      Option::None => {
+        ret Option::None
+      }
+    }
+  }
+
   // Whether every byte is ASCII (below 0x80).
   pub fn is_ascii(self: &Self) -> bool {
     n := str_len(*self)
