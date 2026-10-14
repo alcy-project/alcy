@@ -933,7 +933,12 @@ class Checker {
   // parameters and declarations; anything bound while checking comp
   // evaluation contexts counts as comp-known as well.
   bool bind_comp_known = false;
-  bool bind_pattern(u32 module, ast::PatternIdx pattern, ir::TypeIdx type);
+  bool bind_pattern(u32 module,
+                    ast::PatternIdx pattern,
+                    ir::TypeIdx type,
+                    bool by_ref = false);
+  ir::TypeIdx borrow_binding(ir::TypeIdx type, bool by_ref);
+  bool reads_through_ref(ast::ExprIdx expr) const;
   bool is_bare_int_literal(ast::ExprIdx expr) const;
   bool expr_comp_known(u32 module, ast::ExprIdx expr) const;
   bool expr_comp_known_block(u32 module, ast::BlockIdx block) const;

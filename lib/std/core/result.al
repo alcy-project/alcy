@@ -61,12 +61,12 @@ impl<T: PartialEq, E: PartialEq> PartialEq for Result<T, E> {
   fn eq(self: &Self, other: &Self) -> bool {
     ret match *self {
       Result::Ok(a) => match *other {
-        Result::Ok(b) => a == b,
+        Result::Ok(b) => *a == *b,
         Result::Err(_) => false,
       },
       Result::Err(a) => match *other {
         Result::Ok(_) => false,
-        Result::Err(b) => a == b,
+        Result::Err(b) => *a == *b,
       },
     }
   }

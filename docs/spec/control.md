@@ -27,7 +27,10 @@
 
 - `match` requires exhaustive arms over integer/bool literals, unit
   and tuple variant patterns, tuple and struct patterns, and `_`.
-  Bindings move by default; `&`/`&mut` patterns borrow.
+  Bindings move by default; `&`/`&mut` patterns borrow. A binding
+  behind a reference is a shared reference: `match *e` with `e: &E`
+  binds `s: &T`, the referent stays its owner to end, and moving
+  through `*s` is refused.
 - A negative integer or float literal is a pattern (`-1 => ...`), and
   compares by value after the sign is applied, so `-1` does not match
   `1`.

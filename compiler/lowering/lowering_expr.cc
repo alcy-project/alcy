@@ -3615,6 +3615,18 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
       return;
     case ast::PatternKind::Ident:
     case ast::PatternKind::MutIdent: {
+      if (arm_borrowed_) {
+        // A field behind a reference is borrowed, not moved: the
+        // place address is already the reference value.
+        const ir::TypeIdx ref_ty = builder.reference_type(scrut_type, false);
+        bind_pattern(pattern, Val{scrut_addr.op, ref_ty, false, false});
+        if (failed) {
+          return;
+        }
+        emit_br(body_block);
+        switch_to(body_block);
+        return;
+      }
       bind_pattern(pattern, materialize(scrut_addr));
       if (failed) {
         return;
@@ -3650,7 +3662,7 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
           bindable = bindable && pattern_bindable(element);
           has_or = has_or || ast.patterns[element].kind == ast::PatternKind::Or;
         }
-        if (bindable || has_or) {
+        if ((bindable || has_or) && !arm_borrowed_) {
           // Every field is a binding, or an alternative still needs
           // its nesting diagnostic from bind_pattern.
           for (u32 i = 0; i < static_cast<u32>(elements.size()) && !failed;
@@ -3721,8 +3733,8 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
       }
       // A refutable payload tests in a block of its own; an irrefutable
       // one binds straight into the body, as before.
-      const bool test_payloads =
-          !bindable && !has_or && !is_unit_payload(payloads);
+      const bool test_payloads = !is_unit_payload(payloads) &&
+                                 (arm_borrowed_ || (!bindable && !has_or));
       const ir::BlockIdx bind_block =
           test_payloads ? reserve_block() : body_block;
       Val tag = load_disc(scrut_addr);
@@ -3813,7 +3825,7 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
         has_or =
             has_or || ast.patterns[field.pattern].kind == ast::PatternKind::Or;
       }
-      if (bindable || has_or) {
+      if ((bindable || has_or) && !arm_borrowed_) {
         for (const ast::FieldPattern& field : fields) {
           if (arm_borrowed_ &&
               ast.patterns[field.pattern].kind == ast::PatternKind::Wildcard) {

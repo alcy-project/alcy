@@ -109,7 +109,7 @@ impl<T: PartialEq> PartialEq for Option<T> {
   fn eq(self: &Self, other: &Self) -> bool {
     ret match *self {
       Option::Some(a) => match *other {
-        Option::Some(b) => a == b,
+        Option::Some(b) => *a == *b,
         Option::None => false,
       },
       Option::None => match *other {

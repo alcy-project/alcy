@@ -327,6 +327,18 @@ class Checker {
   void forward(const ir::Function& fn) {
     seed_param_loans(fn);
     seed_capture_places();
+    // Every alloca names its own storage, whichever block holds it.
+    // A block is not visited in execution order, so a use in an early
+    // block would otherwise miss an alloca defined in a later one.
+    for (ir::BlockIdx bidx : fn.blocks) {
+      for (ir::InstructionIdx iidx : storage.blocks()[bidx].instrs) {
+        const ir::Instruction& instr = instr_at(iidx);
+        if (instr.op == ir::Opcode::Alloca && instr.dst.is_valid() &&
+            instr.dst.idx < home.size()) {
+          home[instr.dst.idx] = instr.dst.idx;
+        }
+      }
+    }
     for (ir::BlockIdx bidx : fn.blocks) {
       const ir::Block& block = storage.blocks()[bidx];
       for (ir::InstructionIdx iidx : block.instrs) {

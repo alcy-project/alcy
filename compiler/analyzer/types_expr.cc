@@ -80,21 +80,45 @@ void Checker::bind_error_idents(u32 module, ast::PatternIdx pattern) {
     scopes.back().push_back({name, error_type(), false});
   }
 }
+// A binding behind a reference yields a shared reference to the field,
+// the way a place behind a borrow binds in Rust.
+ir::TypeIdx Checker::borrow_binding(ir::TypeIdx type, bool by_ref) {
+  if (!by_ref) {
+    return type;
+  }
+  return builder.reference_type(type, false);
+}
+
+// Whether a scrutinee reads through a reference: a place reached by a
+// dereference is borrowed, so its bindings are references too.
+bool Checker::reads_through_ref(ast::ExprIdx expr) const {
+  const ast::ExprNode& node = ast.exprs[expr];
+  switch (node.kind) {
+    case ast::ExprKind::Deref: return true;
+    case ast::ExprKind::Field:
+      return reads_through_ref(node.payload.get<ast::ExprField>().receiver);
+    case ast::ExprKind::Index:
+      return reads_through_ref(node.payload.get<ast::ExprIndex>().receiver);
+    default: return false;
+  }
+}
+
 bool Checker::bind_pattern(u32 module,
                            ast::PatternIdx pattern,
-                           ir::TypeIdx type) {
+                           ir::TypeIdx type,
+                           bool by_ref) {
   const bool comp = bind_comp_known || comp_depth > 0;
   const ast::PatternNode& node = ast.patterns[pattern];
   switch (node.kind) {
     case ast::PatternKind::Wildcard: return false;
     case ast::PatternKind::Ident: {
-      scopes.back().push_back(
-          {node.payload.ident.name.name, type, false, comp});
+      scopes.back().push_back({node.payload.ident.name.name,
+                               borrow_binding(type, by_ref), false, comp});
       return false;
     }
     case ast::PatternKind::MutIdent: {
-      scopes.back().push_back(
-          {node.payload.mut_ident.name.name, type, true, comp});
+      scopes.back().push_back({node.payload.mut_ident.name.name,
+                               borrow_binding(type, by_ref), true, comp});
       return false;
     }
     case ast::PatternKind::Literal: {
@@ -150,8 +174,8 @@ bool Checker::bind_pattern(u32 module,
         }
         bool refutable = true;
         for (usize i = 0; i < payloads.size(); ++i) {
-          refutable =
-              bind_pattern(module, elements[i], payloads[i]) && refutable;
+          refutable = bind_pattern(module, elements[i], payloads[i], by_ref) &&
+                      refutable;
         }
         return refutable;
       }
@@ -178,7 +202,7 @@ bool Checker::bind_pattern(u32 module,
         // A field slot is a contiguity copy; a nested pattern names
         // the type behind it (a generic variant instance most of all).
         if (bind_pattern(module, elements[i],
-                         type_origin(tuple_type.elements[i]))) {
+                         type_origin(tuple_type.elements[i]), by_ref)) {
           refutable = true;
         }
       }
@@ -239,7 +263,8 @@ bool Checker::bind_pattern(u32 module,
                                  field.name.span, field.name.name,
                                  nominal->name);
         if (bind_pattern(module, field.pattern,
-                         type_origin(struct_type_shape.fields[index]))) {
+                         type_origin(struct_type_shape.fields[index]),
+                         by_ref)) {
           refutable = true;
         }
       }
@@ -259,7 +284,7 @@ bool Checker::bind_pattern(u32 module,
       }
       const ir::TypeIdx pointee =
           builder.ref_types()[builder.types()[type].as_ref()].pointee;
-      return bind_pattern(module, node.payload.ref.inner, pointee);
+      return bind_pattern(module, node.payload.ref.inner, pointee, false);
     }
     case ast::PatternKind::Or: {
       const std::span<const ast::PatternIdx> alternatives =
@@ -268,11 +293,11 @@ bool Checker::bind_pattern(u32 module,
         return false;
       }
       const usize alt0_start = scopes.back().size();
-      bool refutable = bind_pattern(module, alternatives[0], type);
+      bool refutable = bind_pattern(module, alternatives[0], type, by_ref);
       const usize base = scopes.back().size();
       for (usize i = 1; i < alternatives.size(); ++i) {
         const usize mark = scopes.back().size();
-        if (bind_pattern(module, alternatives[i], type)) {
+        if (bind_pattern(module, alternatives[i], type, by_ref)) {
           refutable = true;
         }
         // Every alternative must bind the same names; extras are
@@ -2807,7 +2832,8 @@ ir::TypeIdx Checker::check_match(u32 module,
     if (is_error(scrutinee)) {
       bind_error_idents(module, arm.pattern);
     } else {
-      const bool refutable = bind_pattern(module, arm.pattern, scrutinee);
+      const bool refutable = bind_pattern(module, arm.pattern, scrutinee,
+                                          reads_through_ref(scrutinee_expr));
       // The `for` desugar marks its `Some` arm: the item pattern must
       // match every item, so a refutable one is an error here rather
       // than a filter. Hand-written matches keep lowering's verdict.
