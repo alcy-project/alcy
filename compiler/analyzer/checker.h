@@ -626,6 +626,9 @@ class Checker {
   // Set while a negated integer literal is checked, so the range check
   // reads the value the negation produces.
   bool literal_negated_ = false;
+  // Set when a `break` is checked inside the loop being walked, so a
+  // `loop` with none is known to diverge.
+  bool loop_break_seen_ = false;
   void validate_cycles(const ir::Storage& storage);
   const CheckedModule::StaticInfo* lookup_static(u32 module,
                                                  std::string_view name);

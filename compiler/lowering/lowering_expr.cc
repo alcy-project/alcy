@@ -4289,6 +4289,12 @@ Val Lowerer::lower_loop(ast::ExprIdx expr) {
   break_targets_.pop_back();
   continue_targets_.pop_back();
   switch_to(exit);
+  // A loop with no `break` reaches no exit: the block is dead and the
+  // loop's value is `!`, so the caller does not fall through it.
+  if (tag_of(expr_type(expr)) == ir::TypeTag::Never) {
+    emit_void(ir::Opcode::Unreachable, {});
+    return Val{size_one, builder.never_type(), false, false};
+  }
   return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
 }
 

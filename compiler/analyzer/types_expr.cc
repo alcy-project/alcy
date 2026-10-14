@@ -3311,9 +3311,20 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
     }
     case ast::ExprKind::Loop: {
       const ir::TypeIdx unit = builder.primitive(ir::TypeTag::Void);
+      // A `break` anywhere in the body may end the loop, so only a
+      // body with none is known to run forever; that loop is `!`. A
+      // `break` of a nested loop counts here too, which is safe and
+      // only leaves a diverging outer loop unclaimed.
+      const bool outer_break = loop_break_seen_;
+      loop_break_seen_ = false;
       ++loop_depth;
       check_block(module, node.payload.get<ast::ExprLoop>().body, &unit);
       --loop_depth;
+      const bool has_break = loop_break_seen_;
+      loop_break_seen_ = outer_break || has_break;
+      if (!has_break) {
+        return builder.never_type();
+      }
       if (expected != nullptr) {
         return unify(*expected, unit, node.span, "loop");
       }
@@ -3398,6 +3409,9 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
     }
     case ast::ExprKind::Break:
     case ast::ExprKind::Continue: {
+      if (node.kind == ast::ExprKind::Break) {
+        loop_break_seen_ = true;
+      }
       if (loop_depth == 0) {
         if (node.kind == ast::ExprKind::Break) {
           const u32 index = bag.emit<i18n::Key::AnalyzerBreakOutsideLoop>(
