@@ -29,6 +29,14 @@ impl<T> [T] {
     ret slice_len(self) == 0
   }
 
+  // The element at `index`, or `None` when past the end.
+  pub fn at(self: &Self, index: usize) -> Option<&T> {
+    if index >= slice_len(self) {
+      ret Option::None
+    }
+    ret Option::Some(unsafe { slice_at(self, index) })
+  }
+
   // The first element, or `None` when empty.
   pub fn first(self: &Self) -> Option<&T> {
     if slice_len(self) == 0 {
@@ -44,6 +52,17 @@ impl<T> [T] {
       ret Option::None
     }
     ret Option::Some(unsafe { slice_at(self, n - 1) })
+  }
+
+  // The views before and after `at`. The caller knows `at` is a
+  // boundary it chose, so it must not exceed the length.
+  pub fn split_at(self: &Self, at: usize) -> (&[T], &[T]) {
+    if at >= slice_len(self) {
+      ret (self, unsafe { slice_from_parts(slice_at(self, 0), 0) })
+    }
+    head := unsafe { slice_from_parts(slice_at(self, 0), at) }
+    tail := unsafe { slice_from_parts(slice_at(self, at), slice_len(self) - at) }
+    ret (head, tail)
   }
 
   // A shared cursor over the elements; the slice's loan is what keeps
