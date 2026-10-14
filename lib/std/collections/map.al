@@ -455,16 +455,23 @@ impl<V> Iterator<(String, V)> for MapIntoIter<V> {
 }
 
 // `m[key]` reads and writes the value under `key`, panicking when the
-// key is absent.
+// key is absent. The panic names the map rather than the `Option` the
+// lookup hands back.
 impl<V> Index<str, V> for Map<V> {
   fn index(self: &Self, i: str) -> &V {
-    ret self.get(i).unwrap()
+    ret match self.get(i) {
+      Option::Some(v) => v,
+      Option::None => panic("Map has no entry for the key"),
+    }
   }
 }
 
 impl<V> IndexMut<str, V> for Map<V> {
   fn index_mut(mut self: &mut Self, i: str) -> &mut V {
-    ret self.get_mut(i).unwrap()
+    ret match self.get_mut(i) {
+      Option::Some(v) => v,
+      Option::None => panic("Map has no entry for the key"),
+    }
   }
 }
 
