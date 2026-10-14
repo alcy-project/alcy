@@ -1,9 +1,7 @@
-// FizzBuzz, the exercise every programmer is given: count to 20 and
-// replace the multiples of three and five with words, both together
-// where they coincide.
+// FizzBuzz: a multiple of both three and five prints both words, so
+// that branch comes first.
 fn main() -> i32 {
-  mut n := 1
-  while n <= 20 {
+  for n in 1..=20 {
     both := n % 15 == 0
     three := n % 3 == 0
     five := n % 5 == 0
@@ -16,7 +14,6 @@ fn main() -> i32 {
     } else {
       println("{}", n)
     }
-    n = n + 1
   }
   ret 0
 }

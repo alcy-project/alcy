@@ -15,7 +15,7 @@ are examples that cannot quietly rot.
 | Sample | What it shows |
 | --- | --- |
 | `hello` | simplest hello world |
-| `fizzbuzz` | `while`, `mut`, `else if`, and formatted `println` |
+| `fizzbuzz` | `for`, `else if`, and formatted `println` |
 | `fibonacci` | a named function, iterative, printing a formatted table |
 | `primes` | two functions, an early `ret`, and trial division to a square root |
 

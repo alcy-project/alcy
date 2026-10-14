@@ -1,5 +1,5 @@
-// The smallest program: one call, one line, and a `main` that prints
-// rather than returns a status.
+// A `main` that prints rather than returns a status declares no return
+// type.
 fn main() {
-  println("hello world")
+  println("hello, world")
 }

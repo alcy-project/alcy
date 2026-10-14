@@ -1,23 +1,19 @@
-// Fibonacci, iteratively. Two variables carry the pair, so each step
-// reads the previous two rather than reaching back for them.
+// Iterative Fibonacci: two variables carry the pair, so each step reads
+// the previous two rather than reaching back for them.
 fn fib(n: i32) -> i32 {
   mut a := 0
   mut b := 1
-  mut i := 0
-  while i < n {
+  for _ in 0..<n {
     next := a + b
     a = b
     b = next
-    i = i + 1
   }
   ret a
 }
 
 fn main() -> i32 {
-  mut n := 0
-  while n < 10 {
+  for n in 0..<10 {
     println("fib({}) = {}", n, fib(n))
-    n = n + 1
   }
   ret 0
 }

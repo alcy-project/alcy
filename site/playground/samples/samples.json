@@ -11,7 +11,7 @@
       "file": "fizzbuzz.al",
       "source": "samples/fizzbuzz/main.al",
       "title": "FizzBuzz",
-      "description": "while, mut, else if, and formatted output."
+      "description": "for, else if, and formatted output."
     },
     {
       "file": "fibonacci.al",

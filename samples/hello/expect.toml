@@ -1,2 +1,2 @@
 exit = 0
-stdout = "hello world\n"
+stdout = "hello, world\n"

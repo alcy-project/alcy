@@ -17,12 +17,10 @@ fn is_prime(n: i32) -> bool {
 }
 
 fn main() -> i32 {
-  mut n := 2
-  while n < 50 {
+  for n in 2..<50 {
     if is_prime(n) {
       println("{}", n)
     }
-    n = n + 1
   }
   ret 0
 }
