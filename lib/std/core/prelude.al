@@ -70,6 +70,7 @@ pub use package::string::str_byte;
 pub use package::string::str_slice;
 pub use package::string::str_from_parts;
 pub use package::string::LinesIter;
+pub use package::string::SplitWhitespace;
 pub use package::string::SplitIter;
 pub use package::string::StrIter;
 pub use package::slice::SliceIter;

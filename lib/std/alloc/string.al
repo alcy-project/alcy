@@ -132,6 +132,10 @@ impl String {
     ret self.as_str().lines()
   }
 
+  pub fn split_whitespace(self: &Self) -> SplitWhitespace {
+    ret self.as_str().split_whitespace()
+  }
+
   pub fn strip_suffix(self: &Self, suffix: str) -> Option<str> {
     ret self.as_str().strip_suffix(suffix)
   }

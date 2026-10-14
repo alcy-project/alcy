@@ -242,6 +242,12 @@ impl str {
     ret SplitIter { rest: self, delim: delim, done: false }
   }
 
+  // A cursor over the whitespace-separated tokens. Leading, trailing,
+  // and repeated whitespace is skipped, so no token is empty.
+  pub fn split_whitespace(self: str) -> SplitWhitespace {
+    ret SplitWhitespace { rest: self }
+  }
+
   // A cursor over the lines, `\n`-separated, with a trailing `\r`
   // removed. A final empty line is not reported.
   pub fn lines(self: str) -> LinesIter {
@@ -251,6 +257,37 @@ impl str {
   // Byte iteration: `for b in s` reads each byte in order.
   pub fn into_iter(self: str) -> StrIter {
     ret StrIter { s: self, pos: 0 }
+  }
+}
+
+// A cursor over the whitespace-separated tokens.
+pub struct SplitWhitespace {
+  rest: str,
+}
+
+impl SplitWhitespace {
+  pub fn into_iter(self: SplitWhitespace) -> SplitWhitespace {
+    ret self
+  }
+}
+
+impl Iterator<str> for SplitWhitespace {
+  fn next(mut self: &mut Self) -> Option<str> {
+    n := str_len(self.rest)
+    mut start := 0 as usize
+    while start < n && is_ascii_space(str_byte(self.rest, start)) {
+      start = start + 1
+    }
+    if start >= n {
+      ret Option::None
+    }
+    mut end := start
+    while end < n && !is_ascii_space(str_byte(self.rest, end)) {
+      end = end + 1
+    }
+    piece := str_slice(self.rest, start, end)
+    self.rest = str_slice(self.rest, end, n)
+    ret Option::Some(piece)
   }
 }
 
