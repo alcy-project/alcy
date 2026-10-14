@@ -116,6 +116,14 @@ impl String {
     ret self.as_str().ends_with(suffix)
   }
 
+  pub fn contains(self: &Self, needle: str) -> bool {
+    ret self.as_str().contains(needle)
+  }
+
+  pub fn find(self: &Self, needle: str) -> Option<usize> {
+    ret self.as_str().find(needle)
+  }
+
   // Forgets every byte, keeping the room already reserved.
   pub fn clear(mut self: &mut Self) {
     self.len = 0

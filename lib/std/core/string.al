@@ -61,6 +61,37 @@ impl str {
     ret true
   }
 
+  // Whether `needle` appears anywhere in the bytes. An empty needle
+  // always matches.
+  pub fn contains(self: &Self, needle: str) -> bool {
+    ret self.find(needle).is_some()
+  }
+
+  // The byte offset where `needle` first appears, or `None`. An empty
+  // needle is at offset zero.
+  pub fn find(self: &Self, needle: str) -> Option<usize> {
+    n := str_len(needle)
+    m := str_len(*self)
+    if n == 0 {
+      ret Option::Some(0 as usize)
+    }
+    if n > m {
+      ret Option::None
+    }
+    mut i := 0 as usize
+    while i <= m - n {
+      mut j := 0 as usize
+      while j < n && str_byte(*self, i + j) == str_byte(needle, j) {
+        j = j + 1
+      }
+      if j == n {
+        ret Option::Some(i)
+      }
+      i = i + 1
+    }
+    ret Option::None
+  }
+
   // Byte iteration: `for b in s` reads each byte in order.
   pub fn into_iter(self: str) -> StrIter {
     ret StrIter { s: self, pos: 0 }
