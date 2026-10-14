@@ -154,6 +154,10 @@ impl String {
     ret unsafe { str_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len) }
   }
 
+  pub fn bytes(self: &Self) -> StrIter {
+    ret self.as_str().bytes()
+  }
+
   pub fn as_bytes(self: &Self) -> &[u8] {
     ret unsafe { slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len) }
   }

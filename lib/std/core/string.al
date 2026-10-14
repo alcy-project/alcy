@@ -302,6 +302,12 @@ impl str {
     ret LinesIter { rest: self, done: false }
   }
 
+  // A cursor over the bytes, the same order as `into_iter`. A named
+  // alias so a reader does not need to know the loop desugar.
+  pub fn bytes(self: str) -> StrIter {
+    ret StrIter { s: self, pos: 0 }
+  }
+
   // Byte iteration: `for b in s` reads each byte in order.
   pub fn into_iter(self: str) -> StrIter {
     ret StrIter { s: self, pos: 0 }
