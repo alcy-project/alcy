@@ -10,6 +10,13 @@ replaced. The foundations are in `roadmap.md`.
   item the ones written above it, and `ItemNode::docs` carries them as
   spans into the same bytes. The lexer already tokenized them, so the
   site generator is the only reader left to write.
+- [ ] Moving a non-`Copy` element out of an owned array still copies:
+  `w := a[0]` loads the element, and the array's glue ends it again,
+  which is a double free in safe code. The drop walk's paths name
+  fields, not elements, so the fix is an element step there - or a
+  refusal while one is missing. An intrinsic's by-value argument is the
+  other road: `uninit_write(slot, s.field)` still copies the way a
+  field read did before `lower_moved`.
 - [ ] Matching over a borrowed value whose type carries a non-`Copy`
   payload is refused as a whole, even where every arm binds only
   `Copy` payloads or nothing (`err-match-ref-payload` and

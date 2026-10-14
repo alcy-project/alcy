@@ -971,7 +971,7 @@ Val Lowerer::lower_variant_construct(
     // Lower for effects; nothing is stored.
     for (usize i = 0; i < payloads.size(); ++i) {
       Val value =
-          lower_expr(call.payload.get<ast::ExprCall>().args[i], &payloads[i]);
+          lower_moved(call.payload.get<ast::ExprCall>().args[i], &payloads[i]);
       if (failed || terminated_cur()) {
         return stopped_value();
       }
@@ -985,7 +985,7 @@ Val Lowerer::lower_variant_construct(
         variant_fields(use->enum_type, use->variant);
     for (usize i = 0; i < payloads.size(); ++i) {
       Val value =
-          lower_expr(call.payload.get<ast::ExprCall>().args[i], &payloads[i]);
+          lower_moved(call.payload.get<ast::ExprCall>().args[i], &payloads[i]);
       if (failed || terminated_cur()) {
         return stopped_value();
       }
@@ -1205,7 +1205,7 @@ Val Lowerer::lower_indirect_call(ast::ExprIdx expr) {
   std::vector<ir::OperandIdx> ops;
   ops.push_back(use_value(callee));
   for (usize i = 0; i < call.args.size(); ++i) {
-    Val arg = lower_expr(call.args[i], &params[i]);
+    Val arg = lower_moved(call.args[i], &params[i]);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
@@ -1324,7 +1324,7 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
       ++comp_at;
       continue;
     }
-    Val arg = lower_expr(call.args[i], &sig.params[i]);
+    Val arg = lower_moved(call.args[i], &sig.params[i]);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
@@ -1390,7 +1390,7 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
       ++comp_at;
       continue;
     }
-    Val arg = lower_expr(args[i], &info.params[i]);
+    Val arg = lower_moved(args[i], &info.params[i]);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
@@ -1484,7 +1484,7 @@ Val Lowerer::lower_extern_call(ast::ExprIdx expr,
   ops.push_back(builder.operand(ir::Operand::from_external_function(
       ext, builder.primitive(ir::TypeTag::Function))));
   for (usize i = 0; i < call.args.size(); ++i) {
-    Val arg = lower_expr(call.args[i], &sig.params[i]);
+    Val arg = lower_moved(call.args[i], &sig.params[i]);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
@@ -1686,7 +1686,7 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     }
     std::vector<ir::OperandIdx> args;
     for (usize i = 0; i < 2; ++i) {
-      Val arg = lower_expr(call.args[i], &sig.params[i]);
+      Val arg = lower_moved(call.args[i], &sig.params[i]);
       if (failed || terminated_cur()) {
         return stopped_value();
       }
@@ -1721,7 +1721,7 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       }
       return Val{to_operand(held, sig.ret), sig.ret, false, false};
     }
-    Val value = lower_expr(call.args[1], &sig.params[1]);
+    Val value = lower_moved(call.args[1], &sig.params[1]);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
@@ -1779,7 +1779,7 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     const ir::TypeIdx usize_ty = usize_type();
     std::vector<ir::OperandIdx> args;
     for (usize i = 0; i < arity; ++i) {
-      Val arg = lower_expr(call.args[i], &sig.params[i]);
+      Val arg = lower_moved(call.args[i], &sig.params[i]);
       if (failed || terminated_cur()) {
         return stopped_value();
       }
@@ -1823,7 +1823,7 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       internal(node.span, "intrinsic arity");
       return Val{size_one, error_type(), false, false};
     }
-    Val receiver = lower_expr(call.args[0], &sig.params[0]);
+    Val receiver = lower_moved(call.args[0], &sig.params[0]);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
@@ -2752,7 +2752,7 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
       ++comp_at;
       continue;
     }
-    Val arg = lower_expr(method_args[i], &info.params[i + 1]);
+    Val arg = lower_moved(method_args[i], &info.params[i + 1]);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
@@ -2858,13 +2858,13 @@ Val Lowerer::lower_spec_binary(
   // method reads them by value.
   Val receiver = is_ref_tag(tag_of(info.params[0])) && is_rooted_place(bin.lhs)
                      ? place_addr(bin.lhs)
-                     : lower_expr(bin.lhs, nullptr);
+                     : lower_moved(bin.lhs, nullptr);
   if (failed || terminated_cur()) {
     return stopped_value();
   }
   Val argument = is_ref_tag(tag_of(info.params[1])) && is_rooted_place(bin.rhs)
                      ? place_addr(bin.rhs)
-                     : lower_expr(bin.rhs, nullptr);
+                     : lower_moved(bin.rhs, nullptr);
   if (failed || terminated_cur()) {
     return stopped_value();
   }
@@ -2891,7 +2891,7 @@ Val Lowerer::lower_spec_unary(
   Val receiver =
       is_ref_tag(tag_of(info.params[0])) && is_rooted_place(unary.inner)
           ? place_addr(unary.inner)
-          : lower_expr(unary.inner, nullptr);
+          : lower_moved(unary.inner, nullptr);
   if (failed || terminated_cur()) {
     return stopped_value();
   }
@@ -2910,13 +2910,13 @@ Val Lowerer::lower_spec_ordering(
   const analyzer::CheckedModule::MethodInfo& info = def.methods[target->index];
   Val receiver = is_ref_tag(tag_of(info.params[0])) && is_rooted_place(bin.lhs)
                      ? place_addr(bin.lhs)
-                     : lower_expr(bin.lhs, nullptr);
+                     : lower_moved(bin.lhs, nullptr);
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
   Val argument = is_ref_tag(tag_of(info.params[1])) && is_rooted_place(bin.rhs)
                      ? place_addr(bin.rhs)
-                     : lower_expr(bin.rhs, nullptr);
+                     : lower_moved(bin.rhs, nullptr);
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
@@ -3080,7 +3080,7 @@ Val Lowerer::lower_struct(ast::ExprIdx expr) {
     seen[index] = true;
     const ir::TypeIdx element_type =
         field_type_of(struct_type, index, ast.exprs[field.value].span);
-    Val value = lower_expr(field.value, &element_type);
+    Val value = lower_moved(field.value, &element_type);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
@@ -3141,7 +3141,7 @@ Val Lowerer::lower_tuple(ast::ExprIdx expr) {
       element_type = shape.elements[i];
       element_expected = &element_type;
     }
-    Val value = lower_expr(tuple.elements[i], element_expected);
+    Val value = lower_moved(tuple.elements[i], element_expected);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
@@ -3173,7 +3173,7 @@ Val Lowerer::lower_array(ast::ExprIdx expr) {
     if (shape.count == 0) {
       return Val{to_operand(addr, array_type), array_type, true, false};
     }
-    Val value = lower_expr(array.repeat, &shape.element);
+    Val value = lower_moved(array.repeat, &shape.element);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
@@ -3192,7 +3192,7 @@ Val Lowerer::lower_array(ast::ExprIdx expr) {
     }
     for (u32 i = 0; i < static_cast<u32>(array.elements.size()) && !failed;
          ++i) {
-      Val value = lower_expr(array.elements[i], &shape.element);
+      Val value = lower_moved(array.elements[i], &shape.element);
       if (failed || terminated_cur()) {
         return stopped_value();
       }
@@ -3311,16 +3311,16 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
   Val lhs = Val{size_one, error_type(), false, false};
   Val rhs = Val{size_one, error_type(), false, false};
   if (!lhs_literal && !rhs_literal) {
-    lhs = lower_expr(bin.lhs, nullptr);
+    lhs = lower_moved(bin.lhs, nullptr);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
-    rhs = lower_expr(bin.rhs, nullptr);
+    rhs = lower_moved(bin.rhs, nullptr);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
   } else if (!lhs_literal) {
-    lhs = lower_expr(bin.lhs, nullptr);
+    lhs = lower_moved(bin.lhs, nullptr);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
@@ -3329,7 +3329,7 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
       return stopped_value();
     }
   } else if (!rhs_literal) {
-    rhs = lower_expr(bin.rhs, nullptr);
+    rhs = lower_moved(bin.rhs, nullptr);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
@@ -4039,6 +4039,23 @@ bool Lowerer::report_nesting(diag::Span span) {
   return true;
 }
 
+Val Lowerer::lower_moved(ast::ExprIdx expr, const ir::TypeIdx* expected) {
+  // Only a rooted projection names storage: the field of a call's
+  // result is a temporary, and reading it is what it always was.
+  if (ast.exprs[expr].kind != ast::ExprKind::Field || !is_rooted_place(expr)) {
+    return lower_expr(expr, expected);
+  }
+  // A reference field is a handle the region rules govern: it is still
+  // loaded, because moving one out of its owner is the conflict those
+  // rules read. An owned field is handed over as a place, so the drop
+  // walk records the partial move.
+  const ir::TypeIdx field_type = expr_type(expr);
+  if (field_type.is_valid() && ir::is_pointer_type(tag_of(field_type))) {
+    return lower_expr(expr, expected);
+  }
+  return place_addr(expr);
+}
+
 Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   if (failed) {
     return Val{size_one, error_type(), false, false};
@@ -4102,7 +4119,7 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
         }
         return lower_literal(literal.value, hint, /*negate=*/true);
       }
-      Val inner = lower_expr(unary.inner, nullptr);
+      Val inner = lower_moved(unary.inner, nullptr);
       if (failed || terminated_cur()) {
         return stopped_value();
       }
@@ -4289,7 +4306,7 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       ir::OperandIdx result(base::INVALID_IDX);
       bool carries_result = false;
       if (ret.value.is_valid()) {
-        Val value = lower_expr(ret.value, nullptr);
+        Val value = lower_moved(ret.value, nullptr);
         if (failed || terminated_cur()) {
           return stopped_value();
         }
@@ -4360,11 +4377,9 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
         }
         return;
       }
-      // A field binding consumes the field: a plain load would hide the
-      // move from the owner's drop walk and the field would end twice.
-      Val init = ast.exprs[decl.init].kind == ast::ExprKind::Field
-                     ? place_addr(decl.init)
-                     : lower_expr(decl.init, nullptr);
+      // Moving into the binding consumes a field rather than loading a
+      // copy: the owner's drop walk has to see the partial move.
+      Val init = lower_moved(decl.init, nullptr);
       if (failed || terminated_cur()) {
         return;
       }
@@ -4390,7 +4405,7 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
       if (failed || terminated_cur()) {
         return;
       }
-      Val value = lower_expr(reassign.value, nullptr);
+      Val value = lower_moved(reassign.value, nullptr);
       if (failed || terminated_cur()) {
         return;
       }
@@ -4450,7 +4465,7 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
     }
     case ast::StmtKind::Expr: {
       const ast::StmtExpr& expr = node.payload.get<ast::StmtExpr>();
-      Val value = lower_expr(expr.value, nullptr);
+      Val value = lower_moved(expr.value, nullptr);
       if (failed || terminated_cur()) {
         return;
       }

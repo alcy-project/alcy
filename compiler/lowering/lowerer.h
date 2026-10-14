@@ -456,6 +456,11 @@ class Lowerer {
                                   diag::Span span);
   Val lower_str_intrinsic(ast::ExprIdx expr, std::string_view name);
   Val lower_panic(ast::ExprIdx expr);
+  // Lowers an expression whose value moves into a new owner. A rooted
+  // field projection is handed over as a place, so the drop walk
+  // records the partial move; a plain load would copy the field, and
+  // the owner that still ends it would free the same buffer twice.
+  Val lower_moved(ast::ExprIdx expr, const ir::TypeIdx* expected);
   ir::OperandIdx arg_for(Val arg, ir::TypeIdx param);
   Val load_disc(Val slot_addr);
   bool is_unit_payload(const std::vector<ir::TypeIdx>& payloads);

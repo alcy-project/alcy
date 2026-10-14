@@ -1049,7 +1049,7 @@ bool Lowerer::lower_rest_tuple(std::span<const ast::ExprIdx> args,
   const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, tuple_type, {size_one});
   for (usize i = 0; i < slots.size() && !failed; ++i) {
     const ir::TypeIdx slot = slots[i];
-    Val value = lower_expr(args[first + i], &slot);
+    Val value = lower_moved(args[first + i], &slot);
     if (failed) {
       return false;
     }
