@@ -132,6 +132,10 @@ impl String {
     ret self.as_str().lines()
   }
 
+  pub fn is_ascii(self: &Self) -> bool {
+    ret self.as_str().is_ascii()
+  }
+
   pub fn split_whitespace(self: &Self) -> SplitWhitespace {
     ret self.as_str().split_whitespace()
   }

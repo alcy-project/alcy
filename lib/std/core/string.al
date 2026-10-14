@@ -242,6 +242,19 @@ impl str {
     ret SplitIter { rest: self, delim: delim, done: false }
   }
 
+  // Whether every byte is ASCII (below 0x80).
+  pub fn is_ascii(self: &Self) -> bool {
+    n := str_len(*self)
+    mut i := 0 as usize
+    while i < n {
+      if str_byte(*self, i) >= 0x80u8 {
+        ret false
+      }
+      i = i + 1
+    }
+    ret true
+  }
+
   // A cursor over the whitespace-separated tokens. Leading, trailing,
   // and repeated whitespace is skipped, so no token is empty.
   pub fn split_whitespace(self: str) -> SplitWhitespace {
