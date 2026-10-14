@@ -1626,8 +1626,20 @@ ir::TypeIdx Checker::check_method_call(u32 module,
   }
   // A field's type is a storage copy of its declaration while the
   // method entry is keyed on the declared type, so look through the
-  // copy. Values without one pass through unchanged.
+  // copy. A reference to a field carries the copy as its pointee, so
+  // the pointee needs the same look-through. Values without one pass
+  // through unchanged.
   receiver = type_origin(receiver);
+  const ir::TypeTag receiver_tag = tag_of(receiver);
+  if (receiver_tag == ir::TypeTag::Ref || receiver_tag == ir::TypeTag::MutRef) {
+    const ir::TypeIdx pointee =
+        builder.ref_types()[builder.types()[receiver].as_ref()].pointee;
+    const ir::TypeIdx canonical = type_origin(pointee);
+    if (canonical.idx != pointee.idx) {
+      receiver = builder.reference_type(canonical,
+                                        receiver_tag == ir::TypeTag::MutRef);
+    }
+  }
   const std::string_view name =
       node.payload.get<ast::ExprMethodCall>().name.name;
   const diag::Span span = node.span;
