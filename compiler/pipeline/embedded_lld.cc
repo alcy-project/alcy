@@ -13,6 +13,7 @@
 
 #include "debug/dcheck.h"
 #include "diag/bag.h"
+#include "fpag/debug/profiler/profile_scope.h"
 
 #if defined(ALCY_EMBEDDED_LLD)
 #include "codegen/target.h"
@@ -169,10 +170,15 @@ base::Result<void, diag::Reported> link_with_embedded_lld(
     argv.push_back(argument.c_str());
   }
   // The driver's own output goes to the process streams, exactly as the
-  // spawned driver's would.
-  const lld::Result linked =
-      lld::lldMain(llvm::ArrayRef<const char*>(argv.data(), argv.size()),
-                   llvm::outs(), llvm::errs(), {{lld::Gnu, &lld::elf::link}});
+  // spawned driver's would. The call is its own row in a time trace, so
+  // a link's cost reads apart from the object write before it.
+  const lld::Result linked = [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "lld-link",
+                                             "backend");
+    return lld::lldMain(llvm::ArrayRef<const char*>(argv.data(), argv.size()),
+                        llvm::outs(), llvm::errs(),
+                        {{lld::Gnu, &lld::elf::link}});
+  }();
   if (linked.retCode != 0) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineLinkFailed>(
         diag::Severity::Error, diag::Stage::Pipeline, DiagCode::LinkError,

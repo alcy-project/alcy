@@ -77,3 +77,11 @@ zero, and a generated source the compiler still accepts. A noisy machine
 cannot make any of those false. `reconcile` needs a release build and
 refuses a debug one, whose figures describe that build rather than the
 compiler.
+
+A wall time says how long a case took, not where it went. The compiler's
+own `--time-trace` breaks a build down: `emit-object`, `lld-startup`
+(the embedded linker's one-time probe of the host's startup files), and
+`lld-link` are separate rows, so a link's cost reads apart from the
+front end's:
+
+    alcy build . -o out/app --time-trace

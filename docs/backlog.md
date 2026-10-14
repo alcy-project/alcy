@@ -54,9 +54,19 @@ replaced. The foundations are in `roadmap.md`.
 - [x] Format-string lint: the explicit `f` conversion (`{:.2f}` over
   `{:.2}`). The analyzer warns (WC045) and names the spelling to
   write; both spellings stay one piece, so the parser is unchanged.
-- [ ] Link-time measurement: a benchmark reporting where a link goes —
-  driver startup, the object write, the linker — and asserting nothing
-  about wall time.
+- [ ] The benchmark fixtures' own commands are outside the gate: the
+  harness's smoke checks that every case is present and that a
+  generated source still compiles, but not that a case's command
+  succeeds, so `build/executable`'s fixture rotted when the
+  private-access check landed (`util::double` had lost its `pub`) and
+  nothing said so. Running each case once, with its `expected_exit`,
+  is what smoke would have to add.
+- [x] Link-time measurement: the embedded linker's one-time startup
+  probe and the `lldMain` call are their own trace rows
+  (`lld-startup`, `lld-link`) beside the object write `emit-object`,
+  so `alcy build --time-trace` reports where a link goes. The suite's
+  `build/executable` case measures the wall time and asserts nothing
+  about it, which is what the benchmarks README says.
 - [ ] The embedded linker beyond this host: startup discovery hard-codes
   Linux paths, only the ELF driver is embedded, and ADR-0049's M3 (the
   wasm lld driver and the portable full compiler) is unstarted.

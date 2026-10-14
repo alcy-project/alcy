@@ -525,9 +525,18 @@ base::Result<void, diag::Reported> link_executable(
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "link", "backend");
   // A configured linker replaces the embedded one; the embedded one runs
   // in-process where the build has it and the host's startup inputs are
-  // found.
-  if (link.driver.empty() && embedded_lld_ready()) {
-    return link_with_embedded_lld(ctx, link, object_paths, exe_path);
+  // found. The startup probe is one-time and reads the host's files, so
+  // it gets its own row in a time trace.
+  if (link.driver.empty()) {
+    bool ready = false;
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "lld-startup",
+                                               "backend");
+      ready = embedded_lld_ready();
+    }
+    if (ready) {
+      return link_with_embedded_lld(ctx, link, object_paths, exe_path);
+    }
   }
   const std::string driver =
       link.driver.empty() ? "clang" : std::string(link.driver);
