@@ -45,7 +45,10 @@ llvm::CmpInst::Predicate float_predicate(ir::Opcode op) {
   using Pred = llvm::CmpInst::Predicate;
   switch (op) {
     case Op::Eq: return Pred::FCMP_OEQ;
-    case Op::Ne: return Pred::FCMP_ONE;
+    // `!=` is true when either side is NaN, so it is the unordered
+    // predicate; the rest are ordered, which is what `==` and the
+    // orderings mean.
+    case Op::Ne: return Pred::FCMP_UNE;
     case Op::Lt: return Pred::FCMP_OLT;
     case Op::Le: return Pred::FCMP_OLE;
     case Op::Gt: return Pred::FCMP_OGT;
