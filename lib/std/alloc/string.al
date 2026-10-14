@@ -120,6 +120,14 @@ impl String {
     ret self.as_str().contains(needle)
   }
 
+  pub fn strip_prefix(self: &Self, prefix: str) -> Option<str> {
+    ret self.as_str().strip_prefix(prefix)
+  }
+
+  pub fn strip_suffix(self: &Self, suffix: str) -> Option<str> {
+    ret self.as_str().strip_suffix(suffix)
+  }
+
   pub fn find(self: &Self, needle: str) -> Option<usize> {
     ret self.as_str().find(needle)
   }

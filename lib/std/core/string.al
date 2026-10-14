@@ -81,6 +81,24 @@ impl str {
     ret true
   }
 
+  // `self` without `prefix`, or `None` when it does not start with
+  // it. An empty prefix strips nothing.
+  pub fn strip_prefix(self: &Self, prefix: str) -> Option<str> {
+    if !self.starts_with(prefix) {
+      ret Option::None
+    }
+    ret Option::Some(str_slice(*self, str_len(prefix), str_len(*self)))
+  }
+
+  // `self` without `suffix`, or `None` when it does not end with it.
+  // An empty suffix strips nothing.
+  pub fn strip_suffix(self: &Self, suffix: str) -> Option<str> {
+    if !self.ends_with(suffix) {
+      ret Option::None
+    }
+    ret Option::Some(str_slice(*self, 0, str_len(*self) - str_len(suffix)))
+  }
+
   // Whether `needle` appears anywhere in the bytes. An empty needle
   // always matches.
   pub fn contains(self: &Self, needle: str) -> bool {
