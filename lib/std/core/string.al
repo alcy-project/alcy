@@ -452,6 +452,30 @@ impl str {
     ret n
   }
 
+  // The index of the first `b`, or `None`.
+  pub fn find_byte(self: &Self, b: u8) -> Option<usize> {
+    mut i := 0 as usize
+    while i < str_len(*self) {
+      if str_byte(*self, i) == b {
+        ret Option::Some(i)
+      }
+      i = i + 1
+    }
+    ret Option::None
+  }
+
+  // The index of the last `b`, or `None`.
+  pub fn rfind_byte(self: &Self, b: u8) -> Option<usize> {
+    mut i := str_len(*self)
+    while i > 0 {
+      i = i - 1
+      if str_byte(*self, i) == b {
+        ret Option::Some(i)
+      }
+    }
+    ret Option::None
+  }
+
   // Whether every byte is ASCII (below 0x80).
   pub fn is_ascii(self: &Self) -> bool {
     n := str_len(*self)
