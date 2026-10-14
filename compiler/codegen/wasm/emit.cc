@@ -352,8 +352,10 @@ std::optional<ValueShape> Emitter::shape_of(ir::TypeIdx type) const {
 
 std::optional<ValueShape> Emitter::shape_of_definition(
     const ir::Instruction& instr) const {
-  if (instr.op == ir::Opcode::Alloca) {
-    // The destination names the element type; the value is its address.
+  // An address is a word whatever the destination names: an `Alloca`
+  // names the element it reserves, and a `GetElementPtr` the field or
+  // element it points at, while both hand out an address.
+  if (instr.op == ir::Opcode::Alloca || instr.op == ir::Opcode::GetElementPtr) {
     return ValueShape{ValType::I32, 1};
   }
   if (!instr.dst.is_valid()) {

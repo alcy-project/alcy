@@ -221,7 +221,16 @@ fn main() {
 ```
 
 A float placeholder can fix its fractional digits: `{:.2f}` keeps two
-of them. Write the conversion out, because the shorthand `{:.2}` is the
+of them.
+
+```alcy
+fn main() {
+  println("{:.2f}", 2.0 / 3.0)
+  println("{}", 1.5)
+}
+```
+
+Write the conversion out, because the shorthand `{:.2}` is the
 same piece and the analyzer warns (WC045): the `f` says what the
 placeholder formats without reading the argument beside it.
 

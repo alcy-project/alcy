@@ -10,11 +10,12 @@ replaced. The foundations are in `roadmap.md`.
   item the ones written above it, and `ItemNode::docs` carries them as
   spans into the same bytes. The lexer already tokenized them, so the
   site generator is the only reader left to write.
-- [ ] The direct-wasm backend miscompiles a float format placeholder: a
-  program that formats an `f64` emits an invalid module (`local.set[0]
-  expected type f64, found local.get of type i32`), so the guide
-  documents `{:.2f}` in prose instead of a runnable fence and no wasm
-  case covers the default float spelling.
+- [x] The direct-wasm backend typed a field or element address by the
+  register beside it, so a `GetElementPtr` into an `f64` declared an
+  `F64` local and handed it an address: any program that formats a
+  float emitted an invalid module. Addresses are words whatever they
+  point at (`shape_of_definition`), `e2e/wasm/float-format` covers the
+  spelling, and the guide's `{:.2f}` example is a runnable fence again.
 - [ ] Consuming `for x in a` over an array is refused on direct-wasm:
   `core/slice.al`'s `raw_ptr` does not lower there (EK001), so the
   guide walks arrays with `.iter()`. The by-reference form works.
