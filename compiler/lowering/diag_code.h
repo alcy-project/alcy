@@ -43,6 +43,9 @@ enum class DiagCode : u8 {
   // drop walk's paths name fields and tuple slots, so the array's glue
   // would end what the move took a second time.
   MoveOutOfElement = 11,
+  // A block whose value is a reference to a local the block declares:
+  // the slot ends with the block and the binding outlives it.
+  BlockReferenceEscapes = 12,
 };
 
 }  // namespace lowering

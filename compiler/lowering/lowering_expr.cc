@@ -5083,6 +5083,42 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
       reachable = false;
     }
   }
+  // A reference to a local this block declares may not be the block's
+  // value: the slot ends with the block, and the binding the value
+  // reaches outlives it. The borrow pass refuses the same escape
+  // through `ret`; a block value reaches a binding, which it does not
+  // check.
+  if (!failed && reachable && !terminated_cur() && node.value.is_valid() &&
+      ast.exprs[node.value].kind == ast::ExprKind::Borrow) {
+    ast::ExprIdx root =
+        ast.exprs[node.value].payload.get<ast::ExprBorrow>().inner;
+    while (root.is_valid()) {
+      const ast::ExprNode& place = ast.exprs[root];
+      if (place.kind == ast::ExprKind::Field) {
+        root = place.payload.get<ast::ExprField>().receiver;
+      } else if (place.kind == ast::ExprKind::Index) {
+        root = place.payload.get<ast::ExprIndex>().receiver;
+      } else {
+        break;
+      }
+    }
+    if (root.is_valid() && ast.exprs[root].kind == ast::ExprKind::Path) {
+      const ast::PathIdx path =
+          ast.exprs[root].payload.get<ast::ExprPath>().idx;
+      const std::span<const ast::Ident> segments = ast.paths[path].segments;
+      if (segments.size() == 1) {
+        const Local* local = lookup_local(segments[0].name);
+        if (local != nullptr &&
+            static_cast<usize>(local - locals.data()) >= mark) {
+          const u32 index = bag.emit<i18n::Key::LowerBlockReferenceEscapes>(
+              diag::Severity::Error, diag::Stage::Lowering,
+              DiagCode::BlockReferenceEscapes, node.span, segments[0].name);
+          (void)index;
+          failed = true;
+        }
+      }
+    }
+  }
   Val value{size_one, builder.primitive(ir::TypeTag::Void), false, false};
   if (!failed && reachable && !terminated_cur()) {
     // A block's trailing value is lowered first: evaluating it can move

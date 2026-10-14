@@ -300,6 +300,7 @@
   /* lower */ \
   F(LowerDestructorNotRun, "Destructor for '{}' is not run: it is reached through a variant or an array, so declare 'fn drop(self: Self)' to end it") \
   F(LowerInternalError, "Internal lowering error: {}") \
+  F(LowerBlockReferenceEscapes, "Reference to local '{}' escapes the block that declares it") \
   F(LowerCompEngineMismatch, "Internal error: the comp engines disagree on '{}'") \
   F(LowerCompOverflow, "Integer overflow in constant evaluation") \
   F(LowerIrVerificationFailed, "Lowered IR failed verification") \
