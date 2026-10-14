@@ -73,6 +73,9 @@ struct LoadedIr {
   usize prelude_functions = 0;
   PointerWidth width = PointerWidth::W64;
   std::string compiler_version;
+  // The build identity the file recorded; zero when its writer knew
+  // none, which is a file from before the section existed.
+  u64 identity = 0;
 };
 
 // Rebuilds verified IR from the bytes `serialize` wrote, or says why it

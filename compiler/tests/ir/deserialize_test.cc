@@ -189,9 +189,8 @@ TEST_CASE("A corrupt binary form is refused") {
     const usize version_len = test::read_u32(file, 16);
     const usize table_at = 20 + version_len + 8;
     const u64 first_offset = test::read_u64(file, table_at + 8);
-    broken[table_at + 24 + 8] = static_cast<u8>(first_offset);
-    for (u32 i = 1; i < 8; ++i) {
-      broken[table_at + 24 + 8 + i] = 0;
+    for (u32 i = 0; i < 8; ++i) {
+      broken[table_at + 24 + 8 + i] = static_cast<u8>(first_offset >> (8 * i));
     }
     reseal(broken);
     CHECK(std::move(deserialize(broken)).unwrap_err() ==
@@ -274,6 +273,24 @@ TEST_CASE("The FILES section keeps the content hashes it was given") {
     // source's bytes is the caller's business.
     CHECK(written[0] == hashes[0]);
   }
+}
+
+TEST_CASE("The reader hands back the identity the writer computed") {
+  ir::SymbolTable strings;
+  const Storage storage = test::composite_storage(strings);
+  const std::array<u64, 1> hashes{0x0123'4567'89ab'cdefull};
+  const std::vector<u8> bytes = test::composite_bytes(strings, storage, hashes);
+  base::Result<LoadedIr, IrLoadError> loaded = deserialize(bytes);
+  CHECK(loaded.is_ok());
+  if (!loaded.is_ok()) {
+    return;
+  }
+  // The digest is over the same tables the reader just rebuilt, so a
+  // cache compares one number instead of walking them.
+  const std::array<std::string_view, 1> names{"main.al"};
+  CHECK(loaded.value().identity ==
+        identity_digest(FileTable{.names = names, .hashes = hashes},
+                        PointerWidth::W64, "0.0.0-test"));
 }
 
 }  // namespace ir

@@ -144,6 +144,7 @@ struct Parsed {
   usize prelude_functions = 0;
   PointerWidth width = PointerWidth::W64;
   std::string compiler_version;
+  u64 identity = 0;
 };
 
 using ParsedResult = base::Result<void, IrLoadError>;
@@ -896,6 +897,19 @@ bool read_prelude(Parsed& parsed, std::span<const u8> payload) {
   return true;
 }
 
+bool read_identity(Parsed& parsed, std::span<const u8> payload) {
+  if (payload.size() != 8) {
+    return false;
+  }
+  Cursor cursor(payload);
+  u64 digest = 0;
+  if (!cursor.read_u64(digest)) {
+    return false;
+  }
+  parsed.identity = digest;
+  return true;
+}
+
 // One dispatched reader per known kind, in the order the format writes
 // them.
 bool read_section(Parsed& parsed, Section kind, std::span<const u8> payload) {
@@ -923,13 +937,14 @@ bool read_section(Parsed& parsed, Section kind, std::span<const u8> payload) {
     case Section::AddrNames: return read_addr_names(parsed, payload);
     case Section::Prelude: return read_prelude(parsed, payload);
     case Section::Consts: return read_consts(parsed, payload);
+    case Section::Identity: return read_identity(parsed, payload);
   }
   return true;
 }
 
 bool known_kind(u32 kind) {
   return kind >= static_cast<u32>(Section::Strings) &&
-         kind <= static_cast<u32>(Section::Consts);
+         kind <= static_cast<u32>(Section::Identity);
 }
 
 base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
@@ -1045,7 +1060,7 @@ base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
   }
 
   for (u32 kind = static_cast<u32>(Section::Strings);
-       kind <= static_cast<u32>(Section::Consts); ++kind) {
+       kind <= static_cast<u32>(Section::Identity); ++kind) {
     if (!sections[kind].present) {
       continue;
     }
@@ -1074,6 +1089,7 @@ base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
   loaded.file_hashes = std::move(parsed.file_hashes);
   loaded.addr_names = std::move(parsed.addr_names);
   loaded.prelude_functions = parsed.prelude_functions;
+  loaded.identity = parsed.identity;
   loaded.width = parsed.width;
   loaded.compiler_version = std::move(parsed.compiler_version);
   return base::make_ok(std::move(loaded));

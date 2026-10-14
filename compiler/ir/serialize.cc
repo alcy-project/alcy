@@ -133,6 +133,12 @@ class Serializer {
     if (!state_.const_types.empty()) {
       sections.push_back({Section::Consts, consts_section()});
     }
+    // The identity is a function of everything written above, so the
+    // writer computes it rather than taking it on faith.
+    ByteWriter identity;
+    identity.put_u64(
+        identity_digest(input_.files, input_.width, input_.compiler_version));
+    sections.push_back({Section::Identity, std::move(identity)});
 
     // The header and the table come first, so an offset depends on the
     // table's own size; compute them before writing anything.

@@ -126,19 +126,23 @@ peripheral work lives in `backlog.md`. The language record lives in
 
   The binary IR form round-trips byte for byte and has no production
   reader; a `[lib]` is an opaque object because a dependent package
-  cannot resolve against it. In slices: the build identity (source
-  bytes, manifest, flags, and toolchain) and the content hashes the
-  format's `FILES` section reserves but the writer leaves empty; a
-  cache of the checked artifact, its location and invalidation, and a
-  hit or miss in the command envelope; a versioned summary of what a
-  dependent needs - signatures, nominal shapes, generic instances,
-  and spec implementations - that the analyzer consumes in place of
-  the dependency's source; multi-object linking, which the runtime's
-  external linkage needs; and the fetchers that make a registry or
-  git dependency obtainable at all. The cache without summaries and
-  the summaries without fetchers each go half the way, so the item
-  states both. The first slice landed: each `FILES` record carries the
-  content hash of the source it names (`fnv1a64` of its bytes), so a
-  cache can tell two programs under one name apart. Designed in
+  cannot resolve against it. In slices: the build identity - source
+  bytes, the manifest among them, pointer width, and toolchain, with a
+  profile joining above the IR boundary where ADR-0067 keeps the cache -
+  and the content hashes the format's `FILES` section reserves but the
+  writer leaves empty; a cache of the checked artifact, its location
+  and invalidation, and a hit or miss in the command envelope; a
+  versioned summary of what a dependent needs - signatures, nominal
+  shapes, generic instances, and spec implementations - that the
+  analyzer consumes in place of the dependency's source; multi-object
+  linking, which the runtime's external linkage needs; and the fetchers
+  that make a registry or git dependency obtainable at all. The cache
+  without summaries and the summaries without fetchers each go half the
+  way, so the item states both. Two slices landed: each `FILES` record
+  carries the content hash of the source it names (`fnv1a64` of its
+  bytes), so a cache can tell two programs under one name apart, and the
+  `IDENTITY` section carries one digest over the file table, the pointer
+  width, and the toolchain (`ir::identity_digest`), so a cache compares
+  one number instead of walking the tables. Designed in
   `docs/adr/0056-the-ir-has-a-text-and-a-binary-form.md`; the pieces
   are named in `docs/spec/deferred.md`.

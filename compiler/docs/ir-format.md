@@ -307,6 +307,12 @@ absent when the count is zero.
 **CONSTS**: `count` × `{ value u64 }`, one row per compile-time value
 argument in the type table. The section is absent when there are none.
 
+**IDENTITY**: one `u64`, the build identity `ir::identity_digest` computes
+over the tables above - every file's name and content hash in order, the
+pointer width, and the version string - so a cache can compare one number
+instead of walking them. A file written before this kind existed carries
+none, and a reader answers zero for those.
+
 ### 3.5 Reading
 
 A reader MUST build a `StorageState`, re-intern `STRINGS`, remap every

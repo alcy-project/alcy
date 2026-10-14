@@ -5,9 +5,11 @@
 
 #include <span>
 #include <string_view>
+#include <vector>
 
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
+#include "ir/binary_format.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
@@ -56,5 +58,38 @@ struct WriteInput {
   // a cache can reject a mismatch. Empty when the caller has none.
   std::string_view compiler_version;
 };
+
+// The build identity: one digest over what an artifact was lowered from -
+// the file table's names and content hashes in order, the pointer width,
+// and the toolchain's version string. The binary form records it so a
+// cache can compare one number instead of walking the tables.
+//
+// The canonical bytes are: for each file row, in order, the name's bytes,
+// one 0x00, and the hash as eight little-endian bytes; then one byte for
+// the pointer width (4 or 8); then the version string's bytes.
+//
+// The profile is not in it: the unoptimized forms answer the same
+// artifact under every profile (ADR-0067), so a cache that keys a
+// profile's output composes the profile above this digest.
+inline u64 identity_digest(const FileTable& files,
+                           PointerWidth width,
+                           std::string_view version) {
+  std::vector<u8> canonical;
+  const auto put_u64 = [&canonical](u64 value) {
+    for (u32 shift = 0; shift < 64; shift += 8) {
+      canonical.push_back(static_cast<u8>(value >> shift));
+    }
+  };
+  for (usize i = 0; i < files.names.size(); ++i) {
+    for (const char ch : files.names[i]) {
+      canonical.push_back(static_cast<u8>(ch));
+    }
+    canonical.push_back(0);
+    put_u64(files.hash_of(static_cast<u32>(i)));
+  }
+  canonical.push_back(width == PointerWidth::W32 ? 4 : 8);
+  canonical.insert(canonical.end(), version.begin(), version.end());
+  return binary::fnv1a64(canonical);
+}
 
 }  // namespace ir

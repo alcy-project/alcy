@@ -61,6 +61,9 @@ enum class Section : u8 {
   Prelude = 22,
   // Compile-time value arguments; one u64 per row. Absent means none.
   Consts = 23,
+  // The build identity `identity_digest` computes over the write input;
+  // one u64. A file written before this kind existed has none.
+  Identity = 24,
 };
 
 }  // namespace ir::binary
