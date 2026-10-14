@@ -29,3 +29,5 @@ chek = "chek"
 outpu = "outpu"
 abd = "abd"
 halp = "halp"
+# The `String::truncate` and `strip_suffix` cases cut "hello" short.
+hel = "hel"
