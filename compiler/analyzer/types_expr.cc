@@ -3645,9 +3645,9 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
           }
         }
       }
-      const ir::TypeIdx inner =
-          borrow_inner ? check_expr(module, deref_inner, nullptr)
-                       : check_place(module, deref_inner);
+      const ir::TypeIdx inner = borrow_inner
+                                    ? check_expr(module, deref_inner, nullptr)
+                                    : check_place(module, deref_inner);
       if (is_error(inner)) {
         return error_type();
       }

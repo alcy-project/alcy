@@ -170,13 +170,12 @@ replaced. The foundations are in `roadmap.md`.
   loop body no longer follows with an unresolved name (or a variant
   that "is not a member of the matched type"). `err-float-range` pins
   both halves.
-- [x] A borrow of a temporary that owns nothing works now (`a.eq(&2)`,
-  `takes(&(1 + 1))`, `p.plus(&P { base: 6 })`): the lowering gives it a
-  slot in the frame and loans that, where it used to refuse every
-  borrowed temporary. One that owns memory is still refused, because
-  the drop walk ends it at the statement's end; `exe-borrow-temporary`
-  walks the accepted shapes and `err-borrow-owning-temporary` pins the
-  refusal.
+- [x] A borrow of a temporary works (`a.eq(&2)`, `takes(&format("y"))`,
+  `format("x").to_ascii_lowercase()`): the lowering gives the value a
+  slot in the frame and loans that, and an owning one becomes an
+  unnamed local the drop walk ends at the enclosing block, so no
+  reference outlives it. `exe-borrow-temporary` and
+  `exe-borrow-temporary-owning` walk the shapes under the sanitizer.
 - [ ] `Option::is_some`/`is_none`/`is_ok`/`is_err` take the receiver by
   value, so the option cannot be consulted twice. `&Self` receivers
   would fix that.

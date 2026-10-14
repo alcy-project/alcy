@@ -377,8 +377,36 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
       return Val{inner.op, pointee, true, true, borrowed};
     }
     default:
-      unsupported(node.span, "borrowed temporary");
-      return Val{size_one, error_type(), true, false};
+      // A temporary takes a slot in this frame, so a borrow of it names
+      // storage: `a.eq(&2)` borrows a materialized operand, and an
+      // owning value becomes an unnamed local the drop walk ends at the
+      // enclosing block, so the borrow is read and retired once and no
+      // reference outlives it.
+      {
+        Val value = lower_expr(expr, nullptr);
+        if (failed || terminated_cur()) {
+          return Val{size_one, error_type(), true, false};
+        }
+        const ir::TypeIdx type = value.type;
+        if (tag_of(type) == ir::TypeTag::Error) {
+          unsupported(node.span, "borrowed temporary");
+          return Val{size_one, error_type(), true, false};
+        }
+        Val place = address_of(value);
+        if (failed) {
+          return Val{size_one, error_type(), true, false};
+        }
+        if (runs_destructor(type)) {
+          const ir::Operand& operand = builder.state().operands[place.op.idx];
+          if (operand.is<ir::RegisterIdx>()) {
+            locals.emplace_back(std::string_view(), operand.as_register(),
+                                type);
+            record_event(OwnershipEvent::Kind::Bind,
+                         static_cast<u32>(locals.size() - 1), {}, node.span);
+          }
+        }
+        return Val{place.op, type, true, true, false};
+      }
   }
 }
 
@@ -2844,10 +2872,12 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   // evaluates to a value first.
   const ast::ExprIdx receiver_expr =
       method.payload.get<ast::ExprMethodCall>().receiver;
-  Val receiver =
-      is_ref_tag(tag_of(info.params[0])) && is_rooted_place(receiver_expr)
-          ? place_addr(receiver_expr)
-          : lower_expr(receiver_expr, nullptr);
+  // A reference receiver borrows the place it names, including a
+  // temporary: `place_addr` gives one a slot in this frame, which the
+  // drop walk ends at the enclosing block.
+  Val receiver = is_ref_tag(tag_of(info.params[0]))
+                     ? place_addr(receiver_expr)
+                     : lower_expr(receiver_expr, nullptr);
   if (failed || terminated_cur()) {
     return stopped_value();
   }
@@ -4693,29 +4723,9 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
           return lower_subslice(base, position, borrow.is_mut, node.span);
         }
       }
-      Val place = Val{size_one, error_type(), false, false};
-      if (is_rooted_place(borrow.inner)) {
-        place = place_addr(borrow.inner);
-        if (failed || terminated_cur()) {
-          return stopped_value();
-        }
-      } else {
-        // The slot holds the temporary for the reference's life, which
-        // is the enclosing expression's. A temporary that owns memory
-        // is still refused: the drop pass ends it at the statement's
-        // end, so a reference to it would outlive it.
-        place = lower_expr(borrow.inner, nullptr);
-        if (failed || terminated_cur()) {
-          return stopped_value();
-        }
-        if (runs_destructor(place.type)) {
-          unsupported(node.span, "a borrowed temporary that owns memory");
-          return stopped_value();
-        }
-        place = address_of(place);
-        if (failed || terminated_cur()) {
-          return stopped_value();
-        }
+      Val place = place_addr(borrow.inner);
+      if (failed || terminated_cur()) {
+        return stopped_value();
       }
       const ir::TypeIdx ref = builder.reference_type(place.type, borrow.is_mut);
       const ir::RegisterIdx loan = emit(ir::Opcode::Borrow, ref, {place.op});

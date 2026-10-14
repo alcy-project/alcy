@@ -5,10 +5,11 @@
 - `&T` (shared reference): freely duplicable; any number may coexist.
 - `&mut T` (exclusive reference): at most one live at a time, and no
   `&T` to the same place may be live while it is.
-- A borrow of a temporary that owns nothing - `&2`, `&(1 + 1)`, a
-  struct of scalars - names a slot the expression lives in. A
-  temporary that owns memory is not borrowed: the drop walk ends it at
-  the statement's end, so the reference would outlive it.
+- A borrow of a temporary names a slot in the frame: `&2`,
+  `&(1 + 1)`, and `&format("y")` all read a place. A `Copy` one has
+  nothing to end; an owning one becomes an unnamed local the drop walk
+  ends at the enclosing block, so the borrow is read and retired once
+  and no reference outlives it.
 - A non-`Copy` value cannot be moved out from under an array's element
   either: an array ends its elements whole, so a move out of one is
   refused until the drop walk can name an element. A value without a
