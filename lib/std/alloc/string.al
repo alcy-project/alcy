@@ -29,6 +29,15 @@ impl String {
     ret self.len
   }
 
+  // Keeps the first `n` bytes, dropping the rest. A byte has no
+  // destructor, so the length is the only thing to change.
+  pub fn truncate(mut self: &mut Self, n: usize) {
+    if n >= self.len {
+      ret
+    }
+    self.len = n
+  }
+
   pub fn capacity(self: &Self) -> usize {
     ret self.cap
   }
