@@ -72,6 +72,15 @@ impl String {
     self.len = n
   }
 
+  // Removes and answers the last byte, or `None` when empty.
+  pub fn pop(mut self: &mut Self) -> Option<u8> {
+    if self.len == 0 {
+      ret Option::None
+    }
+    self.len = self.len - 1
+    ret Option::Some(unsafe { *uninit_assume(elem_ptr(self.buf, self.len)) })
+  }
+
   pub fn capacity(self: &Self) -> usize {
     ret self.cap
   }
