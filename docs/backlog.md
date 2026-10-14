@@ -29,8 +29,13 @@ replaced. The foundations are in `roadmap.md`.
   collected tuple's glue directly, because the tuple is a scratch slot
   rather than a binding the pass could schedule.
 - [x] Manifest lint: a pre-1.0 version range warns (WH007), since a
-  minor may break under 1.0. An exact pin cannot drift and stays
-  silent, and both spellings parse, so the grammar is unchanged.
+  minor may break under 1.0. The rule reads the parsed requirement -
+  one `Equal` bound is a pin and stays silent - so `0.5.x`,
+  `>=0.5.0, <1.0.0`, and a stray leading space all warn.
+- [ ] `parse_version_req` refuses the two-component forms its own
+  message advertises: `=0.5` and `1.2` both answer "needs a version of
+  the form =1.2.3, 1.2, or 1". Either the parser or the message is
+  wrong, and nothing pins which.
 - [x] Format-string lint: the explicit `f` conversion (`{:.2f}` over
   `{:.2}`). The analyzer warns (WC045) and names the spelling to
   write; both spellings stay one piece, so the parser is unchanged.

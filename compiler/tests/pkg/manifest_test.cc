@@ -826,35 +826,36 @@ TEST_CASE("Identity fields refuse shapes that are not a value or a marker") {
 }
 
 TEST_CASE("Manifest warns about a pre-1.0 version range") {
-  constexpr std::string_view RANGE =
-      "[package]\n"
-      "name = \"hello\"\n"
-      "version = \"1.0.0\"\n"
-      "license = \"\"\n"
-      "\n"
-      "[dependencies]\n"
-      "\"hash/one\" = { version = \"0.5.x\" }\n";
-  constexpr std::string_view PINNED =
-      "[package]\n"
-      "name = \"hello\"\n"
-      "version = \"1.0.0\"\n"
-      "license = \"\"\n"
-      "\n"
-      "[dependencies]\n"
-      "\"hash/one\" = { version = \"=0.5.0\" }\n";
-  Fixture range;
-  base::Result<PackageManifest, diag::Reported> ranged = parse_manifest(
-      RANGE, "alcy.toml", source::UNKNOWN_FILE, range.bag, range.arena);
-  CHECK(ranged.is_ok());
-  CHECK(!range.bag.has_errors());
-  // The range admits a minor, and a minor may break before 1.0.
-  CHECK(range.bag.warning_count() == 1);
-  Fixture pinned;
-  base::Result<PackageManifest, diag::Reported> exact = parse_manifest(
-      PINNED, "alcy.toml", source::UNKNOWN_FILE, pinned.bag, pinned.arena);
-  CHECK(exact.is_ok());
-  // An exact pin cannot drift, so the lint stays silent.
-  CHECK(pinned.bag.warning_count() == 0);
+  // The rule reads the parsed requirement, not the spelling: one
+  // `Equal` bound is a pin and cannot drift, and every other
+  // requirement that admits a pre-1.0 version warns.
+  const auto warnings_for = [](std::string_view version) {
+    Fixture f;
+    std::string manifest =
+        "[package]\n"
+        "name = \"hello\"\n"
+        "version = \"1.0.0\"\n"
+        "license = \"\"\n"
+        "\n"
+        "[dependencies]\n"
+        "\"hash/one\" = { version = \"";
+    manifest += version;
+    manifest += "\" }\n";
+    base::Result<PackageManifest, diag::Reported> result = parse_manifest(
+        manifest, "alcy.toml", source::UNKNOWN_FILE, f.bag, f.arena);
+    CHECK(result.is_ok());
+    CHECK(!f.bag.has_errors());
+    return f.bag.warning_count();
+  };
+  // A range admits a minor, and a minor may break before 1.0.
+  CHECK(warnings_for("0.5.x") == 1);
+  CHECK(warnings_for(">=0.5.0, <1.0.0") == 1);
+  CHECK(warnings_for(" 0.5.x") == 1);
+  // An exact pin cannot drift, whatever it was written as.
+  CHECK(warnings_for("0.5.0") == 0);
+  CHECK(warnings_for("=0.5.0") == 0);
+  // A range that starts at 1.0 is not pre-minor at all.
+  CHECK(warnings_for("1.2.x") == 0);
 }
 
 }  // namespace pkg
