@@ -29,6 +29,40 @@ impl String {
     ret self.len
   }
 
+  // A new string with `A`-`Z` folded to lower case; other bytes copy.
+  pub fn to_ascii_lowercase(self: &Self) -> String {
+    mut out := String::with_capacity(self.len)
+    s := self.as_str()
+    mut i := 0 as usize
+    while i < str_len(s) {
+      b := str_byte(s, i)
+      if b >= 0x41u8 && b <= 0x5au8 {
+        out.push(b + 0x20u8)
+      } else {
+        out.push(b)
+      }
+      i = i + 1
+    }
+    ret out
+  }
+
+  // A new string with `a`-`z` folded to upper case; other bytes copy.
+  pub fn to_ascii_uppercase(self: &Self) -> String {
+    mut out := String::with_capacity(self.len)
+    s := self.as_str()
+    mut i := 0 as usize
+    while i < str_len(s) {
+      b := str_byte(s, i)
+      if b >= 0x61u8 && b <= 0x7au8 {
+        out.push(b - 0x20u8)
+      } else {
+        out.push(b)
+      }
+      i = i + 1
+    }
+    ret out
+  }
+
   // Keeps the first `n` bytes, dropping the rest. A byte has no
   // destructor, so the length is the only thing to change.
   pub fn truncate(mut self: &mut Self, n: usize) {
