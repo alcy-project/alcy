@@ -410,6 +410,36 @@ impl Eq for String {
 // A view can build a replacement too, so a reader need not own the
 // source first.
 impl str {
+  // A new string with `A`-`Z` folded to lower case; other bytes copy.
+  pub fn to_ascii_lowercase(self: str) -> String {
+    mut out := String::with_capacity(str_len(self))
+    mut i := 0 as usize
+    while i < str_len(self) {
+      mut b := str_byte(self, i)
+      if b >= 0x41u8 && b <= 0x5au8 {
+        b = b + 0x20u8
+      }
+      out.push(b)
+      i = i + 1
+    }
+    ret out
+  }
+
+  // A new string with `a`-`z` folded to upper case; other bytes copy.
+  pub fn to_ascii_uppercase(self: str) -> String {
+    mut out := String::with_capacity(str_len(self))
+    mut i := 0 as usize
+    while i < str_len(self) {
+      mut b := str_byte(self, i)
+      if b >= 0x61u8 && b <= 0x7au8 {
+        b = b - 0x20u8
+      }
+      out.push(b)
+      i = i + 1
+    }
+    ret out
+  }
+
   // A new string with every non-overlapping occurrence of `from`
   // replaced by `to`. An empty pattern would never advance, so it
   // answers a copy.
