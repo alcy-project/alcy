@@ -173,6 +173,17 @@ impl<T> Vec<T> {
     }
   }
 
+  // Inserts `value` at `index`, shifting the rest up. `index` may
+  // equal the length, which appends.
+  pub fn insert(mut self: &mut Self, index: usize, value: T) {
+    self.push(value)
+    mut i := self.len - 1
+    while i > index {
+      self.swap(i - 1, i)
+      i = i - 1
+    }
+  }
+
   // Reverses the elements in place.
   pub fn reverse(mut self: &mut Self) {
     if self.len < 2 {
