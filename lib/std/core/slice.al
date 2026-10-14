@@ -54,6 +54,30 @@ impl<T> [T] {
     ret Option::Some(unsafe { slice_at(self, n - 1) })
   }
 
+  // The index of the first element the predicate accepts, or `None`.
+  pub fn position(self: &Self, pred: (&T) -> bool) -> Option<usize> {
+    mut i := 0 as usize
+    while i < slice_len(self) {
+      if pred(self.at(i).unwrap()) {
+        ret Option::Some(i)
+      }
+      i = i + 1
+    }
+    ret Option::None
+  }
+
+  // The first element the predicate accepts, or `None`.
+  pub fn find(self: &Self, pred: (&T) -> bool) -> Option<&T> {
+    mut i := 0 as usize
+    while i < slice_len(self) {
+      if pred(self.at(i).unwrap()) {
+        ret self.at(i)
+      }
+      i = i + 1
+    }
+    ret Option::None
+  }
+
   // The first element mutably, or `None` when empty.
   pub fn first_mut(mut self: &mut Self) -> Option<&mut T> {
     if slice_len(self) == 0 {
