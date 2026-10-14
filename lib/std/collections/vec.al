@@ -163,6 +163,18 @@ impl<T> Vec<T> {
     }
   }
 
+  // The first element the predicate accepts, or `None`.
+  pub fn find(self: &Self, pred: (&T) -> bool) -> Option<&T> {
+    mut i := 0 as usize
+    while i < self.len {
+      if pred(self.at(i).unwrap()) {
+        ret self.at(i)
+      }
+      i = i + 1
+    }
+    ret Option::None
+  }
+
   // The index of the first element the predicate accepts, or `None`.
   pub fn position(self: &Self, pred: (&T) -> bool) -> Option<usize> {
     mut i := 0 as usize
