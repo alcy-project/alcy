@@ -54,6 +54,23 @@ impl<T> [T] {
     ret Option::Some(unsafe { slice_at(self, n - 1) })
   }
 
+  // The first element mutably, or `None` when empty.
+  pub fn first_mut(mut self: &mut Self) -> Option<&mut T> {
+    if slice_len(self) == 0 {
+      ret Option::None
+    }
+    ret Option::Some(unsafe { slice_at_mut(self, 0) })
+  }
+
+  // The last element mutably, or `None` when empty.
+  pub fn last_mut(mut self: &mut Self) -> Option<&mut T> {
+    n := slice_len(self)
+    if n == 0 {
+      ret Option::None
+    }
+    ret Option::Some(unsafe { slice_at_mut(self, n - 1) })
+  }
+
   // The views before and after `at`. The caller knows `at` is a
   // boundary it chose, so it must not exceed the length.
   pub fn split_at(self: &Self, at: usize) -> (&[T], &[T]) {
