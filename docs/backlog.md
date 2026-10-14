@@ -57,10 +57,11 @@ replaced. The foundations are in `roadmap.md`.
   minor may break under 1.0. The rule reads the parsed requirement -
   one `Equal` bound is a pin and stays silent - so `0.5.x`,
   `>=0.5.0, <1.0.0`, and a stray leading space all warn.
-- [ ] `parse_version_req` refuses the two-component forms its own
-  message advertises: `=0.5` and `1.2` both answer "needs a version of
-  the form =1.2.3, 1.2, or 1". Either the parser or the message is
-  wrong, and nothing pins which.
+- [x] The requirement message named forms the grammar refuses: `1.2`
+  and `1` are not terms - `version_req_test` pins what parses, a
+  three-component version or one whose last component is `x` - while
+  the message read as if they were. The message names the forms that
+  parse (`1.2.3`, `1.2.x`, `1.x`) and `err-dep-version-form` pins it.
 - [x] Format-string lint: the explicit `f` conversion (`{:.2f}` over
   `{:.2}`). The analyzer warns (WC045) and names the spelling to
   write; both spellings stay one piece, so the parser is unchanged.
