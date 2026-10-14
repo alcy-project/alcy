@@ -2938,7 +2938,8 @@ bool Checker::is_known_intrinsic(std::string_view name) {
          name == "ptr_offset_mut" || name == "drop_in_place" ||
          name == "slice_at" || name == "slice_at_mut" || name == "read" ||
          name == "wrapping_add" || name == "wrapping_sub" ||
-         name == "wrapping_mul";
+         name == "wrapping_mul" || name == "file_size" ||
+         name == "read_file_into";
 }
 
 // The intrinsics whose preconditions the compiler cannot check
@@ -2950,7 +2951,8 @@ static bool intrinsic_is_unsafe(std::string_view name) {
          name == "str_from_parts" || name == "slice_from_parts" ||
          name == "slice_from_parts_mut" || name == "ptr_offset" ||
          name == "ptr_offset_mut" || name == "drop_in_place" ||
-         name == "slice_at" || name == "slice_at_mut" || name == "read";
+         name == "slice_at" || name == "slice_at_mut" || name == "read" ||
+         name == "file_size" || name == "read_file_into";
 }
 
 // What may cross a C boundary in the first ABI slice (ADR-0051):
@@ -3212,6 +3214,14 @@ bool Checker::check_intrinsic_signature(u32 module,
     expected.push_back(builder.reference_type(u8, false));
     expected.push_back(usize_ty);
     expected_ret = str;
+  } else if (name == "file_size") {
+    expected.push_back(str);
+    expected_ret = builder.primitive(ir::TypeTag::I64);
+  } else if (name == "read_file_into") {
+    expected.push_back(str);
+    expected.push_back(builder.reference_type(u8, true));
+    expected.push_back(usize_ty);
+    expected_ret = builder.primitive(ir::TypeTag::I64);
   } else {
     return wrong();
   }

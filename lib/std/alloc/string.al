@@ -29,6 +29,23 @@ impl String {
     ret self.len
   }
 
+  // The whole file at `path`, or `None` when it cannot be read.
+  pub fn read_file(path: str) -> Option<String> {
+    n := unsafe { file_size(path) }
+    if n < 0 {
+      ret Option::None
+    }
+    mut s := String::with_capacity(n as usize)
+    at := s.len
+    spare := s.cap - at
+    m := unsafe { read_file_into(path, uninit_assume(elem_ptr(s.buf, at)), spare) }
+    if m < 0 {
+      ret Option::None
+    }
+    s.set_len(m as usize)
+    ret Option::Some(s)
+  }
+
   // A new string with `A`-`Z` folded to lower case; other bytes copy.
   pub fn to_ascii_lowercase(self: &Self) -> String {
     mut out := String::with_capacity(self.len)

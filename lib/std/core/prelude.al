@@ -47,6 +47,8 @@ pub use package::mem::read;
 pub use package::mem::wrapping_add;
 pub use package::mem::wrapping_sub;
 pub use package::mem::wrapping_mul;
+pub use package::mem::file_size;
+pub use package::mem::read_file_into;
 pub use package::ops::Add;
 pub use package::ops::Div;
 pub use package::ops::Mul;

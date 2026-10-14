@@ -38,3 +38,12 @@ pub intrinsic fn wrapping_add<T>(a: T, b: T) -> T;
 pub intrinsic fn wrapping_sub<T>(a: T, b: T) -> T;
 
 pub intrinsic fn wrapping_mul<T>(a: T, b: T) -> T;
+
+// The byte count of the file at `path`, or -1 when it cannot be
+// opened. The path is NUL-terminated in a temporary slot.
+pub unsafe intrinsic fn file_size(path: str) -> i64;
+
+// Reads up to `out_len` bytes from the file at `path` into the bytes
+// `out` names, answering the bytes read or -1 when it cannot be
+// opened. The caller must have room for `out_len` bytes at `out`.
+pub unsafe intrinsic fn read_file_into(path: str, out: &mut u8, out_len: usize) -> i64;

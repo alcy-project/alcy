@@ -1692,6 +1692,60 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
   if (name == "str_len" || name == "str_byte" || name == "str_slice") {
     return lower_str_intrinsic(expr, name);
   }
+  if (name == "file_size" || name == "read_file_into") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    const usize arity = name == "file_size" ? 1 : 3;
+    if (call.args.size() != arity) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+    const ir::TypeIdx usize_ty = usize_type();
+    const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
+    Val path = lower_expr(call.args[0], &sig.params[0]);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    const ir::OperandIdx path_val = arg_for(path, sig.params[0]);
+    const ir::RegisterIdx bytes =
+        emit(ir::Opcode::ExtractValue, ptr_ty, {path_val, index_operand(0)});
+    const ir::RegisterIdx len =
+        emit(ir::Opcode::ExtractValue, usize_ty, {path_val, index_operand(1)});
+    std::vector<ir::OperandIdx> ops;
+    if (name == "file_size") {
+      const ir::ExternalFunctionIdx ext =
+          declare_external("alcy_file_size", i64_ty, {ptr_ty, usize_ty});
+      ops.push_back(builder.operand(ir::Operand::from_external_function(
+          ext, builder.primitive(ir::TypeTag::Function))));
+      ops.push_back(to_operand(bytes, ptr_ty));
+      ops.push_back(to_operand(len, usize_ty));
+    } else {
+      Val out = lower_expr(call.args[1], &sig.params[1]);
+      if (failed || terminated_cur()) {
+        return stopped_value();
+      }
+      Val out_len = lower_expr(call.args[2], &sig.params[2]);
+      if (failed || terminated_cur()) {
+        return stopped_value();
+      }
+      const ir::ExternalFunctionIdx ext = declare_external(
+          "alcy_read_file_into", i64_ty, {ptr_ty, usize_ty, ptr_ty, usize_ty});
+      ops.push_back(builder.operand(ir::Operand::from_external_function(
+          ext, builder.primitive(ir::TypeTag::Function))));
+      ops.push_back(to_operand(bytes, ptr_ty));
+      ops.push_back(to_operand(len, usize_ty));
+      ops.push_back(arg_for(out, sig.params[1]));
+      ops.push_back(arg_for(out_len, sig.params[2]));
+    }
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::RegisterIdx dst = emit(ir::Opcode::Call, i64_ty, ops);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(dst, i64_ty), i64_ty, false, false};
+  }
   if (name == "elem_ptr" || name == "elem_ref" || name == "ptr_offset" ||
       name == "ptr_offset_mut") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
