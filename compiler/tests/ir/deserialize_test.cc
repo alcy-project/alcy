@@ -3,6 +3,7 @@
 
 #include "ir/deserialize.h"
 
+#include <array>
 #include <span>
 #include <string>
 #include <string_view>
@@ -253,6 +254,25 @@ TEST_CASE("A corrupt binary form is refused") {
     broken[strings_at + 8] ^= 0x01;
     CHECK(std::move(deserialize(broken)).unwrap_err() ==
           IrLoadError::BadChecksum);
+  }
+}
+
+TEST_CASE("The FILES section keeps the content hashes it was given") {
+  ir::SymbolTable strings;
+  const Storage storage = test::composite_storage(strings);
+  const std::array<u64, 1> hashes{0x0123'4567'89ab'cdefull};
+  const std::vector<u8> bytes = test::composite_bytes(strings, storage, hashes);
+  base::Result<LoadedIr, IrLoadError> loaded = deserialize(bytes);
+  CHECK(loaded.is_ok());
+  if (!loaded.is_ok()) {
+    return;
+  }
+  const std::vector<u64>& written = loaded.value().file_hashes;
+  CHECK(written.size() == 1);
+  if (written.size() == 1) {
+    // The writer echoes what it is handed; computing the hash of a
+    // source's bytes is the caller's business.
+    CHECK(written[0] == hashes[0]);
   }
 }
 

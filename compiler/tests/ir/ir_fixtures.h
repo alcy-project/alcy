@@ -184,7 +184,8 @@ inline Storage composite_storage(ir::SymbolTable& strings) {
 
 // The bytes `composite_storage` writes, with its side tables.
 inline std::vector<u8> composite_bytes(ir::SymbolTable& strings,
-                                       const Storage& storage) {
+                                       const Storage& storage,
+                                       std::span<const u64> hashes = {}) {
   const std::array<std::string_view, 1> names{"main.al"};
   const std::array<AddrName, 1> addr_names{
       AddrName{RegisterIdx(0), "x", /*is_param=*/false, /*is_capture=*/false}};
@@ -198,7 +199,7 @@ inline std::vector<u8> composite_bytes(ir::SymbolTable& strings,
       .storage = &storage,
       .strings = &strings,
       .instr_spans = spans,
-      .files = FileTable{.names = names, .hashes = {}},
+      .files = FileTable{.names = names, .hashes = hashes},
       .addr_names = addr_names,
       .prelude_functions = 0,
       .width = PointerWidth::W64,

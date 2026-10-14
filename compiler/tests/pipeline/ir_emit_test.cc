@@ -14,6 +14,7 @@
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
+#include "ir/binary_format.h"
 #include "ir/deserialize.h"
 #include "ir/type.h"
 #include "pipeline/build.h"
@@ -89,7 +90,26 @@ TEST_CASE("The ir-bc mode writes the binary form beside the source") {
       ir::deserialize(written);
   CHECK(loaded.is_ok());
   if (loaded.is_ok()) {
-    CHECK((*loaded.value().storage).functions().size() > 0);
+    const ir::LoadedIr& package = loaded.value();
+    CHECK(package.storage->functions().size() > 0);
+    // The FILES section carries each source's content hash, so a cache
+    // can tell two programs under one name apart. The staged standard
+    // library is loaded too, so the program's own file is found by
+    // name.
+    const std::vector<std::string>& names = package.file_names;
+    CHECK(names.size() == package.file_hashes.size());
+    usize program = names.size();
+    for (usize i = 0; i < names.size(); ++i) {
+      if (names[i].ends_with("main.al")) {
+        program = i;
+      }
+    }
+    CHECK(program < names.size());
+    if (program < names.size()) {
+      const std::span<const u8> source(
+          reinterpret_cast<const u8*>(PROGRAM.data()), PROGRAM.size());
+      CHECK(package.file_hashes[program] == ir::binary::fnv1a64(source));
+    }
   }
 }
 

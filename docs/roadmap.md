@@ -135,6 +135,8 @@ peripheral work lives in `backlog.md`. The language record lives in
   external linkage needs; and the fetchers that make a registry or
   git dependency obtainable at all. The cache without summaries and
   the summaries without fetchers each go half the way, so the item
-  states both. Designed in
+  states both. The first slice landed: each `FILES` record carries the
+  content hash of the source it names (`fnv1a64` of its bytes), so a
+  cache can tell two programs under one name apart. Designed in
   `docs/adr/0056-the-ir-has-a-text-and-a-binary-form.md`; the pieces
   are named in `docs/spec/deferred.md`.

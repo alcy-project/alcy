@@ -26,6 +26,7 @@
 #include "fpag/io/temp_dir.h"
 #include "fpag/str/string_pool_id.h"
 #include "i18n/messages.h"
+#include "ir/binary_format.h"
 #include "ir/serialize.h"
 #include "ir/storage.h"
 #include "ir/text_dump.h"
@@ -426,13 +427,22 @@ base::Result<void, diag::Reported> emit_package_ir(
 // spans never outlive their owners.
 struct IrWriteInput {
   std::vector<std::string_view> file_names;
+  std::vector<u64> file_hashes;
   std::vector<ir::AddrName> addr_names;
   ir::WriteInput input;
 
   IrWriteInput(PipelineContext& ctx, lowering::LoweredPackage& package) {
     file_names.resize(ctx.sources.file_count());
+    file_hashes.resize(file_names.size());
     for (u32 id = 0; id < file_names.size(); ++id) {
       file_names[id] = ctx.sources.name(id).value_or(std::string_view{});
+      // The content hash lets a cache tell two programs under one
+      // name apart, and a file whose bytes are gone hashes the empty
+      // input rather than claiming no hash was computed.
+      const std::string_view bytes =
+          ctx.sources.bytes(id).value_or(std::string_view{});
+      file_hashes[id] = ir::binary::fnv1a64(std::span<const u8>(
+          reinterpret_cast<const u8*>(bytes.data()), bytes.size()));
     }
     addr_names.reserve(package.addr_names.size());
     for (const lowering::LoweredPackage::AddrInfo& entry : package.addr_names) {
@@ -443,7 +453,7 @@ struct IrWriteInput {
         .storage = &*package.storage,
         .strings = &ctx.strings,
         .instr_spans = package.instr_spans,
-        .files = ir::FileTable{.names = file_names, .hashes = {}},
+        .files = ir::FileTable{.names = file_names, .hashes = file_hashes},
         .addr_names = addr_names,
         .prelude_functions = package.prelude_functions,
         .width = ctx.target.width,
