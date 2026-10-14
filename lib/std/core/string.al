@@ -290,6 +290,12 @@ impl str {
     ret SplitWhitespace { rest: self }
   }
 
+  // The bytes before and after `at`. The caller knows `at` is a
+  // boundary it chose; a byte offset is accepted as given.
+  pub fn split_at(self: str, at: usize) -> (str, str) {
+    ret (str_slice(self, 0, at), str_slice(self, at, str_len(self)))
+  }
+
   // A cursor over the lines, `\n`-separated, with a trailing `\r`
   // removed. A final empty line is not reported.
   pub fn lines(self: str) -> LinesIter {

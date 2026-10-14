@@ -183,6 +183,10 @@ impl String {
     ret self.as_str().lines()
   }
 
+  pub fn split_at(self: &Self, at: usize) -> (str, str) {
+    ret self.as_str().split_at(at)
+  }
+
   pub fn is_ascii(self: &Self) -> bool {
     ret self.as_str().is_ascii()
   }
