@@ -16,3 +16,5 @@ pub use package::print::print;
 pub use package::print::println;
 pub use package::print::eprint;
 pub use package::print::eprintln;
+pub use package::file::read_file;
+pub use package::file::write_file;
