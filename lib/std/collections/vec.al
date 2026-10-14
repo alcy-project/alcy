@@ -173,6 +173,13 @@ impl<T> Vec<T> {
     }
   }
 
+  // Moves every element of `other` onto the end, ending `other`.
+  pub fn extend(mut self: &mut Self, other: Vec<T>) {
+    for value in other {
+      self.push(value)
+    }
+  }
+
   // Inserts `value` at `index`, shifting the rest up. `index` may
   // equal the length, which appends.
   pub fn insert(mut self: &mut Self, index: usize, value: T) {
