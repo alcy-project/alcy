@@ -15,10 +15,12 @@ replaced. The foundations are in `roadmap.md`.
   return type, which inference cannot read before the closure is
   checked. A slice that checks a closure argument first, or that lets
   the adapter be spelled with a turbofish, gives it one.
-- [ ] A discarded temporary that owns memory leaks: `_ := format("x")`
-  allocates the string and the drop pass never ends it, because the
-  value is not a binding the pass can schedule. The `fmt` expansion
-  calls its collected tuple's glue directly for the same reason.
+- [x] A discarded temporary that owns memory ends where it stands:
+  `_ := format("x")` and a bare `format("x")` are both ended by the
+  discard path's `record_drop_in_place`, which the sanitized runs of
+  `exe-discard-end` confirm. The `fmt` expansion still calls its
+  collected tuple's glue directly, because the tuple is a scratch slot
+  rather than a binding the pass could schedule.
 - [x] Manifest lint: a pre-1.0 version range warns (WH007), since a
   minor may break under 1.0. An exact pin cannot drift and stays
   silent, and both spellings parse, so the grammar is unchanged.
