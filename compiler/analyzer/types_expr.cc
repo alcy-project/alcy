@@ -1251,7 +1251,30 @@ ir::TypeIdx Checker::check_closure(u32 module,
   }
   const ir::TypeIdx closure_type =
       builder.func_type(seq.finish(), storage_copy(ret));
-  CheckedModule::ClosureLit lit{expr, {}, ret, closure.body, cur_inst, {}};
+  // The literal's own type is the nominal whose one field is the
+  // environment; a context that wants a bare function type gets the
+  // view, which lowering builds as a borrow of the value (ADR-0064).
+  // A literal checked twice keeps the type it interned first.
+  ir::TypeIdx self_type = ir::TypeIdx::invalid();
+  for (const CheckedModule::ClosureLit& prior : modules[module].closures) {
+    if (prior.expr.idx == expr.idx && prior.inst == cur_inst) {
+      self_type = prior.self_type;
+      break;
+    }
+  }
+  const bool fresh = !self_type.is_valid();
+  if (fresh) {
+    self_type = intern_closure(closure_env_type(declared));
+    ClosureSig sig;
+    sig.self_type = self_type;
+    for (ir::TypeIdx param : param_types) {
+      sig.params.push_back(storage_copy(param));
+    }
+    sig.ret = storage_copy(ret);
+    closure_sigs.push_back(std::move(sig));
+  }
+  CheckedModule::ClosureLit lit{expr,     {},        ret,          closure.body,
+                                cur_inst, self_type, closure_type, {}};
   for (usize i = 0; i < closure.params.size(); ++i) {
     const ast::ClosureParam& param = closure.params[i];
     if (param.is_wildcard) {
@@ -1263,11 +1286,18 @@ ir::TypeIdx Checker::check_closure(u32 module,
   for (const CaptureEntry& entry : declared) {
     lit.captures.push_back({entry.name, entry.mode, entry.type});
   }
-  modules[module].closures.push_back(std::move(lit));
+  lit.self_type = self_type;
+  lit.func_type = closure_type;
+  if (fresh) {
+    modules[module].closures.push_back(std::move(lit));
+  }
   if (expected != nullptr) {
+    if (types_equal(*expected, self_type)) {
+      return self_type;
+    }
     return unify(*expected, closure_type, node.span, "closure");
   }
-  return closure_type;
+  return self_type;
 }
 
 // A call through a function value: arity and argument types unify
@@ -1368,6 +1398,21 @@ ir::TypeIdx Checker::check_call(u32 module,
     if (tag_of(callee_type) == ir::TypeTag::Func) {
       const ir::FuncType& sig =
           builder.func_types()[builder.types()[callee_type].as_func()];
+      return check_indirect_call(module, expr, callee, sig, expected);
+    }
+    // A closure value calls through the signature its nominal carries:
+    // the shape is the function type the literal's own would have been,
+    // and interning it again answers that same type.
+    if (const ClosureSig* closure = closure_sig_of_type(callee_type);
+        closure != nullptr) {
+      ir::TypeSeq shape_params;
+      for (ir::TypeIdx param : closure->params) {
+        shape_params.push(param);
+      }
+      const ir::TypeIdx shape =
+          builder.func_type(shape_params.finish(), closure->ret);
+      const ir::FuncType& sig =
+          builder.func_types()[builder.types()[shape].as_func()];
       return check_indirect_call(module, expr, callee, sig, expected);
     }
     const u32 index = bag.emit<i18n::Key::AnalyzerCallNonPath>(
@@ -1514,14 +1559,29 @@ ir::TypeIdx Checker::check_call(u32 module,
     }
     return enum_type;
   }
-  // A local or static holding a function value calls through it;
-  // anything else of non-function type is not callable.
-  if ((resolved.kind == PathValue::Kind::Local ||
-       resolved.kind == PathValue::Kind::Static) &&
-      !is_error(resolved.type) && tag_of(resolved.type) == ir::TypeTag::Func) {
-    const ir::FuncType& sig =
-        builder.func_types()[builder.types()[resolved.type].as_func()];
-    return check_indirect_call(module, expr, callee, sig, expected);
+  // A local or static holding a function value calls through it; one
+  // holding a closure value calls through the signature its nominal
+  // carries. Anything else of non-function type is not callable.
+  if (resolved.kind == PathValue::Kind::Local ||
+      resolved.kind == PathValue::Kind::Static) {
+    if (!is_error(resolved.type) &&
+        tag_of(resolved.type) == ir::TypeTag::Func) {
+      const ir::FuncType& sig =
+          builder.func_types()[builder.types()[resolved.type].as_func()];
+      return check_indirect_call(module, expr, callee, sig, expected);
+    }
+    if (const ClosureSig* closure = closure_sig_of_type(resolved.type);
+        closure != nullptr) {
+      ir::TypeSeq shape_params;
+      for (ir::TypeIdx param : closure->params) {
+        shape_params.push(param);
+      }
+      const ir::TypeIdx shape =
+          builder.func_type(shape_params.finish(), closure->ret);
+      const ir::FuncType& sig =
+          builder.func_types()[builder.types()[shape].as_func()];
+      return check_indirect_call(module, expr, callee, sig, expected);
+    }
   }
   const u32 index = bag.emit<i18n::Key::AnalyzerNotCallable>(
       diag::Severity::Error, diag::Stage::Analyzer, DiagCode::InvalidOperation,

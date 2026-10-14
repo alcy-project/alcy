@@ -129,6 +129,14 @@ class Lowerer {
     ast::ExprIdx closure = ast::ExprIdx::invalid();
   };
   std::vector<FnEntry> fns;
+  // The literal a closure nominal names: the function type a value of
+  // the type coerces to and the code it calls. Resolved once per type.
+  struct ClosureEntry {
+    ir::TypeIdx self = ir::TypeIdx::invalid();
+    ir::TypeIdx func = ir::TypeIdx::invalid();
+    ir::FunctionIdx fn = ir::FunctionIdx(base::INVALID_IDX);
+  };
+  std::vector<ClosureEntry> closure_entries_;
   // Reservation order matches lowering order (FIFO worklist), so
   // reserved indexes line up with storage positions.
   std::vector<usize> worklist_;
@@ -377,6 +385,12 @@ class Lowerer {
   ir::TypeIdx closure_env_type(
       const std::vector<analyzer::CheckedModule::ClosureLit::Capture>&
           captures);
+  // The literal a closure nominal names, resolved once per type: what
+  // its values coerce to and what code they call.
+  const ClosureEntry* closure_entry(ir::TypeIdx type);
+  // The view of a closure value: the code the literal registered and a
+  // pointer to the environment the value owns (ADR-0064).
+  Val closure_view(Val value);
   // A call through a function value: the callee operand carries the
   // value, and the signature comes from its function type.
   Val lower_indirect_call(ast::ExprIdx expr);

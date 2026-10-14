@@ -1911,6 +1911,55 @@ ir::TypeIdx Checker::intern_uninit(ir::TypeIdx payload) {
   return wrapper;
 }
 
+// A closure literal's nominal type: a one-field struct over the
+// environment tuple, so the value owns its captures, its `Copy`-ness is
+// the environment's, and the drop pass ends it through the field
+// (ADR-0064). A literal gets its own type, because the code a value
+// calls is the literal's.
+ir::TypeIdx Checker::intern_closure(ir::TypeIdx env) {
+  return builder.struct_type(
+      closure_name_id,
+      [&] {
+        ir::TypeSeq seq;
+        seq.push(storage_copy(env));
+        return seq.finish();
+      }(),
+      ir::TypeIdxRange{});
+}
+
+// The environment tuple a literal's captures lay out: a moved capture
+// holds the value, a borrow holds the reference, in list order.
+ir::TypeIdx Checker::closure_env_type(std::span<const CaptureEntry> captures) {
+  std::vector<ir::TypeIdx> fields;
+  fields.reserve(captures.size());
+  for (const CaptureEntry& entry : captures) {
+    fields.push_back(
+        entry.mode == ast::CaptureMode::Move
+            ? entry.type
+            : builder.reference_type(entry.type,
+                                     entry.mode == ast::CaptureMode::Mut));
+  }
+  // A tuple's element range must be consecutive slots, so every field
+  // type is resolved first and only then appended as a copy, the way
+  // the lowering builds the same tuple: interning a reference between
+  // appends would break the run.
+  ir::TypeSeq seq;
+  for (ir::TypeIdx field : fields) {
+    seq.push(builder.ref_type(field));
+  }
+  return builder.tuple_type(seq.finish());
+}
+
+const Checker::ClosureSig* Checker::closure_sig_of_type(
+    ir::TypeIdx type) const {
+  for (const ClosureSig& sig : closure_sigs) {
+    if (sig.self_type.idx == type.idx) {
+      return &sig;
+    }
+  }
+  return nullptr;
+}
+
 ir::TypeIdx Checker::uninit_payload(ir::TypeIdx type) const {
   if (tag_of(type) != ir::TypeTag::Struct) {
     return ir::TypeIdx::invalid();
@@ -3932,6 +3981,21 @@ ir::TypeIdx Checker::unify(ir::TypeIdx expected,
   }
   if (coerces_array_to_slice(expected, actual)) {
     return actual;
+  }
+  // A closure value coerces to the function type its environment fits:
+  // the view borrows the environment the value owns (ADR-0064).
+  if (const ClosureSig* closure = closure_sig_of_type(actual);
+      closure != nullptr && tag_of(expected) == ir::TypeTag::Func) {
+    const ir::FuncType& shape =
+        builder.func_types()[builder.types()[expected].as_func()];
+    bool matches = shape.params.size() == closure->params.size() &&
+                   types_equal(shape.ret, closure->ret);
+    for (usize i = 0; matches && i < closure->params.size(); ++i) {
+      matches = types_equal(shape.params[i], closure->params[i]);
+    }
+    if (matches) {
+      return expected;
+    }
   }
   // An unwritten slot is the one mismatch with an obvious fix, so it
   // gets its own message instead of two type names.
@@ -7044,6 +7108,10 @@ base::Result<CheckedPackage, diag::Reported> check_package(
                   profiler};
   checker.uninit_name_id = checker.intern_name("MaybeUninit");
   if (checker.uninit_name_id == str::INVALID_STRING_POOL_ID) {
+    return base::make_err(diag::Reported{});
+  }
+  checker.closure_name_id = checker.intern_name("Closure");
+  if (checker.closure_name_id == str::INVALID_STRING_POOL_ID) {
     return base::make_err(diag::Reported{});
   }
   // The type passes run module by module: nominals, then imports and

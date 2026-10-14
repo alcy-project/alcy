@@ -3833,9 +3833,13 @@ TEST_CASE("Check rejects a function type as a generic argument") {
                                       "fn id<T>(x: T) -> T {\n"
                                       "  ret x\n"
                                       "}\n"
+                                      "fn one(x: i32) -> i32 {\n"
+                                      "  ret x\n"
+                                      "}\n"
                                       "fn main() -> i32 {\n"
-                                      "  f := id((a: i32) -> a)\n"
-                                      "  ret f(1)\n"
+                                      "  f: (i32) -> i32 := one\n"
+                                      "  g := id(f)\n"
+                                      "  ret g(1)\n"
                                       "}\n"}});
   CHECK(setup);
   if (!setup) {

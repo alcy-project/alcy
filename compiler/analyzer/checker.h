@@ -230,6 +230,8 @@ class Checker {
   std::vector<CompCallRecord> comp_calls_;
   // Interned name every `MaybeUninit` wrapper carries.
   str::StringPoolId uninit_name_id = str::INVALID_STRING_POOL_ID;
+  // Interned name every closure literal's nominal type carries.
+  str::StringPoolId closure_name_id = str::INVALID_STRING_POOL_ID;
   // Set once the shared table has no room for another name; the sweep
   // that saw it stops, and `check_package` refuses the package.
   bool name_table_exhausted_ = false;
@@ -312,6 +314,14 @@ class Checker {
     diag::Span span;
     bool used = false;
   };
+  // A closure nominal's signature: what a value of the type coerces to
+  // and calls with. `self_type` is the nominal's own index.
+  struct ClosureSig {
+    ir::TypeIdx self_type = ir::TypeIdx::invalid();
+    std::vector<ir::TypeIdx> params;
+    ir::TypeIdx ret = ir::TypeIdx::invalid();
+  };
+  std::vector<ClosureSig> closure_sigs;
   struct ClosureBound {
     usize scope = 0;
     std::vector<CaptureEntry> captures;
@@ -456,6 +466,16 @@ class Checker {
   ir::TypeIdx intern_nominal(NominalEntry& entry);
   // `MaybeUninit<T>` wrapper for `payload`, interned per payload.
   ir::TypeIdx intern_uninit(ir::TypeIdx payload);
+
+  // The nominal type a closure literal interns: a one-field struct
+  // whose field is its environment tuple (ADR-0064). Every literal
+  // gets its own, because the code a value calls is the literal's.
+  ir::TypeIdx intern_closure(ir::TypeIdx env);
+  // The environment tuple a literal's captures lay out, in list order.
+  ir::TypeIdx closure_env_type(std::span<const CaptureEntry> captures);
+  // The signature a closure nominal carries, or null when the type is
+  // not one.
+  const ClosureSig* closure_sig_of_type(ir::TypeIdx type) const;
   // Payload of a `MaybeUninit<T>` wrapper; invalid for any other type.
   ir::TypeIdx uninit_payload(ir::TypeIdx type) const;
   // Key of a type in the shared instantiation numbering, matching what

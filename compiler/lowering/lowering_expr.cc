@@ -1008,20 +1008,11 @@ ir::OperandIdx Lowerer::disc_operand(u32 discriminant) {
 Val Lowerer::lower_closure(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ir::TypeIdx type = expr_type(expr);
-  if (tag_of(type) != ir::TypeTag::Func) {
-    internal(node.span, "closure without type");
-    return Val{size_one, error_type(), false, false};
-  }
-  // Copied out before emitting anything: interning below may move
-  // the tables the shape borrows.
-  std::vector<ir::TypeIdx> params;
-  const ir::FuncType& shape =
-      builder.state().func_types[builder.state().types[type].as_func()];
-  params.reserve(shape.params.size());
-  for (ir::TypeIdx param : shape.params) {
-    params.push_back(param);
-  }
-  const ir::TypeIdx ret = shape.ret;
+  // A literal's own type is the nominal whose one field is its
+  // environment; a context that wants a bare function type gets the
+  // view, which borrows the value. A coerced named function has no
+  // environment at all (ADR-0064).
+  const bool as_view = tag_of(type) == ir::TypeTag::Func;
   // A closure literal has a checked record with its captures; a
   // coerced named function has none, because it captures nothing.
   const analyzer::CheckedModule::ClosureLit* lit = closure_lit(expr);
@@ -1029,6 +1020,23 @@ Val Lowerer::lower_closure(ast::ExprIdx expr) {
     internal(node.span, "closure without checking");
     return Val{size_one, error_type(), false, false};
   }
+  // Both forms share one signature: the literal's recorded function
+  // type, or the function type a named function coerces from.
+  const ir::TypeIdx sig_type = lit == nullptr ? type : lit->func_type;
+  if (!sig_type.is_valid() || tag_of(sig_type) != ir::TypeTag::Func) {
+    internal(node.span, "closure without type");
+    return Val{size_one, error_type(), false, false};
+  }
+  // Copied out before emitting anything: interning below may move
+  // the tables the shape borrows.
+  std::vector<ir::TypeIdx> params;
+  const ir::FuncType& shape =
+      builder.state().func_types[builder.state().types[sig_type].as_func()];
+  params.reserve(shape.params.size());
+  for (ir::TypeIdx param : shape.params) {
+    params.push_back(param);
+  }
+  const ir::TypeIdx ret = shape.ret;
   // The environment the synthetic function receives is a reference
   // to the tuple the creation site builds; a closure without
   // captures receives none.
@@ -1045,47 +1053,28 @@ Val Lowerer::lower_closure(ast::ExprIdx expr) {
   if (!fn.is_valid()) {
     return Val{size_one, error_type(), false, false};
   }
-  // The value packs code with its environment, the way the function
-  // type lays out. A closure with no captures keeps a null slot.
-  const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, type, {size_one});
-  const ir::TypeIdx code_ty = builder.primitive(ir::TypeTag::Function);
-  const ir::RegisterIdx code =
-      emit(ir::Opcode::GetElementPtr, code_ty,
-           {to_operand(addr, type), zero_i32, index_operand(0)});
-  emit_void(ir::Opcode::Store,
-            {builder.operand(ir::Operand::from_function(fn, code_ty)),
-             to_operand(code, code_ty)});
-  if (failed) {
-    return Val{size_one, error_type(), false, false};
-  }
+  // The environment both forms lay out: one field per capture, a
+  // reference or a copied value.
   const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
-  const ir::RegisterIdx env =
-      emit(ir::Opcode::GetElementPtr, ptr_ty,
-           {to_operand(addr, type), zero_i32, index_operand(1)});
-  if (!captures.empty()) {
-    // The environment: one field per capture, a reference or a copied
-    // value. The borrows and copies here are what the closure value
-    // carries, and borrowing the slot itself is what keeps the
-    // closure from outliving the frame.
-    const ir::RegisterIdx slot = emit(ir::Opcode::Alloca, env_ty, {size_one});
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
+  const ir::TypeIdx code_ty = builder.primitive(ir::TypeTag::Function);
+  // Ends one capture into the environment tuple that starts at
+  // `env_at`: a move hands the value over, a borrow names the captured
+  // local.
+  auto store_captures = [&](ir::OperandIdx env_at) -> bool {
     for (usize i = 0; i < captures.size() && !failed; ++i) {
       const Capture& capture = captures[i];
       const Local* local = lookup_local(capture.name);
       if (local == nullptr) {
         internal(node.span, "capture without local");
-        return Val{size_one, error_type(), false, false};
+        return false;
       }
       const ir::TypeIdx field_ty =
           capture.mode == ast::CaptureMode::Move
               ? capture.type
               : builder.reference_type(capture.type,
                                        capture.mode == ast::CaptureMode::Mut);
-      const ir::RegisterIdx field =
-          emit(ir::Opcode::GetElementPtr, field_ty,
-               {to_operand(slot, env_ty), zero_i32, index_operand(i)});
+      const ir::RegisterIdx field = emit(ir::Opcode::GetElementPtr, field_ty,
+                                         {env_at, zero_i32, index_operand(i)});
       ir::OperandIdx value(base::INVALID_IDX);
       if (capture.mode == ast::CaptureMode::Move) {
         // A Copy value: what the closure holds is its own.
@@ -1100,7 +1089,54 @@ Val Lowerer::lower_closure(ast::ExprIdx expr) {
       }
       emit_void(ir::Opcode::Store, {value, to_operand(field, field_ty)});
     }
+    return !failed;
+  };
+  if (!as_view) {
+    // The value owns its environment: one field, holding the tuple the
+    // captures lay out, and ending the value ends them.
+    const ir::TypeIdx self_type =
+        lit == nullptr ? ir::TypeIdx::invalid() : lit->self_type;
+    if (!self_type.is_valid()) {
+      internal(node.span, "closure without a nominal type");
+      return Val{size_one, error_type(), false, false};
+    }
+    const ir::RegisterIdx addr =
+        emit(ir::Opcode::Alloca, self_type, {size_one});
+    const ir::RegisterIdx env =
+        emit(ir::Opcode::GetElementPtr, env_ty,
+             {to_operand(addr, self_type), zero_i32, index_operand(0)});
     if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    if (!captures.empty() && !store_captures(to_operand(env, env_ty))) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(addr, self_type), self_type, true, false};
+  }
+  // The view packs code with its environment, the way the function
+  // type lays out. A closure with no captures keeps a null slot.
+  const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, type, {size_one});
+  const ir::RegisterIdx code =
+      emit(ir::Opcode::GetElementPtr, code_ty,
+           {to_operand(addr, type), zero_i32, index_operand(0)});
+  emit_void(ir::Opcode::Store,
+            {builder.operand(ir::Operand::from_function(fn, code_ty)),
+             to_operand(code, code_ty)});
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::RegisterIdx env =
+      emit(ir::Opcode::GetElementPtr, ptr_ty,
+           {to_operand(addr, type), zero_i32, index_operand(1)});
+  if (!captures.empty()) {
+    // The environment: the borrows and copies here are what the view
+    // carries, and borrowing the slot itself is what keeps the closure
+    // from outliving the frame.
+    const ir::RegisterIdx slot = emit(ir::Opcode::Alloca, env_ty, {size_one});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    if (!store_captures(to_operand(slot, env_ty))) {
       return Val{size_one, error_type(), false, false};
     }
     const ir::RegisterIdx slot_ref =
@@ -1131,8 +1167,11 @@ Val Lowerer::lower_indirect_call(ast::ExprIdx expr) {
     return stopped_value();
   }
   if (tag_of(callee.type) != ir::TypeTag::Func) {
-    internal(node.span, "call without type");
-    return Val{size_one, error_type(), false, false};
+    // A closure value calls through the view its nominal makes.
+    callee = closure_view(callee);
+    if (failed || tag_of(callee.type) == ir::TypeTag::Error) {
+      return Val{size_one, error_type(), false, false};
+    }
   }
   std::vector<ir::TypeIdx> params;
   const ir::FuncType& shape =
@@ -2423,6 +2462,12 @@ bool Lowerer::is_slice_ref(ir::TypeIdx param) const {
 }
 
 ir::OperandIdx Lowerer::arg_for(Val arg, ir::TypeIdx param) {
+  // A closure value where a bare function type is expected hands over
+  // the view, which borrows the environment the value owns.
+  if (tag_of(param) == ir::TypeTag::Func &&
+      tag_of(arg.type) != ir::TypeTag::Func) {
+    return use_value(closure_view(arg));
+  }
   if (!is_ref_tag(tag_of(param))) {
     return use_value(arg);
   }

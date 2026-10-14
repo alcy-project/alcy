@@ -845,6 +845,80 @@ ir::TypeIdx Lowerer::closure_env_type(
   return builder.tuple_type(seq.finish());
 }
 
+// The literal a closure nominal names: its function type, and the code
+// a value of the type calls. The scan runs once per type, because the
+// call site and the creation site may sit in different modules.
+const Lowerer::ClosureEntry* Lowerer::closure_entry(ir::TypeIdx type) {
+  for (const ClosureEntry& entry : closure_entries_) {
+    if (entry.self.idx == type.idx) {
+      return &entry;
+    }
+  }
+  for (u32 m = 0; m < static_cast<u32>(pkg.modules.size()); ++m) {
+    for (const analyzer::CheckedModule::ClosureLit& lit :
+         pkg.modules[m].closures) {
+      if (lit.self_type.idx != type.idx) {
+        continue;
+      }
+      if (!lit.func_type.is_valid() ||
+          tag_of(lit.func_type) != ir::TypeTag::Func) {
+        return nullptr;
+      }
+      std::vector<ir::TypeIdx> params;
+      const ir::FuncType& shape =
+          builder.state()
+              .func_types[builder.state().types[lit.func_type].as_func()];
+      params.reserve(shape.params.size());
+      for (ir::TypeIdx param : shape.params) {
+        params.push_back(param);
+      }
+      const ir::TypeIdx env_ty = closure_env_type(lit.captures);
+      const ir::TypeIdx env_ref_ty =
+          lit.captures.empty() ? ir::TypeIdx::invalid()
+                               : builder.reference_type(env_ty, false);
+      const ir::FunctionIdx fn = closure_fn_index(
+          m, lit.expr, params, shape.ret, lit.inst, env_ref_ty);
+      closure_entries_.push_back(ClosureEntry{type, lit.func_type, fn});
+      return &closure_entries_.back();
+    }
+  }
+  return nullptr;
+}
+
+// The view of a closure value: the code the literal registered and a
+// pointer to the environment the value owns, which sits at the
+// nominal's first field, so the value's own address is that pointer.
+Val Lowerer::closure_view(Val value) {
+  const ClosureEntry* closure = closure_entry(value.type);
+  if (closure == nullptr || !closure->fn.is_valid() ||
+      tag_of(closure->func) != ir::TypeTag::Func) {
+    internal(cur_span_, "closure view without code");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+  const ir::TypeIdx code_ty = builder.primitive(ir::TypeTag::Function);
+  Val place = value.address ? value : address_of(value);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::RegisterIdx addr =
+      emit(ir::Opcode::Alloca, closure->func, {size_one});
+  const ir::RegisterIdx code_field =
+      emit(ir::Opcode::GetElementPtr, code_ty,
+           {to_operand(addr, closure->func), zero_i32, index_operand(0)});
+  emit_void(ir::Opcode::Store,
+            {builder.operand(ir::Operand::from_function(closure->fn, code_ty)),
+             to_operand(code_field, code_ty)});
+  const ir::RegisterIdx env_field =
+      emit(ir::Opcode::GetElementPtr, ptr_ty,
+           {to_operand(addr, closure->func), zero_i32, index_operand(1)});
+  emit_void(ir::Opcode::Store, {place.op, to_operand(env_field, ptr_ty)});
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(addr, closure->func), closure->func, true, false};
+}
+
 std::vector<ir::TypeIdx> Lowerer::nominal_arguments(ir::TypeIdx type) const {
   const ir::TypeNode& node = builder.state().types[type.idx];
   ir::TypeIdxRange params{};

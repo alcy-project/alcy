@@ -223,6 +223,14 @@ struct CheckedModule {
     ir::TypeIdx ret;
     ast::ExprIdx body;
     u32 inst = NO_INST;
+    // The nominal type this literal interned: a one-field struct whose
+    // field is the environment tuple. The value owns its captures, and
+    // its `Copy`-ness is the environment's (ADR-0064).
+    ir::TypeIdx self_type = ir::TypeIdx::invalid();
+    // The bare function type the literal coerces to. The view of a
+    // nominal borrows the value's environment, so both forms share one
+    // signature.
+    ir::TypeIdx func_type = ir::TypeIdx::invalid();
     // The declared captures, in list order: the name lowering binds,
     // the mode the list declared, and the outer local's type. Lowering
     // builds the environment from these.
