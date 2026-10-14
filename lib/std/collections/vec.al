@@ -53,6 +53,15 @@ impl<T> Vec<T> {
     self.len = self.len + 1
   }
 
+  // Ensures room for `extra` more elements without changing the
+  // length. Growth doubles, so the loop is bounded by the next power
+  // of two above the request.
+  pub fn reserve(mut self: &mut Self, extra: usize) {
+    while self.cap < self.len + extra {
+      self.grow()
+    }
+  }
+
   // Moves to a block twice the room, or to a first block of four.
   // Elements are moved to the new buffer, so a `T` carrying a
   // destructor does not get one run for them; see docs/spec/deferred.md.
