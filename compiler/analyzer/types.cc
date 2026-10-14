@@ -226,7 +226,8 @@ bool Checker::is_expanded_variadic(ast::ItemIdx item) const {
   if (name == "write" || name == "format") {
     return tree.is_staged_item("fmt", item);
   }
-  if (name == "print" || name == "println") {
+  if (name == "print" || name == "println" || name == "eprint" ||
+      name == "eprintln") {
     return tree.is_staged_item("io", item);
   }
   return false;

@@ -7,9 +7,12 @@
 // package's implicit surface. The modules beside this one hold the
 // definitions and are reachable by path.
 //
-// The compiler recognises `print` and `println` by this package rather
-// than by their names; both are expanded at compile time and neither
-// declared body executes. See docs/adr/0016-suites-and-the-std-split.md.
+// The compiler recognises `print`, `println`, `eprint`, and `eprintln`
+// by this package rather than by their names; all are expanded at
+// compile time and none of the declared bodies executes. The `e` forms
+// write stderr. See docs/adr/0016-suites-and-the-std-split.md.
 
 pub use package::print::print;
 pub use package::print::println;
+pub use package::print::eprint;
+pub use package::print::eprintln;

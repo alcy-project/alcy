@@ -1306,7 +1306,8 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
   if (sig.name == "format" && pkg.tree.is_staged_item("fmt", sig.item)) {
     return lower_fmt_format(expr, sig);
   }
-  if ((sig.name == "print" || sig.name == "println") &&
+  if ((sig.name == "print" || sig.name == "println" || sig.name == "eprint" ||
+       sig.name == "eprintln") &&
       pkg.tree.is_staged_item("io", sig.item)) {
     return lower_io_print(expr, sig);
   }

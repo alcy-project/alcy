@@ -1020,7 +1020,8 @@ bool CompEvaluator::comp_eval_call(u32 mod,
   const std::span<const ast::Ident> segments = ast.paths[path].segments;
   if (segments.size() == 1) {
     const std::string_view name = segments[0].name;
-    if (name == "print" || name == "println" || name == "panic") {
+    if (name == "print" || name == "println" || name == "eprint" ||
+        name == "eprintln" || name == "panic") {
       return fail(node.span, "intrinsic is not comp-evaluable");
     }
   }

@@ -1283,6 +1283,23 @@ Val Lowerer::lower_fmt_format(ast::ExprIdx expr,
   return Val{to_operand(slot, sig.ret), sig.ret, true, false};
 }
 
+namespace {
+// The runtime writer a comp `fmt` write names: stdout for `print` and
+// `println`, stderr for `eprint` and `eprintln`.
+std::string_view io_write_hook(std::string_view name) {
+  if (name == "eprintln") {
+    return "alcy_eprintln";
+  }
+  if (name == "eprint") {
+    return "alcy_eprint";
+  }
+  if (name == "println") {
+    return "alcy_println";
+  }
+  return "alcy_print";
+}
+}  // namespace
+
 Val Lowerer::lower_io_print(ast::ExprIdx expr,
                             const analyzer::CheckedModule::FnSig& sig) {
   const ast::ExprNode& node = ast.exprs[expr];
@@ -1336,10 +1353,9 @@ Val Lowerer::lower_io_print(ast::ExprIdx expr,
         emit(ir::Opcode::ExtractValue, ptr_ty, {str_op, index_operand(0)});
     const ir::RegisterIdx len =
         emit(ir::Opcode::ExtractValue, usize_ty, {str_op, index_operand(1)});
-    const bool newline = sig.name == "println";
     const ir::ExternalFunctionIdx write_ext = declare_external(
-        newline ? "alcy_println" : "alcy_print",
-        builder.primitive(ir::TypeTag::Void), {ptr_ty, usize_ty});
+        io_write_hook(sig.name), builder.primitive(ir::TypeTag::Void),
+        {ptr_ty, usize_ty});
     emit_void(ir::Opcode::Call,
               {builder.operand(ir::Operand::from_external_function(
                    write_ext, builder.primitive(ir::TypeTag::Function))),
@@ -1399,11 +1415,9 @@ Val Lowerer::lower_io_print(ast::ExprIdx expr,
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    const bool newline = sig.name == "println";
-    const ir::ExternalFunctionIdx write_ext =
-        declare_external(newline ? "alcy_println" : "alcy_print",
-                         builder.primitive(ir::TypeTag::Void),
-                         {builder.primitive(ir::TypeTag::Ptr), usize_ty});
+    const ir::ExternalFunctionIdx write_ext = declare_external(
+        io_write_hook(sig.name), builder.primitive(ir::TypeTag::Void),
+        {builder.primitive(ir::TypeTag::Ptr), usize_ty});
     emit_void(ir::Opcode::Call,
               {builder.operand(ir::Operand::from_external_function(
                    write_ext, builder.primitive(ir::TypeTag::Function))),
@@ -1445,10 +1459,9 @@ Val Lowerer::lower_io_print(ast::ExprIdx expr,
     return Val{size_one, error_type(), false, false};
   }
   // The hook writes stdout; println adds the newline in a second write.
-  const bool newline = sig.name == "println";
   const ir::ExternalFunctionIdx write_ext = declare_external(
-      newline ? "alcy_println" : "alcy_print",
-      builder.primitive(ir::TypeTag::Void), {ptr_ty, usize_ty});
+      io_write_hook(sig.name), builder.primitive(ir::TypeTag::Void),
+      {ptr_ty, usize_ty});
   emit_void(ir::Opcode::Call,
             {builder.operand(ir::Operand::from_external_function(
                  write_ext, builder.primitive(ir::TypeTag::Function))),

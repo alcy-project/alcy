@@ -15,3 +15,11 @@ pub fn print(comp fmt: str, args: ..) {
 pub fn println(comp fmt: str, args: ..) {
   panic("io::println must expand")
 }
+
+pub fn eprint(comp fmt: str, args: ..) {
+  panic("io::eprint must expand")
+}
+
+pub fn eprintln(comp fmt: str, args: ..) {
+  panic("io::eprintln must expand")
+}

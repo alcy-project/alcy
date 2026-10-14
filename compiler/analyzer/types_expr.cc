@@ -443,7 +443,8 @@ bool Checker::expr_comp_known(u32 module, ast::ExprIdx expr) const {
       const std::span<const ast::Ident> segments = ast.paths[path].segments;
       if (segments.size() == 1) {
         const std::string_view name = segments[0].name;
-        if (name == "print" || name == "println" || name == "panic") {
+        if (name == "print" || name == "println" || name == "eprint" ||
+            name == "eprintln" || name == "panic") {
           return false;
         }
       }
@@ -637,7 +638,8 @@ bool Checker::is_core_fmt(const CheckedModule::FnSig* fn) const {
 // A standard-output write of the staged `io` package: recognized by the
 // package its item is declared in, like fmt's (ADR-0055).
 bool Checker::is_io_print(const CheckedModule::FnSig* fn) const {
-  if (fn->name != "print" && fn->name != "println") {
+  if (fn->name != "print" && fn->name != "println" && fn->name != "eprint" &&
+      fn->name != "eprintln") {
     return false;
   }
   return tree.is_staged_item("io", fn->item);

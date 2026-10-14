@@ -66,6 +66,8 @@ class RuntimeBuilder {
     // (ADR-0052).
     const bool print = declared("alcy_print");
     const bool println = declared("alcy_println");
+    const bool eprint = declared("alcy_eprint");
+    const bool eprintln = declared("alcy_eprintln");
     const bool alloc = declared("alcy_alloc");
     // A checked source operation declares the runtime check it calls,
     // so a declaration of one asks for the panic path too, the way the
@@ -74,14 +76,20 @@ class RuntimeBuilder {
         declared("alcy_check_overflow") || declared("alcy_check_shift");
     const bool panic = declared("alcy_panic") || alloc || checked;
     const bool sys_write = declared("alcy_sys_write");
-    if (print || println || panic || sys_write) {
+    if (print || println || eprint || eprintln || panic || sys_write) {
       build_write_all();
     }
     if (print) {
-      build_writer("alcy_print", /*newline=*/false);
+      build_writer("alcy_print", /*newline=*/false, /*out_fd=*/1);
     }
     if (println) {
-      build_writer("alcy_println", /*newline=*/true);
+      build_writer("alcy_println", /*newline=*/true, /*out_fd=*/1);
+    }
+    if (eprint) {
+      build_writer("alcy_eprint", /*newline=*/false, /*out_fd=*/2);
+    }
+    if (eprintln) {
+      build_writer("alcy_eprintln", /*newline=*/true, /*out_fd=*/2);
     }
     if (panic) {
       build_panic();
@@ -415,7 +423,7 @@ class RuntimeBuilder {
 
   // `alcy_print` writes stdout; `alcy_println` adds the newline in a
   // second write, so a failure to flush the text still shows it.
-  void build_writer(std::string_view name, bool newline) {
+  void build_writer(std::string_view name, bool newline, i32 out_fd) {
     llvm::FunctionType* type = llvm::FunctionType::get(
         builder_.getVoidTy(), {builder_.getPtrTy(), usize_}, false);
     llvm::Function* function = runtime(name, type);
@@ -425,9 +433,9 @@ class RuntimeBuilder {
 
     builder_.SetInsertPoint(entry);
     Guarded text = guard_null(function->getArg(0), function->getArg(1));
-    builder_.CreateCall(write_all_, {fd(1), text.text, text.len});
+    builder_.CreateCall(write_all_, {fd(out_fd), text.text, text.len});
     if (newline) {
-      builder_.CreateCall(write_all_, {fd(1), newline_text_,
+      builder_.CreateCall(write_all_, {fd(out_fd), newline_text_,
                                        llvm::ConstantInt::get(usize_, 1)});
     }
     builder_.CreateRetVoid();
