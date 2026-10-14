@@ -173,6 +173,20 @@ impl<T> Vec<T> {
     }
   }
 
+  // Reverses the elements in place.
+  pub fn reverse(mut self: &mut Self) {
+    if self.len < 2 {
+      ret
+    }
+    mut i := 0 as usize
+    mut j := self.len - 1
+    while i < j {
+      self.swap(i, j)
+      i = i + 1
+      j = j - 1
+    }
+  }
+
   // Removes and answers the element at `index`, moving the last
   // element into its place. The order of the rest is not kept, which
   // is what makes it a swap rather than a shift. `index` is in
