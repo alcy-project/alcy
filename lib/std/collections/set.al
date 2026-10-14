@@ -37,6 +37,14 @@ impl Set {
     ret self.map.insert(key, 0 as u8).is_none()
   }
 
+  // Moves every key of `other` in, ending it. Each key is copied the
+  // way `insert` copies one.
+  pub fn extend(mut self: &mut Self, other: Set) {
+    for key in other.iter() {
+      _ := self.insert(key)
+    }
+  }
+
   pub fn contains(self: &Self, key: str) -> bool {
     ret self.map.contains(key)
   }
