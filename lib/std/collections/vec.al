@@ -175,6 +175,19 @@ impl<T> Vec<T> {
     ret state
   }
 
+  // The first element mutably, or `None` when empty.
+  pub fn first_mut(mut self: &mut Self) -> Option<&mut T> {
+    ret self.at_mut(0)
+  }
+
+  // The last element mutably, or `None` when empty.
+  pub fn last_mut(mut self: &mut Self) -> Option<&mut T> {
+    if self.is_empty() {
+      ret Option::None
+    }
+    ret self.at_mut(self.len - 1)
+  }
+
   // Whether the predicate accepts every element; an empty vector is
   // `true`.
   pub fn all(self: &Self, pred: (&T) -> bool) -> bool {
