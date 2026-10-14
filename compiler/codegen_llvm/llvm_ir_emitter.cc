@@ -1154,30 +1154,31 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
     builder_->SetInsertPoint(ok_block);
     builder_->CreateRet(llvm::ConstantInt::get(builder_->getInt32Ty(), 0));
     builder_->SetInsertPoint(err_block);
+    // The error variant is an exit, not a panic: the message goes to
+    // stderr and the status is 1. The direct backend reports the same.
     llvm::Type* len_ty = width_ == ir::PointerWidth::W64
                              ? builder_->getInt64Ty()
                              : builder_->getInt32Ty();
-    llvm::FunctionCallee panic = module_->getOrInsertFunction(
-        "alcy_panic", llvm::FunctionType::get(builder_->getVoidTy(),
-                                              {builder_->getPtrTy(), len_ty,
-                                               builder_->getPtrTy(), len_ty},
-                                              false));
+    llvm::FunctionCallee write = module_->getOrInsertFunction(
+        "write",
+        llvm::FunctionType::get(
+            len_ty, {builder_->getInt32Ty(), builder_->getPtrTy(), len_ty},
+            false));
     llvm::GlobalVariable* message =
-        builder_->CreateGlobalString("main returned Err", "", 0, module_);
+        builder_->CreateGlobalString("main returned Err\n", "", 0, module_);
     llvm::Value* zero = llvm::ConstantInt::get(builder_->getInt32Ty(), 0);
     llvm::SmallVector<llvm::Value*, 2> indices{zero, zero};
     llvm::Value* bytes =
         builder_->CreateInBoundsGEP(message->getValueType(), message, indices);
     llvm::Value* len = llvm::ConstantInt::get(
-        len_ty, llvm::StringRef("main returned Err").size());
-    // The entry thunk has no source position to name, so the panic prints
-    // its message without one.
-    llvm::GlobalVariable* where =
-        builder_->CreateGlobalString("", "", 0, module_);
-    llvm::Value* where_bytes =
-        builder_->CreateInBoundsGEP(where->getValueType(), where, indices);
-    llvm::Value* zero_len = llvm::ConstantInt::get(len_ty, 0);
-    builder_->CreateCall(panic, {bytes, len, where_bytes, zero_len});
+        len_ty, llvm::StringRef("main returned Err\n").size());
+    llvm::Value* stderr_fd = llvm::ConstantInt::get(builder_->getInt32Ty(), 2);
+    builder_->CreateCall(write, {stderr_fd, bytes, len});
+    llvm::FunctionCallee quit = module_->getOrInsertFunction(
+        "exit", llvm::FunctionType::get(builder_->getVoidTy(),
+                                        {builder_->getInt32Ty()}, false));
+    builder_->CreateCall(quit,
+                         {llvm::ConstantInt::get(builder_->getInt32Ty(), 1)});
     builder_->CreateUnreachable();
     return;
   }

@@ -1,0 +1,3 @@
+# The error variant is an exit, and the message still names it.
+exit = 1
+contains = ["main returned Err"]
