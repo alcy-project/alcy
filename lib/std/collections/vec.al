@@ -154,6 +154,25 @@ impl<T> Vec<T> {
     }
   }
 
+  // Keeps the elements the predicate accepts and drops the rest, in
+  // order. A write cursor follows a read cursor; the swaps leave the
+  // kept prefix in place and the tail is popped, so each rejected
+  // element ends once.
+  pub fn retain(mut self: &mut Self, keep: (&T) -> bool) {
+    mut write := 0 as usize
+    mut scan := 0 as usize
+    while scan < self.len {
+      if keep(self.at(scan).unwrap()) {
+        self.swap(write, scan)
+        write = write + 1
+      }
+      scan = scan + 1
+    }
+    while self.len > write {
+      _ := self.pop()
+    }
+  }
+
   // Removes and answers the element at `index`, moving the last
   // element into its place. The order of the rest is not kept, which
   // is what makes it a swap rather than a shift. `index` is in
