@@ -511,8 +511,10 @@ def run_smoke(build_subdir: str) -> int:
         for problem in problems:
             print(f"BAD    {problem}")
         return 1
-    print(f"ok     {len(seen)} micro case(s) reported, {len(suite)} process "
-          f"case(s) ran, and the fixture compiles")
+    print(
+        f"ok     {len(seen)} micro case(s) reported, {len(suite)} process "
+        f"case(s) ran, and the fixture compiles"
+    )
     return 0
 
 

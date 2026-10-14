@@ -6517,6 +6517,18 @@ bool Checker::resolve_value_path(u32 module,
         out.function = fn;
         return true;
       }
+      // A qualified name reaches a generic function the way a bare one
+      // does; its turbofish rides the call.
+      if (ast::ItemIdx generic = lookup_generic_fn(target, member);
+          generic.is_valid()) {
+        if (!check_item_access(module, target, ast.items[generic].is_pub,
+                               node.span, member)) {
+          return false;
+        }
+        out.kind = PathValue::Kind::GenericFn;
+        out.generic_item = generic;
+        return true;
+      }
       std::vector<VariantMatch> matches;
       if (find_variant_in(target, member, matches) && matches.size() == 1) {
         const ast::ItemNode& decl = ast.items[matches[0].enom->item];
@@ -6659,6 +6671,16 @@ bool Checker::resolve_value_path(u32 module,
     }
     out.kind = PathValue::Kind::Function;
     out.function = fn;
+    return true;
+  }
+  if (ast::ItemIdx generic = lookup_generic_fn(target, member);
+      generic.is_valid()) {
+    if (!check_item_access(module, target, ast.items[generic].is_pub, node.span,
+                           member)) {
+      return false;
+    }
+    out.kind = PathValue::Kind::GenericFn;
+    out.generic_item = generic;
     return true;
   }
   emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnknownValue, node.span,

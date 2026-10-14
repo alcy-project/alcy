@@ -145,12 +145,16 @@ replaced. The foundations are in `roadmap.md`.
 
 ### Language and library surface
 
-- [ ] Qualified generic calls: `helper::id::<i32>(x)` is "Unresolved
-  value 'id'" because the module-qualified path branches never reach the
-  generic-function lookup, and an associated function's turbofish
-  (`P::id::<i32>`) reads as the owner's type arguments. A single callee
-  segment is the only spelling that registers a generic with its
-  turbofish.
+- [x] Qualified generic calls: `helper::id::<i32>(x)` answered
+  "Unresolved value 'id'" because neither module-qualified resolution
+  branch reached the generic-function lookup. Both do now, with the
+  reachability check a qualified name owes (`ok-qualified-generic-call`,
+  `err-qualified-generic-private`).
+- [ ] An associated function's turbofish reads as the owner's type
+  arguments: `P::id::<i32>(x)` over a non-generic `P` is "Unexpected
+  type arguments", and over a generic one the arguments bind the owner.
+  The AST keeps one type-argument list per path, so the parser has to
+  say which segment the turbofish followed.
 - [ ] Read-before-write through an operator: `v[i] = v[i] + 1` and
   `m[k] = m[k] + 1` are rejected as conflicting borrows; binding the read
   to a temporary first works. Two-phase borrows would let the idiomatic
