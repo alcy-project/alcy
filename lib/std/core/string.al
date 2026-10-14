@@ -130,6 +130,28 @@ impl str {
     ret self.trim_start().trim_end()
   }
 
+  // The pieces either side of the first `delim`, or `None` when it
+  // does not appear. An empty delimiter splits at the start.
+  pub fn split_once(self: &Self, delim: str) -> Option<(str, str)> {
+    match self.find(delim) {
+      Option::Some(i) => {
+        after := i + str_len(delim)
+        ret Option::Some(
+            (str_slice(*self, 0, i), str_slice(*self, after, str_len(*self))))
+      }
+      Option::None => { ret Option::None }
+    }
+  }
+
+  // A cursor over the pieces `delim` separates. An empty delimiter
+  // yields the whole view once, so the cursor always advances. The
+  // receiver is taken by value: a view is Copy, and a borrow of the
+  // cursor's source would otherwise outlive the temporary that made
+  // it.
+  pub fn split(self: str, delim: str) -> SplitIter {
+    ret SplitIter { rest: self, delim: delim, done: false }
+  }
+
   // Byte iteration: `for b in s` reads each byte in order.
   pub fn into_iter(self: str) -> StrIter {
     ret StrIter { s: self, pos: 0 }
@@ -156,5 +178,42 @@ impl Iterator<u8> for StrIter {
     b := str_byte(self.s, self.pos)
     self.pos = self.pos + 1
     ret Option::Some(b)
+  }
+}
+
+// A cursor over the pieces a delimiter separates.
+pub struct SplitIter {
+  rest: str,
+  delim: str,
+  done: bool,
+}
+
+impl SplitIter {
+  pub fn into_iter(self: SplitIter) -> SplitIter {
+    ret self
+  }
+}
+
+impl Iterator<str> for SplitIter {
+  fn next(mut self: &mut Self) -> Option<str> {
+    if self.done {
+      ret Option::None
+    }
+    if str_len(self.delim) == 0 {
+      self.done = true
+      ret Option::Some(self.rest)
+    }
+    match self.rest.find(self.delim) {
+      Option::Some(i) => {
+        piece := str_slice(self.rest, 0, i)
+        self.rest =
+            str_slice(self.rest, i + str_len(self.delim), str_len(self.rest))
+        ret Option::Some(piece)
+      }
+      Option::None => {
+        self.done = true
+        ret Option::Some(self.rest)
+      }
+    }
   }
 }

@@ -138,6 +138,14 @@ impl String {
     ret self.as_str().trim_end()
   }
 
+  pub fn split(self: &Self, delim: str) -> SplitIter {
+    ret self.as_str().split(delim)
+  }
+
+  pub fn split_once(self: &Self, delim: str) -> Option<(str, str)> {
+    ret self.as_str().split_once(delim)
+  }
+
   // Forgets every byte, keeping the room already reserved.
   pub fn clear(mut self: &mut Self) {
     self.len = 0
