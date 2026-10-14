@@ -1,4 +1,4 @@
-fn main() -> i32 {
+pub fn main() -> i32 {
   mut total := 0
   total = total + m0::walk0(m0::Point0 { x: 0, y: 0 })
   total = total + m1::walk1(m1::Point1 { x: 1, y: 1 })

@@ -1,21 +1,21 @@
-struct Point23 {
-  x: i32,
-  y: i32,
+pub struct Point23 {
+  pub x: i32,
+  pub y: i32,
 }
 
 impl Point23 {
-  fn length_squared(self: Self) -> i32 {
+  pub fn length_squared(self: Self) -> i32 {
     ret self.x * self.x + self.y * self.y
   }
 }
 
-enum Shape23 {
+pub enum Shape23 {
   Circle(i32),
   Rect(i32, i32),
   Empty,
 }
 
-fn area23(s: Shape23) -> i32 {
+pub fn area23(s: Shape23) -> i32 {
   match s {
     Shape23::Circle(r) => { ret r * 3 * r }
     Shape23::Rect(w, h) => { ret w * h }
@@ -23,7 +23,7 @@ fn area23(s: Shape23) -> i32 {
   }
 }
 
-fn walk23(p: Point23) -> i32 {
+pub fn walk23(p: Point23) -> i32 {
   mut total := 0
   mut n := p.x
   while n > 0 {

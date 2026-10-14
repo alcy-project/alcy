@@ -1,21 +1,21 @@
-struct Point43 {
-  x: i32,
-  y: i32,
+pub struct Point43 {
+  pub x: i32,
+  pub y: i32,
 }
 
 impl Point43 {
-  fn length_squared(self: Self) -> i32 {
+  pub fn length_squared(self: Self) -> i32 {
     ret self.x * self.x + self.y * self.y
   }
 }
 
-enum Shape43 {
+pub enum Shape43 {
   Circle(i32),
   Rect(i32, i32),
   Empty,
 }
 
-fn area43(s: Shape43) -> i32 {
+pub fn area43(s: Shape43) -> i32 {
   match s {
     Shape43::Circle(r) => { ret r * 3 * r }
     Shape43::Rect(w, h) => { ret w * h }
@@ -23,7 +23,7 @@ fn area43(s: Shape43) -> i32 {
   }
 }
 
-fn walk43(p: Point43) -> i32 {
+pub fn walk43(p: Point43) -> i32 {
   mut total := 0
   mut n := p.x
   while n > 0 {

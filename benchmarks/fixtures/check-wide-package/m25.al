@@ -1,21 +1,21 @@
-struct Point25 {
-  x: i32,
-  y: i32,
+pub struct Point25 {
+  pub x: i32,
+  pub y: i32,
 }
 
 impl Point25 {
-  fn length_squared(self: Self) -> i32 {
+  pub fn length_squared(self: Self) -> i32 {
     ret self.x * self.x + self.y * self.y
   }
 }
 
-enum Shape25 {
+pub enum Shape25 {
   Circle(i32),
   Rect(i32, i32),
   Empty,
 }
 
-fn area25(s: Shape25) -> i32 {
+pub fn area25(s: Shape25) -> i32 {
   match s {
     Shape25::Circle(r) => { ret r * 3 * r }
     Shape25::Rect(w, h) => { ret w * h }
@@ -23,7 +23,7 @@ fn area25(s: Shape25) -> i32 {
   }
 }
 
-fn walk25(p: Point25) -> i32 {
+pub fn walk25(p: Point25) -> i32 {
   mut total := 0
   mut n := p.x
   while n > 0 {

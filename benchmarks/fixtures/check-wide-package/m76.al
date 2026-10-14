@@ -1,21 +1,21 @@
-struct Point76 {
-  x: i32,
-  y: i32,
+pub struct Point76 {
+  pub x: i32,
+  pub y: i32,
 }
 
 impl Point76 {
-  fn length_squared(self: Self) -> i32 {
+  pub fn length_squared(self: Self) -> i32 {
     ret self.x * self.x + self.y * self.y
   }
 }
 
-enum Shape76 {
+pub enum Shape76 {
   Circle(i32),
   Rect(i32, i32),
   Empty,
 }
 
-fn area76(s: Shape76) -> i32 {
+pub fn area76(s: Shape76) -> i32 {
   match s {
     Shape76::Circle(r) => { ret r * 3 * r }
     Shape76::Rect(w, h) => { ret w * h }
@@ -23,7 +23,7 @@ fn area76(s: Shape76) -> i32 {
   }
 }
 
-fn walk76(p: Point76) -> i32 {
+pub fn walk76(p: Point76) -> i32 {
   mut total := 0
   mut n := p.x
   while n > 0 {

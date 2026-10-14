@@ -1,21 +1,21 @@
-struct Point57 {
-  x: i32,
-  y: i32,
+pub struct Point57 {
+  pub x: i32,
+  pub y: i32,
 }
 
 impl Point57 {
-  fn length_squared(self: Self) -> i32 {
+  pub fn length_squared(self: Self) -> i32 {
     ret self.x * self.x + self.y * self.y
   }
 }
 
-enum Shape57 {
+pub enum Shape57 {
   Circle(i32),
   Rect(i32, i32),
   Empty,
 }
 
-fn area57(s: Shape57) -> i32 {
+pub fn area57(s: Shape57) -> i32 {
   match s {
     Shape57::Circle(r) => { ret r * 3 * r }
     Shape57::Rect(w, h) => { ret w * h }
@@ -23,7 +23,7 @@ fn area57(s: Shape57) -> i32 {
   }
 }
 
-fn walk57(p: Point57) -> i32 {
+pub fn walk57(p: Point57) -> i32 {
   mut total := 0
   mut n := p.x
   while n > 0 {

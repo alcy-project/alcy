@@ -1,21 +1,21 @@
-struct Point111 {
-  x: i32,
-  y: i32,
+pub struct Point111 {
+  pub x: i32,
+  pub y: i32,
 }
 
 impl Point111 {
-  fn length_squared(self: Self) -> i32 {
+  pub fn length_squared(self: Self) -> i32 {
     ret self.x * self.x + self.y * self.y
   }
 }
 
-enum Shape111 {
+pub enum Shape111 {
   Circle(i32),
   Rect(i32, i32),
   Empty,
 }
 
-fn area111(s: Shape111) -> i32 {
+pub fn area111(s: Shape111) -> i32 {
   match s {
     Shape111::Circle(r) => { ret r * 3 * r }
     Shape111::Rect(w, h) => { ret w * h }
@@ -23,7 +23,7 @@ fn area111(s: Shape111) -> i32 {
   }
 }
 
-fn walk111(p: Point111) -> i32 {
+pub fn walk111(p: Point111) -> i32 {
   mut total := 0
   mut n := p.x
   while n > 0 {

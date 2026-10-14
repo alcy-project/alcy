@@ -1,21 +1,21 @@
-struct Point91 {
-  x: i32,
-  y: i32,
+pub struct Point91 {
+  pub x: i32,
+  pub y: i32,
 }
 
 impl Point91 {
-  fn length_squared(self: Self) -> i32 {
+  pub fn length_squared(self: Self) -> i32 {
     ret self.x * self.x + self.y * self.y
   }
 }
 
-enum Shape91 {
+pub enum Shape91 {
   Circle(i32),
   Rect(i32, i32),
   Empty,
 }
 
-fn area91(s: Shape91) -> i32 {
+pub fn area91(s: Shape91) -> i32 {
   match s {
     Shape91::Circle(r) => { ret r * 3 * r }
     Shape91::Rect(w, h) => { ret w * h }
@@ -23,7 +23,7 @@ fn area91(s: Shape91) -> i32 {
   }
 }
 
-fn walk91(p: Point91) -> i32 {
+pub fn walk91(p: Point91) -> i32 {
   mut total := 0
   mut n := p.x
   while n > 0 {
