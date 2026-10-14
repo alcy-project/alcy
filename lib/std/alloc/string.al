@@ -146,6 +146,10 @@ impl String {
     ret self.as_str().split_once(delim)
   }
 
+  pub fn eq_ignore_ascii_case(self: &Self, other: str) -> bool {
+    ret self.as_str().eq_ignore_ascii_case(other)
+  }
+
   // Forgets every byte, keeping the room already reserved.
   pub fn clear(mut self: &mut Self) {
     self.len = 0

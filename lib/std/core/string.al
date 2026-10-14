@@ -11,6 +11,14 @@ pub intrinsic fn str_slice(s: str, start: usize, end: usize) -> str;
 
 pub unsafe intrinsic fn str_from_parts(ptr: &u8, len: usize) -> str;
 
+// An ASCII letter folded to lower case; other bytes pass through.
+fn ascii_lower(b: u8) -> u8 {
+  if b >= 0x41u8 && b <= 0x5au8 {
+    ret b + 0x20u8
+  }
+  ret b
+}
+
 // The ASCII whitespace `trim` strips: space, tab, newline, vertical
 // tab, form feed, and carriage return.
 fn is_ascii_space(b: u8) -> bool {
@@ -128,6 +136,22 @@ impl str {
   // bytes is removed, so the result is a sub-view of the original.
   pub fn trim(self: &Self) -> str {
     ret self.trim_start().trim_end()
+  }
+
+  // Whether the bytes match `other` ignoring ASCII case.
+  pub fn eq_ignore_ascii_case(self: &Self, other: str) -> bool {
+    n := str_len(*self)
+    if n != str_len(other) {
+      ret false
+    }
+    mut i := 0 as usize
+    while i < n {
+      if ascii_lower(str_byte(*self, i)) != ascii_lower(str_byte(other, i)) {
+        ret false
+      }
+      i = i + 1
+    }
+    ret true
   }
 
   // The pieces either side of the first `delim`, or `None` when it
