@@ -260,6 +260,10 @@ impl String {
     ret self.as_str().parse_i32()
   }
 
+  pub fn parse_f64(self: &Self) -> Option<f64> {
+    ret self.as_str().parse_f64()
+  }
+
   pub fn parse_u32(self: &Self) -> Option<u32> {
     ret self.as_str().parse_u32()
   }

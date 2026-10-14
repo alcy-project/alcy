@@ -378,6 +378,67 @@ impl str {
     }
   }
 
+  // Parses a decimal floating point number with an optional sign and
+  // fractional part. An exponent is not read. `None` when the bytes
+  // are not a number or the digits pass what a `u64` numerator holds.
+  pub fn parse_f64(self: &Self) -> Option<f64> {
+    n := str_len(*self)
+    if n == 0 {
+      ret Option::None
+    }
+    mut i := 0 as usize
+    mut negative := false
+    b := str_byte(*self, 0)
+    if b == 0x2du8 {
+      negative = true
+      i = 1
+    } else if b == 0x2bu8 {
+      i = 1
+    }
+    if i >= n {
+      ret Option::None
+    }
+    mut numerator := 0u64
+    mut scale := 1u64
+    mut seen := false
+    mut point := false
+    while i < n {
+      d := str_byte(*self, i)
+      if d == 0x2eu8 {
+        if point {
+          ret Option::None
+        }
+        point = true
+        i = i + 1
+        continue
+      }
+      if d < 0x30u8 || d > 0x39u8 {
+        ret Option::None
+      }
+      digit := (d - 0x30u8) as u64
+      if numerator > (18446744073709551615u64 - digit) / 10u64 {
+        ret Option::None
+      }
+      numerator = numerator * 10u64 + digit
+      if point {
+        if scale > 1844674407370955161u64 {
+          ret Option::None
+        }
+        scale = scale * 10u64
+      }
+      seen = true
+      i = i + 1
+    }
+    if !seen {
+      ret Option::None
+    }
+    mut value := (numerator as f64) / (scale as f64)
+    if negative {
+      value = 0.0f64 - value
+    }
+    ret Option::Some(value)
+  }
+
   // Whether every byte is ASCII (below 0x80).
   pub fn is_ascii(self: &Self) -> bool {
     n := str_len(*self)
