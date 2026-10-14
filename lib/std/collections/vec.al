@@ -160,6 +160,15 @@ impl<T> Vec<T> {
     self.len = 0
   }
 
+  // Ends the elements past `n` and keeps the first `n`. A length at
+  // or beyond the current one changes nothing.
+  pub fn truncate(mut self: &mut Self, n: usize) {
+    while self.len > n {
+      self.len = self.len - 1
+      unsafe { drop_in_place::<T>(uninit_assume(elem_ptr(self.buf, self.len))) }
+    }
+  }
+
   pub fn drop(mut self: Vec<T>) {
     self.clear()
     unsafe { dealloc(self.buf, self.cap) }
