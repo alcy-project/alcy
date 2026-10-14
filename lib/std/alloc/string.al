@@ -220,6 +220,10 @@ impl String {
     ret self.as_str().parse_i64()
   }
 
+  pub fn parse_u64(self: &Self) -> Option<u64> {
+    ret self.as_str().parse_u64()
+  }
+
   pub fn split_whitespace(self: &Self) -> SplitWhitespace {
     ret self.as_str().split_whitespace()
   }
