@@ -150,24 +150,19 @@ impl str {
       ret Option::None
     }
     mut i := m - n
-    mut found := false
-    mut at := 0 as usize
-    while !found {
+    loop {
       mut j := 0 as usize
       while j < n && str_byte(*self, i + j) == str_byte(needle, j) {
         j = j + 1
       }
       if j == n {
-        found = true
-        at = i
-      } else {
-        if i == 0 {
-          ret Option::None
-        }
-        i = i - 1
+        ret Option::Some(i)
       }
+      if i == 0 {
+        ret Option::None
+      }
+      i = i - 1
     }
-    ret Option::Some(at)
   }
 
   // Whether the bytes match `other` ignoring ASCII case.
