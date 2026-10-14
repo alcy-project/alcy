@@ -405,7 +405,10 @@ def run_smoke(build_subdir: str) -> int:
 
     The one judgement it makes is about the generated source, which is
     exact: the compiler has to accept it. A case measuring error
-    recovery would otherwise look like a case measuring a parser.
+    recovery would otherwise look like a case measuring a parser. Each
+    process case's own command runs once, with the exit the suite
+    expects, because a fixture that stopped building is a case
+    measuring nothing and no shape check can see it.
     """
     try:
         driver = resolve_driver(build_subdir)
@@ -474,6 +477,19 @@ def run_smoke(build_subdir: str) -> int:
                 f"confidence"
             )
 
+        # The checked-in suite, because smoke is the shape check the
+        # gate runs rather than a driver for another suite.
+        suite = load_suite(project_root_dir / "benchmarks/suites/cases.toml")
+        fixtures = project_root_dir / "benchmarks/fixtures"
+        for case in suite:
+            case_argv = [str(binary), *case["argv"]]
+            cwd = prepare_workspace(case, fixtures, work / "process")
+            _, code = run_once(case_argv, cwd)
+            if code != case["expected_exit"]:
+                problems.append(
+                    f"{case['id']}: exit {code}, want {case['expected_exit']}"
+                )
+
         accepted = subprocess.run(
             [str(binary), "check", "--file", str(source_path), "--json"],
             capture_output=True,
@@ -495,7 +511,8 @@ def run_smoke(build_subdir: str) -> int:
         for problem in problems:
             print(f"BAD    {problem}")
         return 1
-    print(f"ok     {len(seen)} case(s) reported and the fixture compiles")
+    print(f"ok     {len(seen)} micro case(s) reported, {len(suite)} process "
+          f"case(s) ran, and the fixture compiles")
     return 0
 
 

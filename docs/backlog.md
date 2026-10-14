@@ -65,13 +65,13 @@ replaced. The foundations are in `roadmap.md`.
 - [x] Format-string lint: the explicit `f` conversion (`{:.2f}` over
   `{:.2}`). The analyzer warns (WC045) and names the spelling to
   write; both spellings stay one piece, so the parser is unchanged.
-- [ ] The benchmark fixtures' own commands are outside the gate: the
-  harness's smoke checks that every case is present and that a
-  generated source still compiles, but not that a case's command
-  succeeds, so `build/executable`'s fixture rotted when the
-  private-access check landed (`util::double` had lost its `pub`) and
-  nothing said so. Running each case once, with its `expected_exit`,
-  is what smoke would have to add.
+- [x] The benchmark fixtures' own commands were outside the gate: smoke
+  checked that every case was present and that a generated source still
+  compiled, but not that a case's command succeeded, so three fixtures
+  rotted silently when the private-access check landed
+  (`build/executable`, `check/package`, and `check/wide-package`).
+  Smoke runs each process case once with its `expected_exit` now, and
+  its first run found the second and third.
 - [x] Link-time measurement: the embedded linker's one-time startup
   probe and the `lldMain` call are their own trace rows
   (`lld-startup`, `lld-link`) beside the object write `emit-object`,

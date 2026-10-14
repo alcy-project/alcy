@@ -73,7 +73,8 @@ instead, which judges the shape of the result and not its speed:
     uv run ./tools/run_benchmarks.py smoke
 
 Every case present, every sample counted, a clock named, a figure above
-zero, and a generated source the compiler still accepts. A noisy machine
+zero, a generated source the compiler still accepts, and every process
+case's own command runs once with the exit the suite expects. A noisy machine
 cannot make any of those false. `reconcile` needs a release build and
 refuses a debug one, whose figures describe that build rather than the
 compiler.
