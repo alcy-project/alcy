@@ -6688,11 +6688,21 @@ bool Checker::resolve_value_path(u32 module,
       }
     }
     if (nominal != nullptr) {
+      // A turbofish after the owner (`P::<T>::id`) names the owner's
+      // arguments; one after the member (`P::id::<U>`) names the
+      // member's. The position decides, so a member turbofish no longer
+      // reads as the owner's.
+      const u32 turbofish_at =
+          ast.exprs[expr].kind == ast::ExprKind::Path
+              ? ast.exprs[expr].payload.get<ast::ExprPath>().type_args_segment
+              : base::INVALID_IDX;
+      const bool owner_args = !type_args.empty() && turbofish_at == 0;
+      const bool member_args = !type_args.empty() && turbofish_at == 1;
       const bool generic_owner = !nominal_params(*nominal).empty();
       ir::TypeIdx self = error_type();
       if (generic_owner) {
         // `Name::<T>::member` names the member of one instantiation.
-        if (type_args.empty()) {
+        if (!owner_args) {
           const u32 index =
               bag.emit<i18n::Key::AnalyzerAssociatedFunctionNeedsTypeArguments>(
                   diag::Severity::Error, diag::Stage::Analyzer,
@@ -6722,14 +6732,26 @@ bool Checker::resolve_value_path(u32 module,
         if (is_error(self)) {
           return false;
         }
-      } else if (type_args.empty()) {
-        self = intern_nominal(*nominal);
-      } else {
+      } else if (owner_args) {
         const u32 index = bag.emit<i18n::Key::AnalyzerUnexpectedTypeArguments>(
             diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::GenericArguments, node.span, head);
         (void)index;
         return false;
+      } else {
+        self = intern_nominal(*nominal);
+      }
+      if (member_args) {
+        // `Name::member::<U>` on a generic associated function
+        // instantiates it the way a method-call turbofish does.
+        const CheckedModule::MethodInfo* method = instantiate_generic_method(
+            module, self, member, type_args, node.span);
+        if (method != nullptr &&
+            method->receiver == CheckedModule::ReceiverKind::None) {
+          out.kind = PathValue::Kind::AssocFunction;
+          out.method = method;
+          return true;
+        }
       }
       if (const CheckedModule::MethodInfo* method =
               lookup_method(self, member, module, node.span, false)) {
