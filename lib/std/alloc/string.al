@@ -63,6 +63,32 @@ impl String {
     ret out
   }
 
+  // A new string with every non-overlapping occurrence of `from`
+  // replaced by `to`. An empty `from` would never advance, so it
+  // answers a copy.
+  pub fn replace(self: &Self, from: str, to: str) -> String {
+    if str_len(from) == 0 {
+      mut copy := String::with_capacity(self.len)
+      copy.push_str(self.as_str())
+      ret copy
+    }
+    mut out := String::new()
+    mut rest := self.as_str()
+    loop {
+      match rest.find(from) {
+        Option::Some(i) => {
+          out.push_str(str_slice(rest, 0, i))
+          out.push_str(to)
+          rest = str_slice(rest, i + str_len(from), str_len(rest))
+        }
+        Option::None => {
+          out.push_str(rest)
+          ret out
+        }
+      }
+    }
+  }
+
   // A new string that repeats these bytes `n` times. A zero `n` is
   // empty.
   pub fn repeat(self: &Self, n: usize) -> String {
