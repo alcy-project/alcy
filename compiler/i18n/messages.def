@@ -390,7 +390,7 @@
   F(PipelineDependencyNeedsFetcher, "Dependency '{}' needs a fetcher the resolver does not have yet") \
   F(PipelineDependencyNotAStdMember, "Dependency '{}' is not a member of alcy/std") \
   F(PipelineDependencyNotASuiteMember, "Dependency '{}' is not a member of suite '{}/{}'") \
-  F(PipelineDependencyOverlaps, "Dependency '{}' overlaps '{}'; name every member or glob the suite, not both") \
+  F(PipelineDependencyOverlaps, "Dependency '{}' overlaps '{}'; the default suite globs 'alcy/std/*', so name a package or a member, not both") \
   F(PipelineDependencySuiteMismatch, "Dependency '{}' names suite '{}/{}', but '{}' holds suite '{}/{}'") \
   F(PipelineFreestandingTarget, "A freestanding build is not implemented for target '{}' yet") \
   F(PipelineInheritsWithoutSuite, "Manifest '{}' inherits from a suite, but no suite encloses it") \
@@ -454,7 +454,7 @@
   F(CliCompileLinkerHelp, "System linker driver for executable builds.") \
   F(CliCompileNeedsTarget, "The `compile` command needs a file target or `--stdin`") \
   F(CliCompileOutputHelp, "Where the output goes. Empty picks a path beside the input; required with --stdin.") \
-  F(CliDepsHelp, "A dependency on top of the default suite, as a specifier (`alcy/std/core`) or `specifier = {{ ... }}`. Repeatable.") \
+  F(CliDepsHelp, "A dependency on top of the default suite (`alcy/std/*`), as a package specifier or `specifier = {{ ... }}`. The default already globs every member; repeatable.") \
   F(CliDepsOnlyForCompile, "The `--no-std` and `--deps` flags only mean anything for `compile`") \
   F(CliDidYouMean, "{} (did you mean '{}'?)") \
   F(CliEmitHelp, "What to write: executable (default), object, llvm-ir, llvm-bc, or ir. The output's extension no longer decides.") \
