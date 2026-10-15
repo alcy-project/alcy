@@ -358,6 +358,22 @@ impl String {
     ret self.as_str().find(needle)
   }
 
+  pub fn find_byte(self: &Self, b: u8) -> Option<usize> {
+    ret self.as_str().find_byte(b)
+  }
+
+  pub fn rfind_byte(self: &Self, b: u8) -> Option<usize> {
+    ret self.as_str().rfind_byte(b)
+  }
+
+  pub fn count_byte(self: &Self, b: u8) -> usize {
+    ret self.as_str().count_byte(b)
+  }
+
+  pub fn count_matches(self: &Self, needle: str) -> usize {
+    ret self.as_str().count_matches(needle)
+  }
+
   // The trims answer a `str` view, so they borrow the buffer rather
   // than allocate.
   pub fn trim(self: &Self) -> str {
