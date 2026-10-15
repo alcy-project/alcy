@@ -378,6 +378,23 @@ impl str {
     }
   }
 
+  // The value as an unsigned machine word, or `None` when the text is
+  // not one or the word cannot hold it.
+  pub fn parse_usize(self: &Self) -> Option<usize> {
+    match self.parse_u64() {
+      Option::Some(v) => {
+        // A value the word cannot hold reads back differently.
+        if (v as usize) as u64 != v {
+          ret Option::None
+        }
+        ret Option::Some(v as usize)
+      }
+      Option::None => {
+        ret Option::None
+      }
+    }
+  }
+
   // Parses a decimal floating point number with an optional sign and
   // fractional part. An exponent is not read. `None` when the bytes
   // are not a number or the digits pass what a `u64` numerator holds.
