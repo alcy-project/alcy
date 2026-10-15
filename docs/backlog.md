@@ -51,6 +51,12 @@ replaced. The foundations are in `roadmap.md`.
   check a match now performs wants its own pin, and a generic caller's
   other-instantiation variant record wants one case proving the
   predicate's miss stays a compile error.
+- [ ] The compiler's stack on a small-stack host: compiling to an
+  object needs most of 64 KiB even natively, so the wasm test binary
+  runs with a 1 MiB stack while programs it builds keep the default.
+  Any standard library growth showed up as a gate failure rather than
+  a number; find the deep path, or budget the stack, before the
+  headroom runs out the same way.
 - [ ] References into the type tables held across checking: a struct
   literal's check kept a `StructType&` while a field value's check
   could intern a type and move the table (a heap-use-after-free the
