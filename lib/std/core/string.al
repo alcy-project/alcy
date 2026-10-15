@@ -452,6 +452,27 @@ impl str {
     ret n
   }
 
+  // The number of non-overlapping occurrences of `needle`. An empty
+  // needle never advances, so it answers zero.
+  pub fn count_matches(self: &Self, needle: str) -> usize {
+    if str_len(needle) == 0 {
+      ret 0
+    }
+    mut n := 0 as usize
+    mut rest := *self
+    loop {
+      match rest.find(needle) {
+        Option::Some(i) => {
+          n = n + 1
+          rest = str_slice(rest, i + str_len(needle), str_len(rest))
+        }
+        Option::None => {
+          ret n
+        }
+      }
+    }
+  }
+
   // The index of the first `b`, or `None`.
   pub fn find_byte(self: &Self, b: u8) -> Option<usize> {
     mut i := 0 as usize
