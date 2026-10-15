@@ -78,6 +78,18 @@ impl<T> [T] {
     ret Option::None
   }
 
+  // The last index the predicate accepts, or `None`.
+  pub fn rposition(self: &Self, pred: (&T) -> bool) -> Option<usize> {
+    mut i := slice_len(self)
+    while i > 0 {
+      i = i - 1
+      if pred(self.at(i).unwrap()) {
+        ret Option::Some(i)
+      }
+    }
+    ret Option::None
+  }
+
   // The first element mutably, or `None` when empty.
   pub fn first_mut(mut self: &mut Self) -> Option<&mut T> {
     if slice_len(self) == 0 {
