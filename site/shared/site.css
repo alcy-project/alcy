@@ -356,6 +356,10 @@ body.site {
   flex: 1;
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);
+  /* The rows start where their content does: stretching would pour the
+     leftover height into the first row, and on a narrow screen that
+     row is the chapter list -- the article would start far below it. */
+  align-content: start;
   gap: 36px;
   width: 100%;
   max-width: 1060px;
