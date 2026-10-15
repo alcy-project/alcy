@@ -585,7 +585,7 @@ class RuntimeBuilder {
         file, llvm::ConstantPointerNull::get(builder_.getPtrTy()), "missing");
     builder_.CreateCondBr(missing, fail, done);
     builder_.SetInsertPoint(fail);
-    builder_.CreateRet(llvm::ConstantInt::get(builder_.getInt64Ty(), -1));
+    builder_.CreateRet(llvm::ConstantInt::get(usize_, -1));
     builder_.SetInsertPoint(done);
     llvm::Function* seek_fn = libc(
         "fseek",
@@ -611,8 +611,8 @@ class RuntimeBuilder {
   // read or -1 when the path cannot be opened.
   void build_read_file_into() {
     llvm::FunctionType* type = llvm::FunctionType::get(
-        builder_.getInt64Ty(),
-        {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
+        usize_, {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_},
+        false);
     llvm::Function* function = runtime("alcy_read_file_into", type);
     function->setDoesNotThrow();
     llvm::LLVMContext& context = module_.getContext();
@@ -635,7 +635,7 @@ class RuntimeBuilder {
         file, llvm::ConstantPointerNull::get(builder_.getPtrTy()), "missing");
     builder_.CreateCondBr(missing, fail, done);
     builder_.SetInsertPoint(fail);
-    builder_.CreateRet(llvm::ConstantInt::get(builder_.getInt64Ty(), -1));
+    builder_.CreateRet(llvm::ConstantInt::get(usize_, -1));
     builder_.SetInsertPoint(done);
     llvm::Function* read_fn = libc(
         "fread",
@@ -658,8 +658,8 @@ class RuntimeBuilder {
   // written or -1 when the path cannot be opened.
   void build_write_file() {
     llvm::FunctionType* type = llvm::FunctionType::get(
-        builder_.getInt64Ty(),
-        {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
+        usize_, {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_},
+        false);
     llvm::Function* function = runtime("alcy_write_file", type);
     function->setDoesNotThrow();
     llvm::LLVMContext& context = module_.getContext();
