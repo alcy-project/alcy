@@ -20,6 +20,7 @@ include = [
   "index",
   "cmp",
   "ops",
+  "hash",
 ]
 # The public surface, in the form `docs/adr/0007-manifest-driven-modules.md` specifies. Nothing
 # enforces it yet. Its `pub` items are also the implicit surface:
@@ -36,6 +37,7 @@ export = [
   "index",
   "cmp",
   "ops",
+  "hash",
 ]
 
 # Specs only this suite may implement (ADR-0053). Indexing and

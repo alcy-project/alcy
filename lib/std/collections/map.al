@@ -29,15 +29,10 @@ pub struct Map<V> {
   cap: usize,
 }
 
-// FNV-1a over the bytes. The multiply wraps, which is the point.
+// The table's hash is the standard library's one, over the key's
+// bytes; equality stays a byte walk.
 fn hash(s: str) -> u64 {
-  mut h := 2166136261 as u64
-  mut i := 0 as usize
-  while i < str_len(s) {
-    h = wrapping_mul(h ^ (str_byte(s, i) as u64), 0x100000001b3 as u64)
-    i = i + 1
-  }
-  ret h
+  ret xxh3_64(s)
 }
 
 // Key equality through `str`'s `PartialEq`.

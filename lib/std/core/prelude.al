@@ -47,6 +47,7 @@ pub use package::mem::read;
 pub use package::mem::wrapping_add;
 pub use package::mem::wrapping_sub;
 pub use package::mem::wrapping_mul;
+pub use package::hash::xxh3_64;
 pub use package::mem::file_size;
 pub use package::mem::read_file_into;
 pub use package::mem::write_file_all;
