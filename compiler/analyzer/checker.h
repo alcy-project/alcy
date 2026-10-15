@@ -299,6 +299,9 @@ class Checker {
   // The capture index that names no capture binding.
   static constexpr u32 NO_CAPTURE = 0xFFFFFFFFu;
   bool in_fn = false;
+  // Nonzero while binding a pattern read through a `&mut` scrutinee:
+  // the bindings name exclusive references to what it points at.
+  bool bind_mut_ref_ = false;
 
   std::vector<std::vector<Local>> scopes;
   // Nonzero inside an `unsafe { ... }` block: the operations the gate

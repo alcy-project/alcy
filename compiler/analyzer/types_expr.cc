@@ -86,7 +86,7 @@ ir::TypeIdx Checker::borrow_binding(ir::TypeIdx type, bool by_ref) {
   if (!by_ref) {
     return type;
   }
-  return builder.reference_type(type, false);
+  return builder.reference_type(type, bind_mut_ref_);
 }
 
 // Whether a scrutinee reads through a reference: a place reached by a
@@ -2903,8 +2903,11 @@ ir::TypeIdx Checker::check_match(u32 module,
             builder.ref_types()[builder.types()[pattern_ty].as_ref()].pointee;
         pattern_by_ref = true;
       }
+      const bool saved_mut_ref = bind_mut_ref_;
+      bind_mut_ref_ = tag == ir::TypeTag::MutRef;
       const bool refutable =
           bind_pattern(module, arm.pattern, pattern_ty, pattern_by_ref);
+      bind_mut_ref_ = saved_mut_ref;
       // The `for` desugar marks its `Some` arm: the item pattern must
       // match every item, so a refutable one is an error here rather
       // than a filter. Hand-written matches keep lowering's verdict.
