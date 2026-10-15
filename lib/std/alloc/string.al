@@ -275,6 +275,12 @@ impl String {
     ret self.as_str().byte(at)
   }
 
+  // The view over the bytes in `[start, end)`, clamped the way
+  // `str::slice` clamps.
+  pub fn slice(self: &Self, start: usize, end: usize) -> str {
+    ret self.as_str().slice(start, end)
+  }
+
   pub fn as_bytes(self: &Self) -> &[u8] {
     ret unsafe { slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len) }
   }
