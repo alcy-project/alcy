@@ -2872,12 +2872,8 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
                      : lower_expr(receiver_expr, nullptr);
   // A by-value receiver that names a field moves it out of its owner,
   // so the owner's drop skips it; a local already carries the marker.
-  if (!is_ref_tag(tag_of(info.params[0])) &&
-      ast.exprs[receiver_expr].kind == ast::ExprKind::Field) {
-    Val field = place_addr(receiver_expr);
-    if (field.place && field.address && !is_copy(field.type)) {
-      mark_move(field);
-    }
+  if (!is_ref_tag(tag_of(info.params[0]))) {
+    mark_field_move(receiver_expr);
   }
   if (failed || terminated_cur()) {
     return stopped_value();
@@ -4138,6 +4134,16 @@ void Lowerer::lower_condition_test(ast::PatternIdx pattern,
   arm_borrowed_ = saved_borrowed;
 }
 
+void Lowerer::mark_field_move(ast::ExprIdx expr) {
+  if (ast.exprs[expr].kind != ast::ExprKind::Field) {
+    return;
+  }
+  Val field = place_addr(expr);
+  if (field.place && field.address && !is_copy(field.type)) {
+    mark_move(field);
+  }
+}
+
 Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprMatch& match = node.payload.get<ast::ExprMatch>();
@@ -4158,14 +4164,8 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       return stopped_value();
     }
     addr = address_of(scrut);
-    // A match consumes a non-Copy field: the field's place is moved,
-    // so the surrounding value's drop skips it.
-    if (ast.exprs[match.scrutinee].kind == ast::ExprKind::Field) {
-      Val field = place_addr(match.scrutinee);
-      if (field.place && field.address && !is_copy(field.type)) {
-        mark_move(field);
-      }
-    }
+    // A match consumes a non-Copy field, so the owner's drop skips it.
+    mark_field_move(match.scrutinee);
   }
   if (failed || terminated_cur()) {
     return stopped_value();
@@ -4394,6 +4394,9 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     Val addr = address_of(init);
     const ir::TypeIdx scrut_type = expr_type(cond_node.init);
+    // The binding takes a non-Copy payload out of a field, so the
+    // field's place is moved and the owner's drop skips it.
+    mark_field_move(cond_node.init);
     // The condition's bindings are locals of the then-arm, so its exit
     // ends them rather than the enclosing scope.
     const u32 arm_mark = static_cast<u32>(locals.size());
@@ -4527,6 +4530,7 @@ Val Lowerer::lower_while(ast::ExprIdx expr) {
     }
     Val addr = address_of(init);
     const ir::TypeIdx scrut_type = expr_type(cond_node.init);
+    mark_field_move(cond_node.init);
     lower_condition_test(cond_node.pattern, addr, scrut_type, body, exit);
     if (failed) {
       return Val{size_one, error_type(), false, false};
@@ -4566,6 +4570,7 @@ Val Lowerer::lower_question(ast::ExprIdx expr) {
   }
   Val addr = address_of(scrut);
   const ir::TypeIdx scrut_type = expr_type(question.inner);
+  mark_field_move(question.inner);
   const std::vector<ir::TypeIdx> first = variant_payload(scrut_type, 0);
   if (first.empty()) {
     internal(node.span, "question without a success variant");

@@ -253,6 +253,9 @@ class Lowerer {
   Val materialize(Val v);
   Val address_of(Val v);
   void mark_move(Val v);
+  // A projection that takes a non-Copy value out of a field consumes the
+  // field's place, so the enclosing owner's drop skips it.
+  void mark_field_move(ast::ExprIdx expr);
   // Resolves a register to the local it names and the field path from
   // that local's root, when it names either.
   bool place_of_register(u32 reg, u32& local_out, std::vector<u32>& path) const;
