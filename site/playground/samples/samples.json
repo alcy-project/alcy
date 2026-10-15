@@ -4,7 +4,7 @@
     {
       "file": "hello.al",
       "source": "samples/hello/main.al",
-      "title": "hello world",
+      "title": "Hello, World",
       "description": "The smallest complete program: print one line and exit."
     },
     {
