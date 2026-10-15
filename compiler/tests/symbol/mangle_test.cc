@@ -316,6 +316,19 @@ TEST_CASE("Demangle recovers raw pointer types") {
   CHECK(symbol::display(out.generics[1]) == "*str");
 }
 
+TEST_CASE("Demangle refuses a type nested too deeply") {
+  Fixture f;
+  symbol::Signature sig = signature("m", "id", symbol::Signature::Kind::Free);
+  sig.generics = {f.i32};
+  const ir::Storage types = f.build();
+  std::string encoded = symbol::mangle(sig, types, f.strings);
+  // The one type tag becomes a chain of references: without a depth
+  // limit the decoder follows it into the stack.
+  const std::string tail(1, encoded.back());
+  encoded.replace(encoded.size() - 1, 1, std::string(200, 'r') + tail);
+  CHECK(symbol::demangle(encoded).is_err());
+}
+
 TEST_CASE("Demangle rejects what it does not understand") {
   // Not ours.
   CHECK(symbol::demangle("free").is_err());

@@ -378,6 +378,18 @@ class Decoder {
   }
 
   bool decode_type(DecodedType& out) {
+    // A type constructor nests, so the decoder recurses; a hostile
+    // symbol stops at this depth rather than exhausting the stack.
+    if (type_depth_ >= MAX_TYPE_DEPTH) {
+      return false;
+    }
+    ++type_depth_;
+    const bool ok = decode_type_inner(out);
+    --type_depth_;
+    return ok;
+  }
+
+  bool decode_type_inner(DecodedType& out) {
     char tag = '\0';
     if (!read_char(tag)) {
       return false;
@@ -480,7 +492,11 @@ class Decoder {
   bool plausible_count(u64 count) const { return count <= text_.size() - at_; }
 
  private:
+  // The deepest type constructor nest the decoder follows.
+  static constexpr usize MAX_TYPE_DEPTH = 64;
+
   std::string_view text_;
+  usize type_depth_ = 0;
   usize at_ = 0;
 };
 
