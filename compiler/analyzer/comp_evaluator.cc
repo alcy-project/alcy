@@ -1608,7 +1608,9 @@ bool CompEvaluator::comp_eval_binary(u32 mod,
         const i64 sr = comp::sign_extend(right, tag);
         static constexpr i64 MIN = static_cast<i64>(static_cast<u64>(1) << 63);
         if (sl == MIN && sr == -1 && comp::int_bytes(tag) == 8) {
-          out.value.int_value = static_cast<u64>(MIN);
+          // `MIN / -1` wraps to `MIN`; `MIN % -1` is zero.
+          out.value.int_value =
+              bin.op == ast::BinaryOp::Div ? static_cast<u64>(MIN) : 0;
           return true;
         }
         const i64 quotient = sl / sr;

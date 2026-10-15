@@ -11,6 +11,11 @@ fn main() -> i32 {
   if wrap != -128i8 {
     ret 2
   }
+  // Remainder never wraps: i64 `MIN % -1` is zero.
+  const mod := (-9223372036854775807i64 - 1i64) % -1i64
+  if mod != 0 {
+    ret 13
+  }
 
   // Overshifts mask, on both a literal and a variable count.
   if 1i32 << 32 != 1 {
