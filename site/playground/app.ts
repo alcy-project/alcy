@@ -5,7 +5,7 @@
 // callbacks, and start the flows. Everything else lives in the feature
 // modules next to this file.
 
-import { initThemeToggle, registerAssetWorker, t } from "../shared/site.js";
+import { initThemeToggle, registerAssetWorker } from "../shared/site.js";
 import { initSearch } from "../shared/search.js";
 import { writeClipboard } from "../shared/clipboard.js";
 
@@ -28,9 +28,9 @@ function copyLink(): void {
     if (!copied) {
       return;
     }
-    elements.copyLink.textContent = t("playground.linkCopied");
+    elements.copyLink.dataset.copied = "true";
     window.setTimeout(() => {
-      elements.copyLink.textContent = t("playground.copyLink");
+      delete elements.copyLink.dataset.copied;
     }, LINK_COPIED_MS);
   });
 }

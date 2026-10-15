@@ -121,6 +121,9 @@ button.busy {
   height: 7px;
   background: var(--fg-faint);
   flex: none;
+  /* Flex centers on the line box; a square there reads a hair high
+     against lowercase text, so it sits one pixel lower. */
+  transform: translateY(1px);
 }
 
 .compiler-state[data-state="loading"] .dot {
@@ -512,6 +515,25 @@ body.resizing {
 
 .statusbar .build {
   flex: none;
+}
+
+/* The link button's label swaps to its "copied" half without resizing
+   the button: the two versions stack in one grid cell, so the wider
+   one sets the width and the row around it never shifts. */
+#copy-link .label {
+  display: grid;
+}
+
+#copy-link .label > span {
+  grid-area: 1 / 1;
+}
+
+#copy-link[data-copied] .label > span:first-child {
+  visibility: hidden;
+}
+
+#copy-link:not([data-copied]) .label > span:last-child {
+  visibility: hidden;
 }
 
 .noscript {
