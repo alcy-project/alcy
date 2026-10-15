@@ -45,6 +45,12 @@ replaced. The foundations are in `roadmap.md`.
   checked, and a closure value carries a nominal type, so no spelling
   of the type arguments recovers the item type. Reading the closure
   argument's signature first is what gives it one.
+- [ ] Negative comp-arg cases for the loosened predicates: a runtime
+  value inside a match arm or a block (`double(match runtime_val …)`,
+  `double({ y := runtime; y })`) must still be refused, the guard
+  check a match now performs wants its own pin, and a generic caller's
+  other-instantiation variant record wants one case proving the
+  predicate's miss stays a compile error.
 - [x] A discarded temporary that owns memory ends where it stands:
   `_ := format("x")` and a bare `format("x")` are both ended by the
   discard path's `record_drop_in_place`, which the sanitized runs of
