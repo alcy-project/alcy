@@ -103,6 +103,26 @@ impl<T> [T] {
     ret true
   }
 
+  // The index `compare` answers zero for, or `None`. The slice must be
+  // ordered the way `compare` orders it.
+  pub fn binary_search_by(self: &Self, compare: (&T) -> i32) -> Option<usize> {
+    mut lo := 0 as usize
+    mut hi := slice_len(self)
+    while lo < hi {
+      mid := lo + (hi - lo) / 2
+      c := compare(self.at(mid).unwrap())
+      if c == 0 {
+        ret Option::Some(mid)
+      }
+      if c < 0 {
+        lo = mid + 1
+      } else {
+        hi = mid
+      }
+    }
+    ret Option::None
+  }
+
   // The first element mutably, or `None` when empty.
   pub fn first_mut(mut self: &mut Self) -> Option<&mut T> {
     if slice_len(self) == 0 {
