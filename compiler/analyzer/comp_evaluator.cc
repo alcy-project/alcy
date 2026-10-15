@@ -1511,21 +1511,34 @@ bool CompEvaluator::comp_eval_binary(u32 mod,
   if (!comp_eval_expr(mod, bin.lhs, scope, lhs)) {
     return false;
   }
-  CompVal rhs;
-  if (!comp_eval_expr(mod, bin.rhs, scope, rhs)) {
-    return false;
-  }
   out.type = expr_type_in(mod, expr);
   if (bin.op == ast::BinaryOp::And || bin.op == ast::BinaryOp::Or) {
-    if (lhs.value.tag != CompValue::Tag::Bool ||
-        rhs.value.tag != CompValue::Tag::Bool) {
+    if (lhs.value.tag != CompValue::Tag::Bool) {
+      return fail(node.span, "logical operand without value");
+    }
+    // The right operand is read only when it can change the answer,
+    // matching the branch the runtime lowering emits.
+    const bool decided = bin.op == ast::BinaryOp::And ? !lhs.value.bool_value
+                                                      : lhs.value.bool_value;
+    if (decided) {
+      out.value.tag = CompValue::Tag::Bool;
+      out.value.bool_value = bin.op == ast::BinaryOp::Or;
+      return true;
+    }
+    CompVal rhs;
+    if (!comp_eval_expr(mod, bin.rhs, scope, rhs)) {
+      return false;
+    }
+    if (rhs.value.tag != CompValue::Tag::Bool) {
       return fail(node.span, "logical operand without value");
     }
     out.value.tag = CompValue::Tag::Bool;
-    out.value.bool_value = bin.op == ast::BinaryOp::And
-                               ? (lhs.value.bool_value && rhs.value.bool_value)
-                               : (lhs.value.bool_value || rhs.value.bool_value);
+    out.value.bool_value = rhs.value.bool_value;
     return true;
+  }
+  CompVal rhs;
+  if (!comp_eval_expr(mod, bin.rhs, scope, rhs)) {
+    return false;
   }
   if (bin.op == ast::BinaryOp::Eq || bin.op == ast::BinaryOp::NotEq) {
     bool equal = false;
