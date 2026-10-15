@@ -85,6 +85,13 @@ fn main() -> i32 {
   if unwrap_choice(Choice::Num(6)) != 6 {
     ret 17
   }
+  // A unit variant is comp-known like any other constant.
+  if choose(Option::None) != 0 {
+    ret 18
+  }
+  if drain(Option::None) != 0 {
+    ret 19
+  }
   if !narrow_ok {
     ret 20
   }

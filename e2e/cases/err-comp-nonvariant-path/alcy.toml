@@ -1,0 +1,11 @@
+[package]
+name = "demo"
+version = "1.0.0"
+license = ""
+
+[modules]
+include = ["main", "helper"]
+
+[[bin]]
+name = "demo"
+path = "main.al"

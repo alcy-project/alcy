@@ -368,6 +368,15 @@ bool Checker::expr_comp_known(u32 module, ast::ExprIdx expr) const {
       const ast::PathIdx path = node.payload.get<ast::ExprPath>().idx;
       const std::span<const ast::Ident> segments = ast.paths[path].segments;
       if (segments.size() != 1) {
+        // A unit variant is a value with no fields. The checker records
+        // every variant it resolves, and an argument is checked before
+        // this predicate reads it, so the table names the ones that are
+        // comp-known.
+        for (const CheckedModule::VariantUse& use : modules[module].variants) {
+          if (use.path.idx == path.idx) {
+            return true;
+          }
+        }
         return false;
       }
       if (const Local* local = lookup_local(segments[0].name)) {
