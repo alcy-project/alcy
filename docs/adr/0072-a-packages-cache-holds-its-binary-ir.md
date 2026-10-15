@@ -83,3 +83,13 @@ summaries that let a dependent package consume a cached one, which are
 the item's next slice; and hashing the link inputs a driver resolves
 outside the package, which matters only once emitted outputs are
 cached.
+
+## Amendments
+
+**The key hashes with XXH3-128.** ADR-0073 replaced fnv1a64
+project-wide: the identity, every `FILES` hash, and the binary footer
+are XXH3-128, so the key is XXH3-128 over the identity, the manifest's
+content hash, and the named target, and an entry's name carries 32 hex
+digits. The decision's shape is unchanged — one digest over the inputs
+that steer the artifact — and the envelope's `hit`, `miss`, and `off`
+are what a caller reads.
