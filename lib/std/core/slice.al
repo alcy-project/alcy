@@ -78,6 +78,35 @@ impl<T> [T] {
     ret Option::None
   }
 
+  // Whether some element equals `value`, compared the way `==`
+  // compares two elements.
+  pub fn contains(self: &Self, value: &T) -> bool {
+    mut i := 0 as usize
+    while i < slice_len(self) {
+      if *self.at(i).unwrap() == *value {
+        ret true
+      }
+      i = i + 1
+    }
+    ret false
+  }
+
+  // Whether the view begins with `prefix`; an empty prefix matches.
+  pub fn starts_with(self: &Self, prefix: &[T]) -> bool {
+    n := slice_len(prefix)
+    if n > slice_len(self) {
+      ret false
+    }
+    mut i := 0 as usize
+    while i < n {
+      if *self.at(i).unwrap() != *prefix.at(i).unwrap() {
+        ret false
+      }
+      i = i + 1
+    }
+    ret true
+  }
+
   // The last index the predicate accepts, or `None`.
   pub fn rposition(self: &Self, pred: (&T) -> bool) -> Option<usize> {
     mut i := slice_len(self)
