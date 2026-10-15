@@ -1879,7 +1879,10 @@ ir::TypeIdx Checker::check_field(u32 module,
                             field_name.name, owner->name)) {
       return error_type();
     }
-    const ir::TypeIdx result = struct_type.fields[field_index];
+    // A field type is stored as a copy of the declared type; the
+    // reader wants the type itself, or an enum instance loses its
+    // variants.
+    const ir::TypeIdx result = type_origin(struct_type.fields[field_index]);
     if (expected != nullptr) {
       return unify(*expected, result, node.span, "field");
     }
