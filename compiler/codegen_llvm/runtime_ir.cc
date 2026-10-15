@@ -585,7 +585,7 @@ class RuntimeBuilder {
         file, llvm::ConstantPointerNull::get(builder_.getPtrTy()), "missing");
     builder_.CreateCondBr(missing, fail, done);
     builder_.SetInsertPoint(fail);
-    builder_.CreateRet(llvm::ConstantInt::get(usize_, -1));
+    builder_.CreateRet(llvm::ConstantInt::getSigned(usize_, -1));
     builder_.SetInsertPoint(done);
     llvm::Function* seek_fn = libc(
         "fseek",
@@ -635,7 +635,7 @@ class RuntimeBuilder {
         file, llvm::ConstantPointerNull::get(builder_.getPtrTy()), "missing");
     builder_.CreateCondBr(missing, fail, done);
     builder_.SetInsertPoint(fail);
-    builder_.CreateRet(llvm::ConstantInt::get(usize_, -1));
+    builder_.CreateRet(llvm::ConstantInt::getSigned(usize_, -1));
     builder_.SetInsertPoint(done);
     llvm::Function* read_fn = libc(
         "fread",
