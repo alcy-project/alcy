@@ -1,10 +1,10 @@
-// Strings order byte by byte through `cmp`, and `sort` uses it.
+// Ordered comparison reaches a string's `partial_cmp`.
 fn main() -> i32 {
-  if !"a".cmp(&"b").is_lt() { ret 1 }
-  if !"b".cmp(&"a").is_gt() { ret 2 }
-  if !"a".cmp(&"a").is_eq() { ret 3 }
-  if !"ab".cmp(&"b").is_lt() { ret 4 }
-  if !"abc".cmp(&"ab").is_gt() { ret 5 }
+  if "a" >= "b" { ret 1 }
+  if !("a" < "b") { ret 2 }
+  if "ab" >= "b" { ret 3 }
+  if "abc" <= "ab" { ret 4 }
+  if !("abc" > "ab") { ret 5 }
   mut names := Vec::<String>::new()
   names.push(format("b"))
   names.push(format("a"))

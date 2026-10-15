@@ -3328,7 +3328,8 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
             }
             return boolean;
           }
-          if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum) {
+          if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum ||
+              tag == ir::TypeTag::Str) {
             return check_spec_ordering(module, expr, operands, expected);
           }
           break;
