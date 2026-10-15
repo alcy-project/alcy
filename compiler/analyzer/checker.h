@@ -516,6 +516,10 @@ class Checker {
     bool through_uninit = false;
     bool through_slice = false;
     bool through_raw = false;
+    // The path of generic-instance argument indices the slot hides
+    // behind, outermost first; empty when the parameter names the slot
+    // itself rather than an instance holding it.
+    std::vector<u32> arg_at;
   };
   DeclaredBinding declared_binding(std::span<const ast::GenericParam> params,
                                    const ast::TypeNode& declared) const;

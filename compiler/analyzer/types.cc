@@ -5890,26 +5890,27 @@ static u32 param_slot(std::span<const ast::GenericParam> params,
 Checker::DeclaredBinding Checker::declared_binding(
     std::span<const ast::GenericParam> params,
     const ast::TypeNode& declared) const {
-  const DeclaredBinding none{static_cast<u32>(params.size()), false, false,
-                             false};
+  DeclaredBinding none{
+      static_cast<u32>(params.size()), false, false, false, false, {}};
   if (declared.kind == ast::TypeKind::Ref) {
     const DeclaredBinding inner = declared_binding(
         params, ast.types[declared.payload.get<ast::TypeRef>().inner]);
-    return DeclaredBinding{inner.slot, true, inner.through_uninit,
-                           inner.through_slice};
+    return DeclaredBinding{inner.slot,           true,
+                           inner.through_uninit, inner.through_slice,
+                           inner.through_raw,    inner.arg_at};
   }
   if (declared.kind == ast::TypeKind::RawPtr) {
     const DeclaredBinding inner = declared_binding(
         params, ast.types[declared.payload.get<ast::TypeRawPtr>().inner]);
-    return DeclaredBinding{inner.slot, false, inner.through_uninit,
-                           inner.through_slice, true};
+    return DeclaredBinding{inner.slot,          false, inner.through_uninit,
+                           inner.through_slice, true,  inner.arg_at};
   }
   if (declared.kind == ast::TypeKind::Slice) {
     // `&[T]` pins `T` from the array or slice behind the reference.
     const DeclaredBinding inner = declared_binding(
         params, ast.types[declared.payload.get<ast::TypeSlice>().element]);
     return DeclaredBinding{inner.slot, inner.through_ref, inner.through_uninit,
-                           true};
+                           true,       inner.through_raw, inner.arg_at};
   }
   if (declared.kind != ast::TypeKind::Path) {
     return none;
@@ -5921,14 +5922,33 @@ Checker::DeclaredBinding Checker::declared_binding(
     // `MaybeUninit<T>` pins `T` from the wrapper's payload.
     const DeclaredBinding inner =
         declared_binding(params, ast.types[type_path.args[0]]);
-    return DeclaredBinding{inner.slot, inner.through_ref, true,
-                           inner.through_slice};
+    return DeclaredBinding{
+        inner.slot,          inner.through_ref, true,
+        inner.through_slice, inner.through_raw, inner.arg_at};
   }
-  if (!type_path.args.empty() || path.segments.size() != 1) {
+  if (!type_path.args.empty()) {
+    // A slot inside a generic instance's arguments reads out of the
+    // instance the argument names: the record is the whole path of
+    // argument indices, outermost first.
+    for (usize i = 0; i < type_path.args.size(); ++i) {
+      DeclaredBinding inner =
+          declared_binding(params, ast.types[type_path.args[i]]);
+      if (inner.slot < params.size()) {
+        inner.arg_at.insert(inner.arg_at.begin(), static_cast<u32>(i));
+        return inner;
+      }
+    }
     return none;
   }
-  return DeclaredBinding{param_slot(params, path.segments[0].name), false,
-                         false, false};
+  if (path.segments.size() != 1) {
+    return none;
+  }
+  return DeclaredBinding{param_slot(params, path.segments[0].name),
+                         false,
+                         false,
+                         false,
+                         false,
+                         {}};
 }
 
 bool Checker::bind_fn_slots(u32 module,
@@ -6106,7 +6126,18 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
     }
     if (!declared.through_ref && !declared.through_raw) {
       // A field's type is a storage copy; the parameter binds the
-      // declared type behind it rather than the copy.
+      // declared type behind it rather than the copy. A slot inside a
+      // generic instance reads out of that instance's own arguments;
+      // when the argument names no instance the slot stays empty and
+      // the check below names the turbofish the call needs.
+      if (!declared.arg_at.empty()) {
+        const ir::TypeIdx at =
+            arg_at_path(type_origin(actual), declared.arg_at);
+        if (at.is_valid()) {
+          bound[declared.slot] = type_origin(at);
+        }
+        continue;
+      }
       bound[declared.slot] = type_origin(actual);
       continue;
     }
@@ -6155,6 +6186,16 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
                 DiagCode::InvalidOperation, span, fn_name(item));
         (void)index;
         return nullptr;
+      }
+    }
+    // A slot inside a generic instance reads out of that instance's
+    // own arguments, so `&Vec<T>` binds from `&Vec<i32>`; when the
+    // argument names no instance the slot stays empty and the check
+    // below names the turbofish the call needs.
+    if (!declared.arg_at.empty()) {
+      bound_type = arg_at_path(bound_type, declared.arg_at);
+      if (!bound_type.is_valid()) {
+        continue;
       }
     }
     // A wrapper's payload and a slice's element are storage copies;

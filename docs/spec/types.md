@@ -130,8 +130,11 @@
   from the bound (`fn collect<I: Iterator<T>, T>(iter: I) -> Vec<T>`):
   the first declared method's signature says where the spec's argument
   appears (`next` returns `Option<T>`), and the implementation the
-  bound-covered parameter has carries its value. Shapes beyond a bare
-  parameter under one nominal application wait for their own slice.
+  bound-covered parameter has carries its value. A parameter nested
+  under one nominal application infers from the instance the argument
+  names (`&Vec<T>` binds from `&Vec<i32>`), reading each level's
+  argument in turn; an argument that names no instance leaves the call
+  to name the turbofish it needs.
 - `Display` accepts the builtin convertibles (`i8`-`u64`, `f32`/`f64`,
   `bool`, `str`) without an implementation, because `{}` formats them
   with no impl at all.
