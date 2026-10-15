@@ -346,6 +346,14 @@ replaced. The foundations are in `roadmap.md`.
   the place - still reports (`ok-borrow-two-phase`,
   `exe-borrow-two-phase`, `err-borrow-two-phase-arg`,
   `err-borrow-two-phase-escape`).
+- [x] A load of scalars owns its copy: the element load kept the
+  receiver's loan alive in a container accessor's answer, so
+  `d := v.pop()` on a `Vec<Point>` read as a borrow of `v` and
+  refused the next `v.push`. The load now asks the same predicate an
+  indirect call's result does, so a value that cannot carry a loan ends
+  the borrow at the copy while one that holds references or views keeps
+  the protection (`ok-borrow-owned-element`,
+  `exe-borrow-owned-element`).
 - [x] A method that takes its receiver by value moves a field receiver
   out of its owner: the call marks the field's place moved, so
   `s.b.unwrap()` with `b: Option<Vec<i32>>` retires the payload once
@@ -411,8 +419,9 @@ replaced. The foundations are in `roadmap.md`.
 - [x] Read-before-write through an operator: an assignment reads its
   value before it takes the place, so `v[i] = v[i] + 1`,
   `m[k] = m[k] + 1`, and the compound forms compile without a
-  temporary. Two-phase borrows are still the general answer for a call
-  that both reads and writes.
+  temporary. A call that both reads and writes resolves the same way:
+  the receiver is a reservation the call activates, which is the
+  two-phase rule above.
 - [x] A returned error from `main() -> Result` is an exit status: the
   message goes to stderr and the process exits 1, matching the direct
   backend, where LLVM's entry used to call `alcy_panic` and abort with
