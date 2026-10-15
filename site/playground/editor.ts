@@ -47,6 +47,12 @@ export function syncScroll(): void {
   // read before anything is written, which keeps this a clean-layout
   // query on a scroll frame.
   const source = elements.source;
+  // A scrollbar can appear or disappear without a resize -- growing the
+  // buffer is what summons it -- so the scroll frame is where its size
+  // is noticed, and where the mirror's compensation has to be current:
+  // without it the mirror clamps a scrollbar short of the bottom and
+  // the glyphs sit a line or two above the caret.
+  syncMetrics();
   const maxTop = Math.max(0, source.scrollHeight - source.clientHeight);
   const maxLeft = Math.max(0, source.scrollWidth - source.clientWidth);
   const top = Math.min(Math.max(source.scrollTop, 0), maxTop);
@@ -58,11 +64,21 @@ export function syncScroll(): void {
 
 // The mirror hides its scrollbars while the textarea shows them, so it
 // has to pad by the space they take or the two clamp at different scroll
-// maxima. The ResizeObserver on the textarea calls this when a scrollbar
-// appears or disappears, which is the only time the numbers change.
+// maxima. A scrollbar appearing does not resize the textarea's border
+// box, so the resize observer cannot be the only caller: `syncScroll`
+// re-checks on every scroll frame, and the observer catches the resizes
+// (window, splitter) that change the numbers the other way.
+let lastScrollbarWidth = -1;
+let lastScrollbarHeight = -1;
+
 export function syncMetrics(): void {
   const scrollbarWidth = elements.source.offsetWidth - elements.source.clientWidth;
   const scrollbarHeight = elements.source.offsetHeight - elements.source.clientHeight;
+  if (scrollbarWidth === lastScrollbarWidth && scrollbarHeight === lastScrollbarHeight) {
+    return;
+  }
+  lastScrollbarWidth = scrollbarWidth;
+  lastScrollbarHeight = scrollbarHeight;
   elements.highlight.style.setProperty(
     "--editor-scrollbar-width",
     `${Math.max(0, scrollbarWidth)}px`,
