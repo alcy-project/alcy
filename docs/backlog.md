@@ -142,6 +142,13 @@ replaced. The foundations are in `roadmap.md`.
 
 ### Language and library surface
 
+- [ ] The tree-sitter grammar reads a condition that opens with `(` as
+  a pattern, so `if (x) == (y) {}` and `if (x, 1) == (y, 1) {}` parse
+  as an error there while the compiler accepts them. The
+  structural-equality cases bind their tuple comparisons first to keep
+  the differential check green; a condition grammar that forks on the
+  token after the closing `)` is what would let the inline form
+  through.
 - [x] Qualified generic calls: `helper::id::<i32>(x)` answered
   "Unresolved value 'id'" because neither module-qualified resolution
   branch reached the generic-function lookup. Both do now, with the

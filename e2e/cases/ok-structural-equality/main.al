@@ -25,10 +25,12 @@ fn main() -> i32 {
   }
   x := 5
   y := 6
-  if !((&x, 1) == (&x, 1)) {
+  left := (&x, 1)
+  right := (&y, 1)
+  if !(left == left) {
     ret 8
   }
-  if (&x, 1) == (&y, 1) {
+  if left == right {
     ret 9
   }
   ret 0
