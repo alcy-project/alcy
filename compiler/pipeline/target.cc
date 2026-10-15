@@ -19,7 +19,6 @@
 #endif
 
 #include "analyzer/resolve.h"
-#include "ast/ast.h"
 #include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
