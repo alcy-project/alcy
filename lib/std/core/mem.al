@@ -46,12 +46,12 @@ pub unsafe intrinsic fn file_size(path: str) -> i64;
 // Reads up to `out_len` bytes from the file at `path` into the bytes
 // `out` names, answering the bytes read or -1 when it cannot be
 // opened. The caller must have room for `out_len` bytes at `out`.
-pub unsafe intrinsic fn read_file_into(path: str, out: &mut u8, out_len: usize) -> i64;
+pub unsafe intrinsic fn read_file_into(path: str, out: &mut u8, out_len: usize) -> isize;
 
 // Writes `data` to the file at `path`, answering the bytes written or
 // -1 when it cannot be opened. The path is NUL-terminated in a
 // temporary slot and an existing file is truncated.
-pub unsafe intrinsic fn write_file_all(path: str, data: str) -> i64;
+pub unsafe intrinsic fn write_file_all(path: str, data: str) -> isize;
 
 // The number of process arguments, the program name first.
 pub unsafe intrinsic fn arg_count() -> i64;

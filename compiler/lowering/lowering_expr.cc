@@ -1773,6 +1773,7 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     }
     const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
     const ir::TypeIdx usize_ty = usize_type();
+    const ir::TypeIdx isize_ty = isize_type();
     const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
     Val path = lower_expr(call.args[0], &sig.params[0]);
     if (failed || terminated_cur()) {
@@ -1802,7 +1803,7 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       const ir::RegisterIdx data_len = emit(ir::Opcode::ExtractValue, usize_ty,
                                             {data_val, index_operand(1)});
       const ir::ExternalFunctionIdx ext = declare_external(
-          "alcy_write_file", usize_ty, {ptr_ty, usize_ty, ptr_ty, usize_ty});
+          "alcy_write_file", isize_ty, {ptr_ty, usize_ty, ptr_ty, usize_ty});
       ops.push_back(builder.operand(ir::Operand::from_external_function(
           ext, builder.primitive(ir::TypeTag::Function))));
       ops.push_back(to_operand(bytes, ptr_ty));
@@ -1819,7 +1820,7 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
         return stopped_value();
       }
       const ir::ExternalFunctionIdx ext =
-          declare_external("alcy_read_file_into", usize_ty,
+          declare_external("alcy_read_file_into", isize_ty,
                            {ptr_ty, usize_ty, ptr_ty, usize_ty});
       ops.push_back(builder.operand(ir::Operand::from_external_function(
           ext, builder.primitive(ir::TypeTag::Function))));
@@ -1831,11 +1832,11 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    const ir::RegisterIdx dst = emit(ir::Opcode::Call, usize_ty, ops);
+    const ir::RegisterIdx dst = emit(ir::Opcode::Call, isize_ty, ops);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    return Val{to_operand(dst, usize_ty), usize_ty, false, false};
+    return Val{to_operand(dst, isize_ty), isize_ty, false, false};
   }
   if (name == "elem_ptr" || name == "elem_ref" || name == "ptr_offset" ||
       name == "ptr_offset_mut") {
@@ -2048,6 +2049,11 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
 ir::TypeIdx Lowerer::usize_type() {
   return builder.primitive(width == ir::PointerWidth::W64 ? ir::TypeTag::U64
                                                           : ir::TypeTag::U32);
+}
+
+ir::TypeIdx Lowerer::isize_type() {
+  return builder.primitive(width == ir::PointerWidth::W64 ? ir::TypeTag::I64
+                                                          : ir::TypeTag::I32);
 }
 
 // Extracts the (bytes, len) pair from a materialized str value.
