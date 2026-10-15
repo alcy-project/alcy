@@ -90,6 +90,19 @@ impl<T> [T] {
     ret Option::None
   }
 
+  // Whether every element is at or before the one after it, by `less`.
+  // An empty slice and a one-element slice are sorted.
+  pub fn is_sorted_by(self: &Self, less: (&T, &T) -> bool) -> bool {
+    mut i := 1 as usize
+    while i < slice_len(self) {
+      if less(self.at(i).unwrap(), self.at(i - 1).unwrap()) {
+        ret false
+      }
+      i = i + 1
+    }
+    ret true
+  }
+
   // The first element mutably, or `None` when empty.
   pub fn first_mut(mut self: &mut Self) -> Option<&mut T> {
     if slice_len(self) == 0 {
