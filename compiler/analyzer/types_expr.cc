@@ -2027,7 +2027,9 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
     kept = push_generic_scope(*instance);
   }
   const ast::ItemNode& decl = ast.items[nominal->item];
-  const ir::StructType& fields =
+  // A copy, not a reference: checking a field's value can intern a type
+  // and move the table this names.
+  const ir::StructType fields =
       builder.struct_types()[builder.types()[struct_type].as_struct()];
   std::vector<bool> seen(decl.payload.get<ast::ItemStruct>().fields.size(),
                          false);
