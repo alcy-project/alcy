@@ -42,8 +42,9 @@ replaced. The foundations are in `roadmap.md`.
   `&T` too, so one rule covers every arm.
 - [ ] `map` has no constructor: its result type comes from a closure's
   return type, which inference cannot read before the closure is
-  checked. A slice that checks a closure argument first, or that lets
-  the adapter be spelled with a turbofish, gives it one.
+  checked, and a closure value carries a nominal type, so no spelling
+  of the type arguments recovers the item type. Reading the closure
+  argument's signature first is what gives it one.
 - [x] A discarded temporary that owns memory ends where it stands:
   `_ := format("x")` and a bare `format("x")` are both ended by the
   discard path's `record_drop_in_place`, which the sanitized runs of
@@ -154,11 +155,10 @@ replaced. The foundations are in `roadmap.md`.
   branch reached the generic-function lookup. Both do now, with the
   reachability check a qualified name owes (`ok-qualified-generic-call`,
   `err-qualified-generic-private`).
-- [ ] An associated function's turbofish reads as the owner's type
-  arguments: `P::id::<i32>(x)` over a non-generic `P` is "Unexpected
-  type arguments", and over a generic one the arguments bind the owner.
-  The AST keeps one type-argument list per path, so the parser has to
-  say which segment the turbofish followed.
+- [x] An associated function's turbofish names its own arguments: the
+  parser records which segment the turbofish followed and the resolver
+  reads it, so `P::id::<i32>(x)` instantiates the member while
+  `P::<T>::id(x)` names the owner's (`ok-assoc-fn-turbofish`).
 - [x] Read-before-write through an operator: an assignment reads its
   value before it takes the place, so `v[i] = v[i] + 1`,
   `m[k] = m[k] + 1`, and the compound forms compile without a
@@ -186,13 +186,16 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] `Option::is_some`/`is_none`/`is_ok`/`is_err` take the receiver by
   value, so the option cannot be consulted twice. `&Self` receivers
   would fix that.
-- [ ] Standard dependency selection: `--deps alcy/std/collections` on top
-  of the default suite errors "Dependency 'alcy/std/*' overlaps
-  'collections'". Make the default suite and the glob rule visible in
-  `--help` and the diagnostic.
-- [ ] `Map` key ergonomics: no entry API (`get_or_insert` first, an
-  `Entry` once the borrow rules allow), and a missing key's panic prints
-  the `Option::unwrap` wording. Generic keys wait for a `Hash` spec and
+- [x] Standard dependency selection: the overlap diagnostic and the
+  `--deps` help name the default `alcy/std/*` glob and the rule, so
+  `--deps alcy/std/collections` explains itself: name a package or a
+  member, not both.
+- [x] `Map::get_or_insert(key, value)` returns the entry as `&mut V`,
+  inserting first when the key is absent, and a missing key in `m[key]`
+  panics with a map-specific message instead of the `Option::unwrap`
+  wording.
+- [ ] `Map` key ergonomics, the rest: an `Entry` once the borrow rules
+  allow, generic keys, which wait for a `Hash` spec, and
   bounds; `keys()` traversal and `Vec` sorting moved to the roadmap's
   iteration and operator items.
 - [x] Trace report nesting: the scan kept only the interval on top of
