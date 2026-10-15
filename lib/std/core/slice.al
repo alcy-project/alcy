@@ -107,6 +107,23 @@ impl<T> [T] {
     ret true
   }
 
+  // Whether the view ends with `suffix`; an empty suffix matches.
+  pub fn ends_with(self: &Self, suffix: &[T]) -> bool {
+    n := slice_len(suffix)
+    m := slice_len(self)
+    if n > m {
+      ret false
+    }
+    mut i := 0 as usize
+    while i < n {
+      if *self.at(m - n + i).unwrap() != *suffix.at(i).unwrap() {
+        ret false
+      }
+      i = i + 1
+    }
+    ret true
+  }
+
   // The last index the predicate accepts, or `None`.
   pub fn rposition(self: &Self, pred: (&T) -> bool) -> Option<usize> {
     mut i := slice_len(self)
