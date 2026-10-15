@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/hash.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "ir/binary_format.h"
@@ -20,14 +21,14 @@ namespace ir {
 // optional and parallel: a zero means the caller did not compute one.
 struct FileTable {
   std::span<const std::string_view> names;
-  std::span<const u64> hashes;
+  std::span<const base::Digest128> hashes;
 
   [[nodiscard]] std::string_view name_of(u32 file) const {
     return file < names.size() ? names[file] : std::string_view{};
   }
 
-  [[nodiscard]] u64 hash_of(u32 file) const {
-    return file < hashes.size() ? hashes[file] : 0;
+  [[nodiscard]] base::Digest128 hash_of(u32 file) const {
+    return file < hashes.size() ? hashes[file] : base::Digest128{};
   }
 };
 
@@ -62,34 +63,32 @@ struct WriteInput {
 // The build identity: one digest over what an artifact was lowered from -
 // the file table's names and content hashes in order, the pointer width,
 // and the toolchain's version string. The binary form records it so a
-// cache can compare one number instead of walking the tables.
+// cache can compare one digest instead of walking the tables.
 //
 // The canonical bytes are: for each file row, in order, the name's bytes,
-// one 0x00, and the hash as eight little-endian bytes; then one byte for
+// one 0x00, and the hash as sixteen little-endian bytes; then one byte for
 // the pointer width (4 or 8); then the version string's bytes.
 //
 // The profile is not in it: the unoptimized forms answer the same
 // artifact under every profile (ADR-0067), so a cache that keys a
 // profile's output composes the profile above this digest.
-inline u64 identity_digest(const FileTable& files,
-                           PointerWidth width,
-                           std::string_view version) {
+inline base::Digest128 identity_digest(const FileTable& files,
+                                       PointerWidth width,
+                                       std::string_view version) {
   std::vector<u8> canonical;
-  const auto put_u64 = [&canonical](u64 value) {
-    for (u32 shift = 0; shift < 64; shift += 8) {
-      canonical.push_back(static_cast<u8>(value >> shift));
-    }
-  };
   for (usize i = 0; i < files.names.size(); ++i) {
     for (const char ch : files.names[i]) {
       canonical.push_back(static_cast<u8>(ch));
     }
     canonical.push_back(0);
-    put_u64(files.hash_of(static_cast<u32>(i)));
+    const std::array<u8, 16> hash = files.hash_of(static_cast<u32>(i)).bytes();
+    canonical.insert(canonical.end(), hash.begin(), hash.end());
   }
   canonical.push_back(width == PointerWidth::W32 ? 4 : 8);
-  canonical.insert(canonical.end(), version.begin(), version.end());
-  return binary::fnv1a64(canonical);
+  for (const char ch : version) {
+    canonical.push_back(static_cast<u8>(ch));
+  }
+  return base::hash128(std::span<const u8>(canonical.data(), canonical.size()));
 }
 
 }  // namespace ir

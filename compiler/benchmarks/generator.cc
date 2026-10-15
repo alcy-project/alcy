@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 
+#include "base/hash.h"
 #include "fmt/core.h"
 #include "fpag/base/numeric.h"
 
@@ -14,12 +15,8 @@ namespace bench {
 
 namespace {
 
-// FNV-1a, so the digest needs no dependency and no second reader. It is
-// a label for "were these the same bytes", not a defense against anyone
-// choosing them.
-constexpr u64 FNV_OFFSET = 14695981039346656037ull;
-constexpr u64 FNV_PRIME = 1099511628211ull;
-
+// XXH3-64. It is a label for "were these the same bytes", not a defense
+// against anyone choosing them.
 std::string hex16(u64 value) {
   static constexpr char DIGITS[] = "0123456789abcdef";
   std::string out(16, '0');
@@ -75,12 +72,7 @@ std::string generate_source(SourceSpec spec) {
 }
 
 std::string source_digest(std::string_view source) {
-  u64 hash = FNV_OFFSET;
-  for (const char c : source) {
-    hash ^= static_cast<u64>(static_cast<u8>(c));
-    hash *= FNV_PRIME;
-  }
-  return hex16(hash);
+  return hex16(base::hash64(source));
 }
 
 }  // namespace bench

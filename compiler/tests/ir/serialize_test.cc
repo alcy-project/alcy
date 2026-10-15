@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/hash.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "ir/binary_format.h"
@@ -54,21 +55,21 @@ TEST_CASE("The binary form frames its sections and hashes its bytes") {
     const u64 size = test::read_u64(file, at + 16);
     CHECK(offset % binary::SECTION_ALIGN == 0);
     CHECK(offset >= previous_end);
-    CHECK(offset + size <= bytes.size() - 8);
+    CHECK(offset + size <= bytes.size() - 16);
     previous_end = offset + size;
   }
 
-  // The last section is the identity: one u64, the digest the recipe in
+  // The last section is the identity: 16 bytes, the digest the recipe in
   // `identity_digest` computes over the tables above.
   const std::array<std::string_view, 1> names{"main.al"};
   const usize identity_at = table_at + (count - 1) * 24;
-  CHECK(test::read_u64(file, test::read_u64(file, identity_at + 8)) ==
+  CHECK(test::read_digest128(file, test::read_u64(file, identity_at + 8)) ==
         identity_digest(FileTable{.names = names, .hashes = {}},
                         PointerWidth::W64, "0.0.0-test"));
 
-  // The footer is the writer's hash of everything before it.
-  CHECK(test::read_u64(file, bytes.size() - 8) ==
-        test::fnv1a64(file.first(bytes.size() - 8)));
+  // The footer is the writer's digest of everything before it.
+  CHECK(test::read_digest128(file, bytes.size() - 16) ==
+        base::hash128(file.first(bytes.size() - 16)));
 }
 
 TEST_CASE("The binary form holds the strings the tables reference") {

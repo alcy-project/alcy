@@ -148,7 +148,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   that make a registry or git dependency obtainable at all. The cache
   without summaries and the summaries without fetchers each go half the
   way, so the item states both. Two slices landed: each `FILES` record
-  carries the content hash of the source it names (`fnv1a64` of its
+  carries the content hash of the source it names (XXH3-128 of its
   bytes), so a cache can tell two programs under one name apart, and the
   `IDENTITY` section carries one digest over the file table, the pointer
   width, and the toolchain (`ir::identity_digest`), so a cache compares

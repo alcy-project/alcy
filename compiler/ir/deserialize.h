@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/hash.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -68,14 +69,14 @@ struct LoadedIr {
   std::unique_ptr<ir::SymbolTable> strings;
   std::vector<diag::Span> instr_spans;
   std::vector<std::string> file_names;
-  std::vector<u64> file_hashes;
+  std::vector<base::Digest128> file_hashes;
   std::vector<AddrNameEntry> addr_names;
   usize prelude_functions = 0;
   PointerWidth width = PointerWidth::W64;
   std::string compiler_version;
-  // The build identity the file recorded; zero when its writer knew
+  // The build identity the file recorded; empty when its writer knew
   // none, which is a file from before the section existed.
-  u64 identity = 0;
+  base::Digest128 identity;
 };
 
 // Rebuilds verified IR from the bytes `serialize` wrote, or says why it

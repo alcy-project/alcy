@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/hash.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -62,10 +63,11 @@ struct LoadedInput {
 // structural error under test is the one reported rather than the
 // checksum mismatch the same patch also caused.
 void reseal(std::vector<u8>& bytes) {
-  const std::span<const u8> body(bytes.data(), bytes.size() - 8);
-  const u64 hash = binary::fnv1a64(body);
-  for (u32 i = 0; i < 8; ++i) {
-    bytes[bytes.size() - 8 + i] = static_cast<u8>(hash >> (8 * i));
+  const base::Digest128 hash =
+      base::hash128(std::span<const u8>(bytes.data(), bytes.size() - 16));
+  const std::array<u8, 16> raw = hash.bytes();
+  for (u32 i = 0; i < 16; ++i) {
+    bytes[bytes.size() - 16 + i] = raw[i];
   }
 }
 
@@ -172,7 +174,7 @@ TEST_CASE("A corrupt binary form is refused") {
   }
   {
     std::vector<u8> broken = bytes;
-    broken[4] = 2;  // A major version this reader does not know.
+    broken[4] = 3;  // A major version this reader does not know.
     reseal(broken);
     CHECK(std::move(deserialize(broken)).unwrap_err() ==
           IrLoadError::UnsupportedVersion);
@@ -259,14 +261,15 @@ TEST_CASE("A corrupt binary form is refused") {
 TEST_CASE("The FILES section keeps the content hashes it was given") {
   ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);
-  const std::array<u64, 1> hashes{0x0123'4567'89ab'cdefull};
+  const std::array<base::Digest128, 1> hashes{
+      base::Digest128{0x0123'4567'89ab'cdefull, 0x0fed'cba9'8765'4321ull}};
   const std::vector<u8> bytes = test::composite_bytes(strings, storage, hashes);
   base::Result<LoadedIr, IrLoadError> loaded = deserialize(bytes);
   CHECK(loaded.is_ok());
   if (!loaded.is_ok()) {
     return;
   }
-  const std::vector<u64>& written = loaded.value().file_hashes;
+  const std::vector<base::Digest128>& written = loaded.value().file_hashes;
   CHECK(written.size() == 1);
   if (written.size() == 1) {
     // The writer echoes what it is handed; computing the hash of a
@@ -278,7 +281,8 @@ TEST_CASE("The FILES section keeps the content hashes it was given") {
 TEST_CASE("The reader hands back the identity the writer computed") {
   ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);
-  const std::array<u64, 1> hashes{0x0123'4567'89ab'cdefull};
+  const std::array<base::Digest128, 1> hashes{
+      base::Digest128{0x0123'4567'89ab'cdefull, 0x0fed'cba9'8765'4321ull}};
   const std::vector<u8> bytes = test::composite_bytes(strings, storage, hashes);
   base::Result<LoadedIr, IrLoadError> loaded = deserialize(bytes);
   CHECK(loaded.is_ok());

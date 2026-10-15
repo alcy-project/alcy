@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "analyzer/resolve.h"
+#include "base/hash.h"
 #include "codegen/backend.h"
 #include "codegen/target.h"
 #include "config/build_config.h"
@@ -26,7 +27,6 @@
 #include "fpag/io/temp_dir.h"
 #include "fpag/str/string_pool_id.h"
 #include "i18n/messages.h"
-#include "ir/binary_format.h"
 #include "ir/serialize.h"
 #include "ir/storage.h"
 #include "ir/text_dump.h"
@@ -439,7 +439,7 @@ base::Result<void, diag::Reported> emit_package_ir(
 // spans never outlive their owners.
 struct IrWriteInput {
   std::vector<std::string_view> file_names;
-  std::vector<u64> file_hashes;
+  std::vector<base::Digest128> file_hashes;
   std::vector<ir::AddrName> addr_names;
   ir::WriteInput input;
 
@@ -453,8 +453,7 @@ struct IrWriteInput {
       // input rather than claiming no hash was computed.
       const std::string_view bytes =
           ctx.sources.bytes(id).value_or(std::string_view{});
-      file_hashes[id] = ir::binary::fnv1a64(std::span<const u8>(
-          reinterpret_cast<const u8*>(bytes.data()), bytes.size()));
+      file_hashes[id] = base::hash128(bytes);
     }
     addr_names.reserve(package.addr_names.size());
     for (const lowering::LoweredPackage::AddrInfo& entry : package.addr_names) {

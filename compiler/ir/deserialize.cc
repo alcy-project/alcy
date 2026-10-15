@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/hash.h"
 #include "debug/check.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -107,6 +108,20 @@ class Cursor {
     return true;
   }
 
+  bool read_digest(base::Digest128& out) {
+    if (!need(16)) {
+      return false;
+    }
+    out.low = 0;
+    out.high = 0;
+    for (u32 i = 0; i < 8; ++i) {
+      out.low |= static_cast<u64>(bytes_[at_ + i]) << (8 * i);
+      out.high |= static_cast<u64>(bytes_[at_ + 8 + i]) << (8 * i);
+    }
+    at_ += 16;
+    return true;
+  }
+
   bool bytes(usize size, std::span<const u8>& out) {
     if (!need(size)) {
       return false;
@@ -138,13 +153,13 @@ struct Parsed {
       std::make_unique<ir::SymbolTable>();
   std::vector<str::StringPoolId> string_ids;
   std::vector<std::string> file_names;
-  std::vector<u64> file_hashes;
+  std::vector<base::Digest128> file_hashes;
   std::vector<LoadedIr::AddrNameEntry> addr_names;
   std::vector<diag::Span> spans;
   usize prelude_functions = 0;
   PointerWidth width = PointerWidth::W64;
   std::string compiler_version;
-  u64 identity = 0;
+  base::Digest128 identity;
 };
 
 using ParsedResult = base::Result<void, IrLoadError>;
@@ -767,7 +782,7 @@ bool read_externals(Parsed& parsed, std::span<const u8> payload) {
 }
 
 bool read_files(Parsed& parsed, std::span<const u8> payload) {
-  const u32 count = record_count(payload.size(), 16);
+  const u32 count = record_count(payload.size(), 24);
   if (count == NONE) {
     return false;
   }
@@ -779,9 +794,9 @@ bool read_files(Parsed& parsed, std::span<const u8> payload) {
   for (u32 i = 0; i < count; ++i) {
     u32 name = 0;
     u32 pad = 0;
-    u64 hash = 0;
+    base::Digest128 hash;
     if (!cursor.read_u32(name) || !cursor.read_u32(pad) ||
-        !cursor.read_u64(hash)) {
+        !cursor.read_digest(hash)) {
       return false;
     }
     if (name != NONE && name >= parsed.string_ids.size()) {
@@ -898,12 +913,12 @@ bool read_prelude(Parsed& parsed, std::span<const u8> payload) {
 }
 
 bool read_identity(Parsed& parsed, std::span<const u8> payload) {
-  if (payload.size() != 8) {
+  if (payload.size() != 16) {
     return false;
   }
   Cursor cursor(payload);
-  u64 digest = 0;
-  if (!cursor.read_u64(digest)) {
+  base::Digest128 digest;
+  if (!cursor.read_digest(digest)) {
     return false;
   }
   parsed.identity = digest;
@@ -963,10 +978,10 @@ base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
   // The trailing footer hashes every byte before it, so a package whose
   // bytes changed under a cache or in transit is refused before any of
   // it is read (compiler/docs/ir-format.md).
-  Cursor footer(bytes, bytes.size() - 8);
-  u64 expected_hash = 0;
-  if (!footer.read_u64(expected_hash) ||
-      binary::fnv1a64(bytes.first(bytes.size() - 8)) != expected_hash) {
+  Cursor footer(bytes, bytes.size() - 16);
+  base::Digest128 expected_hash;
+  if (!footer.read_digest(expected_hash) ||
+      base::hash128(bytes.first(bytes.size() - 16)) != expected_hash) {
     return base::make_err(IrLoadError::BadChecksum);
   }
   u16 major = 0;

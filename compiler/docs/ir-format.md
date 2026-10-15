@@ -206,7 +206,7 @@ version         u8[version_len]   the compiler's version string
 section_count   u64
 sections        section_count × { kind u32, flags u32 (0), offset u64, size u64 }
 payload         sections, each 8-byte aligned, non-overlapping, ascending
-footer          u64      FNV-1a 64 of every byte before it
+footer          u8[16]   XXH3-128 of every byte before it
 ```
 
 A reader MUST reject a missing or wrong magic, a clear flags bit 0, an
@@ -290,9 +290,9 @@ tag, `aux` is 0 and `value` is the union's bytes.
 name u32, path u32, kind u8, cc u8, pad u8[2], generics_head u32,
 generics_size u32 }`.
 
-**FILES**: `{ name u32, pad u32, hash u64 }`, one per file the spans
-name, in `FileId` order. `hash` is 0 when the writer did not compute
-one.
+**FILES**: `{ name u32, pad u32, hash u8[16] }`, one per file the spans
+name, in `FileId` order. `hash` is the file's XXH3-128 content digest,
+all zero when the writer did not compute one.
 
 **SPANS**: `count` × `{ file u32, offset u32, length u32 }`, parallel to
 the instruction table. `file` is `U32_MAX` for a span with no file.
@@ -307,11 +307,11 @@ absent when the count is zero.
 **CONSTS**: `count` × `{ value u64 }`, one row per compile-time value
 argument in the type table. The section is absent when there are none.
 
-**IDENTITY**: one `u64`, the build identity `ir::identity_digest` computes
+**IDENTITY**: 16 bytes, the build identity `ir::identity_digest` computes
 over the tables above - every file's name and content hash in order, the
-pointer width, and the version string - so a cache can compare one number
+pointer width, and the version string - so a cache can compare one digest
 instead of walking them. A file written before this kind existed carries
-none, and a reader answers zero for those.
+none, and a reader answers empty for those.
 
 ### 3.5 Reading
 

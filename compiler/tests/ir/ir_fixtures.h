@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/hash.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/str/string_pool_id.h"
@@ -54,13 +55,11 @@ inline u64 read_u64(std::span<const u8> bytes, usize at) {
   return value;
 }
 
-inline u64 fnv1a64(std::span<const u8> bytes) {
-  u64 hash = 0xCBF29CE484222325ULL;
-  for (const u8 byte : bytes) {
-    hash ^= byte;
-    hash *= 0x100000001B3ULL;
-  }
-  return hash;
+inline base::Digest128 read_digest128(std::span<const u8> bytes, usize at) {
+  base::Digest128 out;
+  out.low = read_u64(bytes, at);
+  out.high = read_u64(bytes, at + 8);
+  return out;
 }
 
 // The offset of `kind`'s payload in a serialized package.
@@ -183,9 +182,10 @@ inline Storage composite_storage(ir::SymbolTable& strings) {
 }
 
 // The bytes `composite_storage` writes, with its side tables.
-inline std::vector<u8> composite_bytes(ir::SymbolTable& strings,
-                                       const Storage& storage,
-                                       std::span<const u64> hashes = {}) {
+inline std::vector<u8> composite_bytes(
+    ir::SymbolTable& strings,
+    const Storage& storage,
+    std::span<const base::Digest128> hashes = {}) {
   const std::array<std::string_view, 1> names{"main.al"};
   const std::array<AddrName, 1> addr_names{
       AddrName{RegisterIdx(0), "x", /*is_param=*/false, /*is_capture=*/false}};

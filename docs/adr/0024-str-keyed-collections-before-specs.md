@@ -66,3 +66,11 @@ borrowed from another field is legal when the borrow rules allow it.
 A borrow of a view from `get` conflicts with a later insertion and
 coexists with further reads, which `tools/check_borrow_rules.py`
 pins under `map`.
+
+## Amendments
+
+**The table hashes with XXH3-64.** ADR-0073 replaced FNV-1a
+project-wide and ADR-0074 gave the standard library its hash in
+`core`: `Map` hashes through it, and the "hashing is this module's
+own" above now names that module. Key copying, equality, and the
+borrow rules below are unchanged.

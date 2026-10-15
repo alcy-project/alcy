@@ -4,6 +4,7 @@
 #include "ir/serialize.h"
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <deque>
 #include <span>
@@ -13,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/hash.h"
 #include "debug/dcheck.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -136,8 +138,10 @@ class Serializer {
     // The identity is a function of everything written above, so the
     // writer computes it rather than taking it on faith.
     ByteWriter identity;
-    identity.put_u64(
-        identity_digest(input_.files, input_.width, input_.compiler_version));
+    const std::array<u8, 16> digest =
+        identity_digest(input_.files, input_.width, input_.compiler_version)
+            .bytes();
+    identity.bytes(digest);
     sections.push_back({Section::Identity, std::move(identity)});
 
     // The header and the table come first, so an offset depends on the
@@ -178,7 +182,7 @@ class Serializer {
     if (out.size() < footer_at) {
       out.zeros(footer_at - out.size());
     }
-    out.put_u64(binary::fnv1a64(out.data()));
+    out.bytes(base::hash128(out.data()).bytes());
     return std::vector<u8>(out.data().begin(), out.data().end());
   }
 
@@ -540,7 +544,7 @@ class Serializer {
     for (u32 i = 0; i < files_.names.size(); ++i) {
       out.put_u32(find_name(files_.names[i]));
       out.put_u32(0);
-      out.put_u64(files_.hash_of(i));
+      out.bytes(files_.hash_of(i).bytes());
     }
     return out;
   }

@@ -6,9 +6,11 @@
 #include <cstring>
 #include <initializer_list>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <vector>
 
+#include "base/hash.h"
 #include "debug/dcheck.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -169,18 +171,19 @@ bool same_diagnostic(const Diagnostic& a, const Diagnostic& b) {
   return true;
 }
 
-// FNV-1a over the fields `same_diagnostic` reads, so entries that hash
+// XXH3-64 over the fields `same_diagnostic` reads, so entries that hash
 // apart are known to differ and the ones that hash together are settled
 // by comparing them whole.
 u64 hash_diagnostic(const Diagnostic& d) {
-  u64 hash = 14695981039346656037ull;
-  const auto mix = [&hash](u64 value) {
-    hash ^= value;
-    hash *= 1099511628211ull;
+  std::vector<u8> canonical;
+  const auto mix = [&canonical](u64 value) {
+    for (u32 shift = 0; shift < 64; shift += 8) {
+      canonical.push_back(static_cast<u8>(value >> shift));
+    }
   };
-  const auto mix_text = [&mix](std::string_view text) {
+  const auto mix_text = [&canonical](std::string_view text) {
     for (const char c : text) {
-      mix(static_cast<u64>(static_cast<u8>(c)));
+      canonical.push_back(static_cast<u8>(c));
     }
   };
   mix(static_cast<u64>(d.severity));
@@ -200,7 +203,7 @@ u64 hash_diagnostic(const Diagnostic& d) {
     mix(d.labels[i].span.length);
     mix_text(d.labels[i].message);
   }
-  return hash;
+  return base::hash64(std::span<const u8>(canonical.data(), canonical.size()));
 }
 
 }  // namespace

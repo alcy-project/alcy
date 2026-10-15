@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/hash.h"
 #include "codegen/target.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
@@ -15,7 +16,6 @@
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
-#include "ir/binary_format.h"
 #include "ir/deserialize.h"
 #include "ir/type.h"
 #include "ir/write_input.h"
@@ -53,9 +53,9 @@ std::vector<std::string> split_lines(std::string_view text) {
 
 // Builds `source` in `dir` for `target` as an IR binary and answers the
 // identity the artifact records, or nothing when a step failed.
-std::optional<u64> identity_of(io::TempDir& dir,
-                               std::string_view source,
-                               const codegen::Target& target) {
+std::optional<base::Digest128> identity_of(io::TempDir& dir,
+                                           std::string_view source,
+                                           const codegen::Target& target) {
   if (!dir.write_file("main.al", source)) {
     return std::nullopt;
   }
@@ -140,12 +140,12 @@ TEST_CASE("The ir-bc mode writes the binary form beside the source") {
     if (program < names.size()) {
       const std::span<const u8> source(
           reinterpret_cast<const u8*>(PROGRAM.data()), PROGRAM.size());
-      CHECK(package.file_hashes[program] == ir::binary::fnv1a64(source));
+      CHECK(package.file_hashes[program] == base::hash128(source));
     }
     // The identity is one digest over the tables the reader just
     // rebuilt: the writer computed it from the same facts, so a cache
     // compares one number and the table's own bytes prove it.
-    CHECK(package.identity != 0);
+    CHECK(package.identity != base::Digest128{});
     std::vector<std::string_view> views;
     views.reserve(names.size());
     for (const std::string& name : names) {
@@ -212,9 +212,9 @@ TEST_CASE("Two 64-bit targets lower one source to the same IR") {
 TEST_CASE("The identity follows the bytes a build read") {
   io::TempDir dir = io::TempDir::create_unique("alcy_ir_identity_test_");
   const codegen::Target host{"x86_64-unknown-linux-gnu", ir::PointerWidth::W64};
-  const std::optional<u64> first = identity_of(dir, PROGRAM, host);
-  const std::optional<u64> again = identity_of(dir, PROGRAM, host);
-  const std::optional<u64> changed =
+  const std::optional<base::Digest128> first = identity_of(dir, PROGRAM, host);
+  const std::optional<base::Digest128> again = identity_of(dir, PROGRAM, host);
+  const std::optional<base::Digest128> changed =
       identity_of(dir, std::string(PROGRAM) + "\n", host);
   CHECK(first.has_value());
   CHECK(again.has_value());
@@ -230,10 +230,10 @@ TEST_CASE("The identity does not follow the named machine") {
   // over the IR's inputs, so a cache answers the second machine without
   // rebuilding.
   io::TempDir dir = io::TempDir::create_unique("alcy_ir_identity_machine_");
-  const std::optional<u64> host = identity_of(
+  const std::optional<base::Digest128> host = identity_of(
       dir, PROGRAM,
       codegen::Target{"x86_64-unknown-linux-gnu", ir::PointerWidth::W64});
-  const std::optional<u64> cross = identity_of(
+  const std::optional<base::Digest128> cross = identity_of(
       dir, PROGRAM,
       codegen::Target{"aarch64-unknown-linux-gnu", ir::PointerWidth::W64});
   CHECK(host.has_value());

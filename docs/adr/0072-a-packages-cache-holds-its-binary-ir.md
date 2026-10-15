@@ -35,7 +35,7 @@ steer it: they act after the IR exists.
 over the inputs that steer it, and a later build with the same digest
 loads it instead of running the front end.**
 
-- The **key** is one `u64` (`fnv1a64`, like the identity) over, in a
+- The **key** is one digest (`base::Digest128`, XXH3-128) over, in a
   fixed order: `ir::identity_digest` over the loaded sources, the
   pointer width, and the compiler version; the manifest's content hash;
   and the named target. The target joins conservatively — a key that
