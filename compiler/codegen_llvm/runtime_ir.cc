@@ -585,7 +585,7 @@ class RuntimeBuilder {
         file, llvm::ConstantPointerNull::get(builder_.getPtrTy()), "missing");
     builder_.CreateCondBr(missing, fail, done);
     builder_.SetInsertPoint(fail);
-    builder_.CreateRet(llvm::ConstantInt::getSigned(usize_, -1));
+    builder_.CreateRet(llvm::ConstantInt::get(builder_.getInt64Ty(), -1));
     builder_.SetInsertPoint(done);
     llvm::Function* seek_fn = libc(
         "fseek",
@@ -611,8 +611,8 @@ class RuntimeBuilder {
   // read or -1 when the path cannot be opened.
   void build_read_file_into() {
     llvm::FunctionType* type = llvm::FunctionType::get(
-        usize_, {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_},
-        false);
+        builder_.getInt64Ty(),
+        {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
     llvm::Function* function = runtime("alcy_read_file_into", type);
     function->setDoesNotThrow();
     llvm::LLVMContext& context = module_.getContext();
@@ -635,7 +635,7 @@ class RuntimeBuilder {
         file, llvm::ConstantPointerNull::get(builder_.getPtrTy()), "missing");
     builder_.CreateCondBr(missing, fail, done);
     builder_.SetInsertPoint(fail);
-    builder_.CreateRet(llvm::ConstantInt::getSigned(usize_, -1));
+    builder_.CreateRet(llvm::ConstantInt::get(builder_.getInt64Ty(), -1));
     builder_.SetInsertPoint(done);
     llvm::Function* read_fn = libc(
         "fread",
@@ -651,15 +651,21 @@ class RuntimeBuilder {
         libc("fclose", llvm::FunctionType::get(builder_.getInt32Ty(),
                                                {builder_.getPtrTy()}, false));
     builder_.CreateCall(close_fn, {file});
-    builder_.CreateRet(count);
+    // The count is a `size_t`, which a 32-bit target answers in 32 bits;
+    // the helper answers `i64` on every target.
+    llvm::Value* widened = count;
+    if (count->getType() != builder_.getInt64Ty()) {
+      widened = builder_.CreateZExt(count, builder_.getInt64Ty(), "wide");
+    }
+    builder_.CreateRet(widened);
   }
 
   // `alcy_write_file(path, len, data, data_len)` answers the bytes
   // written or -1 when the path cannot be opened.
   void build_write_file() {
     llvm::FunctionType* type = llvm::FunctionType::get(
-        usize_, {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_},
-        false);
+        builder_.getInt64Ty(),
+        {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
     llvm::Function* function = runtime("alcy_write_file", type);
     function->setDoesNotThrow();
     llvm::LLVMContext& context = module_.getContext();
@@ -698,7 +704,13 @@ class RuntimeBuilder {
         libc("fclose", llvm::FunctionType::get(builder_.getInt32Ty(),
                                                {builder_.getPtrTy()}, false));
     builder_.CreateCall(close_fn, {file});
-    builder_.CreateRet(count);
+    // The count is a `size_t`, which a 32-bit target answers in 32 bits;
+    // the helper answers `i64` on every target.
+    llvm::Value* widened = count;
+    if (count->getType() != builder_.getInt64Ty()) {
+      widened = builder_.CreateZExt(count, builder_.getInt64Ty(), "wide");
+    }
+    builder_.CreateRet(widened);
   }
   // A freestanding program has no libc to open a file with, so the
   // file answers are the error and the std still links.

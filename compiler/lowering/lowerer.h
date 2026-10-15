@@ -433,7 +433,6 @@ class Lowerer {
   Val lower_extern_call(ast::ExprIdx expr,
                         const analyzer::CheckedModule::FnSig& sig);
   ir::TypeIdx usize_type();
-  ir::TypeIdx isize_type();
   bool str_parts(Val str, ir::OperandIdx& bytes_out, ir::OperandIdx& len_out);
   bool slice_parts(Val slice,
                    ir::OperandIdx& bytes_out,
