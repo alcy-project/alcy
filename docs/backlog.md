@@ -143,13 +143,11 @@ replaced. The foundations are in `roadmap.md`.
 
 ### Language and library surface
 
-- [ ] The LLVM textual-IR emission traps under the wasm-host test suite
-  (`run.py --target=tests --build-subdir=build_wasm --target-os=emscripten`):
-  `emit_mode_test`'s "writes the module as textual IR" and the CLI's
-  same case reach `unreachable` with no diagnostic, while the alcy IR
-  text case beside them passes. Everything else in that suite runs, so
-  the failure is in the LLVM path of a 32-bit host and wants its own
-  bisect.
+- [x] The LLVM textual-IR emission under the wasm-host test suite: the
+  runtime helpers' shapes were the 64-bit spelling of pointer-width
+  values, and with the canonical `i64` shapes and the runtime's own
+  widening, `emit_mode_test`'s "writes the module as textual IR" and
+  the CLI's same case pass under the emscripten host.
 - [ ] The tree-sitter grammar reads a condition that opens with `(` as
   a pattern, so `if (x) == (y) {}` and `if (x, 1) == (y, 1) {}` parse
   as an error there while the compiler accepts them. The
