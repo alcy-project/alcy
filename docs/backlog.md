@@ -143,6 +143,23 @@ replaced. The foundations are in `roadmap.md`.
 
 ### Language and library surface
 
+- [ ] A method that takes its receiver by value does not move a field
+  receiver out of its owner: `s.b.unwrap()` with `b: Option<Vec<i32>>`
+  aborts in `free`, while `match s.b` and `x := s.b` are tracked. The
+  method-call path wants the marker the field match emits.
+- [x] A matched non-Copy field is moved out of its owner: the match
+  marks the field's place moved, so `match s.b` with
+  `b: Option<Vec<i32>>` retires the payload once
+  (`ok-match-field-move`, `exe-match-field-move`).
+- [x] A field hands back the type it declared: the reader returned the
+  stored copy, and an enum field lost its variants with it — a match
+  on `s.b` reported "Variant is not a member of the matched type" and
+  `s.b.unwrap()` aborted, while a local of the same type was fine
+  (`ok-enum-field`, `exe-enum-field`).
+- [x] Nested type arguments close without a space: the type list stops
+  when a `>` is banked, the guard the turbofish path already had, so
+  `a: Vec<Vec<i32>>` parses (`ok-nested-generics`,
+  `exe-nested-generics`).
 - [x] The LLVM textual-IR emission under the wasm-host test suite: the
   runtime helpers' shapes were the 64-bit spelling of pointer-width
   values, and with the canonical `i64` shapes and the runtime's own
