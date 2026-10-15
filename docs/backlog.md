@@ -143,10 +143,10 @@ replaced. The foundations are in `roadmap.md`.
 
 ### Language and library surface
 
-- [ ] A method that takes its receiver by value does not move a field
-  receiver out of its owner: `s.b.unwrap()` with `b: Option<Vec<i32>>`
-  aborts in `free`, while `match s.b` and `x := s.b` are tracked. The
-  method-call path wants the marker the field match emits.
+- [x] A method that takes its receiver by value moves a field receiver
+  out of its owner: the call marks the field's place moved, so
+  `s.b.unwrap()` with `b: Option<Vec<i32>>` retires the payload once
+  (`ok-field-receiver`, `exe-field-receiver`).
 - [x] A matched non-Copy field is moved out of its owner: the match
   marks the field's place moved, so `match s.b` with
   `b: Option<Vec<i32>>` retires the payload once

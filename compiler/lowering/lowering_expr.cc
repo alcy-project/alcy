@@ -2878,6 +2878,15 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   Val receiver = is_ref_tag(tag_of(info.params[0]))
                      ? place_addr(receiver_expr)
                      : lower_expr(receiver_expr, nullptr);
+  // A by-value receiver that names a field moves it out of its owner,
+  // so the owner's drop skips it; a local already carries the marker.
+  if (!is_ref_tag(tag_of(info.params[0])) &&
+      ast.exprs[receiver_expr].kind == ast::ExprKind::Field) {
+    Val field = place_addr(receiver_expr);
+    if (field.place && field.address && !is_copy(field.type)) {
+      mark_move(field);
+    }
+  }
   if (failed || terminated_cur()) {
     return stopped_value();
   }
