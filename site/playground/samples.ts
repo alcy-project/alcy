@@ -63,6 +63,18 @@ export async function loadSamples(): Promise<void> {
     elements.samples.append(option);
   }
   elements.samples.disabled = false;
+  // The picker answers a choice wherever the program came from: the
+  // arriving program (guide handoff, shared link, restored session)
+  // decides what starts in the editor, never whether the picker works.
+  elements.samples.addEventListener("change", () => {
+    // The origin option only names the arriving program; picking a
+    // real example retires it.
+    const origin = elements.samples.querySelector<HTMLOptionElement>('option[value=""]');
+    if (origin !== null) {
+      origin.remove();
+    }
+    void loadSample(elements.samples.value);
+  });
   const first = manifest.default ?? manifest.samples[0]?.file ?? "";
   const initial = manifest.samples.some((sample) => sample.file === first)
     ? first
@@ -95,13 +107,4 @@ export async function loadSamples(): Promise<void> {
   } else {
     await loadSample(elements.samples.value);
   }
-  elements.samples.addEventListener("change", () => {
-    // The origin option only names the arriving program; picking a
-    // real example retires it.
-    const origin = elements.samples.querySelector<HTMLOptionElement>('option[value=""]');
-    if (origin !== null) {
-      origin.remove();
-    }
-    void loadSample(elements.samples.value);
-  });
 }
