@@ -2606,6 +2606,18 @@ void Checker::check_cond(u32 module, ast::CondIdx cond, bool& binds) {
     const ir::TypeIdx init = check_expr(module, node.init, nullptr);
     scopes.emplace_back();
     binds = true;
+    // The form exists for a refutable pattern: an identifier or a
+    // wildcard always matches, so the branch would enter whatever the
+    // initializer holds.
+    const ast::PatternKind condition_kind = ast.patterns[node.pattern].kind;
+    if (condition_kind == ast::PatternKind::Ident ||
+        condition_kind == ast::PatternKind::MutIdent ||
+        condition_kind == ast::PatternKind::Wildcard) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerConditionAlwaysMatches>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidOperation, ast.patterns[node.pattern].span);
+      (void)index;
+    }
     bind_pattern(module, node.pattern, init);
     if (verify_comp_known && !comp_checked_in_scope(node.init) &&
         !expr_comp_known(module, node.init)) {

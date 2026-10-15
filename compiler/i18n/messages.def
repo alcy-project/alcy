@@ -141,6 +141,7 @@
   F(AnalyzerCompBlockValue, "Comp block value is not comp-known") \
   F(AnalyzerCompCondition, "Comp condition is not comp-known") \
   F(AnalyzerCompConditionInitializer, "Comp condition initializer is not comp-known") \
+  F(AnalyzerConditionAlwaysMatches, "This pattern always matches; write a plain condition or a refutable pattern") \
   F(AnalyzerCompFunctionOutsideComp, "Function '{}' is a `comp fn`; it can only be used during compilation") \
   F(AnalyzerCompMatchScrutinee, "Comp match scrutinee is not comp-known") \
   F(AnalyzerCompParameterArgument, "Argument for `comp` parameter must be comp-known") \
