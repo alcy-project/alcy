@@ -207,7 +207,7 @@ impl String {
   }
 
   // Reserves room for `extra` more bytes.
-  fn reserve(mut self: &mut Self, extra: usize) {
+  pub fn reserve(mut self: &mut Self, extra: usize) {
     needed := self.len + extra
     if needed < self.len {
       panic("capacity overflow")
