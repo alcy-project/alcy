@@ -316,16 +316,29 @@ TEST_CASE("Demangle recovers raw pointer types") {
   CHECK(symbol::display(out.generics[1]) == "*str");
 }
 
-TEST_CASE("Demangle refuses a type nested too deeply") {
+TEST_CASE("Demangle follows a type nested within the language's budget") {
   Fixture f;
   symbol::Signature sig = signature("m", "id", symbol::Signature::Kind::Free);
   sig.generics = {f.i32};
   const ir::Storage types = f.build();
   std::string encoded = symbol::mangle(sig, types, f.strings);
-  // The one type tag becomes a chain of references: without a depth
-  // limit the decoder follows it into the stack.
+  // The one type tag becomes a chain of references the compiler could
+  // produce: the decoder's budget is the language's own, so it follows.
   const std::string tail(1, encoded.back());
   encoded.replace(encoded.size() - 1, 1, std::string(200, 'r') + tail);
+  CHECK(symbol::demangle(encoded).is_ok());
+}
+
+TEST_CASE("Demangle refuses a type nested past the language's budget") {
+  Fixture f;
+  symbol::Signature sig = signature("m", "id", symbol::Signature::Kind::Free);
+  sig.generics = {f.i32};
+  const ir::Storage types = f.build();
+  std::string encoded = symbol::mangle(sig, types, f.strings);
+  // A hostile symbol stops at the budget rather than exhausting the
+  // stack.
+  const std::string tail(1, encoded.back());
+  encoded.replace(encoded.size() - 1, 1, std::string(300, 'r') + tail);
   CHECK(symbol::demangle(encoded).is_err());
 }
 

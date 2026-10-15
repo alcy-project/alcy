@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/nesting.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "ir/common.h"
@@ -379,14 +380,13 @@ class Decoder {
 
   bool decode_type(DecodedType& out) {
     // A type constructor nests, so the decoder recurses; a hostile
-    // symbol stops at this depth rather than exhausting the stack.
-    if (type_depth_ >= MAX_TYPE_DEPTH) {
+    // symbol stops at the language's own nesting budget rather than
+    // exhausting the stack.
+    if (nesting_.exhausted()) {
       return false;
     }
-    ++type_depth_;
-    const bool ok = decode_type_inner(out);
-    --type_depth_;
-    return ok;
+    base::NestingScope scope(nesting_);
+    return decode_type_inner(out);
   }
 
   bool decode_type_inner(DecodedType& out) {
@@ -493,10 +493,11 @@ class Decoder {
 
  private:
   // The deepest type constructor nest the decoder follows.
-  static constexpr usize MAX_TYPE_DEPTH = 64;
+  // The budget every pass shares (base/nesting.h), so a symbol the
+  // compiler can produce always decodes.
+  base::NestingGuard nesting_{base::MAX_NESTING};
 
   std::string_view text_;
-  usize type_depth_ = 0;
   usize at_ = 0;
 };
 
