@@ -1669,10 +1669,10 @@ ir::TypeIdx Checker::check_method_call(u32 module,
   // A call that spells type arguments can only resolve a method that
   // declares them; one without reaches the eager methods and the spec
   // implementations first.
-  const CheckedModule::MethodInfo* method =
-      method_type_args.empty()
-          ? lookup_method(nominal, name, module, node.span, spec_only)
-          : nullptr;
+  // A call that spells type arguments reaches the spec path too: a
+  // spec impl's generic method instantiates against its declaration.
+  const CheckedModule::MethodInfo* method = lookup_method(
+      nominal, name, module, node.span, spec_only, U32_MAX, method_type_args);
   if (method == nullptr && !spec_only) {
     bound_failure_ = false;
     method = instantiate_generic_method(module, nominal, name, method_type_args,

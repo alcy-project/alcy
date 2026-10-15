@@ -231,7 +231,6 @@
   F(AnalyzerSelfOutsideImpl, "Self outside of an impl block") \
   F(AnalyzerSourceFileHasNoModule, "Source file '{}' has no module") \
   F(AnalyzerSpecCanonicalShape, "Spec '{}' must keep the compiler's operator shape") \
-  F(AnalyzerSpecMethodTypeParameters, "Spec method '{}' cannot declare type parameters while its impl is generic") \
   F(AnalyzerSpecRequiresNominalTarget, "Spec implementation requires a nominal type") \
   F(AnalyzerSpecSealed, "Spec '{}' is sealed by package '{}'; implementing it from outside needs the [spec] implement key") \
   F(AnalyzerSpecSealUnknown, "Manifest seals spec '{}', which package '{}' does not declare") \

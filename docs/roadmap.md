@@ -91,8 +91,9 @@ peripheral work lives in `backlog.md`. The language record lives in
   declaration and the implementation compare under one anonymous
   stand-in per parameter, so the names need not match, and a call that
   spells them resolves one instantiation through the generic method
-  registry. What remains: a generic impl carrying a method's own
-  parameters. `collect`
+  registry. A generic impl carries a method's own parameters too: the
+  declaration checks the impl's arity, and the call instantiates the
+  member against it. `collect`
   landed with bound-driven inference: a parameter no argument binds
   (`I: Iterator<T>`'s item type) comes from the first declared
   method's signature and the implementation for the bound-covered

@@ -450,6 +450,7 @@ class Checker {
       u32 impl_module,
       u32 spec,
       std::span<const ir::TypeIdx> spec_args,
+      std::span<const ir::TypeIdx> method_args,
       ir::TypeIdx self_type,
       const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
       std::span<const ValueParam> value_scope,
@@ -773,12 +774,14 @@ class Checker {
   // Finds a method for `self`: an inherent one, or with `spec_only` a
   // spec implementation reachable from `module`. Only in-scope specs
   // match.
-  const CheckedModule::MethodInfo* lookup_method(ir::TypeIdx self,
-                                                 std::string_view name,
-                                                 u32 module,
-                                                 diag::Span span,
-                                                 bool spec_only,
-                                                 u32 spec_filter = U32_MAX);
+  const CheckedModule::MethodInfo* lookup_method(
+      ir::TypeIdx self,
+      std::string_view name,
+      u32 module,
+      diag::Span span,
+      bool spec_only,
+      u32 spec_filter = U32_MAX,
+      std::span<const ast::TypeIdx> method_type_args = {});
   // The compiler-owned operator spec `name` declared in staged core, or
   // U32_MAX when the standard library is not staged or declares none.
   u32 operator_spec(std::string_view name) const;

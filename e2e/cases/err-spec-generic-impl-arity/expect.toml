@@ -1,0 +1,2 @@
+exit = 4
+contains = ["does not match the declaration"]

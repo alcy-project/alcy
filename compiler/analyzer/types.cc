@@ -1706,30 +1706,31 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     const ast::ItemNode& method_node = ast.items[method_item];
     const std::string_view name =
         method_node.payload.get<ast::ItemFn>().name.name;
-    // A generic impl's own parameters would have to reach the method
-    // through the spec's declaration; until that lands, only a
-    // concrete impl carries a method with type parameters.
-    if (!method_node.payload.get<ast::ItemFn>().generic.empty() &&
-        generic_impl) {
-      const u32 index = bag.emit<i18n::Key::AnalyzerSpecMethodTypeParameters>(
-          diag::Severity::Error, diag::Stage::Analyzer,
-          DiagCode::GenericArguments,
-          method_node.payload.get<ast::ItemFn>().name.span, name);
-      (void)index;
-      return;
-    }
     bool declared = false;
+    bool arity_ok = true;
     for (const ast::SpecMethod& method : declaration.methods) {
-      if (method.name.name == name) {
-        declared = true;
-        break;
+      if (method.name.name != name) {
+        continue;
       }
+      declared = true;
+      arity_ok = method.generic.size() ==
+                 method_node.payload.get<ast::ItemFn>().generic.size();
+      break;
     }
     if (!declared) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecUnknownMethod>(
           diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownValue,
           method_node.payload.get<ast::ItemFn>().name.span, name,
           spec_entry->name);
+      (void)index;
+      return;
+    }
+    // The declaration is the check: a method that declares type
+    // parameters is implemented by one that declares as many.
+    if (!arity_ok) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerSpecSignatureMismatch>(
+          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
+          method_node.span, name, spec_entry->name);
       (void)index;
       return;
     }
@@ -5258,6 +5259,12 @@ void Checker::index_generic_methods() {
         continue;
       }
       const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
+      // A generic spec impl's methods instantiate through the declared
+      // signature, which is the check; a concrete one's conformance was
+      // settled where the impl was written.
+      if (impl.spec.is_valid() && !impl.params.empty()) {
+        continue;
+      }
       const ast::TypeNode& target = ast.types[impl.type];
       if (target.kind != ast::TypeKind::Path) {
         continue;
@@ -5603,17 +5610,21 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
   return nullptr;
 }
 
-const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
-                                                        std::string_view name,
-                                                        u32 module,
-                                                        diag::Span span,
-                                                        bool spec_only,
-                                                        u32 spec_filter) {
+const CheckedModule::MethodInfo* Checker::lookup_method(
+    ir::TypeIdx self,
+    std::string_view name,
+    u32 module,
+    diag::Span span,
+    bool spec_only,
+    u32 spec_filter,
+    std::span<const ast::TypeIdx> method_type_args) {
   bound_failure_ = false;
   // A field's type is a storage copy of the declared type, so a method or
   // operator reached through a field follows the copy back to its origin.
   self = type_origin(self);
-  if (!spec_only) {
+  // A call that spells type arguments reaches only a method that
+  // declares them; the eager inherent methods declare none.
+  if (!spec_only && method_type_args.empty()) {
     if (const CheckedModule::MethodInfo* inherent =
             lookup_inherent_method(self, name, module, span)) {
       return inherent;
@@ -5704,7 +5715,12 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
         for (const auto& [owner, position] : own->second) {
           const CheckedModule::MethodInfo& method =
               modules[owner].methods[position];
-          if (method.spec == entry.spec && method.name == name) {
+          // An entry keyed by spelled arguments is one call's
+          // instantiation, not the impl's registration: the registry
+          // re-instantiates per call, so the scan takes only the
+          // registered method.
+          if (method.spec == entry.spec && method.name == name &&
+              method.method_args.empty()) {
             candidate = &method;
             break;
           }
@@ -5769,9 +5785,25 @@ const CheckedModule::MethodInfo* Checker::lookup_method(ir::TypeIdx self,
       if (!check_declared_bounds(entry.module, impl.params, scope, span)) {
         continue;
       }
-      candidate =
-          instantiate_spec_method(entry.module, entry.spec, record_spec_args,
-                                  self, scope, value_scope, impl, name);
+      // A method with its own type parameters is instantiated from the
+      // call's spelled arguments, resolved where the receiver's are.
+      std::vector<ir::TypeIdx> method_args;
+      method_args.reserve(method_type_args.size());
+      bool args_ok = true;
+      for (ast::TypeIdx arg : method_type_args) {
+        const ir::TypeIdx resolved = resolve_type(module, arg, &self);
+        if (is_error(resolved)) {
+          args_ok = false;
+          break;
+        }
+        method_args.push_back(resolved);
+      }
+      if (!args_ok) {
+        return nullptr;
+      }
+      candidate = instantiate_spec_method(entry.module, entry.spec,
+                                          record_spec_args, method_args, self,
+                                          scope, value_scope, impl, name);
       if (candidate == nullptr) {
         return nullptr;
       }
@@ -6309,6 +6341,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     u32 impl_module,
     u32 spec,
     std::span<const ir::TypeIdx> spec_args,
+    std::span<const ir::TypeIdx> method_args,
     ir::TypeIdx self_type,
     const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
     std::span<const ValueParam> value_scope,
@@ -6322,7 +6355,8 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     for (const CheckedModule::MethodInfo& existing :
          modules[impl_module].methods) {
       if (existing.item == method_item &&
-          existing.self_type.idx == self_type.idx) {
+          existing.self_type.idx == self_type.idx &&
+          std::ranges::equal(existing.method_args, method_args)) {
         return &existing;
       }
     }
@@ -6343,8 +6377,22 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     for (const auto& binding : value_scope) {
       value_params.push_back(binding);
     }
-    if (!spec_method_sig(spec, name, spec_args, self_type, impl_module, {},
-                         declared_params, declared_ret, declared_receiver)) {
+    // The method's own type parameters bind from the call's explicit
+    // arguments before its signature resolves, the way they do for an
+    // inherent generic method.
+    const std::span<const ast::GenericParam> method_params =
+        fn_generic_params(method_item);
+    if (method_args.size() != method_params.size()) {
+      type_params = std::move(outer_scope);
+      value_params = std::move(outer_values);
+      return nullptr;
+    }
+    for (usize i = 0; i < method_params.size(); ++i) {
+      type_params.emplace_back(method_params[i].name.name, method_args[i]);
+    }
+    if (!spec_method_sig(spec, name, spec_args, self_type, impl_module,
+                         method_args, declared_params, declared_ret,
+                         declared_receiver)) {
       type_params = std::move(outer_scope);
       value_params = std::move(outer_values);
       return nullptr;
@@ -6392,7 +6440,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
                       method_item,
                       false,
                       spec,
-                      {}});
+                      {method_args.begin(), method_args.end()}});
     const u32 inst = inst_index(self_type);
     spec_scope.push_back(spec);
     const ir::TypeIdx saved_ret = fn_ret;
