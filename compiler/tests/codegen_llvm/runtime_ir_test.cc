@@ -193,6 +193,34 @@ TEST_CASE("Runtime follows the target width") {
   check_definition(module, "alcy_alloc", signature(pointer, {usize, usize}));
 }
 
+TEST_CASE("The file helpers answer i64 on a 32-bit target") {
+  llvm::LLVMContext context;
+  llvm::Module module("runtime_ir_test", context);
+  const auto i64 = llvm::Type::getInt64Ty(context);
+  const auto usize32 = llvm::Type::getInt32Ty(context);
+  const auto pointer = opaque_pointer(context);
+
+  // The lowering declares these with the intrinsic's own i64 shape,
+  // and the answer cannot follow the pointer's width: the size_t a
+  // 32-bit fread/fwrite answers is widened inside the runtime.
+  declare(module, "alcy_file_size", signature(i64, {pointer, usize32}));
+  declare(module, "alcy_read_file_into",
+          signature(i64, {pointer, usize32, pointer, usize32}));
+  declare(module, "alcy_write_file",
+          signature(i64, {pointer, usize32, pointer, usize32}));
+
+  add_runtime_definitions(module, target_of(ir::PointerWidth::W32));
+
+  CHECK(!llvm::verifyModule(module));
+
+  check_definition(module, "alcy_file_size",
+                   signature(i64, {pointer, usize32}));
+  check_definition(module, "alcy_read_file_into",
+                   signature(i64, {pointer, usize32, pointer, usize32}));
+  check_definition(module, "alcy_write_file",
+                   signature(i64, {pointer, usize32, pointer, usize32}));
+}
+
 TEST_CASE("A freestanding runtime calls no libc") {
   llvm::LLVMContext context;
   llvm::Module module("runtime_ir_test", context);
