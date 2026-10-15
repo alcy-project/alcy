@@ -267,9 +267,14 @@ bool CompEvaluator::evaluate_item(u32 module,
 }
 
 ir::TypeIdx CompEvaluator::expr_type_in(u32 mod, ast::ExprIdx expr) {
-  for (const auto& entry : inputs_.modules[mod].expr_types) {
-    if (entry.expr == expr && entry.inst == inst_) {
-      return entry.type;
+  // An expression can be checked more than once: a bare integer literal
+  // is re-checked against its sibling's type so `x + 42` adopts `x`'s,
+  // and the last entry is the answer the enclosing expression used. The
+  // lowering reads the same way, so the two agree on a duplicate key.
+  const auto& entries = inputs_.modules[mod].expr_types;
+  for (usize i = entries.size(); i > 0; --i) {
+    if (entries[i - 1].expr == expr && entries[i - 1].inst == inst_) {
+      return entries[i - 1].type;
     }
   }
   return error_type();

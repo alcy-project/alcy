@@ -47,8 +47,18 @@ fn unwrap_choice(comp c: Choice) -> i32 {
   }
 }
 
+// A bare literal is re-checked against its sibling's type, so the comp
+// engine must read the same last entry the lowering does; the first
+// entry would truncate `x` to the literal's initial width.
+fn narrow(comp x: i64) -> bool {
+  ret 42 < x
+}
+
 fn main() -> i32 {
   const k := 21
+  // A comp-evaluated call: `narrow`'s body runs in the comp engine,
+  // where `42 < x` must read the literal's re-checked width.
+  const narrow_ok := narrow(4294967296i64)
   // Short-circuit: the untaken side is never evaluated, even though the
   // comp engine would refuse the division inside it.
   const lhs_false := false && (1 / 0 == 0)
@@ -74,6 +84,9 @@ fn main() -> i32 {
   }
   if unwrap_choice(Choice::Num(6)) != 6 {
     ret 17
+  }
+  if !narrow_ok {
+    ret 20
   }
   ret double(k) + sum_to(4) - comp { 1 + 2 }
 }
