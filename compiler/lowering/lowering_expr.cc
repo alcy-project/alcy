@@ -1802,7 +1802,7 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       const ir::RegisterIdx data_len = emit(ir::Opcode::ExtractValue, usize_ty,
                                             {data_val, index_operand(1)});
       const ir::ExternalFunctionIdx ext = declare_external(
-          "alcy_write_file", i64_ty, {ptr_ty, usize_ty, ptr_ty, usize_ty});
+          "alcy_write_file", usize_ty, {ptr_ty, usize_ty, ptr_ty, usize_ty});
       ops.push_back(builder.operand(ir::Operand::from_external_function(
           ext, builder.primitive(ir::TypeTag::Function))));
       ops.push_back(to_operand(bytes, ptr_ty));
@@ -1818,8 +1818,9 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
       if (failed || terminated_cur()) {
         return stopped_value();
       }
-      const ir::ExternalFunctionIdx ext = declare_external(
-          "alcy_read_file_into", i64_ty, {ptr_ty, usize_ty, ptr_ty, usize_ty});
+      const ir::ExternalFunctionIdx ext =
+          declare_external("alcy_read_file_into", usize_ty,
+                           {ptr_ty, usize_ty, ptr_ty, usize_ty});
       ops.push_back(builder.operand(ir::Operand::from_external_function(
           ext, builder.primitive(ir::TypeTag::Function))));
       ops.push_back(to_operand(bytes, ptr_ty));
