@@ -1831,11 +1831,11 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    const ir::RegisterIdx dst = emit(ir::Opcode::Call, i64_ty, ops);
+    const ir::RegisterIdx dst = emit(ir::Opcode::Call, usize_ty, ops);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    return Val{to_operand(dst, i64_ty), i64_ty, false, false};
+    return Val{to_operand(dst, usize_ty), usize_ty, false, false};
   }
   if (name == "elem_ptr" || name == "elem_ref" || name == "ptr_offset" ||
       name == "ptr_offset_mut") {
