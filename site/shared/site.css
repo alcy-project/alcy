@@ -477,10 +477,12 @@ body.site {
   font-size: 12.5px;
 }
 
-.guide-article pre {
+.code-block pre {
   /* The block's own size decides the strut, and the strut decides the
      line rhythm -- the editing overlay's caret rides the same lines, so
-     the two must agree here or the caret drifts off its glyphs. */
+     the two must agree here or the caret drifts off its glyphs. The
+     metrics live on the block, not on the guide's article, so a block
+     anywhere renders the same. */
   font-size: 12.5px;
   padding: 10px 12px;
   background: var(--bg-code);
@@ -490,7 +492,7 @@ body.site {
   overflow-x: auto;
 }
 
-.guide-article pre code {
+.code-block pre code {
   padding: 0;
   background: none;
   border: 0;

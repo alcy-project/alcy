@@ -357,7 +357,20 @@ export function renderGuideIndex(
 // content, so every URL here is written from the deployment root and the
 // script below picks that root: the project's path on Pages, or the
 // server's root when the built directory is served locally.
-export function renderNotFound(boot: string, stamp: Stamp): string {
+// The 404 carries one runnable block: the page is missing, the compiler
+// is not, and a program that exits 404 says so better than prose. The
+// block is the guide's, read-only -- no Edit, no Reset, no Open; the
+// page's own links already reach the playground, and its depth under
+// the deployment root is whatever was mistyped.
+export function renderNotFound(
+  boot: string,
+  stamp: Stamp,
+  highlight: (code: string) => string,
+): string {
+  const source = `fn main() -> i32 {
+  println("Page not found")
+  ret 404
+}`;
   return `<!doctype html>
 <!-- Copyright 2026 The Alcy Project Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception -->
@@ -376,6 +389,7 @@ export function renderNotFound(boot: string, stamp: Stamp): string {
     </script>
     <script>${boot}</script>
     <link rel="stylesheet" href="shared/site.css" />
+    <link rel="stylesheet" href="shared/guide.css" />
     <link rel="icon" href="favicon.svg" />
   </head>
   <body class="site">
@@ -398,9 +412,20 @@ export function renderNotFound(boot: string, stamp: Stamp): string {
         <a href="guide/">Read the guide</a>
         <a href="playground/">Open the playground</a>
       </div>
+      <div class="code-block" data-language="alcy">
+        <div class="code-view">
+          <pre><code>${highlight(source)}</code></pre>
+        </div>
+        <div class="code-actions" hidden>
+          <button type="button" data-action="copy">Copy</button>
+          <button type="button" data-action="run">Run</button>
+        </div>
+        <div class="code-output" hidden></div>
+      </div>
     </main>
 
     ${footer(stamp)}
+    <script type="module" src="shared/guide.js"></script>
   </body>
 </html>
 `;

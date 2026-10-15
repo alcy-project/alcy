@@ -141,10 +141,22 @@ test("an index route is named at its directory", () => {
 });
 
 test("the 404 page keeps its links on the deployment root", () => {
-  const html = renderNotFound("INLINE_BOOT", { text: "TESTSTAMP", url: "" });
+  const html = renderNotFound("INLINE_BOOT", { text: "TESTSTAMP", url: "" }, (code) => code);
   match(html, /<script>INLINE_BOOT<\/script>/);
   equal(html.includes("boot.js"), false);
   match(html, /<span>alcy · TESTSTAMP<\/span>/);
+  // The playful block: runnable like the guide's but read-only -- the
+  // page's own links already reach the playground.
+  match(html, /<link rel="stylesheet" href="shared\/guide.css" \/>/);
+  match(html, /<script type="module" src="shared\/guide.js"><\/script>/);
+  match(html, /<div class="code-block" data-language="alcy">/);
+  match(html, /println\("Page not found"\)/);
+  match(html, /ret 404/);
+  match(html, /data-action="copy">Copy</);
+  match(html, /data-action="run">Run</);
+  equal(html.includes('data-action="edit"'), false);
+  equal(html.includes('data-action="reset"'), false);
+  equal(html.includes('data-action="open"'), false);
   match(html, /name="robots" content="noindex"/);
   match(html, /location\.pathname\.startsWith\("\/alcy\/"\)/);
   match(html, /href="guide\/"/);

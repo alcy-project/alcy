@@ -244,8 +244,9 @@ function writeSiteRootFiles(
   pages: readonly GuidePage[],
   boot: string,
   stamp: Stamp,
+  highlight: (code: string) => string,
 ): void {
-  writeFileSync(join(options.dist, "404.html"), renderNotFound(boot, stamp));
+  writeFileSync(join(options.dist, "404.html"), renderNotFound(boot, stamp, highlight));
   writeFileSync(
     join(options.dist, "favicon.svg"),
     readFileSync(join(options.site, "favicon.svg")),
@@ -389,7 +390,7 @@ async function main(): Promise<void> {
     }
   }
 
-  writeSiteRootFiles(options, allPages, boot, stamp);
+  writeSiteRootFiles(options, allPages, boot, stamp, highlight);
 
   const errors = [...fences.errors, ...checker.errors];
   if (errors.length > 0) {

@@ -318,7 +318,28 @@ function wireAlcy(block: CodeBlock): void {
   const reset = block.actions.querySelector<HTMLButtonElement>('[data-action="reset"]');
   const run = block.actions.querySelector<HTMLButtonElement>('[data-action="run"]');
   const open = block.actions.querySelector<HTMLButtonElement>('[data-action="open"]');
-  if (edit === null || reset === null || run === null || open === null) {
+
+  if (run !== null) {
+    run.addEventListener("click", () => {
+      void compileAndRun(block, block.source(), run);
+    });
+  }
+
+  // The 404's block ships without one: its own links already reach the
+  // playground, and its depth under the deployment root is whatever
+  // was mistyped, so there is no "../" that lands there.
+  if (open !== null) {
+    open.addEventListener("click", () => {
+      // The handoff rides sessionStorage, and the reader keeps their own
+      // tree's playground, one directory up from this page.
+      handOffToPlayground(block.source());
+      window.location.assign(new URL("../playground/", window.location.href).href);
+    });
+  }
+
+  // A block may ship read-only, like the 404's: no working copy and no
+  // editing state, only the published text and its buttons.
+  if (edit === null || reset === null) {
     return;
   }
 
@@ -410,17 +431,6 @@ function wireAlcy(block: CodeBlock): void {
       showWorking();
     }
     syncReset();
-  });
-
-  run.addEventListener("click", () => {
-    void compileAndRun(block, block.source(), run);
-  });
-
-  // The handoff rides sessionStorage, and the reader keeps their own
-  // tree's playground, one directory up from this page.
-  open.addEventListener("click", () => {
-    handOffToPlayground(block.source());
-    window.location.assign(new URL("../playground/", window.location.href).href);
   });
 }
 
