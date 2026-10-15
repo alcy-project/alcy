@@ -377,12 +377,12 @@ class Checker {
         // Reading a place of reference type yields the referent, and the
         // referent is a place: home/path carry the read place plus a
         // dereference, and the loan flows on as a reborrow. An
-        // aggregate behaves the same way, because loading
-        // `H { r: &mut i32 }` copies a reference that still points into
-        // the loan. A plain scalar load is a *copy* that owns nothing,
-        // so the loan stops there: `x := *r` must not look like
-        // returning the reference, nor keep the borrow alive past its
-        // last use.
+        // aggregate that holds a reference behaves the same way, because
+        // loading `H { r: &mut i32 }` copies a reference that still
+        // points into the loan. A load of anything else is a *copy*
+        // that owns nothing, so the loan stops there: `x := *r` must
+        // not look like returning the reference, nor keep the borrow
+        // alive past its last use.
         const ir::TypeIdx loaded_ty = storage.registers()[instr.dst.idx].type;
         const ir::TypeTag loaded = tag_of(loaded_ty);
         const bool is_reborrow =
@@ -391,12 +391,13 @@ class Checker {
         // keeps the buffer's loan alive exactly like a copy of a
         // reference does. Without this a view outlives the push that
         // reallocates under it: the loan dies at the copy and the
-        // conflict is never reported.
-        const bool carries_reference =
-            is_reborrow || loaded == ir::TypeTag::Struct ||
-            loaded == ir::TypeTag::Tuple || loaded == ir::TypeTag::Array ||
-            loaded == ir::TypeTag::Enum || loaded == ir::TypeTag::Str ||
-            loaded == ir::TypeTag::Slice || loaded == ir::TypeTag::Func;
+        // conflict is never reported. An aggregate of scalars - a
+        // `Point`, a tuple, an `Option<i32>` - carries nothing, so
+        // reading one out of a borrowed place owns its copy outright:
+        // `d := v.pop()` on a `Vec<Point>` must not read as a borrow
+        // of `v` that refuses the next `v.push`. The predicate is the
+        // one an indirect call's result already tracks through.
+        const bool carries_reference = value_may_carry(storage, loaded_ty);
         if (carries_reference) {
           flow[instr.dst.idx] = flow[addr];
         } else {
