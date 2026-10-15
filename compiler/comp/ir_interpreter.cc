@@ -900,7 +900,8 @@ bool Interpreter::execute_binary(ir::InstructionIdx instr, Frame& frame) {
       const i64 signed_right = sign_extend(right, tag);
       constexpr i64 MIN = static_cast<i64>(static_cast<u64>(1) << 63);
       if (signed_left == MIN && signed_right == -1 && int_bytes(tag) == 8) {
-        result = static_cast<u64>(MIN);
+        // `MIN / -1` wraps to `MIN`; `MIN % -1` is zero.
+        result = ins.op == Opcode::IntDiv ? static_cast<u64>(MIN) : 0;
         break;
       }
       result = ins.op == Opcode::IntDiv

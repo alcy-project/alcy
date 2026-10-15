@@ -788,6 +788,54 @@ ir::VerifiedStorage overflow_add_ir(ir::SymbolTable& strings, ir::Opcode op) {
   return std::move(builder).build().unwrap();
 }
 
+// `IntRem` over two i64 parameters: the shape a source-level `%` never
+// lowers to, because `lower_int_division` replaces a `-1` divisor
+// before the instruction is emitted, so only raw IR - a deserialized
+// package - reaches the interpreter's `MIN % -1` arm.
+ir::VerifiedStorage min_rem_ir(ir::SymbolTable& strings) {
+  ir::StorageBuilder builder;
+  const ir::TypeIdx i64 = ir::primitive_idx(ir::TypeTag::I64);
+  const ir::RegisterIdx left(0);
+  const ir::RegisterIdx right(1);
+  const ir::RegisterIdx remainder(2);
+  builder.reg({.type = i64, .def_idx = ir::InstructionIdx(base::INVALID_IDX)});
+  builder.reg({.type = i64, .def_idx = ir::InstructionIdx(base::INVALID_IDX)});
+  ir::OperandSeq operands;
+  operands.push(builder.operand(ir::Operand::from_register(left, i64)));
+  operands.push(builder.operand(ir::Operand::from_register(right, i64)));
+  const ir::InstructionIdx rem =
+      builder.instr({.op = ir::Opcode::IntRem,
+                     .flags = {},
+                     .dst = remainder,
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = operands.finish()});
+  builder.reg({.type = i64, .def_idx = rem});
+  const ir::OperandIdx result =
+      builder.operand(ir::Operand::from_register(remainder, i64));
+  const ir::InstructionIdx ret =
+      builder.instr({.op = ir::Opcode::Ret,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(base::INVALID_IDX),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = {result, 1}});
+  ir::InstrSeq instrs;
+  instrs.push(rem);
+  instrs.push(ret);
+  ir::BlockParamSeq params;
+  params.push(builder.block_param({.type = i64, .reg = left}));
+  params.push(builder.block_param({.type = i64, .reg = right}));
+  const ir::BlockIdx block = builder.block(
+      {.instrs = instrs.finish(), .block_params = params.finish()});
+  builder.function({.meta = {.return_type = i64,
+                             .param_types = {},
+                             .name = strings.intern("rem"),
+                             .path = str::EMPTY_STRING_ID,
+                             .kind = ir::SymbolKind::Foreign,
+                             .generics = ir::TypeIdxRange{}},
+                    .blocks = {block, 1}});
+  return std::move(builder).build().unwrap();
+}
+
 }  // namespace
 
 TEST_CASE("IR interpreter refuses an overflowing source add") {
@@ -808,6 +856,20 @@ TEST_CASE("IR interpreter wraps where the opcode says so") {
   CHECK(run.ok);
   CHECK(run.value.value.tag == comp::CompValue::Tag::Int);
   CHECK(run.value.value.int_value == 2147483648ull);
+}
+
+TEST_CASE("IR interpreter answers MIN % -1 as zero") {
+  Fixture f;
+  ir::VerifiedStorage storage = min_rem_ir(f.strings);
+  constexpr u64 MIN = static_cast<u64>(1) << 63;
+  const ir::TypeIdx i64 = ir::primitive_idx(ir::TypeTag::I64);
+  const std::vector<comp::CompVal> args{int_arg(i64, MIN),
+                                        int_arg(i64, ~static_cast<u64>(0))};
+  const RunResult run = run_function(f, *storage, ir::FunctionIdx(0), args,
+                                     comp::COMP_BRANCH_QUOTA, 0);
+  CHECK(run.ok);
+  CHECK(run.value.value.tag == comp::CompValue::Tag::Int);
+  CHECK(run.value.value.int_value == 0);
 }
 
 }  // namespace lowering
