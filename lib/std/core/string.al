@@ -42,6 +42,24 @@ impl str {
   }
 
   // The byte at `at`; in bounds exactly when `at < self.len()`.
+  // The view over the bytes in `[start, end)`. An index past the end
+  // clamps, so a span read never leaves the source.
+  pub fn slice(self: &Self, start: usize, end: usize) -> str {
+    m := str_len(*self)
+    mut lo := start
+    mut hi := end
+    if lo > m {
+      lo = m
+    }
+    if hi > m {
+      hi = m
+    }
+    if lo > hi {
+      hi = lo
+    }
+    ret str_slice(*self, lo, hi)
+  }
+
   pub fn byte(self: &Self, at: usize) -> u8 {
     ret str_byte(*self, at)
   }
