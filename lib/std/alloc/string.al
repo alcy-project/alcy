@@ -191,6 +191,21 @@ impl String {
     self[at] = b
   }
 
+  // Keeps the bytes `keep` accepts, compacting them in place.
+  pub fn retain(mut self: &mut Self, keep: (u8) -> bool) {
+    mut write := 0 as usize
+    mut read := 0 as usize
+    while read < self.len {
+      b := self[read]
+      if keep(b) {
+        self[write] = b
+        write = write + 1
+      }
+      read = read + 1
+    }
+    self.len = write
+  }
+
   // Reserves room for `extra` more bytes.
   fn reserve(mut self: &mut Self, extra: usize) {
     needed := self.len + extra
