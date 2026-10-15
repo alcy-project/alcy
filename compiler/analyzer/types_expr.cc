@@ -2891,8 +2891,20 @@ ir::TypeIdx Checker::check_match(u32 module,
     if (is_error(scrutinee)) {
       bind_error_idents(module, arm.pattern);
     } else {
-      const bool refutable = bind_pattern(module, arm.pattern, scrutinee,
-                                          reads_through_ref(scrutinee_expr));
+      // A value pattern against a reference scrutinee reads through it:
+      // the reference is peeled and the bindings name what it points at.
+      ir::TypeIdx pattern_ty = scrutinee;
+      bool pattern_by_ref = reads_through_ref(scrutinee_expr);
+      const ir::TypeTag tag = tag_of(pattern_ty);
+      if (!pattern_by_ref &&
+          ast.patterns[arm.pattern].kind != ast::PatternKind::Ref &&
+          (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef)) {
+        pattern_ty =
+            builder.ref_types()[builder.types()[pattern_ty].as_ref()].pointee;
+        pattern_by_ref = true;
+      }
+      const bool refutable =
+          bind_pattern(module, arm.pattern, pattern_ty, pattern_by_ref);
       // The `for` desugar marks its `Some` arm: the item pattern must
       // match every item, so a refutable one is an error here rather
       // than a filter. Hand-written matches keep lowering's verdict.
@@ -2920,8 +2932,19 @@ ir::TypeIdx Checker::check_match(u32 module,
     }
   }
   if (!is_error(scrutinee)) {
-    check_exhaustive(module, scrutinee, node.payload.get<ast::ExprMatch>().arms,
-                     node.span);
+    // The arm patterns peel a reference scrutinee, so exhaustiveness
+    // reads the type they do.
+    ir::TypeIdx exhaustive_ty = scrutinee;
+    const ir::TypeTag tag = tag_of(exhaustive_ty);
+    if ((tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) &&
+        !node.payload.get<ast::ExprMatch>().arms.empty() &&
+        ast.patterns[node.payload.get<ast::ExprMatch>().arms[0].pattern].kind !=
+            ast::PatternKind::Ref) {
+      exhaustive_ty =
+          builder.ref_types()[builder.types()[exhaustive_ty].as_ref()].pointee;
+    }
+    check_exhaustive(module, exhaustive_ty,
+                     node.payload.get<ast::ExprMatch>().arms, node.span);
   }
   if (expected != nullptr && !first) {
     return unify(*expected, result, node.span, "match");

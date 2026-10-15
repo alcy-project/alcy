@@ -3774,6 +3774,25 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
                              ir::BlockIdx fail_block) {
   const ast::PatternNode& node = ast.patterns[pattern];
   const diag::Span span = node.span;
+  // A variant pattern against a reference scrutinee reads through it:
+  // the reference is loaded and the variant is matched in what it names.
+  if (node.kind == ast::PatternKind::Tuple &&
+      node.payload.tuple.path.is_valid()) {
+    const ir::TypeTag scrutinee_tag = tag_of(scrut_type);
+    if (scrutinee_tag == ir::TypeTag::Ref ||
+        scrutinee_tag == ir::TypeTag::MutRef) {
+      const ir::TypeIdx pointee =
+          builder.state()
+              .ref_types[builder.state().types[scrut_type].as_ref()]
+              .pointee;
+      Val pointer = materialize(scrut_addr);
+      if (failed) {
+        return;
+      }
+      scrut_addr = Val{pointer.op, pointee, true, true};
+      scrut_type = pointee;
+    }
+  }
   switch (node.kind) {
     case ast::PatternKind::Wildcard:
       emit_br(body_block);
@@ -4124,6 +4143,11 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   // A scrutinee read through a reference is a place to inspect, not a
   // value to load: the discriminant test must not move the borrow.
   const bool borrowed = scrutinee_borrowed(match.scrutinee);
+  // A reference-typed scrutinee is read through as well: the pointer
+  // is loaded and the arms test the value it names.
+  const ir::TypeTag scrutinee_tag = tag_of(expr_type(match.scrutinee));
+  const bool through_ref =
+      scrutinee_tag == ir::TypeTag::Ref || scrutinee_tag == ir::TypeTag::MutRef;
   Val addr = Val{size_one, error_type(), true, false};
   if (borrowed) {
     addr = place_addr(match.scrutinee);
@@ -4137,7 +4161,19 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   if (failed || terminated_cur()) {
     return stopped_value();
   }
-  const ir::TypeIdx scrut_type = expr_type(match.scrutinee);
+  if (through_ref) {
+    Val pointer = materialize(addr);
+    if (failed) {
+      return stopped_value();
+    }
+    addr = Val{pointer.op, builder.primitive(ir::TypeTag::Ptr), true, true};
+  }
+  ir::TypeIdx scrut_type = expr_type(match.scrutinee);
+  if (through_ref) {
+    scrut_type = builder.state()
+                     .ref_types[builder.state().types[scrut_type].as_ref()]
+                     .pointee;
+  }
   const ir::TypeIdx result_type = expr_type(expr);
   Val slot{size_one, result_type, false, false};
   const bool has_slot = tag_of(result_type) != ir::TypeTag::Void &&
@@ -4186,7 +4222,7 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     epilogues.push_back(reserve_block());
   }
   const bool saved_borrowed = arm_borrowed_;
-  arm_borrowed_ = borrowed;
+  arm_borrowed_ = borrowed || through_ref;
   for (usize i = 0; i < patterns.size() && !failed; ++i) {
     // The arm's pattern bindings end at the arm's own exit, or the sweep
     // would place their drops where their slots do not dominate.
