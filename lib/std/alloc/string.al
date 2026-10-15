@@ -252,6 +252,18 @@ impl String {
     ret self.as_str().bytes()
   }
 
+  // A new string holding a copy of `text`.
+  pub fn from(text: str) -> String {
+    mut s := String::with_capacity(str_len(text))
+    s.push_str(text)
+    ret s
+  }
+
+  // The byte at `at`; `at` must be below the length.
+  pub fn byte(self: &Self, at: usize) -> u8 {
+    ret self.as_str().byte(at)
+  }
+
   pub fn as_bytes(self: &Self) -> &[u8] {
     ret unsafe { slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len) }
   }
