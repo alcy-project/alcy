@@ -16,6 +16,12 @@ clang_toolchain("emcc_wasm32") {
 
   executable_extension = ".js"
 
+  # The compiler under test needs room: a debug binary compiling to an
+  # object already spends most of the default 64 KiB, so any standard
+  # library growth tips it over. A megabyte is still nothing next to
+  # the megabytes a native test host grants the same binary.
+  extra_ldflags = "-sSTACK_SIZE=1MB"
+
   toolchain_args = {
     current_cpu = "wasm32"
     current_os = "emscripten"
