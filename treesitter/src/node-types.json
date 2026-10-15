@@ -2724,6 +2724,16 @@
     "type": "match_arm",
     "named": true,
     "fields": {
+      "guard": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "_expression",
+            "named": true
+          }
+        ]
+      },
       "pattern": {
         "multiple": false,
         "required": true,

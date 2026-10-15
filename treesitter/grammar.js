@@ -767,6 +767,8 @@ module.exports = grammar({
 
     unit_expression: _ => seq('(', ')'),
 
+    // The leading `(` is shared with `parenthesized_expression`, so the
+    // tuple's comma is what decides between them.
     tuple_expression: $ => seq(
       '(',
       $._expression,
@@ -903,6 +905,7 @@ module.exports = grammar({
 
     match_arm: $ => seq(
       field('pattern', $._pattern),
+      optional(seq('if', field('guard', $._expression))),
       '=>',
       field('value', $._expression),
     ),
