@@ -484,6 +484,9 @@ i32 run_compile_on(io::TempDir& dir,
   return cli_main(static_cast<i32>(argv.size()), argv.data());
 }
 
+// An object needs a target machine, and the wasm build has none linked
+// in, which is why `emit_mode_test` compiles its object half out there.
+#if !BUILD_FLAG(IS_OS_ASMJS)
 TEST_CASE("Compile emits an object file") {
 #if !ALCY_BACKEND_LLVM
   // The direct backend writes a module, not the object, IR, or
@@ -508,6 +511,8 @@ TEST_CASE("Compile emits an object file") {
     CHECK(tests::is_object_bytes(*bytes));
   }
 }
+
+#endif
 
 TEST_CASE("Compile emits textual IR") {
 #if !ALCY_BACKEND_LLVM
