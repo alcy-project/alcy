@@ -155,6 +155,25 @@ fn main() {
 }
 ```
 
+A match arm may carry a guard: the arm runs only when the pattern
+matches and the condition holds, and a false guard falls through to the
+next arm. A guarded arm does not cover a case, so the wildcard closes
+this one:
+
+```alcy
+fn sign(x: i32) -> i32 {
+  ret match x {
+    x if x < 0 => -1,
+    x if x > 0 => 1,
+    _ => 0,
+  }
+}
+
+fn main() {
+  println("{} {} {}", sign(-7), sign(0), sign(9))
+}
+```
+
 Enums may take type parameters, and the compiler understands `Option`
 and `Result` well enough to destructure them: a condition binds a
 pattern with `if pattern := expr`, and `?` propagates a failure:
