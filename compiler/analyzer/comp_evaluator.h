@@ -196,9 +196,8 @@ class CompEvaluator {
                       ast::BlockIdx body,
                       CompScope& scope,
                       CompFlow& out,
-                      bool always,
                       diag::Span span,
-                      ast::ExprIdx cond = ast::ExprIdx(base::INVALID_IDX));
+                      const ast::Cond* cond = nullptr);
   bool comp_run_fn(u32 def_module,
                    ast::ItemIdx item,
                    const std::vector<ir::TypeIdx>& params,

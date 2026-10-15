@@ -14,6 +14,29 @@ fn sum_to(comp n: i32) -> i32 {
   }
 }
 
+fn pick(comp n: i32) -> i32 {
+  ret match n {
+    x if x > 5 => 100,
+    x => 1,
+  }
+}
+
+// A pattern condition binds inside the comp engine the way the
+// runtime lowering does.
+fn choose(comp o: Option<i32>) -> i32 {
+  ret (if Option::Some(v) := o { v } else { 0 })
+}
+
+fn drain(comp first: Option<i32>) -> i32 {
+  mut cur := first
+  mut n := 0
+  while Option::Some(v) := cur {
+    n = n + v
+    break
+  }
+  ret n
+}
+
 fn main() -> i32 {
   const k := 21
   // Short-circuit: the untaken side is never evaluated, even though the
@@ -25,6 +48,19 @@ fn main() -> i32 {
   }
   if !lhs_true {
     ret 12
+  }
+  // A guard decides the arm in comp evaluation too.
+  if pick(3) != 1 {
+    ret 13
+  }
+  if pick(7) != 100 {
+    ret 14
+  }
+  if choose(Option::Some(4)) != 4 {
+    ret 15
+  }
+  if drain(Option::Some(5)) != 5 {
+    ret 16
   }
   ret double(k) + sum_to(4) - comp { 1 + 2 }
 }

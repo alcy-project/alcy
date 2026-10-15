@@ -751,36 +751,62 @@ bool CompEvaluator::comp_eval_stmt(u32 mod,
   }
 }
 
-// Unrolls a loop body while its condition holds. `always` covers
-// `loop`, which has no condition expression.
+// Unrolls a loop body while its condition holds; a null condition is
+// `loop`, which has none.
 bool CompEvaluator::comp_eval_loop(u32 mod,
                                    ast::BlockIdx body,
                                    CompScope& scope,
                                    CompFlow& out,
-                                   bool always,
                                    diag::Span span,
-                                   ast::ExprIdx cond) {
+                                   const ast::Cond* cond) {
   while (!failed_) {
     // Every turn of the loop is a backward jump, and the quota counts
     // it so a comp-known loop cannot run without bound.
     if (!spend(span)) {
       return false;
     }
-    if (!always) {
-      CompVal test;
-      if (!comp_eval_expr(mod, cond, scope, test)) {
-        return false;
-      }
-      if (test.value.tag != CompValue::Tag::Bool) {
-        return fail(span, "condition without value");
-      }
-      if (!test.value.bool_value) {
-        out.kind = CompFlow::Kind::Value;
-        return true;
+    bool enter = true;
+    bool pattern_frame = false;
+    if (cond != nullptr) {
+      if (cond->is_pattern) {
+        // The pattern's bindings live in the body's own frame: a turn
+        // that matches enters, one that does not ends the loop.
+        CompVal init;
+        if (!comp_eval_expr(mod, cond->init, scope, init)) {
+          return false;
+        }
+        scope.frames.emplace_back();
+        pattern_frame = true;
+        enter = comp_match_pattern(mod, cond->pattern, init, scope,
+                                   ast.exprs[cond->init].span);
+        if (failed_) {
+          scope.frames.pop_back();
+          return false;
+        }
+      } else {
+        CompVal test;
+        if (!comp_eval_expr(mod, cond->value, scope, test)) {
+          return false;
+        }
+        if (test.value.tag != CompValue::Tag::Bool) {
+          return fail(span, "condition without value");
+        }
+        enter = test.value.bool_value;
       }
     }
+    if (!enter) {
+      if (pattern_frame) {
+        scope.frames.pop_back();
+      }
+      out.kind = CompFlow::Kind::Value;
+      return true;
+    }
     CompFlow flow;
-    if (!comp_eval_block(mod, body, scope, flow)) {
+    const bool ok = comp_eval_block(mod, body, scope, flow);
+    if (pattern_frame) {
+      scope.frames.pop_back();
+    }
+    if (!ok) {
       return false;
     }
     if (flow.kind == CompFlow::Kind::Break) {
@@ -1342,26 +1368,57 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
     case ast::ExprKind::If: {
       const ast::ExprIf& if_node = node.payload.get<ast::ExprIf>();
       const ast::Cond& cond = ast.conds[if_node.cond];
-      CompVal test;
-      if (!comp_eval_expr(mod, cond.value, scope, test)) {
-        return false;
-      }
-      if (test.value.tag != CompValue::Tag::Bool) {
-        return fail(node.span, "condition without value");
-      }
       out.type = expr_type_in(mod, expr);
       CompFlow flow;
-      if (test.value.bool_value) {
-        if (!comp_eval_block(mod, if_node.then_block, scope, flow)) {
+      bool take_then = false;
+      bool pattern_frame = false;
+      if (cond.is_pattern) {
+        // The condition binds a pattern: the then-block is the arm that
+        // matched, and the bindings are its own.
+        CompVal init;
+        if (!comp_eval_expr(mod, cond.init, scope, init)) {
           return false;
         }
-      } else if (if_node.else_block.is_valid()) {
-        if (!comp_eval_block(mod, if_node.else_block, scope, flow)) {
+        scope.frames.emplace_back();
+        pattern_frame = true;
+        take_then = comp_match_pattern(mod, cond.pattern, init, scope,
+                                       ast.exprs[cond.init].span);
+        if (failed_) {
+          scope.frames.pop_back();
           return false;
         }
       } else {
-        out.value.tag = CompValue::Tag::Void;
-        return true;
+        CompVal test;
+        if (!comp_eval_expr(mod, cond.value, scope, test)) {
+          return false;
+        }
+        if (test.value.tag != CompValue::Tag::Bool) {
+          return fail(node.span, "condition without value");
+        }
+        take_then = test.value.bool_value;
+      }
+      if (take_then) {
+        if (!comp_eval_block(mod, if_node.then_block, scope, flow)) {
+          if (pattern_frame) {
+            scope.frames.pop_back();
+          }
+          return false;
+        }
+        if (pattern_frame) {
+          scope.frames.pop_back();
+        }
+      } else {
+        if (pattern_frame) {
+          scope.frames.pop_back();
+        }
+        if (if_node.else_block.is_valid()) {
+          if (!comp_eval_block(mod, if_node.else_block, scope, flow)) {
+            return false;
+          }
+        } else {
+          out.value.tag = CompValue::Tag::Void;
+          return true;
+        }
       }
       if (flow.kind != CompFlow::Kind::Value) {
         return fail(node.span, "control escapes the comp branch");
@@ -1387,6 +1444,23 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
         if (!matched) {
           scope.frames.pop_back();
           continue;
+        }
+        // A guard tests in the arm's own scope, after the pattern bound
+        // its names; a false guard moves on to the next arm.
+        if (arm.guard.is_valid()) {
+          CompVal guard;
+          if (!comp_eval_expr(mod, arm.guard, scope, guard)) {
+            scope.frames.pop_back();
+            return false;
+          }
+          if (guard.value.tag != CompValue::Tag::Bool) {
+            scope.frames.pop_back();
+            return fail(ast.exprs[arm.guard].span, "guard without value");
+          }
+          if (!guard.value.bool_value) {
+            scope.frames.pop_back();
+            continue;
+          }
         }
         CompFlow flow;
         const bool ok = comp_eval_expr(mod, arm.body, scope, flow.value);
@@ -1416,7 +1490,7 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
       out.type = expr_type_in(mod, expr);
       CompFlow flow;
       if (!comp_eval_loop(mod, node.payload.get<ast::ExprLoop>().body, scope,
-                          flow, true, node.span)) {
+                          flow, node.span)) {
         return false;
       }
       out.value.tag = CompValue::Tag::Void;
@@ -1427,8 +1501,8 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
       const ast::Cond& cond = ast.conds[while_node.cond];
       out.type = expr_type_in(mod, expr);
       CompFlow flow;
-      if (!comp_eval_loop(mod, while_node.body, scope, flow, false, node.span,
-                          cond.value)) {
+      if (!comp_eval_loop(mod, while_node.body, scope, flow, node.span,
+                          &cond)) {
         return false;
       }
       out.value.tag = CompValue::Tag::Void;
