@@ -50,11 +50,15 @@ The mechanism is frame pointers plus two tables, LLVM only:
   called once costs nothing.
 - The walk starts at the panic's frame and follows saved frame pointers
   outward, matching each return address against the entry with the
-  greatest start at or below it and within range; anything farther is
-  another mapping (libc, the sanitizer runtime) and not a match. It
-  stops after 64 frames, on a null or non-advancing frame, and prints
-  nothing when nothing matches rather than guessing. Each frame looks
-  up both tables: the function name, then the site after it.
+  greatest start below it and within range; anything farther is another
+  mapping (libc, the sanitizer runtime) and not a match. The comparison
+  is strict because a call that ends its function returns to the address
+  the next function begins at, and that frame belongs to the function
+  that made the call; an unpadded layout puts those two addresses on top
+  of each other. It stops after 64 frames, on a null or non-advancing
+  frame, and prints nothing when nothing matches rather than guessing.
+  Each frame looks up both tables: the function name, then the site
+  after it.
 - The walk reads the x86-64 SysV and AArch64 frame layout (`[fp]` is
   the caller's frame, `[fp+8]` its return address; Apple spells AArch64
   `arm64`). On any other target the panic carries its message and site

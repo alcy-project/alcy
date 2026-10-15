@@ -828,10 +828,10 @@ class RuntimeBuilder {
   }
 
   // One table lookup: the name and length of the entry with the
-  // greatest start at or below `pc` and in range, or null and zero.
-  // Builds its own scan loop and leaves the insert point past it. The
-  // caller only looks up a table it defined beside the function table,
-  // so entries is never null where this runs.
+  // greatest start below `pc` and in range, or null and zero. Builds
+  // its own scan loop and leaves the insert point past it. The caller
+  // only looks up a table it defined beside the function table, so
+  // entries is never null where this runs.
   struct TableMatch {
     llvm::Value* name = nullptr;
     llvm::Value* len = nullptr;
@@ -854,10 +854,12 @@ class RuntimeBuilder {
     llvm::Constant* nil = llvm::ConstantPointerNull::get(builder_.getPtrTy());
     builder_.CreateBr(scan);
 
-    // The scan keeps the match with the greatest start at or below the
-    // return address. Entries are not sorted, and an entry whose start
-    // is too far below the address (libc, another mapping) is not a
-    // match.
+    // The scan keeps the match with the greatest start below the
+    // return address. The comparison is strict: a call that ends its
+    // function returns to the address the next function begins at, and
+    // a frame belongs to the function that made the call. Entries are
+    // not sorted, and an entry whose start is too far below the address
+    // (libc, another mapping) is not a match.
     builder_.SetInsertPoint(scan);
     llvm::PHINode* best_start = builder_.CreatePHI(ptr, 2, "best_start");
     llvm::PHINode* best_name = builder_.CreatePHI(ptr, 2, "best_name");
@@ -882,7 +884,7 @@ class RuntimeBuilder {
     llvm::Value* pc_word = builder_.CreatePtrToInt(pc, usize_, "pc_word");
     llvm::Value* start_word =
         builder_.CreatePtrToInt(start, usize_, "start_word");
-    llvm::Value* after = builder_.CreateICmpULE(start_word, pc_word, "after");
+    llvm::Value* after = builder_.CreateICmpULT(start_word, pc_word, "after");
     llvm::Value* near = builder_.CreateICmpULT(
         builder_.CreateSub(pc_word, start_word),
         llvm::ConstantInt::get(usize_, MAX_BACKTRACE_DISTANCE), "near");
