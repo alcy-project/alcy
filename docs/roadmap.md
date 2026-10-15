@@ -153,5 +153,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   `IDENTITY` section carries one digest over the file table, the pointer
   width, and the toolchain (`ir::identity_digest`), so a cache compares
   one number instead of walking the tables. Designed in
-  `docs/adr/0056-the-ir-has-a-text-and-a-binary-form.md`; the pieces
+  `docs/adr/0056-the-ir-has-a-text-and-a-binary-form.md` and, for the
+  cache's key, artifact, location, and reporting,
+  `docs/adr/0072-a-packages-cache-holds-its-binary-ir.md`; the pieces
   are named in `docs/spec/deferred.md`.
