@@ -259,6 +259,17 @@ impl String {
     ret s
   }
 
+  // A new string holding a copy of the bytes in `bytes`.
+  pub fn from_slice(bytes: &[u8]) -> String {
+    mut s := String::with_capacity(slice_len(bytes))
+    mut i := 0 as usize
+    while i < slice_len(bytes) {
+      s.push(*bytes.at(i).unwrap())
+      i = i + 1
+    }
+    ret s
+  }
+
   // The byte at `at`; `at` must be below the length.
   pub fn byte(self: &Self, at: usize) -> u8 {
     ret self.as_str().byte(at)
