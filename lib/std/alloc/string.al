@@ -434,6 +434,18 @@ impl IndexMut<usize, u8> for String {
   }
 }
 
+impl PartialOrd for String {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering> {
+    ret self.as_str().partial_cmp(&other.as_str())
+  }
+}
+
+impl Ord for String {
+  fn cmp(self: &Self, other: &Self) -> Ordering {
+    ret self.as_str().cmp(&other.as_str())
+  }
+}
+
 impl PartialEq for String {
   fn eq(self: &Self, other: &Self) -> bool {
     if self.len() != other.len() {

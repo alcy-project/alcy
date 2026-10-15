@@ -192,6 +192,46 @@ impl PartialEq for str {
 impl Eq for str {
 }
 
+// The byte order is the string order: the first differing byte decides,
+// and a proper prefix sorts before the longer string.
+impl PartialOrd for str {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering> {
+    ret Option::Some(self.cmp(other))
+  }
+}
+
+impl Ord for str {
+  fn cmp(self: &Self, other: &Self) -> Ordering {
+    a := *self
+    b := *other
+    n := str_len(a)
+    m := str_len(b)
+    mut limit := n
+    if m < limit {
+      limit = m
+    }
+    mut i := 0 as usize
+    while i < limit {
+      x := str_byte(a, i)
+      y := str_byte(b, i)
+      if x < y {
+        ret Ordering::Less
+      }
+      if x > y {
+        ret Ordering::Greater
+      }
+      i = i + 1
+    }
+    if n < m {
+      ret Ordering::Less
+    }
+    if n > m {
+      ret Ordering::Greater
+    }
+    ret Ordering::Equal
+  }
+}
+
 // The scalar orderings compare the pointed-to values, the way their
 // equality does. Integers are totally ordered and carry `Ord`; floats
 // carry `PartialOrd` alone, because a NaN compares with nothing and
