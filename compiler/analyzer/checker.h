@@ -941,7 +941,7 @@ class Checker {
       std::span<const ast::ExprIdx> args);
   NominalEntry* resolve_struct_path(u32 module, ast::PathIdx path);
   void collect_pattern_idents(ast::PatternIdx pattern,
-                              std::vector<std::string_view>& out);
+                              std::vector<std::string_view>& out) const;
   void bind_error_idents(u32 module, ast::PatternIdx pattern);
 
   // Binds a pattern against a type, declaring locals. Returns true
@@ -957,8 +957,16 @@ class Checker {
   ir::TypeIdx borrow_binding(ir::TypeIdx type, bool by_ref);
   bool reads_through_ref(ast::ExprIdx expr) const;
   bool is_bare_int_literal(ast::ExprIdx expr) const;
-  bool expr_comp_known(u32 module, ast::ExprIdx expr) const;
-  bool expr_comp_known_block(u32 module, ast::BlockIdx block) const;
+  // Whether the comp engine can evaluate expr. bound names the
+  // bindings a surrounding pattern or declaration introduced, which the
+  // predicate itself cannot see in the checker's scopes.
+  bool expr_comp_known(u32 module,
+                       ast::ExprIdx expr,
+                       std::span<const std::string_view> bound = {}) const;
+  bool expr_comp_known_block(
+      u32 module,
+      ast::BlockIdx block,
+      std::span<const std::string_view> bound = {}) const;
   ir::TypeIdx check_binary_operands(u32 module,
                                     ast::ExprIdx lhs,
                                     ast::ExprIdx rhs,

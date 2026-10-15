@@ -32,7 +32,7 @@ namespace analyzer {
 // Patterns
 
 void Checker::collect_pattern_idents(ast::PatternIdx pattern,
-                                     std::vector<std::string_view>& out) {
+                                     std::vector<std::string_view>& out) const {
   switch (ast.patterns[pattern].kind) {
     case ast::PatternKind::Wildcard:
     case ast::PatternKind::Literal: return;
@@ -354,7 +354,9 @@ bool Checker::is_bare_int_literal(ast::ExprIdx expr) const {
 // comp-known locals and literal consts, and pure combinations
 // thereof. Calls count when their arguments are comp-known and the
 // callee is not an intrinsic (print/panic never are).
-bool Checker::expr_comp_known(u32 module, ast::ExprIdx expr) const {
+bool Checker::expr_comp_known(u32 module,
+                              ast::ExprIdx expr,
+                              std::span<const std::string_view> bound) const {
   const ast::ExprNode& node = ast.exprs[expr];
   switch (node.kind) {
     case ast::ExprKind::Literal: {
@@ -379,6 +381,13 @@ bool Checker::expr_comp_known(u32 module, ast::ExprIdx expr) const {
         }
         return false;
       }
+      // A binding a surrounding pattern or declaration introduced is
+      // comp-known because the value it matched or was built from is.
+      for (std::string_view name : bound) {
+        if (name == segments[0].name) {
+          return true;
+        }
+      }
       if (const Local* local = lookup_local(segments[0].name)) {
         return local->comp_known;
       }
@@ -389,19 +398,25 @@ bool Checker::expr_comp_known(u32 module, ast::ExprIdx expr) const {
       return is_const_item(module, path);
     }
     case ast::ExprKind::Unary:
-      return expr_comp_known(module, node.payload.get<ast::ExprUnary>().inner);
+      return expr_comp_known(module, node.payload.get<ast::ExprUnary>().inner,
+                             bound);
     case ast::ExprKind::Borrow:
-      return expr_comp_known(module, node.payload.get<ast::ExprBorrow>().inner);
+      return expr_comp_known(module, node.payload.get<ast::ExprBorrow>().inner,
+                             bound);
     case ast::ExprKind::Deref:
-      return expr_comp_known(module, node.payload.get<ast::ExprDeref>().inner);
+      return expr_comp_known(module, node.payload.get<ast::ExprDeref>().inner,
+                             bound);
     case ast::ExprKind::Binary:
-      return expr_comp_known(module, node.payload.get<ast::ExprBinary>().lhs) &&
-             expr_comp_known(module, node.payload.get<ast::ExprBinary>().rhs);
+      return expr_comp_known(module, node.payload.get<ast::ExprBinary>().lhs,
+                             bound) &&
+             expr_comp_known(module, node.payload.get<ast::ExprBinary>().rhs,
+                             bound);
     case ast::ExprKind::Cast:
-      return expr_comp_known(module, node.payload.get<ast::ExprCast>().inner);
+      return expr_comp_known(module, node.payload.get<ast::ExprCast>().inner,
+                             bound);
     case ast::ExprKind::Tuple: {
       for (ast::ExprIdx element : node.payload.get<ast::ExprTuple>().elements) {
-        if (!expr_comp_known(module, element)) {
+        if (!expr_comp_known(module, element, bound)) {
           return false;
         }
       }
@@ -410,10 +425,10 @@ bool Checker::expr_comp_known(u32 module, ast::ExprIdx expr) const {
     case ast::ExprKind::Array: {
       const ast::ExprArray& array = node.payload.get<ast::ExprArray>();
       if (array.repeat.is_valid()) {
-        return expr_comp_known(module, array.repeat);
+        return expr_comp_known(module, array.repeat, bound);
       }
       for (ast::ExprIdx element : array.elements) {
-        if (!expr_comp_known(module, element)) {
+        if (!expr_comp_known(module, element, bound)) {
           return false;
         }
       }
@@ -422,24 +437,25 @@ bool Checker::expr_comp_known(u32 module, ast::ExprIdx expr) const {
     case ast::ExprKind::Struct: {
       for (const ast::ExprFieldInit& field :
            node.payload.get<ast::ExprStruct>().init) {
-        if (!expr_comp_known(module, field.value)) {
+        if (!expr_comp_known(module, field.value, bound)) {
           return false;
         }
       }
       return !node.payload.get<ast::ExprStruct>().base_expr.is_valid() ||
-             expr_comp_known(module,
-                             node.payload.get<ast::ExprStruct>().base_expr);
+             expr_comp_known(
+                 module, node.payload.get<ast::ExprStruct>().base_expr, bound);
     }
     case ast::ExprKind::Field:
-      return expr_comp_known(module,
-                             node.payload.get<ast::ExprField>().receiver);
+      return expr_comp_known(
+          module, node.payload.get<ast::ExprField>().receiver, bound);
     case ast::ExprKind::Index:
-      return expr_comp_known(module,
-                             node.payload.get<ast::ExprIndex>().receiver) &&
-             expr_comp_known(module, node.payload.get<ast::ExprIndex>().index);
+      return expr_comp_known(
+                 module, node.payload.get<ast::ExprIndex>().receiver, bound) &&
+             expr_comp_known(module, node.payload.get<ast::ExprIndex>().index,
+                             bound);
     case ast::ExprKind::Call: {
       for (ast::ExprIdx arg : node.payload.get<ast::ExprCall>().args) {
-        if (!expr_comp_known(module, arg)) {
+        if (!expr_comp_known(module, arg, bound)) {
           return false;
         }
       }
@@ -461,60 +477,78 @@ bool Checker::expr_comp_known(u32 module, ast::ExprIdx expr) const {
     }
     case ast::ExprKind::MethodCall: {
       if (!expr_comp_known(module,
-                           node.payload.get<ast::ExprMethodCall>().receiver)) {
+                           node.payload.get<ast::ExprMethodCall>().receiver,
+                           bound)) {
         return false;
       }
       for (ast::ExprIdx arg : node.payload.get<ast::ExprMethodCall>().args) {
-        if (!expr_comp_known(module, arg)) {
+        if (!expr_comp_known(module, arg, bound)) {
           return false;
         }
       }
       return true;
     }
     case ast::ExprKind::Question:
-      return expr_comp_known(module,
-                             node.payload.get<ast::ExprQuestion>().inner);
+      return expr_comp_known(
+          module, node.payload.get<ast::ExprQuestion>().inner, bound);
     case ast::ExprKind::If: {
-      const ast::Cond& cond = ast.conds[node.payload.get<ast::ExprIf>().cond];
-      if (cond.is_pattern || !expr_comp_known(module, cond.value)) {
+      const ast::ExprIf& if_node = node.payload.get<ast::ExprIf>();
+      const ast::Cond& cond = ast.conds[if_node.cond];
+      if (cond.is_pattern) {
+        if (!expr_comp_known(module, cond.init, bound)) {
+          return false;
+        }
+        // The pattern's bindings are comp-known in the then-block
+        // because the scrutinee they matched is.
+        std::vector<std::string_view> names(bound.begin(), bound.end());
+        collect_pattern_idents(cond.pattern, names);
+        if (!expr_comp_known_block(module, if_node.then_block, names)) {
+          return false;
+        }
+      } else if (!expr_comp_known(module, cond.value, bound) ||
+                 !expr_comp_known_block(module, if_node.then_block, bound)) {
         return false;
       }
-      if (!expr_comp_known_block(module,
-                                 node.payload.get<ast::ExprIf>().then_block) ||
-          (node.payload.get<ast::ExprIf>().else_block.is_valid() &&
-           !expr_comp_known_block(
-               module, node.payload.get<ast::ExprIf>().else_block))) {
-        return false;
-      }
-      return true;
+      return !if_node.else_block.is_valid() ||
+             expr_comp_known_block(module, if_node.else_block, bound);
     }
     case ast::ExprKind::Match: {
-      if (!expr_comp_known(module,
-                           node.payload.get<ast::ExprMatch>().scrutinee)) {
+      const ast::ExprMatch& match = node.payload.get<ast::ExprMatch>();
+      if (!expr_comp_known(module, match.scrutinee, bound)) {
         return false;
       }
-      for (const ast::ExprMatchArm& arm :
-           node.payload.get<ast::ExprMatch>().arms) {
-        if (!expr_comp_known(module, arm.body)) {
+      for (const ast::ExprMatchArm& arm : match.arms) {
+        std::vector<std::string_view> names(bound.begin(), bound.end());
+        collect_pattern_idents(arm.pattern, names);
+        if (arm.guard.is_valid() &&
+            !expr_comp_known(module, arm.guard, names)) {
+          return false;
+        }
+        if (!expr_comp_known(module, arm.body, names)) {
           return false;
         }
       }
       return true;
     }
     case ast::ExprKind::Block:
-      return expr_comp_known_block(module,
-                                   node.payload.get<ast::ExprBlock>().block);
+      return expr_comp_known_block(
+          module, node.payload.get<ast::ExprBlock>().block, bound);
     case ast::ExprKind::Loop:
-      return expr_comp_known_block(module,
-                                   node.payload.get<ast::ExprLoop>().body);
+      return expr_comp_known_block(
+          module, node.payload.get<ast::ExprLoop>().body, bound);
     case ast::ExprKind::While: {
-      const ast::Cond& cond =
-          ast.conds[node.payload.get<ast::ExprWhile>().cond];
-      if (cond.is_pattern || !expr_comp_known(module, cond.value)) {
-        return false;
+      const ast::ExprWhile& while_node = node.payload.get<ast::ExprWhile>();
+      const ast::Cond& cond = ast.conds[while_node.cond];
+      if (cond.is_pattern) {
+        if (!expr_comp_known(module, cond.init, bound)) {
+          return false;
+        }
+        std::vector<std::string_view> names(bound.begin(), bound.end());
+        collect_pattern_idents(cond.pattern, names);
+        return expr_comp_known_block(module, while_node.body, names);
       }
-      return expr_comp_known_block(module,
-                                   node.payload.get<ast::ExprWhile>().body);
+      return expr_comp_known(module, cond.value, bound) &&
+             expr_comp_known_block(module, while_node.body, bound);
     }
     case ast::ExprKind::Break:
     case ast::ExprKind::Continue: return true;
@@ -524,22 +558,29 @@ bool Checker::expr_comp_known(u32 module, ast::ExprIdx expr) const {
   }
 }
 
-bool Checker::expr_comp_known_block(u32 module, ast::BlockIdx block) const {
+bool Checker::expr_comp_known_block(
+    u32 module,
+    ast::BlockIdx block,
+    std::span<const std::string_view> bound) const {
   const ast::Block& node = ast.blocks[block];
+  // A declaration's bindings join the known set for the statements after
+  // it and for the block's own value.
+  std::vector<std::string_view> names(bound.begin(), bound.end());
   for (ast::StmtIdx stmt : node.statements) {
     const ast::StmtNode& stmt_node = ast.stmts[stmt];
     if (stmt_node.kind == ast::StmtKind::Decl) {
-      if (!expr_comp_known(module,
-                           stmt_node.payload.get<ast::StmtDecl>().init)) {
+      const ast::StmtDecl& decl = stmt_node.payload.get<ast::StmtDecl>();
+      if (!expr_comp_known(module, decl.init, names)) {
         return false;
       }
+      collect_pattern_idents(decl.pattern, names);
       continue;
     }
     if (stmt_node.kind == ast::StmtKind::Reassign) {
       const ast::StmtReassign& reassign =
           stmt_node.payload.get<ast::StmtReassign>();
       if (ast.exprs[reassign.place].kind != ast::ExprKind::Path ||
-          !expr_comp_known(module, reassign.value)) {
+          !expr_comp_known(module, reassign.value, names)) {
         return false;
       }
       continue;
@@ -553,7 +594,7 @@ bool Checker::expr_comp_known_block(u32 module, ast::BlockIdx block) const {
     }
     return false;
   }
-  return !node.value.is_valid() || expr_comp_known(module, node.value);
+  return !node.value.is_valid() || expr_comp_known(module, node.value, names);
 }
 
 // Checks operands of a binary operator: same-type numerics, with

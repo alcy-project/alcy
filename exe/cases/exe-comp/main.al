@@ -95,5 +95,18 @@ fn main() -> i32 {
   if !narrow_ok {
     ret 20
   }
+  // A comp argument may bind inside a match, an if-pattern, or a block.
+  if double(match Option::Some(3) {
+    Option::Some(v) => v,
+    Option::None => 0,
+  }) != 6 {
+    ret 21
+  }
+  if double(if Option::Some(v) := Option::Some(4) { v } else { 0 }) != 8 {
+    ret 22
+  }
+  if double({ y := 5; y }) != 10 {
+    ret 23
+  }
   ret double(k) + sum_to(4) - comp { 1 + 2 }
 }
