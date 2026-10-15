@@ -6642,6 +6642,39 @@ bool Checker::resolve_value_path(u32 module,
         out.generic_item = generic;
         return true;
       }
+      // `Enum::<T>::Variant` names the variant of one instance, the way
+      // `Enum::assoc::<T>` names the member of one. Only a unit variant
+      // needs it: a tuple variant takes the instance from its payload.
+      const u32 variant_turbofish_at =
+          ast.exprs[expr].kind == ast::ExprKind::Path
+              ? ast.exprs[expr].payload.get<ast::ExprPath>().type_args_segment
+              : base::INVALID_IDX;
+      const bool variant_owner_args =
+          !type_args.empty() && variant_turbofish_at == 0;
+      const auto variant_owner_type = [&](NominalEntry* entry) -> ir::TypeIdx {
+        if (!variant_owner_args || nominal_params(*entry).empty()) {
+          return nominal_owner_type(entry);
+        }
+        const std::span<const ast::GenericParam> params =
+            nominal_params(*entry);
+        std::vector<ir::TypeIdx> args;
+        args.reserve(type_args.size());
+        for (usize k = 0; k < type_args.size(); ++k) {
+          if (k < params.size() && is_value_param(ast, params[k])) {
+            u64 value = 0;
+            if (!resolve_value_argument(module, type_args[k],
+                                        params[k].name.name, node.span,
+                                        value)) {
+              return error_type();
+            }
+            args.push_back(builder.const_type(value));
+          } else {
+            args.push_back(resolve_type(module, type_args[k], nullptr));
+          }
+        }
+        return instantiate_generic(static_cast<u32>(entry - nominals.data()),
+                                   args, node.span);
+      };
       std::vector<VariantMatch> matches;
       if (find_variant_in(target, member, matches) && matches.size() == 1) {
         const ast::ItemNode& decl = ast.items[matches[0].enom->item];
@@ -6651,7 +6684,11 @@ bool Checker::resolve_value_path(u32 module,
         }
         out.enom = matches[0].enom;
         out.variant = matches[0].variant;
-        out.type = nominal_owner_type(matches[0].enom);
+        out.type = decl.payload.get<ast::ItemEnum>()
+                           .variants[matches[0].variant]
+                           .fields.empty()
+                       ? variant_owner_type(matches[0].enom)
+                       : nominal_owner_type(matches[0].enom);
         out.kind = decl.payload.get<ast::ItemEnum>()
                            .variants[matches[0].variant]
                            .fields.empty()
@@ -6667,6 +6704,39 @@ bool Checker::resolve_value_path(u32 module,
     NominalEntry* nominal = find_nominal_in_scope(module, head);
     if (nominal != nullptr) {
       const ast::ItemNode& nominal_node = ast.items[nominal->item];
+      // `Enum::<T>::Variant` names the variant of one instance, the way
+      // `Enum::assoc::<T>` names the member of one. Only a unit variant
+      // needs it: a tuple variant takes the instance from its payload.
+      const u32 variant_turbofish_at =
+          ast.exprs[expr].kind == ast::ExprKind::Path
+              ? ast.exprs[expr].payload.get<ast::ExprPath>().type_args_segment
+              : base::INVALID_IDX;
+      const bool variant_owner_args =
+          !type_args.empty() && variant_turbofish_at == 0;
+      const auto variant_owner_type = [&](NominalEntry* entry) -> ir::TypeIdx {
+        if (!variant_owner_args || nominal_params(*entry).empty()) {
+          return nominal_owner_type(entry);
+        }
+        const std::span<const ast::GenericParam> params =
+            nominal_params(*entry);
+        std::vector<ir::TypeIdx> args;
+        args.reserve(type_args.size());
+        for (usize k = 0; k < type_args.size(); ++k) {
+          if (k < params.size() && is_value_param(ast, params[k])) {
+            u64 value = 0;
+            if (!resolve_value_argument(module, type_args[k],
+                                        params[k].name.name, node.span,
+                                        value)) {
+              return error_type();
+            }
+            args.push_back(builder.const_type(value));
+          } else {
+            args.push_back(resolve_type(module, type_args[k], nullptr));
+          }
+        }
+        return instantiate_generic(static_cast<u32>(entry - nominals.data()),
+                                   args, node.span);
+      };
       if (nominal_node.kind == ast::ItemKind::Enum) {
         for (u32 i = 0;
              i < static_cast<u32>(
@@ -6676,7 +6746,11 @@ bool Checker::resolve_value_path(u32 module,
               member) {
             out.enom = nominal;
             out.variant = i;
-            out.type = nominal_owner_type(nominal);
+            out.type = nominal_node.payload.get<ast::ItemEnum>()
+                               .variants[i]
+                               .fields.empty()
+                           ? variant_owner_type(nominal)
+                           : nominal_owner_type(nominal);
             out.kind = nominal_node.payload.get<ast::ItemEnum>()
                                .variants[i]
                                .fields.empty()
