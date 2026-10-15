@@ -168,6 +168,16 @@ impl<V> Map<V> {
     ret self.get_mut(key).unwrap()
   }
 
+  // The value for `key`, inserting `make()`'s when absent, so the
+  // default is only built on a miss.
+  pub fn get_or_insert_with(mut self: &mut Self, key: str,
+                            make: () -> V) -> &mut V {
+    if !self.contains(key) {
+      _ := self.insert(key, make())
+    }
+    ret self.get_mut(key).unwrap()
+  }
+
   // The entry for `key`: the value when present, or the map and key to
   // fill when absent.
   pub fn entry(mut self: &mut Self, key: str) -> Entry<V> {
