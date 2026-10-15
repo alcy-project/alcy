@@ -303,6 +303,12 @@ ast::TypeIdx Parser::parse_type() {
           return ast::TypeIdx::invalid();
         }
         args.push_back(arg);
+        // A nested generic argument absorbs the `>` that closes the
+        // list as part of its own `>>`; `consume_gt` drains the banked
+        // one, and a comma after it belongs to the caller.
+        if (banked_gt_ > 0) {
+          break;
+        }
         if (!match(lexer::TokenKind::Comma)) {
           break;
         }
