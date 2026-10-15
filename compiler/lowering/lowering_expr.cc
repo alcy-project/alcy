@@ -4157,6 +4157,14 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       return stopped_value();
     }
     addr = address_of(scrut);
+    // A match consumes a non-Copy field: the field's place is moved,
+    // so the surrounding value's drop skips it.
+    if (ast.exprs[match.scrutinee].kind == ast::ExprKind::Field) {
+      Val field = place_addr(match.scrutinee);
+      if (field.place && field.address && !is_copy(field.type)) {
+        mark_move(field);
+      }
+    }
   }
   if (failed || terminated_cur()) {
     return stopped_value();
