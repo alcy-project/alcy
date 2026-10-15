@@ -118,6 +118,23 @@ impl<T> [T] {
     ret (head, tail)
   }
 
+  // The first element and the rest, or `None` when empty.
+  pub fn split_first(self: &Self) -> Option<(&T, &[T])> {
+    if slice_len(self) == 0 {
+      ret Option::None
+    }
+    ret Option::Some((self.at(0).unwrap(), self.split_at(1).1))
+  }
+
+  // The last element and the front, or `None` when empty.
+  pub fn split_last(self: &Self) -> Option<(&T, &[T])> {
+    n := slice_len(self)
+    if n == 0 {
+      ret Option::None
+    }
+    ret Option::Some((self.at(n - 1).unwrap(), self.split_at(n - 1).0))
+  }
+
   // A shared cursor over the elements; the slice's loan is what keeps
   // them valid.
   pub fn iter(self: &Self) -> SliceIter<T> {
