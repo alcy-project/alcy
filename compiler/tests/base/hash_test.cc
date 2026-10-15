@@ -3,6 +3,7 @@
 
 #include "base/hash.h"
 
+#include <array>
 #include <string_view>
 
 #include "doctest/doctest.h"
