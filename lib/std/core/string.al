@@ -180,6 +180,34 @@ impl str {
     ret Option::None
   }
 
+  // The byte offset at or after `from` where `needle` first appears.
+  // An empty needle is at `from` when that lies within the view.
+  pub fn find_from(self: &Self, from: usize, needle: str) -> Option<usize> {
+    n := str_len(needle)
+    m := str_len(*self)
+    if n == 0 {
+      if from > m {
+        ret Option::None
+      }
+      ret Option::Some(from)
+    }
+    if from + n > m {
+      ret Option::None
+    }
+    mut i := from
+    while i <= m - n {
+      mut j := 0 as usize
+      while j < n && str_byte(*self, i + j) == str_byte(needle, j) {
+        j = j + 1
+      }
+      if j == n {
+        ret Option::Some(i)
+      }
+      i = i + 1
+    }
+    ret Option::None
+  }
+
   // The view with leading ASCII whitespace removed.
   pub fn trim_start(self: &Self) -> str {
     n := str_len(*self)
