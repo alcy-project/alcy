@@ -70,6 +70,7 @@ function ensureHighlighter(): Promise<Highlighter | null> {
 }
 
 interface CodeBlock {
+  root: HTMLElement;
   pre: HTMLElement;
   code: HTMLElement;
   actions: HTMLElement;
@@ -88,6 +89,7 @@ function findBlocks(): CodeBlock[] {
     const actions = root.querySelector<HTMLElement>(".code-actions");
     if (pre !== null && code !== null && actions !== null) {
       found.push({
+        root,
         pre,
         code,
         actions,
@@ -380,6 +382,10 @@ function wireAlcy(block: CodeBlock): void {
         syncReset();
       });
       block.pre.after(created);
+      // The frame reads as active the moment Edit is pressed, and the
+      // caret is already in the text, so typing needs no second click.
+      block.root.classList.add("editing");
+      created.focus();
       edit.textContent = t("guide.done");
       edit.setAttribute("aria-pressed", "true");
       void ensureHighlighter();
@@ -387,6 +393,7 @@ function wireAlcy(block: CodeBlock): void {
       working = editor.value;
       editor.remove();
       editor = null;
+      block.root.classList.remove("editing");
       showWorking();
       edit.textContent = t("guide.edit");
       edit.setAttribute("aria-pressed", "false");

@@ -20,6 +20,13 @@
   position: relative;
 }
 
+/* While editing, the frame reads as focused even before the reader
+   clicks into the text. */
+.code-block.editing .code-view {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* The generator leaves the row hidden until `guide.js` wires it; the
    author display rule would otherwise beat the UA's `[hidden]`. */
 .code-actions[hidden],
