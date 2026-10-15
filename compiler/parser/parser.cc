@@ -1164,8 +1164,13 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
     if (match(lexer::TokenKind::Semicolon)) {
       continue;
     }
-    ast::ItemIdx method = parse_fn(match(lexer::TokenKind::Pub),
-                                   match(lexer::TokenKind::Unsafe), false);
+    // The two `match`es read the one token stream in order, so they are
+    // statements and not arguments: a build that evaluates arguments
+    // right to left reads `unsafe` while it is still at `pub`, and the
+    // method arrives at `parse_fn` a token early.
+    const bool is_pub = match(lexer::TokenKind::Pub);
+    const bool is_unsafe = match(lexer::TokenKind::Unsafe);
+    ast::ItemIdx method = parse_fn(is_pub, is_unsafe, false);
     if (!method.is_valid()) {
       synchronize();
       continue;
