@@ -468,7 +468,8 @@ TEST_CASE("A package build refuses targets sharing one output") {
           "\"alcy/std/alloc\" = {}\n"
           "\"alcy/std/arch\" = {}\n"
           "\"alcy/std/fmt\" = {}\n"
-          "\"alcy/std/io\" = {}\n\n"
+          "\"alcy/std/io\" = {}\n"
+          "\"alcy/std/collections\" = {}\n\n"
           "[[bin]]\npath = \"main.al\"\n\n"
           "[lib]\npath = \"lib.al\"\n") &&
       dir.write_file("proj/main.al", PROGRAM) &&
