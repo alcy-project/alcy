@@ -19,3 +19,16 @@ pub fn arg_at(i: usize) -> Option<String> {
   s.push_str(view)
   ret Option::Some(s)
 }
+
+// The arguments, in order, the program name first. The bytes are
+// copied out, so the result is this program's own.
+pub fn args() -> Vec<String> {
+  mut out := Vec::<String>::with_capacity(args_len())
+  n := args_len()
+  mut i := 0 as usize
+  while i < n {
+    out.push(arg_at(i).unwrap())
+    i = i + 1
+  }
+  ret out
+}

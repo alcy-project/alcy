@@ -20,3 +20,4 @@ pub use package::file::read_file;
 pub use package::file::write_file;
 pub use package::args::args_len;
 pub use package::args::arg_at;
+pub use package::args::args;
