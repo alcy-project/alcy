@@ -37,6 +37,16 @@ fn drain(comp first: Option<i32>) -> i32 {
   ret n
 }
 
+enum Choice { Num(i32), None }
+
+// A comp argument of an enum type materializes its payload in the slot.
+fn unwrap_choice(comp c: Choice) -> i32 {
+  ret match c {
+    Choice::Num(v) => v,
+    Choice::None => 0,
+  }
+}
+
 fn main() -> i32 {
   const k := 21
   // Short-circuit: the untaken side is never evaluated, even though the
@@ -61,6 +71,9 @@ fn main() -> i32 {
   }
   if drain(Option::Some(5)) != 5 {
     ret 16
+  }
+  if unwrap_choice(Choice::Num(6)) != 6 {
+    ret 17
   }
   ret double(k) + sum_to(4) - comp { 1 + 2 }
 }

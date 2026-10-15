@@ -468,7 +468,6 @@ class Lowerer {
   Val load_disc(Val slot_addr);
   bool is_unit_payload(const std::vector<ir::TypeIdx>& payloads);
   Val void_value();
-  ir::TypeIdx payload_tuple(const std::vector<ir::TypeIdx>& fields);
   Val load_payload_field(Val slot_addr, ir::TypeIdxRange fields, u32 field);
   ir::RegisterIdx payload_field_addr(Val slot_addr,
                                      ir::TypeIdxRange fields,

@@ -2759,14 +2759,6 @@ Val Lowerer::void_value() {
   return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
 }
 
-ir::TypeIdx Lowerer::payload_tuple(const std::vector<ir::TypeIdx>& fields) {
-  ir::TypeSeq seq;
-  for (ir::TypeIdx field : fields) {
-    seq.push(builder.ref_type(field));
-  }
-  return builder.tuple_type(seq.finish());
-}
-
 // Value of payload field i of the enum at slot_addr. The slot holds the
 // payload's bytes, so the field address comes from the offset
 // ir::field_offset publishes.

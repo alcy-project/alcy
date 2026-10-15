@@ -137,28 +137,23 @@ Val Lowerer::materialize_comp_value(const CompVal& value, diag::Span span) {
       emit_void(ir::Opcode::Store,
                 {disc_operand(value.value.variant), to_operand(tag_reg, slot)});
       if (!payloads.empty() && !is_unit_payload(payloads)) {
-        const ir::TypeIdx payload_type = payload_tuple(payloads);
-        const ir::RegisterIdx payload =
-            emit(ir::Opcode::Alloca, payload_type, {size_one});
+        // The payload lives in the slot, the way a constructed variant
+        // stores it; a boxed tuple would make every reader of the slot
+        // load the payload pointer as the field itself.
+        const ir::TypeIdxRange fields =
+            variant_fields(value.type, value.value.variant);
+        const Val slot_addr{to_operand(addr, slot), slot, true, false};
         for (usize i = 0; i < payloads.size(); ++i) {
           const CompVal field{value.value.fields[i], payloads[i]};
           Val lowered = materialize_comp_value(field, span);
           if (failed) {
             return Val{size_one, error_type(), false, false};
           }
-          const ir::RegisterIdx field_reg =
-              emit(ir::Opcode::GetElementPtr, payloads[i],
-                   {to_operand(payload, payload_type), zero_i32,
-                    index_operand(static_cast<u32>(i))});
+          const ir::RegisterIdx field_addr =
+              payload_field_addr(slot_addr, fields, static_cast<u32>(i));
           emit_void(ir::Opcode::Store,
-                    {use_value(lowered), to_operand(field_reg, payloads[i])});
+                    {use_value(lowered), to_operand(field_addr, payloads[i])});
         }
-        const ir::TypeIdx ptr = builder.primitive(ir::TypeTag::Ptr);
-        const ir::RegisterIdx slot_field =
-            emit(ir::Opcode::GetElementPtr, ptr,
-                 {to_operand(addr, slot), zero_i32, index_operand(1)});
-        emit_void(ir::Opcode::Store,
-                  {to_operand(payload, ptr), to_operand(slot_field, ptr)});
       }
       return Val{to_operand(addr, slot), value.type, true, false};
     }
