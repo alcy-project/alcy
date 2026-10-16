@@ -565,7 +565,7 @@ Emitter::EmitResult Emitter::emit_check_prelude(const ir::Instruction& instr,
       }
       if (wide) {
         i64_const(64);
-        op(0x54);  // i64.ge_u
+        op(0x5A);  // i64.ge_u
       } else {
         i32_const(static_cast<i32>(integer_bits(tag)));
         op(0x4F);  // i32.ge_u
