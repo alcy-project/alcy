@@ -129,7 +129,9 @@ peripheral work lives in `backlog.md`. The language record lives in
   owning environment where the view must own it: the environment is
   allocated on the heap, the frame-escape refusal retires, and
   frame-crossing iterators close the adapters' frame-bound caveat. Designed in
-  `docs/adr/0044-function-types-and-closures.md`.
+  `docs/adr/0044-function-types-and-closures.md`, with the owning
+  function type in `docs/adr/0075-owning-function-types.md` and capture
+  regions in `docs/adr/0076-region-annotated-captures.md`.
 
 - [ ] Package artifacts: a cache and resolution summaries.
 

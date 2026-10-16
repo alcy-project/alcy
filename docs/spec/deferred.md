@@ -28,7 +28,9 @@ relied upon by MVP programs or by the MVP compiler implementation.
   model is the relational part: the outlives constraints between regions
   and the intersection a struct composes by, which today hold because a
   reborrow carries its parent's loans rather than because the relation
-  is solved. Each rule is stated as a case the
+  is solved. Region-annotated captures solve it by inference, with no
+  written lifetimes; see `docs/adr/0076-region-annotated-captures.md`.
+  Each rule is stated as a case the
   conformance suite runs. See `docs/adr/0012-reborrow-on-reference-read.md`.
 - `spec` (trait) bounds on type parameters, `where` clauses, and
   monomorphization beyond today's per-instantiation interning (enums,
