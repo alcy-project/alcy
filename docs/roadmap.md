@@ -147,12 +147,16 @@ peripheral work lives in `backlog.md`. The language record lives in
   linking, which the runtime's external linkage needs; and the fetchers
   that make a registry or git dependency obtainable at all. The cache
   without summaries and the summaries without fetchers each go half the
-  way, so the item states both. Two slices landed: each `FILES` record
+  way, so the item states both. Three slices landed: each `FILES` record
   carries the content hash of the source it names (XXH3-128 of its
-  bytes), so a cache can tell two programs under one name apart, and the
+  bytes), so a cache can tell two programs under one name apart; the
   `IDENTITY` section carries one digest over the file table, the pointer
   width, and the toolchain (`ir::identity_digest`), so a cache compares
-  one number instead of walking the tables. Designed in
+  one number instead of walking the tables; and the cache itself holds
+  the unoptimized binary IR under one digest over the identity, the
+  manifest, and the target, reporting `hit`, `miss`, or `off` in the
+  envelope. What remains is the summaries slice and everything after
+  it. Designed in
   `docs/adr/0056-the-ir-has-a-text-and-a-binary-form.md` and, for the
   cache's key, artifact, location, and reporting,
   `docs/adr/0072-a-packages-cache-holds-its-binary-ir.md`; the pieces
