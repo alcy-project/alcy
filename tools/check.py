@@ -158,6 +158,12 @@ def main() -> int:
     tool("check_e2e.py", f"--build-subdir={debug_subdir}")
     tool("check_borrow_rules.py", f"--build-subdir={debug_subdir}")
 
+    # The formatter's own gate, over every source rather than a sample:
+    # the tree is what it would write, formatting formatted output
+    # changes nothing, and the compiler's verdict about a file survives
+    # its formatting.
+    tool("check_fmt.py", f"--build-subdir={debug_subdir}")
+
     # The specification is what a program is written against, and the
     # compiler is how this one happens to implement it. That boundary is
     # prose in `docs/spec/overview.md` and a check here, since a

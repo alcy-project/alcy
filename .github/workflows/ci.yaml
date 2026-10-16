@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths: &ci_paths
       - compiler/**
+      - fmt/**
       - lib/**
       - e2e/**
       - exe/**
@@ -198,6 +199,37 @@ jobs:
       - name: Check the Grammar Against the Compiler
         shell: bash
         run: uv run ./tools/check_treesitter.py --differential --build-subdir=build
+
+  # The formatter's own gate, over every source in the tree rather than
+  # a sample: the tree is what it would write, formatting formatted
+  # output changes nothing, and the compiler's verdict about a file
+  # survives its formatting. It needs the binary and nothing else, so
+  # it rides alone like the grammar's differential half rather than in
+  # every matrix entry, which would ask the same question ten times.
+  fmt:
+    name: Formatter
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build
+        with:
+          nix: "false"
+          os: Linux
+
+      - name: Build All
+        shell: bash
+        run: uv run ./tools/build.py --target=all --mode=debug --build-subdir=build
+
+      - name: Check the Formatter
+        shell: bash
+        run: uv run ./tools/check_fmt.py --build-subdir=build
 
   # The engine is built and run, and what comes out is checked for shape:
   # every case present, every sample counted, a clock named, a figure
