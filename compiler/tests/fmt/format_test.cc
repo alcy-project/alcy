@@ -145,11 +145,76 @@ TEST_CASE("The last statement of a body keeps its spelled-out semicolon") {
   // A semicolon mid-body reads the same as the break that replaces it;
   // the last one stays, because the run it ends is the block's last.
   CHECK(once("fn f() { g(1); g(2); }") == "fn f() {\n  g(1)\n  g(2);\n}\n");
+  // A use carries its terminator whether the source spelled it or
+  // left it to the newline: the grammar writes the semicolon, and a
+  // reader without the insertion rule has to see it.
+  CHECK(once("use a::b\n") == "use a::b;\n");
+  CHECK(once("use a::b;\n") == "use a::b;\n");
+  CHECK(once("pub use a::b;\n") == "pub use a::b;\n");
 }
 
 TEST_CASE("Doc comments stay attached to the item that follows") {
   const std::string out = once("/// One.\n/// Two.\nfn f() {}");
-  CHECK(out == "/// One.\n/// Two.\nfn f() {\n}\n");
+  CHECK(out == "/// One.\n/// Two.\nfn f() {}\n");
+}
+
+TEST_CASE("An unsafe block reads like the value it wraps") {
+  // The gate block is an expression, so one statement that fits stays
+  // on the line; a body of statements takes the lines.
+  CHECK(once("fn f() { ret unsafe { alloc::<u8>(0) } }") ==
+        "fn f() {\n  ret unsafe { alloc::<u8>(0) }\n}\n");
+  CHECK(once("fn f() {\n"
+             "  ret unsafe {\n"
+             "    g(1)\n"
+             "    h(2)\n"
+             "  }\n"
+             "}\n") ==
+        "fn f() {\n"
+        "  ret unsafe {\n"
+        "    g(1)\n"
+        "    h(2)\n"
+        "  }\n"
+        "}\n");
+  CHECK(idempotent_default("fn f() { ret unsafe { alloc::<u8>(0) } }"));
+  // A spelled-out semicolon inside keeps the run a statement rather
+  // than the block's value, flat or broken.
+  CHECK(once("fn f() { _ := unsafe { g(1); } }") ==
+        "fn f() {\n  _ := unsafe { g(1); }\n}\n");
+  // A comment that ends its line keeps the block off the one-line form.
+  const std::string commented = once(
+      "fn f() {\n"
+      "  ret unsafe { g(1) // why\n"
+      "  }\n"
+      "}\n");
+  CHECK(commented ==
+        "fn f() {\n"
+        "  ret unsafe {\n"
+        "    g(1) // why\n"
+        "  }\n"
+        "}\n");
+}
+
+TEST_CASE("Control-flow bodies take a line each however short") {
+  CHECK(once("fn f(x: bool) { if x { ret 1 } else { ret 2 } }") ==
+        "fn f(x: bool) {\n"
+        "  if x {\n"
+        "    ret 1\n"
+        "  } else {\n"
+        "    ret 2\n"
+        "  }\n"
+        "}\n");
+  CHECK(once("struct Point { x: i32, y: i32 }") ==
+        "struct Point {\n"
+        "  x: i32,\n"
+        "  y: i32,\n"
+        "}\n");
+  CHECK(once("fn f(x: i32) { match x { 1 => 2, _ => 3 } }") ==
+        "fn f(x: i32) {\n"
+        "  match x {\n"
+        "    1 => 2,\n"
+        "    _ => 3,\n"
+        "  }\n"
+        "}\n");
 }
 
 TEST_CASE("Blank lines between statements are kept to one") {

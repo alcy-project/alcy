@@ -151,6 +151,11 @@ BraceRole classify_brace(const std::vector<Node>& lead) {
   if (has_spec) return BraceRole::SpecBody;
   if (has_extern) return BraceRole::ExternBody;
   if (has_fn) return BraceRole::FnBody;
+  // A brace the unsafe or comp keyword opens is the expression the
+  // keyword gates, however deeply the line around it is spelled.
+  if (last == lexer::TokenKind::Unsafe || last == lexer::TokenKind::Comp) {
+    return BraceRole::ExprBlock;
+  }
   if (has_control) return BraceRole::Block;
   if (!has_any) return BraceRole::Block;
   if (forces_block_brace(last)) return BraceRole::Block;

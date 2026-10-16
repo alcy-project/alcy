@@ -107,6 +107,11 @@ bool allows_prefix_after(TokenKind kind) {
     case TokenKind::As:
     case TokenKind::In:
     case TokenKind::Ret:
+    case TokenKind::If:
+    case TokenKind::Else:
+    case TokenKind::While:
+    case TokenKind::For:
+    case TokenKind::Match:
     case TokenKind::DotDot:
     case TokenKind::DotDotEq:
     case TokenKind::DotDotLess: return true;
@@ -168,7 +173,11 @@ class Printer {
       : source_(source), config_(config) {}
 
   Doc run(const Node& root) {
-    return print_body(root, BraceRole::Block, true);
+    const std::vector<Chunk> chunks = collect_chunks(root, BraceRole::Block);
+    if (chunks.empty()) {
+      return doc_empty();
+    }
+    return print_body_lines(chunks, BraceRole::Block, true);
   }
 
  private:
@@ -192,9 +201,22 @@ class Printer {
     bool explicit_semi = false;
   };
 
-  Doc print_body(const Node& seq, BraceRole role, bool top_level);
   std::vector<Chunk> collect_chunks(const Node& seq, BraceRole role) const;
-  Doc print_chunk(const Chunk& chunk, BraceRole role, bool last_chunk);
+  Doc chunk_line(const Chunk& chunk, Doc terminator);
+  static usize trailing_eol_start(const Chunk& chunk);
+  static bool ends_in_block(const std::vector<const Node*>& code);
+  static bool keeps_semicolon(const Chunk& chunk,
+                              const std::vector<const Node*>& code,
+                              BraceRole role,
+                              bool last_chunk);
+  static bool chunk_is_semi_terminated_item(const Chunk& chunk);
+  Doc print_body_lines(const std::vector<Chunk>& chunks,
+                       BraceRole role,
+                       bool top_level);
+  static Doc chunk_terminator(const Chunk& chunk,
+                              const std::vector<const Node*>& code,
+                              BraceRole role,
+                              bool last_chunk);
   static bool ends_like_statement(const std::vector<const Node*>& nodes);
   Doc print_line(const std::vector<const Node*>& nodes);
   Doc print_flow(const std::vector<const Node*>& nodes, bool allow_wrap);
@@ -263,12 +285,17 @@ bool Printer::space_before(const Node* prev,
       case TokenKind::ColonColon:
       case TokenKind::Question:
       case TokenKind::Colon:
-      case TokenKind::DotDot:
-      case TokenKind::DotDotEq:
-      case TokenKind::DotDotLess:
       case TokenKind::RParen:
       case TokenKind::RBracket:
       case TokenKind::RBrace: return false;
+      // A range reads tight against what bounds it, except in the one
+      // place the language spells it loose: a parameter whose type is
+      // the variadic run of dots.
+      case TokenKind::DotDot:
+      case TokenKind::DotDotEq:
+      case TokenKind::DotDotLess:
+        return prev->kind == NodeKind::Token &&
+               prev->token == TokenKind::Colon;
       case TokenKind::Less:
       case TokenKind::Greater:
       case TokenKind::GreaterGreater:
@@ -309,15 +336,23 @@ bool Printer::space_before(const Node* prev,
       case TokenKind::DotDot:
       case TokenKind::DotDotEq:
       case TokenKind::DotDotLess: return false;
+      // A generic list's opening bracket touches its first argument;
+      // its closing bracket touches the path it finishes -- the call or
+      // the index it opens, and the member it names. A brace is a
+      // header or a literal, and an identifier is an impl's trait, and
+      // both read with the space.
       case TokenKind::Less:
+        if (prev_generic) {
+          return false;
+        }
+        break;
       case TokenKind::Greater:
       case TokenKind::GreaterGreater:
-        // A closing bracket of a generic list touches what it closes
-        // over, except a brace: a greater-than then an opening brace is
-        // a header or a literal, and both read with the space.
         if (prev_generic &&
-            !(cur.kind == NodeKind::Group &&
-              cur.group_role == GroupRole::Brace)) {
+            ((cur.kind == NodeKind::Group &&
+              cur.group_role != GroupRole::Brace) ||
+             (cur.kind == NodeKind::Token &&
+              cur.token == TokenKind::ColonColon))) {
           return false;
         }
         break;
@@ -612,21 +647,63 @@ Doc Printer::print_group(const Node& group) {
 
 Doc Printer::print_brace_body(const Node& group) {
   const std::string close = group.has_closer ? "}" : "";
-  const Doc body = group.kids.empty()
-                       ? doc_empty()
-                       : print_body(group.kids[0], group.brace_role, false);
+  if (group.kids.empty()) {
+    std::vector<Doc> parts;
+    parts.push_back(doc_text("{"));
+    parts.push_back(doc_text(close));
+    return doc_concat(std::move(parts));
+  }
+  const Node& inner = group.kids[0];
+  const BraceRole role = group.brace_role;
+  const std::vector<Chunk> chunks = collect_chunks(inner, role);
+
+  const bool member_body = role == BraceRole::ImplBody ||
+                           role == BraceRole::SpecBody ||
+                           role == BraceRole::ExternBody;
+  if (chunks.empty()) {
+    // A member body still opens its lines: an impl that owns nothing
+    // reads as the pair of braces the grammar gives it.
+    std::vector<Doc> parts;
+    parts.push_back(doc_text("{"));
+    if (member_body) {
+      parts.push_back(doc_hardline());
+    }
+    parts.push_back(doc_text(close));
+    return doc_concat(std::move(parts));
+  }
+  // An expression block holds one expression, and reads like the value
+  // it wraps: on the line it started while it fits, over lines when it
+  // does not. A comment that ends its line keeps it off the one-line
+  // form, since the closer would land inside the comment.
+  if (role == BraceRole::ExprBlock && chunks.size() == 1 &&
+      !chunks[0].is_comment &&
+      trailing_eol_start(chunks[0]) == chunks[0].nodes.size() &&
+      chunks[0].newlines_before < 2) {
+    const usize end = trailing_eol_start(chunks[0]);
+    std::vector<const Node*> code(
+        chunks[0].nodes.begin(),
+        chunks[0].nodes.begin() + static_cast<std::ptrdiff_t>(end));
+    std::vector<Doc> inner_parts;
+    inner_parts.push_back(doc_line());
+    inner_parts.push_back(
+        chunk_line(chunks[0], chunk_terminator(chunks[0], code, role, true)));
+    std::vector<Doc> parts;
+    parts.push_back(doc_text("{"));
+    parts.push_back(
+        doc_nest(config_.indent_width, doc_concat(std::move(inner_parts))));
+    parts.push_back(doc_line());
+    parts.push_back(doc_text(close));
+    return doc_group(doc_concat(std::move(parts)));
+  }
+  Doc body = print_body_lines(chunks, role, false);
   std::vector<Doc> parts;
   parts.push_back(doc_text("{"));
-  if (body.kind == DocKind::Empty) {
-    parts.push_back(doc_hardline());
-  } else {
-    std::vector<Doc> inner;
-    inner.push_back(doc_hardline());
-    inner.push_back(body);
-    parts.push_back(
-        doc_nest(config_.indent_width, doc_concat(std::move(inner))));
-    parts.push_back(doc_hardline());
-  }
+  std::vector<Doc> inner_parts;
+  inner_parts.push_back(doc_hardline());
+  inner_parts.push_back(std::move(body));
+  parts.push_back(
+      doc_nest(config_.indent_width, doc_concat(std::move(inner_parts))));
+  parts.push_back(doc_hardline());
   parts.push_back(doc_text(close));
   return doc_concat(std::move(parts));
 }
@@ -898,11 +975,113 @@ bool Printer::chunk_is_use(const Chunk& chunk) {
   return false;
 }
 
-Doc Printer::print_body(const Node& seq, BraceRole role, bool top_level) {
-  const std::vector<Chunk> chunks = collect_chunks(seq, role);
-  if (chunks.empty()) {
-    return doc_empty();
+// Where the chunk's run of trailing comments that end a line starts.
+// A block comment does not end a line, so it stays part of the code.
+usize Printer::trailing_eol_start(const Chunk& chunk) {
+  usize end = chunk.nodes.size();
+  while (end > 0) {
+    const Node& node = *chunk.nodes[end - 1];
+    if (node.kind != NodeKind::Comment ||
+        node.comment == CommentKind::Block) {
+      break;
+    }
+    --end;
   }
+  return end;
+}
+
+// Whether the code ends in a statement block rather than an
+// expression: a match arm whose body is a block takes no separator
+// after it, while one whose body is a match or a struct literal is an
+// expression arm and keeps its comma.
+bool Printer::ends_in_block(const std::vector<const Node*>& code) {
+  for (usize i = code.size(); i > 0; --i) {
+    const Node* node = code[i - 1];
+    if (node->kind == NodeKind::Comment) {
+      continue;
+    }
+    if (node->kind != NodeKind::Group ||
+        node->group_role != GroupRole::Brace) {
+      return false;
+    }
+    return node->brace_role == BraceRole::Block ||
+           node->brace_role == BraceRole::ExprBlock ||
+           node->brace_role == BraceRole::FnBody;
+  }
+  return false;
+}
+
+// A spelled-out semicolon survives wherever the newline that replaces
+// it would not read the same. A spec or extern member is terminated by
+// one outright. The last chunk of a body keeps its statement status:
+// without the semicolon the run becomes the block's trailing
+// expression instead of a statement whose value nobody takes. A run the
+// lexer does not end a statement after (an intrinsic signature that
+// closes in a greater-than) keeps it too. Everywhere else the line
+// break reads the same to the parser.
+// Whether the chunk is an item the grammar terminates with a
+// semicolon: a use, or an intrinsic signature. The newline a formatter
+// writes reads the same to the compiler, but the grammar spells these
+// terminators, so the layout does too.
+bool Printer::chunk_is_semi_terminated_item(const Chunk& chunk) {
+  for (const Node* node : chunk.nodes) {
+    if (node->kind == NodeKind::Token &&
+        (node->token == TokenKind::Use ||
+         node->token == TokenKind::Intrinsic)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool Printer::keeps_semicolon(const Chunk& chunk,
+                              const std::vector<const Node*>& code,
+                              BraceRole role,
+                              bool last_chunk) {
+  // The items the grammar terminates with a semicolon carry it whether
+  // the source spelled it or left it to the newline: a reader without
+  // the insertion rule, the tree-sitter grammar among them, has to see
+  // the terminator the specification writes.
+  if (chunk_is_semi_terminated_item(chunk)) {
+    return true;
+  }
+  if (!chunk.explicit_semi) {
+    return false;
+  }
+  if (role == BraceRole::SpecBody || role == BraceRole::ExternBody) {
+    return true;
+  }
+  if (last_chunk) {
+    return true;
+  }
+  return !ends_like_statement(code);
+}
+
+// The line one chunk contributes: its code, the separator that ends it,
+// and the comments that ride after it. A comment chunk is its own text.
+Doc Printer::chunk_line(const Chunk& chunk, Doc terminator) {
+  if (chunk.is_comment) {
+    return doc_text(node_text(source_, *chunk.nodes.front()));
+  }
+  const usize end = trailing_eol_start(chunk);
+  std::vector<const Node*> code(
+      chunk.nodes.begin(), chunk.nodes.begin() + static_cast<std::ptrdiff_t>(end));
+  std::vector<Doc> parts;
+  parts.push_back(print_line(code));
+  if (terminator.kind != DocKind::Empty) {
+    parts.push_back(std::move(terminator));
+  }
+  for (usize i = end; i < chunk.nodes.size(); ++i) {
+    parts.push_back(doc_text(" "));
+    parts.push_back(doc_text(node_text(source_, *chunk.nodes[i])));
+  }
+  return doc_concat(std::move(parts));
+}
+
+// One chunk per line, with the blank lines the source had between them.
+Doc Printer::print_body_lines(const std::vector<Chunk>& chunks,
+                             BraceRole role,
+                             bool top_level) {
   const bool member = top_level || role == BraceRole::ImplBody ||
                       role == BraceRole::SpecBody ||
                       role == BraceRole::ExternBody;
@@ -934,75 +1113,40 @@ Doc Printer::print_body(const Node& seq, BraceRole role, bool top_level) {
         parts.push_back(doc_hardline());
       }
     }
-    parts.push_back(print_chunk(chunks[k], role, k + 1 == chunks.size()));
+    const usize end = trailing_eol_start(chunks[k]);
+    std::vector<const Node*> code(
+        chunks[k].nodes.begin(),
+        chunks[k].nodes.begin() + static_cast<std::ptrdiff_t>(end));
+    parts.push_back(chunk_line(
+        chunks[k],
+        chunk_terminator(chunks[k], code, role, k + 1 == chunks.size())));
   }
   return doc_concat(std::move(parts));
 }
 
-Doc Printer::print_chunk(const Chunk& chunk, BraceRole role, bool last_chunk) {
-  if (chunk.is_comment) {
-    return doc_text(node_text(source_, *chunk.nodes.front()));
-  }
-  // A comment that runs to end of line ends the chunk's line, so it
-  // belongs after the chunk's own terminator and outside the flow: kept
-  // inside, its newline would force the code in front of it to wrap.
-  usize end = chunk.nodes.size();
-  while (end > 0) {
-    const Node& node = *chunk.nodes[end - 1];
-    if (node.kind != NodeKind::Comment ||
-        node.comment == CommentKind::Block) {
-      break;
-    }
-    --end;
-  }
-  std::vector<const Node*> code(
-      chunk.nodes.begin(), chunk.nodes.begin() + static_cast<std::ptrdiff_t>(end));
-  std::vector<Doc> parts;
-  parts.push_back(print_line(code));
-
-  // A spelled-out semicolon survives wherever the newline that replaces
-  // it would not read the same. A spec or extern member is terminated
-  // by one outright. The last chunk of a body keeps its statement
-  // status: without the semicolon the run becomes the block's trailing
-  // expression instead of a statement whose value nobody takes. A run
-  // the lexer does not end a statement after (an intrinsic signature
-  // that closes in a greater-than) keeps it too. Everywhere else the
-  // line break reads the same to the parser.
-  bool keep_semi = chunk.explicit_semi;
-  if (keep_semi && role != BraceRole::SpecBody &&
-      role != BraceRole::ExternBody && !last_chunk &&
-      ends_like_statement(code)) {
-    keep_semi = false;
-  }
-
-  bool comma = false;
+// The separator that ends one chunk of a body. A field and a variant
+// are comma-terminated; a match arm takes a comma unless its body is a
+// block, which the line break already separates, and one the source
+// spelled with a semicolon keeps it; everywhere else only a
+// load-bearing semicolon appears.
+Doc Printer::chunk_terminator(const Chunk& chunk,
+                              const std::vector<const Node*>& code,
+                              BraceRole role,
+                              bool last_chunk) {
   if (role == BraceRole::StructBody || role == BraceRole::EnumBody) {
-    comma = true;
-  } else if (role == BraceRole::MatchBody && !chunk.explicit_semi) {
-    const Node* last = nullptr;
-    for (usize i = code.size(); i > 0; --i) {
-      if (code[i - 1]->kind != NodeKind::Comment) {
-        last = code[i - 1];
-        break;
-      }
+    return doc_text(",");
+  }
+  if (role == BraceRole::MatchBody) {
+    if (chunk.explicit_semi) {
+      return doc_text(";");
     }
-    const bool block_body =
-        last != nullptr && last->kind == NodeKind::Group &&
-        last->group_role == GroupRole::Brace &&
-        last->brace_role != BraceRole::Literal;
-    comma = !block_body;
+    if (ends_in_block(code)) {
+      return doc_empty();
+    }
+    return doc_text(",");
   }
-  if (comma) {
-    parts.push_back(doc_text(","));
-  }
-  if (keep_semi) {
-    parts.push_back(doc_text(";"));
-  }
-  for (usize i = end; i < chunk.nodes.size(); ++i) {
-    parts.push_back(doc_text(" "));
-    parts.push_back(doc_text(node_text(source_, *chunk.nodes[i])));
-  }
-  return doc_concat(std::move(parts));
+  return keeps_semicolon(chunk, code, role, last_chunk) ? doc_text(";")
+                                                        : doc_empty();
 }
 
 Doc Printer::print_line(const std::vector<const Node*>& nodes) {

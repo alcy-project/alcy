@@ -25,6 +25,9 @@ enum class GroupRole : u8 { Paren, Bracket, Brace };
 // here keeps that decision next to the reading of the source.
 enum class BraceRole : u8 {
   Block,
+  // A block that is an expression: unsafe and comp blocks wrap a value
+  // the way parentheses do, so they lay out like one.
+  ExprBlock,
   FnBody,
   StructBody,
   EnumBody,
