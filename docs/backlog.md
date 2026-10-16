@@ -161,6 +161,14 @@ replaced. The foundations are in `roadmap.md`.
 
 ### Language and library surface
 
+- [x] Two-phase borrows: a call's exclusive receiver is a reservation
+  taken before the arguments evaluate, and the call itself activates
+  it, so `v.push(v.len())`, `v.push(v[0])`, and
+  `v.insert(v.len(), x)` resolve. A read that is still live at the
+  activation - a view handed in as an argument, a closure that captured
+  the place - still reports (`ok-borrow-two-phase`,
+  `exe-borrow-two-phase`, `err-borrow-two-phase-arg`,
+  `err-borrow-two-phase-escape`).
 - [x] A method that takes its receiver by value moves a field receiver
   out of its owner: the call marks the field's place moved, so
   `s.b.unwrap()` with `b: Option<Vec<i32>>` retires the payload once
