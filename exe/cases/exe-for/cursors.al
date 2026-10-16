@@ -17,7 +17,7 @@ impl Countdown {
   }
 }
 
-impl Iterator<i32> for Countdown {
+impl Iterator < i32 > for Countdown {
   fn next(mut self: &mut Self) -> Option<i32> {
     if self.remaining <= 0 {
       ret Option::None
@@ -48,7 +48,7 @@ impl Wrapped {
   }
 }
 
-impl Iterator<i32> for Wrapped {
+impl Iterator < i32 > for Wrapped {
   fn next(mut self: &mut Self) -> Option<i32> {
     if self.remaining <= 0 {
       ret Option::None

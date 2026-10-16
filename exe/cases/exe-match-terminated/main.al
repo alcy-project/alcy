@@ -4,8 +4,12 @@
 // left the block with two terminators; the case keeps it covered.
 fn classify(opt: Option<i32>) -> i32 {
   match opt {
-    Option::Some(v) => { ret v * 2 }
-    Option::None => { ret 0 - 1 }
+    Option::Some(v) => {
+      ret v * 2
+    }
+    Option::None => {
+      ret 0 - 1
+    }
   }
 }
 
@@ -29,7 +33,9 @@ fn pick_let(opt: Option<i32>) -> i32 {
 // level down from `classify`.
 fn either(opt: Option<i32>) -> i32 {
   match opt {
-    Option::Some(_) | Option::None => { ret 0 }
+    Option::Some(_) | Option::None => {
+      ret 0
+    }
   }
 }
 
@@ -39,7 +45,9 @@ fn nested(opt: Option<Option<i32>>) -> i32 {
     Option::Some(inner) => {
       ret classify(inner)
     }
-    Option::None => { ret 0 - 1 }
+    Option::None => {
+      ret 0 - 1
+    }
   }
 }
 
@@ -49,26 +57,54 @@ fn nested(opt: Option<Option<i32>>) -> i32 {
 // not its return (ADR-0059).
 fn mixed(opt: Option<i32>) -> i32 {
   v := match opt {
-    Option::Some(v) => { ret v }
-    Option::None => 0
+    Option::Some(v) => {
+      ret v
+    }
+    Option::None => 0,
   }
   ret v
 }
 
 fn main() -> i32 {
   mut bad := 0
-  if classify(Option::Some(21)) != 42 { bad = 1 }
-  if classify(Option::None) != 0 - 1 { bad = 2 }
-  if pick(5) != 1 { bad = 3 }
-  if pick(0 - 5) != 0 { bad = 4 }
-  if pick_let(Option::Some(7)) != 7 { bad = 5 }
-  if pick_let(Option::None) != 0 { bad = 6 }
-  if either(Option::Some(1)) != 0 { bad = 7 }
-  if either(Option::None) != 0 { bad = 8 }
-  if nested(Option::Some(Option::Some(21))) != 42 { bad = 9 }
-  if nested(Option::Some(Option::None)) != 0 - 1 { bad = 10 }
-  if nested(Option::None) != 0 - 1 { bad = 11 }
-  if mixed(Option::Some(3)) != 3 { bad = 12 }
-  if mixed(Option::None) != 0 { bad = 13 }
+  if classify(Option::Some(21)) != 42 {
+    bad = 1
+  }
+  if classify(Option::None) != 0 - 1 {
+    bad = 2
+  }
+  if pick(5) != 1 {
+    bad = 3
+  }
+  if pick(0 - 5) != 0 {
+    bad = 4
+  }
+  if pick_let(Option::Some(7)) != 7 {
+    bad = 5
+  }
+  if pick_let(Option::None) != 0 {
+    bad = 6
+  }
+  if either(Option::Some(1)) != 0 {
+    bad = 7
+  }
+  if either(Option::None) != 0 {
+    bad = 8
+  }
+  if nested(Option::Some(Option::Some(21))) != 42 {
+    bad = 9
+  }
+  if nested(Option::Some(Option::None)) != 0 - 1 {
+    bad = 10
+  }
+  if nested(Option::None) != 0 - 1 {
+    bad = 11
+  }
+  if mixed(Option::Some(3)) != 3 {
+    bad = 12
+  }
+  if mixed(Option::None) != 0 {
+    bad = 13
+  }
   ret bad
 }

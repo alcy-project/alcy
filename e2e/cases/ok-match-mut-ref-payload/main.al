@@ -1,7 +1,10 @@
 // A match through a shared reference binds a payload by reference, so
 // the borrow yields a `&String` and the referent stays its owner to
 // end.
-enum E { A(String), B }
+enum E {
+  A(String),
+  B,
+}
 
 fn f(e: &mut E) -> i32 {
   r := match *e {

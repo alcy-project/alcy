@@ -171,9 +171,7 @@ impl String {
     self.reserve(n)
     mut i := 0 as usize
     while i < n {
-      unsafe {
-        uninit_write(elem_ptr(self.buf, self.len + i), str_byte(s, i))
-      }
+      unsafe { uninit_write(elem_ptr(self.buf, self.len + i), str_byte(s, i)) }
       i = i + 1
     }
     self.len = self.len + n
@@ -220,9 +218,7 @@ impl String {
       next = needed
     }
     fresh := unsafe { alloc::<u8>(next) }
-    unsafe {
-      memcopy(elem_ptr(fresh, 0), elem_ref(self.buf, 0), self.len)
-    }
+    unsafe { memcopy(elem_ptr(fresh, 0), elem_ref(self.buf, 0), self.len) }
     unsafe { dealloc(self.buf, self.cap) }
     self.buf = fresh
     self.cap = next
@@ -236,9 +232,7 @@ impl String {
       next = 4
     }
     fresh := unsafe { alloc::<u8>(next) }
-    unsafe {
-      memcopy(elem_ptr(fresh, 0), elem_ref(self.buf, 0), self.len)
-    }
+    unsafe { memcopy(elem_ptr(fresh, 0), elem_ref(self.buf, 0), self.len) }
     unsafe { dealloc(self.buf, self.cap) }
     self.buf = fresh
     self.cap = next
@@ -289,10 +283,7 @@ impl String {
   // length is not changed; `set_len` records how many were written.
   pub fn spare_capacity_mut(mut self: &mut Self) -> &mut [u8] {
     ret unsafe {
-      slice_from_parts_mut(
-          uninit_assume(elem_ptr(self.buf, self.len)),
-          self.cap - self.len,
-      )
+      slice_from_parts_mut(uninit_assume(elem_ptr(self.buf, self.len)), self.cap - self.len,)
     }
   }
 
@@ -445,7 +436,7 @@ impl String {
 
 // `s[i]` reads a byte and `s[i] = b` writes one, panicking past the
 // end the way array indexing does.
-impl Index<usize, u8> for String {
+impl Index < usize, u8 > for String {
   fn index(self: &Self, i: usize) -> &u8 {
     if i >= self.len {
       panic("String index out of bounds")
@@ -454,7 +445,7 @@ impl Index<usize, u8> for String {
   }
 }
 
-impl IndexMut<usize, u8> for String {
+impl IndexMut < usize, u8 > for String {
   fn index_mut(mut self: &mut Self, i: usize) -> &mut u8 {
     if i >= self.len {
       panic("String index out of bounds")

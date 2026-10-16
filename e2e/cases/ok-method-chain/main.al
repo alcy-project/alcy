@@ -1,5 +1,7 @@
 // A method that calls another method on its own receiver.
-struct Counter { n: i32 }
+struct Counter {
+  n: i32,
+}
 
 impl Counter {
   fn new() -> Counter {
@@ -19,6 +21,8 @@ impl Counter {
 fn main() -> i32 {
   mut c := Counter::new()
   c.add_twice(3)
-  if c.n != 6 { ret 1 }
+  if c.n != 6 {
+    ret 1
+  }
   ret 0
 }

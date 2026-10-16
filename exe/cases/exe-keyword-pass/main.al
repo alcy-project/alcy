@@ -28,10 +28,20 @@ fn main() -> i32 {
   mut keywords := Map::<i32>::new()
   _ := keywords.insert("let", 10)
   _ := keywords.insert("fn", 11)
-  if classify("fn", &keywords) != 11 { ret 1 }
-  if classify("let", &keywords) != 10 { ret 2 }
-  if classify("x", &keywords) != 0 { ret 3 }
-  if parse_digits("42") != 42 { ret 4 }
-  if parse_digits("0") != 0 { ret 5 }
+  if classify("fn", &keywords) != 11 {
+    ret 1
+  }
+  if classify("let", &keywords) != 10 {
+    ret 2
+  }
+  if classify("x", &keywords) != 0 {
+    ret 3
+  }
+  if parse_digits("42") != 42 {
+    ret 4
+  }
+  if parse_digits("0") != 0 {
+    ret 5
+  }
   ret 0
 }

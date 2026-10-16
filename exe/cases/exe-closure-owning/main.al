@@ -9,7 +9,7 @@ fn apply(f: () -> i32) -> i32 {
 fn main() -> i32 {
   mut t := String::new()
   t.push_str("hello")
-  greet := [t] () -> {
+  greet := [t]() -> {
     println("{}", t.len())
     ret t.len()
   }
@@ -21,9 +21,12 @@ fn main() -> i32 {
   u.push_str("world!")
   // The view borrows the environment the value owns; the enclosing
   // scope ends it.
-  if apply([u] () -> {
-    ret u.len() as i32
-  }) != 6 {
+  if apply(
+    [u]() ->
+      {
+        ret u.len() as i32
+      }
+  ) != 6 {
     ret 2
   }
   ret 0

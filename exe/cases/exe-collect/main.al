@@ -14,8 +14,7 @@ fn main() -> i32 {
   }
   println("{} {} {}", *by_ref[0], *by_ref[1], *by_ref[2])
 
-  big: FilterIter<VecIter<i32>, &i32> :=
-      FilterIter { iter: v.iter(), f: (x: &i32) -> *x > 1 }
+  big: FilterIter<VecIter<i32>, &i32> := FilterIter { iter: v.iter(), f: (x: &i32) -> *x > 1 }
   filtered := collect(big)
   if *filtered[0] != 3 || *filtered[1] != 2 {
     ret 2

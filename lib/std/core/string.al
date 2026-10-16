@@ -22,12 +22,24 @@ fn ascii_lower(b: u8) -> u8 {
 // The ASCII whitespace `trim` strips: space, tab, newline, vertical
 // tab, form feed, and carriage return.
 fn is_ascii_space(b: u8) -> bool {
-  if b == 0x20u8 { ret true }
-  if b == 0x09u8 { ret true }
-  if b == 0x0au8 { ret true }
-  if b == 0x0bu8 { ret true }
-  if b == 0x0cu8 { ret true }
-  if b == 0x0du8 { ret true }
+  if b == 0x20u8 {
+    ret true
+  }
+  if b == 0x09u8 {
+    ret true
+  }
+  if b == 0x0au8 {
+    ret true
+  }
+  if b == 0x0bu8 {
+    ret true
+  }
+  if b == 0x0cu8 {
+    ret true
+  }
+  if b == 0x0du8 {
+    ret true
+  }
   ret false
 }
 
@@ -115,7 +127,9 @@ impl str {
           total = total + 1
           rest = str_slice(rest, i + n, str_len(rest))
         }
-        Option::None => { ret total }
+        Option::None => {
+          ret total
+        }
       }
     }
   }
@@ -129,8 +143,12 @@ impl str {
     mut s := self
     loop {
       match s.strip_prefix(pat) {
-        Option::Some(rest) => { s = rest }
-        Option::None => { ret s }
+        Option::Some(rest) => {
+          s = rest
+        }
+        Option::None => {
+          ret s
+        }
       }
     }
   }
@@ -143,8 +161,12 @@ impl str {
     mut s := self
     loop {
       match s.strip_suffix(pat) {
-        Option::Some(rest) => { s = rest }
-        Option::None => { ret s }
+        Option::Some(rest) => {
+          s = rest
+        }
+        Option::None => {
+          ret s
+        }
       }
     }
   }
@@ -301,10 +323,11 @@ impl str {
     match self.find(delim) {
       Option::Some(i) => {
         after := i + str_len(delim)
-        ret Option::Some(
-            (str_slice(*self, 0, i), str_slice(*self, after, str_len(*self))))
+        ret Option::Some((str_slice(*self, 0, i), str_slice(*self, after, str_len(*self))))
       }
-      Option::None => { ret Option::None }
+      Option::None => {
+        ret Option::None
+      }
     }
   }
 
@@ -614,7 +637,7 @@ impl SplitWhitespace {
   }
 }
 
-impl Iterator<str> for SplitWhitespace {
+impl Iterator < str > for SplitWhitespace {
   fn next(mut self: &mut Self) -> Option<str> {
     n := str_len(self.rest)
     mut start := 0 as usize
@@ -646,7 +669,7 @@ impl LinesIter {
   }
 }
 
-impl Iterator<str> for LinesIter {
+impl Iterator < str > for LinesIter {
   fn next(mut self: &mut Self) -> Option<str> {
     if self.done || str_len(self.rest) == 0 {
       ret Option::None
@@ -680,7 +703,7 @@ impl StrIter {
   }
 }
 
-impl Iterator<u8> for StrIter {
+impl Iterator < u8 > for StrIter {
   fn next(mut self: &mut Self) -> Option<u8> {
     if self.pos >= str_len(self.s) {
       ret Option::None
@@ -704,7 +727,7 @@ impl SplitIter {
   }
 }
 
-impl Iterator<str> for SplitIter {
+impl Iterator < str > for SplitIter {
   fn next(mut self: &mut Self) -> Option<str> {
     if self.done {
       ret Option::None
@@ -716,8 +739,7 @@ impl Iterator<str> for SplitIter {
     match self.rest.find(self.delim) {
       Option::Some(i) => {
         piece := str_slice(self.rest, 0, i)
-        self.rest =
-            str_slice(self.rest, i + str_len(self.delim), str_len(self.rest))
+        self.rest = str_slice(self.rest, i + str_len(self.delim), str_len(self.rest))
         ret Option::Some(piece)
       }
       Option::None => {

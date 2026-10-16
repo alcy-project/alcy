@@ -11,7 +11,9 @@ spec Sum {
   fn plus(self: &Self, other: &Self) -> i32;
 }
 
-struct P { base: i32 }
+struct P {
+  base: i32,
+}
 
 fn make() -> P {
   ret P { base: 6 }

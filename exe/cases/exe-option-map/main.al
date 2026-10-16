@@ -2,7 +2,9 @@
 // `map` and `and_then` change the payload type, `ok_or` lifts into
 // `Result` (roadmap: Iterator and Option APIs).
 
-fn inc(x: i32) -> i32 { ret x + 1 }
+fn inc(x: i32) -> i32 {
+  ret x + 1
+}
 
 fn small(x: i32) -> Option<u8> {
   if x < 0 {

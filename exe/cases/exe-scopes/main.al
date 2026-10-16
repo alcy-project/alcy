@@ -37,7 +37,7 @@ impl Scopes {
         Option::Some(kind) => {
           ret Option::Some(*kind)
         }
-        Option::None => { }
+        Option::None => {}
       }
     }
     ret Option::None
@@ -47,15 +47,33 @@ impl Scopes {
 fn main() -> i32 {
   mut s := Scopes::new()
   _ := s.push()
-  if !s.define("x", 1) { ret 1 }
-  if s.resolve("x").unwrap() != 1 { ret 2 }
+  if !s.define("x", 1) {
+    ret 1
+  }
+  if s.resolve("x").unwrap() != 1 {
+    ret 2
+  }
   _ := s.push()
-  if !s.define("x", 2) { ret 3 }
-  if s.resolve("x").unwrap() != 2 { ret 4 }
-  if !s.define("y", 5) { ret 5 }
-  if s.resolve("y").unwrap() != 5 { ret 6 }
-  if !s.pop() { ret 7 }
-  if s.resolve("x").unwrap() != 1 { ret 8 }
-  if s.resolve("y").is_some() { ret 9 }
+  if !s.define("x", 2) {
+    ret 3
+  }
+  if s.resolve("x").unwrap() != 2 {
+    ret 4
+  }
+  if !s.define("y", 5) {
+    ret 5
+  }
+  if s.resolve("y").unwrap() != 5 {
+    ret 6
+  }
+  if !s.pop() {
+    ret 7
+  }
+  if s.resolve("x").unwrap() != 1 {
+    ret 8
+  }
+  if s.resolve("y").is_some() {
+    ret 9
+  }
   ret 0
 }

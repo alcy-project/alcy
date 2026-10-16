@@ -14,12 +14,16 @@ fn main() -> i32 {
   }
   match buckets.get("a") {
     Option::Some(list) => {
-      if list.len() != 2 { ret 2 }
+      if list.len() != 2 {
+        ret 2
+      }
     }
     Option::None => {
       ret 3
     }
   }
-  if buckets.len() != 1 { ret 4 }
+  if buckets.len() != 1 {
+    ret 4
+  }
   ret 0
 }

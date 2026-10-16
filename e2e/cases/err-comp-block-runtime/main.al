@@ -6,6 +6,13 @@ fn double(comp n: usize) -> usize {
 
 fn main() -> i32 {
   mut runtime_val := 3usize
-  n := comp { double(comp { y := runtime_val; y }) }
+  n := comp {
+    double(
+      comp {
+        y := runtime_val
+        y
+      }
+    )
+  }
   ret n as i32
 }

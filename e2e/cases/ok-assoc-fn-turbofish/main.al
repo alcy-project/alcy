@@ -1,4 +1,6 @@
-struct Pair { a: i32 }
+struct Pair {
+  a: i32,
+}
 
 impl Pair {
   fn id<T>(x: T) -> T {

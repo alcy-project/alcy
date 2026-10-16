@@ -141,6 +141,7 @@ fn render(tokens: Vec<Token>) -> String {
   }
   ret out
 }
+
 fn main() -> i32 {
   mut sum := Vec::<Token>::new()
   sum.push(token(1, 2))
@@ -150,7 +151,9 @@ fn main() -> i32 {
   sum.push(token(1, 4))
   match run(sum) {
     Option::Some(v) => {
-      if v != 14 { ret 1 }
+      if v != 14 {
+        ret 1
+      }
     }
     Option::None => {
       ret 2
@@ -163,6 +166,8 @@ fn main() -> i32 {
   again.push(token(3, 0))
   again.push(token(1, 4))
   printed := render(again)
-  if printed.as_str() != "(2 + (3 * 4))" { ret 3 }
+  if printed.as_str() != "(2 + (3 * 4))" {
+    ret 3
+  }
   ret 0
 }

@@ -1,4 +1,7 @@
-enum Holder { Ref(&mut i32), Nothing }
+enum Holder {
+  Ref(&mut i32),
+  Nothing,
+}
 
 // A by-value match consumes a move-only scrutinee, and the arms read it
 // to do so: the discriminant, and the payload a binding takes. The move

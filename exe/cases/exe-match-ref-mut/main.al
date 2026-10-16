@@ -18,6 +18,8 @@ fn bump(t: &mut Token) -> i64 {
 
 fn main() -> i32 {
   mut t := Token::Num(7i64)
-  if bump(&mut t) != 8i64 { ret 1 }
+  if bump(&mut t) != 8i64 {
+    ret 1
+  }
   ret 0
 }

@@ -17,9 +17,15 @@ pub enum Shape96 {
 
 pub fn area96(s: Shape96) -> i32 {
   match s {
-    Shape96::Circle(r) => { ret r * 3 * r }
-    Shape96::Rect(w, h) => { ret w * h }
-    Shape96::Empty => { ret 0 }
+    Shape96::Circle(r) => {
+      ret r * 3 * r
+    }
+    Shape96::Rect(w, h) => {
+      ret w * h
+    }
+    Shape96::Empty => {
+      ret 0
+    }
   }
 }
 

@@ -11,18 +11,28 @@ fn main() -> i32 {
   for i in 0..<20000u64 {
     total += i
   }
-  if total != 199990000u64 { ret 1 }
+  if total != 199990000u64 {
+    ret 1
+  }
   match v.at(0) {
     Option::Some(x) => {
-      if *x != 111 { ret 2 }
+      if *x != 111 {
+        ret 2
+      }
     }
-    Option::None => { ret 3 }
+    Option::None => {
+      ret 3
+    }
   }
   match v.at(1) {
     Option::Some(x) => {
-      if *x != 222 { ret 4 }
+      if *x != 222 {
+        ret 4
+      }
     }
-    Option::None => { ret 5 }
+    Option::None => {
+      ret 5
+    }
   }
   ret 0
 }

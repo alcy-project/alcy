@@ -7,16 +7,26 @@ fn main() -> i32 {
   v.push(2i32)
   v.push(3i32)
   v.truncate(1)
-  if v.len() != 1 { ret 1 }
-  if *v.at(0).unwrap() != 1 { ret 2 }
+  if v.len() != 1 {
+    ret 1
+  }
+  if *v.at(0).unwrap() != 1 {
+    ret 2
+  }
   v.truncate(5)
-  if v.len() != 1 { ret 3 }
+  if v.len() != 1 {
+    ret 3
+  }
   mut s := Vec::<String>::new()
   s.push(format("a"))
   s.push(format("b"))
   s.truncate(0)
-  if s.len() != 0 { ret 4 }
+  if s.len() != 0 {
+    ret 4
+  }
   s.push(format("c"))
-  if s.len() != 1 { ret 5 }
+  if s.len() != 1 {
+    ret 5
+  }
   ret 0
 }

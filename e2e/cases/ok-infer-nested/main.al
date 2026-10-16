@@ -14,7 +14,9 @@ fn main() -> i32 {
   v.push(2)
   match first_of(&v) {
     Option::Some(x) => {
-      if *x != 1 { ret 1 }
+      if *x != 1 {
+        ret 1
+      }
     }
     Option::None => {
       ret 2
@@ -22,6 +24,8 @@ fn main() -> i32 {
   }
   mut w := Vec::<String>::new()
   w.push(String::from("x"))
-  if pair_len(&v, &w) != 3 { ret 3 }
+  if pair_len(&v, &w) != 3 {
+    ret 3
+  }
   ret 0
 }

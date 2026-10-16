@@ -22,6 +22,8 @@ fn main() -> i32 {
   mut b := Vec::<i64>::new()
   b.push(4)
   b.push(5)
-  if dot(&a, &b) != 14 { ret 1 }
+  if dot(&a, &b) != 14 {
+    ret 1
+  }
   ret 0
 }

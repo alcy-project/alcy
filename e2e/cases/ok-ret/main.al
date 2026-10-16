@@ -26,7 +26,9 @@ fn diverges() -> i32 {
 }
 
 fn closure() -> i32 {
-  f := (x: i32) -> { x + 1 }
+  f := (x: i32) -> {
+    x + 1
+  }
   ret f(1)
 }
 

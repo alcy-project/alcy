@@ -1,14 +1,22 @@
-struct Res { buf: &mut MaybeUninit<u8> }
+struct Res {
+  buf: &mut MaybeUninit<u8>,
+}
 
 impl Res {
-  fn new() -> Res { ret Res { buf: unsafe { alloc::<u8>(4) } } }
+  fn new() -> Res {
+    ret Res { buf: unsafe { alloc::<u8>(4) } }
+  }
+
   fn drop(self: Res) {
     print("drop-res\n")
     unsafe { dealloc(self.buf, 1 as usize) }
   }
 }
 
-enum E { Ok(i32), Err(Res) }
+enum E {
+  Ok(i32),
+  Err(Res),
+}
 
 impl E {
   fn drop(self: E) {
@@ -17,7 +25,9 @@ impl E {
     // so the payload ends here, on the path that still owns it.
     match self {
       E::Ok(_) => {}
-      E::Err(r) => { r.drop() }
+      E::Err(r) => {
+        r.drop()
+      }
     }
   }
 }

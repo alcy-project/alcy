@@ -1,12 +1,16 @@
 // A shared receiver already hands out borrows of its fields, and the
 // place stays readable afterwards. What the borrow checker cannot model
 // is a place whose type is itself a reference; see docs/adr/0012-reborrow-on-reference-read.md.
-struct Cell { n: i32, tag: i32 }
+struct Cell {
+  n: i32,
+  tag: i32,
+}
 
 impl Cell {
   fn get(self: &Self) -> &i32 {
     ret &self.n
   }
+
   fn opt(self: &Self, i: i32) -> Option<&i32> {
     if i != 0 {
       ret Option::None

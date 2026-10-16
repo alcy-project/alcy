@@ -2,7 +2,7 @@
 // that follows does not end it again.
 
 struct Res {
-  buf: &mut MaybeUninit<u8>
+  buf: &mut MaybeUninit<u8>,
 }
 
 impl Res {

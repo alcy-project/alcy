@@ -1,7 +1,10 @@
 // Exercises the heap intrinsics: typed allocation, unique ownership, a
 // round trip through a function boundary, alignment, a write-readback
 // into the returned block, and release.
-struct Buf { data: &mut MaybeUninit<u8>, cap: usize }
+struct Buf {
+  data: &mut MaybeUninit<u8>,
+  cap: usize,
+}
 
 fn make(cap: usize) -> Buf {
   ret Buf { data: unsafe { alloc::<u8>(cap) }, cap: cap }

@@ -24,6 +24,8 @@ fn run(code: &[i32]) -> i64 {
 
 fn main() -> i32 {
   code := [1, 2, 1, 3, 2]
-  if run(code.as_slice()) != 5 { ret 1 }
+  if run(code.as_slice()) != 5 {
+    ret 1
+  }
   ret 0
 }

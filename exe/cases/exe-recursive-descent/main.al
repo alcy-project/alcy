@@ -21,7 +21,9 @@ impl Parser {
     mut value := 0
     while self.pos < self.src.len() {
       c := self.src.byte(self.pos)
-      if c < 0x30u8 || c > 0x39u8 { break }
+      if c < 0x30u8 || c > 0x39u8 {
+        break
+      }
       value = value * 10 + ((c - 0x30u8) as i32)
       self.pos = self.pos + 1
     }
@@ -31,7 +33,9 @@ impl Parser {
   fn sum(mut self: &mut Self) -> Option<i32> {
     mut total := self.atom()?
     while self.pos < self.src.len() {
-      if self.src.byte(self.pos) != 0x2bu8 { break }
+      if self.src.byte(self.pos) != 0x2bu8 {
+        break
+      }
       self.pos = self.pos + 1
       total = total + self.atom()?
     }
@@ -43,11 +47,17 @@ fn main() -> i32 {
   mut p := Parser::new("12+30+5")
   match p.sum() {
     Option::Some(v) => {
-      if v != 47 { ret 1 }
+      if v != 47 {
+        ret 1
+      }
     }
-    Option::None => { ret 2 }
+    Option::None => {
+      ret 2
+    }
   }
   mut bad := Parser::new("12+")
-  if bad.sum().is_some() { ret 3 }
+  if bad.sum().is_some() {
+    ret 3
+  }
   ret 0
 }

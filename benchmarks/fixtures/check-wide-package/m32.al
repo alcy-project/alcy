@@ -17,9 +17,15 @@ pub enum Shape32 {
 
 pub fn area32(s: Shape32) -> i32 {
   match s {
-    Shape32::Circle(r) => { ret r * 3 * r }
-    Shape32::Rect(w, h) => { ret w * h }
-    Shape32::Empty => { ret 0 }
+    Shape32::Circle(r) => {
+      ret r * 3 * r
+    }
+    Shape32::Rect(w, h) => {
+      ret w * h
+    }
+    Shape32::Empty => {
+      ret 0
+    }
   }
 }
 

@@ -10,7 +10,7 @@ impl Countdown {
   }
 }
 
-impl Iterator<i32> for Countdown {
+impl Iterator < i32 > for Countdown {
   fn next(mut self: &mut Self) -> Option<i32> {
     if self.remaining <= 0 {
       ret Option::None
@@ -31,7 +31,7 @@ pub fn bytes(data: [u8; 3]) -> Bytes {
   ret Bytes { data: data, index: 0 }
 }
 
-impl Iterator<u8> for Bytes {
+impl Iterator < u8 > for Bytes {
   fn next(mut self: &mut Self) -> Option<u8> {
     if self.index >= 3 {
       ret Option::None

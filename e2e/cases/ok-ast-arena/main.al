@@ -114,7 +114,9 @@ fn main() -> i32 {
   sum.push(token(1, 4))
   match run(sum) {
     Option::Some(v) => {
-      if v != 14 { ret 1 }
+      if v != 14 {
+        ret 1
+      }
     }
     Option::None => {
       ret 2

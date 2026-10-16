@@ -2,7 +2,7 @@
 // plain wrapper over `Vec<T>`: if `self.items.push` copied the field,
 // the pushes would land in a temporary and `size` would stay zero.
 struct Bag<T> {
-  items: Vec<T>
+  items: Vec<T>,
 }
 
 impl<T> Bag<T> {

@@ -7,7 +7,9 @@ fn none() -> Option<i32> {
 fn main() -> i32 {
   o := Option::Some(3)
   if Option::Some(v) := o {
-    if v != 3 { ret 1 }
+    if v != 3 {
+      ret 1
+    }
   } else {
     ret 2
   }
@@ -17,10 +19,16 @@ fn main() -> i32 {
   }
   mut count := 0
   while Option::Some(v) := Option::Some(1) {
-    if v != 1 { ret 4 }
+    if v != 1 {
+      ret 4
+    }
     count = count + 1
-    if count > 3 { break }
+    if count > 3 {
+      break
+    }
   }
-  if count != 4 { ret 5 }
+  if count != 4 {
+    ret 5
+  }
   ret 0
 }

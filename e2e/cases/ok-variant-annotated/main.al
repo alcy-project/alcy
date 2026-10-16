@@ -6,7 +6,11 @@ fn none() -> Option<i32> {
 
 fn main() -> i32 {
   n: Option<i32> := Option::None
-  if n.is_some() { ret 1 }
-  if none().is_some() { ret 2 }
+  if n.is_some() {
+    ret 1
+  }
+  if none().is_some() {
+    ret 2
+  }
   ret 0
 }

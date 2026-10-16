@@ -73,13 +73,7 @@ impl<T> Vec<T> {
       next = 4
     }
     fresh := unsafe { alloc::<T>(next) }
-    unsafe {
-      memcopy(
-        elem_ptr(fresh, 0),
-        elem_ref(self.buf, 0),
-        self.len * size_of::<T>(),
-      )
-    }
+    unsafe { memcopy(elem_ptr(fresh, 0), elem_ref(self.buf, 0), self.len * size_of::<T>(),) }
     unsafe { dealloc(self.buf, self.cap) }
     self.buf = fresh
     self.cap = next
@@ -475,7 +469,7 @@ impl<T> VecIntoIter<T> {
   }
 }
 
-impl<T> Iterator<T> for VecIntoIter<T> {
+impl<T> Iterator < T > for VecIntoIter<T> {
   fn next(mut self: &mut Self) -> Option<T> {
     if self.pos >= self.v.len() {
       ret Option::None
@@ -507,7 +501,7 @@ impl<T> VecIter<T> {
   }
 }
 
-impl<T> Iterator<&T> for VecIter<T> {
+impl<T> Iterator < &T > for VecIter<T> {
   fn next(mut self: &mut Self) -> Option<&T> {
     if self.pos >= self.len {
       ret Option::None
@@ -540,7 +534,7 @@ impl<T> VecIterMut<T> {
   }
 }
 
-impl<T> Iterator<&mut T> for VecIterMut<T> {
+impl<T> Iterator < &mut T > for VecIterMut<T> {
   fn next(mut self: &mut Self) -> Option<&mut T> {
     if self.pos >= self.len {
       ret Option::None
@@ -553,13 +547,13 @@ impl<T> Iterator<&mut T> for VecIterMut<T> {
 
 // `a[i]` reads through `at` and panics on a miss, which is what array
 // indexing does.
-impl<T> Index<usize, T> for Vec<T> {
+impl<T> Index < usize, T > for Vec<T> {
   fn index(self: &Self, i: usize) -> &T {
     ret self.at(i).unwrap()
   }
 }
 
-impl<T> IndexMut<usize, T> for Vec<T> {
+impl<T> IndexMut < usize, T > for Vec<T> {
   fn index_mut(mut self: &mut Self, i: usize) -> &mut T {
     ret self.at_mut(i).unwrap()
   }

@@ -1,7 +1,7 @@
 // Discarding ends the value: the explicit spelling and the bare one.
 
 struct D {
-  buf: &mut MaybeUninit<u8>
+  buf: &mut MaybeUninit<u8>,
 }
 
 impl D {
@@ -11,7 +11,9 @@ impl D {
   }
 }
 
-fn make() -> D { ret D { buf: unsafe { alloc::<u8>(1) } } }
+fn make() -> D {
+  ret D { buf: unsafe { alloc::<u8>(1) } }
+}
 
 fn main() -> i32 {
   _ := make()

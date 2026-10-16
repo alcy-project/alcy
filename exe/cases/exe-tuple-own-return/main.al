@@ -5,7 +5,11 @@ fn make() -> (String, i32) {
 
 fn main() -> i32 {
   t := make()
-  if t.0.len() != 2 { ret 1 }
-  if t.1 != 1 { ret 2 }
+  if t.0.len() != 2 {
+    ret 1
+  }
+  if t.1 != 1 {
+    ret 2
+  }
   ret 0
 }

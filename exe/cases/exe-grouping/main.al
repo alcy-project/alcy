@@ -14,10 +14,14 @@ fn main() -> i32 {
     list.push(String::from(w.as_str()))
     i = i + 1
   }
-  if groups.len() != 2 { ret 1 }
+  if groups.len() != 2 {
+    ret 1
+  }
   match groups.get("a") {
     Option::Some(list) => {
-      if list.len() != 2 { ret 2 }
+      if list.len() != 2 {
+        ret 2
+      }
     }
     Option::None => {
       ret 3

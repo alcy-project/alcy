@@ -82,9 +82,17 @@ fn text_of(src: str, t: &Token) -> str {
 fn main() -> i32 {
   src := "let s = \"hi\" // note\n+"
   tokens := lex(src)
-  if tokens.len() != 5 { ret 1 }
-  if text_of(src, tokens.at(0).unwrap()) != "let" { ret 2 }
-  if text_of(src, tokens.at(3).unwrap()) != "\"hi\"" { ret 3 }
-  if text_of(src, tokens.at(4).unwrap()) != "+" { ret 4 }
+  if tokens.len() != 5 {
+    ret 1
+  }
+  if text_of(src, tokens.at(0).unwrap()) != "let" {
+    ret 2
+  }
+  if text_of(src, tokens.at(3).unwrap()) != "\"hi\"" {
+    ret 3
+  }
+  if text_of(src, tokens.at(4).unwrap()) != "+" {
+    ret 4
+  }
   ret 0
 }

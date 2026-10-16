@@ -26,6 +26,12 @@ fn main() -> i32 {
   ret bad
 }
 
-enum Box<T> { Filled(T), Empty }
+enum Box<T> {
+  Filled(T),
+  Empty,
+}
 
-enum Pair<A, B> { Both(A, B), Neither }
+enum Pair<A, B> {
+  Both(A, B),
+  Neither,
+}

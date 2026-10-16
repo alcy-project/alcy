@@ -8,7 +8,9 @@ fn main() -> i32 {
   v.push(String::from("b"))
   match live {
     Option::Some(s) => {
-      if s.len() != 1 { ret 1 }
+      if s.len() != 1 {
+        ret 1
+      }
     }
     Option::None => {
       ret 2

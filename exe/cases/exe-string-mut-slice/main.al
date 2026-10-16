@@ -4,10 +4,14 @@ fn main() -> i32 {
   mut s := format("abc")
   {
     b := s.as_mut_slice()
-    if b.len() != 3 { ret 1 }
+    if b.len() != 3 {
+      ret 1
+    }
     b[0] = 0x41u8
     b[2] = 0x5au8
   }
-  if s.as_str() != "AbZ" { ret 2 }
+  if s.as_str() != "AbZ" {
+    ret 2
+  }
   ret 0
 }

@@ -5,10 +5,18 @@ fn main() -> i32 {
   mut b := Set::new()
   _ := b.insert("x")
   _ := b.insert("y")
-  if !a.is_subset(&b) { ret 1 }
-  if b.is_subset(&a) { ret 2 }
+  if !a.is_subset(&b) {
+    ret 1
+  }
+  if b.is_subset(&a) {
+    ret 2
+  }
   mut e := Set::new()
-  if !e.is_subset(&a) { ret 3 }
-  if !a.is_subset(&a) { ret 4 }
+  if !e.is_subset(&a) {
+    ret 3
+  }
+  if !a.is_subset(&a) {
+    ret 4
+  }
   ret 0
 }

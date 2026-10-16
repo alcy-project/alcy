@@ -1,4 +1,7 @@
-enum Shape { Circle(i32), Rect }
+enum Shape {
+  Circle(i32),
+  Rect,
+}
 
 fn area(s: Shape) -> i32 {
   r := match s {

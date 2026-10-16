@@ -20,7 +20,11 @@ fn main() -> i32 {
   scopes.push(Scope { name: String::from("root"), parent: -1 })
   scopes.push(Scope { name: String::from("fn"), parent: 0 })
   scopes.push(Scope { name: String::from("block"), parent: 1 })
-  if depth_of(&scopes, 2) != 3 { ret 1 }
-  if depth_of(&scopes, 0) != 1 { ret 2 }
+  if depth_of(&scopes, 2) != 3 {
+    ret 1
+  }
+  if depth_of(&scopes, 0) != 1 {
+    ret 2
+  }
   ret 0
 }

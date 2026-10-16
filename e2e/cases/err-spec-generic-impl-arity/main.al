@@ -4,7 +4,9 @@ spec Pick {
   fn pick<T>(self: &Self, x: T) -> T;
 }
 
-struct W { base: i32 }
+struct W {
+  base: i32,
+}
 
 impl Pick for W {
   fn pick(self: &Self, x: i32) -> i32 {

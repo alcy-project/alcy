@@ -20,6 +20,7 @@ impl Mark for Point {
 
 spec Take {
   fn take<T>(self: &Self, value: T) -> T;
+
   fn total<T: Mark>(self: &Self, value: T) -> i32;
 }
 

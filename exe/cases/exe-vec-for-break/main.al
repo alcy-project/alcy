@@ -1,7 +1,7 @@
 // A loop that stops early ends the elements it never took.
 
 struct D {
-  buf: &mut MaybeUninit<u8>
+  buf: &mut MaybeUninit<u8>,
 }
 
 impl D {
@@ -11,7 +11,9 @@ impl D {
   }
 }
 
-fn make() -> D { ret D { buf: unsafe { alloc::<u8>(1) } } }
+fn make() -> D {
+  ret D { buf: unsafe { alloc::<u8>(1) } }
+}
 
 fn main() -> i32 {
   mut v: Vec<D> := Vec::<D>::new()
@@ -21,7 +23,9 @@ fn main() -> i32 {
   mut n := 0
   for d in v {
     n = n + 1
-    if n == 2 { break }
+    if n == 2 {
+      break
+    }
   }
   ret 0
 }

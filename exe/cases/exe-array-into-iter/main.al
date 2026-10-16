@@ -1,7 +1,7 @@
 // `for d in a` consumes an array; a break ends what the loop never took.
 
 struct D {
-  buf: &mut MaybeUninit<u8>
+  buf: &mut MaybeUninit<u8>,
 }
 
 impl D {
@@ -11,7 +11,9 @@ impl D {
   }
 }
 
-fn make() -> D { ret D { buf: unsafe { alloc::<u8>(1) } } }
+fn make() -> D {
+  ret D { buf: unsafe { alloc::<u8>(1) } }
+}
 
 fn main() -> i32 {
   a := [make(), make(), make()]

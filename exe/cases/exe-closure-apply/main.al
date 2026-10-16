@@ -12,12 +12,20 @@ fn twice(f: (i32) -> i32, x: i32) -> i32 {
 
 fn main() -> i32 {
   g := (a: i32) -> a * 2
-  if apply(g, 20) != 41 { ret 1 }
-  if twice(g, 10) != 40 { ret 2 }
-  if ((v: i32) -> v - 1)(50) != 49 { ret 3 }
+  if apply(g, 20) != 41 {
+    ret 1
+  }
+  if twice(g, 10) != 40 {
+    ret 2
+  }
+  if ((v: i32) -> v - 1)(50) != 49 {
+    ret 3
+  }
   // A closure value is a type like any other: a generic takes it, and
   // the value it returns still calls.
   doubled := id((v: i32) -> v * 2)
-  if doubled(21) != 42 { ret 4 }
+  if doubled(21) != 42 {
+    ret 4
+  }
   ret 0
 }

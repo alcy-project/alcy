@@ -19,11 +19,21 @@ fn main() -> i32 {
   mut tokens := Vec::<Token>::new()
   tokens.push(Token { kind: 1, span: Span { start: 0, end: 3 } })
   tokens.push(Token { kind: 2, span: Span { start: 4, end: 5 } })
-  if tokens.len() != 2 { ret 1 }
+  if tokens.len() != 2 {
+    ret 1
+  }
   t := tokens.at(0).unwrap()
-  if t.kind != 1 { ret 2 }
-  if t.span.end - t.span.start != 3 { ret 3 }
-  if slice_of(src, t.span) != "let" { ret 4 }
-  if slice_of(src, tokens.at(1).unwrap().span) != "x" { ret 5 }
+  if t.kind != 1 {
+    ret 2
+  }
+  if t.span.end - t.span.start != 3 {
+    ret 3
+  }
+  if slice_of(src, t.span) != "let" {
+    ret 4
+  }
+  if slice_of(src, tokens.at(1).unwrap().span) != "x" {
+    ret 5
+  }
   ret 0
 }

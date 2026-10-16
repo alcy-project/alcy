@@ -2,7 +2,7 @@
 // into a moved place re-initializes it.
 
 struct D {
-  buf: &mut MaybeUninit<u8>
+  buf: &mut MaybeUninit<u8>,
 }
 
 impl D {
@@ -12,7 +12,9 @@ impl D {
   }
 }
 
-fn make() -> D { ret D { buf: unsafe { alloc::<u8>(1) } } }
+fn make() -> D {
+  ret D { buf: unsafe { alloc::<u8>(1) } }
+}
 
 fn main() -> i32 {
   mut r := make()
@@ -20,7 +22,9 @@ fn main() -> i32 {
   mut i := 0
   while i < 3 {
     i = i + 1
-    if i == 2 { r.drop() }
+    if i == 2 {
+      r.drop()
+    }
     r = make()
   }
   ret 0

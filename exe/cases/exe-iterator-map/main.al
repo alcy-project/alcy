@@ -2,9 +2,13 @@
 // argument now that the mangle encodes function signatures, and the
 // adapter's next calls it. Distinct element types instantiate apart.
 
-fn inc(x: i32) -> i32 { ret x + 1 }
+fn inc(x: i32) -> i32 {
+  ret x + 1
+}
 
-fn twice(x: i32) -> i64 { ret (x * 2) as i64 }
+fn twice(x: i32) -> i64 {
+  ret (x * 2) as i64
+}
 
 fn main() -> i32 {
   r := 1..=3

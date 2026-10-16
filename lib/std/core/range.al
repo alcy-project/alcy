@@ -80,12 +80,7 @@ impl<T> Bound<T> {
 impl<T> Range<T> {
   // Names the cursor `for` iterates, advancing one value at a time.
   pub fn into_iter(self: Self) -> RangeIter<T> {
-    ret RangeIter {
-      current: self.start.first(),
-      end: self.end,
-      stride: 1,
-      done: false,
-    }
+    ret RangeIter { current: self.start.first(), end: self.end, stride: 1, done: false, }
   }
 
   // Names a cursor advancing `stride` values at a time: `(0..<10)`
@@ -97,12 +92,7 @@ impl<T> Range<T> {
     if stride <= 0 {
       panic("stride must be positive")
     }
-    ret RangeIter {
-      current: self.start.first(),
-      end: self.end,
-      stride: stride,
-      done: false,
-    }
+    ret RangeIter { current: self.start.first(), end: self.end, stride: stride, done: false, }
   }
 }
 
@@ -114,7 +104,7 @@ impl<T> RangeIter<T> {
   }
 }
 
-impl<T> Iterator<T> for RangeIter<T> {
+impl<T> Iterator < T > for RangeIter<T> {
   fn next(mut self: &mut Self) -> Option<T> {
     if self.done {
       ret Option::None

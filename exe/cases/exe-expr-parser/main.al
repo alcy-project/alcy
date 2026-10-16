@@ -77,7 +77,9 @@ fn main() -> i32 {
   sum.push(token(1, 4))
   match run(sum) {
     Option::Some(v) => {
-      if v != 14 { ret 1 }
+      if v != 14 {
+        ret 1
+      }
     }
     Option::None => {
       ret 2
@@ -93,7 +95,9 @@ fn main() -> i32 {
   grouped.push(token(1, 4))
   match run(grouped) {
     Option::Some(v) => {
-      if v != 20 { ret 3 }
+      if v != 20 {
+        ret 3
+      }
     }
     Option::None => {
       ret 4

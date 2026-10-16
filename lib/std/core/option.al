@@ -69,7 +69,7 @@ impl<T> Option<T> {
         Option::Some(v)
       } else {
         Option::None
-      },
+      }
       Option::None => Option::None,
     }
   }

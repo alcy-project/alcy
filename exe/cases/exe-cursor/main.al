@@ -34,6 +34,8 @@ fn count_digits(src: str) -> i32 {
 }
 
 fn main() -> i32 {
-  if count_digits("a1b2") != 2 { ret 1 }
+  if count_digits("a1b2") != 2 {
+    ret 1
+  }
   ret 0
 }

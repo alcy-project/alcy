@@ -30,10 +30,20 @@ fn main() -> i32 {
   a := pool.intern("x")
   b := pool.intern("y")
   c := pool.intern("x")
-  if a != 0 { ret 1 }
-  if b != 1 { ret 2 }
-  if c != 0 { ret 3 }
-  if pool.name_of(a) != "x" { ret 4 }
-  if pool.name_of(b) != "y" { ret 5 }
+  if a != 0 {
+    ret 1
+  }
+  if b != 1 {
+    ret 2
+  }
+  if c != 0 {
+    ret 3
+  }
+  if pool.name_of(a) != "x" {
+    ret 4
+  }
+  if pool.name_of(b) != "y" {
+    ret 5
+  }
   ret 0
 }

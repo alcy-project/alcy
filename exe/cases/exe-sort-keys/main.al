@@ -8,9 +8,15 @@ fn main() -> i32 {
   for key in m.keys() {
     names.push(String::from(key))
   }
-  if names.len() != 2 { ret 1 }
+  if names.len() != 2 {
+    ret 1
+  }
   names.sort()
-  if names.at(0).unwrap().as_str() != "a" { ret 2 }
-  if names.at(1).unwrap().as_str() != "b" { ret 3 }
+  if names.at(0).unwrap().as_str() != "a" {
+    ret 2
+  }
+  if names.at(1).unwrap().as_str() != "b" {
+    ret 3
+  }
   ret 0
 }

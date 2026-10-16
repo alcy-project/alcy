@@ -35,6 +35,8 @@ fn main() -> i32 {
   msgs.push(diag(5, "second"))
   msgs.push(diag(1, "first"))
   text := render(msgs)
-  if text.as_str() != "first\nsecond" { ret 1 }
+  if text.as_str() != "first\nsecond" {
+    ret 1
+  }
   ret 0
 }

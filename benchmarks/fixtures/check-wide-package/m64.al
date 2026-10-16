@@ -17,9 +17,15 @@ pub enum Shape64 {
 
 pub fn area64(s: Shape64) -> i32 {
   match s {
-    Shape64::Circle(r) => { ret r * 3 * r }
-    Shape64::Rect(w, h) => { ret w * h }
-    Shape64::Empty => { ret 0 }
+    Shape64::Circle(r) => {
+      ret r * 3 * r
+    }
+    Shape64::Rect(w, h) => {
+      ret w * h
+    }
+    Shape64::Empty => {
+      ret 0
+    }
   }
 }
 

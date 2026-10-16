@@ -12,17 +12,29 @@ fn main() -> i32 {
     v.push(v[i - 1] + v[i - 2])
     i = i + 1
   }
-  if v.len() != 10 { ret 1 }
-  if v[9] != 34 { ret 2 }
+  if v.len() != 10 {
+    ret 1
+  }
+  if v[9] != 34 {
+    ret 2
+  }
   // The receiver's own length is an argument.
   v.push(v.len() as i32)
-  if v[10] != 10 { ret 3 }
+  if v[10] != 10 {
+    ret 3
+  }
   // An element feeds the growth.
   v.push(v[0])
-  if v[11] != 0 { ret 4 }
+  if v[11] != 0 {
+    ret 4
+  }
   // Appending at the end reads the length in place.
   v.insert(v.len(), 99)
-  if v.len() != 13 { ret 5 }
-  if v[12] != 99 { ret 6 }
+  if v.len() != 13 {
+    ret 5
+  }
+  if v[12] != 99 {
+    ret 6
+  }
   ret 0
 }

@@ -17,9 +17,15 @@ pub enum Shape43 {
 
 pub fn area43(s: Shape43) -> i32 {
   match s {
-    Shape43::Circle(r) => { ret r * 3 * r }
-    Shape43::Rect(w, h) => { ret w * h }
-    Shape43::Empty => { ret 0 }
+    Shape43::Circle(r) => {
+      ret r * 3 * r
+    }
+    Shape43::Rect(w, h) => {
+      ret w * h
+    }
+    Shape43::Empty => {
+      ret 0
+    }
   }
 }
 

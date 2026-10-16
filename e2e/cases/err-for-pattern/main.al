@@ -9,7 +9,7 @@ impl Cursor {
   }
 }
 
-impl Iterator<i32> for Cursor {
+impl Iterator < i32 > for Cursor {
   fn next(mut self: &mut Self) -> Option<i32> {
     if self.remaining <= 0 {
       ret Option::None

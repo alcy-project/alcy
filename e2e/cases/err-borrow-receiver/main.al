@@ -1,7 +1,9 @@
 // An implicit reborrow at a method receiver is a loan too, whether or
 // not the source writes a `&`. The method here hands back a reference
 // derived from `&self`, so the store has to conflict with it.
-struct Box { n: i32 }
+struct Box {
+  n: i32,
+}
 
 impl Box {
   fn get(self: &Self) -> &i32 {

@@ -1,8 +1,9 @@
-struct Plain { n: i32 }
+struct Plain {
+  n: i32,
+}
 
 impl Plain {
-  fn drop(self: Plain) {
-  }
+  fn drop(self: Plain) {}
 }
 
 fn main() {

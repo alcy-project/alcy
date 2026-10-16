@@ -1,4 +1,7 @@
-enum Tag { One(i32), Two }
+enum Tag {
+  One(i32),
+  Two,
+}
 
 // `Tag` holds a payload. The payload lives in the value itself, so
 // keeping one across a later call has to keep reading the right bytes;
@@ -22,7 +25,10 @@ fn discard(t: Tag) {
 // A differing-shape enum: the area has to hold the widest payload even
 // though the first variant carries less. The second variant holds two
 // words where the first holds one, so the area is padded to fit.
-enum Either { Left(i32), Right((i32, i32)) }
+enum Either {
+  Left(i32),
+  Right((i32, i32)),
+}
 
 fn wide(a: i32, b: i32) -> Either {
   ret Either::Right((a, b))

@@ -5,10 +5,14 @@ fn main() -> i32 {
     cell := counts.get_or_insert_with(word, () -> 0)
     *cell = *cell + 1
   }
-  if counts.len() != 3 { ret 1 }
+  if counts.len() != 3 {
+    ret 1
+  }
   match counts.get("a") {
     Option::Some(n) => {
-      if *n != 3 { ret 2 }
+      if *n != 3 {
+        ret 2
+      }
     }
     Option::None => {
       ret 3

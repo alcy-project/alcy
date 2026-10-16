@@ -19,7 +19,7 @@ pub unsafe intrinsic fn slice_at<T>(s: &[T], i: usize) -> &T;
 // The mutable element at `i`; in bounds exactly when `i < slice_len(s)`.
 pub unsafe intrinsic fn slice_at_mut<T>(s: &mut [T], i: usize) -> &mut T;
 
-impl<T> [T] {
+impl<T>[T] {
   // The element count.
   pub fn len(self: &Self) -> usize {
     ret slice_len(self)
@@ -238,7 +238,7 @@ impl<T> SliceIter<T> {
   }
 }
 
-impl<T> Iterator<&T> for SliceIter<T> {
+impl<T> Iterator < &T > for SliceIter<T> {
   fn next(mut self: &mut Self) -> Option<&T> {
     if self.pos >= slice_len(self.s) {
       ret Option::None
@@ -249,7 +249,7 @@ impl<T> Iterator<&T> for SliceIter<T> {
   }
 }
 
-impl<T, N: usize> [T; N] {
+impl<T, N: usize>[T; N] {
   // The element count; `N` is the array's own.
   pub fn len(self: &Self) -> usize {
     ret N
@@ -292,11 +292,11 @@ pub struct ArrayIntoIter<T, N: usize> {
 }
 
 impl<T, N: usize> ArrayIntoIter<T, N> {
-  pub fn into_iter(self: ArrayIntoIter<T, N>) -> ArrayIntoIter<T, N> {
+  pub fn into_iter(self: ArrayIntoIter < T, N >) -> ArrayIntoIter<T, N> {
     ret self
   }
 
-  pub fn drop(mut self: ArrayIntoIter<T, N>) {
+  pub fn drop(mut self: ArrayIntoIter < T, N >) {
     mut i := self.pos
     while i < N {
       unsafe { drop_in_place(slice_at_mut(self.a.as_mut_slice(), i)) }
@@ -305,7 +305,7 @@ impl<T, N: usize> ArrayIntoIter<T, N> {
   }
 }
 
-impl<T, N: usize> Iterator<T> for ArrayIntoIter<T, N> {
+impl<T, N: usize> Iterator < T > for ArrayIntoIter<T, N> {
   fn next(mut self: &mut Self) -> Option<T> {
     if self.pos >= N {
       ret Option::None
@@ -329,7 +329,7 @@ impl<T> SliceIterMut<T> {
   }
 }
 
-impl<T> Iterator<&mut T> for SliceIterMut<T> {
+impl<T> Iterator < &mut T > for SliceIterMut<T> {
   fn next(mut self: &mut Self) -> Option<&mut T> {
     if self.pos >= slice_len(self.s) {
       ret Option::None

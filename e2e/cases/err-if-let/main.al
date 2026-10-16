@@ -1,5 +1,4 @@
 fn main() {
   o := 1
-  if let 1 = o {
-  }
+  if let 1 = o {}
 }

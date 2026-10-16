@@ -7,6 +7,8 @@ fn main() -> i32 {
   mut m := Map::<i32>::new()
   _ := m.insert("a", 1)
   _ := m.insert("b", 2)
-  if entries_of(&m) != 2 { ret 1 }
+  if entries_of(&m) != 2 {
+    ret 1
+  }
   ret 0
 }

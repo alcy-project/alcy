@@ -71,14 +71,7 @@ impl<V> Map<V> {
       unsafe { uninit_write(elem_ptr(states, i), 0 as u8) }
       i = i + 1
     }
-    ret Map {
-      keys: keys,
-      values: values,
-      states: states,
-      len: 0,
-      tombs: 0,
-      cap: slots,
-    }
+    ret Map { keys: keys, values: values, states: states, len: 0, tombs: 0, cap: slots, }
   }
 
   pub fn len(self: &Self) -> usize {
@@ -165,8 +158,7 @@ impl<V> Map<V> {
 
   // The value for `key`, inserting `make()`'s when absent, so the
   // default is only built on a miss.
-  pub fn get_or_insert_with(mut self: &mut Self, key: str,
-                            make: () -> V) -> &mut V {
+  pub fn get_or_insert_with(mut self: &mut Self, key: str, make: () -> V) -> &mut V {
     if !self.contains(key) {
       _ := self.insert(key, make())
     }
@@ -351,7 +343,7 @@ impl<V> MapEntryIter<V> {
   }
 }
 
-impl<V> Iterator<(str, &V)> for MapEntryIter<V> {
+impl<V> Iterator < (str, &V) > for MapEntryIter<V> {
   fn next(mut self: &mut Self) -> Option<(str, &V)> {
     self.pos = next_live(self.states, self.cap, self.pos)
     if self.pos >= self.cap {
@@ -378,7 +370,7 @@ impl<V> MapKeys<V> {
   }
 }
 
-impl<V> Iterator<str> for MapKeys<V> {
+impl<V> Iterator < str > for MapKeys<V> {
   fn next(mut self: &mut Self) -> Option<str> {
     self.pos = next_live(self.states, self.cap, self.pos)
     if self.pos >= self.cap {
@@ -404,7 +396,7 @@ impl<V> MapValues<V> {
   }
 }
 
-impl<V> Iterator<&V> for MapValues<V> {
+impl<V> Iterator < &V > for MapValues<V> {
   fn next(mut self: &mut Self) -> Option<&V> {
     self.pos = next_live(self.states, self.cap, self.pos)
     if self.pos >= self.cap {
@@ -440,12 +432,8 @@ impl<V> MapIntoIter<V> {
     mut i := self.pos
     while i < self.m.cap {
       if *uninit_ref(unsafe { elem_ref(self.m.states, i) }) == 1 {
-        unsafe {
-          drop_in_place::<String>(uninit_assume(elem_ptr(self.m.keys, i)))
-        }
-        unsafe {
-          drop_in_place::<V>(uninit_assume(elem_ptr(self.m.values, i)))
-        }
+        unsafe { drop_in_place::<String>(uninit_assume(elem_ptr(self.m.keys, i))) }
+        unsafe { drop_in_place::<V>(uninit_assume(elem_ptr(self.m.values, i))) }
       }
       i = i + 1
     }
@@ -455,7 +443,7 @@ impl<V> MapIntoIter<V> {
   }
 }
 
-impl<V> Iterator<(String, V)> for MapIntoIter<V> {
+impl<V> Iterator < (String, V) > for MapIntoIter<V> {
   fn next(mut self: &mut Self) -> Option<(String, V)> {
     at := next_live(self.m.states, self.m.cap, self.pos)
     if at >= self.m.cap {
@@ -471,7 +459,7 @@ impl<V> Iterator<(String, V)> for MapIntoIter<V> {
 // `m[key]` reads and writes the value under `key`, panicking when the
 // key is absent. The panic names the map rather than the `Option` the
 // lookup hands back.
-impl<V> Index<str, V> for Map<V> {
+impl<V> Index < str, V > for Map<V> {
   fn index(self: &Self, i: str) -> &V {
     ret match self.get(i) {
       Option::Some(v) => v,
@@ -480,7 +468,7 @@ impl<V> Index<str, V> for Map<V> {
   }
 }
 
-impl<V> IndexMut<str, V> for Map<V> {
+impl<V> IndexMut < str, V > for Map<V> {
   fn index_mut(mut self: &mut Self, i: str) -> &mut V {
     ret match self.get_mut(i) {
       Option::Some(v) => v,

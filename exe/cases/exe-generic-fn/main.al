@@ -1,7 +1,9 @@
 // Generic free functions: argument-driven inference, explicit
 // turbofish arguments, a parameter shared across arguments, recursion
 // inside a generic body, and generic struct arguments.
-struct Box<T> { item: T }
+struct Box<T> {
+  item: T,
+}
 
 fn identity<T>(x: T) -> T {
   ret x

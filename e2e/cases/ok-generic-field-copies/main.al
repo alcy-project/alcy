@@ -4,15 +4,15 @@
 // copies form one contiguous range, so they must be appended only after
 // every field has resolved.
 struct Leaf<T> {
-  slot: &mut MaybeUninit<T>
+  slot: &mut MaybeUninit<T>,
 }
 
 struct Pair<S, T> {
   first: Leaf<S>,
-  second: Leaf<T>
+  second: Leaf<T>,
 }
 
-fn touch(p: &Pair<i32, u8>) -> i32 {
+fn touch(p: &Pair < i32, u8 >) -> i32 {
   ret 0
 }
 

@@ -6,11 +6,19 @@ fn main() -> i32 {
   v.push(1)
   v.push(2)
   doubled := v.map((x: &i32) -> *x * 2)
-  if *doubled.at(0).unwrap() != 2 { ret 1 }
-  if *doubled.at(1).unwrap() != 4 { ret 2 }
+  if *doubled.at(0).unwrap() != 2 {
+    ret 1
+  }
+  if *doubled.at(1).unwrap() != 4 {
+    ret 2
+  }
   labels := v.map((x: &i32) -> format("n{}", *x))
-  if labels.at(0).unwrap().as_str() != "n1" { ret 3 }
+  if labels.at(0).unwrap().as_str() != "n1" {
+    ret 3
+  }
   empty := Vec::<i32>::new().map((x: &i32) -> *x)
-  if empty.len() != 0 { ret 4 }
+  if empty.len() != 0 {
+    ret 4
+  }
   ret 0
 }

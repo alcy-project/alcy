@@ -28,9 +28,17 @@ fn main() -> i32 {
   lx.kinds.push(1)
   lx.kinds.push(2)
   lx.kinds.push(3)
-  if lx.peek(1) != 2 { ret 1 }
-  if lx.peek(5) != 0 { ret 2 }
-  if lx.bump() != 1 { ret 3 }
-  if lx.peek(0) != 2 { ret 4 }
+  if lx.peek(1) != 2 {
+    ret 1
+  }
+  if lx.peek(5) != 0 {
+    ret 2
+  }
+  if lx.bump() != 1 {
+    ret 3
+  }
+  if lx.peek(0) != 2 {
+    ret 4
+  }
   ret 0
 }

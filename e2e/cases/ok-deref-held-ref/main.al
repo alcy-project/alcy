@@ -7,7 +7,11 @@ fn main() -> i32 {
   *fr = 10
   lr := v.last_mut().unwrap()
   *lr = 20
-  if *v.at(0).unwrap() != 10 { ret 1 }
-  if *v.at(1).unwrap() != 20 { ret 2 }
+  if *v.at(0).unwrap() != 10 {
+    ret 1
+  }
+  if *v.at(1).unwrap() != 20 {
+    ret 2
+  }
   ret 0
 }

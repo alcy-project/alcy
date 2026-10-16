@@ -6,7 +6,9 @@ spec Pick {
   fn pick<T>(self: &Self, x: T) -> T;
 }
 
-struct Wrap<V> { value: V }
+struct Wrap<V> {
+  value: V,
+}
 
 impl<V> Pick for Wrap<V> {
   fn pick<U>(self: &Self, x: U) -> U {

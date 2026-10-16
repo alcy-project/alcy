@@ -32,7 +32,9 @@ fn main() -> i32 {
   mut p := Parser { src: String::from("7"), pos: 0 }
   match p.digit() {
     Result::Ok(v) => {
-      if v != 0x37u8 { ret 1 }
+      if v != 0x37u8 {
+        ret 1
+      }
     }
     Result::Err(_) => {
       ret 2
@@ -40,11 +42,15 @@ fn main() -> i32 {
   }
   mut e := Parser { src: String::from(""), pos: 0 }
   match e.digit() {
-    Result::Ok(_) => { ret 3 }
+    Result::Ok(_) => {
+      ret 3
+    }
     Result::Err(why) => {
       match why {
-        ParseError::End => { }
-        ParseError::Unexpected(_) => { ret 4 }
+        ParseError::End => {}
+        ParseError::Unexpected(_) => {
+          ret 4
+        }
       }
     }
   }

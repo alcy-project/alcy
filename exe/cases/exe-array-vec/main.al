@@ -4,7 +4,7 @@
 
 struct ArrayVec<T, N: usize> {
   data: [T; N],
-  len: usize
+  len: usize,
 }
 
 impl<T, N: usize> ArrayVec<T, N> {
@@ -61,10 +61,11 @@ fn main() -> i32 {
     ret 4
   }
 
-  z: ArrayVec<u8, 8> := ArrayVec {
-    data: [1 as u8, 2 as u8, 3 as u8, 4 as u8, 5 as u8, 6 as u8, 7 as u8, 8 as u8],
-    len: 8,
-  }
+  z: ArrayVec<u8, 8> :=
+    ArrayVec {
+      data: [1 as u8, 2 as u8, 3 as u8, 4 as u8, 5 as u8, 6 as u8, 7 as u8, 8 as u8],
+      len: 8,
+    }
   if z.data[7] != 8 as u8 {
     ret 5
   }
@@ -99,10 +100,11 @@ fn main() -> i32 {
   }
 
   // A second count in the same program runs as its own instance.
-  mut b: ArrayVec<u8, 8> := ArrayVec {
-    data: [0 as u8, 0 as u8, 0 as u8, 0 as u8, 0 as u8, 0 as u8, 0 as u8, 0 as u8],
-    len: 0,
-  }
+  mut b: ArrayVec<u8, 8> :=
+    ArrayVec {
+      data: [0 as u8, 0 as u8, 0 as u8, 0 as u8, 0 as u8, 0 as u8, 0 as u8, 0 as u8],
+      len: 0,
+    }
   b.push(8 as u8)
   if b.len() != 1 {
     ret 9

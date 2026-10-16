@@ -1,19 +1,33 @@
-struct Res { buf: &mut MaybeUninit<u8> }
+struct Res {
+  buf: &mut MaybeUninit<u8>,
+}
 
 impl Res {
-  fn new() -> Res { ret Res { buf: unsafe { alloc::<u8>(4) } } }
+  fn new() -> Res {
+    ret Res { buf: unsafe { alloc::<u8>(4) } }
+  }
+
   fn drop(self: Res) {
     print("res\n")
     unsafe { dealloc(self.buf, 1 as usize) }
   }
 }
 
-struct Holder { inner: Res, tag: i32 }
+struct Holder {
+  inner: Res,
+  tag: i32,
+}
 
-struct G<T> { item: T, raw: &mut MaybeUninit<u8> }
+struct G<T> {
+  item: T,
+  raw: &mut MaybeUninit<u8>,
+}
 
 impl<T> G<T> {
-  fn wrap(v: T) -> G<T> { ret G { item: v, raw: unsafe { alloc::<u8>(1) } } }
+  fn wrap(v: T) -> G<T> {
+    ret G { item: v, raw: unsafe { alloc::<u8>(1) } }
+  }
+
   fn drop(self: G<T>) {
     print("gen\n")
     unsafe { dealloc(self.raw, 1 as usize) }

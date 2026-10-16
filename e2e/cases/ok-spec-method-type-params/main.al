@@ -5,7 +5,9 @@ spec Pick {
   fn pick<T>(self: &Self, x: T) -> T;
 }
 
-struct W { base: i32 }
+struct W {
+  base: i32,
+}
 
 impl Pick for W {
   fn pick<U>(self: &Self, x: U) -> U {
@@ -15,7 +17,11 @@ impl Pick for W {
 
 fn main() -> i32 {
   w := W { base: 1 }
-  if w.pick::<i32>(2) != 2 { ret 1 }
-  if w.pick(3) != 3 { ret 2 }
+  if w.pick::<i32>(2) != 2 {
+    ret 1
+  }
+  if w.pick(3) != 3 {
+    ret 2
+  }
   ret 0
 }

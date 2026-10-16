@@ -21,8 +21,14 @@ fn main() -> i32 {
     }
     i = i + 1
   }
-  if idents.len() != 2 { ret 1 }
-  if idents.at(0).unwrap().as_str() != "let" { ret 2 }
-  if idents.at(1).unwrap().as_str() != "x" { ret 3 }
+  if idents.len() != 2 {
+    ret 1
+  }
+  if idents.at(0).unwrap().as_str() != "let" {
+    ret 2
+  }
+  if idents.at(1).unwrap().as_str() != "x" {
+    ret 3
+  }
   ret 0
 }

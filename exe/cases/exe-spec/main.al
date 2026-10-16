@@ -14,7 +14,7 @@ struct Counter {
   n: i32,
 }
 
-impl Iterator<i32> for Counter {
+impl Iterator < i32 > for Counter {
   fn next(mut self: &mut Self) -> Option<i32> {
     self.n = self.n + 1
     ret Option::Some(self.n)

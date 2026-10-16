@@ -24,7 +24,7 @@ fn main() -> i32 {
   }
   // Index through results: the element type flows out of the value
   // parameter.
-  xs := [first::<i32, 3>([31, 0, 0]), first::<i32, 5>([42, 0, 0, 0, 0])]
+  xs := [first::< i32, 3 > ([31, 0, 0]), first::< i32, 5 > ([42, 0, 0, 0, 0])]
   if xs[0] != 31 || xs[1] != 42 {
     ret 4
   }

@@ -3,7 +3,7 @@
 // placed.
 
 struct D {
-  buf: &mut MaybeUninit<u8>
+  buf: &mut MaybeUninit<u8>,
 }
 
 impl D {
@@ -13,12 +13,14 @@ impl D {
   }
 }
 
-fn take(d: D) { }
+fn take(d: D) {}
 
 fn main() -> i32 {
   d := D { buf: unsafe { alloc::<u8>(1) } }
   c := true
-  if c { take(d) }
+  if c {
+    take(d)
+  }
   println("after")
   ret 0
 }

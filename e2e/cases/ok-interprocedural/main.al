@@ -1,4 +1,6 @@
-struct H { r: &mut i32 }
+struct H {
+  r: &mut i32,
+}
 
 fn id(x: &i32) -> &i32 {
   ret x

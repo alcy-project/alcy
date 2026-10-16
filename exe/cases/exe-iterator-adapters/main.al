@@ -2,9 +2,13 @@
 // fails, enumerate pairs values with positions, take bounds the pulls,
 // and skip drops a prefix; fold consumes an iterator into one value.
 
-fn add(a: i32, b: i32) -> i32 { ret a + b }
+fn add(a: i32, b: i32) -> i32 {
+  ret a + b
+}
 
-fn even(x: i32) -> bool { ret x % 2 == 0 }
+fn even(x: i32) -> bool {
+  ret x % 2 == 0
+}
 
 fn main() -> i32 {
   r := 1..=6
@@ -53,7 +57,8 @@ fn main() -> i32 {
   }
 
   u := 1..=5
-  mut sk: SkipIter<RangeIter<i32>, i32> := SkipIter { iter: u.into_iter(), remaining: 2, started: false }
+  mut sk: SkipIter<RangeIter<i32>, i32> :=
+    SkipIter { iter: u.into_iter(), remaining: 2, started: false }
   mut first := 0
   match sk.next() {
     Option::Some(v) => {

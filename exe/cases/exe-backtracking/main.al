@@ -31,12 +31,20 @@ fn main() -> i32 {
   mut p := Parser { kinds: Vec::<i32>::new(), pos: 0 }
   p.kinds.push(1)
   p.kinds.push(3)
-  if p.try_ab() { ret 1 }
-  if p.pos != 0 { ret 2 }
+  if p.try_ab() {
+    ret 1
+  }
+  if p.pos != 0 {
+    ret 2
+  }
   mut q := Parser { kinds: Vec::<i32>::new(), pos: 0 }
   q.kinds.push(1)
   q.kinds.push(2)
-  if !q.try_ab() { ret 3 }
-  if q.pos != 2 { ret 4 }
+  if !q.try_ab() {
+    ret 3
+  }
+  if q.pos != 2 {
+    ret 4
+  }
   ret 0
 }

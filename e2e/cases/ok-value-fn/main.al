@@ -11,7 +11,9 @@ fn tag<T, N: usize>(x: T) -> T {
   ret x
 }
 
-struct Arr<T, N: usize> { data: [T; N] }
+struct Arr<T, N: usize> {
+  data: [T; N],
+}
 
 impl<T, N: usize> Arr<T, N> {
   fn make() -> Self {

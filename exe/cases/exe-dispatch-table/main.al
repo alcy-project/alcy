@@ -15,7 +15,11 @@ fn main() -> i32 {
   table.push(Handler { f: (x: i32) -> x * 2, name: format("double") })
   first := table.at(0).unwrap()
   second := table.at(1).unwrap()
-  if (first.f)(1) != 2 { ret 1 }
-  if (second.f)(3) != 6 { ret 2 }
+  if (first.f)(1) != 2 {
+    ret 1
+  }
+  if (second.f)(3) != 6 {
+    ret 2
+  }
   ret 0
 }

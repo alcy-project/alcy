@@ -26,10 +26,20 @@ fn sieve(n: u64) -> Vec<u64> {
 
 fn main() -> i32 {
   primes := sieve(1600)
-  if primes.len() != 251 { ret 1 }
-  if primes[0] != 2 { ret 2 }
-  if primes[1] != 3 { ret 3 }
-  if primes[2] != 5 { ret 4 }
-  if primes[250] != 1597 { ret 5 }
+  if primes.len() != 251 {
+    ret 1
+  }
+  if primes[0] != 2 {
+    ret 2
+  }
+  if primes[1] != 3 {
+    ret 3
+  }
+  if primes[2] != 5 {
+    ret 4
+  }
+  if primes[250] != 1597 {
+    ret 5
+  }
   ret 0
 }

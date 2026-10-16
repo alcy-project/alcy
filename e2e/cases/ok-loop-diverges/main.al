@@ -4,7 +4,12 @@ fn f() -> i32 {
   mut i := 0
   loop {
     i = i + 1
-    if i == 3 { ret i }
+    if i == 3 {
+      ret i
+    }
   }
 }
-fn main() -> i32 { ret f() }
+
+fn main() -> i32 {
+  ret f()
+}

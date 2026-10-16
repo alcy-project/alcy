@@ -1,7 +1,14 @@
-enum Shape { Circle(i32), Square(i32), Rect }
+enum Shape {
+  Circle(i32),
+  Square(i32),
+  Rect,
+}
 
 // Core's Option, declared locally so the case needs no prelude.
-enum Option<T> { Some(T), None }
+enum Option<T> {
+  Some(T),
+  None,
+}
 
 fn area(s: Shape) -> i32 {
   r := match s {

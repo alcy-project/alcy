@@ -4,7 +4,7 @@
 
 struct ArrayVec<T, N: usize> {
   data: [T; N],
-  len: usize
+  len: usize,
 }
 
 impl<T, N: usize> ArrayVec<T, N> {
@@ -19,7 +19,7 @@ impl<T, N: usize> ArrayVec<T, N> {
 
 enum Chunk<T, N: usize> {
   Full([T; N]),
-  Empty
+  Empty,
 }
 
 const K: usize = 4
@@ -36,7 +36,29 @@ fn main() -> i32 {
   // One method call on each of the literal and the const-item
   // instantiations, plus the 8-wide one. `capacity` reads the count
   // the declaration bound as an ordinary value.
-  ret a.data[3] + b.data[0] + c.data[7] + n + a.len() as i32 + b.len() as i32 +
-    c.len() as i32 + a.capacity() as i32 + b.capacity() as i32 +
-    c.capacity() as i32
+  ret a
+    .data[3] +
+    b
+    .data[0] +
+    c
+    .data[7] +
+    n +
+    a
+    .len() as
+    i32 +
+    b
+    .len() as
+    i32 +
+    c
+    .len() as
+    i32 +
+    a
+    .capacity() as
+    i32 +
+    b
+    .capacity() as
+    i32 +
+    c
+    .capacity() as
+    i32
 }

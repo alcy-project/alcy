@@ -1,6 +1,8 @@
 // A parameter no argument pins waits for a spelling the method path
 // does not have.
-struct Maker { base: i32 }
+struct Maker {
+  base: i32,
+}
 
 impl Maker {
   fn make<U>(self: &Self, x: i32) -> U {

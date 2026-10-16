@@ -16,7 +16,7 @@ struct CountdownIter {
   remaining: i32,
 }
 
-impl Iterator<i32> for CountdownIter {
+impl Iterator < i32 > for CountdownIter {
   fn next(mut self: &mut Self) -> Option<i32> {
     if self.remaining <= 0 {
       ret Option::None
@@ -46,7 +46,7 @@ struct PairIter {
   index: i32,
 }
 
-impl Iterator<Pair> for PairIter {
+impl Iterator < Pair > for PairIter {
   fn next(mut self: &mut Self) -> Option<Pair> {
     if self.index >= 3 {
       ret Option::None
@@ -73,17 +73,25 @@ fn main() -> i32 {
   for v in c {
     total = total + v
   }
-  if total != 10 { ret 1 }
+  if total != 10 {
+    ret 1
+  }
 
   // `continue` and `break` act on the loop the rule generates.
   six := Countdown { remaining: 6 }
   mut odd_sum := 0
   for v in six {
-    if v % 2 == 0 { continue }
-    if v < 2 { break }
+    if v % 2 == 0 {
+      continue
+    }
+    if v < 2 {
+      break
+    }
     odd_sum = odd_sum + v
   }
-  if odd_sum != 8 { ret 2 }
+  if odd_sum != 8 {
+    ret 2
+  }
 
   // Nested loops keep separate cursors, even though both desugar to a
   // binding with the same spelling.
@@ -94,15 +102,21 @@ fn main() -> i32 {
       grid = grid + a * b
     }
   }
-  if grid != 36 { ret 3 }
+  if grid != 36 {
+    ret 3
+  }
 
   // The pattern destructures the item; `_` skips a field.
   pairs := Pairs { unused: 0 }
   mut squares := 0
-  for Pair { left: _, right } in pairs {
+  for Pair {
+    left: _, right
+  } in pairs {
     squares = squares + right
   }
-  if squares != 5 { ret 4 }
+  if squares != 5 {
+    ret 4
+  }
 
   // A wildcard pattern runs the body once per item; parentheses let a
   // struct literal stand as the head.
@@ -110,7 +124,11 @@ fn main() -> i32 {
   for _ in (Countdown { remaining: 7 }) {
     seen = seen + 1
   }
-  if seen != 7 { ret 5 }
-  if sum_to(3) != 6 { ret 6 }
+  if seen != 7 {
+    ret 5
+  }
+  if sum_to(3) != 6 {
+    ret 6
+  }
   ret 0
 }

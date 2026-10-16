@@ -1,6 +1,6 @@
 // The value a return names must carry the signature the spelling
 // declares.
-fn bad() -> fn(i32) -> i32 {
+fn bad() -> fn (i32) -> i32 {
   ret 5
 }
 

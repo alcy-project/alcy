@@ -16,9 +16,15 @@ fn main() -> i32 {
   v.push(1)
   v.push(2)
   doubled := map_all(&v, (x: &i32) -> *x * 2)
-  if *doubled.at(0).unwrap() != 2 { ret 1 }
-  if *doubled.at(1).unwrap() != 4 { ret 2 }
+  if *doubled.at(0).unwrap() != 2 {
+    ret 1
+  }
+  if *doubled.at(1).unwrap() != 4 {
+    ret 2
+  }
   labels := map_all(&v, (x: &i32) -> format("n{}", *x))
-  if labels.at(0).unwrap().as_str() != "n1" { ret 3 }
+  if labels.at(0).unwrap().as_str() != "n1" {
+    ret 3
+  }
   ret 0
 }

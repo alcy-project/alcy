@@ -2,9 +2,16 @@
 // the answer: the copy is made of scalars, so it carries no loan and
 // the container mutates again while the answer is still live. The
 // sanitized run is what checks the frees.
-struct Point { x: i64, y: i64 }
+struct Point {
+  x: i64,
+  y: i64,
+}
 
-enum Shape { Circle(i64), Square(i64), Dot }
+enum Shape {
+  Circle(i64),
+  Square(i64),
+  Dot,
+}
 
 fn main() -> i32 {
   // A struct of scalars.
@@ -13,19 +20,33 @@ fn main() -> i32 {
   ps.push(Point { x: 3, y: 4 })
   mid := ps.remove(1)
   ps.push(Point { x: 5, y: 6 })
-  if mid.x != 3 { ret 1 }
-  if mid.y != 4 { ret 2 }
-  if ps.len() != 2 { ret 3 }
+  if mid.x != 3 {
+    ret 1
+  }
+  if mid.y != 4 {
+    ret 2
+  }
+  if ps.len() != 2 {
+    ret 3
+  }
   top := ps.pop()
   ps.insert(0, Point { x: 7, y: 8 })
   match top {
     Option::Some(p) => {
-      if p.x != 5 { ret 4 }
-      if p.y != 6 { ret 5 }
+      if p.x != 5 {
+        ret 4
+      }
+      if p.y != 6 {
+        ret 5
+      }
     }
-    Option::None => { ret 6 }
+    Option::None => {
+      ret 6
+    }
   }
-  if ps.len() != 2 { ret 7 }
+  if ps.len() != 2 {
+    ret 7
+  }
 
   // A tuple of scalars.
   mut ts := Vec::<(i64, i64)>::new()
@@ -34,9 +55,13 @@ fn main() -> i32 {
   ts.push((30, 40))
   match got {
     Option::Some((a, b)) => {
-      if a + b != 30 { ret 8 }
+      if a + b != 30 {
+        ret 8
+      }
     }
-    Option::None => { ret 9 }
+    Option::None => {
+      ret 9
+    }
   }
 
   // An enum of scalars.
@@ -47,11 +72,19 @@ fn main() -> i32 {
   match shape {
     Option::Some(s) => {
       match s {
-        Shape::Circle(r) => { if r != 7 { ret 10 } }
-        _ => { ret 11 }
+        Shape::Circle(r) => {
+          if r != 7 {
+            ret 10
+          }
+        }
+        _ => {
+          ret 11
+        }
       }
     }
-    Option::None => { ret 12 }
+    Option::None => {
+      ret 12
+    }
   }
 
   // An Option of scalars.
@@ -60,9 +93,17 @@ fn main() -> i32 {
   inner := os.pop()
   os.push(Option::None)
   match inner {
-    Option::Some(Option::Some(x)) => { if x != 3 { ret 13 } }
-    Option::Some(Option::None) => { ret 14 }
-    Option::None => { ret 15 }
+    Option::Some(Option::Some(x)) => {
+      if x != 3 {
+        ret 13
+      }
+    }
+    Option::Some(Option::None) => {
+      ret 14
+    }
+    Option::None => {
+      ret 15
+    }
   }
   ret 0
 }

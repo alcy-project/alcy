@@ -1,5 +1,5 @@
 struct D {
-  buf: &mut MaybeUninit<u8>
+  buf: &mut MaybeUninit<u8>,
 }
 
 impl D {
@@ -13,7 +13,7 @@ fn sink(x: &D) {}
 
 enum R {
   Ok(i32),
-  Err(i32)
+  Err(i32),
 }
 
 fn propagates(r: R) -> R {
@@ -40,6 +40,9 @@ fn main() -> i32 {
   }
   // `?` propagating out is a return, so it ends the live values too.
   r := propagates(R::Err(0))
-  m := match r { R::Ok(x) => x, R::Err(e) => e }
+  m := match r {
+    R::Ok(x) => x,
+    R::Err(e) => e,
+  }
   ret m
 }

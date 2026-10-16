@@ -24,7 +24,14 @@ fn pick(comp n: i32) -> i32 {
 // A pattern condition binds inside the comp engine the way the
 // runtime lowering does.
 fn choose(comp o: Option<i32>) -> i32 {
-  ret (if Option::Some(v) := o { v } else { 0 })
+  ret (
+    if Option::Some(v) :=
+      o {
+        v
+      } else {
+        0
+      }
+  )
 }
 
 fn drain(comp first: Option<i32>) -> i32 {
@@ -37,7 +44,10 @@ fn drain(comp first: Option<i32>) -> i32 {
   ret n
 }
 
-enum Choice { Num(i32), None }
+enum Choice {
+  Num(i32),
+  None,
+}
 
 // A comp argument of an enum type materializes its payload in the slot.
 fn unwrap_choice(comp c: Choice) -> i32 {
@@ -96,16 +106,30 @@ fn main() -> i32 {
     ret 20
   }
   // A comp argument may bind inside a match, an if-pattern, or a block.
-  if double(match Option::Some(3) {
-    Option::Some(v) => v,
-    Option::None => 0,
-  }) != 6 {
+  if double(
+    match Option::Some(3) {
+      Option::Some(v) => v,
+      Option::None => 0,
+    }
+  ) != 6 {
     ret 21
   }
-  if double(if Option::Some(v) := Option::Some(4) { v } else { 0 }) != 8 {
+  if double(
+    if Option::Some(v) :=
+      Option::Some(4) {
+        v
+      } else {
+        0
+      }
+  ) != 8 {
     ret 22
   }
-  if double({ y := 5; y }) != 10 {
+  if double(
+    {
+      y := 5
+      y
+    }
+  ) != 10 {
     ret 23
   }
   ret double(k) + sum_to(4) - comp { 1 + 2 }

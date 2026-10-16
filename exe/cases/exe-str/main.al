@@ -15,5 +15,12 @@ fn count_a(comp s: str) -> i32 {
 fn main() -> i32 {
   s := "banana"
   part := str_slice(s, 0, 2)
-  ret count_a("banana") + str_len(str_slice(s, 1, 4)) as i32 - str_len(s) as i32 + str_byte(part, 0) as i32 - 98
+  ret count_a("banana") +
+    str_len(str_slice(s, 1, 4)) as
+    i32 -
+    str_len(s) as
+    i32 +
+    str_byte(part, 0) as
+    i32 -
+    98
 }

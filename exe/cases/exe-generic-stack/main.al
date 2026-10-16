@@ -27,18 +27,24 @@ fn main() -> i32 {
   ints.push(2)
   match ints.pop() {
     Option::Some(v) => {
-      if v != 2 { ret 1 }
+      if v != 2 {
+        ret 1
+      }
     }
     Option::None => {
       ret 2
     }
   }
-  if ints.len() != 1 { ret 3 }
+  if ints.len() != 1 {
+    ret 3
+  }
   mut names := Stack::<String>::new()
   names.push(String::from("x"))
   match names.pop() {
     Option::Some(v) => {
-      if v.as_str() != "x" { ret 4 }
+      if v.as_str() != "x" {
+        ret 4
+      }
     }
     Option::None => {
       ret 5

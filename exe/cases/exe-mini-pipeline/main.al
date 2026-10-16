@@ -84,13 +84,19 @@ fn main() -> i32 {
   mut known := Map::<i32>::new()
   _ := known.insert("let", 1)
   tokens := lex(src)
-  if tokens.len() != 3 { ret 1 }
+  if tokens.len() != 3 {
+    ret 1
+  }
   match report(src, &tokens, &known) {
     Option::Some(msgs) => {
-      if !String::write_file("report.txt", msgs.as_str()) { ret 2 }
+      if !String::write_file("report.txt", msgs.as_str()) {
+        ret 2
+      }
       match String::read_file("report.txt") {
         Option::Some(back) => {
-          if back.as_str() != "unknown x\n" { ret 3 }
+          if back.as_str() != "unknown x\n" {
+            ret 3
+          }
         }
         Option::None => {
           ret 4

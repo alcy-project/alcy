@@ -1,4 +1,6 @@
-struct Res { buf: &mut MaybeUninit<u8> }
+struct Res {
+  buf: &mut MaybeUninit<u8>,
+}
 
 impl Res {
   fn drop(mut self: &mut Self) {

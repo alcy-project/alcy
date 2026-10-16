@@ -10,11 +10,17 @@ fn main() -> i32 {
   s := S { b: Option::Some(items) }
   mut seen := 0
   while Option::Some(inner) := s.b {
-    if inner.len() != 1 { ret 1 }
-    if *inner.at(0).unwrap() != 7 { ret 2 }
+    if inner.len() != 1 {
+      ret 1
+    }
+    if *inner.at(0).unwrap() != 7 {
+      ret 2
+    }
     seen = seen + 1
     break
   }
-  if seen != 1 { ret 3 }
+  if seen != 1 {
+    ret 3
+  }
   ret 0
 }

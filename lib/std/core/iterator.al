@@ -22,7 +22,7 @@ pub struct MapIter<I, T, U> {
   pub f: (T) -> U,
 }
 
-impl<I, T, U> Iterator<U> for MapIter<I, T, U> {
+impl<I, T, U> Iterator < U > for MapIter<I, T, U> {
   fn next(mut self: &mut Self) -> Option<U> {
     ret match self.iter.next() {
       Option::Some(v) => Option::Some((self.f)(v)),
@@ -38,14 +38,14 @@ pub struct FilterIter<I, T> {
   pub f: (T) -> bool,
 }
 
-impl<I, T> Iterator<T> for FilterIter<I, T> {
+impl<I, T> Iterator < T > for FilterIter<I, T> {
   fn next(mut self: &mut Self) -> Option<T> {
     ret match self.iter.next() {
       Option::Some(v) => if (self.f)(v) {
         Option::Some(v)
       } else {
         self.next()
-      },
+      }
       Option::None => Option::None,
     }
   }
@@ -59,7 +59,7 @@ pub struct EnumerateIter<I, E> {
   pub index: usize,
 }
 
-impl<I, E> Iterator<(usize, E)> for EnumerateIter<I, E> {
+impl<I, E> Iterator < (usize, E) > for EnumerateIter<I, E> {
   fn next(mut self: &mut Self) -> Option<(usize, E)> {
     ret match self.iter.next() {
       Option::Some(v) => {
@@ -78,7 +78,7 @@ pub struct TakeIter<I, T> {
   pub remaining: usize,
 }
 
-impl<I, T> Iterator<T> for TakeIter<I, T> {
+impl<I, T> Iterator < T > for TakeIter<I, T> {
   fn next(mut self: &mut Self) -> Option<T> {
     if self.remaining == 0 {
       ret Option::None
@@ -96,7 +96,7 @@ pub struct SkipIter<I, T> {
   pub started: bool,
 }
 
-impl<I, T> Iterator<T> for SkipIter<I, T> {
+impl<I, T> Iterator < T > for SkipIter<I, T> {
   fn next(mut self: &mut Self) -> Option<T> {
     if !self.started {
       self.started = true

@@ -1,9 +1,13 @@
 // The free algorithms over any iterator: count, any, all, position,
 // find, last, and collect_into.
 
-fn is_even(x: i32) -> bool { ret x % 2 == 0 }
+fn is_even(x: i32) -> bool {
+  ret x % 2 == 0
+}
 
-fn is_big(x: i32) -> bool { ret x > 2 }
+fn is_big(x: i32) -> bool {
+  ret x > 2
+}
 
 fn main() -> i32 {
   mut v: Vec<i32> := Vec::<i32>::new()

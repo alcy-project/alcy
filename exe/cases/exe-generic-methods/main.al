@@ -52,12 +52,14 @@ impl<T> Box<T> {
       Box::Empty => default,
     }
   }
+
   fn is_empty(self: Self) -> bool {
     ret match self {
       Box::Filled(_) => false,
       Box::Empty => true,
     }
   }
+
   fn rec(self: Self, n: i32, default: T) -> T {
     if n <= 0 {
       ret self.or(default)

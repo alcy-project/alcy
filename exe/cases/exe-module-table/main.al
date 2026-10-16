@@ -33,7 +33,9 @@ fn main() -> i32 {
   modules.push(Module { name: String::from("lib"), symbols: Map::<i32>::new() })
   match lookup(&modules, "root", "x") {
     Option::Some(v) => {
-      if v != 1 { ret 1 }
+      if v != 1 {
+        ret 1
+      }
     }
     Option::None => {
       ret 2
@@ -43,13 +45,13 @@ fn main() -> i32 {
     Option::Some(_) => {
       ret 3
     }
-    Option::None => { }
+    Option::None => {}
   }
   match lookup(&modules, "nope", "x") {
     Option::Some(_) => {
       ret 4
     }
-    Option::None => { }
+    Option::None => {}
   }
   ret 0
 }

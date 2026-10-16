@@ -15,8 +15,12 @@ fn main() -> i32 {
       Option::None => break,
     }
   }
-  if total != 10 { ret 1 }
-  if c.next().is_some() { ret 2 }
+  if total != 10 {
+    ret 1
+  }
+  if c.next().is_some() {
+    ret 2
+  }
 
   mut sum := 0
   mut b := bytes([1u8, 2u8, 3u8])
@@ -28,6 +32,8 @@ fn main() -> i32 {
       Option::None => break,
     }
   }
-  if sum != 6 { ret 3 }
+  if sum != 6 {
+    ret 3
+  }
   ret 0
 }

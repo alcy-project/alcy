@@ -1,9 +1,17 @@
-struct S { n: i32 }
-
-impl S {
-  fn get(self: &Self) -> i32 { ret self.n }
+struct S {
+  n: i32,
 }
 
-fn get() -> i32 { ret 7 }
+impl S {
+  fn get(self: &Self) -> i32 {
+    ret self.n
+  }
+}
 
-fn main() -> i32 { ret get() + S { n: 1 }.get() }
+fn get() -> i32 {
+  ret 7
+}
+
+fn main() -> i32 {
+  ret get() + S { n: 1 }.get()
+}

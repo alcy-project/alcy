@@ -28,7 +28,11 @@ impl Matrix {
 fn main() -> i32 {
   mut m := Matrix::new(2, 3)
   m.set(1, 2, 7)
-  if m.at(1, 2) != 7 { ret 1 }
-  if m.at(0, 0) != 0 { ret 2 }
+  if m.at(1, 2) != 7 {
+    ret 1
+  }
+  if m.at(0, 0) != 0 {
+    ret 2
+  }
   ret 0
 }

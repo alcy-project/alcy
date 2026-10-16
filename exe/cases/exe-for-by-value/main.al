@@ -7,6 +7,8 @@ fn main() -> i32 {
   for x in v {
     sum = sum + x
   }
-  if sum != 3 { ret 1 }
+  if sum != 3 {
+    ret 1
+  }
   ret 0
 }

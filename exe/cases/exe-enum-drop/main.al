@@ -1,7 +1,7 @@
 // A live variant's payload ends when the enum does.
 
 struct D {
-  buf: &mut MaybeUninit<u8>
+  buf: &mut MaybeUninit<u8>,
 }
 
 impl D {
@@ -16,7 +16,9 @@ enum Holder {
   Two(i32),
 }
 
-fn make() -> D { ret D { buf: unsafe { alloc::<u8>(1) } } }
+fn make() -> D {
+  ret D { buf: unsafe { alloc::<u8>(1) } }
+}
 
 fn main() -> i32 {
   h := Holder::One(make())

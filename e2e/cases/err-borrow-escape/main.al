@@ -2,7 +2,9 @@
 // caller's own argument, or an accessor that returns `&T` derived from
 // `&Self` hands back a pointer nothing records. The store below would
 // change what the returned reference reads.
-struct Box { n: i32 }
+struct Box {
+  n: i32,
+}
 
 fn get(b: &Box) -> &i32 {
   ret &b.n

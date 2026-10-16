@@ -7,7 +7,7 @@
 // same way the map does it, and `insert` reports whether the key was
 // new. See `map.al` for the table.
 pub struct Set {
-  map: Map<u8>
+  map: Map<u8>,
 }
 
 impl Set {

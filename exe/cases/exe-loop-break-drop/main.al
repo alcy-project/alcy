@@ -1,7 +1,12 @@
-struct Res { buf: &mut MaybeUninit<u8> }
+struct Res {
+  buf: &mut MaybeUninit<u8>,
+}
 
 impl Res {
-  fn new() -> Res { ret Res { buf: unsafe { alloc::<u8>(4) } } }
+  fn new() -> Res {
+    ret Res { buf: unsafe { alloc::<u8>(4) } }
+  }
+
   fn drop(self: Res) {
     print("drop\n")
     unsafe { dealloc(self.buf, 1 as usize) }

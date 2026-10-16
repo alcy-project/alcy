@@ -5,12 +5,16 @@ fn main() -> i32 {
   mut t := 1
   u := 10
   mut v := 100
-  f := [t, &u, &mut v] (a: i32) -> {
+  f := [t, &u, &mut v](a: i32) -> {
     v = v + a
     a + t + u + v
   }
   t = 50
-  if f(1) != 113 { ret 1 }
-  if f(1) != 114 { ret 2 }
+  if f(1) != 113 {
+    ret 1
+  }
+  if f(1) != 114 {
+    ret 2
+  }
   ret 0
 }

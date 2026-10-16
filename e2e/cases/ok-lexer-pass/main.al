@@ -60,10 +60,20 @@ fn text_of(src: str, t: &Token) -> str {
 fn main() -> i32 {
   src := "let x1 = 42"
   tokens := lex(src)
-  if tokens.len() != 4 { ret 1 }
-  if text_of(src, tokens.at(0).unwrap()) != "let" { ret 2 }
-  if text_of(src, tokens.at(1).unwrap()) != "x1" { ret 3 }
-  if tokens.at(2).unwrap().kind != 3 { ret 4 }
-  if text_of(src, tokens.at(3).unwrap()) != "42" { ret 5 }
+  if tokens.len() != 4 {
+    ret 1
+  }
+  if text_of(src, tokens.at(0).unwrap()) != "let" {
+    ret 2
+  }
+  if text_of(src, tokens.at(1).unwrap()) != "x1" {
+    ret 3
+  }
+  if tokens.at(2).unwrap().kind != 3 {
+    ret 4
+  }
+  if text_of(src, tokens.at(3).unwrap()) != "42" {
+    ret 5
+  }
   ret 0
 }

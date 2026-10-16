@@ -3,7 +3,7 @@
 // Strings. The sanitized run checks that nothing is left allocated.
 
 struct D {
-  buf: &mut MaybeUninit<u8>
+  buf: &mut MaybeUninit<u8>,
 }
 
 impl D {
@@ -13,7 +13,9 @@ impl D {
   }
 }
 
-fn make() -> D { ret D { buf: unsafe { alloc::<u8>(1) } } }
+fn make() -> D {
+  ret D { buf: unsafe { alloc::<u8>(1) } }
+}
 
 fn main() {
   mut m := Map::<D>::new()

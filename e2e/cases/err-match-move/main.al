@@ -1,4 +1,7 @@
-enum E { A(&mut i32), B }
+enum E {
+  A(&mut i32),
+  B,
+}
 
 fn main() {
   mut x := 1

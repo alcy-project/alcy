@@ -11,7 +11,7 @@ impl PairIter {
   }
 }
 
-impl Iterator<(i32, i32)> for PairIter {
+impl Iterator < (i32, i32) > for PairIter {
   fn next(mut self: &mut Self) -> Option<(i32, i32)> {
     if self.index >= 3 {
       ret Option::None
@@ -29,8 +29,12 @@ fn main() -> i32 {
     squares = squares + sq
     count = count + i
   }
-  if squares != 5 { ret 1 }
-  if count != 3 { ret 2 }
+  if squares != 5 {
+    ret 1
+  }
+  if count != 3 {
+    ret 2
+  }
   // The cursor stays spent through the same instantiation.
   mut it := PairIter { index: 0 }
   mut n := 0
@@ -42,7 +46,11 @@ fn main() -> i32 {
       Option::None => break,
     }
   }
-  if n != 3 { ret 3 }
-  if it.next().is_some() { ret 4 }
+  if n != 3 {
+    ret 3
+  }
+  if it.next().is_some() {
+    ret 4
+  }
   ret 0
 }

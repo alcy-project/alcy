@@ -8,7 +8,9 @@ fn main() -> i32 {
   s := S { b: Option::Some(3), c: Option::None }
   match s.b {
     Option::Some(v) => {
-      if v != 3 { ret 1 }
+      if v != 3 {
+        ret 1
+      }
     }
     Option::None => {
       ret 2
@@ -18,9 +20,13 @@ fn main() -> i32 {
     Option::Some(_) => {
       ret 3
     }
-    Option::None => { }
+    Option::None => {}
   }
-  if s.b.unwrap() != 3 { ret 4 }
-  if s.c.is_some() { ret 5 }
+  if s.b.unwrap() != 3 {
+    ret 4
+  }
+  if s.c.is_some() {
+    ret 5
+  }
   ret 0
 }

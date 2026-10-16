@@ -29,7 +29,9 @@ fn main() -> i32 {
   a := Value::Name(String::from("x"))
   match eval(&a, &env) {
     Result::Ok(v) => {
-      if v != 10 { ret 1 }
+      if v != 10 {
+        ret 1
+      }
     }
     Result::Err(_) => {
       ret 2
@@ -38,7 +40,9 @@ fn main() -> i32 {
   b := Value::Num(5)
   match eval(&b, &env) {
     Result::Ok(v) => {
-      if v != 5 { ret 3 }
+      if v != 5 {
+        ret 3
+      }
     }
     Result::Err(_) => {
       ret 4
@@ -46,9 +50,13 @@ fn main() -> i32 {
   }
   missing := Value::Name(String::from("y"))
   match eval(&missing, &env) {
-    Result::Ok(_) => { ret 5 }
+    Result::Ok(_) => {
+      ret 5
+    }
     Result::Err(why) => {
-      if why.as_str() != "unknown name" { ret 6 }
+      if why.as_str() != "unknown name" {
+        ret 6
+      }
     }
   }
   ret 0

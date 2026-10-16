@@ -1,7 +1,10 @@
 // Exercises the typed heap primitives: `size_of`/`align_of` type
 // queries, `alloc<T>`/`dealloc<T>` element-counted ownership, and
 // `elem_ptr<T>` typed element offsets over unwritten slots.
-struct Pair<T> { first: T, second: T }
+struct Pair<T> {
+  first: T,
+  second: T,
+}
 
 fn fill(data: &mut MaybeUninit<i32>, count: usize) {
   mut i := 0 as usize

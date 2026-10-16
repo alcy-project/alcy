@@ -17,8 +17,14 @@ fn weight(t: Tok) -> i32 {
 }
 
 fn main() -> i32 {
-  if weight(Tok::Plus(3)) != 3 { ret 1 }
-  if weight(Tok::Minus(4)) != 4 { ret 2 }
-  if weight(Tok::End) != 0 { ret 3 }
+  if weight(Tok::Plus(3)) != 3 {
+    ret 1
+  }
+  if weight(Tok::Minus(4)) != 4 {
+    ret 2
+  }
+  if weight(Tok::End) != 0 {
+    ret 3
+  }
   ret 0
 }

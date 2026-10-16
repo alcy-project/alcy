@@ -1,4 +1,6 @@
-struct H { r: &mut i32 }
+struct H {
+  r: &mut i32,
+}
 
 fn main() {
   mut x := 0

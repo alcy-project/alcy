@@ -4,7 +4,9 @@ spec Make {
   fn make<T>(self: &Self) -> T;
 }
 
-struct W { base: i32 }
+struct W {
+  base: i32,
+}
 
 impl Make for W {
   fn make<U>(self: &Self) -> U {

@@ -15,8 +15,12 @@ fn main() -> i32 {
   s := S { b: Option::Some(items) }
   match take(s) {
     Option::Some(v) => {
-      if v.len() != 1 { ret 1 }
-      if *v.at(0).unwrap() != 7 { ret 2 }
+      if v.len() != 1 {
+        ret 1
+      }
+      if *v.at(0).unwrap() != 7 {
+        ret 2
+      }
     }
     Option::None => {
       ret 3

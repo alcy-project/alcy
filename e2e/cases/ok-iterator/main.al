@@ -5,7 +5,7 @@ struct Counter {
   limit: i32,
 }
 
-impl Iterator<i32> for Counter {
+impl Iterator < i32 > for Counter {
   fn next(mut self: &mut Self) -> Option<i32> {
     if self.next_value > self.limit {
       ret Option::None
@@ -27,8 +27,12 @@ fn main() -> i32 {
       Option::None => break,
     }
   }
-  if sum != 6 { ret 1 }
+  if sum != 6 {
+    ret 1
+  }
   // An exhausted iterator stays exhausted.
-  if c.next().is_some() { ret 2 }
+  if c.next().is_some() {
+    ret 2
+  }
   ret 0
 }

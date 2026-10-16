@@ -15,6 +15,8 @@ impl Pair {
 
 fn main() -> i32 {
   p := Pair { a: format("x"), b: format("y") }
-  if p.both().as_str() != "xy" { ret 1 }
+  if p.both().as_str() != "xy" {
+    ret 1
+  }
   ret 0
 }

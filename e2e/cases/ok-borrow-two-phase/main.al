@@ -6,6 +6,8 @@ fn main() -> i32 {
   v.push(v.len() as i32)
   v.push(v[0])
   v.insert(v.len(), 9)
-  if v.len() != 4 { ret 1 }
+  if v.len() != 4 {
+    ret 1
+  }
   ret 0
 }
