@@ -39,6 +39,8 @@ source_set("cli") {
     "converters.h",
     "duration.cc",
     "duration.h",
+    "fmt_command.cc",
+    "fmt_command.h",
     "init_command.cc",
     "init_command.h",
     "init_handler.cc",
@@ -72,6 +74,7 @@ source_set("cli") {
   deps = [
     "//compiler/i18n",
     "//compiler/pipeline",
+    "//fmt:alcy_fmt",
   ]
   defines = [ "ALCY_PROJECT_NAME=\"$project_name\"" ]
 

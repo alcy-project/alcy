@@ -16,6 +16,10 @@ enum class ResultCode : u8 {
   CheckFailed = 4,
   NewFailed = 5,
   RunFailed = 6,
+  // A file the formatter could not read or write.
+  FmtFailed = 7,
+  // fmt --check found a file whose layout would change.
+  FmtNotClean = 8,
 };
 
 inline constexpr i32 result_code(ResultCode code) {

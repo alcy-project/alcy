@@ -30,6 +30,7 @@ enum class Subcommand : u8 {
   New,
   Init,
   Check,
+  Fmt,
 };
 
 struct CliConfig {
@@ -100,6 +101,13 @@ struct CliConfig {
   // fragment form (`alcy/std/core`, or `name = { ... }`). Views borrow
   // argv storage like target_dir.
   std::vector<std::string_view> deps;
+  // fmt was asked to report the files whose layout would change rather
+  // than write them.
+  bool fmt_check = false;
+  // The files fmt was pointed at, in command-line order. Empty reads
+  // standard input and writes standard output. Views borrow argv storage
+  // like target_dir.
+  std::vector<std::string_view> fmt_files;
   // Which ignore file `new` and `init` write. Defaults to git because
   // that is the version control most packages are kept in, and the
   // choice only selects a file: no repository is created either way.

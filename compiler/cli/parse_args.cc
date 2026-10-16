@@ -74,6 +74,8 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
     c.subcommand = Subcommand::Init;
   } else if (selected == "check") {
     c.subcommand = Subcommand::Check;
+  } else if (selected == "fmt") {
+    c.subcommand = Subcommand::Fmt;
   }
   c.release = matches.get<bool>("release").unwrap_or(false);
   // `--release` selects the release profile; `--profile` names a profile
@@ -102,6 +104,7 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
   // The choices above already rejected anything else, so an unknown value
   // here means the default, not an error to report a second time.
   c.stdin_source = matches.get<bool>("stdin").unwrap_or(false);
+  c.fmt_check = matches.get<bool>("check").unwrap_or(c.fmt_check);
   c.file = matches.get<std::string_view>("file").unwrap_or(c.file);
   c.emit = matches.get<pipeline::EmitMode>("emit").unwrap_or(
       pipeline::EmitMode::Executable);
@@ -136,7 +139,11 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
   }
 
   const std::span<const std::string_view> positionals = matches.positionals();
-  if (!positionals.empty()) {
+  if (c.subcommand == Subcommand::Fmt) {
+    // fmt takes any number of files: the first positional is not a
+    // target directory, and the rest are not program arguments.
+    c.fmt_files.assign(positionals.begin(), positionals.end());
+  } else if (!positionals.empty()) {
     c.target_dir = positionals[0];
     c.program_args.assign(positionals.begin() + 1, positionals.end());
   }
@@ -429,6 +436,13 @@ arg::Parser build_parser(i18n::Language language) {
           .add_arg(arg::ArgBuilder("file")
                        .help(usage.text(i18n::Key::CliCheckFileHelp))
                        .default_value("")
+                       .build())
+          .build());
+  builder.add_subcommand(
+      build_subcommand("fmt", std::string(usage.text(i18n::Key::CliFmtAbout)))
+          .add_arg(arg::ArgBuilder("check")
+                       .help(usage.text(i18n::Key::CliFmtCheckHelp))
+                       .is_flag(true)
                        .build())
           .build());
   return arg::Parser(std::move(builder).build());

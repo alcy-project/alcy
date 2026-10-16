@@ -125,6 +125,16 @@ class DiagBag {
                 {out.data(), out.size()});
   }
 
+  // Appends a message from outside any check area: no code, no span, so
+  // the severity and the text are all a reader has. This is the bag's
+  // side of diag::message, for a command that reports several such
+  // complaints and has no single failure to hand the envelope. The text
+  // is composed from the catalog by the caller and copied here, so it
+  // may be built anywhere.
+  u32 emit_message(Severity severity, std::string_view message) {
+    return push(severity, std::nullopt, {}, false, message);
+  }
+
   // Attaches secondary labels to a previously emitted diagnostic. The labels
   // array is copied into the arena. Fails when `index` does not name an
   // emitted diagnostic.

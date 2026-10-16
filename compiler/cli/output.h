@@ -42,6 +42,10 @@ enum class Outcome : u8 {
   Ran,
   CreatedPackage,
   CreatedSuite,
+  Formatted,
+  // The command wrote its result to standard output. Nothing else may
+  // follow it there, so it reports no result line of its own.
+  Piped,
 };
 
 // Whether the command did what it was asked to do. A command sets it

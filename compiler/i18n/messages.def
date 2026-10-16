@@ -474,6 +474,11 @@
   F(CliEmitHelp, "What to write: executable (default), object, llvm-ir, llvm-bc, or ir. The output's extension no longer decides.") \
   F(CliFilePlural, "files") \
   F(CliFileSingular, "file") \
+  F(CliFmtAbout, "Format source files") \
+  F(CliFmtCheckHelp, "Report the files whose layout would change, without writing them.") \
+  F(CliFmtNotFormatted, "'{}' needs formatting") \
+  F(CliFmtReadFailed, "Cannot read '{}'") \
+  F(CliFmtWriteFailed, "Cannot write '{}'") \
   F(CliFunctionPlural, "functions") \
   F(CliFunctionSingular, "function") \
   F(CliInitAbout, "Create a package in an existing directory") \
@@ -516,6 +521,7 @@
   F(CliVerbCreatedPackage, "Created package") \
   F(CliVerbCreatedSuite, "Created suite") \
   F(CliVerbFailed, "Failed") \
+  F(CliVerbFormatted, "Formatted") \
   F(CliVerbRan, "Ran") \
   /* diagnostic renderer */ \
   F(RenderDiagnosticsDroppedPlural, "{} diagnostics were dropped: the compiler ran out of memory for them") \

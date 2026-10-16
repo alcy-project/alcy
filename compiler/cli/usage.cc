@@ -151,6 +151,8 @@ UsageText::UsageText(Language language)
   set(Key::CliVcsHelp, i18n::format<Key::CliVcsHelp>(language));
   set(Key::CliCheckAbout, i18n::format<Key::CliCheckAbout>(language));
   set(Key::CliCheckFileHelp, i18n::format<Key::CliCheckFileHelp>(language));
+  set(Key::CliFmtAbout, i18n::format<Key::CliFmtAbout>(language));
+  set(Key::CliFmtCheckHelp, i18n::format<Key::CliFmtCheckHelp>(language));
 }
 
 const UsageText& usage_text(Language language) {

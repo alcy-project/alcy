@@ -149,6 +149,8 @@ std::string_view verb_for(Outcome outcome, i18n::Language language) {
       return i18n::text<Key::CliVerbCreatedPackage>(language);
     case Outcome::CreatedSuite:
       return i18n::text<Key::CliVerbCreatedSuite>(language);
+    case Outcome::Formatted:
+    case Outcome::Piped: return i18n::text<Key::CliVerbFormatted>(language);
   }
   return i18n::text<Key::CliVerbFailed>(language);
 }
@@ -164,6 +166,8 @@ const char* outcome_name(Outcome outcome) {
     case Outcome::Ran: return "ran";
     case Outcome::CreatedPackage: return "created-package";
     case Outcome::CreatedSuite: return "created-suite";
+    case Outcome::Formatted: return "formatted";
+    case Outcome::Piped: return "piped";
   }
   return "failed";
 }
@@ -281,6 +285,16 @@ std::string result_subject(const Envelope& envelope, i18n::Language language) {
       }
       return subject;
     }
+    case Outcome::Formatted: {
+      std::string subject;
+      append_count(subject, envelope.file_count,
+                   i18n::text<Key::CliFileSingular>(language),
+                   i18n::text<Key::CliFilePlural>(language));
+      return subject;
+    }
+    // The formatted source already left on standard output; a subject
+    // after it would read as part of the source.
+    case Outcome::Piped: return {};
     case Outcome::Built:
     case Outcome::Compiled:
     case Outcome::Ran: return envelope.output_path;
@@ -449,9 +463,11 @@ std::string render_result(const Envelope& envelope,
   if (envelope.status == Status::Ok) {
     // A run already announced itself before the program started, and a
     // second line after the program's own output would sit below that
-    // output and read as more of it. The exit code is the result, and
-    // the caller has it.
-    if (envelope.outcome != Outcome::Ran) {
+    // output and read as more of it. A command that piped its result to
+    // standard output is in the same position. The exit code is the
+    // result, and the caller has it.
+    if (envelope.outcome != Outcome::Ran &&
+        envelope.outcome != Outcome::Piped) {
       render_result_line(out, envelope, options.color, true, options.language);
     }
   }

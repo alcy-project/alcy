@@ -54,7 +54,9 @@ TEST_CASE("Parse build subcommand") {
                             .link_args = {},
                             .program_args = {},
                             .no_std = false,
-                            .deps = {}});
+                            .deps = {},
+                            .fmt_check = false,
+                            .fmt_files = {}});
 }
 
 TEST_CASE("Parse profile flag") {
