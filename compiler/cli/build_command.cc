@@ -50,6 +50,7 @@ ResultCode run_build(const CliConfig& config,
   }
   const pkg::Toolchain tool = std::move(toolchain).unwrap();
   ctx.freestanding = tool.freestanding;
+  ctx.no_cache = config.no_cache;
   const pipeline::LinkOptions link = resolve_link_options(config, tool);
   base::Result<pkg::Profiles, diag::Reported> profiles =
       pipeline::load_profiles(ctx, found.root);
@@ -90,6 +91,7 @@ ResultCode run_build(const CliConfig& config,
   record_output(std::move(res).unwrap(), envelope);
   envelope.status = Status::Ok;
   envelope.outcome = Outcome::Built;
+  envelope.cache = ctx.cache_outcome;
   return ResultCode::Success;
 }
 

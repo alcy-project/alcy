@@ -32,6 +32,7 @@
 #include "fpag/term/style.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"
+#include "pipeline/cache.h"
 #include "source/source.h"
 #include "text/json.h"
 
@@ -304,6 +305,14 @@ std::string result_note(const Envelope& envelope, i18n::Language language) {
     note += ", ";
     note += i18n::format<i18n::Key::CliMemoryPeak>(language, peak);
   }
+  // A quiet default stays quiet the way an unmeasured peak does: only a
+  // consulted cache names its outcome.
+  if (envelope.cache != pipeline::CacheOutcome::Off) {
+    note += ", ";
+    note += envelope.cache == pipeline::CacheOutcome::Hit
+                ? i18n::format<i18n::Key::CliCacheHit>(language)
+                : i18n::format<i18n::Key::CliCacheMiss>(language);
+  }
   note += ')';
   return note;
 }
@@ -494,6 +503,14 @@ std::string render_json(const Envelope& envelope, i18n::Language language) {
   // matches on, rather than the sentence a human reads.
   out += R"(,"outcome":)";
   append_json_string(out, outcome_name(envelope.outcome));
+  // Always present like the statistics: a reader indexes one shape on
+  // every command, and only `build` ever answers anything but off.
+  out += R"(,"cache":)";
+  switch (envelope.cache) {
+    case pipeline::CacheOutcome::Hit: append_json_string(out, "hit"); break;
+    case pipeline::CacheOutcome::Miss: append_json_string(out, "miss"); break;
+    case pipeline::CacheOutcome::Off: append_json_string(out, "off"); break;
+  }
   out += R"(,"summary":)";
   if (envelope.status != Status::Ok) {
     if (!envelope.failure.has_value()) {

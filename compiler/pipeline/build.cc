@@ -37,6 +37,7 @@
 #include "overlay/overlay.h"
 #include "path/path.h"
 #include "pipeline/backend_emit.h"
+#include "pipeline/cache.h"
 #include "pipeline/call_sites.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/embedded_lld.h"
@@ -54,10 +55,14 @@
 
 namespace pipeline {
 
-base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
+namespace {
+
+// The frontend and lowering without the release passes: the cache
+// stores this form so the optimizer runs after a hit exactly as after
+// a miss, and the entry check stays ahead of the lookup.
+base::Result<lowering::LoweredPackage, diag::Reported> compile_tree_unoptimized(
     PipelineContext& ctx,
     analyzer::ModuleTree tree,
-    bool optimize,
     bool needs_entry,
     std::string_view entry_name) {
   const bool has_main = !needs_entry || has_free_main(ctx, tree);
@@ -73,22 +78,50 @@ base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
     return base::make_err(diag::Reported{});
   }
   FrontendOutput done = std::move(out).unwrap();
-  // The release passes run after borrow checking, so the ownership they
-  // leave behind still holds, and both backends - including the direct
-  // one with no middle end - see the same optimized IR.
-  if (optimize) {
-    base::Result<ir::VerifiedStorage, ir::VerificationError> optimized =
-        opt::optimize(std::move(done.package.storage));
-    if (optimized.is_err()) {
-      const u32 index = ctx.bag.emit<i18n::Key::PipelineOptimizeFailed>(
-          diag::Severity::Error, diag::Stage::Pipeline,
-          DiagCode::OptimizeFailed);
-      (void)index;
-      return base::make_err(diag::Reported{});
-    }
-    done.package.storage = std::move(optimized).unwrap();
-  }
   return base::make_ok(std::move(done.package));
+}
+
+// The release passes run after borrow checking, so the ownership they
+// leave behind still holds, and both backends - including the direct
+// one with no middle end - see the same optimized IR.
+base::Result<void, diag::Reported> optimize_package(
+    PipelineContext& ctx,
+    lowering::LoweredPackage& package,
+    bool optimize) {
+  if (!optimize) {
+    return base::make_ok();
+  }
+  base::Result<ir::VerifiedStorage, ir::VerificationError> optimized =
+      opt::optimize(std::move(package.storage));
+  if (optimized.is_err()) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineOptimizeFailed>(
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::OptimizeFailed);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  package.storage = std::move(optimized).unwrap();
+  return base::make_ok();
+}
+
+}  // namespace
+
+base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
+    PipelineContext& ctx,
+    analyzer::ModuleTree tree,
+    bool optimize,
+    bool needs_entry,
+    std::string_view entry_name) {
+  base::Result<lowering::LoweredPackage, diag::Reported> package =
+      compile_tree_unoptimized(ctx, tree, needs_entry, entry_name);
+  if (package.is_err() || ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  lowering::LoweredPackage lowered = std::move(package).unwrap();
+  if (optimize_package(ctx, lowered, optimize).is_err() ||
+      ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  return base::make_ok(std::move(lowered));
 }
 
 namespace {
@@ -437,24 +470,35 @@ base::Result<void, diag::Reported> emit_package_ir(
 // What a write input borrows: the file names and address names it points
 // at, kept alive for as long as the input is. Constructed in place so the
 // spans never outlive their owners.
+struct SourceFiles {
+  std::vector<std::string_view> names;
+  std::vector<base::Digest128> hashes;
+};
+
+// The file table over the loaded sources: names in FileId order with
+// the content hash of each, so a cache tells two programs under one
+// name apart. A file whose bytes are gone hashes the empty input
+// rather than claiming no hash was computed.
+SourceFiles source_file_table(PipelineContext& ctx) {
+  SourceFiles files;
+  files.names.resize(ctx.sources.file_count());
+  files.hashes.resize(files.names.size());
+  for (u32 id = 0; id < files.names.size(); ++id) {
+    files.names[id] = ctx.sources.name(id).value_or(std::string_view{});
+    const std::string_view bytes =
+        ctx.sources.bytes(id).value_or(std::string_view{});
+    files.hashes[id] = base::hash128(bytes);
+  }
+  return files;
+}
+
 struct IrWriteInput {
-  std::vector<std::string_view> file_names;
-  std::vector<base::Digest128> file_hashes;
+  SourceFiles files;
   std::vector<ir::AddrName> addr_names;
   ir::WriteInput input;
 
-  IrWriteInput(PipelineContext& ctx, lowering::LoweredPackage& package) {
-    file_names.resize(ctx.sources.file_count());
-    file_hashes.resize(file_names.size());
-    for (u32 id = 0; id < file_names.size(); ++id) {
-      file_names[id] = ctx.sources.name(id).value_or(std::string_view{});
-      // The content hash lets a cache tell two programs under one
-      // name apart, and a file whose bytes are gone hashes the empty
-      // input rather than claiming no hash was computed.
-      const std::string_view bytes =
-          ctx.sources.bytes(id).value_or(std::string_view{});
-      file_hashes[id] = base::hash128(bytes);
-    }
+  IrWriteInput(PipelineContext& ctx, lowering::LoweredPackage& package)
+      : files(source_file_table(ctx)) {
     addr_names.reserve(package.addr_names.size());
     for (const lowering::LoweredPackage::AddrInfo& entry : package.addr_names) {
       addr_names.push_back(ir::AddrName{entry.addr, entry.name, entry.is_param,
@@ -464,7 +508,7 @@ struct IrWriteInput {
         .storage = &*package.storage,
         .strings = &ctx.strings,
         .instr_spans = package.instr_spans,
-        .files = ir::FileTable{.names = file_names, .hashes = file_hashes},
+        .files = ir::FileTable{.names = files.names, .hashes = files.hashes},
         .addr_names = addr_names,
         .prelude_functions = package.prelude_functions,
         .width = ctx.target.width,
@@ -472,6 +516,14 @@ struct IrWriteInput {
     };
   }
 };
+
+// The binary form of a lowered package, for the cache to store and for
+// `--emit=ir-bc` to write: one serialization serves both.
+std::vector<u8> serialize_package_ir(PipelineContext& ctx,
+                                     lowering::LoweredPackage& package) {
+  IrWriteInput write_input(ctx, package);
+  return ir::serialize(write_input.input);
+}
 
 // The alcy IR text view. It runs before the backend is consulted, because
 // the form belongs to the pipeline: a build with no code generator still
@@ -499,8 +551,7 @@ base::Result<void, diag::Reported> emit_package_ir_binary(
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-ir-bc",
                                            "backend");
   (void)profile;
-  IrWriteInput write_input(ctx, package);
-  const std::vector<u8> bytes = ir::serialize(write_input.input);
+  const std::vector<u8> bytes = serialize_package_ir(ctx, package);
   return write_output(ctx, "ir binary", output_path, bytes);
 }
 
@@ -826,16 +877,55 @@ base::Result<std::string, diag::Reported> build_package(
   std::string first_output;
   for (PlannedTarget& planned_target : planned) {
     PackageTarget& target = *planned_target.target;
-    base::Result<lowering::LoweredPackage, diag::Reported> package =
-        compile_tree(
-            ctx, target.tree, profile.optimize,
-            !target.is_lib && planned_target.mode == EmitMode::Executable,
-            target.name);
-    if (package.is_err() || ctx.bag.has_errors()) {
+    // The cache stores the unoptimized package, so the lookup runs
+    // before the frontend and the store runs before the optimizer:
+    // a hit and a miss optimize, check, and emit the same way.
+    std::optional<lowering::LoweredPackage> cached;
+    std::string cache_dir;
+    std::string entry;
+    if (!ctx.no_cache) {
+      const path::Path out_dir = target.output_dir.has_value()
+                                     ? *target.output_dir
+                                     : root.join(path::DEFAULT_OUT_DIR);
+      const SourceFiles sources = source_file_table(ctx);
+      const std::string_view manifest_bytes =
+          ctx.sources.bytes(manifest_file).value_or(std::string_view{});
+      const base::Digest128 key = cache_key(
+          ir::FileTable{.names = sources.names, .hashes = sources.hashes},
+          ctx.target.width, ctx.version, manifest_bytes, ctx.target.triple);
+      cache_dir = std::string(out_dir.join(".cache").as_view());
+      entry = cache_entry_path(cache_dir, key);
+      cached = cache_load(ctx, entry);
+      ctx.cache_outcome = combine_cache_outcome(
+          ctx.cache_outcome,
+          cached.has_value() ? CacheOutcome::Hit : CacheOutcome::Miss);
+    }
+    if (!cached.has_value()) {
+      base::Result<lowering::LoweredPackage, diag::Reported> package =
+          compile_tree_unoptimized(
+              ctx, target.tree,
+              !target.is_lib && planned_target.mode == EmitMode::Executable,
+              target.name);
+      if (package.is_err() || ctx.bag.has_errors()) {
+        failed = true;
+        break;
+      }
+      // Only a quiet build stores: a hit rebuilds no diagnostics, so
+      // a stored entry stays silent when it is read back.
+      if (!ctx.no_cache && ctx.bag.size() == 0) {
+        lowering::LoweredPackage fresh = std::move(package).unwrap();
+        cache_store(cache_dir, entry, serialize_package_ir(ctx, fresh));
+        cached = std::move(fresh);
+      } else {
+        cached = std::move(package).unwrap();
+      }
+    }
+    lowering::LoweredPackage& lowered = *cached;
+    if (optimize_package(ctx, lowered, profile.optimize).is_err() ||
+        ctx.bag.has_errors()) {
       failed = true;
       break;
     }
-    lowering::LoweredPackage lowered = std::move(package).unwrap();
     base::Result<std::string, diag::Reported> written =
         emit_output(ctx, lowered, profile, link, planned_target.mode,
                     planned_target.path, target.is_lib);

@@ -58,6 +58,8 @@ struct CliConfig {
   // The boolean keys an explicit flag overrides on the resolved profile.
   std::optional<bool> optimize = std::nullopt;
   std::optional<bool> overflow_checks = std::nullopt;
+  // Skip the build cache for this invocation: no lookup and no store.
+  bool no_cache = false;
   // First positional, read as each subcommand's target (empty when
   // absent; the cli substitutes "."). Borrows argv storage, so a config
   // must not outlive the argument vector it was parsed from.

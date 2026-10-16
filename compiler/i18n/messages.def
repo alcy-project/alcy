@@ -443,6 +443,8 @@
   F(CliBuildAbout, "Build a package directory") \
   F(CliBuildOutputHelp, "Where the output goes. Empty picks the package's out/ directory.") \
   F(CliBuildTakesDirectory, "The `build` command takes a package directory; use `compile` for a file") \
+  F(CliCacheHit, "cache hit") \
+  F(CliCacheMiss, "cache miss") \
   F(CliBytePlural, "bytes") \
   F(CliByteSingular, "byte") \
   F(CliCheckAbout, "Check a package without emitting code") \
@@ -475,6 +477,7 @@
   F(CliModuleSingular, "module") \
   F(CliNewAbout, "Create a new package") \
   F(CliNoStdHelp, "Start with no standard library instead of the default suite. Add back with --deps.") \
+  F(CliNoCacheHelp, "Skip the build cache for this invocation: no lookup and no store.") \
   F(CliNoSubcommand, "No subcommand given") \
   F(CliOnPanicHelp, "What a panic does before it aborts: abort (the default) writes the message, and backtrace also names the frames it can walk. Overrides the selected profile's on-panic.") \
   F(CliOptimizeHelp, "Whether the middle end and the release passes run: on or off. Overrides the selected profile's optimize.") \

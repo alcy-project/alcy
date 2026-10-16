@@ -58,6 +58,12 @@ class SymbolTable {
   SymbolTable(const SymbolTable&) = delete;
   SymbolTable& operator=(const SymbolTable&) = delete;
 
+  // Movable: names point at the table's own heap storage or at sources
+  // beside it, never at the table object, so a move keeps every view
+  // valid. The cache installs a loaded table this way.
+  SymbolTable(SymbolTable&&) = default;
+  SymbolTable& operator=(SymbolTable&&) = default;
+
   // The id for `name`, whose bytes have to outlive the table.
   std::optional<Id> try_intern(std::string_view name);
 

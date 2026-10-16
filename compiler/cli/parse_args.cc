@@ -121,6 +121,7 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
     }
   }
   c.no_std = matches.get<bool>("no-std").unwrap_or(false);
+  c.no_cache = matches.get<bool>("no-cache").unwrap_or(false);
   // `vcs` is declared on the two scaffolding verbs only, so the default
   // stands wherever it is absent.
   c.vcs = matches.get<pipeline::Vcs>("vcs").unwrap_or(c.vcs);
@@ -304,6 +305,10 @@ arg::Parser build_parser(i18n::Language language) {
           .add_arg(arg::ArgBuilder("link-args")
                        .help(usage.text(i18n::Key::CliLinkArgsOverrideHelp))
                        .default_value("")
+                       .build())
+          .add_arg(arg::ArgBuilder("no-cache")
+                       .help(usage.text(i18n::Key::CliNoCacheHelp))
+                       .is_flag(true)
                        .build())
           .build());
   builder.add_subcommand(

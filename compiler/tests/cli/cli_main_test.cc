@@ -743,6 +743,86 @@ TEST_CASE("Build links the arguments toolchain.toml names") {
   CHECK(run_build_on(dir, "proj") != 0);
 }
 
+namespace {
+
+// Builds `rel` with `extra` arguments and answers the exit code with
+// what the build reported on standard output.
+struct BuiltWithOutput {
+  i32 code = 1;
+  std::string out;
+};
+
+BuiltWithOutput run_build_captured(io::TempDir& dir,
+                                   std::string_view rel,
+                                   std::span<const std::string_view> extra) {
+  BuiltWithOutput built;
+  const std::string target = dir.join(rel);
+  std::vector<std::string> storage{"alcy", "build"};
+  for (const std::string_view arg : extra) {
+    storage.emplace_back(arg);
+  }
+  storage.push_back(target);
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  CapturedStdout captured(dir.join("captured.txt"));
+  if (!captured.ok()) {
+    return built;
+  }
+  built.code = cli_main(static_cast<i32>(argv.size()), argv.data());
+  built.out = captured.text();
+  return built;
+}
+
+}  // namespace
+
+TEST_CASE("Build reports a cache hit on a second build") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_cache_");
+  const bool setup = write_package(dir, "proj",
+                                   "fn main() -> i32 {\n"
+                                   "  ret 0\n"
+                                   "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  // `--emit=ir-bc` writes the binary without linking, so the case runs
+  // where no link driver exists.
+  const std::string_view emit[] = {"--emit", "ir-bc"};
+  const BuiltWithOutput first = run_build_captured(dir, "proj", emit);
+  CHECK(first.code == 0);
+  CHECK(first.out.find("cache miss") != std::string::npos);
+  const std::string first_bytes = io::read_file(dir.join("proj/out/app.irb"));
+  CHECK(!first_bytes.empty());
+  const BuiltWithOutput second = run_build_captured(dir, "proj", emit);
+  CHECK(second.code == 0);
+  CHECK(second.out.find("cache hit") != std::string::npos);
+  // A hit answers the same bytes the miss wrote.
+  CHECK(io::read_file(dir.join("proj/out/app.irb")) == first_bytes);
+}
+
+TEST_CASE("Build with --no-cache consults nothing") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_cold_");
+  const bool setup = write_package(dir, "proj",
+                                   "fn main() -> i32 {\n"
+                                   "  ret 0\n"
+                                   "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  const std::string_view emit[] = {"--emit", "ir-bc"};
+  const BuiltWithOutput first = run_build_captured(dir, "proj", emit);
+  CHECK(first.code == 0);
+  const std::string_view off[] = {"--emit", "ir-bc", "--no-cache"};
+  const BuiltWithOutput second = run_build_captured(dir, "proj", off);
+  CHECK(second.code == 0);
+  // Off stays quiet the way an unmeasured peak does: no outcome to name.
+  CHECK(second.out.find("cache") == std::string::npos);
+}
+
 TEST_CASE("Build reports a broken profile file") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_profile_bad_");
   const bool setup = write_package(dir, "proj",

@@ -17,6 +17,7 @@
 #include "fpag/mem/arena.h"
 #include "i18n/language.h"
 #include "ir/symbol_table.h"
+#include "pipeline/cache.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -66,6 +67,13 @@ struct PipelineContext {
   // `_start` instead of `main`, and the link skips the C runtime
   // (ADR-0052). Set from the goal package's toolchain file.
   bool freestanding = false;
+  // Skip the build cache for this invocation (`--no-cache`): no lookup
+  // and no store, so the pipeline can be measured and debugged without
+  // it.
+  bool no_cache = false;
+  // What the cache did for this run, combined across targets with a
+  // miss dominating. The command reports it.
+  CacheOutcome cache_outcome = CacheOutcome::Off;
 
   // `span_capacity` is the syntax arena's reservation. A case that has
   // to spend it can ask for less, the way `ast::AstArena` allows.

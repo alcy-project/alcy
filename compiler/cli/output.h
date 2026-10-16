@@ -15,6 +15,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_mode.h"
 #include "i18n/language.h"
+#include "pipeline/cache.h"
 
 namespace diag {
 
@@ -77,6 +78,10 @@ struct Envelope {
   // What a scaffold created, and where. Only set by `new` and `init`.
   std::string package_name;
   std::string package_dir;
+  // What the build cache did: off when it was not consulted, miss when
+  // the frontend ran, hit when the frontend was skipped. Only `build`
+  // consults it; every other command leaves the default.
+  pipeline::CacheOutcome cache = pipeline::CacheOutcome::Off;
   // The suite a scaffold joined or made, spelled `owner/name` or
   // `name`. Empty for everything else.
   std::string suite_name;
