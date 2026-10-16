@@ -68,13 +68,20 @@ arguing with it. A loan's extent is the input to a region solver rather
 than a syntactic approximation of one, so the two share a computation
 rather than merely agreeing.
 
-### Two-phase borrows are deferred
+### Two-phase borrows
 
 `v.push(v.len())` needs the receiver's mutable borrow reserved during
-argument evaluation and activated after. It is an ergonomics patch on a
-correct checker, not a soundness prerequisite, so it follows the
-reborrow work rather than blocking it. The compiler will hit it early;
-it should not wait long.
+argument evaluation and activated after. It is an ergonomics patch on
+a correct checker, not a soundness prerequisite, so it followed the
+reborrow work rather than blocking it.
+
+The reservation is the receiver borrow itself: an exclusive `Borrow`
+whose only use is the receiver operand of one call. Reads of the place
+in the window between that borrow and the call - a shared borrow, a
+load of data - are admitted, and the call is the activation, where any
+other loan still live on the place conflicts. A read that outlives the
+argument evaluation therefore still reports: a view handed in as an
+argument, or a closure that captured the place, refuses the call.
 
 ## Where the implementation actually stands
 

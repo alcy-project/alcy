@@ -60,8 +60,6 @@ relied upon by MVP programs or by the MVP compiler implementation.
 - `pub(...)` restricted visibility; glob imports.
 - `f16`, 128-bit integers, posit, and decimal types; `Char`/`Ascii`/
   grapheme semantics in core (see `types.md`).
-- Two-phase borrows, so `v.push(v.len())` resolves the receiver before
-  the arguments; see `docs/adr/0012-reborrow-on-reference-read.md`.
 - Interior mutability; mutable statics; `const`-position extensions.
 - Attribute system in full (`#[repr(C)]` and beyond).
 

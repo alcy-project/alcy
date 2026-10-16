@@ -5,6 +5,12 @@
 - `&T` (shared reference): freely duplicable; any number may coexist.
 - `&mut T` (exclusive reference): at most one live at a time, and no
   `&T` to the same place may be live while it is.
+- A call's exclusive receiver is a reservation (ADR-0012): the borrow
+  is taken before the arguments evaluate, reads of the place in that
+  window are admitted, and the call itself activates it, where any
+  other loan still live on the place conflicts. `v.push(v.len())` and
+  `v.push(v[0])` resolve; a view handed in as an argument, or a
+  closure that captured the place, still reports.
 - A borrow of a temporary names a slot in the frame: `&2`,
   `&(1 + 1)`, and `&format("y")` all read a place. A `Copy` one has
   nothing to end; an owning one becomes an unnamed local the drop walk

@@ -188,6 +188,11 @@ class Checker {
   std::vector<std::vector<u32>> path;
   std::vector<std::vector<u32>> flow;
   std::vector<Loan> loans;
+  // Two-phase borrows: an exclusive receiver whose only use is the call
+  // it serves. The borrow is a reservation until the call activates it,
+  // so the argument evaluation between the two is the window ADR-0012
+  // opens for reads of the place.
+  std::vector<u8> reserved_receiver;
   // What the package named, by the address it named, and the captured
   // addresses among it. Both were walks over every name in the package: one
   // per diagnostic, and one per function of every sweep.
@@ -207,6 +212,8 @@ class Checker {
   std::vector<ir::BlockIdx> succs_scratch_;
   std::vector<ir::BlockIdx> stack_scratch_;
   std::vector<ir::BlockIdx> post_scratch_;
+  std::vector<u32> use_count_scratch_;
+  std::vector<u8> receiver_call_scratch_;
   // Entry-block allocas holding a block parameter, paired with that
   // parameter's position. Filled by param_allocas per function and read
   // by is_param_root, so both see the same homes.
@@ -1124,7 +1131,58 @@ class Checker {
     DCHECK(false);
   }
 
+  // Two-phase borrows: which exclusive receiver borrows serve one call.
+  // A `Borrow` whose destination is used exactly once, as the receiver
+  // operand of a direct call, is a reservation: the call activates it,
+  // and the argument evaluation between the two is the window
+  // ADR-0012 opens for reads of the place.
+  void collect_reserved(const ir::Function& fn) {
+    const usize registers = storage.registers().size();
+    use_count_scratch_.assign(registers, 0);
+    receiver_call_scratch_.assign(registers, 0);
+    for (ir::BlockIdx bidx : fn.blocks) {
+      for (ir::InstructionIdx iidx : storage.blocks()[bidx].instrs) {
+        const ir::Instruction& instr = instr_at(iidx);
+        const bool direct_call =
+            instr.op == ir::Opcode::Call && !instr.operands.empty() &&
+            storage.operands()[instr.operands.head()].is<ir::FunctionIdx>();
+        for (u32 offset = 0; offset < instr.operands.size(); ++offset) {
+          const ir::Operand& operand =
+              storage.operands()[instr.operands.head() + offset];
+          if (!operand.is<ir::RegisterIdx>()) {
+            continue;
+          }
+          const u32 reg = operand.as_register().idx;
+          if (reg >= registers) {
+            continue;
+          }
+          ++use_count_scratch_[reg];
+          if (direct_call && offset == 1) {
+            receiver_call_scratch_[reg] = 1;
+          }
+        }
+      }
+    }
+    for (ir::BlockIdx bidx : fn.blocks) {
+      for (ir::InstructionIdx iidx : storage.blocks()[bidx].instrs) {
+        const ir::Instruction& instr = instr_at(iidx);
+        if (instr.op != ir::Opcode::Borrow || !instr.dst.is_valid() ||
+            instr.dst.idx >= reserved_receiver.size()) {
+          continue;
+        }
+        reserved_receiver[instr.dst.idx] =
+            use_count_scratch_[instr.dst.idx] == 1 &&
+                    receiver_call_scratch_[instr.dst.idx] != 0 &&
+                    tag_of(storage.registers()[instr.dst].type) ==
+                        ir::TypeTag::MutRef
+                ? 1
+                : 0;
+      }
+    }
+  }
+
   void check_function(const ir::Function& fn) {
+    collect_reserved(fn);
     forward(fn);
     std::vector<ir::BlockIdx> order;
     reverse_post_order(fn, order);
@@ -1205,6 +1263,18 @@ class Checker {
             }
             if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
               continue;
+            }
+            // A reserved receiver's window admits a read of data: the
+            // call that activates the reservation re-checks the place,
+            // so a read that outlives the call still reports. Reading a
+            // reference out is not data, so it stays a conflict.
+            if (instr.dst.is_valid() && loan.reg < reserved_receiver.size() &&
+                reserved_receiver[loan.reg] != 0) {
+              const ir::TypeTag loaded =
+                  tag_of(storage.registers()[instr.dst.idx].type);
+              if (loaded != ir::TypeTag::Ref && loaded != ir::TypeTag::MutRef) {
+                continue;
+              }
             }
             const u32 index = bag.emit<i18n::Key::BorrowConflict>(
                 diag::Severity::Error, diag::Stage::Borrow, DiagCode::Conflict,
@@ -1301,6 +1371,14 @@ class Checker {
           if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
             continue;
           }
+          // A shared borrow during a reserved receiver's window is the
+          // read the reservation admits; the activation at the call is
+          // what still refuses one that outlives it.
+          if (!exclusive && loan.exclusive &&
+              loan.reg < reserved_receiver.size() &&
+              reserved_receiver[loan.reg] != 0) {
+            continue;
+          }
           if (exclusive || loan.exclusive) {
             const u32 index = bag.emit<i18n::Key::BorrowConflict>(
                 diag::Severity::Error, diag::Stage::Borrow, DiagCode::Conflict,
@@ -1362,6 +1440,62 @@ class Checker {
             (void)index;
             break;
           }
+        }
+        break;
+      }
+      case ir::Opcode::Call: {
+        // The reservation activates: the callee sees the exclusive
+        // borrow, so any other loan still live on the place it covers
+        // conflicts. Reads that ended in the argument evaluation are
+        // the window two-phase borrows admit (ADR-0012).
+        if (instr.operands.size() < 2 ||
+            !storage.operands()[instr.operands.head()].is<ir::FunctionIdx>()) {
+          break;
+        }
+        const ir::Operand& receiver =
+            storage.operands()[instr.operands.head() + 1];
+        if (!receiver.is<ir::RegisterIdx>() ||
+            receiver.as_register().idx >= reserved_receiver.size() ||
+            reserved_receiver[receiver.as_register().idx] == 0) {
+          break;
+        }
+        for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
+          const Loan& reserved = loans[id];
+          if (reserved.reg != receiver.as_register().idx ||
+              reserved.param != NO_ROOT) {
+            continue;
+          }
+          for (u32 other = 0; other < static_cast<u32>(loans.size()); ++other) {
+            if (other == id) {
+              continue;
+            }
+            const Loan& loan = loans[other];
+            if (loan.param != NO_ROOT || loan.reg == reserved.reg) {
+              continue;
+            }
+            if (!live_at(other, bidx, pos) ||
+                !overlaps(loan.place, reserved.place)) {
+              continue;
+            }
+            // A reborrow taken through the receiver stands behind it,
+            // the way the borrow rule lets one taken through a loan.
+            if (carries_loan(loan.reg, id)) {
+              continue;
+            }
+            // The call's own projection reifies the return's borrow of
+            // the receiver - it supersedes the reservation's loan in
+            // the result rather than riding beside it - so it is the
+            // activation's product, not a loan competing with it.
+            if (instr.dst.is_valid() && loan.reg == instr.dst.idx) {
+              continue;
+            }
+            const u32 index = bag.emit<i18n::Key::BorrowConflict>(
+                diag::Severity::Error, diag::Stage::Borrow, DiagCode::Conflict,
+                span, addr_name(reserved.place.root));
+            (void)index;
+            break;
+          }
+          break;
         }
         break;
       }
@@ -1540,6 +1674,7 @@ class Checker {
     home.assign(registers, NO_ROOT);
     path.assign(registers, {});
     flow.assign(registers, {});
+    reserved_receiver.assign(registers, 0);
     const usize blocks = storage.blocks().size();
     live_in.assign(blocks, {});
     live_out.assign(blocks, {});
