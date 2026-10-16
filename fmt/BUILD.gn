@@ -1,0 +1,36 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# The formatter is a module beside the compiler rather than a stage inside
+# it: it reads source for people, not for the pipeline, and the compiler
+# never depends on it. Its headers are included as "fmt/src/...", so the
+# repository root is on the include path for the target and for everything
+# that depends on it. The "src" level keeps the formatter's headers out of
+# the "fmt/..." prefix the vendored formatting library owns.
+config("fmt_config") {
+  include_dirs = [
+    "//",
+    "//compiler",
+  ]
+}
+
+source_set("alcy_fmt") {
+  sources = [
+    "src/cst.cc",
+    "src/cst.h",
+    "src/doc.cc",
+    "src/doc.h",
+    "src/format.cc",
+    "src/format.h",
+    "src/lex.cc",
+    "src/lex.h",
+  ]
+  deps = [
+    "//compiler:base_modules",
+    "//compiler/diag",
+    "//compiler/i18n",
+    "//compiler/lexer",
+    "//compiler/source",
+  ]
+  public_configs = [ ":fmt_config" ]
+}
