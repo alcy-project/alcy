@@ -113,6 +113,11 @@ what implements it lives in `compiler/`.
   is self-hosted. Its own documentation is in `compiler/docs/`.
   `compiler/fuzz/` holds the fuzz targets, which need libFuzzer and are
   therefore outside `all`.
+- `fmt/` - the source formatter, a library beside the compiler rather
+  than a stage inside it: the compiler never depends on it, and it leans
+  on the compiler's lexer alone. `alcy fmt` reaches it from the command
+  line, and `tools/check_fmt.py` asks its properties of every source
+  in the tree. See ADR-0081.
 - `lib/` - the toolchain standard library as source suites
   (`lib/std/<member>/`); embedded into the compiler binary and
   injected as prelude modules, never built as separate packages.

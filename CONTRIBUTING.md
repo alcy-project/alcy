@@ -23,6 +23,9 @@ uv run ./tools/build.py --target=all --mode=debug
 uv run ./tools/run.py --target=tests --mode=debug
 uv run ./tools/check_e2e.py
 uv run ./tools/check_exe.py
+# The .al sources are the formatter's own gate: laid out as alcy fmt
+# writes them, idempotent under a second pass, unchanged in verdict.
+uv run ./tools/check_fmt.py
 # lint.py also runs the tree's TOML, Markdown, rule, and Python checks.
 uv run ./tools/lint.py
 uv run ./tools/format.py --dry-run
