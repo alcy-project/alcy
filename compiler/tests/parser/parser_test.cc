@@ -1566,6 +1566,36 @@ TEST_CASE("Parser reads empty captures and empty params") {
   CHECK(closure.params.empty());
 }
 
+TEST_CASE("Parser reads owning function types beside structural ones") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn apply(f: fn(i32) -> i32, g: (i32) -> i32, h: fn() -> i32) {}", f);
+  CHECK(result.ok);
+  CHECK(!f.bag.has_errors());
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  CHECK(fn.params.size() == 3);
+  if (fn.params.size() != 3) {
+    return;
+  }
+  const ast::TypeNode& one = f.ast.types[fn.params[0].type];
+  CHECK(one.kind == ast::TypeKind::OwnFunc);
+  if (one.kind == ast::TypeKind::OwnFunc) {
+    const ast::TypeFunc& func = one.payload.get<ast::TypeFunc>();
+    CHECK(func.params.size() == 1);
+    CHECK(func.ret.is_valid());
+  }
+  const ast::TypeNode& two = f.ast.types[fn.params[1].type];
+  CHECK(two.kind == ast::TypeKind::Func);
+  const ast::TypeNode& none = f.ast.types[fn.params[2].type];
+  CHECK(none.kind == ast::TypeKind::OwnFunc);
+  if (none.kind == ast::TypeKind::OwnFunc) {
+    CHECK(none.payload.get<ast::TypeFunc>().params.empty());
+  }
+}
+
 TEST_CASE("Parser reads function types without disturbing parens") {
   Fixture f;
   const ParseResult result = parse(

@@ -100,7 +100,9 @@ A path takes type arguments for generic enums and structs only, and a
 closing `>>` splits into two `>` (dangling halves error). A function
 type is structural: `(A, B) -> R`, with `()` and `(A)` as its no- and
 one-parameter spellings; a bare `(A)` outside the arrow position is
-the type it wraps. `*T` and `*mut T` are raw pointers: thin, Copy,
+the type it wraps. `fn(A, B) -> R` is the owning spelling of the same
+signature: a value that owns its environment, move-only, against the
+borrowing view (ADR-0075). `*T` and `*mut T` are raw pointers: thin, Copy,
 and outside the region system; `**T` lexes as the power token but a
 type position reads the pair as two stars. See `ffi.md`.
 

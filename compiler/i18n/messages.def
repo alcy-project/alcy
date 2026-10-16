@@ -207,6 +207,7 @@
   F(AnalyzerNotCaptured, "Use of '{}' is not captured; add it to the capture list") \
   F(AnalyzerNotTupleVariant, "Not a tuple variant") \
   F(AnalyzerOrPatternBindsDifferentNames, "Or-pattern alternatives must bind the same names") \
+  F(AnalyzerOwnFunctionUnsupported, "Owning function types are not supported yet") \
   F(AnalyzerPathHeadNotSupported, "`{}` is not a path head; the package root is `package::`") \
   F(AnalyzerPowerNotImplemented, "The '**' operator is not implemented yet") \
   F(AnalyzerPrintArity, "'{}' expects a format string, found {} arguments") \

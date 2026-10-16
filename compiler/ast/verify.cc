@@ -96,6 +96,16 @@ bool verify_type_children(const TypeNode& node, const AstArena& arena) {
       }
       return bound(func.ret, arena.types);
     }
+    case TypeKind::OwnFunc: {
+      // Shares the payload; an owning spelling names the same children.
+      const TypeFunc func = node.payload.get<TypeFunc>();
+      for (const TypeIdx param : func.params) {
+        if (!bound(param, arena.types)) {
+          return false;
+        }
+      }
+      return bound(func.ret, arena.types);
+    }
   }
   return false;
 }

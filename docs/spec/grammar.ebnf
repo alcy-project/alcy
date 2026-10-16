@@ -92,7 +92,8 @@ use_item    = "use" , path , [ "as" , IDENT ] , ";" ;
 
 type        = primitive | "()" | "!" | "str"
             | tuple_type | paren_type | array_type | slice_type
-            | ref_type | raw_ptr_type | path_type | func_type ;
+            | ref_type | raw_ptr_type | path_type | func_type
+            | owning_func_type ;
 primitive   = integer_type | float_type | "bool" ;
 tuple_type  = "(" , type , "," , [ type , { "," , type } ] , [ "," ] , ")" ;
               (* The comma is what makes the parens a type of their own:
@@ -104,6 +105,11 @@ func_type   = "(" , [ type , { "," , type } , [ "," ] ] , ")" ,
                  type, and captures are erased. A single type in
                  parens is one parameter, so `(A) -> R` is a function
                  type while a bare `(A)` is `A`. *)
+owning_func_type = "fn" , "(" , [ type , { "," , type } , [ "," ] ] ,
+                   ")" , "->" , type ;
+              (* Owning (ADR-0075): a value that owns its environment,
+                 move-only, against the borrowing view above. The
+                 parameter list mirrors it, including the empty form. *)
 array_type  = "[" , type , ";" , ( INTEGER | path ) , "]" ;
               (* A path names a value parameter in scope or a `const`
                  integer value; the const's initializer is evaluated at

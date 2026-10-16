@@ -500,3 +500,41 @@ impl Point {
               (path
                 (identifier)))
             (arguments)))))))
+
+================================================================================
+An owning function type names the heap-owning spelling
+================================================================================
+
+fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
+  ret f(x)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (owning_function_type
+          (function_parameters
+            (primitive_type))
+          (primitive_type)))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments
+            (path_expression
+              (path
+                (identifier)))))))))

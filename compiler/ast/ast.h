@@ -132,6 +132,10 @@ enum class TypeKind : u8 {
   Ref,
   RawPtr,
   Func,
+  // An owning function type (`fn(params) -> ret`, ADR-0075): a value
+  // that owns its environment, move-only, against `Func`'s borrowing
+  // view. Shares the `TypeFunc` payload.
+  OwnFunc,
   // A value argument in a type-argument list (`ArrayVec<T, 4>`). The
   // parsed node names one literal; the analyzer decides from the
   // declared slot whether the argument must be a value.

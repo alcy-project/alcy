@@ -226,6 +226,10 @@
         "named": true
       },
       {
+        "type": "owning_function_type",
+        "named": true
+      },
+      {
         "type": "paren_type",
         "named": true
       },
@@ -3014,6 +3018,32 @@
           },
           {
             "type": "wildcard_pattern",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "owning_function_type",
+    "named": true,
+    "fields": {
+      "parameters": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "function_parameters",
+            "named": true
+          }
+        ]
+      },
+      "return": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "_type",
             "named": true
           }
         ]

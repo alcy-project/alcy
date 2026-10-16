@@ -364,6 +364,7 @@ module.exports = grammar({
       $.tuple_type,
       $.paren_type,
       $.function_type,
+      $.owning_function_type,
       $.array_type,
       $.slice_type,
       $.reference_type,
@@ -405,6 +406,15 @@ module.exports = grammar({
     // `(A, B) -> R`; `()` and `(A)` are the no- and one-parameter
     // spellings (grammar.ebnf, "Types").
     function_type: $ => seq(
+      field('parameters', $.function_parameters),
+      '->',
+      field('return', $._type),
+    ),
+
+    // `fn(A, B) -> R`: the owning spelling of the same signature
+    // (ADR-0075); the parameter list mirrors the structural one.
+    owning_function_type: $ => seq(
+      'fn',
       field('parameters', $.function_parameters),
       '->',
       field('return', $._type),

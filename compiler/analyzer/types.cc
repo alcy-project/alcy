@@ -1355,6 +1355,17 @@ static bool type_mentions_params(const ast::AstArena& ast,
       }
       return fn.ret.is_valid() && type_mentions_params(ast, fn.ret, params);
     }
+    case ast::TypeKind::OwnFunc: {
+      // Shares the payload; a parameter nested under an owning
+      // spelling still mentions its slot.
+      const ast::TypeFunc& fn = node.payload.get<ast::TypeFunc>();
+      for (ast::TypeIdx param : fn.params) {
+        if (type_mentions_params(ast, param, params)) {
+          return true;
+        }
+      }
+      return fn.ret.is_valid() && type_mentions_params(ast, fn.ret, params);
+    }
     default: return false;
   }
 }
@@ -2697,6 +2708,15 @@ ir::TypeIdx Checker::resolve_type(u32 module,
   }
   const base::NestingScope scope(nesting_);
   const ast::TypeNode& node = ast.types[type];
+  // Owning function types parse but wait for their slice (ADR-0075):
+  // refuse them here rather than let one reach lowering as a view.
+  if (node.kind == ast::TypeKind::OwnFunc) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerOwnFunctionUnsupported>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::InvalidOperation, node.span);
+    (void)index;
+    return error_type();
+  }
   switch (node.kind) {
     case ast::TypeKind::Value: {
       // A literal is parsed in argument lists only; reaching a type
@@ -2767,6 +2787,11 @@ ir::TypeIdx Checker::resolve_type(u32 module,
       }
       return builder.func_type(
           seq.finish(), storage_copy(resolve_type(module, func.ret, self)));
+    }
+    case ast::TypeKind::OwnFunc: {
+      // Unreachable: the guard above refuses owning spellings before
+      // the switch. Lowering never sees one as a view.
+      return error_type();
     }
     case ast::TypeKind::Slice: {
       const ast::TypeSlice& slice = node.payload.get<ast::TypeSlice>();

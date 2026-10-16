@@ -53,6 +53,46 @@ ast::TypeIdx Parser::parse_type() {
   const usize mark = pos_;
   switch (peek_kind()) {
     using T = lexer::TokenKind;
+    case T::Fn: {
+      // `fn(params) -> ret`: an owning function type. The parameter
+      // list mirrors the structural spelling's, including the empty
+      // and one-parameter forms.
+      advance();
+      if (!expect(T::LParen, "`(`")) {
+        return ast::TypeIdx::invalid();
+      }
+      std::vector<ast::TypeIdx> params;
+      if (!check(T::RParen) && !at_end()) {
+        while (true) {
+          ast::TypeIdx param = parse_type();
+          if (!param.is_valid()) {
+            return ast::TypeIdx::invalid();
+          }
+          params.push_back(param);
+          if (!match(T::Comma)) {
+            break;
+          }
+        }
+      }
+      if (!expect(T::RParen, "`)`")) {
+        return ast::TypeIdx::invalid();
+      }
+      if (!expect(T::Arrow, "`->`")) {
+        return ast::TypeIdx::invalid();
+      }
+      ast::TypeIdx ret = parse_type();
+      if (!ret.is_valid()) {
+        return ast::TypeIdx::invalid();
+      }
+      ast::TypeNode node;
+      node.kind = ast::TypeKind::OwnFunc;
+      node.span = span_from(mark);
+      node.payload.set(ast::TypeFunc{
+          .params = ast::copy_to_arena(ast_.spans, params),
+          .ret = ret,
+      });
+      return ast_.types.push_back(node);
+    }
     case T::LParen: {
       advance();
       if (match(T::RParen)) {
