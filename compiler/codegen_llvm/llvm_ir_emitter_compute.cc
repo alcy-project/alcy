@@ -251,11 +251,14 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
           result = builder_->CreateUIToFP(value, dst_ty);
         }
       } else if (ir::is_float_type(src_tag) && ir::is_integer_type(dst_tag)) {
-        if (ir::is_signed_integer_type(dst_tag)) {
-          result = builder_->CreateFPToSI(value, dst_ty);
-        } else {
-          result = builder_->CreateFPToUI(value, dst_ty);
-        }
+        // A cast saturates: NaN becomes zero and a value past the
+        // destination takes its end, so every backend answers one
+        // value (ADR-0066). A bare `fptosi` answers poison.
+        const llvm::Intrinsic::ID id = ir::is_signed_integer_type(dst_tag)
+                                           ? llvm::Intrinsic::fptosi_sat
+                                           : llvm::Intrinsic::fptoui_sat;
+        result =
+            builder_->CreateIntrinsic(id, {dst_ty, value->getType()}, {value});
       } else if (ir::is_float_type(src_tag) && ir::is_float_type(dst_tag)) {
         result = builder_->CreateFPCast(value, dst_ty);
       } else if (ir::is_integer_type(src_tag) &&

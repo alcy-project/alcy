@@ -6,6 +6,7 @@
 
 #include "codegen/backend.h"
 #include "codegen/wasm/emit.h"
+#include "codegen/wasm/opcodes.h"
 #include "codegen/wasm/writer.h"
 #include "debug/dcheck.h"
 #include "diag/span.h"
@@ -94,6 +95,27 @@ u8 float_compare_opcode(ir::Opcode op, bool wide) {
     case O::Le: return wide ? 0x65 : 0x5F;
     case O::Ge: return wide ? 0x66 : 0x60;
     default: return 0;
+  }
+}
+// The width a shift count is checked against.
+u32 integer_bits(ir::TypeTag tag) {
+  switch (tag) {
+    case ir::TypeTag::I8:
+    case ir::TypeTag::U8: return 8;
+    case ir::TypeTag::I16:
+    case ir::TypeTag::U16: return 16;
+    case ir::TypeTag::I32:
+    case ir::TypeTag::U32: return 32;
+    default: return 64;
+  }
+}
+
+// The signed minimum an i32 container holds for a narrowed tag.
+i32 signed_minimum(ir::TypeTag tag) {
+  switch (tag) {
+    case ir::TypeTag::I8: return -128;
+    case ir::TypeTag::I16: return -32768;
+    default: return std::numeric_limits<i32>::min();
   }
 }
 
@@ -278,14 +300,47 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
                                                  : (wide ? 0xBA : 0xB8));
         }
       } else if (ir::is_float_type(src_tag) && ir::is_integer_type(dst_tag)) {
-        const bool wide_src = src_tag == ir::TypeTag::F64;
-        const bool wide_dst = is_wide_int(dst_tag);
-        if (wide_dst) {
-          op(wide_src ? (ir::is_signed_integer_type(dst_tag) ? 0xB0 : 0xB1)
-                      : (ir::is_signed_integer_type(dst_tag) ? 0xAE : 0xAF));
-        } else {
-          op(wide_src ? (ir::is_signed_integer_type(dst_tag) ? 0xAA : 0xAB)
-                      : (ir::is_signed_integer_type(dst_tag) ? 0xA8 : 0xA9));
+        // A cast saturates: NaN becomes zero and a value past the
+        // destination takes its end. The trapping form this used to
+        // write answered something else from LLVM's undefined fptosi,
+        // which ADR-0066's rule does not allow.
+        const u32 index = (is_wide_int(dst_tag) ? 4u : 0u) +
+                          (src_tag == ir::TypeTag::F64 ? 2u : 0u) +
+                          (ir::is_signed_integer_type(dst_tag) ? 0u : 1u);
+        body_.byte(codegen::wasm::TRUNC_SAT[index][0]);
+        body_.byte(codegen::wasm::TRUNC_SAT[index][1]);
+        // The conversion lands in a 32-bit word, so a narrower
+        // destination clamps to its own ends - the range the LLVM
+        // intrinsic saturates at directly.
+        if (!is_wide_int(dst_tag) && dst_tag != ir::TypeTag::I32 &&
+            dst_tag != ir::TypeTag::U32) {
+          const bool is_signed = ir::is_signed_integer_type(dst_tag);
+          // Bool saturates at its one bit; `integer_bits` names the
+          // width a shift count is checked against, where a `bool` is
+          // a word.
+          const u32 bits =
+              dst_tag == ir::TypeTag::I1 ? 1u : integer_bits(dst_tag);
+          const i32 low = is_signed ? -(1 << (bits - 1)) : 0;
+          const i32 high = is_signed ? (1 << (bits - 1)) - 1
+                                     : static_cast<i32>((1u << bits) - 1u);
+          local_set(scratch0_);
+          if (is_signed) {
+            i32_const(low);
+            local_get(scratch0_);
+            local_get(scratch0_);
+            i32_const(low);
+            op(0x48);  // i32.lt_s
+            op(0x1B);  // select: low when the value is under it
+            local_set(scratch0_);
+          }
+          i32_const(high);
+          local_get(scratch0_);
+          local_get(scratch0_);
+          i32_const(high);
+          // An unsigned word above 2^31 is negative read signed, so the
+          // high clamp must compare the way the destination reads.
+          op(is_signed ? 0x4A : 0x4B);  // i32.gt_s / i32.gt_u
+          op(0x1B);  // select: high when the value is over it
         }
         canonicalize(body_, dst_tag);
       } else if (ir::is_float_type(src_tag) && ir::is_float_type(dst_tag)) {
@@ -370,28 +425,6 @@ u8 binary_opcode(ir::Opcode op, bool wide) {
     }
   }
   return 0;
-}
-
-// The width a shift count is checked against.
-u32 integer_bits(ir::TypeTag tag) {
-  switch (tag) {
-    case ir::TypeTag::I8:
-    case ir::TypeTag::U8: return 8;
-    case ir::TypeTag::I16:
-    case ir::TypeTag::U16: return 16;
-    case ir::TypeTag::I32:
-    case ir::TypeTag::U32: return 32;
-    default: return 64;
-  }
-}
-
-// The signed minimum an i32 container holds for a narrowed tag.
-i32 signed_minimum(ir::TypeTag tag) {
-  switch (tag) {
-    case ir::TypeTag::I8: return -128;
-    case ir::TypeTag::I16: return -32768;
-    default: return std::numeric_limits<i32>::min();
-  }
 }
 
 }  // namespace

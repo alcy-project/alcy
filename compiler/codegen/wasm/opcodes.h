@@ -60,6 +60,23 @@ constexpr u8 OP_BLOCK_VOID = 0x40;
 // the stack.
 inline constexpr u8 MEMORY_COPY[4] = {0xFC, 0x0A, 0x00, 0x00};
 
+// The saturating float-to-integer conversions, each the 0xFC prefix and
+// its sub-opcode. A cast answers one value on both backends: NaN becomes
+// zero and a value past the destination takes its end, where the
+// trapping form the emitter used to write and LLVM's undefined fptosi
+// answered differently. Indexed by wide destination, wide source, and
+// signedness.
+inline constexpr u8 TRUNC_SAT[8][2] = {
+    {0xFC, 0x00},  // i32.trunc_sat_f32_s
+    {0xFC, 0x01},  // i32.trunc_sat_f32_u
+    {0xFC, 0x02},  // i32.trunc_sat_f64_s
+    {0xFC, 0x03},  // i32.trunc_sat_f64_u
+    {0xFC, 0x04},  // i64.trunc_sat_f32_s
+    {0xFC, 0x05},  // i64.trunc_sat_f32_u
+    {0xFC, 0x06},  // i64.trunc_sat_f64_s
+    {0xFC, 0x07},  // i64.trunc_sat_f64_u
+};
+
 // The one load and store the emitter writes by hand, in the runtime and
 // in the instruction emitters' word loops alike.
 inline void i32_load(BinaryWriter& out, u32 align_log2, u32 offset) {

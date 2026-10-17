@@ -19,6 +19,10 @@
   `wrapping_mul` name the wrapping forms for code that wants them in
   every profile. A constant expression is always evaluated checked,
   so an overflow or a zero divisor there is an error.
+- Casts: a cast between a float and an integer truncates toward zero,
+  and a value the destination cannot hold saturates - its minimum below
+  the destination's range and its maximum above it, with NaN becoming
+  zero (ADR-0077). A cast is never undefined and never traps.
 
 ## Tuples
 
