@@ -274,7 +274,8 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       if (!elem.is_valid()) {
         const ir::TypeIdx base_type = storage_.registers()[base_reg].type;
         const ir::TypeTag tag = storage_.types()[base_type].tag;
-        if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
+        if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef ||
+            tag == ir::TypeTag::RawPtr || tag == ir::TypeTag::RawMutPtr) {
           elem = storage_.ref_types()[storage_.types()[base_type].as_ref()]
                      .pointee;
         } else if (!is_thin_pointer(tag)) {
@@ -298,7 +299,8 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       DCHECK(instr.dst.is_valid());
       const ir::TypeIdx dst_type = storage_.registers()[instr.dst].type;
       const ir::TypeTag tag = storage_.types()[dst_type].tag;
-      DCHECK(tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef);
+      DCHECK(tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef ||
+             tag == ir::TypeTag::RawPtr || tag == ir::TypeTag::RawMutPtr);
       const ir::TypeIdx elem =
           storage_.ref_types()[storage_.types()[dst_type].as_ref()].pointee;
       return emit_elem_offset(storage_.operands()[ops.head()],
