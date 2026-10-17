@@ -133,9 +133,10 @@ llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
       // `return_type` is what asks for that.
       return llvm::StructType::get(module_->getContext(), {});
     case T::Never:
-      // Uninhabited; only function return positions lower through
-      // here (noreturn externals), where LLVM expects void.
-      return builder_->getVoidTy();
+      // Uninhabited, but a field or an element still has to hold a
+      // type of the layout's size zero; a return position, the one
+      // place LLVM wants void, goes through `return_type`.
+      return llvm::StructType::get(module_->getContext(), {});
     case T::I1: return builder_->getInt1Ty();
     case T::I8:
     case T::U8: return builder_->getInt8Ty();
@@ -820,10 +821,12 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
       DCHECK(ops.size() <= 1);
       // An explicit `()` comes back as an operand of a type that holds
       // no bytes, and the function still returns void.
+      const ir::TypeTag returned =
+          ops.empty()
+              ? ir::TypeTag::Void
+              : storage_->types()[storage_->operands()[ops.head()].type].tag;
       const bool void_return =
-          ops.empty() ||
-          storage_->types()[storage_->operands()[ops.head()].type].tag ==
-              ir::TypeTag::Void;
+          returned == ir::TypeTag::Void || returned == ir::TypeTag::Never;
       if (void_return) {
         builder_->CreateRetVoid();
       } else {
