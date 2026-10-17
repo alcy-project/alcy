@@ -207,6 +207,8 @@
   F(AnalyzerNotCaptured, "Use of '{}' is not captured; add it to the capture list") \
   F(AnalyzerNotTupleVariant, "Not a tuple variant") \
   F(AnalyzerOrPatternBindsDifferentNames, "Or-pattern alternatives must bind the same names") \
+  F(AnalyzerOwnFunctionReturn, "The returned value does not carry the `fn(...)` signature of '{}'") \
+  F(AnalyzerOwnFunctionReturnMissing, "The body of '{}' never carries the `fn(...)` signature its return type declares") \
   F(AnalyzerOwnFunctionUnsupported, "Owning function types are not supported here yet") \
   F(AnalyzerOwnFunctionWitness, "Argument for owning function parameter '{}' does not match its `fn(...)` signature") \
   F(AnalyzerPathHeadNotSupported, "`{}` is not a path head; the package root is `package::`") \

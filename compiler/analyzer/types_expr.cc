@@ -1635,8 +1635,15 @@ ir::TypeIdx Checker::check_call(u32 module,
   // carries. Anything else of non-function type is not callable.
   if (resolved.kind == PathValue::Kind::Local ||
       resolved.kind == PathValue::Kind::Static) {
-    if (!is_error(resolved.type) &&
-        tag_of(resolved.type) == ir::TypeTag::Func) {
+    // An error callee propagates without a second report: the value's
+    // own check said why it is not a function.
+    if (is_error(resolved.type)) {
+      for (ast::ExprIdx arg : args) {
+        check_expr(module, arg, nullptr);
+      }
+      return error_type();
+    }
+    if (tag_of(resolved.type) == ir::TypeTag::Func) {
       const ir::FuncType& sig =
           builder.func_types()[builder.types()[resolved.type].as_func()];
       return check_indirect_call(module, expr, callee, sig, expected);
@@ -3541,22 +3548,22 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
         fn_ret = unify(fn_ret, builder.primitive(ir::TypeTag::Void), node.span,
                        "return");
       } else {
-        const ir::TypeIdx value = check_expr(
-            module, node.payload.get<ast::ExprReturn>().value, &fn_ret);
-        // The anchor sticks once named: a declared return type never
-        // drifts, while an error slot takes the first return it sees
-        // so later returns and the trailing value have something to
-        // meet. Only broken declarations start erroneous, where the
-        // bag already holds errors.
-        if (is_error(fn_ret)) {
-          fn_ret =
-              unify(fn_ret, value,
-                    ast.exprs[node.payload.get<ast::ExprReturn>().value].span,
-                    "return");
-        } else {
-          unify(fn_ret, value,
-                ast.exprs[node.payload.get<ast::ExprReturn>().value].span,
-                "return");
+        const ast::ExprIdx returned = node.payload.get<ast::ExprReturn>().value;
+        // A return-position `fn()` declaration has no argument to bind
+        // it: the value this `ret` names is the witness, and the
+        // signature takes it from here (ADR-0075). The anchor sticks
+        // once named: a declared return type never drifts, while an
+        // error slot takes the first return it sees so later returns
+        // and the trailing value have something to meet. Only broken
+        // declarations start erroneous, where the bag already holds
+        // errors.
+        if (!try_bind_own_fn_return(module, fn_ret, returned, node.span)) {
+          const ir::TypeIdx value = check_expr(module, returned, &fn_ret);
+          if (is_error(fn_ret)) {
+            fn_ret = unify(fn_ret, value, ast.exprs[returned].span, "return");
+          } else {
+            unify(fn_ret, value, ast.exprs[returned].span, "return");
+          }
         }
       }
       return builder.never_type();

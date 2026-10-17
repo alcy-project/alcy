@@ -2007,6 +2007,12 @@ ir::TypeIdx Checker::method_param_stand_in() {
                              ir::TypeIdxRange{});
 }
 
+ir::TypeIdx Checker::own_fn_return_stand_in() {
+  ir::TypeSeq fields;
+  return builder.struct_type(own_fn_return_stand_in_id, fields.finish(),
+                             ir::TypeIdxRange{});
+}
+
 // The spec a spec side names, through the same type grammar an impl's
 // spec side parses with. Registration reports what it needs; resolving
 // a method's own entry only wants the index.
@@ -5419,22 +5425,62 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
     // call's receiver rather than a listed argument, so its slot
     // binds nothing here; a value that stays unbound waits for a
     // spelling the method path does not have.
+    std::vector<usize> return_slots;
     std::vector<ir::TypeIdx> method_args;
-    if (type_args.empty()) {
+    {
+      // A turbofish spells only the parameters the declaration writes
+      // (ADR-0075): a synthetic `fn(...)` slot takes its witness from
+      // an argument or from the body, never from a spelling.
+      usize spelled_count = 0;
+      for (const ast::GenericParam& param : method_fn.generic) {
+        if (own_fn_bound(param.name.name) == nullptr) {
+          ++spelled_count;
+        }
+      }
+      if (type_args.size() != spelled_count && !type_args.empty()) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::ArityMismatch, span, name, spelled_count,
+            spelled_count == 1 ? "" : "s");
+        (void)index;
+        return nullptr;
+      }
       std::vector<ir::TypeIdx> inferred(method_fn.generic.size(),
                                         ir::TypeIdx(base::INVALID_IDX));
+      usize next_explicit = 0;
+      for (usize i = 0;
+           i < method_fn.generic.size() && next_explicit < type_args.size();
+           ++i) {
+        if (own_fn_bound(method_fn.generic[i].name.name) != nullptr) {
+          continue;
+        }
+        const ir::TypeIdx resolved =
+            resolve_type(entry.module, type_args[next_explicit++], &self);
+        if (is_error(resolved)) {
+          return nullptr;
+        }
+        inferred[i] = resolved;
+      }
       const std::span<const ast::ItemFnParam> declared =
           fn_params(entry.method_item);
       const usize pushed = type_params.size();
       for (const auto& binding : scope) {
         type_params.emplace_back(binding.first, binding.second);
       }
+      // A receiver is written `self` (grammar.md), and the call's list
+      // leaves it out, so the pairing starts after it. Reading the
+      // spelling avoids resolving the first parameter's type, which
+      // may name the very parameter being inferred.
       usize offset = 0;
-      if (!declared.empty()) {
-        const ir::TypeIdx first =
-            resolve_type(entry.module, declared[0].type, &self);
-        if (!is_error(first) && classify_receiver(first, self) !=
-                                    CheckedModule::ReceiverKind::None) {
+      if (!declared.empty() &&
+          (ast.patterns[declared[0].pattern].kind == ast::PatternKind::Ident ||
+           ast.patterns[declared[0].pattern].kind ==
+               ast::PatternKind::MutIdent)) {
+        const std::string_view first_name =
+            ast.patterns[declared[0].pattern].kind == ast::PatternKind::Ident
+                ? ast.patterns[declared[0].pattern].payload.ident.name.name
+                : ast.patterns[declared[0].pattern].payload.mut_ident.name.name;
+        if (first_name == "self") {
           offset = 1;
         }
       }
@@ -5490,6 +5536,25 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
       if (!inference_ok) {
         return nullptr;
       }
+      // A return-position spelling waits for the body's first `ret`,
+      // the way a free function's does (ADR-0075); a witness an
+      // earlier call recorded answers directly.
+      for (usize i = 0; i < inferred.size(); ++i) {
+        if (inferred[i].is_valid()) {
+          continue;
+        }
+        const OwnFnBound* own = own_fn_bound(method_fn.generic[i].name.name);
+        if (own == nullptr || !own->is_return) {
+          continue;
+        }
+        const ir::TypeIdx known = own_fn_return_witness(entry.method_item, i);
+        if (known.is_valid()) {
+          inferred[i] = known;
+          continue;
+        }
+        inferred[i] = own_fn_return_stand_in();
+        return_slots.push_back(i);
+      }
       bool complete = true;
       for (const ir::TypeIdx arg : inferred) {
         if (!arg.is_valid()) {
@@ -5505,23 +5570,6 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
         return nullptr;
       }
       method_args = std::move(inferred);
-    } else {
-      if (type_args.size() != method_fn.generic.size()) {
-        const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
-            diag::Severity::Error, diag::Stage::Analyzer,
-            DiagCode::ArityMismatch, span, name, method_fn.generic.size(),
-            method_fn.generic.size() == 1 ? "" : "s");
-        (void)index;
-        return nullptr;
-      }
-      method_args.reserve(type_args.size());
-      for (ast::TypeIdx arg : type_args) {
-        const ir::TypeIdx resolved = resolve_type(entry.module, arg, &self);
-        if (is_error(resolved)) {
-          return nullptr;
-        }
-        method_args.push_back(resolved);
-      }
     }
     // The method's own bounds have to hold for the arguments it was
     // spelled with, the way a free function's do (ADR-0028).
@@ -5534,6 +5582,14 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
     if (!check_declared_bounds(entry.module, method_fn.generic, method_bounds,
                                span)) {
       return nullptr;
+    }
+    // The body check that follows answers each fresh stand-in: the
+    // instantiation consumes the record and takes the witness for the
+    // return type, or reports that none came.
+    for (usize slot : return_slots) {
+      pending_own_fn_returns_.push_back(PendingOwnFnReturn{
+          entry.method_item, slot, method_args[slot],
+          own_fn_bound(method_fn.generic[slot].name.name), span});
     }
     return instantiate_method(entry.module, self, scope, value_scope, impl,
                               name, method_args);
@@ -5977,14 +6033,62 @@ const Checker::OwnFnBound* Checker::own_fn_bound(std::string_view name) const {
   return nullptr;
 }
 
+ir::TypeIdx Checker::own_fn_return_witness(ast::ItemIdx item,
+                                           usize slot) const {
+  for (const OwnFnReturnWitness& recorded : own_fn_return_witnesses_) {
+    if (recorded.item == item && recorded.slot == slot) {
+      return recorded.witness;
+    }
+  }
+  return ir::TypeIdx::invalid();
+}
+
+bool Checker::try_bind_own_fn_return(u32 module,
+                                     ir::TypeIdx& fn_ret,
+                                     ast::ExprIdx value,
+                                     diag::Span span) {
+  const PendingOwnFnReturn* found = nullptr;
+  // The innermost pending answers first: a nested instantiation appends
+  // while an outer body is mid-check, and each answers its own stand-in.
+  for (const PendingOwnFnReturn& pending : pending_own_fn_returns_) {
+    if (pending.stand_in.idx == fn_ret.idx) {
+      found = &pending;
+    }
+  }
+  if (found == nullptr) {
+    return false;
+  }
+  // The record is copied before the value is checked: a nested
+  // instantiation may append to the list while it runs.
+  const PendingOwnFnReturn pending = *found;
+  const ir::TypeIdx actual = check_expr(module, value, nullptr);
+  if (!is_error(actual) &&
+      check_own_fn_witness(module, actual, *pending.declared, span)) {
+    own_fn_return_witnesses_.push_back(
+        OwnFnReturnWitness{pending.item, pending.slot, actual});
+    fn_ret = actual;
+  } else {
+    // An answer that failed: later returns meet the error, and the
+    // instantiation reports nothing further.
+    own_fn_return_witnesses_.push_back(
+        OwnFnReturnWitness{pending.item, pending.slot, error_type()});
+    fn_ret = error_type();
+  }
+  return true;
+}
+
 bool Checker::check_own_fn_witness(u32 module,
                                    ir::TypeIdx witness,
                                    const OwnFnBound& declared,
                                    diag::Span span) {
   auto reject = [&]() {
-    const u32 index = bag.emit<i18n::Key::AnalyzerOwnFunctionWitness>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
-        span, declared.name);
+    const u32 index = declared.is_return
+                          ? bag.emit<i18n::Key::AnalyzerOwnFunctionReturn>(
+                                diag::Severity::Error, diag::Stage::Analyzer,
+                                DiagCode::TypeMismatch, span, declared.display)
+                          : bag.emit<i18n::Key::AnalyzerOwnFunctionWitness>(
+                                diag::Severity::Error, diag::Stage::Analyzer,
+                                DiagCode::TypeMismatch, span, declared.display);
     (void)index;
     return false;
   };
@@ -6039,6 +6143,24 @@ void Checker::desugar_own_fn_params(ast::ItemIdx item) {
   // mutable accessor, so a changed item is set back whole.
   ast::ItemFn fn = node.payload.get<ast::ItemFn>();
   std::vector<ast::GenericParam> added;
+  // One spelling: the type becomes a path to a fresh synthetic
+  // parameter, the item's generic list grows, and the signature is
+  // recorded for the witness check. `display` names the spelling in a
+  // diagnostic, empty when only the synthetic name can.
+  auto rewrite = [&](ast::TypeIdx spelling, ast::TypeFunc sig, bool is_return,
+                     std::string_view display) {
+    own_fn_names_.push_back("__fn" + std::to_string(next_own_fn_++));
+    const ast::Ident name{own_fn_names_.back(), ast.types[spelling].span};
+    const std::vector<ast::Ident> segments{name};
+    const ast::PathIdx path = ast.paths.push_back(ast::Path{
+        ast::copy_to_arena(ast.spans, segments), ast.types[spelling].span});
+    ast.types[spelling].kind = ast::TypeKind::Path;
+    ast.types[spelling].payload.set(ast::TypePath{.path = path, .args = {}});
+    added.push_back(ast::GenericParam{
+        .name = name, .type = ast::TypeIdx::invalid(), .bounds = {}});
+    own_fn_bounds_.push_back(OwnFnBound{name.name, sig, is_return,
+                                        display.empty() ? name.name : display});
+  };
   for (const ast::ItemFnParam& param : fn.params) {
     const ast::TypeIdx param_type = param.type;
     if (!param_type.is_valid() ||
@@ -6047,16 +6169,22 @@ void Checker::desugar_own_fn_params(ast::ItemIdx item) {
     }
     const ast::TypeFunc sig =
         ast.types[param_type].payload.get<ast::TypeFunc>();
-    own_fn_names_.push_back("__fn" + std::to_string(next_own_fn_++));
-    const ast::Ident name{own_fn_names_.back(), ast.types[param_type].span};
-    const std::vector<ast::Ident> segments{name};
-    const ast::PathIdx path = ast.paths.push_back(ast::Path{
-        ast::copy_to_arena(ast.spans, segments), ast.types[param_type].span});
-    ast.types[param_type].kind = ast::TypeKind::Path;
-    ast.types[param_type].payload.set(ast::TypePath{.path = path, .args = {}});
-    added.push_back(ast::GenericParam{
-        .name = name, .type = ast::TypeIdx::invalid(), .bounds = {}});
-    own_fn_bounds_.push_back(OwnFnBound{name.name, sig});
+    const ast::PatternKind kind = ast.patterns[param.pattern].kind;
+    std::string_view display{};
+    if (kind == ast::PatternKind::Ident) {
+      display = ast.patterns[param.pattern].payload.ident.name.name;
+    } else if (kind == ast::PatternKind::MutIdent) {
+      display = ast.patterns[param.pattern].payload.mut_ident.name.name;
+    }
+    rewrite(param_type, sig, false, display);
+  }
+  // A return-position spelling waits for the body to name its witness
+  // (ADR-0075), so the declaration is the check and the diagnostic
+  // shows the function it answers for.
+  const ast::TypeIdx ret = fn.return_type;
+  if (ret.is_valid() && ast.types[ret].kind == ast::TypeKind::OwnFunc) {
+    const ast::TypeFunc sig = ast.types[ret].payload.get<ast::TypeFunc>();
+    rewrite(ret, sig, true, fn.name.name);
   }
   if (added.empty()) {
     return;
@@ -6320,6 +6448,33 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
     in_fn = saved_in_fn;
     bind_comp_known = saved_bind;
   }
+  // A stand-in the body answered: the signature the caller reads
+  // carries the witness, and the instance's arguments follow it, so
+  // the next call with the same witness finds this body check instead
+  // of running another.
+  if (!pending_own_fn_returns_.empty() &&
+      pending_own_fn_returns_.back().item == item) {
+    const PendingOwnFnReturn pending = pending_own_fn_returns_.back();
+    pending_own_fn_returns_.pop_back();
+    const ir::TypeIdx witness = own_fn_return_witness(item, pending.slot);
+    if (witness.is_valid()) {
+      modules[module].functions[sig_index].ret = witness;
+      for (FnInstance& instance : fn_instances) {
+        if (instance.sig_index == sig_index &&
+            pending.slot < instance.args.size()) {
+          instance.args[pending.slot] = witness;
+        }
+      }
+    } else {
+      // No return named the signature: the error type keeps the
+      // callers from meeting the stand-in, and the report says why.
+      modules[module].functions[sig_index].ret = error_type();
+      const u32 index = bag.emit<i18n::Key::AnalyzerOwnFunctionReturnMissing>(
+          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::NotCompKnown,
+          pending.span, fn_name(item));
+      (void)index;
+    }
+  }
   type_params = kept_outer;
   value_params = kept_outer_values;
   return &modules[module].functions[sig_index];
@@ -6428,25 +6583,40 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
     const std::span<const ast::TypeIdx>& explicit_args,
     diag::Span span) {
   const std::span<const ast::GenericParam> params = fn_generic_params(item);
-  if (explicit_args.size() != params.size() && !explicit_args.empty()) {
+  // A synthetic parameter of an owning `fn(...)` spelling takes its
+  // witness from an argument or the body, so a turbofish spells only
+  // the parameters the declaration writes (ADR-0075).
+  usize spelled = 0;
+  for (const ast::GenericParam& param : params) {
+    if (own_fn_bound(param.name.name) == nullptr) {
+      ++spelled;
+    }
+  }
+  if (explicit_args.size() != spelled && !explicit_args.empty()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
         diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityMismatch,
-        span, fn_name(item), params.size(), params.size() == 1 ? "" : "s");
+        span, fn_name(item), spelled, spelled == 1 ? "" : "s");
     (void)index;
     return nullptr;
   }
   std::vector<ir::TypeIdx> bound(params.size(), ir::TypeIdx(base::INVALID_IDX));
-  for (usize i = 0; i < explicit_args.size(); ++i) {
+  usize next_explicit = 0;
+  for (usize i = 0; i < params.size() && next_explicit < explicit_args.size();
+       ++i) {
+    if (own_fn_bound(params[i].name.name) != nullptr) {
+      continue;
+    }
+    const ast::TypeIdx explicit_arg = explicit_args[next_explicit++];
     if (is_value_param(ast, params[i])) {
       u64 value = 0;
-      if (!resolve_value_argument(module, explicit_args[i], params[i].name.name,
+      if (!resolve_value_argument(module, explicit_arg, params[i].name.name,
                                   span, value)) {
         return nullptr;
       }
       bound[i] = builder.const_type(value);
       continue;
     }
-    bound[i] = resolve_type(module, explicit_args[i], nullptr);
+    bound[i] = resolve_type(module, explicit_arg, nullptr);
   }
   for (usize i = 0; i < fn_params(item).size() && i < args.size(); ++i) {
     const DeclaredBinding declared =
@@ -6502,6 +6672,27 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
       return nullptr;
     }
   }
+  // A return-position `fn()` spelling pins nothing on its own: the
+  // body's first `ret` names its witness, so the signature resolves
+  // with a stand-in and the body's answer replaces it after the check
+  // (ADR-0075). A witness an earlier call recorded answers directly.
+  std::vector<usize> return_slots;
+  for (usize i = 0; i < params.size() && i < bound.size(); ++i) {
+    if (bound[i].is_valid()) {
+      continue;
+    }
+    const OwnFnBound* declared = own_fn_bound(params[i].name.name);
+    if (declared == nullptr || !declared->is_return) {
+      continue;
+    }
+    const ir::TypeIdx known = own_fn_return_witness(item, i);
+    if (known.is_valid()) {
+      bound[i] = known;
+      continue;
+    }
+    bound[i] = own_fn_return_stand_in();
+    return_slots.push_back(i);
+  }
   // A value slot never infers, so an unfilled one is named first: the
   // type message below would suggest spelling only a type argument.
   for (usize i = 0; i < bound.size(); ++i) {
@@ -6533,6 +6724,13 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   }
   if (!check_declared_bounds(module, params, bounds, span)) {
     return nullptr;
+  }
+  // The body check that follows answers each fresh stand-in: the
+  // instantiation consumes these records and replaces the signature's
+  // return type with the witness, or reports that none came.
+  for (usize slot : return_slots) {
+    pending_own_fn_returns_.push_back(PendingOwnFnReturn{
+        item, slot, bound[slot], own_fn_bound(params[slot].name.name), span});
   }
   return instantiate_fn(module, item, bound);
 }
@@ -6604,6 +6802,8 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     add_function(impl_module, {method_node.payload.get<ast::ItemFn>().name.name,
                                params, ret, method_item})
         .is_method = true;
+    const u32 method_sig_index =
+        static_cast<u32>(modules[impl_module].functions.size()) - 1;
     // A method of a spec impl keeps its spec on the entry, the way a
     // concrete registration does: the body check and the call tables
     // read it.
@@ -6658,6 +6858,30 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     loop_depth = saved_loop;
     in_fn = saved_in_fn;
     bind_comp_known = saved_bind;
+    // A stand-in the body answered: the method's signature carries the
+    // witness, and the entry's arguments follow it, so the next call
+    // with the same witness finds this body check.
+    if (!pending_own_fn_returns_.empty() &&
+        pending_own_fn_returns_.back().item == method_item) {
+      const PendingOwnFnReturn pending = pending_own_fn_returns_.back();
+      pending_own_fn_returns_.pop_back();
+      const ir::TypeIdx witness =
+          own_fn_return_witness(method_item, pending.slot);
+      if (witness.is_valid()) {
+        entry->ret = witness;
+        modules[impl_module].functions[method_sig_index].ret = witness;
+        if (pending.slot < entry->method_args.size()) {
+          entry->method_args[pending.slot] = witness;
+        }
+      } else {
+        entry->ret = error_type();
+        modules[impl_module].functions[method_sig_index].ret = error_type();
+        const u32 index = bag.emit<i18n::Key::AnalyzerOwnFunctionReturnMissing>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::NotCompKnown, pending.span, name);
+        (void)index;
+      }
+    }
     type_params = std::move(outer_scope);
     value_params = std::move(outer_values);
     return entry;
@@ -7510,7 +7734,13 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
     // `ret` inside unifies against `fn_ret` on its own either way.
     const ir::TypeIdx type =
         check_block(module, body, is_void(fn_ret) ? &fn_ret : nullptr);
-    if (!is_void(fn_ret) && !is_error(fn_ret) && !is_never(type) &&
+    // A return-position `fn()` signature still waiting for the body's
+    // answer reports through its own diagnostic, not through this one
+    // (the anchor is a stand-in nobody can name).
+    const bool awaited =
+        !pending_own_fn_returns_.empty() &&
+        pending_own_fn_returns_.back().stand_in.idx == fn_ret.idx;
+    if (!is_void(fn_ret) && !awaited && !is_error(fn_ret) && !is_never(type) &&
         !is_error(type)) {
       const diag::Span span = ast.blocks[body].value.is_valid()
                                   ? ast.exprs[ast.blocks[body].value].span
@@ -7753,6 +7983,10 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   }
   checker.method_param_name_id = checker.intern_name("MethodParam");
   if (checker.method_param_name_id == str::INVALID_STRING_POOL_ID) {
+    return base::make_err(diag::Reported{});
+  }
+  checker.own_fn_return_stand_in_id = checker.intern_name("OwnFnReturn");
+  if (checker.own_fn_return_stand_in_id == str::INVALID_STRING_POOL_ID) {
     return base::make_err(diag::Reported{});
   }
   // The type passes run module by module: nominals, then imports and

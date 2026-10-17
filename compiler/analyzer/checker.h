@@ -236,6 +236,8 @@ class Checker {
   str::StringPoolId closure_name_id = str::INVALID_STRING_POOL_ID;
   // Interned name every method type parameter's stand-in carries.
   str::StringPoolId method_param_name_id = str::INVALID_STRING_POOL_ID;
+  // Interned name the stand-in of a return-position `fn()` carries.
+  str::StringPoolId own_fn_return_stand_in_id = str::INVALID_STRING_POOL_ID;
   // Set once the shared table has no room for another name; the sweep
   // that saw it stops, and `check_package` refuses the package.
   bool name_table_exhausted_ = false;
@@ -499,26 +501,59 @@ class Checker {
   u32 inst_index(ir::TypeIdx type) const;
   // Declared type parameters of a function or method item.
   std::span<const ast::GenericParam> fn_generic_params(ast::ItemIdx item) const;
-  // Owning function types in parameter position (ADR-0075): the
-  // spelling desugars to a synthetic generic parameter whose witness is
-  // the argument, and the recorded signature is the check the witness
-  // must pass. Storage keeps spans and names stable for the run.
+  // Owning function types in parameter and return position (ADR-0075):
+  // the spelling desugars to a synthetic generic parameter whose
+  // witness is the argument, or the body's first `ret`, and the
+  // recorded signature is the check the witness must pass. Storage
+  // keeps spans and names stable for the run.
   struct OwnFnBound {
     std::string_view name;
     ast::TypeFunc sig;
+    // A return-position spelling infers its witness from the body
+    // rather than from an argument.
+    bool is_return = false;
+    // The name a diagnostic shows: the declared parameter, or the
+    // declaring function for a return position.
+    std::string_view display;
+  };
+  // The witness a return-position spelling took from the body. An
+  // error type is an answer that failed the check; an invalid index
+  // means the body has not answered yet.
+  struct OwnFnReturnWitness {
+    ast::ItemIdx item;
+    usize slot;
+    ir::TypeIdx witness;
+  };
+  // One return-position slot a body check is answering: the stand-in
+  // the signature was built with, and the declaration it must satisfy.
+  struct PendingOwnFnReturn {
+    ast::ItemIdx item;
+    usize slot;
+    ir::TypeIdx stand_in;
+    const OwnFnBound* declared;
+    diag::Span span;
   };
   std::deque<std::vector<ast::GenericParam>> own_fn_params_;
   std::deque<std::string> own_fn_names_;
   std::vector<OwnFnBound> own_fn_bounds_;
+  std::vector<OwnFnReturnWitness> own_fn_return_witnesses_;
+  std::vector<PendingOwnFnReturn> pending_own_fn_returns_;
   u32 next_own_fn_ = 0;
-  // Rewrites each `fn(...)` parameter spelling of `item` in place: the
-  // type becomes a path to a fresh synthetic parameter, the item's
-  // parameter list grows, and the signature is recorded. A spelling
-  // anywhere else stays for the checker to refuse.
+  // Rewrites each `fn(...)` spelling of `item` in place: the type
+  // becomes a path to a fresh synthetic parameter, the item's parameter
+  // list grows, and the signature is recorded. A spelling anywhere else
+  // stays for the checker to refuse.
   void desugar_own_fn_params(ast::ItemIdx item);
   // The recorded owning-function signature for a parameter name, or
   // null when the parameter is not one.
   const OwnFnBound* own_fn_bound(std::string_view name) const;
+  // The witness recorded for a return-position slot, or an invalid type
+  // while the body has not answered.
+  ir::TypeIdx own_fn_return_witness(ast::ItemIdx item, usize slot) const;
+  // The stand-in a return-position signature resolves with until the
+  // body names its witness: one nominal, like the method-parameter
+  // stand-in, because a pending record carries which slot it answers.
+  ir::TypeIdx own_fn_return_stand_in();
   // Whether `witness` carries `declared`'s signature: a closure's own
   // function type, or a function type, compared element by element.
   // Reports and answers false on a mismatch.
@@ -526,6 +561,13 @@ class Checker {
                             ir::TypeIdx witness,
                             const OwnFnBound& declared,
                             diag::Span span);
+  // Answers a pending return-position signature from one `ret`: true
+  // when the return is the answer to spell it with, so the caller
+  // skips its own unification.
+  bool try_bind_own_fn_return(u32 module,
+                              ir::TypeIdx& fn_ret,
+                              ast::ExprIdx value,
+                              diag::Span span);
   // Item name for diagnostics.
   std::string_view fn_name(ast::ItemIdx item) const;
   // Whether calling the function or intrinsic item is an operation

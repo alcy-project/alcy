@@ -193,13 +193,17 @@ replaced. The foundations are in `roadmap.md`.
   `too-many-locals` provokes the local-cap report through release
   register counts, so it wants rechecking when regalloc-adjacent work
   lands.
-- [ ] Owning function types (ADR-0075) beyond the parameter slice: a
-  method's `fn(...)` parameter still refuses, because the method path
-  spells type arguments and infers none from arguments; the return
-  position (`fn make() -> fn(i32) -> i32`) wants the synthetic
-  parameter fixed from the body's return shape; `fn()`-typed bindings
-  are not yet move-only (reassignment must be refused); and named
-  storage (`struct H { f: fn(...) }`) needs generics threaded by
+- [ ] Owning function types (ADR-0075) beyond parameters and returns:
+  a method's `fn(...)` parameter infers from its arguments, a turbofish
+  spells only the parameters a declaration writes, and the return
+  position takes its witness from the body's first `ret` - free
+  functions and methods alike (`ok-own-fn-return`,
+  `exe-own-fn-return`, `err-own-fn-return-mismatch`,
+  `err-own-fn-return-missing`, `ok-own-fn-turbofish`). What remains: a
+  spelling nested inside another type (`-> Option<fn(i32) -> i32>`, a
+  struct field) still refuses (`err-own-func-type`); `fn()`-typed
+  bindings are not yet move-only (reassignment must be refused); and
+  named storage (`struct H { f: fn(...) }`) needs generics threaded by
   hand.
 - [x] Two-phase borrows: a call's exclusive receiver is a reservation
   taken before the arguments evaluate, and the call itself activates
