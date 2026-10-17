@@ -73,6 +73,19 @@ replaced. The foundations are in `roadmap.md`.
   `exe-discard-end` confirm. The `fmt` expansion still calls its
   collected tuple's glue directly, because the tuple is a scratch slot
   rather than a binding the pass could schedule.
+- [ ] A destructible local whose end site sits across a loop keeps its
+  heap: the ownership dataflow seeds every block with `Moved`, so a
+  loop's back edge joins `Maybe` at its header and every later site
+  reads maybe - and the guarded drop never runs, because the guard's
+  block and the flag it tests do not reach the emitted function (the
+  dataflow reports the flag valid and the glue resolved while the
+  module carries no `i1` alloca and no drop call). `s := format("ab{}",
+  0)` followed by `g := [s] (x: i32) -> x + s.len() as i32` leaks the
+  buffer, and the same witness through a free function's `fn()`
+  parameter leaks too (`apply([s] ...)`); `exe-method-infer`'s witness
+  holds only Copy values because of it. The seeding is the suspected
+  cause - a bottom state the join can skip is the direction - and the
+  guard's emission needs tracing to where the block is lost.
 - [x] Manifest lint: a pre-1.0 version range warns (WH007), since a
   minor may break under 1.0. The rule reads the parsed requirement -
   one `Equal` bound is a pin and stays silent - so `0.5.x`,
