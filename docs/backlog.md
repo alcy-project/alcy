@@ -5,6 +5,17 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [ ] An unreachable match arm is not reported: two arms with the same
+  literal pattern keep the first and the later one can never run, while
+  the compiler does warn about a statement after `ret` (WD003). The
+  complete check is pattern overlap - ranges, or-patterns, enum shapes -
+  and wants a decision on whether the duplicate is a warning or an
+  error; a guarded arm must not count as covering a later unguarded one.
+- [ ] A UTF-8 byte order mark at the start of a source is an `Invalid
+  character` at 1:1: the lexer has no rule for the sequence, so an
+  editor that saves one makes the whole file unreadable. Other compilers
+  skip it; the spec says nothing, so this wants a decision before the
+  lexer learns the three bytes.
 - [x] A struct kept two fields under one name and an enum two variants
   under one: nothing at the declaration checked, so a struct literal was
   asked for both fields and an access reached the first, while a second
