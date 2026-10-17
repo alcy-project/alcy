@@ -5,6 +5,12 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [x] A struct kept two fields under one name and an enum two variants
+  under one: nothing at the declaration checked, so a struct literal was
+  asked for both fields and an access reached the first, while a second
+  variant resolved to whichever entry a lookup reached. The declaration
+  site reports the duplicate now, before the generic forms intern per
+  use, and `err-duplicate-field` and `err-duplicate-variant` hold both.
 - [x] A \u{...} escape whose value is not a Unicode scalar compiled and
   then vanished: the lexer validated the escape's shape only, so
   \u{110000}, a surrogate like \u{D800}, and a digit run past the width
