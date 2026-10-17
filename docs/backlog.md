@@ -5,6 +5,19 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [x] A constant comparison folded at the destination's type in the
+  release passes: a comparison's destination is a bool, so `-1i8 < 0i8`
+  ranked the raw words unsigned and folded to false - an all-constant
+  branch in a release build took the wrong arm at every signed width,
+  while the debug build, which does not fold, was right. The fold ranks
+  the operands' type now, and `exe-fold-compare` holds the pairs.
+- [x] A function whose registers pass the wasm local cap produced a
+  module no engine parses: the emitter spends one local per register and
+  the engines refuse more than 50000, which a function the release
+  passes inline a great deal into can reach. The backend reports the
+  construct now (ADR-0049), `tools/check_wasm.py` gained an `error`
+  field for a case that expects a rejection, and `too-many-locals` uses
+  it.
 - [x] A frame that reached the direct-wasm stack reserve's end wrote
   itself over the heap: the shadow stack and the bump allocator grow up
   from addresses one reserve apart, so a deep enough recursion replaced
