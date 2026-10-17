@@ -1,0 +1,3 @@
+# MIN / -1 wraps, so the checked build's abort is out of the way.
+args = ["--release"]
+exit = 0
