@@ -982,8 +982,12 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
       // through the same width as an unsigned type before widening.
       const ir::ImmutableIdx zero =
           builder.immutable({.type = elem_ty, .data = {.i64_value = 0}});
+      // The magnitude comes from a wrapping subtraction: the checked
+      // form aborts on the type's minimum, whose magnitude the signed
+      // range cannot hold, and the reinterpretation below reads the
+      // wrapped bits as the unsigned magnitude it is.
       const ir::RegisterIdx magnitude =
-          emit(ir::Opcode::IntSub, elem_ty,
+          emit(ir::Opcode::IntSubWrap, elem_ty,
                {to_operand(zero, elem_ty), to_operand(loaded, elem_ty)});
       const ir::TypeIdx same_width =
           builder.primitive(ir::unsigned_integer_type(tag_of(elem_ty)));
