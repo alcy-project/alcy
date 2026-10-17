@@ -161,6 +161,14 @@ replaced. The foundations are in `roadmap.md`.
 
 ### Language and library surface
 
+- [ ] The formatter's fixed-point digits are exact only to about
+  sixteen places: `{:.Nf}` takes each digit by multiplying the fraction
+  by ten in `f64`, so the error compounds and the seventeenth place is
+  wrong (`{:.17f}` of `0.1` prints `0.10000000000000000` where half-up
+  rounding of the exact value is `0.10000000000000001`; `1/3` prints
+  `0.33333333333333330` against `0.33333333333333331`). An exact
+  conversion over the mantissa, a scaled long division, is the fix; the
+  spec's cap of 17 places stands.
 - [ ] The direct-wasm stack budget: a frame past the reserve (the
   shadow stack's base) panics with "stack overflow", which is a
   per-target limit native does not share and no spec states; a
