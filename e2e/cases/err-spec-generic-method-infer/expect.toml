@@ -1,2 +1,3 @@
 exit = 4
-contains = ["Cannot infer the type arguments of method 'pick'"]
+contains = ["Cannot infer the type arguments of method 'make'"]
+not_contains = []

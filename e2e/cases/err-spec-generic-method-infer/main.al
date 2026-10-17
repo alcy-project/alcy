@@ -1,18 +1,18 @@
-// A method that declares its own type parameters is instantiated by
-// the call's explicit arguments; nothing binds them otherwise.
-spec Pick {
-  fn pick<T>(self: &Self, x: T) -> T;
+// A method type parameter no argument pins has nothing to infer from:
+// the call has to spell it.
+spec Make {
+  fn make<T>(self: &Self) -> T;
 }
 
 struct W { base: i32 }
 
-impl Pick for W {
-  fn pick<U>(self: &Self, x: U) -> U {
-    ret x
+impl Make for W {
+  fn make<U>(self: &Self) -> U {
+    ret self.base
   }
 }
 
 fn main() -> i32 {
   w := W { base: 7 }
-  ret w.pick(5)
+  ret w.make()
 }

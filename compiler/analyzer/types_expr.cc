@@ -1725,8 +1725,9 @@ ir::TypeIdx Checker::check_method_call(u32 module,
       nominal, name, module, node.span, spec_only, U32_MAX, method_type_args);
   if (method == nullptr && !spec_only) {
     bound_failure_ = false;
-    method = instantiate_generic_method(module, nominal, name, method_type_args,
-                                        span);
+    method = instantiate_generic_method(
+        module, nominal, name, method_type_args,
+        node.payload.get<ast::ExprMethodCall>().args, span);
   }
   // A method whose declaration is `unsafe` needs the gate at its call
   // site, the way a free function does (ADR-0050).

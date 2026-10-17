@@ -3500,6 +3500,13 @@ void Checker::process_module(u32 module) {
         break;
       }
       case ast::ItemKind::Impl: {
+        // An owning `fn(...)` parameter desugars before any method of
+        // the block registers (ADR-0075); the method path infers the
+        // witness from the call's arguments like a free function's.
+        for (ast::ItemIdx method_item :
+             node.payload.get<ast::ItemImpl>().methods) {
+          desugar_own_fn_params(method_item);
+        }
         if (node.payload.get<ast::ItemImpl>().spec.is_valid()) {
           register_spec_impl(module, item);
           break;
@@ -5318,6 +5325,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
     ir::TypeIdx self,
     std::string_view name,
     std::span<const ast::TypeIdx> type_args,
+    std::span<const ast::ExprIdx> args,
     diag::Span span) {
   u32 target_nominal = 0;
   std::vector<ir::TypeIdx> target_args;
@@ -5405,30 +5413,115 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
     if (!shape_ok) {
       continue;
     }
-    if (type_args.empty()) {
-      const u32 index =
-          bag.emit<i18n::Key::AnalyzerCannotInferMethodTypeArguments>(
-              diag::Severity::Error, diag::Stage::Analyzer,
-              DiagCode::NotCompKnown, span, name, name);
-      (void)index;
-      return nullptr;
-    }
-    if (type_args.size() != method_fn.generic.size()) {
-      const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityMismatch,
-          span, name, method_fn.generic.size(),
-          method_fn.generic.size() == 1 ? "" : "s");
-      (void)index;
-      return nullptr;
-    }
+    // A method's own parameters infer from the call's arguments the
+    // way a free function's do: the declaration pins what it can and
+    // the closure signature fills a return slot. The receiver is the
+    // call's receiver rather than a listed argument, so its slot
+    // binds nothing here; a value that stays unbound waits for a
+    // spelling the method path does not have.
     std::vector<ir::TypeIdx> method_args;
-    method_args.reserve(type_args.size());
-    for (ast::TypeIdx arg : type_args) {
-      const ir::TypeIdx resolved = resolve_type(entry.module, arg, &self);
-      if (is_error(resolved)) {
+    if (type_args.empty()) {
+      std::vector<ir::TypeIdx> inferred(method_fn.generic.size(),
+                                        ir::TypeIdx(base::INVALID_IDX));
+      const std::span<const ast::ItemFnParam> declared =
+          fn_params(entry.method_item);
+      const usize pushed = type_params.size();
+      for (const auto& binding : scope) {
+        type_params.emplace_back(binding.first, binding.second);
+      }
+      usize offset = 0;
+      if (!declared.empty()) {
+        const ir::TypeIdx first =
+            resolve_type(entry.module, declared[0].type, &self);
+        if (!is_error(first) && classify_receiver(first, self) !=
+                                    CheckedModule::ReceiverKind::None) {
+          offset = 1;
+        }
+      }
+      bool inference_ok = true;
+      for (usize i = 0; i + offset < declared.size() && i < args.size(); ++i) {
+        const DeclaredBinding slot_decl = declared_binding(
+            method_fn.generic, ast.types[declared[i + offset].type]);
+        if (slot_decl.slot >= method_fn.generic.size() ||
+            is_value_param(ast, method_fn.generic[slot_decl.slot]) ||
+            inferred[slot_decl.slot].is_valid()) {
+          continue;
+        }
+        if (!bind_argument_slot(module, slot_decl, args[i], name, inferred,
+                                span)) {
+          inference_ok = false;
+          break;
+        }
+      }
+      for (usize i = 0;
+           inference_ok && i + offset < declared.size() && i < args.size();
+           ++i) {
+        if (!bind_fn_slots(module, method_fn.generic, declared[i + offset].type,
+                           args[i], inferred, span)) {
+          inference_ok = false;
+          break;
+        }
+      }
+      if (inference_ok &&
+          !infer_bound_arguments(entry.module, method_fn.generic, inferred,
+                                 span)) {
+        inference_ok = false;
+      }
+      // An owning function parameter's witness carries the signature
+      // the spelling declared, checked under the impl scope and the
+      // bindings so far (ADR-0075).
+      for (usize i = 0; inference_ok && i < inferred.size(); ++i) {
+        if (inferred[i].is_valid()) {
+          type_params.emplace_back(method_fn.generic[i].name.name, inferred[i]);
+        }
+      }
+      for (usize i = 0; inference_ok && i < inferred.size(); ++i) {
+        const OwnFnBound* own = own_fn_bound(method_fn.generic[i].name.name);
+        if (own == nullptr || !inferred[i].is_valid()) {
+          continue;
+        }
+        if (!check_own_fn_witness(entry.module, inferred[i], *own, span)) {
+          inference_ok = false;
+        }
+      }
+      while (type_params.size() > pushed) {
+        type_params.pop_back();
+      }
+      if (!inference_ok) {
         return nullptr;
       }
-      method_args.push_back(resolved);
+      bool complete = true;
+      for (const ir::TypeIdx arg : inferred) {
+        if (!arg.is_valid()) {
+          complete = false;
+        }
+      }
+      if (!complete) {
+        const u32 index =
+            bag.emit<i18n::Key::AnalyzerCannotInferMethodTypeArguments>(
+                diag::Severity::Error, diag::Stage::Analyzer,
+                DiagCode::NotCompKnown, span, name, name);
+        (void)index;
+        return nullptr;
+      }
+      method_args = std::move(inferred);
+    } else {
+      if (type_args.size() != method_fn.generic.size()) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::ArityMismatch, span, name, method_fn.generic.size(),
+            method_fn.generic.size() == 1 ? "" : "s");
+        (void)index;
+        return nullptr;
+      }
+      method_args.reserve(type_args.size());
+      for (ast::TypeIdx arg : type_args) {
+        const ir::TypeIdx resolved = resolve_type(entry.module, arg, &self);
+        if (is_error(resolved)) {
+          return nullptr;
+        }
+        method_args.push_back(resolved);
+      }
     }
     // The method's own bounds have to hold for the arguments it was
     // spelled with, the way a free function's do (ADR-0028).
@@ -5527,6 +5620,12 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
       const CheckedModule::MethodInfo& method =
           modules[owner].methods[position];
       if (method.spec != NO_SPEC) {
+        continue;
+      }
+      // An entry keyed by spelled arguments is one call's
+      // instantiation, not the impl's registration: a second call
+      // with other arguments re-instantiates.
+      if (!method.method_args.empty()) {
         continue;
       }
       if (method.name == name) {
@@ -6109,11 +6208,29 @@ bool Checker::bind_fn_slots(u32 module,
   if (is_error(actual)) {
     return false;
   }
+  // A closure literal's own type is its nominal, whose signature is the
+  // function type the literal recorded (ADR-0064); a function type
+  // carries its own. Either way the return slot reads the signature.
+  ir::TypeIdx sig = actual;
   if (tag_of(actual) != ir::TypeTag::Func) {
+    sig = ir::TypeIdx::invalid();
+    for (const CheckedModule& entry : modules) {
+      for (const CheckedModule::ClosureLit& lit : entry.closures) {
+        if (lit.self_type.idx == actual.idx) {
+          sig = lit.func_type;
+          break;
+        }
+      }
+      if (sig.is_valid()) {
+        break;
+      }
+    }
+  }
+  if (!sig.is_valid() || tag_of(sig) != ir::TypeTag::Func) {
     return true;
   }
   const ir::FuncType& actual_shape =
-      builder.func_types()[builder.types()[actual.idx].as_func()];
+      builder.func_types()[builder.types()[sig.idx].as_func()];
   bound[slot] = type_origin(actual_shape.ret);
   (void)span;
   return true;
@@ -6211,6 +6328,99 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
 // Binds a generic function or intrinsic's type parameters, then
 // instantiates. Explicit turbofish arguments win; otherwise a parameter
 // a declared parameter type pins on its own binds from that argument.
+// Binds one declared parameter's slot from one argument, following the
+// shape the declaration wrote: the argument inference a free function
+// and a method share. `callee` names the callee in a diagnostic, and a
+// slot the argument does not pin stays empty so the caller's
+// cannot-infer answer stands.
+bool Checker::bind_argument_slot(u32 module,
+                                 const DeclaredBinding& declared,
+                                 ast::ExprIdx arg,
+                                 std::string_view callee,
+                                 std::vector<ir::TypeIdx>& bound,
+                                 diag::Span span) {
+  const ir::TypeIdx actual = check_expr(module, arg, nullptr);
+  if (is_error(actual)) {
+    return false;
+  }
+  if (!declared.through_ref && !declared.through_raw) {
+    // A field's type is a storage copy; the parameter binds the
+    // declared type behind it rather than the copy. A slot inside a
+    // generic instance reads out of that instance's own arguments;
+    // when the argument names no instance the slot stays empty and
+    // the check below names the turbofish the call needs.
+    if (!declared.arg_at.empty()) {
+      const ir::TypeIdx at = arg_at_path(type_origin(actual), declared.arg_at);
+      if (at.is_valid()) {
+        bound[declared.slot] = type_origin(at);
+      }
+      return true;
+    }
+    bound[declared.slot] = type_origin(actual);
+    return true;
+  }
+  const ir::TypeTag tag = builder.types()[actual.idx].tag;
+  const bool pointer_ok = declared.through_raw ? ir::is_raw_ptr_type(tag)
+                                               : (tag == ir::TypeTag::Ref ||
+                                                  tag == ir::TypeTag::MutRef);
+  if (!pointer_ok) {
+    const u32 index =
+        declared.through_raw
+            ? bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsPointer>(
+                  diag::Severity::Error, diag::Stage::Analyzer,
+                  DiagCode::InvalidOperation, span, callee)
+            : bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsReference>(
+                  diag::Severity::Error, diag::Stage::Analyzer,
+                  DiagCode::InvalidOperation, span, callee);
+    (void)index;
+    return false;
+  }
+  ir::TypeIdx bound_type =
+      builder.ref_types()[builder.types()[actual.idx].as_ref()].pointee;
+  if (declared.through_uninit) {
+    bound_type = uninit_payload(bound_type);
+    if (!bound_type.is_valid()) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsUninit>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidOperation, span, callee);
+      (void)index;
+      return false;
+    }
+  }
+  if (declared.through_slice) {
+    const ir::TypeTag bound_tag = builder.types()[bound_type.idx].tag;
+    if (bound_tag == ir::TypeTag::Array) {
+      bound_type =
+          builder.array_types()[builder.types()[bound_type.idx].as_array()]
+              .element;
+    } else if (bound_tag == ir::TypeTag::Slice) {
+      bound_type =
+          builder.slice_types()[builder.types()[bound_type.idx].as_slice()]
+              .element;
+    } else {
+      const u32 index = bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsSequence>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::InvalidOperation, span, callee);
+      (void)index;
+      return false;
+    }
+  }
+  // A slot inside a generic instance reads out of that instance's
+  // own arguments, so `&Vec<T>` binds from `&Vec<i32>`; when the
+  // argument names no instance the slot stays empty and the check
+  // below names the turbofish the call needs.
+  if (!declared.arg_at.empty()) {
+    bound_type = arg_at_path(bound_type, declared.arg_at);
+    if (!bound_type.is_valid()) {
+      return true;
+    }
+  }
+  // A wrapper's payload and a slice's element are storage copies;
+  // the parameter binds the declared type behind them.
+  bound[declared.slot] = type_origin(bound_type);
+  return true;
+}
+
 const CheckedModule::FnSig* Checker::resolve_generic_fn(
     u32 module,
     ast::ItemIdx item,
@@ -6248,87 +6458,10 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
         bound[declared.slot].is_valid()) {
       continue;
     }
-    const ir::TypeIdx actual = check_expr(module, args[i], nullptr);
-    if (is_error(actual)) {
+    if (!bind_argument_slot(module, declared, args[i], fn_name(item), bound,
+                            span)) {
       return nullptr;
     }
-    if (!declared.through_ref && !declared.through_raw) {
-      // A field's type is a storage copy; the parameter binds the
-      // declared type behind it rather than the copy. A slot inside a
-      // generic instance reads out of that instance's own arguments;
-      // when the argument names no instance the slot stays empty and
-      // the check below names the turbofish the call needs.
-      if (!declared.arg_at.empty()) {
-        const ir::TypeIdx at =
-            arg_at_path(type_origin(actual), declared.arg_at);
-        if (at.is_valid()) {
-          bound[declared.slot] = type_origin(at);
-        }
-        continue;
-      }
-      bound[declared.slot] = type_origin(actual);
-      continue;
-    }
-    const ir::TypeTag tag = builder.types()[actual.idx].tag;
-    const bool pointer_ok = declared.through_raw ? ir::is_raw_ptr_type(tag)
-                                                 : (tag == ir::TypeTag::Ref ||
-                                                    tag == ir::TypeTag::MutRef);
-    if (!pointer_ok) {
-      const u32 index =
-          declared.through_raw
-              ? bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsPointer>(
-                    diag::Severity::Error, diag::Stage::Analyzer,
-                    DiagCode::InvalidOperation, span, fn_name(item))
-              : bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsReference>(
-                    diag::Severity::Error, diag::Stage::Analyzer,
-                    DiagCode::InvalidOperation, span, fn_name(item));
-      (void)index;
-      return nullptr;
-    }
-    ir::TypeIdx bound_type =
-        builder.ref_types()[builder.types()[actual.idx].as_ref()].pointee;
-    if (declared.through_uninit) {
-      bound_type = uninit_payload(bound_type);
-      if (!bound_type.is_valid()) {
-        const u32 index = bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsUninit>(
-            diag::Severity::Error, diag::Stage::Analyzer,
-            DiagCode::InvalidOperation, span, fn_name(item));
-        (void)index;
-        return nullptr;
-      }
-    }
-    if (declared.through_slice) {
-      const ir::TypeTag bound_tag = builder.types()[bound_type.idx].tag;
-      if (bound_tag == ir::TypeTag::Array) {
-        bound_type =
-            builder.array_types()[builder.types()[bound_type.idx].as_array()]
-                .element;
-      } else if (bound_tag == ir::TypeTag::Slice) {
-        bound_type =
-            builder.slice_types()[builder.types()[bound_type.idx].as_slice()]
-                .element;
-      } else {
-        const u32 index =
-            bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsSequence>(
-                diag::Severity::Error, diag::Stage::Analyzer,
-                DiagCode::InvalidOperation, span, fn_name(item));
-        (void)index;
-        return nullptr;
-      }
-    }
-    // A slot inside a generic instance reads out of that instance's
-    // own arguments, so `&Vec<T>` binds from `&Vec<i32>`; when the
-    // argument names no instance the slot stays empty and the check
-    // below names the turbofish the call needs.
-    if (!declared.arg_at.empty()) {
-      bound_type = arg_at_path(bound_type, declared.arg_at);
-      if (!bound_type.is_valid()) {
-        continue;
-      }
-    }
-    // A wrapper's payload and a slice's element are storage copies;
-    // the parameter binds the declared type behind them.
-    bound[declared.slot] = type_origin(bound_type);
   }
   for (usize i = 0; i < fn_params(item).size() && i < args.size(); ++i) {
     if (!bind_fn_slots(module, params, fn_params(item)[i].type, args[i], bound,
@@ -7064,9 +7197,12 @@ bool Checker::resolve_value_path(u32 module,
       }
       if (member_args) {
         // `Name::member::<U>` on a generic associated function
-        // instantiates it the way a method-call turbofish does.
+        // instantiates it the way a method-call turbofish does. The
+        // name is resolved before its call is read, so an unspelled
+        // instantiation has no arguments to infer from here.
+        std::span<const ast::ExprIdx> no_args;
         const CheckedModule::MethodInfo* method = instantiate_generic_method(
-            module, self, member, type_args, node.span);
+            module, self, member, type_args, no_args, node.span);
         if (method != nullptr &&
             method->receiver == CheckedModule::ReceiverKind::None) {
           out.kind = PathValue::Kind::AssocFunction;

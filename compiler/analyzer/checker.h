@@ -552,6 +552,17 @@ class Checker {
   };
   DeclaredBinding declared_binding(std::span<const ast::GenericParam> params,
                                    const ast::TypeNode& declared) const;
+  // Binds one declared parameter's slot from one argument, following
+  // the shape the declaration wrote: the argument inference a free
+  // function and a method share. `callee` names the callee in a
+  // diagnostic, and a slot the argument does not pin stays empty so
+  // the caller's cannot-infer answer stands.
+  bool bind_argument_slot(u32 module,
+                          const DeclaredBinding& declared,
+                          ast::ExprIdx arg,
+                          std::string_view callee,
+                          std::vector<ir::TypeIdx>& bound,
+                          diag::Span span);
   // Declared parameters of a function or intrinsic item.
   std::span<const ast::ItemFnParam> fn_params(ast::ItemIdx item) const;
   // Declared return type of a function or intrinsic item; invalid when
@@ -845,6 +856,7 @@ class Checker {
       ir::TypeIdx self,
       std::string_view name,
       std::span<const ast::TypeIdx> type_args,
+      std::span<const ast::ExprIdx> args,
       diag::Span span);
   void record_call(u32 module,
                    ast::ExprIdx callee,
