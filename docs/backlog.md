@@ -5,6 +5,12 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [ ] A type mismatch between two closure literals reads `expected
+  'struct', found 'struct'`: each closure literal is its own type, which
+  is what the error is about, and the message names the kind both sides
+  share instead. Spelling an anonymous closure by its signature, or
+  numbering the environments, is what a reader needs - it wants a
+  decision on what a closure type is called in a diagnostic.
 - [x] The wasm call site pushed each argument's own words, and the
   operand a `()` argument carries is the lowering's placeholder, so the
   placeholder stayed on the stack and the next store read it as its
