@@ -5,6 +5,12 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [x] The uninhabited type reached LLVM as `void` wherever it appeared,
+  so the same data layout assertion that caught the unit type caught a
+  `!` field, a `!` tuple element, a `!` parameter, and a `!` array
+  element - the layout gives every one of those size zero. It builds as
+  the empty struct now, and the `ret` guard accepts both zero-sized
+  tags. `exe-never-shape` holds the shapes.
 - [x] The unit type was LLVM's `void` wherever it appeared, so a `()`
   field, tuple element, or argument crashed the emitter on the data
   layout's assertion that a type have a size, while the wasm backend
