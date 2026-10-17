@@ -33,7 +33,17 @@ std::string_view node_text(std::string_view source, const Node& node) {
 // next pass reads those bytes back the same way.
 std::string_view error_text(std::string_view source, const Node& node) {
   std::string_view text = text_of(source, node.offset, node.length);
+  // Trailing blanks never survive into the output -- the renderer
+  // trims them before every newline it writes -- so the measure reads
+  // the span without them, or a wrap decision is made over bytes the
+  // output does not carry.
+  while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) {
+    text.remove_suffix(1);
+  }
   if (node.offset + node.length >= source.size()) {
+    // A span that reaches the end of the source also drops the
+    // newlines the lexer's clipping absorbed there: the line break is
+    // the one the formatter writes itself after the last token.
     while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) {
       text.remove_suffix(1);
     }
@@ -93,6 +103,23 @@ bool tokens_merge(std::string_view prev, std::string_view next) {
     }
   }
   return false;
+}
+
+// Whether a dot that touches a number reads as the number's decimal
+// point: the lexer looks past the dot, and an identifier that is not
+// the float suffixes leaves it a member access. Nothing past it, or
+// any other byte, continues the number.
+bool dot_joins_number(std::string_view after) {
+  if (after.empty()) {
+    return true;
+  }
+  const char c = after.front();
+  const bool ident = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                     c == '_';
+  if (!ident) {
+    return true;
+  }
+  return after == "f32" || after == "f64";
 }
 
 bool is_path_like(TokenKind kind) {
@@ -661,7 +688,13 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes, bool allow_wrap) 
   // room for its closing half -- so the gap is pinned verbatim: it is
   // the one thing that keeps a second pass reading the same stream.
   const auto pin_gap = [&](const Node& from, const Node& to) {
-    const usize gap_start = from.offset + from.length;
+    usize gap_start = from.offset + from.length;
+    if (from.kind == NodeKind::Token && from.token == TokenKind::Error) {
+      // The blanks an error span ends in are gap bytes, not span
+      // bytes: the span re-absorbs one of them on every pass, so they
+      // all ride in the gap and the count stays put.
+      gap_start = from.offset + error_text(source_, from).size();
+    }
     if (to.offset > gap_start) {
       pieces.push_back(Piece{
           doc_text(source_.substr(gap_start, to.offset - gap_start)),
@@ -715,6 +748,19 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes, bool allow_wrap) 
       sep = Sep::None;
     } else if (pending_break) {
       sep = allow_wrap ? Sep::Line : Sep::Space;
+    } else if (node.kind == NodeKind::Token && node.token == TokenKind::Dot &&
+               prev != nullptr && prev->kind == NodeKind::Token &&
+               (prev->token == TokenKind::Integer ||
+                prev->token == TokenKind::Float) &&
+               dot_joins_number(i + 1 < nodes.size()
+                                    ? node_text(source_, *nodes[i + 1])
+                                    : std::string_view())) {
+      // A dot after a number reads as the number's decimal point when
+      // the two touch and the byte past the dot continues a number: a
+      // member name does not, a digit and the float suffixes do. The
+      // token count of the output would differ from the tree's, so
+      // the two never touch there.
+      sep = Sep::Space;
     } else if (node.kind == NodeKind::Token && node.token == TokenKind::Dot &&
                !(prev != nullptr && prev->kind == NodeKind::Token &&
                  (prev->token == TokenKind::Dot ||
