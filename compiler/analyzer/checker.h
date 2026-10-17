@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <deque>
 #include <span>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -497,6 +499,33 @@ class Checker {
   u32 inst_index(ir::TypeIdx type) const;
   // Declared type parameters of a function or method item.
   std::span<const ast::GenericParam> fn_generic_params(ast::ItemIdx item) const;
+  // Owning function types in parameter position (ADR-0075): the
+  // spelling desugars to a synthetic generic parameter whose witness is
+  // the argument, and the recorded signature is the check the witness
+  // must pass. Storage keeps spans and names stable for the run.
+  struct OwnFnBound {
+    std::string_view name;
+    ast::TypeFunc sig;
+  };
+  std::deque<std::vector<ast::GenericParam>> own_fn_params_;
+  std::deque<std::string> own_fn_names_;
+  std::vector<OwnFnBound> own_fn_bounds_;
+  u32 next_own_fn_ = 0;
+  // Rewrites each `fn(...)` parameter spelling of `item` in place: the
+  // type becomes a path to a fresh synthetic parameter, the item's
+  // parameter list grows, and the signature is recorded. A spelling
+  // anywhere else stays for the checker to refuse.
+  void desugar_own_fn_params(ast::ItemIdx item);
+  // The recorded owning-function signature for a parameter name, or
+  // null when the parameter is not one.
+  const OwnFnBound* own_fn_bound(std::string_view name) const;
+  // Whether `witness` carries `declared`'s signature: a closure's own
+  // function type, or a function type, compared element by element.
+  // Reports and answers false on a mismatch.
+  bool check_own_fn_witness(u32 module,
+                            ir::TypeIdx witness,
+                            const OwnFnBound& declared,
+                            diag::Span span);
   // Item name for diagnostics.
   std::string_view fn_name(ast::ItemIdx item) const;
   // Whether calling the function or intrinsic item is an operation

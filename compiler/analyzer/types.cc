@@ -3340,7 +3340,10 @@ void Checker::process_module(u32 module) {
         }
         value_names.push_back(name.name);
         // Generic functions register per instantiation at their call
-        // sites; eager registration cannot bind their parameters.
+        // sites; eager registration cannot bind their parameters. An
+        // owning `fn(...)` parameter makes the item generic first
+        // (ADR-0075).
+        desugar_own_fn_params(item);
         register_fn_signature(module, item);
         break;
       }
@@ -5866,6 +5869,106 @@ bool Checker::fn_is_comp(ast::ItemIdx item) const {
          node.payload.get<ast::ItemFn>().is_comp;
 }
 
+const Checker::OwnFnBound* Checker::own_fn_bound(std::string_view name) const {
+  for (const OwnFnBound& bound : own_fn_bounds_) {
+    if (bound.name == name) {
+      return &bound;
+    }
+  }
+  return nullptr;
+}
+
+bool Checker::check_own_fn_witness(u32 module,
+                                   ir::TypeIdx witness,
+                                   const OwnFnBound& declared,
+                                   diag::Span span) {
+  auto reject = [&]() {
+    const u32 index = bag.emit<i18n::Key::AnalyzerOwnFunctionWitness>(
+        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
+        span, declared.name);
+    (void)index;
+    return false;
+  };
+  // The witness's function type: a closure's own, or a function type.
+  ir::TypeIdx sig = ir::TypeIdx::invalid();
+  if (tag_of(witness) == ir::TypeTag::Func) {
+    sig = witness;
+  } else {
+    for (const CheckedModule& module_entry : modules) {
+      for (const CheckedModule::ClosureLit& lit : module_entry.closures) {
+        if (lit.self_type.idx == witness.idx) {
+          sig = lit.func_type;
+          break;
+        }
+      }
+      if (sig.is_valid()) {
+        break;
+      }
+    }
+  }
+  if (!sig.is_valid() || tag_of(sig) != ir::TypeTag::Func) {
+    return reject();
+  }
+  std::vector<ir::TypeIdx> want_params;
+  want_params.reserve(declared.sig.params.size());
+  for (ast::TypeIdx param : declared.sig.params) {
+    want_params.push_back(resolve_type(module, param, nullptr));
+  }
+  const ir::TypeIdx want_ret = resolve_type(module, declared.sig.ret, nullptr);
+  if (is_error(want_ret)) {
+    return false;
+  }
+  const ir::FuncType& shape =
+      builder.func_types()[builder.types()[sig.idx].as_func()];
+  if (shape.params.size() != want_params.size()) {
+    return reject();
+  }
+  for (usize i = 0; i < want_params.size(); ++i) {
+    if (!types_equal(shape.params[i], want_params[i])) {
+      return reject();
+    }
+  }
+  return types_equal(shape.ret, want_ret) || reject();
+}
+
+void Checker::desugar_own_fn_params(ast::ItemIdx item) {
+  const ast::ItemNode& node = ast.items[item];
+  if (node.kind != ast::ItemKind::Fn) {
+    return;
+  }
+  // The copy is what the payload is rewritten from: the union has no
+  // mutable accessor, so a changed item is set back whole.
+  ast::ItemFn fn = node.payload.get<ast::ItemFn>();
+  std::vector<ast::GenericParam> added;
+  for (const ast::ItemFnParam& param : fn.params) {
+    const ast::TypeIdx param_type = param.type;
+    if (!param_type.is_valid() ||
+        ast.types[param_type].kind != ast::TypeKind::OwnFunc) {
+      continue;
+    }
+    const ast::TypeFunc sig =
+        ast.types[param_type].payload.get<ast::TypeFunc>();
+    own_fn_names_.push_back("__fn" + std::to_string(next_own_fn_++));
+    const ast::Ident name{own_fn_names_.back(), ast.types[param_type].span};
+    const std::vector<ast::Ident> segments{name};
+    const ast::PathIdx path = ast.paths.push_back(ast::Path{
+        ast::copy_to_arena(ast.spans, segments), ast.types[param_type].span});
+    ast.types[param_type].kind = ast::TypeKind::Path;
+    ast.types[param_type].payload.set(ast::TypePath{.path = path, .args = {}});
+    added.push_back(ast::GenericParam{
+        .name = name, .type = ast::TypeIdx::invalid(), .bounds = {}});
+    own_fn_bounds_.push_back(OwnFnBound{name.name, sig});
+  }
+  if (added.empty()) {
+    return;
+  }
+  std::vector<ast::GenericParam> all(fn.generic.begin(), fn.generic.end());
+  all.insert(all.end(), added.begin(), added.end());
+  own_fn_params_.push_back(std::move(all));
+  fn.generic = own_fn_params_.back();
+  ast.items[item].payload.set(fn);
+}
+
 std::span<const ast::GenericParam> Checker::fn_generic_params(
     ast::ItemIdx item) const {
   const ast::ItemNode& node = ast.items[item];
@@ -6235,6 +6338,36 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   }
   if (!infer_bound_arguments(module, params, bound, span)) {
     return nullptr;
+  }
+  // An owning function parameter's witness must carry the signature the
+  // spelling declared (ADR-0075): the closure's own function type, or a
+  // function type, compared element by element under the bindings so
+  // far. The signature may mention other parameters, so this runs after
+  // inference has bound what it can.
+  {
+    const usize pushed = type_params.size();
+    for (usize i = 0; i < params.size() && i < bound.size(); ++i) {
+      if (bound[i].is_valid()) {
+        type_params.emplace_back(params[i].name.name, bound[i]);
+      }
+    }
+    bool witnesses_ok = true;
+    for (usize i = 0; i < params.size() && i < bound.size(); ++i) {
+      const OwnFnBound* declared = own_fn_bound(params[i].name.name);
+      if (declared == nullptr || !bound[i].is_valid()) {
+        continue;
+      }
+      if (!check_own_fn_witness(module, bound[i], *declared, span)) {
+        witnesses_ok = false;
+        break;
+      }
+    }
+    while (type_params.size() > pushed) {
+      type_params.pop_back();
+    }
+    if (!witnesses_ok) {
+      return nullptr;
+    }
   }
   // A value slot never infers, so an unfilled one is named first: the
   // type message below would suggest spelling only a type argument.

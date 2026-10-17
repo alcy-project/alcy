@@ -38,9 +38,13 @@ means a value that owns its environment, drops it, and never copies:
   tuples, and other spellings introduces the parameter at the same
   scope. Struct fields and `impl` blocks are out: naming storage
   needs named generics threaded by hand, which stays spelled.
-- Coercions: a nominal coerces to `fn()` by signature match; a `fn()`
-  coerces to a `( )->` view, which borrows the owned value and never
-  outlives it. A view never coerces to `fn()`: it owns nothing.
+- Coercions: any value whose function signature matches satisfies
+  `fn()` — a closure nominal, a named function, or a `( )->` view.
+  A `fn()` coerces to a `( )->` view, which borrows the owned value
+  and never outlives it; a view satisfies `fn()` because it is
+  already called by value and owns nothing to end. The move-only
+  rule below governs `fn()`-typed *bindings*, not the witnesses they
+  accept.
 - The witness's environment lives on the heap exactly when a move
   capture needs it owned (ADR-0064's placement rule, unchanged); the
   drop walk ends the fields and frees the block, statically, per

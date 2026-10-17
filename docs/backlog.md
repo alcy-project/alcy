@@ -161,6 +161,14 @@ replaced. The foundations are in `roadmap.md`.
 
 ### Language and library surface
 
+- [ ] Owning function types (ADR-0075) beyond the parameter slice: a
+  method's `fn(...)` parameter still refuses, because the method path
+  spells type arguments and infers none from arguments; the return
+  position (`fn make() -> fn(i32) -> i32`) wants the synthetic
+  parameter fixed from the body's return shape; `fn()`-typed bindings
+  are not yet move-only (reassignment must be refused); and named
+  storage (`struct H { f: fn(...) }`) needs generics threaded by
+  hand.
 - [x] Two-phase borrows: a call's exclusive receiver is a reservation
   taken before the arguments evaluate, and the call itself activates
   it, so `v.push(v.len())`, `v.push(v[0])`, and

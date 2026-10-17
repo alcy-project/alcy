@@ -1,9 +1,12 @@
-// Owning function types parse but wait for their slice: the checker
-// refuses them rather than letting one through as a borrowing view.
-fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
-  ret f(x)
+// The return position waits for its slice: the synthetic parameter a
+// parameter spelling creates is inferred from the argument, and a
+// return has no argument to infer from yet.
+fn make() -> fn(i32) -> i32 {
+  t := 21
+  ret [t] (a: i32) -> a + t
 }
 
 fn main() -> i32 {
-  ret apply((a: i32) -> a, 1)
+  f := make()
+  ret f(1) - 22
 }
