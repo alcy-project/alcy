@@ -411,6 +411,20 @@ impl<T> Vec<T> {
     unsafe { dealloc(self.buf, self.cap) }
   }
 
+  // A new vector of each element passed through `f`. The result's
+  // element type is the closure's return type, which the call reads
+  // from the closure argument's own signature.
+  pub fn map<U>(self: &Self, f: (&T) -> U) -> Vec<U> {
+    mut out := Vec::<U>::new()
+    out.reserve(self.len)
+    mut i := 0 as usize
+    while i < self.len {
+      out.push(f(self.at(i).unwrap()))
+      i = i + 1
+    }
+    ret out
+  }
+
   // Consumes the vector; the cursor owns what is left.
   pub fn into_iter(self: Vec<T>) -> VecIntoIter<T> {
     ret VecIntoIter { v: self, pos: 0 }
