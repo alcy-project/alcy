@@ -5,6 +5,21 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [x] A cast from a float to an integer was undefined where the language
+  says nothing is (ADR-0066): LLVM's `fptosi` left NaN and an
+  out-of-range value poison, so a checked build, a release build, and a
+  formatter that received the poisoned word each answered differently,
+  and the direct-wasm backend trapped. Both backends saturate now
+  (ADR-0077), the spec's numeric tower names the rule, and
+  `exe-cast-saturate` and `e2e/wasm/cast-saturate` hold the edges of
+  every destination.
+- [x] Printing a signed type's minimum aborted in a checked build: the
+  formatter takes the magnitude with a subtract from zero, which
+  overflows for the one value whose magnitude the signed range cannot
+  hold, so `println("{}", i32::MIN)` panicked and only a release build
+  printed it. The magnitude comes from the wrapping form now, which the
+  `MIN / -1` rewrite already uses, and `exe-fmt-min` prints the minimum
+  of each signed width.
 - [x] A constant comparison folded at the destination's type in the
   release passes: a comparison's destination is a bool, so `-1i8 < 0i8`
   ranked the raw words unsigned and folded to false - an all-constant
