@@ -483,23 +483,213 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
         emit(ir::Opcode::Select, f64_ty,
              {to_operand(integral, boolean), f64_imm(0.0),
               to_operand(difference, f64_ty)});
-    // One extra digit decides the rounding.
+    // The fraction is the dyadic rational `M / 2^K`, so its digits and
+    // the half-up bit come from one exact product and a shift. Taking a
+    // digit at a time by multiplying the `f64` fraction by ten instead
+    // carried a rounding error that left the seventeenth place wrong:
+    // `{:.17f}` of `0.1` printed `0.10000000000000000` where the value
+    // rounds to `0.10000000000000001`.
     const ir::TypeIdx frac_ty =
-        builder.array_type(u8_ty, static_cast<u64>(digits) + 2);
+        builder.array_type(u8_ty, static_cast<u64>(digits) + 1);
     const ir::RegisterIdx frac_buf =
         emit(ir::Opcode::Alloca, frac_ty, {size_one});
-    for (u32 i = 0; i <= digits; ++i) {
-      const ir::RegisterIdx scaled =
-          emit(ir::Opcode::FMul, f64_ty,
-               {to_operand(fraction, f64_ty), f64_imm(10.0)});
-      const ir::RegisterIdx over = emit(
-          ir::Opcode::Gt, boolean, {to_operand(scaled, f64_ty), f64_imm(9.0)});
-      const ir::RegisterIdx capped =
-          emit(ir::Opcode::Select, f64_ty,
-               {to_operand(over, boolean), f64_imm(9.0),
-                to_operand(scaled, f64_ty)});
+    auto u64_imm = [&](u64 literal) {
+      return to_operand(
+          builder.immutable({.type = u64_ty, .data = {.u64_value = literal}}),
+          u64_ty);
+    };
+    // Doubling is exact, and a finite fraction below one reaches an
+    // integer `M` below 2^53 after `K` steps; zero is integral at once.
+    const ir::RegisterIdx dyadic_addr =
+        emit(ir::Opcode::Alloca, f64_ty, {size_one});
+    emit_void(ir::Opcode::Store,
+              {to_operand(fraction, f64_ty), to_operand(dyadic_addr, f64_ty)});
+    const ir::RegisterIdx power_addr =
+        emit(ir::Opcode::Alloca, u64_ty, {size_one});
+    emit_void(ir::Opcode::Store, {u64_imm(0), to_operand(power_addr, u64_ty)});
+    const ir::BlockIdx dy_head = reserve_block();
+    const ir::BlockIdx dy_body = reserve_block();
+    const ir::BlockIdx dy_exit = reserve_block();
+    emit_br(dy_head);
+    switch_to(dy_head);
+    {
+      const ir::RegisterIdx at =
+          emit(ir::Opcode::Load, f64_ty, {to_operand(dyadic_addr, f64_ty)});
+      const ir::RegisterIdx truncated =
+          emit(ir::Opcode::TypeCast, u64_ty, {to_operand(at, f64_ty)});
+      const ir::RegisterIdx widened =
+          emit(ir::Opcode::TypeCast, f64_ty, {to_operand(truncated, u64_ty)});
+      const ir::RegisterIdx integral =
+          emit(ir::Opcode::Eq, boolean,
+               {to_operand(widened, f64_ty), to_operand(at, f64_ty)});
+      emit_cond_br(to_operand(integral, boolean), dy_exit, dy_body);
+    }
+    switch_to(dy_body);
+    {
+      const ir::RegisterIdx at =
+          emit(ir::Opcode::Load, f64_ty, {to_operand(dyadic_addr, f64_ty)});
+      const ir::RegisterIdx doubled = emit(
+          ir::Opcode::FMul, f64_ty, {to_operand(at, f64_ty), f64_imm(2.0)});
+      emit_void(ir::Opcode::Store,
+                {to_operand(doubled, f64_ty), to_operand(dyadic_addr, f64_ty)});
+      const ir::RegisterIdx power =
+          emit(ir::Opcode::Load, u64_ty, {to_operand(power_addr, u64_ty)});
+      const ir::RegisterIdx next = emit(
+          ir::Opcode::IntAdd, u64_ty, {to_operand(power, u64_ty), u64_imm(1)});
+      emit_void(ir::Opcode::Store,
+                {to_operand(next, u64_ty), to_operand(power_addr, u64_ty)});
+      emit_br(dy_head);
+    }
+    switch_to(dy_exit);
+    const ir::RegisterIdx scaled_at =
+        emit(ir::Opcode::Load, f64_ty, {to_operand(dyadic_addr, f64_ty)});
+    const ir::RegisterIdx numerator =
+        emit(ir::Opcode::TypeCast, u64_ty, {to_operand(scaled_at, f64_ty)});
+    const ir::RegisterIdx dyadic =
+        emit(ir::Opcode::Load, u64_ty, {to_operand(power_addr, u64_ty)});
+    // `M * 10^digits` in two limbs: `M` is below 2^53 and the constant
+    // below 2^57, so every partial product fits one word.
+    u64 constant = 1;
+    for (u32 i = 0; i < digits; ++i) {
+      constant *= 10;
+    }
+    const ir::RegisterIdx m_low =
+        emit(ir::Opcode::And, u64_ty,
+             {to_operand(numerator, u64_ty), u64_imm(0xFFFFFFFFu)});
+    const ir::RegisterIdx m_high =
+        emit(ir::Opcode::LogicalShiftRight, u64_ty,
+             {to_operand(numerator, u64_ty), u64_imm(32)});
+    const ir::RegisterIdx p0 =
+        emit(ir::Opcode::IntMul, u64_ty,
+             {to_operand(m_low, u64_ty), u64_imm(constant & 0xFFFFFFFFu)});
+    const ir::RegisterIdx p1 =
+        emit(ir::Opcode::IntMul, u64_ty,
+             {to_operand(m_low, u64_ty), u64_imm(constant >> 32)});
+    const ir::RegisterIdx p2 =
+        emit(ir::Opcode::IntMul, u64_ty,
+             {to_operand(m_high, u64_ty), u64_imm(constant & 0xFFFFFFFFu)});
+    const ir::RegisterIdx p3 =
+        emit(ir::Opcode::IntMul, u64_ty,
+             {to_operand(m_high, u64_ty), u64_imm(constant >> 32)});
+    const ir::RegisterIdx p0_low =
+        emit(ir::Opcode::And, u64_ty,
+             {to_operand(p0, u64_ty), u64_imm(0xFFFFFFFFu)});
+    const ir::RegisterIdx p0_high = emit(ir::Opcode::LogicalShiftRight, u64_ty,
+                                         {to_operand(p0, u64_ty), u64_imm(32)});
+    const ir::RegisterIdx p1_low =
+        emit(ir::Opcode::And, u64_ty,
+             {to_operand(p1, u64_ty), u64_imm(0xFFFFFFFFu)});
+    const ir::RegisterIdx p1_high = emit(ir::Opcode::LogicalShiftRight, u64_ty,
+                                         {to_operand(p1, u64_ty), u64_imm(32)});
+    const ir::RegisterIdx p2_low =
+        emit(ir::Opcode::And, u64_ty,
+             {to_operand(p2, u64_ty), u64_imm(0xFFFFFFFFu)});
+    const ir::RegisterIdx p2_high = emit(ir::Opcode::LogicalShiftRight, u64_ty,
+                                         {to_operand(p2, u64_ty), u64_imm(32)});
+    const ir::RegisterIdx middle0 =
+        emit(ir::Opcode::IntAdd, u64_ty,
+             {to_operand(p0_high, u64_ty), to_operand(p1_low, u64_ty)});
+    const ir::RegisterIdx middle =
+        emit(ir::Opcode::IntAdd, u64_ty,
+             {to_operand(middle0, u64_ty), to_operand(p2_low, u64_ty)});
+    const ir::RegisterIdx middle_shifted =
+        emit(ir::Opcode::ShiftLeft, u64_ty,
+             {to_operand(middle, u64_ty), u64_imm(32)});
+    const ir::RegisterIdx product_low =
+        emit(ir::Opcode::Or, u64_ty,
+             {to_operand(p0_low, u64_ty), to_operand(middle_shifted, u64_ty)});
+    const ir::RegisterIdx middle_high =
+        emit(ir::Opcode::LogicalShiftRight, u64_ty,
+             {to_operand(middle, u64_ty), u64_imm(32)});
+    const ir::RegisterIdx high0 =
+        emit(ir::Opcode::IntAdd, u64_ty,
+             {to_operand(p3, u64_ty), to_operand(p1_high, u64_ty)});
+    const ir::RegisterIdx high1 =
+        emit(ir::Opcode::IntAdd, u64_ty,
+             {to_operand(high0, u64_ty), to_operand(p2_high, u64_ty)});
+    const ir::RegisterIdx product_high =
+        emit(ir::Opcode::IntAdd, u64_ty,
+             {to_operand(high1, u64_ty), to_operand(middle_high, u64_ty)});
+    // `q = (M * 10^digits) >> (K - 1)`: its low bit is the half-up
+    // decision and the rest is the digit string. The wrapped `K` of the
+    // integral case falls past every window and answers zero.
+    const ir::RegisterIdx split =
+        emit(ir::Opcode::IntSubWrap, u64_ty,
+             {to_operand(dyadic, u64_ty), u64_imm(1)});
+    const ir::RegisterIdx low_window =
+        emit(ir::Opcode::Lt, boolean, {to_operand(split, u64_ty), u64_imm(64)});
+    const ir::RegisterIdx high_window =
+        emit(ir::Opcode::Ge, boolean, {to_operand(split, u64_ty), u64_imm(64)});
+    const ir::RegisterIdx past_windows = emit(
+        ir::Opcode::Ge, boolean, {to_operand(split, u64_ty), u64_imm(128)});
+    const ir::RegisterIdx low_count =
+        emit(ir::Opcode::Select, u64_ty,
+             {to_operand(low_window, boolean), to_operand(split, u64_ty),
+              u64_imm(0)});
+    const ir::RegisterIdx cross_raw =
+        emit(ir::Opcode::IntSubWrap, u64_ty,
+             {u64_imm(63), to_operand(split, u64_ty)});
+    const ir::RegisterIdx cross_count =
+        emit(ir::Opcode::Select, u64_ty,
+             {to_operand(low_window, boolean), to_operand(cross_raw, u64_ty),
+              u64_imm(0)});
+    const ir::RegisterIdx above_raw =
+        emit(ir::Opcode::IntSubWrap, u64_ty,
+             {to_operand(split, u64_ty), u64_imm(64)});
+    const ir::RegisterIdx above_count =
+        emit(ir::Opcode::Select, u64_ty,
+             {to_operand(high_window, boolean), to_operand(above_raw, u64_ty),
+              u64_imm(0)});
+    const ir::RegisterIdx high_count =
+        emit(ir::Opcode::Select, u64_ty,
+             {to_operand(past_windows, boolean), u64_imm(0),
+              to_operand(above_count, u64_ty)});
+    // A shift by the width is undefined, so the crossing term shifts by
+    // `63 - split` and then by one, which drops the same top bits.
+    const ir::RegisterIdx crossed = emit(
+        ir::Opcode::ShiftLeft, u64_ty,
+        {to_operand(product_high, u64_ty), to_operand(cross_count, u64_ty)});
+    const ir::RegisterIdx crossed_again =
+        emit(ir::Opcode::ShiftLeft, u64_ty,
+             {to_operand(crossed, u64_ty), u64_imm(1)});
+    const ir::RegisterIdx low_digits =
+        emit(ir::Opcode::LogicalShiftRight, u64_ty,
+             {to_operand(product_low, u64_ty), to_operand(low_count, u64_ty)});
+    const ir::RegisterIdx below_path = emit(
+        ir::Opcode::Or, u64_ty,
+        {to_operand(crossed_again, u64_ty), to_operand(low_digits, u64_ty)});
+    const ir::RegisterIdx above_path = emit(
+        ir::Opcode::LogicalShiftRight, u64_ty,
+        {to_operand(product_high, u64_ty), to_operand(high_count, u64_ty)});
+    const ir::RegisterIdx within =
+        emit(ir::Opcode::Not, boolean, {to_operand(past_windows, boolean)});
+    const ir::RegisterIdx middle_path =
+        emit(ir::Opcode::And, boolean,
+             {to_operand(high_window, boolean), to_operand(within, boolean)});
+    const ir::RegisterIdx above_selected =
+        emit(ir::Opcode::Select, u64_ty,
+             {to_operand(middle_path, boolean), to_operand(above_path, u64_ty),
+              u64_imm(0)});
+    const ir::RegisterIdx quotient =
+        emit(ir::Opcode::Select, u64_ty,
+             {to_operand(low_window, boolean), to_operand(below_path, u64_ty),
+              to_operand(above_selected, u64_ty)});
+    const ir::RegisterIdx exact =
+        emit(ir::Opcode::LogicalShiftRight, u64_ty,
+             {to_operand(quotient, u64_ty), u64_imm(1)});
+    const ir::RegisterIdx round_bit = emit(
+        ir::Opcode::And, u64_ty, {to_operand(quotient, u64_ty), u64_imm(1)});
+    // The digit string is the exact value, least significant last.
+    ir::RegisterIdx pending = exact;
+    for (u32 i = digits; i-- > 0;) {
+      const ir::RegisterIdx rest =
+          emit(ir::Opcode::UintRem, u64_ty,
+               {to_operand(pending, u64_ty), u64_imm(10)});
+      const ir::RegisterIdx kept =
+          emit(ir::Opcode::UintDiv, u64_ty,
+               {to_operand(pending, u64_ty), u64_imm(10)});
       const ir::RegisterIdx narrow =
-          emit(ir::Opcode::TypeCast, u8_ty, {to_operand(capped, f64_ty)});
+          emit(ir::Opcode::TypeCast, u8_ty, {to_operand(rest, u64_ty)});
       const ir::RegisterIdx glyph = emit(
           ir::Opcode::IntAdd, u8_ty, {to_operand(narrow, u8_ty), glyph_zero});
       const ir::RegisterIdx cell =
@@ -507,28 +697,12 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
                {to_operand(frac_buf, frac_ty), zero_i32, index_operand(i)});
       emit_void(ir::Opcode::Store,
                 {to_operand(glyph, u8_ty), to_operand(cell, u8_ty)});
-      const ir::RegisterIdx digit =
-          emit(ir::Opcode::TypeCast, f64_ty, {to_operand(narrow, u8_ty)});
-      const ir::RegisterIdx rest =
-          emit(ir::Opcode::FSub, f64_ty,
-               {to_operand(scaled, f64_ty), to_operand(digit, f64_ty)});
-      const ir::RegisterIdx below = emit(
-          ir::Opcode::Lt, boolean, {to_operand(rest, f64_ty), f64_imm(0.0)});
-      fraction = emit(
-          ir::Opcode::Select, f64_ty,
-          {to_operand(below, boolean), f64_imm(0.0), to_operand(rest, f64_ty)});
+      pending = kept;
     }
-    // Half-up: the extra digit starts the carry and it runs down the
+    // Half-up: the leftover above the digits carries down through the
     // fraction into the integer part.
-    const ir::RegisterIdx last =
-        emit(ir::Opcode::GetElementPtr, u8_ty,
-             {to_operand(frac_buf, frac_ty), zero_i32, index_operand(digits)});
-    const ir::RegisterIdx last_glyph =
-        emit(ir::Opcode::Load, u8_ty, {to_operand(last, u8_ty)});
-    const ir::OperandIdx half = to_operand(
-        builder.immutable({.type = u8_ty, .data = {.u8_value = 53}}), u8_ty);
-    ir::RegisterIdx carry =
-        emit(ir::Opcode::Ge, boolean, {to_operand(last_glyph, u8_ty), half});
+    ir::RegisterIdx carry = emit(ir::Opcode::Ne, boolean,
+                                 {to_operand(round_bit, u64_ty), u64_imm(0)});
     for (u32 i = digits; i-- > 0;) {
       const ir::RegisterIdx cell =
           emit(ir::Opcode::GetElementPtr, u8_ty,
