@@ -5,6 +5,15 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [x] The wasm call site pushed each argument's own words, and the
+  operand a `()` argument carries is the lowering's placeholder, so the
+  placeholder stayed on the stack and the next store read it as its
+  address - the call ran, returned the right value, and wrote elsewhere.
+  Arguments are matched to the callee's parameter types now, and a
+  zero-sized one contributes nothing. A zero-sized load or store was
+  also `Construct 'void' is not supported`, which kept `Vec<()>` from
+  compiling at all; both are no-ops. `e2e/wasm/unit-arg` holds the
+  shapes and `exe-unit-arg` runs them on the host.
 - [x] The uninhabited type reached LLVM as `void` wherever it appeared,
   so the same data layout assertion that caught the unit type caught a
   `!` field, a `!` tuple element, a `!` parameter, and a `!` array
