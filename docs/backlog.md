@@ -5,6 +5,13 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [x] A \u{...} escape whose value is not a Unicode scalar compiled and
+  then vanished: the lexer validated the escape's shape only, so
+  \u{110000}, a surrogate like \u{D800}, and a digit run past the width
+  of the value all passed, and unescaping dropped what it could not
+  encode - a string spelled with \u{110000} printed as if the escape
+  were not there. The lexer reads the value now, reports it with the
+  escape's own span, and the grammar states the range.
 - [x] An unsuffixed integer literal in no typed position kept the `i32`
   default whatever it held: `x := 4294967296` compiled to `0`,
   `18446744073709551616` to `0`, and `0x0102030405060708 as u64` to the
