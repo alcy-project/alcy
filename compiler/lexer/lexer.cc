@@ -197,6 +197,16 @@ bool is_hex_digit(char c) {
   return is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
+u32 hex_digit_value(char c) {
+  if (is_digit(c)) {
+    return static_cast<u32>(c - '0');
+  }
+  if (c >= 'a' && c <= 'f') {
+    return static_cast<u32>(c - 'a' + 10);
+  }
+  return static_cast<u32>(c - 'A' + 10);
+}
+
 }  // namespace
 
 Lexer::Lexer(std::string_view bytes, source::FileId file, diag::DiagBag& bag)
@@ -488,10 +498,24 @@ void Lexer::lex_string(std::vector<Token>& out) {
         if (i < bytes_.size() && bytes_[i] == '{') {
           ++i;
           const usize hex = i;
+          u64 code = 0;
           while (i < bytes_.size() && is_hex_digit(bytes_[i])) {
+            // Stop tracking once the value cannot be a scalar: the
+            // answer cannot change, and the multiply would wrap.
+            if (code <= 0x10FFFF) {
+              code = code * 16 + hex_digit_value(bytes_[i]);
+            }
             ++i;
           }
           if (i != hex && i < bytes_.size() && bytes_[i] == '}') {
+            // The digits are well formed, but what they spell may not
+            // be a Unicode scalar value, and unescaping would drop it -
+            // a string that lost a character without a word.
+            if (code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF)) {
+              emit_error<i18n::Key::LexerUnicodeEscapeNotScalar>(
+                  out, pos_, i + 1 - pos_, diag::Stage::Lexer,
+                  DiagCode::InvalidEscape);
+            }
             pos_ = i + 1;
             continue;
           }

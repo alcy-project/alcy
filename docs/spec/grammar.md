@@ -55,7 +55,9 @@ are rejected with guidance diagnostics.
 - A float literal may carry an exponent, with or without a fraction:
   `2e9`, `1.5e-3`, `6.02E23`. The exponent needs at least one digit, and
   its sign is optional.
-- String escapes: `\n \t \r \\ \" \0 \u{HEX}`. `'x'` character
+- String escapes: `\n \t \r \\ \" \0 \u{HEX}`. The `\u{...}` value
+  must name a Unicode scalar value: `\u{110000}` is past the last one,
+  and a surrogate such as `\u{D800}` is not one. `'x'` character
   syntax exists but resolves only with core (see `types.md`).
 - Longest-match lexing applies throughout.
 

@@ -25,11 +25,12 @@ i32 hex_value(char c) {
   return -1;
 }
 
-// Appends one code point as UTF-8. Out-of-range and surrogate values
-// are dropped: the lexer already rejected a malformed escape, so this
-// only sees a well-formed run. The parameter is wide enough that an
-// overlong digit run is dropped here rather than wrapping into a
-// different character.
+// Appends one code point as UTF-8. The lexer rejects a value that is
+// not a Unicode scalar, so a well-formed run reaches this point; the
+// test stays as the last guard, because emitting invalid UTF-8 would
+// be worse than dropping the escape for a caller that skipped the
+// lexer. The parameter is wide enough that an overlong digit run is
+// dropped here rather than wrapping into a different character.
 void append_utf8(std::string& out, u64 code) {
   if (code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF)) {
     return;

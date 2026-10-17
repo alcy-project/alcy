@@ -29,6 +29,7 @@
   F(LexerInvalidEscapeInCharacter, "Invalid escape in character literal") \
   F(LexerInvalidEscapeInString, "Invalid escape in string literal") \
   F(LexerInvalidNumber, "Invalid number literal") \
+  F(LexerUnicodeEscapeNotScalar, "A \\u{{...}} escape must name a Unicode scalar value") \
   F(LexerUnterminatedBlockComment, "Unterminated block comment") \
   F(LexerUnterminatedCharacter, "Unterminated character literal") \
   F(LexerUnterminatedString, "Unterminated string literal") \
