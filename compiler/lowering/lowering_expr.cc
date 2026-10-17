@@ -3799,9 +3799,17 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
     case ast::PatternKind::MutIdent: {
       if (arm_borrowed_) {
         // A field behind a reference is borrowed, not moved: the
-        // place address is already the reference value.
+        // place address is already the reference value. The operand
+        // carries the place's own type, so it restamps itself as the
+        // reference: a backend that reads the operand's type stores
+        // the pointer's width, not the pointee's.
         const ir::TypeIdx ref_ty = builder.reference_type(scrut_type, false);
-        bind_pattern(pattern, Val{scrut_addr.op, ref_ty, false, false});
+        ir::OperandIdx value = scrut_addr.op;
+        const ir::Operand& named = builder.state().operands[value.idx];
+        if (named.is<ir::RegisterIdx>()) {
+          value = to_operand(named.as_register(), ref_ty);
+        }
+        bind_pattern(pattern, Val{value, ref_ty, false, false});
         if (failed) {
           return;
         }
