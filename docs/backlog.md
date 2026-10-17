@@ -5,6 +5,15 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [x] The unit type was LLVM's `void` wherever it appeared, so a `()`
+  field, tuple element, or argument crashed the emitter on the data
+  layout's assertion that a type have a size, while the wasm backend
+  compiled the same shapes. It builds as the empty struct the layout
+  describes now, a function's return position keeps `void`, an argument
+  carries the empty struct its parameter names, and a store through a
+  pointer to the unit type writes nothing - without that last part
+  `h.a = ()` put eight placeholder bytes over `h.b`, which the layout
+  places at the same offset. `exe-unit-field` holds the shapes.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
