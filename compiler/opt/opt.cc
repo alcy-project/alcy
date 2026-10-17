@@ -219,10 +219,12 @@ void fold_and_propagate(StorageState& state) {
                      b_tag)) {
       continue;
     }
-    (void)a_tag;
     (void)b_tag;
     u64 out = 0;
-    if (!fold_binary(instr.op, dst_tag, a, b, out)) {
+    // The fold ranks the operands' type: a comparison's destination is a
+    // bool, and folding `-1i8 < 0i8` at bool's width compared the raw
+    // words unsigned, where the source type is what ranks them.
+    if (!fold_binary(instr.op, a_tag, a, b, out)) {
       continue;
     }
     const ir::ImmutableIdx imm =
