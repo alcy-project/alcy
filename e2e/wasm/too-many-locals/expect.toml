@@ -1,0 +1,4 @@
+# The engine's local cap is a bound the emitter reports rather than a
+# module it writes and cannot parse.
+args = ["--release"]
+error = "a function with more than 50000 locals"

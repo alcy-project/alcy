@@ -622,6 +622,17 @@ Emitter::EmitResult Emitter::build_locals(const ir::Function& function) {
       frame_bytes_ += static_cast<u32>(bytes);
     }
   }
+  // A wasm function declares all of its locals at once, and the engines
+  // cap that count (V8 refuses more than 50000). One local per register
+  // is this emitter's model (ADR-0049), so a function the release passes
+  // inline a great deal into can pass the cap; the module would then not
+  // parse. Report the function rather than write it.
+  if (locals_.size() > LOCAL_LIMIT) {
+    const ir::Block& entry = storage_.blocks()[function.blocks.head()];
+    return unsupported(
+        entry.instrs.empty() ? diag::Span{} : span_of(entry.instrs.head()),
+        "a function with more than 50000 locals");
+  }
   frame_bytes_ = static_cast<u32>(ir::align_up(frame_bytes_, 16));
   return base::make_ok();
 }

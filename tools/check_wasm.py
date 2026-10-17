@@ -19,6 +19,14 @@ required; `stdout` is compared exactly when present, and `contains` and
 `not_contains` are checked against the combined output. An optional
 `args` list is inserted after `compile`, so a case can ask for
 `--release` like any other compiler flag.
+
+A case may ask for a rejection instead of a run, with `error` in place
+of `exit`:
+
+    error = "a function with more than 50000 locals"
+
+The compiler must fail and the text must appear in its output; no module
+is written and nothing runs.
 """
 
 import argparse
@@ -43,8 +51,13 @@ def parse_expect(path: Path):
         sys.exit(f"{path}: invalid TOML format: {e}")
 
     expected_exit = data.get("exit")
-    if expected_exit is None:
+    error = data.get("error")
+    if expected_exit is None and error is None:
         sys.exit(f"{path}: missing required 'exit' key")
+    if expected_exit is not None and error is not None:
+        sys.exit(f"{path}: 'exit' and 'error' are exclusive")
+    if error is not None and not isinstance(error, str):
+        sys.exit(f"{path}: 'error' must be a string")
 
     stdout = data.get("stdout")
     contains = data.get("contains", [])
@@ -61,7 +74,7 @@ def parse_expect(path: Path):
         isinstance(arg, str) for arg in extra_args
     ):
         sys.exit(f"{path}: 'args' must be a list of strings")
-    return expected_exit, stdout, contains, not_contains, extra_args
+    return expected_exit, error, stdout, contains, not_contains, extra_args
 
 
 def compare(proc, expected_exit, stdout, contains, not_contains):
@@ -96,6 +109,7 @@ def run_case(alcy: Path, shim: Path, case_dir: Path):
 
     (
         expected_exit,
+        error,
         stdout,
         contains,
         not_contains,
@@ -121,6 +135,15 @@ def run_case(alcy: Path, shim: Path, case_dir: Path):
             encoding="utf-8",
             cwd=project_root_dir,
         )
+        if error is not None:
+            if compiled.returncode == 0:
+                return False, "compile succeeded; wanted a rejection"
+            output = compiled.stdout + compiled.stderr
+            if error not in output:
+                return False, (
+                    f"missing diagnostic: {error!r}\n--- output ---\n" + output
+                )
+            return True, ""
         if compiled.returncode != 0:
             return False, ("compile failed:\n" + compiled.stdout + compiled.stderr)
         bun = shutil.which("bun")

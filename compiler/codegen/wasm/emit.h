@@ -94,6 +94,10 @@ class Emitter {
 
   // Bytes reserved between the data and the heap for the shadow stack.
   static constexpr u32 STACK_RESERVE = 64 * 1024;
+  // The engines cap a function's locals (V8 refuses more than 50000), and
+  // this emitter spends one per register, so a function past the cap is
+  // reported rather than written as a module that will not parse.
+  static constexpr u32 LOCAL_LIMIT = 50000;
   // The iovec and written-count slot `fd_write` reads and fills.
   static constexpr u32 SCRATCH_BYTES = 16;
   static constexpr u32 PAGE_BYTES = 64 * 1024;
