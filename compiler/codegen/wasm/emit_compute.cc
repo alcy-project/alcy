@@ -170,6 +170,15 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
       return base::make_err(codegen::EmitError::Unsupported);
     }
     op(opcode);
+    // A narrowed integer rides a wider container, and the operation can
+    // leave it in a form the type does not spell: an i8 wrap lands past
+    // 127, a left shift past the byte, and a compare against the
+    // value the language answers then reads them apart. The checked
+    // form canonicalizes on its own; this is the path a release takes.
+    if (ir::is_integer_type(tag) && !is_wide_int(tag) &&
+        tag != ir::TypeTag::I32 && tag != ir::TypeTag::U32) {
+      canonicalize(body_, tag);
+    }
     return store_dst();
   }
 

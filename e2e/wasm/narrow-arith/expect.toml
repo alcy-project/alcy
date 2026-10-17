@@ -1,0 +1,4 @@
+# The checked build refuses the wraps on purpose (ADR-0068); the
+# release build is where the narrow container had to learn to wrap.
+args = ["--release"]
+exit = 0
