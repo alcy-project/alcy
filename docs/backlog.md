@@ -5,6 +5,16 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [ ] The formatter's fixed-point digits are exact only to about sixteen
+  places: `{:.Nf}` takes each digit by multiplying the fraction by ten
+  in `f64`, so the error compounds and the seventeenth place is wrong -
+  `{:.17f}` of `0.1` prints `0.10000000000000000` where half-up
+  rounding of the exact value is `0.10000000000000001`, `0.7` prints
+  `0.70000000000000000` against `0.69999999999999996`, and `1/3`
+  prints `0.33333333333333330` against `0.33333333333333331`. The
+  thirteen-to-sixteen-place forms agree with the exact value, so the fix
+  is an exact conversion over the mantissa (a scaled long division)
+  rather than the `f64` loop; the spec's `N` cap of 17 stands.
 - [x] A cast from a float to an integer was undefined where the language
   says nothing is (ADR-0066): LLVM's `fptosi` left NaN and an
   out-of-range value poison, so a checked build, a release build, and a
