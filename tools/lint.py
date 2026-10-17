@@ -88,6 +88,13 @@ def target_files(target_dirs: list[Path]):
         assert d.is_dir()
         for f in d.rglob("*"):
             relative_path = str(f.relative_to(project_root_dir))
+            # A directory the normal build never sees -- the fuzz
+            # targets, which exist only under is_fuzz -- has no entry
+            # in the compilation database, so its files cannot be
+            # linted against the flags that build them. The gn check
+            # already skips the same list.
+            if relative_path.split(os.sep)[1] in excluded_source_dirs:
+                continue
             if f.is_file():
                 if f.suffix in source_extensions:
                     files.append(relative_path)
