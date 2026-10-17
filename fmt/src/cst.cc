@@ -108,6 +108,12 @@ BraceRole classify_brace(const std::vector<Node>& lead) {
   bool has_fn = false;
   bool has_control = false;
   bool has_any = false;
+  // Whether the lead holds anything the layout itself wrote down: a
+  // real token or a closed delimiter. A lead of nothing but unread
+  // bytes classifies as a block, because whether a separator stood in
+  // front of it is exactly what the layout cannot promise to carry
+  // into the next pass.
+  bool has_read = false;
   lexer::TokenKind last = lexer::TokenKind::Eof;
   for (usize i = start; i < lead.size(); ++i) {
     const Node& node = lead[i];
@@ -117,9 +123,11 @@ BraceRole classify_brace(const std::vector<Node>& lead) {
     has_any = true;
     if (node.kind == NodeKind::Group) {
       last = closer_of_group(node);
+      has_read = true;
       continue;
     }
     last = node.token;
+    has_read = node.token != lexer::TokenKind::Error;
     switch (node.token) {
       case lexer::TokenKind::Match: has_match = true; break;
       case lexer::TokenKind::Struct: has_struct = true; break;
@@ -158,6 +166,7 @@ BraceRole classify_brace(const std::vector<Node>& lead) {
   }
   if (has_control) return BraceRole::Block;
   if (!has_any) return BraceRole::Block;
+  if (!has_read) return BraceRole::Block;
   if (forces_block_brace(last)) return BraceRole::Block;
   return BraceRole::Literal;
 }

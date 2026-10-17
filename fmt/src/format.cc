@@ -300,6 +300,11 @@ class Printer {
     // The chunk ended at a semicolon spelled in the source rather than
     // at the newline the lexer turned into one.
     bool explicit_semi = false;
+    // Where the whitespace before a comment that rode the line a
+    // separator finished starts: after the separator itself, whose
+    // bytes the terminator already wrote.
+    bool has_riding_gap = false;
+    usize riding_gap_start = 0;
   };
 
   std::vector<Chunk> collect_chunks(const Node& seq, BraceRole role) const;
@@ -1063,6 +1068,7 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const Node& seq,
       current = Chunk{};
     }
   };
+  usize separator_end = 0;
   for (const Node& node : seq.kids) {
     if (node.kind == NodeKind::Token && node.token == TokenKind::Semicolon) {
       // A semicolon with no chunk in front of it ends nothing: the
@@ -1073,12 +1079,14 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const Node& seq,
       }
       flush();
       after_separator = true;
+      separator_end = node.offset + node.length;
       continue;
     }
     if (split_comma && node.kind == NodeKind::Token &&
         node.token == TokenKind::Comma) {
       flush();
       after_separator = true;
+      separator_end = node.offset + node.length;
       continue;
     }
     if (node.kind == NodeKind::Comment) {
@@ -1087,6 +1095,8 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const Node& seq,
       if (same_line) {
         if (current.nodes.empty() && !chunks.empty()) {
           chunks.back().nodes.push_back(&node);
+          chunks.back().has_riding_gap = true;
+          chunks.back().riding_gap_start = separator_end;
         } else {
           current.nodes.push_back(&node);
         }
@@ -1328,14 +1338,22 @@ Doc Printer::chunk_line(const Chunk& chunk, Doc terminator) {
     if (end > 0) {
       const Node& last_code = *chunk.nodes[end - 1];
       const Node& comment = *chunk.nodes[i];
+      const bool rides_separator =
+          i == end && chunk.has_riding_gap && chunk.riding_gap_start > 0;
       if (last_code.kind == NodeKind::Token &&
           last_code.token == TokenKind::Error) {
         const usize gap_start =
-            last_code.offset + error_text(source_, last_code).size();
+            rides_separator
+                ? chunk.riding_gap_start
+                : last_code.offset + error_text(source_, last_code).size();
         if (comment.offset > gap_start) {
           parts.push_back(doc_text(source_.substr(
               gap_start, comment.offset - gap_start)));
         }
+      } else if (rides_separator && comment.offset > chunk.riding_gap_start) {
+        parts.push_back(doc_text(source_.substr(
+            chunk.riding_gap_start,
+            comment.offset - chunk.riding_gap_start)));
       } else {
         parts.push_back(doc_text(" "));
       }
