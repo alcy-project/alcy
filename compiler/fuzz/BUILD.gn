@@ -26,13 +26,21 @@
 template("fuzz_target") {
   executable(target_name) {
     testonly = true
-    forward_variables_from(invoker, "*")
+    # extra_deps stays out of the forward so the target scope does not
+    # carry a copy nobody reads; the template reads it off the invoker.
+    forward_variables_from(invoker, "*", [ "extra_deps" ])
     configs += [
       ":fuzz_config",
       "//compiler:alcy_config",
       "//compiler:win_sys_libs",
     ]
     deps = [ "//compiler:alcy_lib" ]
+    # A target whose boundary lives outside the compiler names the
+    # library it reaches this way rather than linking every fuzzer
+    # against it.
+    if (defined(invoker.extra_deps)) {
+      deps += invoker.extra_deps
+    }
   }
 }
 
@@ -69,6 +77,11 @@ if (!is_fuzz) {
     sources = [ "fuzz_ir_load.cc" ]
   }
 
+  fuzz_target("fuzz_fmt") {
+    sources = [ "fuzz_fmt.cc" ]
+    extra_deps = [ "//fmt:alcy_fmt" ]
+  }
+
   fuzz_target("fuzz_lexer") {
     sources = [ "fuzz_lexer.cc" ]
   }
@@ -96,6 +109,7 @@ if (!is_fuzz) {
   group("fuzz") {
     testonly = true
     deps = [
+      ":fuzz_fmt",
       ":fuzz_ir_load",
       ":fuzz_lexer",
       ":fuzz_manifest",

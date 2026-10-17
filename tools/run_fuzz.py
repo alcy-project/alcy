@@ -44,6 +44,7 @@ KNOWN_DIR = fuzz_dir / "known"
 # byte-level boundary a target drives; see the comment at the top of that
 # file for what the oracle is in each case.
 TARGETS = {
+    "fuzz_fmt": "bytes -> format -> a second pass moves nothing",
     "fuzz_lexer": "bytes -> lex -> verify_token_stream",
     "fuzz_parser": "bytes -> lex -> parse -> verify_file",
     "fuzz_path": "two path spellings -> from_native / join agreement",
