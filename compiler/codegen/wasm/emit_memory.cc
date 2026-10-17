@@ -134,6 +134,13 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       const ir::Operand& ptr = storage_.operands()[ops.head()];
       const ir::TypeIdx type = storage_.registers()[instr.dst].type;
       const ir::TypeTag tag = storage_.types()[type].tag;
+      // A load of a zero-sized type reads nothing, and the destination
+      // holds no words: a `()` element popped out of a `Vec<()>` is
+      // the shape this arrives in.
+      if (tag == ir::TypeTag::Void || tag == ir::TypeTag::Never ||
+          tag == ir::TypeTag::Error) {
+        return base::make_ok();
+      }
       const u32 base = reg_base_[instr.dst.idx];
 
       if (is_aggregate_tag(tag)) {
@@ -201,6 +208,12 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       const ir::Operand& value = storage_.operands()[ops.head()];
       const ir::Operand& ptr = storage_.operands()[ops.head() + 1];
       const ir::TypeTag tag = storage_.types()[value.type].tag;
+      // A store to a zero-sized place writes nothing, whatever the
+      // operand carries.
+      if (tag == ir::TypeTag::Void || tag == ir::TypeTag::Never ||
+          tag == ir::TypeTag::Error) {
+        return base::make_ok();
+      }
       // An alloca's result is the address of its element, whatever the
       // register's declared type says; the LLVM emitter stores the
       // pointer word for the same reason.

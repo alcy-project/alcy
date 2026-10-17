@@ -161,6 +161,11 @@ class Emitter {
   [[nodiscard]] std::optional<ValueShape> shape_of(ir::TypeIdx type) const;
   [[nodiscard]] std::optional<ValueShape> shape_of_definition(
       const ir::Instruction& instr) const;
+  // Whether the argument at `position` belongs to a zero-sized
+  // parameter, whose operand is only a placeholder.
+  [[nodiscard]] bool argument_is_zero_sized(
+      const std::vector<ir::TypeIdx>& param_types,
+      u32 position) const;
   u32 allocate_local(ValType type);
   EmitResult push_operand(const ir::Operand& operand);
   EmitResult push_word(const ir::Operand& operand, u32 word, ValType type);

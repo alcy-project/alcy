@@ -357,6 +357,16 @@ std::optional<ValueShape> Emitter::shape_of(ir::TypeIdx type) const {
   }
 }
 
+bool Emitter::argument_is_zero_sized(
+    const std::vector<ir::TypeIdx>& param_types,
+    u32 position) const {
+  if (position >= param_types.size()) {
+    return false;
+  }
+  const std::optional<ValueShape> shape = shape_of(param_types[position]);
+  return shape.has_value() && shape->words == 0;
+}
+
 std::optional<ValueShape> Emitter::shape_of_definition(
     const ir::Instruction& instr) const {
   // An address is a word whatever the destination names: an `Alloca`
@@ -913,7 +923,26 @@ Emitter::EmitResult Emitter::emit_call(const ir::Instruction& instr) {
     op(OP_I32_ADD);
   }
 
+  // The callee's parameters say which arguments take words: a
+  // zero-sized one carries a placeholder operand, and pushing it would
+  // leave the call a word deep and shift whatever reads next.
+  std::vector<ir::TypeIdx> param_types;
+  if (callee.is<ir::FunctionIdx>()) {
+    for (const ir::TypeIdx param :
+         storage_.functions()[callee.as_function()].meta.param_types) {
+      param_types.push_back(param);
+    }
+  } else {
+    for (const ir::TypeIdx param :
+         storage_.external_functions()[callee.as_external_function()]
+             .meta.param_types) {
+      param_types.push_back(param);
+    }
+  }
   for (u32 index = 1; index < ops.size(); ++index) {
+    if (argument_is_zero_sized(param_types, index - 1)) {
+      continue;
+    }
     if (push_operand(storage_.operands()[ops.head() + index]).is_err()) {
       return base::make_err(codegen::EmitError::Unsupported);
     }
@@ -958,11 +987,13 @@ Emitter::EmitResult Emitter::emit_indirect_call(const ir::Instruction& instr,
     params.push_back(ValType::I32);
   }
   params.push_back(ValType::I32);  // The environment.
+  std::vector<ir::TypeIdx> param_types;
   for (const ir::TypeIdx param : signature.params) {
     const std::optional<ValueShape> shape = shape_of(param);
     if (!shape.has_value()) {
       return unsupported(current_span_, "this call's parameters");
     }
+    param_types.push_back(param);
     params.insert(params.end(), shape->words, shape->type);
   }
   if (!aggregate_result) {
@@ -983,6 +1014,9 @@ Emitter::EmitResult Emitter::emit_indirect_call(const ir::Instruction& instr,
   }
   local_get(reg_base_[closure.idx] + 1);  // The environment.
   for (u32 index = 1; index < ops.size(); ++index) {
+    if (argument_is_zero_sized(param_types, index - 1)) {
+      continue;
+    }
     if (push_operand(storage_.operands()[ops.head() + index]).is_err()) {
       return base::make_err(codegen::EmitError::Unsupported);
     }
