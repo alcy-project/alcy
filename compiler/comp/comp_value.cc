@@ -3,6 +3,7 @@
 
 #include "comp/comp_value.h"
 
+#include <limits>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -116,12 +117,23 @@ bool truth(const CompVal& value) {
 // Suffixes were validated by checking; strip the longest known suffix
 // and parse what remains (wrapping arithmetic matches release overflow
 // semantics; checked overflow is later work).
-u64 parse_numeric_value(std::string_view spelling) {
-  constexpr std::string_view SUFFIXES[] = {
-      "isize", "usize", "i8",  "i16", "i32", "i64",
-      "u8",    "u16",   "u32", "u64", "f32", "f64",
-  };
+namespace {
+constexpr std::string_view SUFFIXES[] = {
+    "isize", "usize", "i8",  "i16", "i32", "i64",
+    "u8",    "u16",   "u32", "u64", "f32", "f64",
+};
+}  // namespace
 
+bool has_type_suffix(std::string_view spelling) {
+  for (std::string_view suffix : SUFFIXES) {
+    if (spelling.size() > suffix.size() && spelling.ends_with(suffix)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+u64 parse_numeric_value(std::string_view spelling, bool* overflow) {
   // Strip the suffix if present.
   for (std::string_view suffix : SUFFIXES) {
     const bool has_suffix =
@@ -167,6 +179,10 @@ u64 parse_numeric_value(std::string_view spelling) {
       digit = static_cast<u32>(ch - 'A' + 10);
     } else {
       continue;
+    }
+    if (overflow != nullptr &&
+        value > (std::numeric_limits<u64>::max() - digit) / base) {
+      *overflow = true;
     }
     value = value * base + digit;
   }

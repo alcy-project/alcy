@@ -71,7 +71,11 @@ bool sub_overflows(u64 left, u64 right, ir::TypeTag tag);
 bool mul_overflows(u64 left, u64 right, ir::TypeTag tag);
 // A literal's magnitude: strip the longest known suffix and the 0x,
 // 0b, or 0o prefix, then parse the digits (wrapping arithmetic).
-u64 parse_numeric_value(std::string_view spelling);
+// `overflow`, when given, is set for a magnitude past `u64`, which the
+// accumulation wraps rather than rejects.
+u64 parse_numeric_value(std::string_view spelling, bool* overflow = nullptr);
+// Whether the spelling ends in a known type suffix.
+bool has_type_suffix(std::string_view spelling);
 // The truth a comp value carries; an integer is true when nonzero.
 bool truth(const CompVal& value);
 // The binding `name` in `scope`, innermost frame first, or nullptr.

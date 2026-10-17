@@ -3562,7 +3562,7 @@ TEST_CASE("Check reads a base prefix as digits, not a suffix") {
                                       "fn main() -> i32 {\n"
                                       "  _ := 0xFF\n"
                                       "  _ := 0x1A\n"
-                                      "  _ := 0xdeadbeef\n"
+                                      "  _ := 0xdeadbeefu32\n"
                                       "  _ := 0b1010\n"
                                       "  _ := 0o17\n"
                                       "  _ := 0xFFu8\n"

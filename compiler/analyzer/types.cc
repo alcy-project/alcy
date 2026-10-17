@@ -4426,7 +4426,12 @@ bool Checker::classify_suffix(std::string_view spelling,
 static bool int_literal_fits(std::string_view spelling,
                              ir::TypeTag tag,
                              bool negative) {
-  const u64 magnitude = comp::parse_numeric_value(spelling);
+  bool overflow = false;
+  const u64 magnitude = comp::parse_numeric_value(spelling, &overflow);
+  // Past u64 is past every type, and the parse wraps there.
+  if (overflow) {
+    return false;
+  }
   switch (tag) {
     case ir::TypeTag::U8: return magnitude <= (negative ? 0ull : 0xFFull);
     case ir::TypeTag::U16: return magnitude <= (negative ? 0ull : 0xFFFFull);
@@ -4500,7 +4505,10 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
         }
         return *expected;
       }
-      if (has_suffix && !int_literal_fits(lit.spelling, tag, negative)) {
+      // The literal takes its suffix's type, or the default. The
+      // magnitude must fit either: without the check a value past the
+      // type truncated silently to a different number.
+      if (!int_literal_fits(lit.spelling, tag, negative)) {
         const u32 index = bag.emit<i18n::Key::AnalyzerIntegerLiteralOutOfRange>(
             diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::TypeMismatch, lit.span);

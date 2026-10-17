@@ -1070,6 +1070,10 @@ class Checker {
   ir::TypeIdx borrow_binding(ir::TypeIdx type, bool by_ref);
   bool reads_through_ref(ast::ExprIdx expr) const;
   bool is_bare_int_literal(ast::ExprIdx expr) const;
+  // An integer literal with no type suffix, whatever base it spells:
+  // a position may give it the type. The index and range rules want the
+  // narrower decimal-only form above.
+  bool is_unsuffixed_int_literal(ast::ExprIdx expr) const;
   // Whether the comp engine can evaluate expr. bound names the
   // bindings a surrounding pattern or declaration introduced, which the
   // predicate itself cannot see in the checker's scopes.

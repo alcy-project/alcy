@@ -14,6 +14,7 @@
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "base/nesting.h"
+#include "comp/comp_value.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -331,6 +332,19 @@ bool Checker::bind_pattern(u32 module,
 
 // Expressions
 
+bool Checker::is_unsuffixed_int_literal(ast::ExprIdx expr) const {
+  const ast::ExprNode& node = ast.exprs[expr];
+  if (node.kind != ast::ExprKind::Literal) {
+    return false;
+  }
+  const ast::Literal& value =
+      ast.literals[node.payload.get<ast::ExprLiteral>().value];
+  if (value.kind != ast::LiteralKind::Integer) {
+    return false;
+  }
+  return !comp::has_type_suffix(value.spelling);
+}
+
 bool Checker::is_bare_int_literal(ast::ExprIdx expr) const {
   const ast::ExprNode& node = ast.exprs[expr];
   if (node.kind != ast::ExprKind::Literal) {
@@ -611,8 +625,28 @@ ir::TypeIdx Checker::check_binary_operands(u32 module,
   const ir::TypeIdx* operand_expected =
       (expected != nullptr && is_integer_tag(tag_of(*expected))) ? expected
                                                                  : nullptr;
-  ir::TypeIdx left = check_expr(module, lhs, operand_expected);
-  ir::TypeIdx right = check_expr(module, rhs, operand_expected);
+  // An unsuffixed integer literal takes the other operand's type, so the
+  // sibling is checked first: ranking it against the default would report
+  // a magnitude the position holds.
+  ir::TypeIdx left = ir::TypeIdx::invalid();
+  ir::TypeIdx right = ir::TypeIdx::invalid();
+  const bool lhs_literal = is_unsuffixed_int_literal(lhs);
+  const bool rhs_literal = is_unsuffixed_int_literal(rhs);
+  if (lhs_literal != rhs_literal) {
+    if (lhs_literal) {
+      right = check_expr(module, rhs, operand_expected);
+      left =
+          check_expr(module, lhs,
+                     is_integer_tag(tag_of(right)) ? &right : operand_expected);
+    } else {
+      left = check_expr(module, lhs, operand_expected);
+      right = check_expr(
+          module, rhs, is_integer_tag(tag_of(left)) ? &left : operand_expected);
+    }
+  } else {
+    left = check_expr(module, lhs, operand_expected);
+    right = check_expr(module, rhs, operand_expected);
+  }
   if (!types_equal(left, right) && !is_error(left) && !is_error(right)) {
     if (is_integer_tag(tag_of(right)) && is_bare_int_literal(lhs)) {
       left = check_expr(module, lhs, &right);
@@ -2181,10 +2215,17 @@ ir::TypeIdx Checker::check_cast(u32 module,
                                 ast::ExprIdx expr,
                                 const ir::TypeIdx* expected) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ir::TypeIdx inner =
-      check_expr(module, node.payload.get<ast::ExprCast>().inner, nullptr);
+  const ast::ExprIdx operand = node.payload.get<ast::ExprCast>().inner;
   const ir::TypeIdx target =
       resolve_type(module, node.payload.get<ast::ExprCast>().type, nullptr);
+  // An unsuffixed integer literal takes the target's type: the cast
+  // spells that magnitude, where the default would hold only what fits
+  // it. A suffixed literal keeps its own type, which the cast then
+  // converts.
+  const bool retypes =
+      is_unsuffixed_int_literal(operand) && is_integer_tag(tag_of(target));
+  const ir::TypeIdx inner =
+      check_expr(module, operand, retypes ? &target : nullptr);
   if (is_error(inner) || is_error(target)) {
     return error_type();
   }
