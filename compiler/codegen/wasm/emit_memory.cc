@@ -86,6 +86,18 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       const u32 size = layout.size == 0 ? 1 : static_cast<u32>(layout.size);
       const u32 align = layout.align == 0 ? 1 : static_cast<u32>(layout.align);
       alloca_elem_[instr.dst.idx] = elem;
+      const u32 reserved = reg_slot_[instr.dst.idx];
+      if (reserved != NO_LOCAL) {
+        // The frame reserved this storage at entry, so the address is
+        // the same on every execution: a loop body's binding reuses the
+        // slot instead of walking the shadow stack up an iteration at a
+        // time.
+        local_get(frame_local_);
+        i32_const(static_cast<i32>(reserved));
+        op(OP_I32_ADD);
+        local_set(reg_base_[instr.dst.idx]);
+        return base::make_ok();
+      }
 
       const ir::Operand& count = storage_.operands()[ops.head()];
       const std::optional<ValueShape> count_shape = shape_of(count.type);

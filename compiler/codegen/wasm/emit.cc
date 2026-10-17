@@ -564,6 +564,43 @@ Emitter::EmitResult Emitter::build_locals(const ir::Function& function) {
       frame_bytes_ += static_cast<u32>(layout.size == 0 ? 1 : layout.size);
     }
   }
+  // A constant-count alloca is frame storage the same way. Reserving it
+  // here keeps a loop body's binding from walking the shadow stack up
+  // one slot per iteration, which is what let a long loop run the frame
+  // past the stack reserve and into the heap. A variable count keeps
+  // the dynamic bump, since its size is not known until the program
+  // runs.
+  for (const ir::BlockIdx block_index : blocks_) {
+    const ir::Block& block = storage_.blocks()[block_index];
+    for (const ir::InstructionIdx instr_index : block.instrs) {
+      const ir::Instruction& instr = storage_.instrs()[instr_index];
+      if (instr.op != ir::Opcode::Alloca || !instr.dst.is_valid() ||
+          reg_slot_[instr.dst.idx] != NO_LOCAL || instr.operands.empty()) {
+        continue;
+      }
+      const ir::Operand& count = storage_.operands()[instr.operands.head()];
+      if (!count.is<ir::ImmutableIdx>()) {
+        continue;
+      }
+      const ir::Immutable& imm = storage_.immutables()[count.as_immutable()];
+      const ir::TypeTag tag = storage_.types()[imm.type.idx].tag;
+      if (!ir::is_integer_type(tag)) {
+        continue;
+      }
+      const u64 elements = imm.as_u64_integer(tag);
+      const ir::TypeIdx type = storage_.registers()[instr.dst].type;
+      const ir::TypeLayout layout = storage_.layout_of(type, target_.width);
+      const u64 bytes = (layout.size == 0 ? 1 : static_cast<u64>(layout.size)) *
+                        (elements == 0 ? 1 : elements);
+      if (bytes > 0x7fffffff) {
+        continue;
+      }
+      const u32 align = layout.align == 0 ? 1 : static_cast<u32>(layout.align);
+      frame_bytes_ = static_cast<u32>(ir::align_up(frame_bytes_, align));
+      reg_slot_[instr.dst.idx] = frame_bytes_;
+      frame_bytes_ += static_cast<u32>(bytes);
+    }
+  }
   frame_bytes_ = static_cast<u32>(ir::align_up(frame_bytes_, 16));
   return base::make_ok();
 }
