@@ -5,6 +5,38 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [x] A frame that reached the direct-wasm stack reserve's end wrote
+  itself over the heap: the shadow stack and the bump allocator grow up
+  from addresses one reserve apart, so a deep enough recursion replaced
+  a live buffer's bytes and the program kept running - a `Vec`
+  allocated before the recursion read a frame's own value at its first
+  element, and only a recursion that outran the memory trapped. Every
+  function compares its frame's new pointer against an immutable global
+  the layout publishes and reports "stack overflow" rather than crossing
+  it; `e2e/wasm/stack-limit` recurses under the limit with a live vector
+  and then past it.
+- [x] A raw pointer aborted the direct-wasm emitter at an internal
+  check: the element offset `ptr_offset` and `ptr_offset_mut` return
+  has a raw pointer destination, and the emit case accepted references
+  only. The same program's `(*r).y` asked for a projection through
+  `u8`, because a raw pointer base fell to the byte-addressed fallback
+  where the pointee is what the walk needs. Both sites dereference the
+  pointee the way the LLVM emitter does now, and
+  `e2e/wasm/raw-pointer` covers creation, read, write, offset, struct
+  projection, and array indexing.
+- [x] Narrow arithmetic under direct-wasm left a container that did not
+  spell the type: the unchecked form of an `i8` wrap, a left shift, or
+  `MIN / -1` kept a value past the type's range, so a compare in a
+  release build answered apart from it (`exe-arith-defined` exited 9).
+  The arithmetic path canonicalizes a narrow result the way the checked
+  path already did, and `e2e/wasm/narrow-arith` runs with `--release`.
+- [x] A match over a reference scrutinee wrote its payload binding at
+  the pointee's width: the binding's store reused the place operand,
+  whose recorded type is the payload's, and a backend that reads the
+  operand's type emitted an `i64` store with a pointer word on the
+  stack - an invalid module for any `&Enum` with a wide payload. The
+  operand restamps itself as the reference now, and
+  `e2e/wasm/match-ref-payload` covers the arm.
 - [x] Doc-comment collection in the parser: `skip_insignificant` keeps
   the span of each `DocComment` it walks past, the item loop hands an
   item the ones written above it, and `ItemNode::docs` carries them as
