@@ -5,6 +5,15 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [x] An unsuffixed integer literal in no typed position kept the `i32`
+  default whatever it held: `x := 4294967296` compiled to `0`,
+  `18446744073709551616` to `0`, and `0x0102030405060708 as u64` to the
+  low half of the magnitude. The spec's rule that a literal must fit its
+  type ran only for a suffix or an expected integer type, and the
+  magnitude parse wrapped past `u64`. The default is checked now, a
+  cast's target and the operand beside a literal name the type first, and
+  `err-integer-literal-default` and `ok-integer-literal-range` hold the
+  two sides.
 - [x] The formatter's fixed-point digits were exact only to about
   sixteen places: `{:.Nf}` took each digit by multiplying the fraction
   by ten in `f64`, so the error compounded and the seventeenth place
