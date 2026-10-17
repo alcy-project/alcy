@@ -24,6 +24,77 @@ std::string_view node_text(std::string_view source, const Node& node) {
   return text_of(source, node.offset, node.length);
 }
 
+// The bytes of an error token, printed as they were read. A span that
+// reaches the end of the source drops trailing newlines: the lexer's
+// invalid-scalar clipping absorbs the line break there -- the one the
+// formatter writes itself after the last token -- and a span that grew
+// by it in one pass and not the next would move the layout with it.
+// A span that ends short of the source keeps every byte, because the
+// next pass reads those bytes back the same way.
+std::string_view error_text(std::string_view source, const Node& node) {
+  std::string_view text = text_of(source, node.offset, node.length);
+  if (node.offset + node.length >= source.size()) {
+    while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) {
+      text.remove_suffix(1);
+    }
+  }
+  return text;
+}
+
+// Whether an error token's span is still hungry: the lexer stopped it
+// at a boundary it did not choose, so whatever the layout writes after
+// it joins the span on the next pass. A literal that never closed takes
+// bytes to the newline, an unterminated block comment takes the rest of
+// the file, and a UTF-8 lead that did not get all the bytes it promised
+// takes them from what follows. A complete scalar and a closed literal
+// ended where they ended, so a separator after one reads back as a
+// separator.
+bool error_absorbs(std::string_view text) {
+  if (text.empty()) {
+    return false;
+  }
+  const auto first = static_cast<unsigned char>(text.front());
+  if (first == '\'' || first == '"') {
+    return text.size() == 1 || text.back() != static_cast<char>(first);
+  }
+  if (first == '/' && text.size() >= 2 && text[1] == '*') {
+    return true;
+  }
+  const bool lead =
+      (first & 0xE0) == 0xC0 || (first & 0xF0) == 0xE0 || (first & 0xF8) == 0xF0;
+  if (lead) {
+    const usize promise = (first & 0xE0) == 0xC0   ? 2
+                          : (first & 0xF0) == 0xE0 ? 3
+                                                   : 4;
+    if (text.size() < promise) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Whether two tokens printed with nothing between them would read back
+// as one: the lexer takes the longest match, so a pair whose joined
+// bytes begin a longer spelling merges, and the token count of the
+// output would differ from the tree that produced it. A space between
+// them keeps the count, and the layout owns the byte it inserted.
+bool tokens_merge(std::string_view prev, std::string_view next) {
+  static constexpr std::string_view SPELLINGS[] = {
+      "..=", "..<", "**=", "<<=", ">>=", "->", "=>", "==", "!=", ">=",
+      "<=", "&&", "||", "**", "::", ":=", "..", "<<", ">>", "+=", "-=",
+      "*=", "/=", "%=", "&=", "|=", "^="};
+  if (prev.empty() || next.empty()) {
+    return false;
+  }
+  for (std::string_view spelling : SPELLINGS) {
+    if (spelling.size() > prev.size() && spelling.starts_with(prev) &&
+        spelling[prev.size()] == next.front()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool is_path_like(TokenKind kind) {
   switch (kind) {
     case TokenKind::Ident:
@@ -208,15 +279,18 @@ class Printer {
   static bool keeps_semicolon(const Chunk& chunk,
                               const std::vector<const Node*>& code,
                               BraceRole role,
-                              bool last_chunk);
+                              bool last_chunk,
+                              bool next_suppresses);
   static bool chunk_is_semi_terminated_item(const Chunk& chunk);
+  static bool chunk_starts_with_suppressor(const Chunk& chunk);
   Doc print_body_lines(const std::vector<Chunk>& chunks,
                        BraceRole role,
                        bool top_level);
-  static Doc chunk_terminator(const Chunk& chunk,
-                              const std::vector<const Node*>& code,
-                              BraceRole role,
-                              bool last_chunk);
+  Doc chunk_terminator(const Chunk& chunk,
+                       const std::vector<const Node*>& code,
+                       BraceRole role,
+                       bool last_chunk,
+                       bool next_suppresses);
   static bool ends_like_statement(const std::vector<const Node*>& nodes);
   Doc print_line(const std::vector<const Node*>& nodes);
   Doc print_flow(const std::vector<const Node*>& nodes, bool allow_wrap);
@@ -568,10 +642,33 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes, bool allow_wrap) 
 
   std::vector<Piece> pieces;
   const Node* prev = nullptr;
+  // The node immediately before this one, whatever it is: the gap the
+  // source put between two nodes is what an error token's neighbours
+  // are pinned against.
+  const Node* prev_node = nullptr;
   bool prev_generic = false;
   bool prev_unary = false;
   bool pending_break = false;
   bool suppress = false;
+
+  const auto is_error_token = [](const Node* node) {
+    return node != nullptr && node->kind == NodeKind::Token &&
+           node->token == TokenKind::Error;
+  };
+  // The whitespace the source put around an error token, as its own
+  // piece. An error's bytes re-lex as whatever the bytes around them
+  // make of them -- a lone quote becomes a literal when a space opens
+  // room for its closing half -- so the gap is pinned verbatim: it is
+  // the one thing that keeps a second pass reading the same stream.
+  const auto pin_gap = [&](const Node& from, const Node& to) {
+    const usize gap_start = from.offset + from.length;
+    if (to.offset > gap_start) {
+      pieces.push_back(Piece{
+          doc_text(source_.substr(gap_start, to.offset - gap_start)),
+          Sep::None});
+    }
+  };
+
   for (usize i = 0; i < nodes.size(); ++i) {
     const Node& node = *nodes[i];
     if (node.kind == NodeKind::Comment) {
@@ -579,10 +676,14 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes, bool allow_wrap) 
       if (!suppress && !pieces.empty()) {
         sep = Sep::Space;
       }
+      if (sep == Sep::Space && is_error_token(prev_node)) {
+        pin_gap(*prev_node, node);
+        sep = Sep::None;
+      }
       Doc text = doc_text(node_text(source_, node));
       // A comment that runs to end of line ends the line it sits on, so
-      // what follows it has to start a new one. A block comment does not:
-      // code may keep reading after it on the same line.
+      // what follows it has to start a new one. A block comment does
+      // not: code may keep reading after it on the same line.
       const bool runs_to_eol = node.comment != CommentKind::Block;
       if (runs_to_eol) {
         std::vector<Doc> parts;
@@ -595,19 +696,45 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes, bool allow_wrap) 
       }
       pieces.push_back(Piece{std::move(text), sep});
       pending_break = false;
+      prev_node = &node;
       continue;
     }
     Sep sep = Sep::None;
+    const bool near_error = node.kind == NodeKind::Token &&
+                            node.token == TokenKind::Error;
+    const bool after_comment_break = suppress;
     if (pieces.empty()) {
       sep = Sep::None;
     } else if (suppress) {
       sep = Sep::None;
       suppress = false;
+    } else if (near_error || is_error_token(prev_node)) {
+      if (prev_node != nullptr) {
+        pin_gap(*prev_node, node);
+      }
+      sep = Sep::None;
     } else if (pending_break) {
       sep = allow_wrap ? Sep::Line : Sep::Space;
-    } else if (node.kind == NodeKind::Token && node.token == TokenKind::Dot) {
+    } else if (node.kind == NodeKind::Token && node.token == TokenKind::Dot &&
+               !(prev != nullptr && prev->kind == NodeKind::Token &&
+                 (prev->token == TokenKind::Dot ||
+                  prev->token == TokenKind::DotDot))) {
+      // The chain continues on the next line at a member boundary. In
+      // the middle of a run of dots it must not: a break there
+      // re-pairs the dots into range tokens on the next pass, and the
+      // layout moves with the pairing.
       sep = allow_wrap ? Sep::SoftLine : Sep::None;
     } else if (space_before(prev, prev_generic, prev_unary, node, generic[i])) {
+      sep = Sep::Space;
+    }
+    // Nothing between two tokens can read back as one token, whatever
+    // the spacing rules wanted: the merge is checked after them, over
+    // the seam the layout actually wrote.
+    if (sep == Sep::None && !after_comment_break && !near_error &&
+        !is_error_token(prev_node) && prev_node != nullptr &&
+        prev_node->kind == NodeKind::Token && node.kind == NodeKind::Token &&
+        tokens_merge(node_text(source_, *prev_node),
+                     node_text(source_, node))) {
       sep = Sep::Space;
     }
     pieces.push_back(Piece{node_doc(node), sep});
@@ -616,6 +743,7 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes, bool allow_wrap) 
     pending_break = node.kind == NodeKind::Token && !unary[i] &&
                    !generic[i] && is_break_after(node.token);
     prev = &node;
+    prev_node = &node;
     prev_generic = generic[i];
     prev_unary = unary[i];
   }
@@ -624,7 +752,11 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes, bool allow_wrap) 
 
 Doc Printer::node_doc(const Node& node) {
   switch (node.kind) {
-    case NodeKind::Token: return doc_text(node_text(source_, node));
+    case NodeKind::Token:
+      if (node.token == TokenKind::Error) {
+        return doc_text(error_text(source_, node));
+      }
+      return doc_text(node_text(source_, node));
     case NodeKind::Comment: return doc_text(node_text(source_, node));
     case NodeKind::Group: return print_group(node);
     case NodeKind::Sequence: return doc_empty();
@@ -685,8 +817,8 @@ Doc Printer::print_brace_body(const Node& group) {
         chunks[0].nodes.begin() + static_cast<std::ptrdiff_t>(end));
     std::vector<Doc> inner_parts;
     inner_parts.push_back(doc_line());
-    inner_parts.push_back(
-        chunk_line(chunks[0], chunk_terminator(chunks[0], code, role, true)));
+    inner_parts.push_back(chunk_line(
+        chunks[0], chunk_terminator(chunks[0], code, role, true, false)));
     std::vector<Doc> parts;
     parts.push_back(doc_text("{"));
     parts.push_back(
@@ -778,7 +910,11 @@ Doc Printer::print_list(const Node& group,
     }
     body.push_back(std::move(item_docs[k]));
   }
-  if (trailing || items.size() >= 2) {
+  // A comma the source did not write lands inside a delimiter it
+  // never closed and grows by one per pass, so an unclosed list
+  // invents none; the comma the source did write is its own byte and
+  // prints whatever the group's shape.
+  if (trailing || (group.has_closer && items.size() >= 2)) {
     body.push_back(
         doc_if_break(doc_text(","), trailing ? doc_text(",") : doc_empty()));
   }
@@ -804,10 +940,16 @@ Doc Printer::print_literal(const Node& group) {
   std::vector<Item> items = split_on_commas(inner, had_comma, trailing);
   const std::string close = group.has_closer ? "}" : "";
   if (items.empty() || (items.size() == 1 && items[0].nodes.empty())) {
+    // A closer the source never wrote is not invented here either:
+    // the next pass would read it as the end of a group this one left
+    // open.
+    std::vector<Doc> parts;
+    parts.push_back(doc_text("{"));
     if (had_comma) {
-      return doc_text("{,}");
+      parts.push_back(doc_text(","));
     }
-    return doc_text("{}");
+    parts.push_back(doc_text(close));
+    return doc_concat(std::move(parts));
   }
   if (!had_comma) {
     std::vector<Doc> inner_parts;
@@ -835,7 +977,10 @@ Doc Printer::print_literal(const Node& group) {
     }
     body.push_back(std::move(item_docs[k]));
   }
-  if (trailing || items.size() >= 2) {
+  // An unclosed literal grows an invented comma by one per pass, the
+  // same way an unclosed list does; the comma the source wrote is its
+  // own byte and stays.
+  if (trailing || (group.has_closer && items.size() >= 2)) {
     body.push_back(
         doc_if_break(doc_text(","), trailing ? doc_text(",") : doc_empty()));
   }
@@ -858,6 +1003,11 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const Node& seq,
                            role == BraceRole::MatchBody;
   std::vector<Chunk> chunks;
   Chunk current;
+  // The previous lexeme ended a chunk: a comment on the same line as
+  // the separator rides the line that separator finished rather than
+  // starting one of its own, or the layout would move it on the pass
+  // over this layout's own output.
+  bool after_separator = false;
   const auto flush = [&]() {
     if (!current.nodes.empty()) {
       chunks.push_back(std::move(current));
@@ -866,22 +1016,35 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const Node& seq,
   };
   for (const Node& node : seq.kids) {
     if (node.kind == NodeKind::Token && node.token == TokenKind::Semicolon) {
-      current.explicit_semi = !node.synthetic_semi;
+      // A semicolon with no chunk in front of it ends nothing: the
+      // grammar skips a stray one, and its flag must not leak into the
+      // chunk that follows.
+      if (!current.nodes.empty()) {
+        current.explicit_semi = !node.synthetic_semi;
+      }
       flush();
+      after_separator = true;
       continue;
     }
     if (split_comma && node.kind == NodeKind::Token &&
         node.token == TokenKind::Comma) {
       flush();
+      after_separator = true;
       continue;
     }
     if (node.kind == NodeKind::Comment) {
-      const bool same_line = node.newlines_before == 0 && !current.nodes.empty();
+      const bool same_line =
+          node.newlines_before == 0 && (!current.nodes.empty() || after_separator);
       if (same_line) {
-        current.nodes.push_back(&node);
+        if (current.nodes.empty() && !chunks.empty()) {
+          chunks.back().nodes.push_back(&node);
+        } else {
+          current.nodes.push_back(&node);
+        }
         if (node.comment == CommentKind::Line) {
           flush();
         }
+        after_separator = false;
       } else {
         flush();
         Chunk comment;
@@ -896,6 +1059,7 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const Node& seq,
       current.newlines_before = node.newlines_before;
     }
     current.nodes.push_back(&node);
+    after_separator = false;
   }
   flush();
   return chunks;
@@ -1034,10 +1198,40 @@ bool Printer::chunk_is_semi_terminated_item(const Chunk& chunk) {
   return false;
 }
 
+// Whether a chunk begins with a token the lexer's semicolon-insertion
+// rule suppresses: a line break in front of one of these does not
+// stand in for a semicolon, so the spelled one ahead of it cannot be
+// dropped without merging the two chunks into one.
+bool Printer::chunk_starts_with_suppressor(const Chunk& chunk) {
+  for (const Node* node : chunk.nodes) {
+    if (node->kind != NodeKind::Token) {
+      return false;
+    }
+    switch (node->token) {
+      case TokenKind::Comma:
+      case TokenKind::RParen:
+      case TokenKind::RBracket:
+      case TokenKind::RBrace:
+      case TokenKind::Dot:
+      // The whole dot family: the lexer's probe reads the next
+      // character, and every token that starts with a dot reads as a
+      // chain continuation to it, so a line break before any of them
+      // stands without a semicolon.
+      case TokenKind::DotDot:
+      case TokenKind::DotDotEq:
+      case TokenKind::DotDotLess:
+      case TokenKind::Else: return true;
+      default: return false;
+    }
+  }
+  return false;
+}
+
 bool Printer::keeps_semicolon(const Chunk& chunk,
                               const std::vector<const Node*>& code,
                               BraceRole role,
-                              bool last_chunk) {
+                              bool last_chunk,
+                              bool next_suppresses) {
   // The items the grammar terminates with a semicolon carry it whether
   // the source spelled it or left it to the newline: a reader without
   // the insertion rule, the tree-sitter grammar among them, has to see
@@ -1049,6 +1243,9 @@ bool Printer::keeps_semicolon(const Chunk& chunk,
     return false;
   }
   if (role == BraceRole::SpecBody || role == BraceRole::ExternBody) {
+    return true;
+  }
+  if (next_suppresses) {
     return true;
   }
   if (last_chunk) {
@@ -1071,8 +1268,14 @@ Doc Printer::chunk_line(const Chunk& chunk, Doc terminator) {
   if (terminator.kind != DocKind::Empty) {
     parts.push_back(std::move(terminator));
   }
+  // The space rides only after code: a chunk that is nothing but its
+  // comments starts the line with them, and a pass over a layout that
+  // began each such line with a space would read the space back and
+  // move the comment again.
   for (usize i = end; i < chunk.nodes.size(); ++i) {
-    parts.push_back(doc_text(" "));
+    if (end > 0) {
+      parts.push_back(doc_text(" "));
+    }
     parts.push_back(doc_text(node_text(source_, *chunk.nodes[i])));
   }
   return doc_concat(std::move(parts));
@@ -1117,9 +1320,18 @@ Doc Printer::print_body_lines(const std::vector<Chunk>& chunks,
     std::vector<const Node*> code(
         chunks[k].nodes.begin(),
         chunks[k].nodes.begin() + static_cast<std::ptrdiff_t>(end));
+    bool next_suppresses = false;
+    for (usize j = k + 1; j < chunks.size(); ++j) {
+      if (chunks[j].is_comment) {
+        continue;
+      }
+      next_suppresses = chunk_starts_with_suppressor(chunks[j]);
+      break;
+    }
     parts.push_back(chunk_line(
         chunks[k],
-        chunk_terminator(chunks[k], code, role, k + 1 == chunks.size())));
+        chunk_terminator(chunks[k], code, role, k + 1 == chunks.size(),
+                         next_suppresses)));
   }
   return doc_concat(std::move(parts));
 }
@@ -1132,7 +1344,29 @@ Doc Printer::print_body_lines(const std::vector<Chunk>& chunks,
 Doc Printer::chunk_terminator(const Chunk& chunk,
                               const std::vector<const Node*>& code,
                               BraceRole role,
-                              bool last_chunk) {
+                              bool last_chunk,
+                              bool next_suppresses) {
+  for (usize i = code.size(); i > 0; --i) {
+    const Node* node = code[i - 1];
+    if (node->kind == NodeKind::Comment) {
+      continue;
+    }
+    // A chunk that ends in a delimiter the source never closed eats
+    // whatever follows it in the output, so the next pass would read a
+    // terminator as part of the group's contents. No terminator is
+    // written after one.
+    if (node->kind == NodeKind::Group && !node->has_closer) {
+      return doc_empty();
+    }
+    // A hungry error eats a separator the same way; a complete one
+    // ended where it ended, and the separator after it reads back as a
+    // separator.
+    if (node->kind == NodeKind::Token && node->token == TokenKind::Error &&
+        error_absorbs(error_text(source_, *node))) {
+      return doc_empty();
+    }
+    break;
+  }
   if (role == BraceRole::StructBody || role == BraceRole::EnumBody) {
     return doc_text(",");
   }
@@ -1145,8 +1379,9 @@ Doc Printer::chunk_terminator(const Chunk& chunk,
     }
     return doc_text(",");
   }
-  return keeps_semicolon(chunk, code, role, last_chunk) ? doc_text(";")
-                                                        : doc_empty();
+  return keeps_semicolon(chunk, code, role, last_chunk, next_suppresses)
+             ? doc_text(";")
+             : doc_empty();
 }
 
 Doc Printer::print_line(const std::vector<const Node*>& nodes) {
