@@ -80,6 +80,34 @@ void LlvmIrEmitter::check_state() {
   DCHECK_MSG(interner_, "String Interner is null");
 }
 
+llvm::Value* LlvmIrEmitter::argument_value(const ir::Operand& op,
+                                           llvm::Type* wanted) const {
+  const ir::TypeTag tag = storage_->types()[op.type.idx].tag;
+  if (tag == ir::TypeTag::Void || tag == ir::TypeTag::Never) {
+    return llvm::UndefValue::get(wanted);
+  }
+  llvm::Value* value = resolve_operand_value(op);
+  if (value->getType() != wanted) {
+    // The unit type lowers to a dummy operand, so the parameter's own
+    // zero-sized type is the value that belongs here.
+    if (auto* structure = llvm::dyn_cast<llvm::StructType>(wanted);
+        structure != nullptr && structure->getNumElements() == 0) {
+      return llvm::UndefValue::get(wanted);
+    }
+  }
+  return value;
+}
+
+llvm::Type* LlvmIrEmitter::return_type(ir::TypeIdx idx) const {
+  const ir::TypeTag tag = storage_->types()[idx].tag;
+  // A function's return position, and only that position, spells the
+  // unit and uninhabited types as LLVM's `void`.
+  if (tag == ir::TypeTag::Void || tag == ir::TypeTag::Never) {
+    return builder_->getVoidTy();
+  }
+  return type(idx);
+}
+
 llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
   if (type_cache_.size() <= idx.idx) {
     type_cache_.resize(storage_->types().size(), nullptr);
@@ -98,7 +126,12 @@ llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
   using T = ir::TypeTag;
 
   switch (tag) {
-    case T::Void: return builder_->getVoidTy();
+    case T::Void:
+      // The unit type is a value of no bytes, not an unsized hole: a
+      // field or an element holds it, and the layout gives it size
+      // zero and alignment one. Only a return position wants void, and
+      // `return_type` is what asks for that.
+      return llvm::StructType::get(module_->getContext(), {});
     case T::Never:
       // Uninhabited; only function return positions lower through
       // here (noreturn externals), where LLVM expects void.
@@ -751,13 +784,13 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
           param_types.push_back(type(param));
         }
         llvm::FunctionType* fn_type =
-            llvm::FunctionType::get(type(sig.ret), param_types, false);
+            llvm::FunctionType::get(return_type(sig.ret), param_types, false);
         llvm::SmallVector<llvm::Value*, FUNCTION_ARGS_SOO_SIZE> args;
         args.reserve(ops.size());
         args.push_back(env);
         for (u32 idx = 1; idx < ops.size(); ++idx) {
           const ir::Operand& arg_op = storage_->operands()[ops.head() + idx];
-          args.push_back(resolve_operand_value(arg_op));
+          args.push_back(argument_value(arg_op, param_types[idx]));
         }
         llvm::CallInst* call_inst = builder_->CreateCall(fn_type, code, args);
         if (i.dst.is_valid()) {
@@ -772,7 +805,8 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
 
       for (u32 idx = 1; idx < ops.size(); ++idx) {
         const ir::Operand& arg_op = storage_->operands()[ops.head() + idx];
-        args.push_back(resolve_operand_value(arg_op));
+        args.push_back(argument_value(
+            arg_op, callee_func->getFunctionType()->getParamType(idx - 1)));
       }
 
       llvm::CallInst* call_inst = builder_->CreateCall(callee_func, args);
@@ -784,7 +818,13 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
     }
     case Op::Ret: {
       DCHECK(ops.size() <= 1);
-      if (ops.empty()) {
+      // An explicit `()` comes back as an operand of a type that holds
+      // no bytes, and the function still returns void.
+      const bool void_return =
+          ops.empty() ||
+          storage_->types()[storage_->operands()[ops.head()].type].tag ==
+              ir::TypeTag::Void;
+      if (void_return) {
         builder_->CreateRetVoid();
       } else {
         const ir::Operand& lhs = storage_->operands()[ops.head()];
@@ -961,7 +1001,7 @@ llvm::Function* LlvmIrEmitter::create_function(
   }
 
   llvm::FunctionType* func_type = llvm::FunctionType::get(
-      type(function_meta.return_type),
+      return_type(function_meta.return_type),
       llvm::ArrayRef<llvm::Type*>(parameter_types), false);
 
   const std::string func_name = linkable_name(function_meta);

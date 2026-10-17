@@ -105,6 +105,7 @@ class LlvmIrEmitter {
   void check_state();
 
   llvm::Type* type(ir::TypeIdx idx) const;
+  llvm::Type* return_type(ir::TypeIdx idx) const;
   llvm::Type* build_type(ir::TypeIdx idx) const;
   llvm::Type* enum_payload_area_type(ir::TypeIdx idx) const;
 
@@ -146,6 +147,12 @@ class LlvmIrEmitter {
   std::string display_name(const ir::FunctionMeta& function_meta) const;
 
   llvm::Value* resolve_operand_value(const ir::Operand& operand) const;
+  // The value an argument carries, as the callee's parameter type
+  // wants it. A zero-sized parameter has no bits to fill, and the unit
+  // type lowers to a dummy operand, so the empty struct is what goes
+  // there whatever the operand holds.
+  llvm::Value* argument_value(const ir::Operand& operand,
+                              llvm::Type* wanted) const;
   llvm::Function* resolve_operand_function(const ir::Operand& operand) const;
 
   // Whether an instruction is a call a backtrace names: a call whose

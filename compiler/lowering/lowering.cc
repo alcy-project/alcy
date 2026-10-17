@@ -266,6 +266,14 @@ const std::vector<ir::TypeIdx>& Lowerer::fn_instance_args(u32 module,
 void Lowerer::emit_void(ir::Opcode op,
                         const std::vector<ir::OperandIdx>& ops,
                         ir::InstructionFlags flags) {
+  // A store through a pointer to the unit type writes nothing. The
+  // value a `()` expression carries is a placeholder with a width of
+  // its own, and spilling it would land on whatever the layout put at
+  // the same offset, which for a struct field is the field beside it.
+  if (op == ir::Opcode::Store && ops.size() == 2 &&
+      tag_of(builder.state().operands[ops[1]].type) == ir::TypeTag::Void) {
+    return;
+  }
   const ir::OperandIdx head =
       ir::OperandIdx(static_cast<u32>(builder.state().operands.size()));
   for (ir::OperandIdx op_idx : ops) {
