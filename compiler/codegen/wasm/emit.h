@@ -87,6 +87,9 @@ class Emitter {
   // bump allocator's cursor.
   static constexpr u32 GLOBAL_SP = 0;
   static constexpr u32 GLOBAL_HEAP = 1;
+  // The shadow stack's bound, declared with the layout after the bodies
+  // that read it, which is why a body names the index instead.
+  static constexpr u32 GLOBAL_STACK_LIMIT = 2;
   static constexpr u32 NO_LOCAL = 0xFFFFFFFF;
 
   // Bytes reserved between the data and the heap for the shadow stack.
@@ -232,6 +235,7 @@ class Emitter {
   u32 colon_text_ = NO_LOCAL;
   u32 overflow_text_ = NO_LOCAL;
   u32 shift_text_ = NO_LOCAL;
+  u32 stack_text_ = NO_LOCAL;
 
   // --- per-function state, reset by emit_function ---
   BinaryWriter body_;

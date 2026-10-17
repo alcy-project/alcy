@@ -100,6 +100,9 @@ constexpr std::string_view ALLOC_FAILURE = "allocation failed";
 // runtime's (ADR-0068).
 constexpr std::string_view OVERFLOW_FAILURE = "integer overflow";
 constexpr std::string_view SHIFT_FAILURE = "shift out of range";
+// The shadow stack crossing its reserve would land on the heap, so the
+// frame guard reports the reserve's name instead of corrupting.
+constexpr std::string_view STACK_FAILURE = "stack overflow";
 
 #if BUILD_FLAG(IS_DEBUG)
 bool is_terminator(ir::Opcode op) {
@@ -186,19 +189,21 @@ base::Result<std::vector<u8>, codegen::EmitError> Emitter::run() {
       builder_.add_element(RUNTIME_FUNCTIONS, entries);
     }
   }
-  if (emit_program().is_err()) {
-    return base::make_err(codegen::EmitError::Unsupported);
-  }
   // The runtime's newline is data too, and the scratch slot the layout
-  // publishes sits after every string; both must be placed before the
-  // runtime bodies bake the addresses in. The panic chrome is data for
-  // the same reason.
+  // publishes sits after every string; both must be placed before any
+  // body bakes an address in. The panic chrome is data for the same
+  // reason, and the frame guard names the stack reserve from inside
+  // every function body.
   (void)newline_offset();
   panic_text_ = data_for("panic");
   at_text_ = data_for(" at ");
   colon_text_ = data_for(": ");
   overflow_text_ = data_for(OVERFLOW_FAILURE);
   shift_text_ = data_for(SHIFT_FAILURE);
+  stack_text_ = data_for(STACK_FAILURE);
+  if (emit_program().is_err()) {
+    return base::make_err(codegen::EmitError::Unsupported);
+  }
   if (emit_start().is_err()) {
     return base::make_err(codegen::EmitError::Unsupported);
   }
@@ -437,6 +442,22 @@ Emitter::EmitResult Emitter::emit_function(ir::FunctionIdx index) {
   local_get(frame_local_);
   i32_const(static_cast<i32>(frame_bytes_));
   op(OP_I32_ADD);
+  // Past the reserve the frame lands on the heap, which is how a deep
+  // recursion used to overwrite a live buffer and keep running. The
+  // bound is a panic rather than that corruption.
+  local_set(scratch0_);
+  local_get(scratch0_);
+  global_get(GLOBAL_STACK_LIMIT);
+  op(OP_I32_GT_U);
+  if_void();
+  i32_const(static_cast<i32>(stack_text_));
+  i32_const(static_cast<i32>(STACK_FAILURE.size()));
+  i32_const(0);
+  i32_const(0);
+  call(PANIC);
+  op(OP_UNREACHABLE);
+  end_op();
+  local_get(scratch0_);
   global_set(GLOBAL_SP);
   set_state(0);
   if (emit_dispatch().is_err()) {
@@ -1148,6 +1169,9 @@ void Emitter::add_memory_and_globals() {
   builder_.set_memory(pages == 0 ? 1 : pages);
   builder_.add_global(ValType::I32, true, static_cast<i32>(stack_base_));
   builder_.add_global(ValType::I32, true, static_cast<i32>(heap_base_));
+  const u32 limit =
+      builder_.add_global(ValType::I32, false, static_cast<i32>(heap_base_));
+  DCHECK_EQ(limit, GLOBAL_STACK_LIMIT);
 }
 
 // The runtime the program's `alcy_*` declarations resolve to, written
