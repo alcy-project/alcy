@@ -5,16 +5,25 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
-- [ ] The formatter's fixed-point digits are exact only to about sixteen
-  places: `{:.Nf}` takes each digit by multiplying the fraction by ten
-  in `f64`, so the error compounds and the seventeenth place is wrong -
-  `{:.17f}` of `0.1` prints `0.10000000000000000` where half-up
-  rounding of the exact value is `0.10000000000000001`, `0.7` prints
+- [x] The formatter's fixed-point digits were exact only to about
+  sixteen places: `{:.Nf}` took each digit by multiplying the fraction
+  by ten in `f64`, so the error compounded and the seventeenth place
+  was wrong - `{:.17f}` of `0.1` printed `0.10000000000000000` where
+  half-up rounding of the value is `0.10000000000000001`, `0.7` printed
   `0.70000000000000000` against `0.69999999999999996`, and `1/3`
-  prints `0.33333333333333330` against `0.33333333333333331`. The
-  thirteen-to-sixteen-place forms agree with the exact value, so the fix
-  is an exact conversion over the mantissa (a scaled long division)
-  rather than the `f64` loop; the spec's `N` cap of 17 stands.
+  printed `0.33333333333333330` against `0.33333333333333331`. The
+  fraction is the dyadic rational `M / 2^K`, and its digits and the
+  half-up bit come from one exact product and a shift now, so every place
+  is the value's; `exe-fmt-exact` and `e2e/wasm/fmt-exact` hold the
+  shapes, and the spec's `N` cap of 17 stands.
+- [ ] The exponent form's mantissa is reached by multiplying the
+  magnitude by ten or a tenth per step, so its low places are the
+  accumulated rounding, not the value's: `{:.17f}` of `f64::MAX` prints
+  `1.79769313486234683e308` where the value rounds to
+  `1.79769313486231571e308`, about thirteen good places out of the
+  seventeen asked for. A single scaled multiplication per step would
+  bound the error to one rounding, and the exact answer wants a power of
+  ten table or the scaled long division the fraction digits use.
 - [x] A cast from a float to an integer was undefined where the language
   says nothing is (ADR-0066): LLVM's `fptosi` left NaN and an
   out-of-range value poison, so a checked build, a release build, and a
