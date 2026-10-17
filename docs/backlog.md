@@ -161,6 +161,13 @@ replaced. The foundations are in `roadmap.md`.
 
 ### Language and library surface
 
+- [ ] The direct-wasm stack budget: a frame past the reserve (the
+  shadow stack's base) panics with "stack overflow", which is a
+  per-target limit native does not share and no spec states; a
+  variable-length alloca still walks past it unchecked, and
+  `too-many-locals` provokes the local-cap report through release
+  register counts, so it wants rechecking when regalloc-adjacent work
+  lands.
 - [ ] Owning function types (ADR-0075) beyond the parameter slice: a
   method's `fn(...)` parameter still refuses, because the method path
   spells type arguments and infers none from arguments; the return
