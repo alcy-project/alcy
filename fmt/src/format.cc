@@ -40,10 +40,13 @@ std::string_view error_text(std::string_view source, const Node& node) {
   while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) {
     text.remove_suffix(1);
   }
-  if (node.offset + node.length >= source.size()) {
-    // A span that reaches the end of the source also drops the
-    // newlines the lexer's clipping absorbed there: the line break is
-    // the one the formatter writes itself after the last token.
+  const usize span_end = node.offset + node.length;
+  if (source.find_first_not_of(" \t\r\n", span_end) ==
+      std::string_view::npos) {
+    // Nothing but blanks follow the span, so the tail of the layout
+    // normalizes every one of them away, and the newlines the lexer's
+    // clipping absorbed into the span go with them. The line break
+    // that lands there is the one the formatter writes itself.
     while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) {
       text.remove_suffix(1);
     }
@@ -1317,10 +1320,25 @@ Doc Printer::chunk_line(const Chunk& chunk, Doc terminator) {
   // The space rides only after code: a chunk that is nothing but its
   // comments starts the line with them, and a pass over a layout that
   // began each such line with a space would read the space back and
-  // move the comment again.
+  // move the comment again. After an error the source's own gap is
+  // pinned instead of the canonical space -- those bytes decide what
+  // the error's bytes read back as, and a comment that moved would
+  // feed them to the span.
   for (usize i = end; i < chunk.nodes.size(); ++i) {
     if (end > 0) {
-      parts.push_back(doc_text(" "));
+      const Node& last_code = *chunk.nodes[end - 1];
+      const Node& comment = *chunk.nodes[i];
+      if (last_code.kind == NodeKind::Token &&
+          last_code.token == TokenKind::Error) {
+        const usize gap_start =
+            last_code.offset + error_text(source_, last_code).size();
+        if (comment.offset > gap_start) {
+          parts.push_back(doc_text(source_.substr(
+              gap_start, comment.offset - gap_start)));
+        }
+      } else {
+        parts.push_back(doc_text(" "));
+      }
     }
     parts.push_back(doc_text(node_text(source_, *chunk.nodes[i])));
   }
