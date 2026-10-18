@@ -89,7 +89,12 @@ replaced. The foundations are in `roadmap.md`.
   exponentially often and the instantiations are a consequence. The
   recorded type table holds one entry per check but nothing reads it
   back, and a memo must respect that a bare integer literal is
-  re-checked against a sibling's type. Reproduce with a generated
+  re-checked against a sibling's type. A factor of exactly two per
+  level points at a regular double check: each level's argument is
+  typed once on its own and once against the type the enclosing
+  generic resolution expects, and both walks descend. Finding that
+  second check and reusing the first answer, or memoizing on the
+  expression plus its context, is the fix. Reproduce with a generated
   file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
