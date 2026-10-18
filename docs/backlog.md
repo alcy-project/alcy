@@ -215,7 +215,15 @@ replaced. The foundations are in `roadmap.md`.
   types (`expr=20` plain, then with `exp=169`), so no key dedupes them
   and the fix has to stop the second request; the same-key repeats
   that broke the four memo variants are another, rarer shape (a
-  literal under a cast) and they are what any table must leave alone. The key must carry
+  literal under a cast) and they are what any table must leave alone. The
+  argument path shows the shape: `check_call_args` (`types_expr.cc:673`)
+  types each argument once against its parameter and then walks the
+  same argument again through `expr_comp_known` for a comp parameter
+  (`:696`). A generic call infers its type arguments by checking them
+  once and then reaches `check_call_args` with the resolved
+  parameters, so the tree is walked twice per level - read `check_call`
+  (`:1488`) for the inference pass and let it hand the resolved
+  arguments over instead of re-checking. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
