@@ -326,7 +326,14 @@ replaced. The foundations are in `roadmap.md`.
   function's head, so re-locate `Checker::instantiate_fn` before
   instrumenting. Count calls against mints: if mints stays flat while
   calls grow, the reuse works and the requests themselves multiply; if
-  mints grows with calls, the reuse is missing. The key must carry
+  mints grows with calls, the reuse is missing. Measured: reuse is
+  fine. `instantiate_fn` takes 4,351 calls and mints 56 instances at
+  twelve levels, and 65,791 calls with 60 mints at sixteen, so the
+  distinct instantiations grow linearly and the requests explode. The
+  fix is therefore on the request side: something asks for the same
+  instantiation again and again, and since the body checker is linear
+  (`check_fn` 253 to 257) the asking happens inside one body walk. Find
+  the loop that walks a call expression more than once per body. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
