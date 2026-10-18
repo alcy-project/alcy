@@ -79,9 +79,13 @@ replaced. The foundations are in `roadmap.md`.
   bodies (`types.cc:4840`), so the descent stops at the first generic
   call. What repeats instead is `lookup_function` inside
   `precheck_called_fn` (`:4828`), which instantiates the generic once
-  per walk; the next measurement is how often the walk itself runs, so
-  count the callers of `check_const_dependencies` rather than its
-  callees. Reproduce with a generated file.
+  per walk. A counter on the walk itself reads under 256 calls at
+  both depths, so the walk is not invoked exponentially either; the
+  instantiations come from resolving the nested call expressions each
+  time they are reached, not from the walk repeating. The next step is
+  to count how often the checker resolves one call expression and how
+  many instantiations that resolution asks for. Reproduce with a
+  generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
