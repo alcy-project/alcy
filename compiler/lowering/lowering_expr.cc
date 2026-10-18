@@ -2359,17 +2359,17 @@ bool Lowerer::run_bounds(Val range,
         emit(ir::Opcode::Select, usize_ty,
              {to_operand(use_bump, boolean), to_operand(bumped, usize_ty),
               use_value(wide)});
-    const ir::RegisterIdx crossed =
-        emit(ir::Opcode::IntAddWrap, usize_ty, {len, one});
-    const ir::RegisterIdx limit = emit(
-        ir::Opcode::Select, usize_ty,
-        {to_operand(use_bump, boolean), len, to_operand(crossed, usize_ty)});
-    const ir::RegisterIdx under =
-        emit(ir::Opcode::Lt, boolean,
-             {to_operand(bounded, usize_ty), to_operand(limit, usize_ty)});
+    // The bound is an index into the run, and `len` itself names the
+    // end, so it is in range exactly when it does not exceed `len`. The
+    // `+1` an included end or an excluded start carries is already in
+    // `bounded`, so one comparison serves both spellings. Reading the
+    // bound against `len + 1` instead rejected the last element an
+    // inclusive end names, and read a length that wrapped.
+    const ir::RegisterIdx within =
+        emit(ir::Opcode::Le, boolean, {to_operand(bounded, usize_ty), len});
     const ir::RegisterIdx ok =
         emit(ir::Opcode::Or, boolean,
-             {to_operand(is_unbounded, boolean), to_operand(under, boolean)});
+             {to_operand(is_unbounded, boolean), to_operand(within, boolean)});
     require(ok);
     if (failed) {
       return Val{size_one, error_type(), false, false};
