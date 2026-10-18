@@ -2270,7 +2270,7 @@ ir::TypeIdx Checker::check_element_index(ir::TypeIdx receiver,
     return error_type();
   }
   if (tag_of(receiver) == ir::TypeTag::Array) {
-    const ir::ArrayType& array =
+    const ir::ArrayType array =
         builder.array_types()[builder.types()[receiver].as_array()];
     if (expected != nullptr) {
       return unify(*expected, array.element, span, "index");
@@ -2282,7 +2282,7 @@ ir::TypeIdx Checker::check_element_index(ir::TypeIdx receiver,
     const ir::TypeIdx pointee =
         builder.ref_types()[builder.types()[receiver].as_ref()].pointee;
     if (tag_of(pointee) == ir::TypeTag::Slice) {
-      const ir::SliceType& slice =
+      const ir::SliceType slice =
           builder.slice_types()[builder.types()[pointee].as_slice()];
       if (expected != nullptr) {
         return unify(*expected, slice.element, span, "index");
@@ -2487,7 +2487,7 @@ ir::TypeIdx Checker::check_run_index(ir::TypeIdx receiver,
   }
   const ir::TypeTag tag = tag_of(receiver);
   if (tag == ir::TypeTag::Array) {
-    const ir::ArrayType& array =
+    const ir::ArrayType array =
         builder.array_types()[builder.types()[receiver].as_array()];
     unsized = true;
     const ir::TypeIdx run = builder.slice_type(array.element);
@@ -3072,7 +3072,7 @@ ir::TypeIdx Checker::check_array(u32 module,
   u64 expected_count = 0;
   bool has_expected_count = false;
   if (expected != nullptr && tag_of(*expected) == ir::TypeTag::Array) {
-    const ir::ArrayType& shape =
+    const ir::ArrayType shape =
         builder.array_types()[builder.types()[*expected].as_array()];
     expected_element = shape.element;
     element_expected = &expected_element;
