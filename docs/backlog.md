@@ -348,7 +348,14 @@ replaced. The foundations are in `roadmap.md`.
   time the work itself - a sampling profile of `alcy check` on the
   sixteen-level wrapper, or a cumulative timer around each phase of
   the analyzer - so the next change is aimed at the seconds and not at
-  a count. The key must carry
+  a count. `perf record -g` on the sixteen-level wrapper works and the
+  profile is flat: the hottest single address is 4.25 percent and the
+  rest fall away quickly, with no analyzer function on top. The build
+  is the debug one, and it carries AddressSanitizer, so much of that
+  time is the sanitizer's bookkeeping and the picture is not the
+  release one. Measure the release build's wrapper before treating the
+  seconds as an algorithmic cost; if it is still super-linear there,
+  profile that build instead. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
