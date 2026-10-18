@@ -234,7 +234,13 @@ replaced. The foundations are in `roadmap.md`.
   (`:1560`), which types every one of them again. `resolve_generic_fn`
   already knows the types it inferred from; carrying them back (or
   letting it record them where `check_call_args` reads) removes the
-  second walk and the exponent with it. The key must carry
+  second walk and the exponent with it. The inference function is
+  `Checker::resolve_generic_fn` (`types.cc:6607`); it first fills the
+  explicitly spelled parameters and then works the rest out from the
+  arguments, below `:6640`. Read from there: whatever it computes per
+  argument is what `check_call_args` recomputes, so threading one
+  vector of argument types from the inference to the argument check
+  is the whole fix. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
