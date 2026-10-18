@@ -5,7 +5,7 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
-- [ ] A method call whose receiver is a range index aborts the
+- [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
   (`llvm_ir_emitter_compute.cc:327`) and `Construct 'struct' is not
