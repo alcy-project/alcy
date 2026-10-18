@@ -453,22 +453,13 @@ replaced. The foundations are in `roadmap.md`.
   belongs to the package's build rather than a dependent's.
   `dependencies_test` calls `Pair::new` and `p.total()` with the
   library's sources gone.
-- [ ] A generic whose signature names an owning function type cannot be
-  checked once, because the closure's witness is per instantiation
-  (ADR-0075): the type the body returns is not the type the declaration
-  names. Making the closure's type carry its own parameters is what
-  would let such a generic be checked once, and cross a package
-  boundary with the rest.
 - [ ] The generic boundary in a summary: a `needs_body` row is
   omitted, so a dependent that names a generic item reads "Unresolved
   import" without learning why. The IR has no parameterized types (its
   tags are concrete), so a declaration's shape cannot be spelled; it
-  exists only per instantiation. The decision is ADR-0079: a generic
-  item crosses as its declaration and its checked body, and the
-  dependent instantiates it. What remains is that work - a type
-  parameter in the IR, the body checked once against its parameters, the
-  specialization pass, the body in the summary, and the AST-level
-  instantiation walk deleted.
+  exists only per instantiation. Fetching the instantiation from the
+  library, or spelling the instantiations the library already built
+  under synthesized names, is the choice the ADR records.
 - [ ] `core::string`'s `trim_start_matches` once reported `Returns
   reference to local 's'` for the `None` arm's `ret s` - the loop
   reassigns `mut s` from `s.strip_prefix(pat)` and the local holds a
@@ -763,57 +754,12 @@ replaced. The foundations are in `roadmap.md`.
   open intervals containing the event now, which one thread cannot tell
   apart from the old rule.
 - [ ] `demangle` recurses per type constructor with no depth limit; a
-  hostile symbol can exhaust the stack. Latent while only tests call it.
-- [ ] A value's type is named in three places, and a place is not a
-  value: a register's row, the operand that names it, and the
-  lowering's own value each carry a type, and the verifier compares
-  none of them. The direct-wasm backend reads the operand's, so a
-  lowering site that disagrees with the register writes a word of the
-  wrong width - the borrowed binding's fix restamped one operand to
-  match, and the backend's `is_address` case and the `Val` constructions
-  around `lowering_expr.cc:377` are the same gap. A place's address is a
-  pointer value, but a register that holds one is declared with the
-  pointee's type, so the IR cannot say what the register holds. One
-  home for a value's type, and a place that is not a value, is the
-  fix; the verifier's silence is what let it drift.
-- [ ] The direct-wasm backend has no allocation model: every SSA
-  register gets a wasm local of its own, against ADR-0049's slot model,
-  so the local count is the register count and one inlined call crosses
-  the engine's cap, allocas need a second frame pass, and the stack
-  guard costs four or five instructions per call in functions whose
-  frame cannot reach the limit. The opcodes are raw hex whose only name
-  is a comment, so a wide shift was misencoded while the suite was
-  green, and a narrow result is canonicalized per operation rather than
-  at one destination rule.
-- [ ] A closure's environment is the closure's own address, so the
-  value is self-referential and cannot be moved: a store of the address
-  of a moved place is refused, and a closure that owns
-  nothing is declared not moved, which is not a property of its type -
-  a `&mut` capture is an exclusive loan, and two handles over one
-  loan are what `exe-closure-capture-mut` expects. The environment
-  belongs outside the value, or beside the call as its own operand.
-- [ ] ADR-0076 says the region inference is total, and the backlog
-  holds a program that reads dead storage and compiles. Until the
-  solver exists, that record is a claim the code does not make, and a
-  checker that accepts incorrect code is worse than one that refuses
-  correct code.
-- [ ] A summary identifies a nominal by comparing two type graphs, so
-  two declarations with the same shape are the same type: the matcher
-  walks both graphs with a pair budget, and a declaration past it, or
-  one that two rows match, is dropped without a word. A declaration
-  identity in the artifact, and a comparison by it, would end the
-  matcher, the name fallback, and the per-occurrence re-spelling.
-- [ ] A summary carries no spec implementation, so a dependent cannot
-  see that a library's type implements one, and the roadmap asks a
-  summary to carry them.
-- [ ] The cache is consulted after the frontend has parsed and
-  resolved, so a hit cannot skip the work that dominates, and the
-  compiler's version string does not identify the binary that wrote an
-  entry: two builds of one dirty tree share every key.
-- [ ] `alcy run` compiles without the cache, so a run pays the front
-  end every time. The build's cache lookup and the run's lowering are
-  two paths over the same work, and the run path is the one that has
-  no key.
+  hostile symbol can exhaust the stack. Latent while only tests call
+  it. The recursion is in the `Decoder` inside
+  `compiler/symbol/mangle.cc` (its type reader, reached from
+  `demangle` at `:528`); a depth counter that answers
+  `DemangleError::Malformed` past a limit, plus a unit test over a
+  deeply nested encoded type, is the fix.
 
 ## Shipped
 
