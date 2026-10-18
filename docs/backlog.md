@@ -74,9 +74,14 @@ replaced. The foundations are in `roadmap.md`.
   once per instantiation it is reached through. The walk runs from a
   pass over each function's body (`:4620`) that learns which values a
   constant expression can reach, and `precheck_called_fn` is what
-  follows a call into the callee's body. An in-progress set keyed on
-  the item, guarded in `precheck_called_fn` (`types.cc:4819`), breaks
-  the descent. Reproduce with a generated file.
+  follows a call into the callee's body. The precheck already keeps a
+  per-item set (`prechecked_fns_`) and deliberately skips generic
+  bodies (`types.cc:4840`), so the descent stops at the first generic
+  call. What repeats instead is `lookup_function` inside
+  `precheck_called_fn` (`:4828`), which instantiates the generic once
+  per walk; the next measurement is how often the walk itself runs, so
+  count the callers of `check_const_dependencies` rather than its
+  callees. Reproduce with a generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
