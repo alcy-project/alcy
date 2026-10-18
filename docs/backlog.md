@@ -381,7 +381,13 @@ replaced. The foundations are in `roadmap.md`.
   expression walk: a parent asks `check_expr` for the same call child
   again and again. Read the cases the caller trace named - `Cast`,
   `Range`, `Deref`, `Binary`, `Call` - for a second `check_expr` of one
-  child, which is now the single remaining question. The key must carry
+  child, which is now the single remaining question. The cases are
+  mostly single checks: `Cast` types its operand once (`:2214`),
+  `Binary` checks logical operands once each and otherwise hands both
+  to `check_binary_operands` (`:3756`), which takes `expected` and is
+  the next read (`types_expr.cc:619`) - a helper that learns the
+  left operand's type and then re-types it against the unified one
+  would be exactly the doubling. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
