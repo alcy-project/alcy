@@ -11,8 +11,11 @@ replaced. The foundations are in `roadmap.md`.
   more than a hundred at twenty-eight, where `alcy check` had to be
   killed. The input is a few hundred bytes, so the cost is in the
   cover walk, not in reading it, and the growth is steep enough to
-  read as exponential in the nesting depth. Reproduce with `alcy
-  check` on a generated file. The walk is `Checker::patterns_cover`
+  read as exponential in the nesting depth. A plain constructor
+  chain with no `|` anywhere - `Some(Some(... E::A ...))` and a
+  wildcard arm - hangs the same way, so the cost is not the
+  or-pattern expansion. Reproduce with `alcy check` on a generated
+  file. The walk is `Checker::patterns_cover`
   (`types_expr.cc:3032`); it takes the rows by value and specializes
   them per constructor at the two recursive calls (`:3146`, `:3200`),
   so a nested payload rebuilds the row set at every level. Memoizing
