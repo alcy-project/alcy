@@ -2090,7 +2090,7 @@ ir::TypeIdx Checker::uninit_payload(ir::TypeIdx type) const {
   if (tag_of(type) != ir::TypeTag::Struct) {
     return ir::TypeIdx::invalid();
   }
-  const ir::StructType& shape =
+  const ir::StructType shape =
       builder.struct_types()[builder.types()[type.idx].as_struct()];
   if (shape.name != uninit_name_id) {
     return ir::TypeIdx::invalid();
@@ -3215,7 +3215,7 @@ bool Checker::check_intrinsic_signature(u32 module,
     if (tag_of(pointee(params[0])) == ir::TypeTag::Slice) {
       return wrong();
     }
-    const ir::SliceType& slice =
+    const ir::SliceType slice =
         builder.slice_types()[builder.types()[pointee(ret)].as_slice()];
     const bool kinds_match =
         (ret_tag == ir::TypeTag::MutRef && ptr_tag == ir::TypeTag::MutRef) ||
@@ -3757,7 +3757,7 @@ bool Checker::drop_scan(ir::TypeIdx type, std::vector<u32>& stack) {
       result = drop_scan(builder.array_types()[node.as_array()].element, stack);
       break;
     case ir::TypeTag::Tuple: {
-      const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
+      const ir::TupleType tuple = builder.tuple_types()[node.as_tuple()];
       for (ir::TypeIdx element : tuple.elements) {
         if (drop_scan(element, stack)) {
           result = true;
@@ -3887,7 +3887,7 @@ bool Checker::has_value_cycle(ir::TypeIdx root,
   bool cycle = false;
   switch (node.tag) {
     case ir::TypeTag::Struct: {
-      const ir::StructType& struct_type =
+      const ir::StructType struct_type =
           storage.struct_types()[node.as_struct()];
       for (ir::TypeIdx field : struct_type.fields) {
         if (has_value_cycle(field, stack, storage)) {
@@ -3902,7 +3902,7 @@ bool Checker::has_value_cycle(ir::TypeIdx root,
       for (ir::EnumVariantTypeIdx vidx = enum_type.variants.head();
            vidx.idx < enum_type.variants.head().idx + enum_type.variants.size();
            vidx = ir::EnumVariantTypeIdx(vidx.idx + 1)) {
-        const ir::EnumVariantType& variant = storage.enum_variant_types()[vidx];
+        const ir::EnumVariantType variant = storage.enum_variant_types()[vidx];
         for (ir::TypeIdx field : variant.fields) {
           if (has_value_cycle(field, stack, storage)) {
             cycle = true;
@@ -3916,7 +3916,7 @@ bool Checker::has_value_cycle(ir::TypeIdx root,
       break;
     }
     case ir::TypeTag::Tuple: {
-      const ir::TupleType& tuple = storage.tuple_types()[node.as_tuple()];
+      const ir::TupleType tuple = storage.tuple_types()[node.as_tuple()];
       for (ir::TypeIdx element : tuple.elements) {
         if (has_value_cycle(element, stack, storage)) {
           cycle = true;
@@ -3926,12 +3926,12 @@ bool Checker::has_value_cycle(ir::TypeIdx root,
       break;
     }
     case ir::TypeTag::Array: {
-      const ir::ArrayType& array = storage.array_types()[node.as_array()];
+      const ir::ArrayType array = storage.array_types()[node.as_array()];
       cycle = has_value_cycle(array.element, stack, storage);
       break;
     }
     case ir::TypeTag::Slice: {
-      const ir::SliceType& slice = storage.slice_types()[node.as_slice()];
+      const ir::SliceType slice = storage.slice_types()[node.as_slice()];
       cycle = has_value_cycle(slice.element, stack, storage);
       break;
     }
