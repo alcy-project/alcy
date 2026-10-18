@@ -1866,7 +1866,7 @@ ir::TypeIdx Checker::check_field(u32 module,
   }
   const ir::TypeTag tag = tag_of(receiver);
   if (tag == ir::TypeTag::Struct) {
-    const ir::StructType& struct_type =
+    const ir::StructType struct_type =
         builder.struct_types()[builder.types()[receiver].as_struct()];
     NominalEntry* owner = nullptr;
     u32 field_index = 0;
@@ -1947,7 +1947,7 @@ ir::TypeIdx Checker::check_field(u32 module,
     return result;
   }
   if (tag == ir::TypeTag::Tuple) {
-    const ir::TupleType& tuple_type =
+    const ir::TupleType tuple_type =
         builder.tuple_types()[builder.types()[receiver].as_tuple()];
     u32 index = 0;
     bool digits = !field_name.name.empty();
@@ -2147,7 +2147,7 @@ ir::TypeIdx Checker::check_question(u32 module,
     (void)index;
     return error_type();
   }
-  const ir::EnumVariantType& first =
+  const ir::EnumVariantType first =
       builder.enum_variant_types()[shape.variants.head()];
   if (first.fields.empty()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerTryNeedsValueVariant>(
