@@ -1,0 +1,4 @@
+exit = 4
+args = ["--color=always"]
+contains = ["Comp block value is not comp-known", "\u001b[31m"]
+not_contains = []
