@@ -446,7 +446,17 @@ replaced. The foundations are in `roadmap.md`.
   with each of the consecutive entries of one hot expression: if the
   instance changes on a short cycle the call is re-entered by the
   instantiation machinery; if it never changes, one body walk checks it
-  over and over. The key must carry
+  over and over. Measured, and the two stories separate cleanly: the
+  hot `Path` and `Cast` (`expr=4` and `6`) are always checked with
+  `cur_inst` at the top level, `0xffffffff`, while the instantiated
+  bodies' own nodes (`Block`, `Cast`, `Path` at `expr=3`, `2`, `0`)
+  carry instances 14, 16, 18, 20 and on. So the outermost call is
+  re-entered thousands of times inside one walk of one top-level
+  statement, and the node audit missed the loop because it lives in a
+  helper rather than a case. The special-cased call paths are the
+  natural fit: `check_fmt_format` and `check_fmt_write`, reached from
+  `check_call` (`types_expr.cc:1569`-`:1573`), which walk a call's
+  arguments once per format placeholder. Read those two next. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
