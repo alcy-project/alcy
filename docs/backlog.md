@@ -49,8 +49,12 @@ replaced. The foundations are in `roadmap.md`.
   from `instantiate_generic`, which mints type instances, while the
   nested `wrap` calls resolve through the function instantiation path
   (`instantiate_generic_method`, `types.cc:5344`); a few hundred type
-  level calls cannot account for seconds, so instrument the function
-  path next. Reproduce with a generated file.
+  level calls cannot account for seconds. Neither path is hot: the
+  type path and `instantiate_generic_method` both stay under a few
+  hundred and a few dozen calls. `wrap` is a free generic function,
+  so its calls resolve through the free-function instantiation path,
+  which is the one still to instrument. Reproduce with a generated
+  file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
