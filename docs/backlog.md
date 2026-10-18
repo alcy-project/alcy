@@ -185,7 +185,11 @@ replaced. The foundations are in `roadmap.md`.
   the value is not walked twice there. The two complete chains in the
   trace must therefore be two runs of a body check itself - find the
   caller that checks one body twice rather than a node that re-checks
-  a child. The key must carry
+  a child. The body check itself is `check_block(module, body, ...)`
+  (`types.cc:7764`) inside the item handler, so the handler runs once
+  per body and something calls it twice for the same item. Find its
+  caller - a declaration pass and a body pass, or a per-reference
+  walk - and let the second call see the type already recorded. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
