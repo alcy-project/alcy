@@ -387,7 +387,14 @@ replaced. The foundations are in `roadmap.md`.
   to `check_binary_operands` (`:3756`), which takes `expected` and is
   the next read (`types_expr.cc:619`) - a helper that learns the
   left operand's type and then re-types it against the unified one
-  would be exactly the doubling. The key must carry
+  would be exactly the doubling. It has one, but a small one: when the
+  two operands do not match and one is a bare integer literal, that
+  operand is checked once more against its sibling (`types_expr.cc:650`
+  onward), which is the adoption the comment above it describes and a
+  leaf-sized walk. So the binary helper is out for a call-bearing
+  operand, and the doubling has to be in the remaining cases with a
+  nested child: `Range` (its two endpoints), `Deref`, and the call
+  path itself. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
