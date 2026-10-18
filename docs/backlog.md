@@ -263,7 +263,14 @@ replaced. The foundations are in `roadmap.md`.
   expected type. Check the block walk first: the body block is checked
   by `check_block` (compiler/analyzer/types_expr.cc:4025), and if it visits
   statements or the trailing value twice, that is the root every
-  parent/child repeat below it is a copy of. The key must carry
+  parent/child repeat below it is a copy of - and it does: the value
+  is checked (`types_expr.cc:4045`) and then handed to
+  `expr_comp_known` (`:4050`), a second structural walk of the same
+  tree, when `verify_comp_known` is set. `check_call_args` does the
+  same for a comp argument (`:695`). `expr_comp_known` is pure - it
+  answers whether a tree is comp-known, not what a context infers - so
+  the sound fix is to memoize it per expression and instance, unlike
+  the type table. That should collapse the exponent. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
