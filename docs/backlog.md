@@ -189,7 +189,13 @@ replaced. The foundations are in `roadmap.md`.
   (`types.cc:7764`) inside the item handler, so the handler runs once
   per body and something calls it twice for the same item. Find its
   caller - a declaration pass and a body pass, or a per-reference
-  walk - and let the second call see the type already recorded. The key must carry
+  walk - and let the second call see the type already recorded. The
+  handler is `Checker::check_fn` (`types.cc:7717`) and it has both:
+  the precheck path calls it (`:4887`, `:4936`) and the ordinary path
+  calls it again (`:6472`, `:6883`, `:7036`), so a body runs twice.
+  Read the precheck callers first: `precheck_fn_body` skips a generic
+  declaration, so the instantiated body of a generic function reaches
+  `check_fn` from both ends and doubles at every level. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
