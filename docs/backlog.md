@@ -15,7 +15,14 @@ replaced. The foundations are in `roadmap.md`.
   for the failing form casts the `Range` value to `u64` and indexes
   the slice with it, so the lowered run value reaches the call as an
   index operand: the receiver's type and the lowered operand disagree
-  by the time the method call is built.
+  by the time the method call is built. The lowering's own range check
+  reads the same wrong type - moving it ahead of the spec-call target
+  changes nothing - so the analyzer recorded an integer for the range
+  expression, and `check_index` then took the element path. The index
+  is only mis-typed when the index expression is a method call's
+  receiver, so the next step is the receiver check in
+  `check_method_call`, which looks up the method before the index
+  expression is typed.
 - [ ] An inclusive range whose end is one below its start (`s[3..=2]`)
   yields an empty run, while the exclusive spelling (`s[3..<2]`) aborts:
   the inversion check compares the decoded endpoints, and the included
