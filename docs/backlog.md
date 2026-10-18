@@ -71,9 +71,12 @@ replaced. The foundations are in `roadmap.md`.
   repeats is from `check_const_dependencies` (`:4707`): that walk
   follows a call into the callee's body to find the values a constant
   expression depends on, and the body of a generic function is walked
-  once per instantiation it is reached through. Memoizing the walk per
-  function, or the precheck per instance, is the fix. Reproduce with a
-  generated file.
+  once per instantiation it is reached through. The walk runs from a
+  pass over each function's body (`:4620`) that learns which values a
+  constant expression can reach, and `precheck_called_fn` is what
+  follows a call into the callee's body. An in-progress set keyed on
+  the item, guarded in `precheck_called_fn` (`types.cc:4819`), breaks
+  the descent. Reproduce with a generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
