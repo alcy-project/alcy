@@ -67,11 +67,12 @@ replaced. The foundations are in `roadmap.md`.
   function once per request - caching the instance stops duplicate
   instances, not duplicate body checks. Memoizing the check, or the
   check of a body already in progress, is where the fix belongs. The
-  check is `precheck_called_fn` (`types.cc:4819`), called from the call
-  path at `:4707` with no guard, while the method counterpart is only
-  reached when a comp evaluation or another precheck is in progress
-  (`:1808`). Giving the function case the same guard, or a
-  once-per-instance flag, is the smallest fix. Reproduce with a
+  check is `precheck_called_fn` (`types.cc:4819`), and the call that
+  repeats is from `check_const_dependencies` (`:4707`): that walk
+  follows a call into the callee's body to find the values a constant
+  expression depends on, and the body of a generic function is walked
+  once per instantiation it is reached through. Memoizing the walk per
+  function, or the precheck per instance, is the fix. Reproduce with a
   generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
