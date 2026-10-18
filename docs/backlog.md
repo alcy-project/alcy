@@ -320,7 +320,13 @@ replaced. The foundations are in `roadmap.md`.
   counts - so the question is why one instantiation is built again and
   again. That is the reuse loop from the earlier notes
   (`instances_by_nominal_`, `types_equal`), and the structural
-  comparison there is what to re-examine. The key must carry
+  comparison there is what to re-examine. The mint itself is
+  `fn_instances.push_back(FnInstance{...})` (`types.cc:6458`), which is
+  where a miss counter goes; `types.cc:6153` is no longer the
+  function's head, so re-locate `Checker::instantiate_fn` before
+  instrumenting. Count calls against mints: if mints stays flat while
+  calls grow, the reuse works and the requests themselves multiply; if
+  mints grows with calls, the reuse is missing. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
