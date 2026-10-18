@@ -227,7 +227,14 @@ replaced. The foundations are in `roadmap.md`.
   path-callee branch: `check_call` (`:1488`) handles a closure or
   value callee first, and the branch that resolves a named generic
   function continues past `:1531`, where the type arguments are worked
-  out. Read from there. The key must carry
+  out. Read from there. The pair is right there: the named branch
+  calls `resolve_generic_fn(module, item, call.args, call.type_args,
+  span)` (`types_expr.cc:1549`) to work out the type arguments from the
+  arguments, and then hands the same `call.args` to `check_call_args`
+  (`:1560`), which types every one of them again. `resolve_generic_fn`
+  already knows the types it inferred from; carrying them back (or
+  letting it record them where `check_call_args` reads) removes the
+  second walk and the exponent with it. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
