@@ -394,7 +394,14 @@ replaced. The foundations are in `roadmap.md`.
   leaf-sized walk. So the binary helper is out for a call-bearing
   operand, and the doubling has to be in the remaining cases with a
   nested child: `Range` (its two endpoints), `Deref`, and the call
-  path itself. The key must carry
+  path itself. `Range` is the same shape as `Binary`: the case
+  delegates to `check_range` (`types_expr.cc:4017`), which types one
+  endpoint once and re-types a bare integer literal endpoint against
+  its sibling (the adaptation at `:2587`), again a leaf-sized walk. So
+  the two remaining places with a nested child are `Deref` and the call
+  path, and if both check once, then no single node re-asks a child and
+  the twenty-six checks of one call come from repeated entries higher
+  up rather than from one parent. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
