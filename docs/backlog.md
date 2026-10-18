@@ -283,7 +283,13 @@ replaced. The foundations are in `roadmap.md`.
   holds, so a memo keyed on module, expression, and instance alone is
   wrong unless the bound set is the same on every walk of an
   expression. Establish that first - either it is fixed per expression
-  and the simple key holds, or the key has to carry the bound set. The key must carry
+  and the simple key holds, or the key has to carry the bound set. Both
+  happen: the recursion carries one `bound` unchanged
+  (`types_expr.cc:415`-`:499`), but an outside entry uses another -
+  `check_call_args` calls it with no bound at all (`:696`), while an
+  inner walk of the same argument carries the enclosing names. So the
+  simple key is unsound, and the memo has to key on the bound set (or
+  the two entry kinds have to agree on one). The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
