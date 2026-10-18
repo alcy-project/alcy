@@ -333,7 +333,14 @@ replaced. The foundations are in `roadmap.md`.
   fix is therefore on the request side: something asks for the same
   instantiation again and again, and since the body checker is linear
   (`check_fn` 253 to 257) the asking happens inside one body walk. Find
-  the loop that walks a call expression more than once per body. The key must carry
+  the loop that walks a call expression more than once per body. It
+  asks for one instantiation over and over: the first thirty calls at
+  eight levels are all `item=1`, `inst=0xffffffff`, `nargs=1` - the same
+  instantiation, requested again and again with no other call between.
+  So a small cache in `instantiate_fn` keyed on module, item, argument
+  indices, and instance removes them, and the structural reuse behind
+  it already handles arguments re-minted with new indices. The cause is
+  on the requesting side, but this is the safe place to cut it. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
