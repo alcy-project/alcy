@@ -410,7 +410,16 @@ replaced. The foundations are in `roadmap.md`.
   somewhere above the expression: a statement, block, or loop body
   walked twice inside one function body. Measure that next - count
   `check_stmt` and `check_block` entries per body and instance - rather
-  than reading more expression cases. The key must carry
+  than reading more expression cases. Statements are clean too: a
+  counter on `check_stmt` (`types_expr.cc:4229`) never reaches two
+  hundred entries at sixteen levels, so no statement is re-walked.
+  With the node audit closed and statements flat, the twenty-six
+  entries for one call happen inside the checking of a single
+  statement's expression - yet no case re-asks a child. The next
+  measurement has to show the path, not the count: record, for the
+  hottest expression, the kind of the expression that was being
+  checked above it (a small parent stack in the checker), and read off
+  how the same node is reached twenty-six times. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
