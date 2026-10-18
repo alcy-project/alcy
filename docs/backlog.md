@@ -304,7 +304,14 @@ replaced. The foundations are in `roadmap.md`.
   resolution should be remembered per item, arguments, and instance -
   the signature it returns does not change between two checks of the
   same call - so memoizing it there is the fix; a per-candidate
-  re-check inside it is the other thing to look for. The key must carry
+  re-check inside it is the other thing to look for. A per-expression
+  counter names the hottest instead: a `Path` (kind 1) reaches 4,000
+  checks and a whole chain of `Cast`s (kind 10, one per level) reach
+  1,000 to 4,000 each, so one level's cast is re-typed as many times
+  as its depth below the top. The `Cast` case itself checks its operand
+  once (`types_expr.cc:2214`), so the doubling starts with whatever
+  checks the topmost cast of the chain twice - read the case that owns
+  it (the trace put a `Question`, `Deref`, and `Call` above it). The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
