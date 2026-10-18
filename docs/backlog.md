@@ -41,8 +41,12 @@ replaced. The foundations are in `roadmap.md`.
   (about 1080 scans and 330 comparisons per 128 calls) while the time
   grows fivefold, so one comparison of a nested type is what explodes.
   Avoiding the structural fallback by canonicalizing the arguments
-  removes those comparisons; understanding why one comparison is
-  expensive is the deeper fix. Reproduce with a generated file.
+  removes those comparisons. The comparison's own walk is linear and
+  cycle-safe, and it normalizes every step through `type_origin`
+  (`types_equal_inner`, `types.cc:4010`), so the expensive call is
+  likely `type_origin` on a nested compound type, which is called once
+  per minimum pair and can itself rebuild the type. Profile that call
+  before changing the comparison. Reproduce with a generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
