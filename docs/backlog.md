@@ -753,13 +753,11 @@ replaced. The foundations are in `roadmap.md`.
   threads reshaped the tree. The parent is the smallest span among the
   open intervals containing the event now, which one thread cannot tell
   apart from the old rule.
-- [ ] `demangle` recurses per type constructor with no depth limit; a
-  hostile symbol can exhaust the stack. Latent while only tests call
-  it. The recursion is in the `Decoder` inside
-  `compiler/symbol/mangle.cc` (its type reader, reached from
-  `demangle` at `:528`); a depth counter that answers
-  `DemangleError::Malformed` past a limit, plus a unit test over a
-  deeply nested encoded type, is the fix.
+- [x] `demangle` recursed per type constructor with no depth limit. The
+  guard is `decode_type` in `compiler/symbol/mangle.cc` (`:381`),
+  which spends the language's nesting budget and stops a hostile
+  symbol before the stack; `mangle_test.cc` follows a type nested
+  within it (`:319`) and refuses one past it (`:332`).
 
 ## Shipped
 
