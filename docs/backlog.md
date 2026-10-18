@@ -428,7 +428,15 @@ replaced. The foundations are in `roadmap.md`.
   the loop is around candidate or method resolution: `check_method_call`
   (`types_expr.cc:1708`) and `check_call`'s named branch are where a
   per-candidate pass would sit. Read the method path first, since a
-  method chain on a generic is what the wrapper spells. The key must carry
+  method chain on a generic is what the wrapper spells. It is not a
+  candidate loop inside the case: `check_method_call` types the
+  receiver once (`types_expr.cc:1712`) and then works with that type.
+  So one pass of the observed pair is one whole method-call check -
+  receiver then argument - and the method call itself is being entered
+  thousands of times. The remaining question is who re-enters it: no
+  parent case, statement, or body does, so look for a loop that walks
+  expressions from the top - a `for` desugar, a comp unroll, or a
+  retry around a failed resolution that starts again from the callee. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
