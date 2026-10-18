@@ -27,6 +27,7 @@ fn deep(p: ((E, i32), i32)) -> i32 {
     ((E::A, 1), z) => 10 + z,
     ((E::A, x), z) => x + z,
     ((E::B, x), z) => x + z + 100,
+    ((E::C, x), z) => x + z + 200,
   }
 }
 
@@ -50,6 +51,7 @@ fn main() -> i32 {
   if deep(((E::A, 1), 5)) != 15 { ret 8 }
   if deep(((E::A, 4), 5)) != 9 { ret 9 }
   if deep(((E::B, 4), 5)) != 109 { ret 10 }
+  if deep(((E::C, 4), 5)) != 209 { ret 15 }
   if options((Option::Some(5i32), Option::None)) != 5 { ret 11 }
   if options((Option::None, Option::Some(5i32))) != 105 { ret 12 }
   if options((Option::Some(2i32), Option::Some(3i32))) != 5 { ret 13 }

@@ -1252,7 +1252,22 @@ class Checker {
                         ir::TypeIdx scrutinee,
                         std::span<const ast::ExprMatchArm> arms,
                         diag::Span span);
-  bool pattern_is_wildcard(ast::PatternIdx pattern) const;
+  // Whether the pattern is irrefutable for `type`. A binding is; a bare
+  // name that spells a fieldless variant is a constructor, so it is not.
+  bool pattern_is_wildcard(ir::TypeIdx type, ast::PatternIdx pattern);
+  // The declaration a nominal type came from. A field or a payload
+  // copies the type node, so its index is not the one the nominal
+  // registered; the shape it points at decides then.
+  const ast::ItemNode* nominal_decl(ir::TypeIdx type, ast::ItemKind kind);
+  // The variants of an enum type, when the type names one.
+  std::span<const ast::ItemEnumVariant> enum_variants(ir::TypeIdx type);
+  // The fields of a struct type, when the type names one.
+  std::span<const ast::ItemStructField> struct_fields(ir::TypeIdx type);
+  // Whether the pattern rows cover every value of their columns:
+  // Maranget's specialization, one column at a time, so a nested
+  // payload no arm reaches is a hole the way a missing variant is.
+  bool patterns_cover(std::vector<ir::TypeIdx> types,
+                      std::vector<std::vector<ast::PatternIdx>> rows);
   void collect_bool_literals(ast::PatternIdx pattern,
                              std::vector<bool>& covered) const;
   void mark_variant_covered(ast::PatternIdx pattern,

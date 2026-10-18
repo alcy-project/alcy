@@ -2796,6 +2796,17 @@ void Checker::check_exhaustive(u32 module,
                                std::span<const ast::ExprMatchArm> arms,
                                diag::Span span) {
   (void)module;
+  // The arms that always run: a guarded arm may not match, so it covers
+  // nothing.
+  const auto unguarded_rows = [&]() {
+    std::vector<std::vector<ast::PatternIdx>> rows;
+    for (const ast::ExprMatchArm& arm : arms) {
+      if (!arm.guard.is_valid()) {
+        rows.push_back({arm.pattern});
+      }
+    }
+    return rows;
+  };
   bool wildcard = false;
   std::vector<bool> covered_bool{false, false};
   // A guarded arm may not match, so it covers nothing: the match
@@ -2804,7 +2815,7 @@ void Checker::check_exhaustive(u32 module,
     if (arm.guard.is_valid()) {
       continue;
     }
-    if (pattern_is_wildcard(arm.pattern)) {
+    if (pattern_is_wildcard(scrutinee, arm.pattern)) {
       wildcard = true;
     }
     collect_bool_literals(arm.pattern, covered_bool);
@@ -2870,6 +2881,14 @@ void Checker::check_exhaustive(u32 module,
         return;
       }
     }
+    // Every variant has an arm, but a payload of one may not:
+    // `Some(Some(v))` and `None` leave `Some(None)` with no arm.
+    if (!patterns_cover({scrutinee}, unguarded_rows())) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerMatchNotExhaustive>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::NonExhaustiveMatch, span);
+      (void)index;
+    }
     return;
   }
   if (is_integer_tag(tag)) {
@@ -2880,14 +2899,21 @@ void Checker::check_exhaustive(u32 module,
     return;
   }
   if (tag == ir::TypeTag::Tuple) {
+    bool has_tuple = false;
     for (const ast::ExprMatchArm& arm : arms) {
       if (arm.guard.is_valid()) {
         continue;
       }
       if (ast.patterns[arm.pattern].kind == ast::PatternKind::Tuple &&
           !ast.patterns[arm.pattern].payload.tuple.path.is_valid()) {
-        return;
+        has_tuple = true;
+        break;
       }
+    }
+    // A tuple pattern names the shape; its elements still have to cover
+    // every value, which the row check decides.
+    if (has_tuple && patterns_cover({scrutinee}, unguarded_rows())) {
+      return;
     }
     const u32 index = bag.emit<i18n::Key::AnalyzerMatchNotExhaustiveTuple>(
         diag::Severity::Error, diag::Stage::Analyzer,
@@ -2896,13 +2922,18 @@ void Checker::check_exhaustive(u32 module,
     return;
   }
   if (tag == ir::TypeTag::Struct) {
+    bool has_struct = false;
     for (const ast::ExprMatchArm& arm : arms) {
       if (arm.guard.is_valid()) {
         continue;
       }
       if (ast.patterns[arm.pattern].kind == ast::PatternKind::Struct) {
-        return;
+        has_struct = true;
+        break;
       }
+    }
+    if (has_struct && patterns_cover({scrutinee}, unguarded_rows())) {
+      return;
     }
     const u32 index = bag.emit<i18n::Key::AnalyzerMatchNotExhaustiveStruct>(
         diag::Severity::Error, diag::Stage::Analyzer,
@@ -2916,21 +2947,373 @@ void Checker::check_exhaustive(u32 module,
   (void)index;
 }
 
-bool Checker::pattern_is_wildcard(ast::PatternIdx pattern) const {
+bool Checker::pattern_is_wildcard(ir::TypeIdx type, ast::PatternIdx pattern) {
+  if (!pattern.is_valid()) {
+    return true;
+  }
   switch (ast.patterns[pattern].kind) {
-    case ast::PatternKind::Wildcard: return true;
-    case ast::PatternKind::Ident:
+    case ast::PatternKind::Wildcard:
     case ast::PatternKind::MutIdent: return true;
+    case ast::PatternKind::Ident: {
+      // A bare name that spells a fieldless variant is a constructor:
+      // `match e { A => ... }` leaves `B` with no arm.
+      if (tag_of(type) == ir::TypeTag::Enum) {
+        for (const ast::ItemEnumVariant& variant : enum_variants(type)) {
+          if (variant.fields.empty() &&
+              variant.name.name ==
+                  ast.patterns[pattern].payload.ident.name.name) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
     case ast::PatternKind::Or: {
       for (ast::PatternIdx alt :
            ast.patterns[pattern].payload.or_pat.alternatives) {
-        if (pattern_is_wildcard(alt)) {
+        if (pattern_is_wildcard(type, alt)) {
           return true;
         }
       }
       return false;
     }
     default: return false;
+  }
+}
+
+const ast::ItemNode* Checker::nominal_decl(ir::TypeIdx type,
+                                           ast::ItemKind kind) {
+  const auto at = [&](u32 nominal) -> const ast::ItemNode* {
+    const ast::ItemNode& candidate = ast.items[nominals[nominal].item];
+    return candidate.kind == kind ? &candidate : nullptr;
+  };
+  if (const auto declaring = nominal_by_type_.find(type.idx);
+      declaring != nominal_by_type_.end()) {
+    if (const ast::ItemNode* decl = at(declaring->second)) {
+      return decl;
+    }
+  }
+  // A generic instance shares its nominal's declaration, which the
+  // instance the type names holds.
+  if (const GenericInstance* instance = generic_find(type)) {
+    if (const ast::ItemNode* decl = at(instance->nominal)) {
+      return decl;
+    }
+  }
+  // A field or a payload copies the type node, so the index the nominal
+  // registered is not the one the copy carries: the shape both point at
+  // is.
+  const ir::TypeTag tag = tag_of(type);
+  if (tag != ir::TypeTag::Enum && tag != ir::TypeTag::Struct) {
+    return nullptr;
+  }
+  const auto same_shape = [&](ir::TypeIdx other) {
+    if (!other.is_valid() || tag_of(other) != tag) {
+      return false;
+    }
+    return tag == ir::TypeTag::Enum ? builder.types()[other].as_enum() ==
+                                          builder.types()[type].as_enum()
+                                    : builder.types()[other].as_struct() ==
+                                          builder.types()[type].as_struct();
+  };
+  // A payload copy of an instance shares the instance's tables, so the
+  // shape finds the instance even when the copy's own index does not.
+  for (const GenericInstance& instance : generic_instances) {
+    if (same_shape(instance.type)) {
+      if (const ast::ItemNode* decl = at(instance.nominal)) {
+        return decl;
+      }
+    }
+  }
+  for (const NominalEntry& entry : nominals) {
+    if (same_shape(entry.type)) {
+      if (const ast::ItemNode* decl = at(nominal_index(&entry))) {
+        return decl;
+      }
+    }
+  }
+  return nullptr;
+}
+
+std::span<const ast::ItemEnumVariant> Checker::enum_variants(ir::TypeIdx type) {
+  const ast::ItemNode* decl = nominal_decl(type, ast::ItemKind::Enum);
+  if (decl == nullptr) {
+    return {};
+  }
+  return decl->payload.get<ast::ItemEnum>().variants;
+}
+
+std::span<const ast::ItemStructField> Checker::struct_fields(ir::TypeIdx type) {
+  const ast::ItemNode* decl = nominal_decl(type, ast::ItemKind::Struct);
+  if (decl == nullptr) {
+    return {};
+  }
+  return decl->payload.get<ast::ItemStruct>().fields;
+}
+
+bool Checker::patterns_cover(std::vector<ir::TypeIdx> types,
+                             std::vector<std::vector<ast::PatternIdx>> rows) {
+  if (types.empty()) {
+    return !rows.empty();
+  }
+  if (rows.empty()) {
+    return false;
+  }
+  // An or-pattern covers exactly what its alternatives do, so each
+  // alternative becomes a row of its own.
+  {
+    std::vector<std::vector<ast::PatternIdx>> split;
+    split.reserve(rows.size());
+    for (std::vector<ast::PatternIdx>& row : rows) {
+      if (row.empty()) {
+        continue;
+      }
+      if (!row[0].is_valid() ||
+          ast.patterns[row[0]].kind != ast::PatternKind::Or) {
+        split.push_back(std::move(row));
+        continue;
+      }
+      for (ast::PatternIdx alt :
+           ast.patterns[row[0]].payload.or_pat.alternatives) {
+        std::vector<ast::PatternIdx> copy = row;
+        copy[0] = alt;
+        split.push_back(std::move(copy));
+      }
+    }
+    rows = std::move(split);
+  }
+  if (rows.empty()) {
+    return false;
+  }
+  // A row of wildcards covers every value, whatever the columns hold.
+  // It is also what ends the descent on a type that contains itself: a
+  // wildcard row stays one through every specialization.
+  for (const std::vector<ast::PatternIdx>& row : rows) {
+    bool all_wild = true;
+    for (usize i = 0; i < types.size(); ++i) {
+      if (i >= row.size() || !pattern_is_wildcard(types[i], row[i])) {
+        all_wild = false;
+        break;
+      }
+    }
+    if (all_wild) {
+      return true;
+    }
+  }
+
+  // An invalid pattern index is a wildcard the caller asks for.
+  const ast::PatternIdx kwild = ast::PatternIdx::invalid();
+  const auto tails = [](const std::vector<ast::PatternIdx>& row) {
+    return std::vector<ast::PatternIdx>(row.begin() + 1, row.end());
+  };
+  const auto with = [](std::vector<ast::PatternIdx> args,
+                       std::vector<ast::PatternIdx> tail) {
+    args.insert(args.end(), tail.begin(), tail.end());
+    return args;
+  };
+  const auto wild_args = [&](usize count) {
+    return std::vector<ast::PatternIdx>(count, kwild);
+  };
+  // The name a constructor pattern spells, when its shape allows one.
+  const auto ctor_name = [&](ast::PatternIdx pattern) -> std::string_view {
+    const ast::PatternNode& node = ast.patterns[pattern];
+    if (node.kind == ast::PatternKind::Ident) {
+      return node.payload.ident.name.name;
+    }
+    if (node.kind == ast::PatternKind::Tuple &&
+        node.payload.tuple.path.is_valid() &&
+        !ast.paths[node.payload.tuple.path].segments.empty()) {
+      return ast.paths[node.payload.tuple.path].segments.back().name;
+    }
+    if (node.kind == ast::PatternKind::Struct &&
+        node.payload.strukt.path.is_valid() &&
+        !ast.paths[node.payload.strukt.path].segments.empty()) {
+      return ast.paths[node.payload.strukt.path].segments.back().name;
+    }
+    return {};
+  };
+
+  const ir::TypeIdx head = types[0];
+  const std::vector<ir::TypeIdx> rest(types.begin() + 1, types.end());
+  const ir::TypeTag tag = tag_of(head);
+  switch (tag) {
+    case ir::TypeTag::Never:
+      // Uninhabited: no value reaches an arm, so no arm is missing.
+      return true;
+    case ir::TypeTag::I1: {
+      for (usize value = 0; value < 2; ++value) {
+        std::vector<std::vector<ast::PatternIdx>> next;
+        for (const std::vector<ast::PatternIdx>& row : rows) {
+          if (pattern_is_wildcard(head, row[0])) {
+            next.push_back(tails(row));
+            continue;
+          }
+          const ast::PatternNode& node = ast.patterns[row[0]];
+          if (node.kind != ast::PatternKind::Literal) {
+            // A shape a bool does not have: read it as a wildcard rather
+            // than claim the value has no arm.
+            next.push_back(tails(row));
+            continue;
+          }
+          const ast::Literal& literal =
+              ast.literals[node.payload.literal.value];
+          if (literal.kind != ast::LiteralKind::Bool) {
+            next.push_back(tails(row));
+            continue;
+          }
+          if ((literal.spelling == "true" ? 0 : 1) == value) {
+            next.push_back(tails(row));
+          }
+        }
+        if (!patterns_cover(rest, std::move(next))) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case ir::TypeTag::Enum: {
+      const std::span<const ast::ItemEnumVariant> variants =
+          enum_variants(head);
+      const ir::EnumType& enum_type =
+          builder.enum_types()[builder.types()[head].as_enum()];
+      if (variants.empty() || variants.size() != enum_type.variants.size()) {
+        return true;
+      }
+      for (usize index = 0; index < variants.size(); ++index) {
+        const ir::TypeIdxRange fields =
+            builder.enum_variant_types()[enum_type.variants[index]].fields;
+        const usize arity = static_cast<usize>(fields.size());
+        std::vector<ir::TypeIdx> columns;
+        for (ir::TypeIdx field : fields) {
+          columns.push_back(field);
+        }
+        std::vector<std::vector<ast::PatternIdx>> next;
+        for (const std::vector<ast::PatternIdx>& row : rows) {
+          std::vector<ast::PatternIdx> tail = tails(row);
+          if (pattern_is_wildcard(head, row[0])) {
+            next.push_back(with(wild_args(arity), std::move(tail)));
+            continue;
+          }
+          const std::string_view name = ctor_name(row[0]);
+          if (name.empty()) {
+            next.push_back(with(wild_args(arity), std::move(tail)));
+            continue;
+          }
+          if (name != variants[index].name.name) {
+            continue;  // Another variant: this row cannot match here.
+          }
+          std::vector<ast::PatternIdx> args;
+          const ast::PatternNode& node = ast.patterns[row[0]];
+          if (node.kind == ast::PatternKind::Tuple) {
+            for (ast::PatternIdx element : node.payload.tuple.elements) {
+              args.push_back(element);
+            }
+          } else if (node.kind == ast::PatternKind::Struct) {
+            for (const ast::FieldPattern& field : node.payload.strukt.fields) {
+              args.push_back(field.pattern);
+            }
+          }
+          if (args.size() != arity) {
+            args = wild_args(arity);
+          }
+          next.push_back(with(std::move(args), std::move(tail)));
+        }
+        columns.insert(columns.end(), rest.begin(), rest.end());
+        if (!patterns_cover(std::move(columns), std::move(next))) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case ir::TypeTag::Tuple:
+    case ir::TypeTag::Struct: {
+      // One constructor: every row that matches contributes its fields,
+      // in declaration order, and the recursion covers them the way a
+      // variant's payload is covered.
+      std::vector<ir::TypeIdx> columns;
+      if (tag == ir::TypeTag::Tuple) {
+        for (ir::TypeIdx element :
+             builder.tuple_types()[builder.types()[head].as_tuple()].elements) {
+          columns.push_back(element);
+        }
+      } else {
+        for (ir::TypeIdx field :
+             builder.struct_types()[builder.types()[head].as_struct()].fields) {
+          columns.push_back(field);
+        }
+      }
+      const usize arity = columns.size();
+      const std::span<const ast::ItemStructField> fields =
+          tag == ir::TypeTag::Struct ? struct_fields(head)
+                                     : std::span<const ast::ItemStructField>{};
+      std::vector<std::vector<ast::PatternIdx>> next;
+      for (const std::vector<ast::PatternIdx>& row : rows) {
+        if (pattern_is_wildcard(head, row[0])) {
+          next.push_back(with(wild_args(arity), tails(row)));
+          continue;
+        }
+        const ast::PatternNode& node = ast.patterns[row[0]];
+        std::vector<ast::PatternIdx> args;
+        if (node.kind == ast::PatternKind::Tuple && tag == ir::TypeTag::Tuple) {
+          for (ast::PatternIdx element : node.payload.tuple.elements) {
+            args.push_back(element);
+          }
+        } else if (node.kind == ast::PatternKind::Struct &&
+                   tag == ir::TypeTag::Struct && !fields.empty()) {
+          for (const ast::ItemStructField& field : fields) {
+            ast::PatternIdx bound = kwild;
+            for (const ast::FieldPattern& candidate :
+                 node.payload.strukt.fields) {
+              if (candidate.name.name == field.name.name) {
+                bound = candidate.pattern;
+                break;
+              }
+            }
+            args.push_back(bound);
+          }
+        } else {
+          args = wild_args(arity);
+        }
+        if (args.size() != arity) {
+          args = wild_args(arity);
+        }
+        next.push_back(with(std::move(args), tails(row)));
+      }
+      columns.insert(columns.end(), rest.begin(), rest.end());
+      return patterns_cover(std::move(columns), std::move(next));
+    }
+    case ir::TypeTag::Ref:
+    case ir::TypeTag::MutRef: {
+      const ir::TypeIdx pointee =
+          builder.ref_types()[builder.types()[head].as_ref()].pointee;
+      std::vector<std::vector<ast::PatternIdx>> next;
+      for (const std::vector<ast::PatternIdx>& row : rows) {
+        ast::PatternIdx inner = kwild;
+        if (!pattern_is_wildcard(head, row[0]) &&
+            ast.patterns[row[0]].kind == ast::PatternKind::Ref) {
+          inner = ast.patterns[row[0]].payload.ref.inner;
+        }
+        std::vector<ast::PatternIdx> args{inner};
+        next.push_back(with(std::move(args), tails(row)));
+      }
+      std::vector<ir::TypeIdx> columns{pointee};
+      columns.insert(columns.end(), rest.begin(), rest.end());
+      return patterns_cover(std::move(columns), std::move(next));
+    }
+    default: {
+      // Values with no constructor patterns: only a wildcard covers the
+      // column, and a column with none is a hole.
+      std::vector<std::vector<ast::PatternIdx>> next;
+      for (const std::vector<ast::PatternIdx>& row : rows) {
+        if (pattern_is_wildcard(head, row[0])) {
+          next.push_back(tails(row));
+        }
+      }
+      if (next.empty()) {
+        return false;
+      }
+      return patterns_cover(rest, std::move(next));
+    }
   }
 }
 
