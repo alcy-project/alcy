@@ -371,7 +371,17 @@ replaced. The foundations are in `roadmap.md`.
   that walks a call may build argument and parameter vectors just to
   throw them away. Count allocations (`mallinfo2` before and after, or
   a counter in the allocator) at twelve and sixteen levels before
-  choosing a fix. The key must carry
+  choosing a fix. The call chain is short: `instantiate_fn` has exactly
+  one caller, `resolve_generic_fn` (`types.cc:6763`), and that has one
+  caller of its own, the named branch of `check_call`
+  (`types_expr.cc:1549`). So every count above is just the number of
+  times one call expression is checked, and the twenty-six identical
+  requests in a row mean one call expression is checked twenty-six
+  times back to back. The multiply is therefore entirely in the
+  expression walk: a parent asks `check_expr` for the same call child
+  again and again. Read the cases the caller trace named - `Cast`,
+  `Range`, `Deref`, `Binary`, `Call` - for a second `check_expr` of one
+  child, which is now the single remaining question. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
