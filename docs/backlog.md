@@ -59,8 +59,15 @@ replaced. The foundations are in `roadmap.md`.
   clock. The same instantiation is requested exponentially often even
   though the function already scans `fn_instances` for a match
   (`:6157`), so the reuse keeps missing. The fix is to make that
-  lookup hit, most likely by canonicalizing the arguments first, the
-  way the type path needs. Reproduce with a generated file.
+  lookup hit. The reuse loop itself is correct, though: it compares
+  module, item, arity, and every argument by index or structure
+  (`:6163`), so it is not a missed match. The same `(item, args)` is
+  asked for again and again and the loop hands back the same
+  signature, which means the caller re-checks the body of the generic
+  function once per request - caching the instance stops duplicate
+  instances, not duplicate body checks. Memoizing the check, or the
+  check of a body already in progress, is where the fix belongs.
+  Reproduce with a generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
