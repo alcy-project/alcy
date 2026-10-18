@@ -289,7 +289,14 @@ replaced. The foundations are in `roadmap.md`.
   `check_call_args` calls it with no bound at all (`:696`), while an
   inner walk of the same argument carries the enclosing names. So the
   simple key is unsound, and the memo has to key on the bound set (or
-  the two entry kinds have to agree on one). The key must carry
+  the two entry kinds have to agree on one). A counter there settles
+  it: `expr_comp_known` is called fewer than a hundred times at
+  twelve and sixteen levels, so it is not the amplifier either. The
+  hot functions found so far are `check_expr` (12,288 then 135,168)
+  and `instantiate_fn` (4,352 then 65,792), and their ratio to the
+  program size is the thing to explain; `check_fn` (253, 257) and the
+  comp-known predicate are both linear. Look for what sits between a
+  `check_expr` call and an `instantiate_fn` call and repeats. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
