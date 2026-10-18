@@ -106,13 +106,13 @@ ir::TypeIdx CompEvaluator::field_type_of(ir::TypeIdx base,
                                          diag::Span span) {
   const ir::TypeTag tag = tag_of(base);
   if (tag == ir::TypeTag::Struct) {
-    const ir::StructType& struct_type =
+    const ir::StructType struct_type =
         builder.state().struct_types[builder.state().types[base].as_struct()];
     if (index < struct_type.fields.size()) {
       return struct_type.fields[index];
     }
   } else if (tag == ir::TypeTag::Tuple) {
-    const ir::TupleType& tuple_type =
+    const ir::TupleType tuple_type =
         builder.state().tuple_types[builder.state().types[base].as_tuple()];
     if (index < tuple_type.elements.size()) {
       return tuple_type.elements[index];
@@ -210,7 +210,7 @@ std::vector<ir::TypeIdx> CompEvaluator::variant_payload(ir::TypeIdx enum_type,
       builder.state().enum_types[builder.state().types[enum_type].as_enum()];
   std::vector<ir::TypeIdx> payloads;
   u32 at = enum_ty.variants.head().idx + variant;
-  const ir::EnumVariantType& variant_ty =
+  const ir::EnumVariantType variant_ty =
       builder.state().enum_variant_types[ir::EnumVariantTypeIdx(at)];
   for (ir::TypeIdx field : variant_ty.fields) {
     payloads.push_back(field);
@@ -355,7 +355,7 @@ bool CompEvaluator::comp_bind_pattern(u32 mod,
       if (value.value.tag != CompValue::Tag::Tuple) {
         return fail(span, "pattern is not comp-evaluable");
       }
-      const ir::TupleType& shape =
+      const ir::TupleType shape =
           builder.state()
               .tuple_types[builder.state().types[value.type].as_tuple()];
       const std::span<const ast::PatternIdx> elements =

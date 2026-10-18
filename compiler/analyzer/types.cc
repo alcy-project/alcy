@@ -3171,7 +3171,7 @@ bool Checker::check_intrinsic_signature(u32 module,
     if (tag_of(pointee(params[0])) != ir::TypeTag::Slice) {
       return wrong();
     }
-    const ir::SliceType& slice =
+    const ir::SliceType slice =
         builder.slice_types()[builder.types()[pointee(params[0])].as_slice()];
     return or_wrong(params.size() == 2 && is_usize(params[1]) &&
                     same(slice.element, pointee(ret)));
@@ -3186,7 +3186,7 @@ bool Checker::check_intrinsic_signature(u32 module,
     if (tag_of(pointee(params[0])) != ir::TypeTag::Slice) {
       return wrong();
     }
-    const ir::SliceType& slice =
+    const ir::SliceType slice =
         builder.slice_types()[builder.types()[pointee(params[0])].as_slice()];
     return or_wrong(params.size() == 2 && is_usize(params[1]) &&
                     same(slice.element, pointee(ret)));
