@@ -112,7 +112,13 @@ replaced. The foundations are in `roadmap.md`.
   speculative check the caller throws away followed by the real one
   the settled inference allows: the first answer is never meant to be
   reused, so the fix is to find the caller that asks early and
-  resolve once, rather than to remember the first answer. The key must carry
+  resolve once, rather than to remember the first answer. The trace
+  shows the pair repeating one level up as well (`expr=20` is checked
+  with and without an expected type just before each check of
+  `expr=16`), so the early pass is not local: it comes from the top of
+  the chain, most likely a method or generic resolution that checks
+  its operands once to infer the type arguments and checks them again
+  with the arguments it inferred instead of reusing the first pass. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
