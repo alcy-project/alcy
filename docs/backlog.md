@@ -148,7 +148,13 @@ replaced. The foundations are in `roadmap.md`.
   set where a literal is handled, compared around the inner call
   (`before != after`), tells whether this expression's subtree held
   one - and a subtree that held one is never stored, so a cache hit
-  cannot hide it. The key must carry
+  cannot hide it. It does not help either: with a literal anywhere in the
+  subtree kept out, the same two cases still fail, so the stale entry
+  is not literal-driven - any expression can be re-typed once the
+  inference around it settles. Four variants have now been measured
+  (full, no literals, no expected type, no literal subtree) and all
+  fail the same way, so the fix is an explicit inference generation or
+  the removal of the duplicate request, not a better exclusion. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
