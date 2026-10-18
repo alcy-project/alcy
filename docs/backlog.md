@@ -35,7 +35,14 @@ replaced. The foundations are in `roadmap.md`.
   carry fresh indices. Re-minting a nested argument while checking it
   is what can double the work per level; the fix is to canonicalize
   the argument before the lookup so the index fast path hits.
-  Reproduce with a generated file.
+  Instrumenting the lookup shows the exponent is in `types_equal`
+  itself, not in how often it is called: at twelve and sixteen levels
+  the call, scan, and structural-comparison counts are nearly the same
+  (about 1080 scans and 330 comparisons per 128 calls) while the time
+  grows fivefold, so one comparison of a nested type is what explodes.
+  Avoiding the structural fallback by canonicalizing the arguments
+  removes those comparisons; understanding why one comparison is
+  expensive is the deeper fix. Reproduce with a generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
