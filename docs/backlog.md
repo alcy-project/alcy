@@ -5,6 +5,12 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [ ] A deeply nested pattern costs super-linear compile time: a
+  `match` arm of the form `Option::Some(Option::Some(... (E::A | E::B)
+  ...))` with a wildcard arm takes 1 s at twelve levels of nesting and
+  11 s at twenty-four, and the parser's nesting limit leaves room to
+  grow further. The shape is small, so the cost is in the cover walk,
+  not in the input. Reproduce with `alcy check` on a generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
