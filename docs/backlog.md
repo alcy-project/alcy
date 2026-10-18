@@ -735,9 +735,10 @@ replaced. The foundations are in `roadmap.md`.
   unnamed local the drop walk ends at the enclosing block, so no
   reference outlives it. `exe-borrow-temporary` and
   `exe-borrow-temporary-owning` walk the shapes under the sanitizer.
-- [ ] `Option::is_some`/`is_none`/`is_ok`/`is_err` take the receiver by
-  value, so the option cannot be consulted twice. `&Self` receivers
-  would fix that.
+- [x] `Option::is_some`/`is_none`/`is_ok`/`is_err` took the receiver by
+  value. They now read `self: &Self` (`lib/std/core/option.al:14`,
+  `result.al:17`), so an owned option answers twice; the predicates are
+  the place to pin that.
 - [x] Standard dependency selection: the overlap diagnostic and the
   `--deps` help name the default `alcy/std/*` glob and the rule, so
   `--deps alcy/std/collections` explains itself: name a package or a
