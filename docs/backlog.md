@@ -82,10 +82,15 @@ replaced. The foundations are in `roadmap.md`.
   per walk. A counter on the walk itself reads under 256 calls at
   both depths, so the walk is not invoked exponentially either; the
   instantiations come from resolving the nested call expressions each
-  time they are reached, not from the walk repeating. The next step is
-  to count how often the checker resolves one call expression and how
-  many instantiations that resolution asks for. Reproduce with a
-  generated file.
+  time they are reached, not from the walk repeating. A counter on
+  `check_expr` settles it: it runs more than 12,288 times at twelve
+  levels and more than 135,168 at sixteen, a factor of about two per
+  level, so the checker re-types the same expression tree
+  exponentially often and the instantiations are a consequence. The
+  recorded type table holds one entry per check but nothing reads it
+  back, and a memo must respect that a bare integer literal is
+  re-checked against a sibling's type. Reproduce with a generated
+  file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
