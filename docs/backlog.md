@@ -28,7 +28,14 @@ replaced. The foundations are in `roadmap.md`.
   quadratic: `wrap(wrap(...))` costs 1.2 s at sixteen levels and 29 s
   at twenty, a factor of two per level. Something re-expands the
   whole type per instantiation instead of sharing the instance the
-  nesting already built. Reproduce with a generated file.
+  nesting already built. The reuse lookup is `instantiate_generic`
+  (`types.cc:2351`): it first compares argument indices, then falls
+  back to a structural `types_equal` walk because, as its own comment
+  says, compound arguments are re-minted on each resolution and so
+  carry fresh indices. Re-minting a nested argument while checking it
+  is what can double the work per level; the fix is to canonicalize
+  the argument before the lookup so the index fast path hits.
+  Reproduce with a generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
