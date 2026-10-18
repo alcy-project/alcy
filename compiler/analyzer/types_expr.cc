@@ -185,7 +185,7 @@ bool Checker::bind_pattern(u32 module,
         bind_error_idents(module, pattern);
         return false;
       }
-      const ir::TupleType& tuple_type =
+      const ir::TupleType tuple_type =
           builder.tuple_types()[builder.types()[type].as_tuple()];
       const std::span<const ast::PatternIdx> elements =
           node.payload.tuple.elements;
@@ -235,7 +235,7 @@ bool Checker::bind_pattern(u32 module,
       }
       unify(type, struct_type, node.span, "struct pattern");
       const ast::ItemNode& decl = ast.items[nominal->item];
-      const ir::StructType& struct_type_shape =
+      const ir::StructType struct_type_shape =
           builder.struct_types()[builder.types()[struct_type].as_struct()];
       bool refutable = false;
       for (const ast::FieldPattern& field : node.payload.strukt.fields) {
@@ -982,7 +982,7 @@ ir::TypeIdx Checker::check_fmt_write(u32 module,
     const ir::TypeIdx pointee =
         builder.ref_types()[builder.types()[buf_type].as_ref()].pointee;
     if (tag_of(pointee) == ir::TypeTag::Array) {
-      const ir::ArrayType& shape =
+      const ir::ArrayType shape =
           builder.array_types()[builder.types()[pointee].as_array()];
       buf_ok = tag_of(shape.element) == ir::TypeTag::U8;
     }
