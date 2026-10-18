@@ -33,7 +33,12 @@ replaced. The foundations are in `roadmap.md`.
   lowering materializes a `Range<i32>` for it. The two disagree, so the
   next step is to print the tag `expr_type(index.index)` holds in the
   index lowering and compare it with the expression the analyzer last
-  typed.
+  typed. The likely mechanism is `range_element`: it asks
+  `generic_find(type_origin(type))`, and a field or payload copies the
+  type node without carrying the index the instance registered - the
+  same gap the exhaustiveness check hit, fixed there by matching the
+  shape a type points at. A copy reaching `range_element` answers
+  false, and `check_index` then reads the range as an element index.
 - [ ] An inclusive range whose end is one below its start (`s[3..=2]`)
   yields an empty run, while the exclusive spelling (`s[3..<2]`) aborts:
   the inversion check compares the decoded endpoints, and the included
