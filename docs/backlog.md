@@ -96,8 +96,13 @@ replaced. The foundations are in `roadmap.md`.
   it: at four levels the same low expression indices appear again and
   again, first plain and then with an expected type, and every re-type
   walks the subtree beneath it, so the work doubles per level.
-  Finding that second check and reusing the first answer, or memoizing
-  on the expression plus its context, is the fix. The key must carry
+  Finding that second check and reusing the first answer is the fix.
+  A memo of completed checks was tried: keyed on module, expression,
+  expected type, and instance and storing successes only, it cuts the
+  wrapper from 15.9 s to 0.12 s at twenty levels, but it fails
+  `ok-method-infer` and `ok-own-fn-param`, so an inference-dependent
+  expression's answer is not a function of that key. The cache has to
+  exclude those checks, or the inference has to become memoizable. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
