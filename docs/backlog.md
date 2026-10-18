@@ -456,7 +456,14 @@ replaced. The foundations are in `roadmap.md`.
   helper rather than a case. The special-cased call paths are the
   natural fit: `check_fmt_format` and `check_fmt_write`, reached from
   `check_call` (`types_expr.cc:1569`-`:1573`), which walk a call's
-  arguments once per format placeholder. Read those two next. The key must carry
+  arguments once per format placeholder. Their heads are
+  `check_fmt_write` (`types_expr.cc:981`) and `check_fmt_format`
+  (`:1065`); the write one types the format string (`:1004`) and the
+  buffer (`:1013`) once each and then handles the value arguments below
+  `:1022`, which is the code to read for a per-placeholder pass. Note
+  the recognizers: `is_core_fmt` (`:715`) and `is_io_print` (`:724`)
+  cover `write`/`format` and `print`/`println`, so a `println` of the
+  wrapper reaches this path. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
