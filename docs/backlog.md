@@ -355,7 +355,13 @@ replaced. The foundations are in `roadmap.md`.
   time is the sanitizer's bookkeeping and the picture is not the
   release one. Measure the release build's wrapper before treating the
   seconds as an algorithmic cost; if it is still super-linear there,
-  profile that build instead. The key must carry
+  profile that build instead. Measured: the release build keeps the
+  growth. Twelve, sixteen, and twenty levels take 26 ms, 85 ms, and
+  1,202 ms, so the factor of two per level is still there and only its
+  constant is about ten times smaller than the sanitized build's. The
+  exponent is real work, not sanitizer bookkeeping, so the search
+  stands. Note that `out/build/alcy` is now the release binary - the
+  debug one has to be rebuilt before any instrumented run. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
