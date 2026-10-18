@@ -2959,7 +2959,15 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   // A reference receiver borrows the place it names, including a
   // temporary: `place_addr` gives one a slot in this frame, which the
   // drop walk ends at the enclosing block.
-  Val receiver = is_ref_tag(tag_of(info.params[0]))
+  // A range index names a view, not a place: `s[run]` already reaches
+  // the run through a reference, so a reference receiver takes that
+  // value instead of the address of an element. Reading it as a place
+  // built an element access out of a Range value.
+  const bool receiver_is_run =
+      ast.exprs[receiver_expr].kind == ast::ExprKind::Index &&
+      is_range_type(expr_type(
+          ast.exprs[receiver_expr].payload.get<ast::ExprIndex>().index));
+  Val receiver = is_ref_tag(tag_of(info.params[0])) && !receiver_is_run
                      ? place_addr(receiver_expr)
                      : lower_expr(receiver_expr, nullptr);
   // A by-value receiver that names a field moves it out of its owner,
