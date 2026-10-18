@@ -354,7 +354,10 @@ replaced. The foundations are in `roadmap.md`.
   `double({ y := runtime; y })`) must still be refused, the guard
   check a match now performs wants its own pin, and a generic caller's
   other-instantiation variant record wants one case proving the
-  predicate's miss stays a compile error.
+  predicate's miss stays a compile error. The spelling and the
+  evaluation rules are in `docs/spec/comp.md`; the predicate lives in
+  `compiler/analyzer/comp_evaluator.cc` (the parameter checks around
+  `:867`) with the interface in `comp_evaluator.h`.
 - [ ] `size_of::<T>()` is not comp-evaluable: `const N: usize =
   size_of::<()>()` reports `Construct 'intrinsic is not comp-evaluable'
   is not supported`. The answer is a property of the layout the lowering
