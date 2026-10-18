@@ -102,7 +102,13 @@ replaced. The foundations are in `roadmap.md`.
   wrapper from 15.9 s to 0.12 s at twenty levels, but it fails
   `ok-method-infer` and `ok-own-fn-param`, so an inference-dependent
   expression's answer is not a function of that key. The cache has to
-  exclude those checks, or the inference has to become memoizable. The key must carry
+  exclude those checks, or the inference has to become memoizable. A
+  trace of `ok-method-infer` shows why: one expression (kind 0, the
+  kind to look up in `ast::ExprKind`) is checked twice under exactly
+  the same module, expression, expected type, and instance, and the
+  inference that settles in between makes the second answer the right
+  one. The key has to carry whatever makes the answer final, or those
+  expressions have to stay out of the memo. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
