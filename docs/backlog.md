@@ -167,7 +167,13 @@ replaced. The foundations are in `roadmap.md`.
   second begins. So the ordinary path checks a body twice: one pass
   completes a body and the main pass checks it again, and each
   instantiation of a nested generic repeats that pair at the level
-  below. Find the two passes and keep the second from re-walking. The key must carry
+  below. The first pass is most likely the return-position witness
+  walk: it records its findings at `own_fn_return_witnesses_`
+  (`types.cc:6095`) by checking the body's return values, and the
+  recorded witness is consumed later while a signature is resolved
+  (`:5578`, `:6487`, `:6716`, `:6897`). Read those two ends to see
+  whether the witness pass and the ordinary body pass both walk the
+  body, and keep one of them from re-walking. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
