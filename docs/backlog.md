@@ -361,7 +361,17 @@ replaced. The foundations are in `roadmap.md`.
   constant is about ten times smaller than the sanitized build's. The
   exponent is real work, not sanitizer bookkeeping, so the search
   stands. Note that `out/build/alcy` is now the release binary - the
-  debug one has to be rebuilt before any instrumented run. The key must carry
+  debug one has to be rebuilt before any instrumented run. The release
+  binary carries no debug symbols, so `addr2line` answers `??` for its
+  addresses; a symbolized profile needs a `-g` release or the debug
+  build. What the unsymbolized one does show is grouping: three tight
+  clusters in the binary and a steady share in `libc` at addresses
+  that look like the memcpy/malloc family, so allocation and copying
+  inside the repeated calls is the leading hypothesis - each request
+  that walks a call may build argument and parameter vectors just to
+  throw them away. Count allocations (`mallinfo2` before and after, or
+  a counter in the allocator) at twelve and sixteen levels before
+  choosing a fix. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
