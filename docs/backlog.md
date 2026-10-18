@@ -161,7 +161,13 @@ replaced. The foundations are in `roadmap.md`.
   expression of the body runs twice and each level below re-walks its
   children. Find what checks the outer expression twice (the
   comp-dependency pass that calls `precheck_called_fn` is the first
-  suspect) and the whole chain collapses. The key must carry
+  suspect) - and that suspect is out: every check of the doubled body
+  runs with `comp_depth == 0` and no precheck in progress, and the
+  first chain ends at the body's outermost expression before the
+  second begins. So the ordinary path checks a body twice: one pass
+  completes a body and the main pass checks it again, and each
+  instantiation of a nested generic repeats that pair at the level
+  below. Find the two passes and keep the second from re-walking. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
