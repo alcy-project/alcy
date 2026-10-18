@@ -100,19 +100,23 @@ replaced. The foundations are in `roadmap.md`.
   `exe-discard-end` confirm. The `fmt` expansion still calls its
   collected tuple's glue directly, because the tuple is a scratch slot
   rather than a binding the pass could schedule.
-- [ ] A destructible local whose end site sits across a loop keeps its
-  heap: the ownership dataflow seeds every block with `Moved`, so a
-  loop's back edge joins `Maybe` at its header and every later site
-  reads maybe - and the guarded drop never runs, because the guard's
-  block and the flag it tests do not reach the emitted function (the
-  dataflow reports the flag valid and the glue resolved while the
-  module carries no `i1` alloca and no drop call). `s := format("ab{}",
-  0)` followed by `g := [s] (x: i32) -> x + s.len() as i32` leaks the
-  buffer, and the same witness through a free function's `fn()`
-  parameter leaks too (`apply([s] ...)`); `exe-method-infer`'s witness
-  holds only Copy values because of it. The seeding is the suspected
-  cause - a bottom state the join can skip is the direction - and the
-  guard's emission needs tracing to where the block is lost.
+- [x] A closure that owns its environment keeps its heap: the
+  environment's capture type could resolve to a second type node for
+  the same nominal (a `String` node beside the declaration's own), and
+  the drop glue lookup answered only the type index a destructor was
+  registered under, so the closure's nominal read as non-destructible
+  and no drop was emitted. The lookup follows the nominal shape now, so
+  a node interned through another path ends the way its declaration
+  does: `exe-closure-capture-drop` walks a bound closure and a `fn()`
+  parameter that both capture a heap string under the sanitizer, and
+  the witness in `exe-method-infer` can hold a `String` again.
+- [ ] One nominal as several type nodes: the checker can intern a
+  second type node over a declaration's own struct or enum shape (a
+  `String` node beside the declaration's), and `types_equal` compares
+  origins, so two nodes over one declaration read as different types
+  while only the drop lookup was taught to see through them. What
+  interns the second node - and whether the nodes should collapse to
+  one - wants finding.
 - [x] Manifest lint: a pre-1.0 version range warns (WH007), since a
   minor may break under 1.0. The rule reads the parsed requirement -
   one `Equal` bound is a pin and stays silent - so `0.5.x`,

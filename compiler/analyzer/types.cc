@@ -2369,6 +2369,13 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
     (void)index;
     return error_type();
   }
+  // A nominal that declares no parameters is not an instantiation: the
+  // declaration's own type is the answer, so a concrete type reached
+  // through a substitution keeps the one index its fields, its
+  // destructor, and its origin were interned under.
+  if (params.empty()) {
+    return intern_nominal(nominals[nominal]);
+  }
   // A caller that reaches this from a value path resolves arguments
   // itself, so a value-declared slot must hold the const type a value
   // was lowered to. Anything else is a type argument in that slot.
@@ -3790,10 +3797,38 @@ CheckedModule::MethodInfo& Checker::add_method(u32 module,
   return target.methods.back();
 }
 
+// The nominal shape a type node names: two nodes over one struct or
+// enum are the same declaration however they were interned.
+std::optional<u64> Checker::drop_shape_key(ir::TypeIdx type) const {
+  const ir::TypeNode& node = builder.types()[type];
+  if (node.tag == ir::TypeTag::Struct) {
+    return (static_cast<u64>(ir::TypeTag::Struct) << 32) | node.as_struct().idx;
+  }
+  if (node.tag == ir::TypeTag::Enum) {
+    return (static_cast<u64>(ir::TypeTag::Enum) << 32) | node.as_enum().idx;
+  }
+  return std::nullopt;
+}
+
 CheckedModule::DropGlue Checker::find_drop_glue(ir::TypeIdx type) {
   const auto found = drop_glue_by_type_.find(type.idx);
   if (found != drop_glue_by_type_.end()) {
+    if (const std::optional<u64> shape = drop_shape_key(type);
+        shape.has_value()) {
+      drop_glue_by_shape_.emplace(*shape, found->second);
+    }
     return found->second;
+  }
+  // A second type node over one nominal shape is the same declaration,
+  // so the destructor the shape already answered with answers for it
+  // too: a node interned through another path carries no glue of its
+  // own, and a value of either ends the same way.
+  const std::optional<u64> shape = drop_shape_key(type);
+  if (shape.has_value()) {
+    const auto shaped = drop_glue_by_shape_.find(*shape);
+    if (shaped != drop_glue_by_shape_.end()) {
+      return shaped->second;
+    }
   }
   // A generic type reaches its destructor through `impl<T> Name<T>`,
   // which only exists once instantiated.
@@ -3809,7 +3844,12 @@ CheckedModule::DropGlue Checker::find_drop_glue(ir::TypeIdx type) {
   if (position == position_by_address_.end()) {
     return {};
   }
-  return {position->second.first, position->second.second};
+  const CheckedModule::DropGlue glue{position->second.first,
+                                     position->second.second};
+  if (shape.has_value()) {
+    drop_glue_by_shape_.emplace(*shape, glue);
+  }
+  return glue;
 }
 
 bool Checker::holds_destructible(ir::TypeIdx type, std::vector<u32>& stack) {

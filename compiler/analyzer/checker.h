@@ -4,6 +4,7 @@
 #pragma once
 
 #include <deque>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -919,12 +920,16 @@ class Checker {
   bool drop_scan(ir::TypeIdx type, std::vector<u32>& stack);
   bool holds_destructible(ir::TypeIdx type, std::vector<u32>& stack);
   CheckedModule::DropGlue find_drop_glue(ir::TypeIdx type);
+  std::optional<u64> drop_shape_key(ir::TypeIdx type) const;
   // Destructors by the type they drop. Resolving a drop asks this of every
   // type the package holds, and answering by walking every method in the
   // package charged a type for the whole package. Filled as methods register,
   // which is also when a generic instantiation adds one, so it cannot fall
   // behind the table it indexes.
   std::unordered_map<u32, CheckedModule::DropGlue> drop_glue_by_type_;
+  // Glue keyed by the nominal shape a type node names, so a second
+  // node over the same declaration answers with the same destructor.
+  std::unordered_map<u64, CheckedModule::DropGlue> drop_glue_by_shape_;
   // Methods by the type they are declared on, as (module, position). A call
   // is resolved by walking the methods of the type it names, not every
   // method in the package.
