@@ -246,7 +246,13 @@ replaced. The foundations are in `roadmap.md`.
   can read that entry, unify it with the parameter, and skip the
   second walk. Keep literals out of the shortcut (the member flag from
   the memo work says when a subtree holds one) because adopting the
-  parameter type is exactly what the second walk is for. The key must carry
+  parameter type is exactly what the second walk is for. Check the
+  assumption first: `resolve_generic_fn` does not check the arguments
+  itself. Its one inference call is `infer_bound_arguments(module,
+  params, bound, span)` (`types.cc:6670`), which takes no argument
+  list, so the argument types reach it another way (a member holding
+  the pending call, or a helper). Read it before writing the reuse,
+  since a wrong assumption here means no reuse to make. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
