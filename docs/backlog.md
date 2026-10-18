@@ -340,7 +340,15 @@ replaced. The foundations are in `roadmap.md`.
   So a small cache in `instantiate_fn` keyed on module, item, argument
   indices, and instance removes them, and the structural reuse behind
   it already handles arguments re-minted with new indices. The cause is
-  on the requesting side, but this is the safe place to cut it. The key must carry
+  on the requesting side, but this is the safe place to cut it. The
+  mint block is `types.cc:6455`-`6463` and the calls into it are cheap
+  work, which is the contradiction left: every counter measured is
+  linear (bodies, comp-known, instances) or a count of cheap requests,
+  and none of them accounts for the seconds. Before changing anything,
+  time the work itself - a sampling profile of `alcy check` on the
+  sixteen-level wrapper, or a cumulative timer around each phase of
+  the analyzer - so the next change is aimed at the seconds and not at
+  a count. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
