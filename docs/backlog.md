@@ -39,8 +39,8 @@ replaced. The foundations are in `roadmap.md`.
   same gap the exhaustiveness check hit, fixed there by matching the
   shape a type points at. A copy reaching `range_element` answers
   false, and `check_index` then reads the range as an element index.
-- [ ] An inclusive range whose end is one below its start (`s[3..=2]`)
-  yields an empty run, while the exclusive spelling (`s[3..<2]`) aborts:
+- [x] An inclusive range whose end is one below its start (`s[3..=2]`)
+  yielded an empty run, while the exclusive spelling (`s[3..<2]`) aborted:
   the inversion check compares the decoded endpoints, and the included
   end decoded one past the element it named, so the two orders collapse.
   It is safe today (the width is zero) but the two spellings of one
