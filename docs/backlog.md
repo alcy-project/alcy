@@ -136,7 +136,14 @@ replaced. The foundations are in `roadmap.md`.
   inference generation that makes an answer final. The subtree walk
   has a model to copy: `verify_expr_children` (`compiler/ast/verify.cc`
   `:163`) switches on the node kind and names every child, so the
-  predicate is a small mirror of it plus a per-expression cache. The key must carry
+  predicate is a small mirror of it plus a per-expression cache. Three
+  variants were tried and all fail the same two cases: the full table,
+  the table without literals, and the table that stores only checks
+  made with no expected type. The answer therefore depends on the
+  inference state in every variant, so no key built from the module,
+  expression, expected type, and instance can stand in for it. The
+  fix is the subtree predicate (a literal below can always move an
+  answer) or an explicit inference generation. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
