@@ -296,7 +296,15 @@ replaced. The foundations are in `roadmap.md`.
   and `instantiate_fn` (4,352 then 65,792), and their ratio to the
   program size is the thing to explain; `check_fn` (253, 257) and the
   comp-known predicate are both linear. Look for what sits between a
-  `check_expr` call and an `instantiate_fn` call and repeats. The key must carry
+  `check_expr` call and an `instantiate_fn` call and repeats. It is
+  `resolve_generic_fn` itself: a counter on it reads about 4,200 calls
+  at twelve levels and 65,800 at sixteen, which matches
+  `instantiate_fn` almost exactly, so the generic call resolution is
+  the amplifier and it runs once per check of a call expression. The
+  resolution should be remembered per item, arguments, and instance -
+  the signature it returns does not change between two checks of the
+  same call - so memoizing it there is the fix; a per-candidate
+  re-check inside it is the other thing to look for. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
