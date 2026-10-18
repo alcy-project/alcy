@@ -27,7 +27,13 @@ replaced. The foundations are in `roadmap.md`.
   `check_index` itself took the spec path because the range expression
   it typed came back as an integer. Nothing after the receiver check
   re-types the receiver, so the wrong type is fixed at that first
-  `check_expr` of the receiver.
+  `check_expr` of the receiver. The type table is append-only and
+  `Lowerer::expr_type` reads the last entry, so that last entry is what
+  lowering sees: an integer for the index expression, while the same
+  lowering materializes a `Range<i32>` for it. The two disagree, so the
+  next step is to print the tag `expr_type(index.index)` holds in the
+  index lowering and compare it with the expression the analyzer last
+  typed.
 - [ ] An inclusive range whose end is one below its start (`s[3..=2]`)
   yields an empty run, while the exclusive spelling (`s[3..<2]`) aborts:
   the inversion check compares the decoded endpoints, and the included
