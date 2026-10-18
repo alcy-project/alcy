@@ -311,7 +311,16 @@ replaced. The foundations are in `roadmap.md`.
   as its depth below the top. The `Cast` case itself checks its operand
   once (`types_expr.cc:2214`), so the doubling starts with whatever
   checks the topmost cast of the chain twice - read the case that owns
-  it (the trace put a `Question`, `Deref`, and `Call` above it). The key must carry
+  it (the trace put a `Question`, `Deref`, and `Call` above it). Read
+  the counts once more: they are per AST node across the whole run, and
+  a node is checked once per instantiation, so the same cast reaching
+  4,000 means the instantiation it lives in was made thousands of
+  times, not that one body was re-typed. The exponent is in the number
+  of instantiations - the `resolve_generic_fn` and `instantiate_fn`
+  counts - so the question is why one instantiation is built again and
+  again. That is the reuse loop from the earlier notes
+  (`instances_by_nominal_`, `types_equal`), and the structural
+  comparison there is what to re-examine. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
