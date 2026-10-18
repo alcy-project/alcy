@@ -143,7 +143,12 @@ replaced. The foundations are in `roadmap.md`.
   inference state in every variant, so no key built from the module,
   expression, expected type, and instance can stand in for it. The
   fix is the subtree predicate (a literal below can always move an
-  answer) or an explicit inference generation. The key must carry
+  answer) or an explicit inference generation. The predicate does not
+  need the child switch: the checks run bottom up, so a member flag
+  set where a literal is handled, compared around the inner call
+  (`before != after`), tells whether this expression's subtree held
+  one - and a subtree that held one is never stored, so a cache hit
+  cannot hide it. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
