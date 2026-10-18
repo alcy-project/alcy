@@ -22,7 +22,12 @@ replaced. The foundations are in `roadmap.md`.
   is only mis-typed when the index expression is a method call's
   receiver, so the next step is the receiver check in
   `check_method_call`, which looks up the method before the index
-  expression is typed.
+  expression is typed. The analyzer does record the call: `record_call`
+  names the element `Index` impl for the index expression, so
+  `check_index` itself took the spec path because the range expression
+  it typed came back as an integer. Nothing after the receiver check
+  re-types the receiver, so the wrong type is fixed at that first
+  `check_expr` of the receiver.
 - [ ] An inclusive range whose end is one below its start (`s[3..=2]`)
   yields an empty run, while the exclusive spelling (`s[3..<2]`) aborts:
   the inversion check compares the decoded endpoints, and the included
