@@ -276,7 +276,14 @@ replaced. The foundations are in `roadmap.md`.
   `expr_comp_known_inner` and adding a small `expr_comp_known` wrapper
   (lookup, call, store) keyed on module, expression, and instance
   routes every recursive call through the memo. A block predicate has
-  the same shape and wants the same wrapper. The key must carry
+  the same shape and wants the same wrapper. Before writing it, note
+  the predicate's real signature: `expr_comp_known(u32 module,
+  ast::ExprIdx expr, std::span<const std::string_view> bound) const`
+  (`types_expr.cc:371`). Its answer depends on the names `bound`
+  holds, so a memo keyed on module, expression, and instance alone is
+  wrong unless the bound set is the same on every walk of an
+  expression. Establish that first - either it is fixed per expression
+  and the simple key holds, or the key has to carry the bound set. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
