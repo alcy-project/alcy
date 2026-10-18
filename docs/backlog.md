@@ -436,7 +436,17 @@ replaced. The foundations are in `roadmap.md`.
   thousands of times. The remaining question is who re-enters it: no
   parent case, statement, or body does, so look for a loop that walks
   expressions from the top - a `for` desugar, a comp unroll, or a
-  retry around a failed resolution that starts again from the callee. The key must carry
+  retry around a failed resolution that starts again from the callee.
+  Each of those is already read away: `check_call` does not retry a
+  failed generic resolution (it checks the arguments and reports,
+  `types_expr.cc:1551`), the wrapper's body is not comp, and it has no
+  `for`. That leaves one measurement that decides between the two
+  remaining stories - the same expression checked within one
+  instantiation, or once per instantiation across many. Print `cur_inst`
+  with each of the consecutive entries of one hot expression: if the
+  instance changes on a short cycle the call is re-entered by the
+  instantiation machinery; if it never changes, one body walk checks it
+  over and over. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
