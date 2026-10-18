@@ -179,9 +179,13 @@ replaced. The foundations are in `roadmap.md`.
   ordinary body pass reaches the same `ret`, so every expression the
   value names is walked twice and a nested instantiation doubles it
   again. The recorded answer is already in the type table, so the
-  ordinary pass can read it back instead of walking the value; check
-  what the `Return` case of `check_expr_inner` does with an
-  already-answered stand-in. The key must carry
+  ordinary pass can read it back instead of walking the value. The
+  `Return` case already guards that: when `try_bind_own_fn_return`
+  answers, the ordinary check is skipped (`types_expr.cc:3984`), so
+  the value is not walked twice there. The two complete chains in the
+  trace must therefore be two runs of a body check itself - find the
+  caller that checks one body twice rather than a node that re-checks
+  a child. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
