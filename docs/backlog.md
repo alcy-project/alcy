@@ -195,7 +195,14 @@ replaced. The foundations are in `roadmap.md`.
   calls it again (`:6472`, `:6883`, `:7036`), so a body runs twice.
   Read the precheck callers first: `precheck_fn_body` skips a generic
   declaration, so the instantiated body of a generic function reaches
-  `check_fn` from both ends and doubles at every level. The key must carry
+  `check_fn` from both ends and doubles at every level. The precheck
+  end is a full body check: it saves the per-body state, sets
+  `cur_inst` to the instance (`types.cc:4881`), raises
+  `prechecking_fn_`, and calls `check_fn` (`:4887`) just for the typed
+  expressions, then restores everything. The ordinary end calls it
+  again for the same instance. Open question to settle first: the
+  precheck returns early for a generic declaration, so check which end
+  actually doubles a generic function's instantiated body. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
