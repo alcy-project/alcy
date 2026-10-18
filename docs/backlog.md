@@ -92,10 +92,13 @@ replaced. The foundations are in `roadmap.md`.
   re-checked against a sibling's type. A factor of exactly two per
   level points at a regular double check: each level's argument is
   typed once on its own and once against the type the enclosing
-  generic resolution expects, and both walks descend. Finding that
-  second check and reusing the first answer, or memoizing on the
-  expression plus its context, is the fix. Reproduce with a generated
-  file.
+  generic resolution expects, and both walks descend. A trace confirms
+  it: at four levels the same low expression indices appear again and
+  again, first plain and then with an expected type, and every re-type
+  walks the subtree beneath it, so the work doubles per level.
+  Finding that second check and reusing the first answer, or memoizing
+  on the expression plus its context, is the fix. Reproduce with a
+  generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
