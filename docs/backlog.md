@@ -154,7 +154,14 @@ replaced. The foundations are in `roadmap.md`.
   inference around it settles. Four variants have now been measured
   (full, no literals, no expected type, no literal subtree) and all
   fail the same way, so the fix is an explicit inference generation or
-  the removal of the duplicate request, not a better exclusion. The key must carry
+  the removal of the duplicate request, not a better exclusion. The
+  caller trace names the mechanism: every repeat is a parent checking
+  the child it already checked - `Cast` (20) asks for `Literal` (16)
+  again, `Range` (40) asks for `Deref` (39) again - so the outermost
+  expression of the body runs twice and each level below re-walks its
+  children. Find what checks the outer expression twice (the
+  comp-dependency pass that calls `precheck_called_fn` is the first
+  suspect) and the whole chain collapses. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
