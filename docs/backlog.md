@@ -173,7 +173,15 @@ replaced. The foundations are in `roadmap.md`.
   recorded witness is consumed later while a signature is resolved
   (`:5578`, `:6487`, `:6716`, `:6897`). Read those two ends to see
   whether the witness pass and the ordinary body pass both walk the
-  body, and keep one of them from re-walking. The key must carry
+  body, and keep one of them from re-walking. The first pass is
+  `try_bind_own_fn_return` (`types.cc:6074`): it answers a return
+  position's stand-in by checking the value (`:6092`) before the
+  ordinary body pass reaches the same `ret`, so every expression the
+  value names is walked twice and a nested instantiation doubles it
+  again. The recorded answer is already in the type table, so the
+  ordinary pass can read it back instead of walking the value; check
+  what the `Return` case of `check_expr_inner` does with an
+  already-answered stand-in. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
