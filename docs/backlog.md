@@ -97,8 +97,10 @@ replaced. The foundations are in `roadmap.md`.
   again, first plain and then with an expected type, and every re-type
   walks the subtree beneath it, so the work doubles per level.
   Finding that second check and reusing the first answer, or memoizing
-  on the expression plus its context, is the fix. Reproduce with a
-  generated file.
+  on the expression plus its context, is the fix. On the rebased main
+  the wrapper costs 15.9 s at twenty levels where it cost 29 s before,
+  so the constant improved but the growth did not: twenty-six levels
+  still has to be killed. Reproduce with a generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
