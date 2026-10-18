@@ -5,13 +5,17 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
-- [ ] A method call on the result of a range index aborts the emitter:
-  `n := s[1..<3].len()` (and `first`, and the same chain on a
-  `Vec` or a re-slice) reports `Unsupported cast` from the LLVM
-  backend and `Construct 'struct' is not supported` from the direct
-  wasm one, while the split form `x := s[1..<3]` lowers correctly. The
-  chain resolves the index as an element access and casts the `Range`
-  value to the index type.
+- [ ] A method call whose receiver is a range index aborts the
+  emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
+  `Vec`) reports `Unsupported cast` from the LLVM backend
+  (`llvm_ir_emitter_compute.cc:327`) and `Construct 'struct' is not
+  supported` from the direct wasm one, while `x := s[1..<3]` followed
+  by `x.len()` lowers correctly. Parenthesizing the receiver
+  (`(s[1..<3]).len()`) does not help, so it is not the parse. The IR
+  for the failing form casts the `Range` value to `u64` and indexes
+  the slice with it, so the lowered run value reaches the call as an
+  index operand: the receiver's type and the lowered operand disagree
+  by the time the method call is built.
 - [ ] An inclusive range whose end is one below its start (`s[3..=2]`)
   yields an empty run, while the exclusive spelling (`s[3..<2]`) aborts:
   the inversion check compares the decoded endpoints, and the included
