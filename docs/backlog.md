@@ -5,6 +5,15 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [x] The exhaustiveness check read one level, so `Some(Some(v))` and
+  `None` covered `Some` and `None` and `Some(None)` kept no arm: the
+  match compiled and the value fell through - a segfault on the host and
+  a trap on wasm, with the same hole behind a tuple, a struct field, and
+  a nested variant payload. A bare name that spells a fieldless variant
+  counted as a binding for the same reason. `patterns_cover` specializes
+  one column at a time now, and a row of wildcards ends the descent on a
+  type that contains itself. `exe-nested-pattern` and
+  `ok-nested-pattern` each held a match genuinely missing `E::C`.
 - [ ] `size_of::<T>()` is not comp-evaluable: `const N: usize =
   size_of::<()>()` reports `Construct 'intrinsic is not comp-evaluable'
   is not supported`. The answer is a property of the layout the lowering
