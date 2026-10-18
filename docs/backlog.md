@@ -55,12 +55,39 @@ replaced. The foundations are in `roadmap.md`.
   check a match now performs wants its own pin, and a generic caller's
   other-instantiation variant record wants one case proving the
   predicate's miss stays a compile error.
+- [ ] `size_of::<T>()` is not comp-evaluable: `const N: usize =
+  size_of::<()>()` reports `Construct 'intrinsic is not comp-evaluable'
+  is not supported`. The answer is a property of the layout the lowering
+  already holds, and an array length written with it would fold. It wants
+  a decision on which layout queries the comp engine may answer.
+- [ ] A type mismatch between two closure literals reads `expected
+  'struct', found 'struct'`: each closure literal is its own type, which
+  is what the error is about, and the message names the kind both sides
+  share instead. Spelling an anonymous closure by its signature, or
+  numbering the environments, is what a reader needs - it wants a
+  decision on what a closure type is called in a diagnostic.
 - [ ] The compiler's stack on a small-stack host: compiling to an
   object needs most of 64 KiB even natively, so the wasm test binary
   runs with a 1 MiB stack while programs it builds keep the default.
   Any standard library growth showed up as a gate failure rather than
   a number; find the deep path, or budget the stack, before the
   headroom runs out the same way.
+- [ ] A deeply nested pattern hangs the cover walk: a `match` arm of
+  the form `Option::Some(Option::Some(... (E::A | E::B) ...))` with a
+  wildcard arm costs about a second at twenty levels of nesting and
+  more than a hundred at twenty-eight, where `alcy check` had to be
+  killed. The input is a few hundred bytes, so the cost is in the
+  cover walk, not in reading it, and the growth is steep enough to
+  read as exponential in the nesting depth. A plain constructor chain
+  with no `|` anywhere - `Some(Some(... E::A ...))` and a wildcard
+  arm - hangs the same way, so the cost is not the or-pattern
+  expansion. Reproduce with `alcy check` on a generated file.
+- [ ] An unreachable match arm is not reported: two arms with the same
+  literal pattern keep the first and the later one can never run, while
+  the compiler does warn about a statement after `ret` (WD003). The
+  complete check is pattern overlap - ranges, or-patterns, enum shapes -
+  and wants a decision on whether the duplicate is a warning or an
+  error; a guarded arm must not count as covering a later unguarded one.
 - [ ] References into the type tables held across checking: a struct
   literal's check kept a `StructType&` while a field value's check
   could intern a type and move the table (a heap-use-after-free the
@@ -205,6 +232,14 @@ replaced. The foundations are in `roadmap.md`.
   bindings are not yet move-only (reassignment must be refused); and
   named storage (`struct H { f: fn(...) }`) needs generics threaded by
   hand.
+- [ ] A reference stored into a longer-lived place outlives its
+  referent: `mut r: &i32 := &0; { n := 5; r = &n; } *r` compiles, and
+  so does the same store through a struct field or an `if` arm, which
+  leaves `*r` reading storage the scope already ended.
+  `docs/spec/deferred.md` leaves the outlives constraints between
+  regions to the region-annotated captures work, so the check wants that
+  relation rather than a rule about one instruction; the case is here so
+  that work starts from a reproducer.
 - [x] Two-phase borrows: a call's exclusive receiver is a reservation
   taken before the arguments evaluate, and the call itself activates
   it, so `v.push(v.len())`, `v.push(v[0])`, and
@@ -242,6 +277,11 @@ replaced. The foundations are in `roadmap.md`.
   the differential check green; a condition grammar that forks on the
   token after the closing `)` is what would let the inline form
   through.
+- [ ] A UTF-8 byte order mark at the start of a source is an `Invalid
+  character` at 1:1: the lexer has no rule for the sequence, so an
+  editor that saves one makes the whole file unreadable. Other compilers
+  skip it; the spec says nothing, so this wants a decision before the
+  lexer learns the three bytes.
 - [x] Qualified generic calls: `helper::id::<i32>(x)` answered
   "Unresolved value 'id'" because neither module-qualified resolution
   branch reached the generic-function lookup. Both do now, with the
