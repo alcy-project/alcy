@@ -24,7 +24,11 @@ replaced. The foundations are in `roadmap.md`.
   nested generic function call `wrap(wrap(...))` takes twenty-nine
   seconds at twenty levels. The generic call path is far worse than
   the enum constructor path at the same depth, so the instance work
-  is where to look. Reproduce with a generated file.
+  is where to look. The growth is exponential in the depth, not
+  quadratic: `wrap(wrap(...))` costs 1.2 s at sixteen levels and 29 s
+  at twenty, a factor of two per level. Something re-expands the
+  whole type per instantiation instead of sharing the instance the
+  nesting already built. Reproduce with a generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
