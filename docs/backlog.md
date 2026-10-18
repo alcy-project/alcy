@@ -118,7 +118,12 @@ replaced. The foundations are in `roadmap.md`.
   `expr=16`), so the early pass is not local: it comes from the top of
   the chain, most likely a method or generic resolution that checks
   its operands once to infer the type arguments and checks them again
-  with the arguments it inferred instead of reusing the first pass. The key must carry
+  with the arguments it inferred instead of reusing the first pass. It
+  is not a visible pair though: the operand checks in `types_expr.cc`
+  and `types.cc` are each single, so the second walk starts inside
+  `check_expr_inner`'s own `Call` and `MethodCall` cases - read those
+  with the trace's kinds in hand (`ExprKind` values 0, 10, and 24 in
+  the failing case). The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
