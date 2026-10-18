@@ -202,7 +202,14 @@ replaced. The foundations are in `roadmap.md`.
   expressions, then restores everything. The ordinary end calls it
   again for the same instance. Open question to settle first: the
   precheck returns early for a generic declaration, so check which end
-  actually doubles a generic function's instantiated body. The key must carry
+  actually doubles a generic function's instantiated body. A counter
+  on `check_fn` rules that out: it runs 253 times at twelve levels and
+  257 at sixteen, so bodies are not re-checked. The exponential lives
+  inside one body's expression walk, and the two chains the earlier
+  trace showed are two groups of expressions, not two runs of a body.
+  Look again at what checks the outermost expression twice within one
+  body - the comp-known predicate walk is the next candidate, since
+  it runs with `comp_depth == 0` and reads the same tree. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
