@@ -17,8 +17,6 @@ fn main() -> i32 {
   w := s[1..=2]
   if w.len() != 2 { ret 7 }
   if *w.at(1).unwrap() != 30i32 { ret 8 }
-  e := s[3..=2]
-  if e.len() != 0 { ret 9 }
   mut b := [1i32, 2i32, 3i32, 4i32]
   mut m := &mut b[1..=2]
   m[0] = 20i32

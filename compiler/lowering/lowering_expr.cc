@@ -2390,10 +2390,24 @@ bool Lowerer::run_bounds(Val range,
   if (failed) {
     return false;
   }
-  // `start <= end`, and both are bounded by `len` above, so the width
-  // below cannot wrap.
-  const ir::RegisterIdx inverted =
+  // An included end names an element, so its run inverts one earlier:
+  // `3..=2` decodes as `3..<3`, and only the tag tells the two apart.
+  // The run is ordered when the start is not past the end, and not equal
+  // to it either when the end names an element. Both bounds are bounded
+  // by `len` above, so the width below cannot wrap.
+  const Val end_tag = load_disc(end_slot);
+  const ir::RegisterIdx end_included = emit(
+      ir::Opcode::Eq, boolean, {use_value(end_tag), disc_operand(included_v)});
+  const ir::RegisterIdx past =
       emit(ir::Opcode::Gt, boolean, {use_value(start), use_value(end)});
+  const ir::RegisterIdx equal =
+      emit(ir::Opcode::Eq, boolean, {use_value(start), use_value(end)});
+  const ir::RegisterIdx both =
+      emit(ir::Opcode::And, boolean,
+           {to_operand(end_included, boolean), to_operand(equal, boolean)});
+  const ir::RegisterIdx inverted =
+      emit(ir::Opcode::Or, boolean,
+           {to_operand(past, boolean), to_operand(both, boolean)});
   const ir::RegisterIdx ordered = emit(
       ir::Opcode::Select, boolean,
       {to_operand(inverted, boolean), bool_operand(false), bool_operand(true)});
