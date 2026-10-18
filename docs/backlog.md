@@ -13,9 +13,13 @@ replaced. The foundations are in `roadmap.md`.
   reach it, an explicit binding type does not help, and the value is
   a couple hundred bytes. The cost is therefore in building or
   canonicalizing the nested generic instances, not in the cover walk
-  and not in the or-pattern expansion. Reproduce with a generated
-  file; the twenty-four level case with an annotated binding still
-  spends several seconds.
+  and not in the or-pattern expansion. The type itself is not the
+  cost: a function whose parameter names the same nesting forty deep
+  checks in a third of a second, so the type syntax and the instance
+  are built cheaply. What explodes is checking the nested value -
+  the `Some(Some(...))` expression - and an explicit binding type
+  still spends several seconds at twenty-four levels. Reproduce with
+  a generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
