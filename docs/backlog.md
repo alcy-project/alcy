@@ -122,8 +122,13 @@ replaced. The foundations are in `roadmap.md`.
   is not a visible pair though: the operand checks in `types_expr.cc`
   and `types.cc` are each single, so the second walk starts inside
   `check_expr_inner`'s own `Call` and `MethodCall` cases - read those
-  with the trace's kinds in hand (`ExprKind` values 0, 10, and 24 in
-  the failing case). The key must carry
+  with the trace's kinds in hand. The kinds say the unsound repeat is a
+  `Literal` (0) under a `Cast` (10) inside a `Range` (24): the cast is
+  checked with and without an expected type and each walk re-adopts the
+  literal, which is the re-check the comment on `check_expr` describes.
+  The exponential case is different - it repeats calls - so a memo that
+  leaves literal adoption alone (or handles it separately) may still be
+  sound for the call-driven nesting. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
