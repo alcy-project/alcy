@@ -252,7 +252,15 @@ replaced. The foundations are in `roadmap.md`.
   params, bound, span)` (`types.cc:6670`), which takes no argument
   list, so the argument types reach it another way (a member holding
   the pending call, or a helper). Read it before writing the reuse,
-  since a wrong assumption here means no reuse to make. The key must carry
+  since a wrong assumption here means no reuse to make. It is wrong:
+  `infer_bound_arguments` (`types.cc:1020`) reads only the generic
+  parameters' annotations and bounds, never the call arguments, so the
+  argument-driven binding happens in `check_call_args`'s own
+  `unify` (`types_expr.cc:691`). There is no separate argument walk to
+  remove, and the second walk that makes the exponent is somewhere
+  else - the trace's parent/child repeats are the place to look, with
+  a parent asking the same child once plainly and once with an
+  expected type. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
