@@ -52,9 +52,15 @@ replaced. The foundations are in `roadmap.md`.
   level calls cannot account for seconds. Neither path is hot: the
   type path and `instantiate_generic_method` both stay under a few
   hundred and a few dozen calls. `wrap` is a free generic function,
-  so its calls resolve through the free-function instantiation path,
-  which is the one still to instrument. Reproduce with a generated
-  file.
+  so its calls resolve through the free-function instantiation path.
+  That path is `instantiate_fn` (`types.cc:6153`), and it is the hot
+  one: a counter there reads 4,352 calls at twelve levels and 65,792
+  at sixteen, a factor of about two per level that matches the wall
+  clock. The same instantiation is requested exponentially often even
+  though the function already scans `fn_instances` for a match
+  (`:6157`), so the reuse keeps missing. The fix is to make that
+  lookup hit, most likely by canonicalizing the arguments first, the
+  way the type path needs. Reproduce with a generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
