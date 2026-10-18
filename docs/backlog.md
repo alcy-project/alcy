@@ -18,8 +18,13 @@ replaced. The foundations are in `roadmap.md`.
   checks in a third of a second, so the type syntax and the instance
   are built cheaply. What explodes is checking the nested value -
   the `Some(Some(...))` expression - and an explicit binding type
-  still spends several seconds at twenty-four levels. Reproduce with
-  a generated file.
+  still spends several seconds at twenty-four levels. Generic
+  instantiation is what the cost needs: nested tuples, which have no
+  instantiation, check in a fifth of a second sixty deep, while a
+  nested generic function call `wrap(wrap(...))` takes twenty-nine
+  seconds at twenty levels. The generic call path is far worse than
+  the enum constructor path at the same depth, so the instance work
+  is where to look. Reproduce with a generated file.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
