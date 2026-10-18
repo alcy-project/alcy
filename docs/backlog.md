@@ -12,7 +12,12 @@ replaced. The foundations are in `roadmap.md`.
   killed. The input is a few hundred bytes, so the cost is in the
   cover walk, not in reading it, and the growth is steep enough to
   read as exponential in the nesting depth. Reproduce with `alcy
-  check` on a generated file.
+  check` on a generated file. The walk is `Checker::patterns_cover`
+  (`types_expr.cc:3032`); it takes the rows by value and specializes
+  them per constructor at the two recursive calls (`:3146`, `:3200`),
+  so a nested payload rebuilds the row set at every level. Memoizing
+  the specialization on the row set and the column types is the fix
+  that keeps the algorithm.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
