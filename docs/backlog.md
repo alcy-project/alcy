@@ -401,7 +401,16 @@ replaced. The foundations are in `roadmap.md`.
   the two remaining places with a nested child are `Deref` and the call
   path, and if both check once, then no single node re-asks a child and
   the twenty-six checks of one call come from repeated entries higher
-  up rather than from one parent. The key must carry
+  up rather than from one parent. `Deref` closes the audit: it checks
+  its operand once (`types_expr.cc:3716`) and only unifies the pointee
+  (`:3732`). Every case the caller trace named - `Cast`, `Binary`,
+  `Range`, `Deref` - checks each child once, with the only repeats
+  being the leaf-sized literal adoption. So no single node re-asks a
+  child, and one call expression reached twenty-six entries from
+  somewhere above the expression: a statement, block, or loop body
+  walked twice inside one function body. Measure that next - count
+  `check_stmt` and `check_block` entries per body and instance - rather
+  than reading more expression cases. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
