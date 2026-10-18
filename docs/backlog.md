@@ -5,22 +5,17 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
-- [ ] A deeply nested pattern hangs the cover walk: a `match` arm of
-  the form `Option::Some(Option::Some(... (E::A | E::B) ...))` with a
-  wildcard arm costs about a second at twenty levels of nesting and
-  more than a hundred at twenty-eight, where `alcy check` had to be
-  killed. The input is a few hundred bytes, so the cost is in the
-  cover walk, not in reading it, and the growth is steep enough to
-  read as exponential in the nesting depth. A plain constructor
-  chain with no `|` anywhere - `Some(Some(... E::A ...))` and a
-  wildcard arm - hangs the same way, so the cost is not the
-  or-pattern expansion. Reproduce with `alcy check` on a generated
-  file. The walk is `Checker::patterns_cover`
-  (`types_expr.cc:3032`); it takes the rows by value and specializes
-  them per constructor at the two recursive calls (`:3146`, `:3200`),
-  so a nested payload rebuilds the row set at every level. Memoizing
-  the specialization on the row set and the column types is the fix
-  that keeps the algorithm.
+- [ ] A deeply nested generic type costs explosive compile time. A
+  value of a type like `Option<Option<...<E>...>>` nested twenty
+  levels deep is checked in about a second and twenty-eight levels
+  past a minute, where `alcy check` had to be killed. Nothing in the
+  source needs a pattern: a single wildcard arm and a bound value
+  reach it, an explicit binding type does not help, and the value is
+  a couple hundred bytes. The cost is therefore in building or
+  canonicalizing the nested generic instances, not in the cover walk
+  and not in the or-pattern expansion. Reproduce with a generated
+  file; the twenty-four level case with an annotated binding still
+  spends several seconds.
 - [x] A method call whose receiver is a range index aborted the
   emitter: `n := s[1..<3].len()` (and `first`, and the same chain on a
   `Vec`) reports `Unsupported cast` from the LLVM backend
