@@ -5,6 +5,19 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [ ] A method call on the result of a range index aborts the emitter:
+  `n := s[1..<3].len()` (and `first`, and the same chain on a
+  `Vec` or a re-slice) reports `Unsupported cast` from the LLVM
+  backend and `Construct 'struct' is not supported` from the direct
+  wasm one, while the split form `x := s[1..<3]` lowers correctly. The
+  chain resolves the index as an element access and casts the `Range`
+  value to the index type.
+- [ ] An inclusive range whose end is one below its start (`s[3..=2]`)
+  yields an empty run, while the exclusive spelling (`s[3..<2]`) aborts:
+  the inversion check compares the decoded endpoints, and the included
+  end decoded one past the element it named, so the two orders collapse.
+  It is safe today (the width is zero) but the two spellings of one
+  inverted interval disagree.
 - [ ] A reference stored into a longer-lived place outlives its
   referent: `mut r: &i32 := &0; { n := 5; r = &n; } *r` compiles, and
   so does the same store through a struct field or an `if` arm, which
