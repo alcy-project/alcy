@@ -394,14 +394,10 @@ replaced. The foundations are in `roadmap.md`.
 - [x] References into the type tables held across checking: a struct
   literal's check kept a `StructType&` while a field value's check
   could intern a type and move the table (a heap-use-after-free the
-  new std module's layout shift exposed). The audit closes with
-  forty-five readers copying their entry - the struct, tuple, variant,
-  pattern, element-index, run-index, array, intrinsic, and shape
-  readers, the drop walk, the comp evaluator, and every other read of
-  a builder table a call could move between. The rule is the file's
-  now: a reference into a table the checker can grow is never held
-  across a call. The few sites that read the frozen `Storage` keep
-  their references, because nothing can move it.
+  new std module's layout shift exposed). The analyzer's readers had
+  the same shape throughout; they now take a copy - ten in
+  `types_expr.cc`, ten in `types.cc`, and four in `comp_evaluator.cc`
+  - so no live reference spans a check that can intern.
 - [x] A discarded temporary that owns memory ends where it stands:
   `_ := format("x")` and a bare `format("x")` are both ended by the
   discard path's `record_drop_in_place`, which the sanitized runs of
@@ -418,78 +414,24 @@ replaced. The foundations are in `roadmap.md`.
   does: `exe-closure-capture-drop` walks a bound closure and a `fn()`
   parameter that both capture a heap string under the sanitizer, and
   the witness in `exe-method-infer` can hold a `String` again.
-- [x] The symbol a summary call names, and the linkage that needs: each
-  summary row carries the mangled symbol the library's own build writes
-  (the emitter's encoding, computed where the artifact is written), the
-  dependent's call declares it in the external table, and the target
-  links the dependency's object. The runtime's entry points were already
-  `linkonce_odr`; the two argument globals are discardable now too, so
-  two objects in one image keep one copy. A package whose library has a
-  summary resolves, links, and runs with the library's sources gone
-  (`dependencies_test` builds both and runs the binary).
-- [x] A summary carries no struct field names: the section writes the
-  fields each struct row declares - name and visibility, in declaration
-  order - and the surface spells a nominal row into its declaration (a
-  struct from the runs, an enum from the variant names its table
-  holds), so a dependent names the type, constructs a literal, and
-  reads a field across the boundary. `dependencies_test` does all three
-  with the library's sources gone. A signature that *names* a nominal
-  is still left out, and the reason is the item below.
-- [x] A summary call passes what the callee takes: the call handed the
-  argument's place over where the callee takes its value, so a field
-  read as an argument met the emitter's LLVM assertion. It crosses as
-  the value now, the way a C entry point's does, and a nominal
-  parameter, a nominal return, a nested nominal field, and a reference
-  to a nominal all work - `dependencies_test` runs all four with the
-  library's sources gone. Spelling a signature through a copy was
-  refused while this was open; a row spells it now, because identical
-  shapes lay out alike.
-- [x] Associated functions and methods in a summary: a row names the
-  nominal its item belongs to now (`owner`, the type the declaration
-  names), and the surface groups the rows by it into the `impl` the
-  declaration's module holds, after every nominal has been spelled. A
-  method spells its receiver as `self` - `mut self` when the receiver
-  takes an exclusive borrow, which its type says - and its call crosses
-  as the value the callee takes with the receiver as the first
-  parameter; a call names the callee's own item before its name, which
-  two impls could share. A comp function gets no row, because its call
-  belongs to the package's build rather than a dependent's.
-  `dependencies_test` calls `Pair::new` and `p.total()` with the
-  library's sources gone.
-- [ ] The generic boundary in a summary: a `needs_body` row is
-  omitted, so a dependent that names a generic item reads "Unresolved
-  import" without learning why. The IR has no parameterized types (its
-  tags are concrete), so a declaration's shape cannot be spelled; it
-  exists only per instantiation. Fetching the instantiation from the
-  library, or spelling the instantiations the library already built
-  under synthesized names, is the choice the ADR records.
-- [ ] `core::string`'s `trim_start_matches` once reported `Returns
-  reference to local 's'` for the `None` arm's `ret s` - the loop
-  reassigns `mut s` from `s.strip_prefix(pat)` and the local holds a
-  slice view, so the loan's place is the local while its pointee is the
-  text. Six shapes faithful to it pass now (the free function with one
-  and two parameters, the method form, the staged prelude reached from
-  a program, and both reassignment orders), so the function alone does
-  not produce the report; it came from a configuration that no longer
-  exists (a summary call declared as a bodyless foreign function, which
-  reached std code the extern path never reaches) and rebuilding that
-  route is what would say whether the report was a false positive about
-  a loan's place or a conservative rule worth keeping.
-- [x] One nominal as several type nodes: the checker interned a
-  second type node over a declaration's own shape (a `String` node
-  beside the declaration's), and `types_equal` compares origins, so two
-  nodes over one declaration read as different types while only the
-  drop lookup was taught to see through them. The observable symptom
-  was a two-node dump (`struct Pair(i32, i32)` at #19 and #158) that
-  made a nominal-typed signature unspellable. It no longer reproduces:
-  a library with a struct, a nested struct, an impl, and calls dumps
-  one node per declaration now, and the dependent spells, links, and
-  runs a nominal parameter, return, nested field, and reference. The
-  diagnosis that stands is that the object a field or parameter holds
-  is a storage copy - a reference the checker records an origin for,
-  which lowering follows - so a consumer that meets one resolves it by
-  shape; if the extra node returns, the reader audit's rule and
-  `type_origins` are where to look.
+- [ ] The symbol a summary call names: `lower_summary_call` declares an
+  external qualified by the package (`dep::double`) under the C calling
+  convention, which no artifact defines, so a dependent's build stops at
+  the linker where its check resolved. Multi-object linking wants the
+  mangled symbol the dependency's own build writes, and the external
+  linkage its runtime needs.
+- [ ] A summary carries no struct field names: a signature over a
+  nominal is left out of the surface a dependent spells, because a
+  literal or a field read would need names the `SUMMARY` section does
+  not carry. A names table beside the rows is what lets nominals cross
+  the boundary, and with them the associated functions and methods.
+- [ ] One nominal as several type nodes: the checker can intern a
+  second type node over a declaration's own struct or enum shape (a
+  `String` node beside the declaration's), and `types_equal` compares
+  origins, so two nodes over one declaration read as different types
+  while only the drop lookup was taught to see through them. What
+  interns the second node - and whether the nodes should collapse to
+  one - wants finding.
 - [x] Manifest lint: a pre-1.0 version range warns (WH007), since a
   minor may break under 1.0. The rule reads the parsed requirement -
   one `Equal` bound is a pin and stays silent - so `0.5.x`,
@@ -570,9 +512,8 @@ replaced. The foundations are in `roadmap.md`.
   and the module statics. `Lowerer::expr_type` scans backward ("last
   entry wins") while `CompEvaluator::expr_type_in` scans forward ("first
   wins"), so the readers can disagree on a duplicate key, and
-  `MAX_FN_ENTRIES = 8192` reports `ED013` at the call that spends the
-  last slot now, rather than failing at an unspecified internal span;
-  raising the budget itself waits for the indexing.
+  `MAX_FN_ENTRIES = 8192` turns a package past it into an internal error
+  rather than a diagnostic.
 - [ ] Split `Lowerer`: comp evaluation, format expansion, and AST-to-IR
   lowering share one class with a large public surface.
 - [ ] Borrow-pass scratch sized by the program, not the function: the
@@ -580,20 +521,6 @@ replaced. The foundations are in `roadmap.md`.
   entries it names. The final pass's per-worker memory cost is why
   spreading it lost by measurement (ADR-0047), so the sizing waits for a
   reason to spread it.
-- [x] A moved-from owning closure was still callable: `h := g` handed
-  the environment to `h`, but `g()` still passed `g`'s own storage as
-  the environment and read what `h`'s drop freed. The borrow pass
-  refuses a store whose value is the address of a moved place, which is
-  the shape a closure call writes its environment through;
-  `err-closure-move-reuse` holds it. A place reached through a deref is
-  exempt, because the value names the referent rather than the slot a
-  move takes.
-- [ ] Two handles over one exclusive loan: a closure that owns nothing
-  is not moved (its captures are borrows, ADR-0064), so `h := g` on a
-  closure holding a `&mut` capture gives two handles that share one
-  loan, which `exe-closure-capture-mut` expects; whether both may write
-  through it is the borrow checker's question rather than the move
-  walk's.
 
 ### Language and library surface
 
@@ -677,35 +604,16 @@ replaced. The foundations are in `roadmap.md`.
   the differential check green; a condition grammar that forks on the
   token after the closing `)` is what would let the inline form
   through.
-- [x] A UTF-8 byte order mark at the start of a source is an `Invalid
+- [ ] A UTF-8 byte order mark at the start of a source is an `Invalid
   character` at 1:1: the lexer has no rule for the sequence, so an
   editor that saves one makes the whole file unreadable. Other compilers
   skip it; the spec says nothing, so this wants a decision before the
   lexer learns the three bytes.
-  Resolved: the source view drops a leading `EF BB BF`, so the offsets
-  every reader sees are the text's own and a file with the mark and one
-  without are the same program; the grammar's lexical notes record the
-  decision. The mark stays an invalid character anywhere else.
-- [x] A struct kept two fields under one name and an enum two variants
-  under one: nothing at the declaration checked, so a struct literal was
-  asked for both fields and an access reached the first, while a second
-  variant was unreachable. Both declarations reject a repeated name now,
-  naming it, and the surviving member is the first
-  (`err-duplicate-field`, `err-duplicate-variant`).
 - [x] Qualified generic calls: `helper::id::<i32>(x)` answered
   "Unresolved value 'id'" because neither module-qualified resolution
   branch reached the generic-function lookup. Both do now, with the
   reachability check a qualified name owes (`ok-qualified-generic-call`,
   `err-qualified-generic-private`).
-- [x] An associated call bound the owner's turbofish to the member: the
-  two-segment branch passed the whole path's arguments on, so
-  `Holder::<i32>::map_to(true)` pinned the member's first generic to
-  `i32` and refused the argument, and an owner with two parameters
-  reported a mismatch against the member's one written slot. A call's
-  arguments bind the member's own parameters now, the way a method
-  call's do, and the owner's turbofish stays the owner's
-  (`ok-assoc-fn-infer` pins the numeric and the differently-typed
-  call).
 - [x] An associated function's turbofish names its own arguments: the
   parser records which segment the turbofish followed and the resolver
   reads it, so `P::id::<i32>(x)` instantiates the member while
