@@ -108,7 +108,11 @@ replaced. The foundations are in `roadmap.md`.
   the same module, expression, expected type, and instance, and the
   inference that settles in between makes the second answer the right
   one. The key has to carry whatever makes the answer final, or those
-  expressions have to stay out of the memo. The key must carry
+  expressions have to stay out of the memo. Read the pair as a
+  speculative check the caller throws away followed by the real one
+  the settled inference allows: the first answer is never meant to be
+  reused, so the fix is to find the caller that asks early and
+  resolve once, rather than to remember the first answer. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
