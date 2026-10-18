@@ -5,6 +5,11 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [ ] `size_of::<T>()` is not comp-evaluable: `const N: usize =
+  size_of::<()>()` reports `Construct 'intrinsic is not comp-evaluable'
+  is not supported`. The answer is a property of the layout the lowering
+  already holds, and an array length written with it would fold. It wants
+  a decision on which layout queries the comp engine may answer.
 - [ ] A type mismatch between two closure literals reads `expected
   'struct', found 'struct'`: each closure literal is its own type, which
   is what the error is about, and the message names the kind both sides
