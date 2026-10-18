@@ -260,7 +260,10 @@ replaced. The foundations are in `roadmap.md`.
   remove, and the second walk that makes the exponent is somewhere
   else - the trace's parent/child repeats are the place to look, with
   a parent asking the same child once plainly and once with an
-  expected type. The key must carry
+  expected type. Check the block walk first: the body block is checked
+  by `check_block` (compiler/analyzer/types_expr.cc:4025), and if it visits
+  statements or the trailing value twice, that is the root every
+  parent/child repeat below it is a copy of. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
