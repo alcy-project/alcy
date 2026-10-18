@@ -97,7 +97,11 @@ replaced. The foundations are in `roadmap.md`.
   again, first plain and then with an expected type, and every re-type
   walks the subtree beneath it, so the work doubles per level.
   Finding that second check and reusing the first answer, or memoizing
-  on the expression plus its context, is the fix. On the rebased main
+  on the expression plus its context, is the fix. The key must carry
+  the expected type as well as the expression and the instance: a
+  memo that ignores it skips the unification the expected type asks
+  for and would accept a mismatch, and one that caches only the
+  untyped checks only halves the exponent. On the rebased main
   the wrapper costs 15.9 s at twenty levels where it cost 29 s before,
   so the constant improved but the growth did not: twenty-six levels
   still has to be killed. Reproduce with a generated file.
