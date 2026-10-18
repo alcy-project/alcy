@@ -209,7 +209,13 @@ replaced. The foundations are in `roadmap.md`.
   trace showed are two groups of expressions, not two runs of a body.
   Look again at what checks the outermost expression twice within one
   body - the comp-known predicate walk is the next candidate, since
-  it runs with `comp_depth == 0` and reads the same tree. The key must carry
+  it runs with `comp_depth == 0` and reads the same tree. Read the
+  trace again and the two problems separate: the doubled walks that
+  make the exponent ask the same expression with different expected
+  types (`expr=20` plain, then with `exp=169`), so no key dedupes them
+  and the fix has to stop the second request; the same-key repeats
+  that broke the four memo variants are another, rarer shape (a
+  literal under a cast) and they are what any table must leave alone. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
