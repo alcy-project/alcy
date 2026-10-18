@@ -6,6 +6,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "base/hash.h"
@@ -17,14 +18,17 @@
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
 #include "ir/deserialize.h"
+#include "ir/summary.h"
 #include "ir/type.h"
 #include "ir/write_input.h"
+#include "path/path.h"
 #include "pipeline/build.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/profile.h"
 #include "pipeline/std_select.h"
+#include "source/source.h"
 
 namespace pipeline {
 
@@ -258,6 +262,112 @@ TEST_CASE("The ir mode answers a release build the same artifact") {
       binary_ctx, dir.join("main.al"), "", BuildProfile{.optimize = true},
       LinkOptions{}, EmitMode::IrBinary, full_std_selection());
   CHECK(binary.is_ok());
+}
+
+TEST_CASE("An ir-binary build carries the summary only for a library") {
+  // A dependent reads a library's summary and never a bin's: the build
+  // names the library's public surface, marks the declaration a
+  // dependent cannot instantiate, and skips what is private (ADR-0078).
+  io::TempDir dir = io::TempDir::create_unique("alcy_ir_summary_test_");
+  const bool setup =
+      dir.write_file(
+          "proj/alcy.toml",
+          "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+          "[modules]\ninclude = [\"lib\"]\n\n"
+          "[dependencies]\n\"alcy/std/core\" = {}\n"
+          "\"alcy/std/alloc\" = {}\n"
+          "\"alcy/std/arch\" = {}\n"
+          "\"alcy/std/fmt\" = {}\n"
+          "\"alcy/std/io\" = {}\n"
+          "\"alcy/std/collections\" = {}\n\n"
+          "[lib]\npath = \"lib.al\"\n") &&
+      dir.write_file("proj/lib.al",
+                     "pub fn double(x: i32) -> i32 {\n"
+                     "  ret x + x\n"
+                     "}\n\n"
+                     "pub fn identity<T>(x: T) -> T {\n"
+                     "  ret x\n"
+                     "}\n\n"
+                     "fn hidden(x: i32) -> i32 {\n"
+                     "  ret x\n"
+                     "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(dir.join("proj"));
+  CHECK(root.is_ok());
+  if (root.is_err()) {
+    return;
+  }
+  const path::Path root_path = std::move(root).unwrap();
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<source::FileId, source::SourceError> manifest =
+      ctx.sources.load(root_path.join("alcy.toml").as_view());
+  CHECK(manifest.is_ok());
+  if (manifest.is_err()) {
+    return;
+  }
+  base::Result<std::string, diag::Reported> built =
+      build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                    "", BuildProfile{}, LinkOptions{}, EmitMode::IrBinary);
+  CHECK(built.is_ok());
+  const std::optional<std::string> bytes =
+      io::read_file(dir.join("proj/out/app.irb"));
+  CHECK(bytes.has_value());
+  if (!bytes.has_value() || bytes->size() < 4) {
+    return;
+  }
+  const std::span<const u8> written(reinterpret_cast<const u8*>(bytes->data()),
+                                    bytes->size());
+  const base::Result<ir::LoadedIr, ir::IrLoadError> loaded =
+      ir::deserialize(written);
+  CHECK(loaded.is_ok());
+  if (loaded.is_err()) {
+    return;
+  }
+  const ir::LoadedIr& package = loaded.value();
+  CHECK(package.summary.size() == 2);
+  bool doubled = false;
+  bool generic = false;
+  for (const ir::SummaryEntry& entry : package.summary) {
+    const std::string_view name = package.strings->get(entry.name);
+    CHECK(name != "hidden");
+    if (name == "double") {
+      doubled = !entry.needs_body && entry.function.is_valid();
+    }
+    if (name == "identity") {
+      generic = entry.needs_body && !entry.function.is_valid();
+    }
+  }
+  CHECK(doubled);
+  CHECK(generic);
+
+  // The mode over a single file is a bin, and a bin's artifact carries
+  // no summary.
+  io::TempDir bin_dir = io::TempDir::create_unique("alcy_ir_summary_bin_test_");
+  CHECK(bin_dir.write_file("main.al", PROGRAM));
+  PipelineContext bin_ctx{i18n::Language::EnUs};
+  const base::Result<std::string, diag::Reported> bin_built = build_single_file(
+      bin_ctx, bin_dir.join("main.al"), "", BuildProfile{}, LinkOptions{},
+      EmitMode::IrBinary, full_std_selection());
+  CHECK(bin_built.is_ok());
+  const std::optional<std::string> bin_bytes =
+      io::read_file(bin_dir.join("main.irb"));
+  CHECK(bin_bytes.has_value());
+  if (!bin_bytes.has_value() || bin_bytes->size() < 4) {
+    return;
+  }
+  const std::span<const u8> bin_written(
+      reinterpret_cast<const u8*>(bin_bytes->data()), bin_bytes->size());
+  const base::Result<ir::LoadedIr, ir::IrLoadError> bin_loaded =
+      ir::deserialize(bin_written);
+  CHECK(bin_loaded.is_ok());
+  if (bin_loaded.is_ok()) {
+    CHECK(bin_loaded.value().summary.empty());
+  }
 }
 
 }  // namespace pipeline

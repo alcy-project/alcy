@@ -43,6 +43,7 @@
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
+#include "ir/summary.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
@@ -1573,6 +1574,103 @@ bool comp_values_match(const comp::CompValue& a, const comp::CompValue& b) {
 
 }  // namespace
 
+namespace {
+
+// Whether a module belongs to the package being built rather than to
+// something staged beside it: the staged std members sit at the tail of
+// the module list, and a path dependency's modules carry its root.
+bool is_own_module(const analyzer::ModuleTree& tree, u32 mod) {
+  const usize own = tree.modules.size();
+  if (mod >= own || own - tree.staged_modules <= mod) {
+    return false;
+  }
+  return tree.module_roots.empty() ||
+         tree.module_roots[mod] == analyzer::NO_PACKAGE_ROOT;
+}
+
+// Whether a method's first parameter is its receiver, which the grammar
+// writes `self`.
+bool takes_receiver(const ast::AstArena& ast, const ast::ItemFn& fn) {
+  if (fn.params.empty()) {
+    return false;
+  }
+  const ast::PatternNode& pattern = ast.patterns[fn.params.front().pattern];
+  if (pattern.kind == ast::PatternKind::Ident) {
+    return pattern.payload.ident.name.name == "self";
+  }
+  if (pattern.kind == ast::PatternKind::MutIdent) {
+    return pattern.payload.mut_ident.name.name == "self";
+  }
+  return false;
+}
+
+// The package's public surface for the summary (ADR-0078): one row per
+// public item of the package's own modules. A concrete item names the
+// lowered code that carries it; a generic one knows only its
+// declaration, because instantiating it needs the body, so the row says
+// the dependent must not try.
+std::vector<ir::SummaryEntry> collect_summary(
+    const analyzer::CheckedPackage& pkg,
+    const ast::AstArena& ast,
+    const std::vector<Lowerer::FnEntry>& fns,
+    ir::SymbolTable& strings) {
+  std::vector<ir::SummaryEntry> summary;
+  for (const Lowerer::FnEntry& entry : fns) {
+    if (entry.closure.is_valid() || !entry.item.is_valid() ||
+        entry.inst != analyzer::NO_INST) {
+      continue;
+    }
+    if (!is_own_module(pkg.tree, entry.mod) || !ast.items[entry.item].is_pub) {
+      continue;
+    }
+    summary.push_back(
+        ir::SummaryEntry{entry.idx, entry.name_id, entry.kind, false});
+  }
+  for (u32 mod = 0; mod < pkg.tree.modules.size(); ++mod) {
+    if (!is_own_module(pkg.tree, mod)) {
+      continue;
+    }
+    for (ast::ItemIdx item : pkg.tree.modules[mod]->items) {
+      const ast::ItemNode& node = ast.items[item];
+      if (!node.is_pub) {
+        continue;
+      }
+      if (node.kind == ast::ItemKind::Fn) {
+        const ast::ItemFn& fn = node.payload.get<ast::ItemFn>();
+        if (fn.generic.empty() || !fn.body.is_valid()) {
+          continue;
+        }
+        summary.push_back(ir::SummaryEntry{ir::FunctionIdx(base::INVALID_IDX),
+                                           strings.intern(fn.name.name),
+                                           ir::SymbolKind::Free, true});
+        continue;
+      }
+      if (node.kind != ast::ItemKind::Impl) {
+        continue;
+      }
+      const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
+      for (ast::ItemIdx method : impl.methods) {
+        const ast::ItemNode& method_node = ast.items[method];
+        if (!method_node.is_pub) {
+          continue;
+        }
+        const ast::ItemFn& fn = method_node.payload.get<ast::ItemFn>();
+        if (impl.params.empty() && fn.generic.empty()) {
+          continue;
+        }
+        summary.push_back(ir::SummaryEntry{
+            ir::FunctionIdx(base::INVALID_IDX), strings.intern(fn.name.name),
+            takes_receiver(ast, fn) ? ir::SymbolKind::Method
+                                    : ir::SymbolKind::Assoc,
+            true});
+      }
+    }
+  }
+  return summary;
+}
+
+}  // namespace
+
 base::Result<LoweredPackage, diag::Reported> lower_package(
     analyzer::CheckedPackage package,
     ir::PointerWidth width,
@@ -1587,6 +1685,8 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   if (lowerer.failed) {
     return base::make_err(diag::Reported{});
   }
+  std::vector<ir::SummaryEntry> summary =
+      collect_summary(lowerer.pkg, ast, lowerer.fns, strings);
   // Side tables move out before the builder, which finish() consumes.
   std::vector<diag::Span> spans = std::move(lowerer.instr_spans_);
   std::vector<LoweredPackage::AddrInfo> addrs = std::move(lowerer.addr_names_);
@@ -1629,8 +1729,13 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     return base::make_err(diag::Reported{});
   }
   ir::VerifiedStorage storage = std::move(built).unwrap();
-  LoweredPackage lowered{std::move(storage), std::move(spans), std::move(addrs),
-                         prelude_functions};
+  LoweredPackage lowered{std::move(storage),
+                         std::move(spans),
+                         std::move(addrs),
+                         prelude_functions,
+                         0,
+                         0,
+                         std::move(summary)};
   // ADR-0054: the IR engine is compared against the AST engine over
   // every comp call lowering made, before it is trusted to answer. A
   // disagreement is a compiler bug; a construct the interpreter does

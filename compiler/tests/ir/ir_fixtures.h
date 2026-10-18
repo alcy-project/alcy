@@ -26,6 +26,7 @@
 #include "ir/serialize.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
+#include "ir/summary.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/write_input.h"
@@ -185,7 +186,8 @@ inline Storage composite_storage(ir::SymbolTable& strings) {
 inline std::vector<u8> composite_bytes(
     ir::SymbolTable& strings,
     const Storage& storage,
-    std::span<const base::Digest128> hashes = {}) {
+    std::span<const base::Digest128> hashes = {},
+    std::span<const SummaryEntry> summary = {}) {
   const std::array<std::string_view, 1> names{"main.al"};
   const std::array<AddrName, 1> addr_names{
       AddrName{RegisterIdx(0), "x", /*is_param=*/false, /*is_capture=*/false}};
@@ -201,6 +203,7 @@ inline std::vector<u8> composite_bytes(
       .instr_spans = spans,
       .files = FileTable{.names = names, .hashes = hashes},
       .addr_names = addr_names,
+      .summary = summary,
       .prelude_functions = 0,
       .width = PointerWidth::W64,
       .compiler_version = "0.0.0-test",

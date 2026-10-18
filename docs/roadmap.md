@@ -135,9 +135,9 @@ peripheral work lives in `backlog.md`. The language record lives in
 
 - [ ] Package artifacts: a cache and resolution summaries.
 
-  The binary IR form round-trips byte for byte and has no production
-  reader; a `[lib]` is an opaque object because a dependent package
-  cannot resolve against it. In slices: the build identity - source
+  The binary IR form round-trips byte for byte; a `[lib]` is an opaque
+  object because a dependent package cannot resolve against it. In
+  slices: the build identity - source
   bytes, the manifest among them, pointer width, and toolchain, with a
   profile joining above the IR boundary where ADR-0067 keeps the cache -
   and the content hashes the format's `FILES` section reserves but the
@@ -149,17 +149,23 @@ peripheral work lives in `backlog.md`. The language record lives in
   linking, which the runtime's external linkage needs; and the fetchers
   that make a registry or git dependency obtainable at all. The cache
   without summaries and the summaries without fetchers each go half the
-  way, so the item states both. Three slices landed: each `FILES` record
+  way, so the item states both. Four slices landed: each `FILES` record
   carries the content hash of the source it names (XXH3-128 of its
   bytes), so a cache can tell two programs under one name apart; the
   `IDENTITY` section carries one digest over the file table, the pointer
   width, and the toolchain (`ir::identity_digest`), so a cache compares
-  one number instead of walking the tables; and the cache itself holds
+  one number instead of walking the tables; the cache itself holds
   the unoptimized binary IR under one digest over the identity, the
   manifest, and the target, reporting `hit`, `miss`, or `off` in the
-  envelope. What remains is the summaries slice and everything after
-  it. Designed in
-  `docs/adr/0056-the-ir-has-a-text-and-a-binary-form.md` and, for the
+  envelope; and a `[lib]` target's IR binary carries a `SUMMARY` of the
+  package's public surface - the code that carries each signature, and
+  a generic declaration marked as needing its body - which the reader
+  rebuilds and the cache hit path hands back. What remains is the
+  analyzer consuming a summary instead of a dependency's source, and
+  everything after it. Designed in
+  `docs/adr/0056-the-ir-has-a-text-and-a-binary-form.md`, for the
   cache's key, artifact, location, and reporting,
-  `docs/adr/0072-a-packages-cache-holds-its-binary-ir.md`; the pieces
+  `docs/adr/0072-a-packages-cache-holds-its-binary-ir.md`, and for the
+  surface a dependent reads,
+  `docs/adr/0078-the-summary-a-dependent-reads.md`; the pieces
   are named in `docs/spec/deferred.md`.

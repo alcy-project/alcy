@@ -16,10 +16,12 @@
 #include "fpag/base/result.h"
 #include "ir/binary_format.h"
 #include "ir/common.h"
+#include "ir/function.h"
 #include "ir/seq_builder.h"
 #include "ir/serialize.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
+#include "ir/summary.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/write_input.h"
@@ -34,6 +36,7 @@ namespace {
 struct LoadedInput {
   std::vector<std::string_view> files;
   std::vector<AddrName> addr_names;
+  std::span<const SummaryEntry> summary;
   WriteInput input;
 
   explicit LoadedInput(LoadedIr& loaded) {
@@ -46,12 +49,14 @@ struct LoadedInput {
       addr_names.push_back(
           AddrName{entry.reg, entry.name, entry.is_param, entry.is_capture});
     }
+    summary = loaded.summary;
     input = WriteInput{
         .storage = &*loaded.storage,
         .strings = loaded.strings.get(),
         .instr_spans = loaded.instr_spans,
         .files = FileTable{.names = files, .hashes = loaded.file_hashes},
         .addr_names = addr_names,
+        .summary = summary,
         .prelude_functions = loaded.prelude_functions,
         .width = loaded.width,
         .compiler_version = loaded.compiler_version,
@@ -131,6 +136,7 @@ TEST_CASE("A const argument survives the binary form") {
       .instr_spans = {},
       .files = {},
       .addr_names = {},
+      .summary = {},
       .prelude_functions = 0,
       .width = PointerWidth::W64,
       .compiler_version = "0.0.0-test",
@@ -295,6 +301,80 @@ TEST_CASE("The reader hands back the identity the writer computed") {
   CHECK(loaded.value().identity ==
         identity_digest(FileTable{.names = names, .hashes = hashes},
                         PointerWidth::W64, "0.0.0-test"));
+}
+
+TEST_CASE("A summary section reads back the package's surface") {
+  ir::SymbolTable strings;
+  const Storage storage = test::composite_storage(strings);
+  const std::array<SummaryEntry, 2> summary{
+      SummaryEntry{FunctionIdx(0), strings.intern("main"), SymbolKind::Free,
+                   /*needs_body=*/false},
+      SummaryEntry{FunctionIdx(base::INVALID_IDX), strings.intern("make"),
+                   SymbolKind::Free, /*needs_body=*/true},
+  };
+  const std::vector<u8> bytes =
+      test::composite_bytes(strings, storage, /*hashes=*/{}, summary);
+  const std::span<const u8> file(bytes);
+
+  // The section is written after the identity, where the kinds order
+  // puts it.
+  const usize version_len = test::read_u32(file, 16);
+  const usize count = test::read_u64(file, 20 + version_len);
+  const usize last_at = 20 + version_len + 8 + (count - 1) * 24;
+  CHECK(test::read_u32(file, last_at) ==
+        static_cast<u32>(binary::Section::Summary));
+
+  base::Result<LoadedIr, IrLoadError> loaded = deserialize(bytes);
+  CHECK(loaded.is_ok());
+  if (loaded.is_err()) {
+    return;
+  }
+  LoadedIr package = std::move(loaded).unwrap();
+  CHECK(package.summary.size() == 2);
+  if (package.summary.size() != 2) {
+    return;
+  }
+  CHECK(package.summary[0].function.idx == 0);
+  CHECK(package.strings->get(package.summary[0].name) == "main");
+  CHECK(package.summary[0].kind == SymbolKind::Free);
+  CHECK_FALSE(package.summary[0].needs_body);
+  CHECK_FALSE(package.summary[1].function.is_valid());
+  CHECK(package.strings->get(package.summary[1].name) == "make");
+  CHECK(package.summary[1].kind == SymbolKind::Free);
+  CHECK(package.summary[1].needs_body);
+
+  // Reading and writing again produces the bytes it read, summary and
+  // all: a dependent that reads and forwards keeps the surface.
+  LoadedInput input(package);
+  CHECK(serialize(input.input) == bytes);
+}
+
+TEST_CASE("A corrupt summary is refused") {
+  ir::SymbolTable strings;
+  const Storage storage = test::composite_storage(strings);
+  const std::array<SummaryEntry, 1> summary{
+      SummaryEntry{FunctionIdx(0), strings.intern("main"), SymbolKind::Free,
+                   /*needs_body=*/false},
+  };
+  const std::vector<u8> bytes =
+      test::composite_bytes(strings, storage, /*hashes=*/{}, summary);
+  const std::span<const u8> file(bytes);
+  {
+    // A function index no table row answers.
+    std::vector<u8> broken = bytes;
+    const usize summary_at = test::section_at(file, binary::Section::Summary);
+    broken[summary_at + 4] = 9;
+    reseal(broken);
+    CHECK(std::move(deserialize(broken)).unwrap_err() == IrLoadError::BadShape);
+  }
+  {
+    // A symbol kind outside the enum.
+    std::vector<u8> broken = bytes;
+    const usize summary_at = test::section_at(file, binary::Section::Summary);
+    broken[summary_at + 12] = 99;
+    reseal(broken);
+    CHECK(std::move(deserialize(broken)).unwrap_err() == IrLoadError::BadShape);
+  }
 }
 
 }  // namespace ir

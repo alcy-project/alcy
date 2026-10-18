@@ -32,6 +32,7 @@
 #include "ir/register.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
+#include "ir/summary.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/verifier.h"
@@ -45,7 +46,7 @@ LoadedIr::LoadedIr(VerifiedStorage storage) : storage(std::move(storage)) {}
 namespace {
 
 constexpr u32 NONE = U32_MAX;
-// Kinds 1..Consts must fit this; a larger kind is unknown and skipped.
+// Kinds 1..Summary must fit this; a larger kind is unknown and skipped.
 constexpr usize MAX_SECTIONS = 32;
 
 // A bounds-checked little-endian reader over the file bytes.
@@ -155,6 +156,7 @@ struct Parsed {
   std::vector<std::string> file_names;
   std::vector<base::Digest128> file_hashes;
   std::vector<LoadedIr::AddrNameEntry> addr_names;
+  std::vector<SummaryEntry> summary;
   std::vector<diag::Span> spans;
   usize prelude_functions = 0;
   PointerWidth width = PointerWidth::W64;
@@ -899,6 +901,47 @@ bool read_addr_names(Parsed& parsed, std::span<const u8> payload) {
   return true;
 }
 
+bool read_summary(Parsed& parsed, std::span<const u8> payload) {
+  const u32 count = record_count(payload.size(), 12);
+  if (count == NONE) {
+    return false;
+  }
+  Cursor cursor(payload);
+  u32 read = 0;
+  if (!cursor.read_u32(read) || read != count) {
+    return false;
+  }
+  for (u32 i = 0; i < count; ++i) {
+    u32 function = 0;
+    u32 name = 0;
+    u8 kind = 0;
+    u8 flags = 0;
+    u8 reserved = 0;
+    if (!cursor.read_u32(function) || !cursor.read_u32(name) ||
+        !cursor.read_u8(kind) || !cursor.read_u8(flags) ||
+        !cursor.read_u8(reserved) || !cursor.read_u8(reserved)) {
+      return false;
+    }
+    if (function != NONE && function >= parsed.state.functions.size()) {
+      return false;
+    }
+    if (name != NONE && name >= parsed.string_ids.size()) {
+      return false;
+    }
+    if (kind > static_cast<u8>(SymbolKind::Method)) {
+      return false;
+    }
+    parsed.summary.push_back(SummaryEntry{
+        .function = function == NONE ? FunctionIdx(base::INVALID_IDX)
+                                     : FunctionIdx(function),
+        .name = string_id(parsed, name),
+        .kind = static_cast<SymbolKind>(kind),
+        .needs_body = (flags & 0x01u) != 0,
+    });
+  }
+  return true;
+}
+
 bool read_prelude(Parsed& parsed, std::span<const u8> payload) {
   if (payload.size() != 4) {
     return false;
@@ -953,13 +996,14 @@ bool read_section(Parsed& parsed, Section kind, std::span<const u8> payload) {
     case Section::Prelude: return read_prelude(parsed, payload);
     case Section::Consts: return read_consts(parsed, payload);
     case Section::Identity: return read_identity(parsed, payload);
+    case Section::Summary: return read_summary(parsed, payload);
   }
   return true;
 }
 
 bool known_kind(u32 kind) {
   return kind >= static_cast<u32>(Section::Strings) &&
-         kind <= static_cast<u32>(Section::Identity);
+         kind <= static_cast<u32>(Section::Summary);
 }
 
 base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
@@ -1075,7 +1119,7 @@ base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
   }
 
   for (u32 kind = static_cast<u32>(Section::Strings);
-       kind <= static_cast<u32>(Section::Identity); ++kind) {
+       kind <= static_cast<u32>(Section::Summary); ++kind) {
     if (!sections[kind].present) {
       continue;
     }
@@ -1105,6 +1149,7 @@ base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
   loaded.addr_names = std::move(parsed.addr_names);
   loaded.prelude_functions = parsed.prelude_functions;
   loaded.identity = parsed.identity;
+  loaded.summary = std::move(parsed.summary);
   loaded.width = parsed.width;
   loaded.compiler_version = std::move(parsed.compiler_version);
   return base::make_ok(std::move(loaded));

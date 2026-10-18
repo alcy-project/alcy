@@ -14,6 +14,7 @@
 #include "fpag/base/result.h"
 #include "ir/common.h"
 #include "ir/storage.h"
+#include "ir/summary.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
 
@@ -74,6 +75,9 @@ struct LoadedIr {
   usize prelude_functions = 0;
   PointerWidth width = PointerWidth::W64;
   std::string compiler_version;
+  // The package's public surface, when the file carries a summary
+  // (ADR-0078). Names resolve in `strings`.
+  std::vector<SummaryEntry> summary;
   // The build identity the file recorded; empty when its writer knew
   // none, which is a file from before the section existed.
   base::Digest128 identity;

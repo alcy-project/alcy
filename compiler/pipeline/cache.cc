@@ -108,9 +108,13 @@ std::optional<lowering::LoweredPackage> cache_load(PipelineContext& ctx,
     addr_names.push_back(
         {name.reg, ctx.strings.get(*id), name.is_param, name.is_capture});
   }
-  return lowering::LoweredPackage{
-      std::move(entry.storage), std::move(entry.instr_spans),
-      std::move(addr_names), entry.prelude_functions};
+  return lowering::LoweredPackage{std::move(entry.storage),
+                                  std::move(entry.instr_spans),
+                                  std::move(addr_names),
+                                  entry.prelude_functions,
+                                  0,
+                                  0,
+                                  std::move(entry.summary)};
 }
 
 bool cache_store(std::string_view dir,

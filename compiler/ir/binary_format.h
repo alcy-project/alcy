@@ -56,6 +56,12 @@ enum class Section : u8 {
   // The build identity `identity_digest` computes over the write input;
   // 16 bytes. A file written before this kind existed has none.
   Identity = 24,
+  // The package's public surface, so a dependent can resolve against it
+  // without the source (ADR-0078). Rows: a u32 count, then per row a
+  // function index (invalid for a declaration with no code), a string
+  // index for the source name, the symbol kind, one flags byte, and two
+  // reserved bytes. Absent means the package carries no summary.
+  Summary = 25,
 };
 
 }  // namespace ir::binary

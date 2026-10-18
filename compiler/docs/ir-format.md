@@ -313,6 +313,16 @@ pointer width, and the version string - so a cache can compare one digest
 instead of walking them. A file written before this kind existed carries
 none, and a reader answers empty for those.
 
+**SUMMARY**: `count` × `{ function u32, name u32, kind u8, flags u8,
+reserved u8[2] }`, the package's public surface for a dependent to
+resolve against (ADR-0078). `function` names the `FUNCTIONS` row whose
+signature carries the item, or `U32_MAX` when the item lowered to no
+code of its own; `name` is the source name in `STRINGS`; `kind` is the
+`SymbolKind` the symbol is written as; and `flags` bit 0 says the item
+needs its body to be used, as a generic declaration does. The section is
+written for a library target and absent otherwise, and a reader answers
+empty for a file that carries none.
+
 ### 3.5 Reading
 
 A reader MUST build a `StorageState`, re-intern `STRINGS`, remap every

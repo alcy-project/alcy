@@ -31,6 +31,7 @@
 #include "ir/operand.h"
 #include "ir/register.h"
 #include "ir/storage.h"
+#include "ir/summary.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/write_input.h"
@@ -92,7 +93,8 @@ class Serializer {
         strings_(*input.strings),
         spans_(input.instr_spans),
         files_(input.files),
-        addr_names_(input.addr_names) {
+        addr_names_(input.addr_names),
+        summary_(input.summary) {
     DCHECK(input.storage != nullptr);
     DCHECK(input.strings != nullptr);
     DCHECK(spans_.empty() ||
@@ -143,6 +145,9 @@ class Serializer {
             .bytes();
     identity.bytes(digest);
     sections.push_back({Section::Identity, std::move(identity)});
+    if (!summary_.empty()) {
+      sections.push_back({Section::Summary, summary_section()});
+    }
 
     // The header and the table come first, so an offset depends on the
     // table's own size; compute them before writing anything.
@@ -193,6 +198,7 @@ class Serializer {
   std::span<const diag::Span> spans_;
   FileTable files_;
   std::span<const AddrName> addr_names_;
+  std::span<const SummaryEntry> summary_;
 
   // String bytes in table order, and the content -> index map that
   // deduplicates. Lookups only, never iterated. A deque, not a vector:
@@ -261,6 +267,9 @@ class Serializer {
       if (state_.types[immutable.type].tag == TypeTag::Str) {
         collect_pool_id(immutable.data.str_id_value, offsets);
       }
+    }
+    for (const SummaryEntry& entry : summary_) {
+      collect_pool_id(entry.name, offsets);
     }
     std::sort(offsets.begin(), offsets.end());
     offsets.erase(std::unique(offsets.begin(), offsets.end()), offsets.end());
@@ -579,6 +588,19 @@ class Serializer {
                        static_cast<u8>(name.is_capture ? 2u : 0u);
       out.put_u8(flags);
       out.zeros(3);
+    }
+    return out;
+  }
+
+  ByteWriter summary_section() const {
+    ByteWriter out;
+    out.put_u32(static_cast<u32>(summary_.size()));
+    for (const SummaryEntry& entry : summary_) {
+      out.put_u32(entry.function.idx);
+      out.put_u32(string_index(entry.name));
+      out.put_u8(static_cast<u8>(entry.kind));
+      out.put_u8(static_cast<u8>(entry.needs_body ? 1u : 0u));
+      out.zeros(2);
     }
     return out;
   }

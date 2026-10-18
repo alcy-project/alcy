@@ -15,6 +15,7 @@
 #include "fpag/debug/profiler/profiler.h"
 #include "ir/common.h"
 #include "ir/storage.h"
+#include "ir/summary.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "source/source.h"
@@ -90,6 +91,9 @@ struct LoweredPackage {
   usize comp_engine_compared = 0;
   // Comp calls the IR engine answered instead of the AST engine.
   usize comp_engine_answered = 0;
+  // The package's public surface, for the summary a dependent reads
+  // (ADR-0078). Empty when the package has no public items.
+  std::vector<ir::SummaryEntry> summary;
 };
 
 base::Result<LoweredPackage, diag::Reported> lower_package(

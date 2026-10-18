@@ -29,6 +29,7 @@
 #include "i18n/messages.h"
 #include "ir/serialize.h"
 #include "ir/storage.h"
+#include "ir/summary.h"
 #include "ir/text_dump.h"
 #include "ir/verifier.h"
 #include "ir/write_input.h"
@@ -497,7 +498,9 @@ struct IrWriteInput {
   std::vector<ir::AddrName> addr_names;
   ir::WriteInput input;
 
-  IrWriteInput(PipelineContext& ctx, lowering::LoweredPackage& package)
+  IrWriteInput(PipelineContext& ctx,
+               lowering::LoweredPackage& package,
+               std::span<const ir::SummaryEntry> summary)
       : files(source_file_table(ctx)) {
     addr_names.reserve(package.addr_names.size());
     for (const lowering::LoweredPackage::AddrInfo& entry : package.addr_names) {
@@ -510,6 +513,7 @@ struct IrWriteInput {
         .instr_spans = package.instr_spans,
         .files = ir::FileTable{.names = files.names, .hashes = files.hashes},
         .addr_names = addr_names,
+        .summary = summary,
         .prelude_functions = package.prelude_functions,
         .width = ctx.target.width,
         .compiler_version = ctx.version,
@@ -520,8 +524,14 @@ struct IrWriteInput {
 // The binary form of a lowered package, for the cache to store and for
 // `--emit=ir-bc` to write: one serialization serves both.
 std::vector<u8> serialize_package_ir(PipelineContext& ctx,
-                                     lowering::LoweredPackage& package) {
-  IrWriteInput write_input(ctx, package);
+                                     lowering::LoweredPackage& package,
+                                     bool is_lib) {
+  // A dependent resolves against a library's summary; a bin's artifact
+  // carries none (ADR-0078).
+  const std::span<const ir::SummaryEntry> summary =
+      is_lib ? std::span<const ir::SummaryEntry>(package.summary)
+             : std::span<const ir::SummaryEntry>();
+  IrWriteInput write_input(ctx, package, summary);
   return ir::serialize(write_input.input);
 }
 
@@ -535,7 +545,7 @@ base::Result<void, diag::Reported> emit_package_ir_text(
     const std::string& output_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "dump-ir", "backend");
   (void)profile;
-  IrWriteInput write_input(ctx, package);
+  IrWriteInput write_input(ctx, package, /*summary=*/{});
   const std::string text = ir::write_text(write_input.input);
   const std::span<const u8> bytes(reinterpret_cast<const u8*>(text.data()),
                                   text.size());
@@ -547,11 +557,12 @@ base::Result<void, diag::Reported> emit_package_ir_binary(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
     BuildProfile profile,
-    const std::string& output_path) {
+    const std::string& output_path,
+    bool is_lib) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-ir-bc",
                                            "backend");
   (void)profile;
-  const std::vector<u8> bytes = serialize_package_ir(ctx, package);
+  const std::vector<u8> bytes = serialize_package_ir(ctx, package, is_lib);
   return write_output(ctx, "ir binary", output_path, bytes);
 }
 
@@ -684,7 +695,7 @@ base::Result<std::string, diag::Reported> emit_output(
       return emit_package_ir_text(ctx, lowered, profile, output_path);
     }
     if (mode == EmitMode::IrBinary) {
-      return emit_package_ir_binary(ctx, lowered, profile, output_path);
+      return emit_package_ir_binary(ctx, lowered, profile, output_path, is_lib);
     }
     // Executable: a backend that writes objects hands them to the linker;
     // one whose output is a final module writes that module and stops.
@@ -914,7 +925,8 @@ base::Result<std::string, diag::Reported> build_package(
       // a stored entry stays silent when it is read back.
       if (!ctx.no_cache && ctx.bag.size() == 0) {
         lowering::LoweredPackage fresh = std::move(package).unwrap();
-        cache_store(cache_dir, entry, serialize_package_ir(ctx, fresh));
+        cache_store(cache_dir, entry,
+                    serialize_package_ir(ctx, fresh, target.is_lib));
         cached = std::move(fresh);
       } else {
         cached = std::move(package).unwrap();

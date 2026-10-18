@@ -13,6 +13,7 @@
 #include "ir/binary_format.h"
 #include "ir/common.h"
 #include "ir/storage.h"
+#include "ir/summary.h"
 #include "ir/symbol_table.h"
 
 namespace ir {
@@ -51,6 +52,9 @@ struct WriteInput {
   std::span<const diag::Span> instr_spans;
   FileTable files;
   std::span<const AddrName> addr_names;
+  // The package's public surface, for the summary a library's artifact
+  // carries (ADR-0078). Empty when the caller has none.
+  std::span<const SummaryEntry> summary;
   usize prelude_functions = 0;
   // The pointer width lowering ran with; the text header and the binary
   // header both record it.
