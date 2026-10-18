@@ -133,7 +133,10 @@ replaced. The foundations are in `roadmap.md`.
   a context type changes the answer of every expression above it, and
   their entries are already stored. A sound table therefore has to keep
   out any expression whose subtree holds a literal, or carry the
-  inference generation that makes an answer final. The key must carry
+  inference generation that makes an answer final. The subtree walk
+  has a model to copy: `verify_expr_children` (`compiler/ast/verify.cc`
+  `:163`) switches on the node kind and names every child, so the
+  predicate is a small mirror of it plus a per-expression cache. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
