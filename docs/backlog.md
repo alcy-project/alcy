@@ -223,7 +223,11 @@ replaced. The foundations are in `roadmap.md`.
   once and then reaches `check_call_args` with the resolved
   parameters, so the tree is walked twice per level - read `check_call`
   (`:1488`) for the inference pass and let it hand the resolved
-  arguments over instead of re-checking. The key must carry
+  arguments over instead of re-checking. The inference sits in the
+  path-callee branch: `check_call` (`:1488`) handles a closure or
+  value callee first, and the branch that resolves a named generic
+  function continues past `:1531`, where the type arguments are worked
+  out. Read from there. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
