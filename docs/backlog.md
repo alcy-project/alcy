@@ -419,7 +419,16 @@ replaced. The foundations are in `roadmap.md`.
   measurement has to show the path, not the count: record, for the
   hottest expression, the kind of the expression that was being
   checked above it (a small parent stack in the checker), and read off
-  how the same node is reached twenty-six times. The key must carry
+  how the same node is reached twenty-six times. It shows a loop:
+  before every hot `Cast` (six, eight, ten, and on) the expression
+  entered just before was the same `Path` (expression four), so one
+  iteration checks that path and then one cast of the chain, over and
+  over - four thousand iterations of a Path-then-Cast pair. That is a
+  call resolution re-reading its callee path and then one argument, so
+  the loop is around candidate or method resolution: `check_method_call`
+  (`types_expr.cc:1708`) and `check_call`'s named branch are where a
+  per-candidate pass would sit. Read the method path first, since a
+  method chain on a generic is what the wrapper spells. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
