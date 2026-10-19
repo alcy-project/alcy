@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The top level is flat too: `check_stmt`
+  (`types_expr.cc:4242`) reaches five hundred and not a thousand at both
+  depths. So every count is flat - the statements, the expressions, the
+  pattern binds, the resolution, the instances - and the instructions
+  still double per level. That pins the growth to a loop inside one of
+  those functions whose trip count follows the nesting rather than the
+  input: something that scans a structure that grows with depth. The
+  scopes stack is the first candidate (a scope per nesting level, scanned
+  per node), and the payload lists are the second. Count loop iterations
+  that touch `scopes` per depth, harmlessly, before reading further.
   costs milliseconds. The count is really flat: a threshold list shows
   seven hundred reached and eight hundred never, at twenty and at
   twenty-four alike, so `bind_pattern` cannot itself be the doubling
