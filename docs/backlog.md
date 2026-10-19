@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The pattern machinery is innocent too, and that
+  is a correction: timing `bind_pattern` from the inside totals about
+  1.1 ms over its seven hundred calls at twenty levels - the 80 us seen
+  earlier was the worst single interval, not the average - and the cover
+  walk's seventy calls at 481 us worst are likewise well under a
+  millisecond together. Every function timed so far costs a millisecond
+  or so against a 136 ms run, so the seconds are in code never timed:
+  `check_stmt`, `check_block`, `check_fn`, `instantiate_fn`,
+  `resolve_type`, or lowering. Time `check_stmt` next, whose count was
+  measured but whose interval never was.
   costs milliseconds. The walk is innocent: the whole run enters
   `check_expr` about five thousand times - the print stops before six -
   and the summed interval over every entry is under a millisecond, so
