@@ -974,7 +974,16 @@ replaced. The foundations are in `roadmap.md`.
   that the resolution cache was supposed to make linear. Time that
   directly next - the `check_expr` on the match scrutinee and the
   entries it makes - because a flat `unify` there means the cache is
-  not hitting for this shape.
+  not hitting for this shape. The cache does hit: the scrutinee's
+  constructor chain calls `resolve_generic_fn` fewer than four hundred
+  times at twenty, twenty-two, and twenty-four levels alike, flat. So
+  all four timed functions are flat - the resolution, the cover walk,
+  `bind_pattern`, and `unify` - and the run still grows about 1.85
+  times per level. The growth must be in a function none of those call:
+  `check_expr`'s own entry, `type_origin`, `types_equal`, or
+  `instantiate_generic`. Count `check_expr` per depth next; if its
+  entry count explodes while every callee is flat, the cost is in the
+  walk's dispatch or its type recording, not in the work.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
