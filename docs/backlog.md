@@ -947,7 +947,14 @@ replaced. The foundations are in `roadmap.md`.
   grows with the type, such as enumerating a variant's fields or asking
   for nominal declarations again at every step, and the fix, when the
   hot spot is named, is the same as the resolution cache: remember the
-  answer per pattern and type instead of deriving it twice.
+  answer per pattern and type instead of deriving it twice. It is not:
+  `bind_pattern` (`types_expr.cc:107`) is entered just over seven
+  hundred times on the twenty-level nest with no interval above 80 us,
+  so the whole pattern walk costs milliseconds against a 143 ms run.
+  Both pattern-side functions are cheap now, which leaves the
+  exhaustiveness driver around `patterns_cover` - `unguarded_rows()`
+  and the row building at `:2885`, `:2914`, and `:2934` - and the
+  `unify` calls that meet a nested type, as the next things to time.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
