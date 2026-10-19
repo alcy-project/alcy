@@ -901,6 +901,15 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The instantiation is flat too: `instantiate_generic`
+  (`types.cc:2357`) reaches a hundred and not two hundred at both
+  depths. Every operation now has a flat count while the instructions
+  double, so the growth has to be in the size of the structures those
+  operations touch. Print the type table's size (`builder.types().size()`)
+  and the instance and function table sizes at each depth: if they grow
+  like `2^depth`, flat-count operations over them explode and the fix is
+  to stop minting the intermediate types - the same shape as the
+  resolution cache, one level down in the type builder.
   costs milliseconds. The decisive test is a shallow pattern against the
   same deep type - `match Option::Some(...(E::A)...) { _ => 1 }` - and it
   is exponential by itself: 1,113,833,814, 4,108,012,025, and
