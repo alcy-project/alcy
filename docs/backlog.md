@@ -482,7 +482,17 @@ replaced. The foundations are in `roadmap.md`.
   value expression ten or more times. That is the loop left to find:
   read `check_stmt` (`types_expr.cc:4229`) and its statement-value
   helper for a path that checks the statement's expression more than
-  once. The key must carry
+  once. The declaration case does it: the initializer is checked
+  (`types_expr.cc:4245`) and then handed to `expr_comp_known`
+  (`:4251`) when the declaration is const or `verify_comp_known` is
+  set - the third twin of the same pattern, after `check_block:4050`
+  and `check_call_args:695`. That is the loop: one checked value, then
+  one comp-known walk of the same tree, and the comp-known walk
+  recurses into nested calls whose arguments are checked and walked
+  again. The counter in the earlier note says the predicate itself runs
+  under a hundred times, so settle the flag first: print
+  `verify_comp_known` at the wrapper's declaration and see whether this
+  path is even taken. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
