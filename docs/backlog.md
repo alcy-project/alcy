@@ -915,6 +915,15 @@ replaced. The foundations are in `roadmap.md`.
   exhaustiveness work leaned on, so read it with the nesting in mind:
   if it resolves the type through its origin or a structural
   comparison each time, a nest pays for it once per variant per level.
+  It does not: `nominal_decl` (`types_expr.cc:2983`) is a map lookup in
+  `nominal_by_type_` (`:2989`), then `generic_find` (`:2997`), then a
+  scan comparing `as_enum` shapes (`:3009`), each constant time per
+  candidate and none of them walking the nesting. With this helper
+  clean, every read of the walk is cheap and no operation walks the
+  type, so the remaining explanation is that the walk is entered more
+  often than the coarse buckets showed. Count it exactly and time it:
+  print every tenth entry with a running total, and keep the largest
+  interval between entries with the pattern row that produced it.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
