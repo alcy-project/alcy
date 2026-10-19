@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The hypothesis is disproved by its own count:
+  `generic_instance_for` (`types.cc:2204`) is called fewer than a
+  hundred times at twenty and at twenty-four levels, so the
+  instantiation machinery is not what the pattern phase spends. Every
+  call inside the tuple case is now flat or excluded - `unify` at five
+  thousand, `generic_instance_for` under a hundred, `variant_payloads`
+  worse when removed - except `resolve_variant_path`, still unmeasured.
+  If that too is flat, the exponential is not a call at all and has to
+  be `bind_pattern`'s own loop or its scope bookkeeping growing with the
+  nesting; count the elements walked and the scope size per level next.
   costs milliseconds. Strongest candidate, and it is the same family as
   the resolution cost already fixed: `generic_instance_for`
   (`types_expr.cc:151`), reached when the variant's type is generic, is
