@@ -901,6 +901,18 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The last test removes the match entirely: the same
+  nested `Option::Some(...)` written as a declaration and nothing else
+  takes 1,113,192,992, 4,108,422,641, and 16,078,515,028 instructions at
+  twenty, twenty-two, and twenty-four levels - the same numbers to
+  within a tenth of a percent as the shallow-pattern file. So there is
+  no pattern, no cover walk, and no match in the loop at all: typing a
+  nested constructor-call chain is itself exponential. That is the same
+  family as the resolution cost already fixed, on the constructor path,
+  which does not reach `resolve_generic_fn`. Read `check_call`'s named
+  branch for how a variant constructor is resolved per level - the
+  `PathValue` kind that is not `GenericFn` and not `Function` - and
+  find what it re-derives for the argument's nested type.
   costs milliseconds. The tables do not explode: peak memory is 58.5,
   59.0, and 58.8 MiB at twenty, twenty-two, and twenty-four levels on
   the shallow-pattern file, flat while the time goes 119 ms to 1.15 s,
