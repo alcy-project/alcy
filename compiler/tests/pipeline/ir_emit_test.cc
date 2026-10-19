@@ -288,6 +288,9 @@ TEST_CASE("An ir-binary build carries the summary only for a library") {
                      "pub fn identity<T>(x: T) -> T {\n"
                      "  ret x\n"
                      "}\n\n"
+                     "pub struct Point { x: i32, y: i32 }\n\n"
+                     "pub struct Boxed<T> { value: T }\n\n"
+                     "pub enum Kind { A, B }\n\n"
                      "fn hidden(x: i32) -> i32 {\n"
                      "  ret x\n"
                      "}\n");
@@ -329,21 +332,46 @@ TEST_CASE("An ir-binary build carries the summary only for a library") {
     return;
   }
   const ir::LoadedIr& package = loaded.value();
-  CHECK(package.summary.size() == 2);
+  CHECK(package.summary.size() == 5);
   bool doubled = false;
   bool generic = false;
+  bool point = false;
+  bool boxed = false;
+  bool kind = false;
   for (const ir::SummaryEntry& entry : package.summary) {
     const std::string_view name = package.strings->get(entry.name);
     CHECK(name != "hidden");
+    // The package's items sit at its root, so the path is empty; a
+    // module the manifest includes beside it may also hold surface.
+    const std::string_view path = package.strings->get(entry.path);
+    const bool known_path = path.empty() || path == "lib";
+    CHECK(known_path);
     if (name == "double") {
+      CHECK(entry.kind == ir::SummaryKind::Free);
       doubled = !entry.needs_body && entry.function.is_valid();
     }
     if (name == "identity") {
+      CHECK(entry.kind == ir::SummaryKind::Free);
       generic = entry.needs_body && !entry.function.is_valid();
+    }
+    if (name == "Point") {
+      CHECK(entry.kind == ir::SummaryKind::Struct);
+      point = !entry.needs_body && entry.function.is_valid();
+    }
+    if (name == "Boxed") {
+      CHECK(entry.kind == ir::SummaryKind::Struct);
+      boxed = entry.needs_body && !entry.function.is_valid();
+    }
+    if (name == "Kind") {
+      CHECK(entry.kind == ir::SummaryKind::Enum);
+      kind = !entry.needs_body && entry.function.is_valid();
     }
   }
   CHECK(doubled);
   CHECK(generic);
+  CHECK(point);
+  CHECK(boxed);
+  CHECK(kind);
 
   // The mode over a single file is a bin, and a bin's artifact carries
   // no summary.

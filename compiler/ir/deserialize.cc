@@ -902,7 +902,7 @@ bool read_addr_names(Parsed& parsed, std::span<const u8> payload) {
 }
 
 bool read_summary(Parsed& parsed, std::span<const u8> payload) {
-  const u32 count = record_count(payload.size(), 12);
+  const u32 count = record_count(payload.size(), 16);
   if (count == NONE) {
     return false;
   }
@@ -914,28 +914,42 @@ bool read_summary(Parsed& parsed, std::span<const u8> payload) {
   for (u32 i = 0; i < count; ++i) {
     u32 function = 0;
     u32 name = 0;
+    u32 path = 0;
     u8 kind = 0;
     u8 flags = 0;
     u8 reserved = 0;
     if (!cursor.read_u32(function) || !cursor.read_u32(name) ||
-        !cursor.read_u8(kind) || !cursor.read_u8(flags) ||
-        !cursor.read_u8(reserved) || !cursor.read_u8(reserved)) {
-      return false;
-    }
-    if (function != NONE && function >= parsed.state.functions.size()) {
+        !cursor.read_u32(path) || !cursor.read_u8(kind) ||
+        !cursor.read_u8(flags) || !cursor.read_u8(reserved) ||
+        !cursor.read_u8(reserved)) {
       return false;
     }
     if (name != NONE && name >= parsed.string_ids.size()) {
       return false;
     }
-    if (kind > static_cast<u8>(SymbolKind::Method)) {
+    if (path != NONE && path >= parsed.string_ids.size()) {
       return false;
+    }
+    const SummaryKind summary_kind = static_cast<SummaryKind>(kind);
+    if (kind > static_cast<u8>(SummaryKind::Enum)) {
+      return false;
+    }
+    // A function row names lowered code; a nominal row names a type, or
+    // nothing when the declaration is generic.
+    if (function != NONE) {
+      const bool is_nominal = summary_kind == SummaryKind::Struct ||
+                              summary_kind == SummaryKind::Enum;
+      if (is_nominal ? function >= parsed.state.types.size()
+                     : function >= parsed.state.functions.size()) {
+        return false;
+      }
     }
     parsed.summary.push_back(SummaryEntry{
         .function = function == NONE ? FunctionIdx(base::INVALID_IDX)
                                      : FunctionIdx(function),
         .name = string_id(parsed, name),
-        .kind = static_cast<SymbolKind>(kind),
+        .path = string_id(parsed, path),
+        .kind = summary_kind,
         .needs_body = (flags & 0x01u) != 0,
     });
   }

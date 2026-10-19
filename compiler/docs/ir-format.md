@@ -313,15 +313,18 @@ pointer width, and the version string - so a cache can compare one digest
 instead of walking them. A file written before this kind existed carries
 none, and a reader answers empty for those.
 
-**SUMMARY**: `count` × `{ function u32, name u32, kind u8, flags u8,
-reserved u8[2] }`, the package's public surface for a dependent to
-resolve against (ADR-0078). `function` names the `FUNCTIONS` row whose
-signature carries the item, or `U32_MAX` when the item lowered to no
-code of its own; `name` is the source name in `STRINGS`; `kind` is the
-`SymbolKind` the symbol is written as; and `flags` bit 0 says the item
-needs its body to be used, as a generic declaration does. The section is
-written for a library target and absent otherwise, and a reader answers
-empty for a file that carries none.
+**SUMMARY**: `count` × `{ function u32, name u32, path u32, kind u8,
+flags u8, reserved u8[2] }`, the package's public surface for a dependent
+to resolve against (ADR-0078). `function` names the `FUNCTIONS` row whose
+signature carries the item, or a `TYPES` row when `kind` names a struct
+or an enum; `U32_MAX` stands where the declaration is generic and has no
+code of its own. `name` is the source name in `STRINGS`; `path` is the
+module it belongs to, dotted from the package root; `kind` is the symbol
+kind a function row is written as, or the nominal a struct or enum row
+names; and `flags` bit 0 says the item needs its body to be used, as a
+generic declaration does. The section is written for a library target and
+absent otherwise, and a reader answers empty for a file that carries
+none.
 
 ### 3.5 Reading
 

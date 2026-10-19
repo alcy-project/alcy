@@ -1609,6 +1609,42 @@ bool takes_receiver(const ast::AstArena& ast, const ast::ItemFn& fn) {
 // lowered code that carries it; a generic one knows only its
 // declaration, because instantiating it needs the body, so the row says
 // the dependent must not try.
+// What a function's symbol kind spells in a summary row.
+ir::SummaryKind summary_kind_of(ir::SymbolKind kind) {
+  switch (kind) {
+    case ir::SymbolKind::Assoc: return ir::SummaryKind::Assoc;
+    case ir::SymbolKind::Method: return ir::SummaryKind::Method;
+    default: return ir::SummaryKind::Free;
+  }
+}
+
+// The nominal a declaration interned, found by the item the checked
+// tables recorded for it; the definition's row precedes any
+// instantiation's.
+ir::TypeIdx nominal_type_of(const analyzer::CheckedPackage& pkg,
+                            u32 mod,
+                            ast::ItemIdx item,
+                            bool is_struct) {
+  if (mod >= pkg.modules.size()) {
+    return ir::TypeIdx(base::INVALID_IDX);
+  }
+  if (is_struct) {
+    for (const analyzer::CheckedModule::StructInfo& info :
+         pkg.modules[mod].structs) {
+      if (info.item == item) {
+        return info.type;
+      }
+    }
+    return ir::TypeIdx(base::INVALID_IDX);
+  }
+  for (const analyzer::CheckedModule::EnumInfo& info : pkg.modules[mod].enums) {
+    if (info.item == item) {
+      return info.type;
+    }
+  }
+  return ir::TypeIdx(base::INVALID_IDX);
+}
+
 std::vector<ir::SummaryEntry> collect_summary(
     const analyzer::CheckedPackage& pkg,
     const ast::AstArena& ast,
@@ -1624,15 +1660,36 @@ std::vector<ir::SummaryEntry> collect_summary(
       continue;
     }
     summary.push_back(
-        ir::SummaryEntry{entry.idx, entry.name_id, entry.kind, false});
+        ir::SummaryEntry{entry.idx, entry.name_id,
+                         strings.intern(pkg.tree.modules[entry.mod]->path),
+                         summary_kind_of(entry.kind), false});
   }
   for (u32 mod = 0; mod < pkg.tree.modules.size(); ++mod) {
     if (!is_own_module(pkg.tree, mod)) {
       continue;
     }
+    const str::StringPoolId path = strings.intern(pkg.tree.modules[mod]->path);
     for (ast::ItemIdx item : pkg.tree.modules[mod]->items) {
       const ast::ItemNode& node = ast.items[item];
       if (!node.is_pub) {
+        continue;
+      }
+      if (node.kind == ast::ItemKind::Struct ||
+          node.kind == ast::ItemKind::Enum) {
+        const bool is_struct = node.kind == ast::ItemKind::Struct;
+        const bool generic =
+            is_struct ? !node.payload.get<ast::ItemStruct>().params.empty()
+                      : !node.payload.get<ast::ItemEnum>().params.empty();
+        const std::string_view name =
+            is_struct ? node.payload.get<ast::ItemStruct>().name.name
+                      : node.payload.get<ast::ItemEnum>().name.name;
+        const ir::TypeIdx type =
+            generic ? ir::TypeIdx(base::INVALID_IDX)
+                    : nominal_type_of(pkg, mod, item, is_struct);
+        summary.push_back(ir::SummaryEntry{
+            ir::FunctionIdx(type.idx), strings.intern(name), path,
+            is_struct ? ir::SummaryKind::Struct : ir::SummaryKind::Enum,
+            generic || !type.is_valid()});
         continue;
       }
       if (node.kind == ast::ItemKind::Fn) {
@@ -1641,8 +1698,8 @@ std::vector<ir::SummaryEntry> collect_summary(
           continue;
         }
         summary.push_back(ir::SummaryEntry{ir::FunctionIdx(base::INVALID_IDX),
-                                           strings.intern(fn.name.name),
-                                           ir::SymbolKind::Free, true});
+                                           strings.intern(fn.name.name), path,
+                                           ir::SummaryKind::Free, true});
         continue;
       }
       if (node.kind != ast::ItemKind::Impl) {
@@ -1658,11 +1715,12 @@ std::vector<ir::SummaryEntry> collect_summary(
         if (impl.params.empty() && fn.generic.empty()) {
           continue;
         }
-        summary.push_back(ir::SummaryEntry{
-            ir::FunctionIdx(base::INVALID_IDX), strings.intern(fn.name.name),
-            takes_receiver(ast, fn) ? ir::SymbolKind::Method
-                                    : ir::SymbolKind::Assoc,
-            true});
+        summary.push_back(ir::SummaryEntry{ir::FunctionIdx(base::INVALID_IDX),
+                                           strings.intern(fn.name.name), path,
+                                           takes_receiver(ast, fn)
+                                               ? ir::SummaryKind::Method
+                                               : ir::SummaryKind::Assoc,
+                                           true});
       }
     }
   }

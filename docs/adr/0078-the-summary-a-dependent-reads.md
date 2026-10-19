@@ -27,9 +27,10 @@ pre-instantiated code would need the set of instances up front.
 **A summary is the package's public surface, written in the binary
 form the compiler already has.** A library target's IR binary carries
 a `SUMMARY` section: one row per public item of the package's own
-modules, naming the `FUNCTIONS` row whose signature carries it, the
-source name, the symbol kind, and whether the item needs its body to
-be used. The type tables are the artifact's, so a nominal shape a
+modules. A function row names the `FUNCTIONS` row whose signature
+carries it, a struct or enum row the `TYPES` row of its nominal, and
+every row the source name, the module it belongs to, and whether the
+item needs its body to be used. The type tables are the artifact's, so a nominal shape a
 signature mentions is already there; the module path on every function
 row says which modules are the package's own. A bin's artifact carries
 none, because nothing depends on a bin.

@@ -306,11 +306,16 @@ TEST_CASE("The reader hands back the identity the writer computed") {
 TEST_CASE("A summary section reads back the package's surface") {
   ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);
-  const std::array<SummaryEntry, 2> summary{
-      SummaryEntry{FunctionIdx(0), strings.intern("main"), SymbolKind::Free,
+  const std::array<SummaryEntry, 3> summary{
+      SummaryEntry{FunctionIdx(0), strings.intern("main"), strings.intern(""),
+                   SummaryKind::Free,
                    /*needs_body=*/false},
       SummaryEntry{FunctionIdx(base::INVALID_IDX), strings.intern("make"),
-                   SymbolKind::Free, /*needs_body=*/true},
+                   strings.intern("string"), SummaryKind::Free,
+                   /*needs_body=*/true},
+      SummaryEntry{FunctionIdx(3), strings.intern("String"),
+                   strings.intern("string"), SummaryKind::Struct,
+                   /*needs_body=*/false},
   };
   const std::vector<u8> bytes =
       test::composite_bytes(strings, storage, /*hashes=*/{}, summary);
@@ -330,18 +335,25 @@ TEST_CASE("A summary section reads back the package's surface") {
     return;
   }
   LoadedIr package = std::move(loaded).unwrap();
-  CHECK(package.summary.size() == 2);
-  if (package.summary.size() != 2) {
+  CHECK(package.summary.size() == 3);
+  if (package.summary.size() != 3) {
     return;
   }
   CHECK(package.summary[0].function.idx == 0);
   CHECK(package.strings->get(package.summary[0].name) == "main");
-  CHECK(package.summary[0].kind == SymbolKind::Free);
+  CHECK(package.strings->get(package.summary[0].path).empty());
+  CHECK(package.summary[0].kind == SummaryKind::Free);
   CHECK_FALSE(package.summary[0].needs_body);
   CHECK_FALSE(package.summary[1].function.is_valid());
   CHECK(package.strings->get(package.summary[1].name) == "make");
-  CHECK(package.summary[1].kind == SymbolKind::Free);
+  CHECK(package.strings->get(package.summary[1].path) == "string");
+  CHECK(package.summary[1].kind == SummaryKind::Free);
   CHECK(package.summary[1].needs_body);
+  // A nominal row names a type rather than code.
+  CHECK(package.summary[2].function.idx == 3);
+  CHECK(package.strings->get(package.summary[2].name) == "String");
+  CHECK(package.summary[2].kind == SummaryKind::Struct);
+  CHECK_FALSE(package.summary[2].needs_body);
 
   // Reading and writing again produces the bytes it read, summary and
   // all: a dependent that reads and forwards keeps the surface.
@@ -353,7 +365,8 @@ TEST_CASE("A corrupt summary is refused") {
   ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);
   const std::array<SummaryEntry, 1> summary{
-      SummaryEntry{FunctionIdx(0), strings.intern("main"), SymbolKind::Free,
+      SummaryEntry{FunctionIdx(0), strings.intern("main"), strings.intern(""),
+                   SummaryKind::Free,
                    /*needs_body=*/false},
   };
   const std::vector<u8> bytes =
@@ -371,7 +384,7 @@ TEST_CASE("A corrupt summary is refused") {
     // A symbol kind outside the enum.
     std::vector<u8> broken = bytes;
     const usize summary_at = test::section_at(file, binary::Section::Summary);
-    broken[summary_at + 12] = 99;
+    broken[summary_at + 16] = 99;
     reseal(broken);
     CHECK(std::move(deserialize(broken)).unwrap_err() == IrLoadError::BadShape);
   }

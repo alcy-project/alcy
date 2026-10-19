@@ -63,6 +63,9 @@ struct CheckedModule {
   std::vector<NamedType> types;
   // Field names parallel to ir::StructType field lists, per struct.
   struct StructInfo {
+    // The declaration the nominal came from; a generic instantiation
+    // names its declaration's item.
+    ast::ItemIdx item;
     ir::TypeIdx type;
     std::vector<std::string_view> fields;
   };
@@ -70,6 +73,7 @@ struct CheckedModule {
   // Variant names in declaration order (the index is the discriminant),
   // mirroring structs for matches and construction.
   struct EnumInfo {
+    ast::ItemIdx item;
     std::string_view name;
     ir::TypeIdx type;
     std::vector<std::string_view> variants;

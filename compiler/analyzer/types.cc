@@ -3333,7 +3333,8 @@ void Checker::process_module(u32 module) {
                  node.payload.get<ast::ItemStruct>().fields) {
               fields.push_back(field.name.name);
             }
-            modules[module].structs.push_back({resolved, std::move(fields)});
+            modules[module].structs.push_back(
+                {entry->item, resolved, std::move(fields)});
           } else if (node.kind == ast::ItemKind::Enum) {
             std::vector<std::string_view> variants;
             for (const ast::ItemEnumVariant& variant :
@@ -3341,7 +3342,7 @@ void Checker::process_module(u32 module) {
               variants.push_back(variant.name.name);
             }
             modules[module].enums.push_back(
-                {entry->name, resolved, std::move(variants)});
+                {entry->item, entry->name, resolved, std::move(variants)});
           }
         }
       } break;
@@ -8184,7 +8185,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
         fields.push_back(field.name.name);
       }
       package.modules[nominal.module].structs.push_back(
-          {instance.type, std::move(fields)});
+          {nominal.item, instance.type, std::move(fields)});
     } else {
       std::vector<std::string_view> variants;
       for (const ast::ItemEnumVariant& variant :
@@ -8192,7 +8193,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
         variants.push_back(variant.name.name);
       }
       package.modules[nominal.module].enums.push_back(
-          {nominal.name, instance.type, std::move(variants)});
+          {nominal.item, nominal.name, instance.type, std::move(variants)});
     }
   }
   return base::make_ok(std::move(package));
