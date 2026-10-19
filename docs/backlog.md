@@ -841,7 +841,13 @@ replaced. The foundations are in `roadmap.md`.
   that follows below `:3100` is the rest. Both are candidates. Time a
   single `pattern_is_wildcard` on a nesting of four, eight, and
   sixteen to see whether one cell costs depth-many steps, because that
-  would make the whole walk quadratic before any repeat.
+  would make the whole walk quadratic before any repeat. It does not:
+  `pattern_is_wildcard` (`types_expr.cc:2949`) looks only at the
+  pattern's kind, with one scan of the enum's variants for a bare
+  identifier (`:2960`), and never recurses into the type. So the scan
+  is cheap and the seconds are in the specialization below `:3100` -
+  the next read - or in the or-split copy (`:3077`), which duplicates a
+  row per alternative.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
