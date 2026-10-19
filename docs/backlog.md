@@ -92,8 +92,13 @@ replaced. The foundations are in `roadmap.md`.
   literal's check kept a `StructType&` while a field value's check
   could intern a type and move the table (a heap-use-after-free the
   new std module's layout shift exposed; the struct case copies now).
-  The analyzer keeps the same shape in its field, tuple, and enum
-  readers, and each wants the same audit.
+  Twenty-four more readers copy their entry now - the struct, tuple,
+  variant, pattern, element-index, run-index, array, and intrinsic
+  readers, the drop walk, and the comp evaluator among them - and the
+  audit is not finished: a `TypeNode` held across `drop_scan`'s
+  recursion, `match_compound_target`'s resolved target held across
+  `resolve_type`, and the `func_types`, `ref_types`, and `types()`
+  readers the first pass never named all still hold table slots.
 - [x] A discarded temporary that owns memory ends where it stands:
   `_ := format("x")` and a bare `format("x")` are both ended by the
   discard path's `record_drop_in_place`, which the sanitized runs of
