@@ -141,6 +141,15 @@ replaced. The foundations are in `roadmap.md`.
   library's sources gone. Spelling a signature through a copy was
   refused while this was open; a row spells it now, because identical
   shapes lay out alike.
+- [ ] Associated functions and methods in a summary: a row says the
+  symbol kind but not the nominal the item belongs to, so a dependent
+  cannot spell the `impl` a method sits in. The lowering's `FnEntry`
+  carries the kind and the item but no owner, and the checked module's
+  method table is where the owner lives (the shape `nominal_type_of`
+  reads for structs). The row wants an owner beside its function and
+  the surface wants to group rows by it into `impl` items. The call
+  needs nothing new: a summary call crosses as the value the callee
+  takes, and a receiver is one more argument.
 - [ ] `core::string`'s `trim_start_matches` returns a slice local the
   borrow checker reads as a reference to the local: `mut s := self` is
   reassigned from `strip_prefix` in the loop, and the `None` arm's

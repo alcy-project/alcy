@@ -114,7 +114,7 @@ library, its sources present and then gone). The trim is the resolver's
 `PackageRoot.exports`, so a summary never shows a dependent more than
 the source it stands in for.
 
-**Next:** associated functions, methods, and spec implementations,
-whose receivers are nominals and whose call shapes the work above
-settled; and the generic boundary, where a declaration has no body to
-instantiate and the summary has to say so.
+**Next:** associated functions and methods, which need the nominal a
+row belongs to (`Associated functions and methods in a summary` in the
+backlog carries the shape), and then the generic boundary, where a
+declaration has no body to instantiate and the summary has to say so.
