@@ -955,6 +955,15 @@ replaced. The foundations are in `roadmap.md`.
   exhaustiveness driver around `patterns_cover` - `unguarded_rows()`
   and the row building at `:2885`, `:2914`, and `:2934` - and the
   `unify` calls that meet a nested type, as the next things to time.
+  `unify` (`types.cc:4164`) is called over five thousand times on the
+  twenty-level nest - about two hundred and fifty per level - and no
+  interval between calls exceeds 30 us, so it accounts for tens of
+  milliseconds of the 143 ms run. That count is the one to pin down:
+  measure it at twenty, twenty-two, and twenty-four levels. If it grows
+  by the same factor as the run, the pattern typing is calling unify
+  once per pair of nested nodes and that is the bug; if it stays flat,
+  the remaining seconds are elsewhere and the driver around the cover
+  walk is next.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
