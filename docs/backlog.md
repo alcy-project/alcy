@@ -901,6 +901,18 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. `resolve_variant_path` (`types.cc:7539`) is flat
+  too - fewer than a hundred calls at twenty levels, a little over at
+  twenty-four - so every call inside the tuple case is now flat or
+  excluded and the exponential has to be `bind_pattern`'s own loop or
+  scope bookkeeping. But the counts themselves do not add up: a
+  recursive walk over a twenty-deep pattern and a twenty-four-deep one
+  cannot both make exactly seven hundred calls, and `bind_pattern` did.
+  Re-measure the call count before drawing anything from it - a total
+  printed once at the end rather than a rolling multiple of a hundred,
+  or a per-depth tally - because a wrong count has been steering the
+  search. If the real count grows with depth, the doubling is the
+  recursion itself and the fix is to walk the nest once.
   costs milliseconds. The hypothesis is disproved by its own count:
   `generic_instance_for` (`types.cc:2204`) is called fewer than a
   hundred times at twenty and at twenty-four levels, so the
