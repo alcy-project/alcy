@@ -901,6 +901,17 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The bisect ran and found it: with `bind_pattern`
+  returning false at its first line (`types_expr.cc:107`, `return
+  false;` before its `const bool comp` line) the counts are 147,936,572,
+  151,308,289, and 154,600,025 against 1,861,195,838, 7,086,514,185, and
+  27,978,134,924. That is ninety-two to ninety-nine percent of the cost
+  gone and, more to the point, the growth gone: about two percent per
+  two levels instead of ninety-five. `bind_pattern` is the doubling.
+  Its call count was seven hundred, so one call must cost `2^depth`
+  inside - find the loop or re-descent in its body (`:107` to about
+  `:250`) that walks the nested pattern more than once per node and
+  make it walk once.
   costs milliseconds. The bisect ran: with `patterns_cover` returning
   true at its first line the counts are 1,779,522,788, 6,768,480,108, and
   26,716,066,218 against 1,861,195,838, 7,086,514,185, and 27,978,134,924
