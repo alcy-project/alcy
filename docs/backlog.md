@@ -790,11 +790,15 @@ replaced. The foundations are in `roadmap.md`.
   recorded function type, so the element type infers unspelled -
   `v.map((x: &T) -> U)` (`ok-vec-map`, `exe-vec-map`) - and the same
   reading fills a free function's return slot (`ok-closure-infer`).
-- [ ] An associated function's call infers nothing: the member is
+- [x] An associated function's call infers nothing: the member is
   resolved before its call's arguments are read, so
   `Holder::<i32>::map_to(...)` still spells what a method call now
   infers; a spelled turbofish also counts the synthetic `fn()`
   parameters a declaration carries.
+  Resolved: a call's arguments reach the path resolution and bind the
+  member's own parameters, so `Pair::id(7)` and
+  `Holder::<i32>::map_to(7)` infer; the turbofish count already skips a
+  synthetic `fn()` parameter. Case: `ok-assoc-fn-infer`.
 - [ ] Negative comp-arg cases for the loosened predicates: a runtime
   value inside a match arm or a block (`double(match runtime_val …)`,
   `double({ y := runtime; y })`) must still be refused, the guard
