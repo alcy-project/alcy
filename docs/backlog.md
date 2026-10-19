@@ -901,6 +901,18 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The profile does name a place, once sorted by
+  symbol: three addresses within a few dozen bytes of each other,
+  `0x5212ce9`, `0x5212f0d`, and `0x5212dec`, hold about 38 percent of
+  the samples, and disassembling the first shows `movups %xmm0,(%rax)`
+  and `movups %xmm1,0xc(%rax)` - two sixteen-byte stores - then
+  `mov $0x1,%al` and a jump. That is an inlined small copy: the seconds
+  are memory copies, and a copy that runs once per call while the
+  matrix grows is exactly the shape left open earlier when the by-value
+  `rows` argument was set aside. The binary is stripped - `addr2line`
+  and `nm` answer nothing - so name the function by rebuilding with
+  symbols, or by reading the ASan report's own frames, before changing
+  the copy.
   costs milliseconds. The loader frames are an artifact: with
   `LD_BIND_NOW=1` the run takes 135 ms and 1,939 ms at twenty and
   twenty-four levels against 143 ms and 1,903 ms, and `LD_DEBUG=statistics`
