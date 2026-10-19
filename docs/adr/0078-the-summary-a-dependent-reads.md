@@ -108,8 +108,16 @@ declared in passes an aggregate as a pointer where the library's own
 function takes the caller's shape (see `A summary call passes what the
 callee takes` in the backlog).
 
-**Next:** the second node over a nominal, which is what a
-nominal-typed signature waits on; associated functions, methods, and
-spec implementations; the generic boundary; and the export-list
-question of what a summary may show a dependent that does not import
-it.
+**The export list trims a summary the way it trims source.** An
+unexported module is refused on both paths, an exported surface
+resolves on both, and the counts agree (probed with a two-module
+library, its sources present and then gone). The trim is the resolver's
+`PackageRoot.exports`, so a summary never shows a dependent more than
+the source it stands in for.
+
+**Next:** a nominal-typed parameter, which waits on the calling
+convention a summary call crosses under - `A summary call passes what
+the callee takes` in the backlog records both the convention and the
+`core/string.al` borrow error a declaration route runs into; then
+associated functions, methods, and spec implementations; and the
+generic boundary.
