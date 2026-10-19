@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The code is `types_expr.cc:1622` onward: a
+  generic enum's constructor infers its instance from the argument
+  (`infer_from_payload_args`, `:1635`), and then types the same argument
+  again against the payload at `:1665`. Two walks of one argument per
+  level is the doubling - the same shape as the resolution cost that was
+  fixed, one branch over. The fix is the same: remember the inference
+  per call expression and instance (or let the later walk start from what
+  the inference already computed) so the argument is typed once per
+  level. Read `infer_from_payload_args` to confirm it is the walk that
+  costs, then cache it.
   costs milliseconds. The last test removes the match entirely: the same
   nested `Option::Some(...)` written as a declaration and nothing else
   takes 1,113,192,992, 4,108,422,641, and 16,078,515,028 instructions at
