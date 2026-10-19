@@ -901,6 +901,15 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. `instantiate_fn` is next and is also innocent:
+  its cumulative interval is about 1.3 ms over its two hundred calls at
+  twenty levels and 1.1 ms at twenty-four, so the instances and their
+  bodies cost milliseconds. The list of timed-and-cheap functions now
+  covers the expression walk, the cover walk, `bind_pattern`,
+  `instantiate_fn`, and the resolution. What has never been timed in
+  the match path is `unguarded_rows()`, called at `:2885`, `:2914`,
+  and `:2934` to build the row matrix, and the outer body of
+  `check_match` itself; time those two next.
   costs milliseconds. The pattern machinery is innocent too, and that
   is a correction: timing `bind_pattern` from the inside totals about
   1.1 ms over its seven hundred calls at twenty levels - the 80 us seen
