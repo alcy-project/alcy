@@ -272,8 +272,8 @@ class Serializer {
       collect_pool_id(entry.name, offsets);
       collect_pool_id(entry.path, offsets);
       collect_pool_id(entry.symbol, offsets);
-      for (const str::StringPoolId field : entry.fields) {
-        collect_pool_id(field, offsets);
+      for (const SummaryField& field : entry.fields) {
+        collect_pool_id(field.name, offsets);
       }
     }
     std::sort(offsets.begin(), offsets.end());
@@ -636,8 +636,10 @@ class Serializer {
     }
     out.put_u32(names);
     for (const SummaryEntry& entry : summary_) {
-      for (const str::StringPoolId field : entry.fields) {
-        out.put_u32(string_index(field));
+      for (const SummaryField& field : entry.fields) {
+        out.put_u32(string_index(field.name));
+        out.put_u8(static_cast<u8>(field.is_pub ? 1u : 0u));
+        out.zeros(3);
       }
     }
     return out;

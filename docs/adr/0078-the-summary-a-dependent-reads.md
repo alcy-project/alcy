@@ -96,7 +96,18 @@ with the library's sources gone. The runtime's entry points and the two
 argument globals are discardable definitions, so two objects in one
 image keep one copy of each.
 
-**Next:** the names a nominal's fields carry, so a literal and a field
-read can cross the boundary; associated functions, methods, and spec
-implementations; the generic boundary; and the export-list question of
-what a summary may show a dependent that does not import it.
+**Landed: a nominal crosses as a declaration.** A struct row carries
+the fields its declaration has - name and visibility, in declaration
+order - and the surface spells a nominal row into the declaration its
+module holds, so a dependent names the type, constructs a literal, and
+reads a field with only the summary in hand. A signature that names a
+nominal is still left out: the artifact holds two type nodes over one
+declaration (see `One nominal as several type nodes` in the backlog),
+and the row and the function's parameter name different ones, so there
+is nothing to spell the parameter with yet.
+
+**Next:** the second node over a nominal, which is what a
+nominal-typed signature waits on; associated functions, methods, and
+spec implementations; the generic boundary; and the export-list
+question of what a summary may show a dependent that does not import
+it.

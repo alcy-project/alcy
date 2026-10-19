@@ -97,7 +97,7 @@ struct LoweredPackage {
   // The field names the summary rows point into, one run per nominal
   // row; the rows borrow them. Growing the container moves the runs,
   // which keeps each run's own buffer where the rows point.
-  std::vector<std::vector<str::StringPoolId>> summary_fields;
+  std::vector<std::vector<ir::SummaryField>> summary_fields;
 };
 
 base::Result<LoweredPackage, diag::Reported> lower_package(

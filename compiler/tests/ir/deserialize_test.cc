@@ -306,8 +306,9 @@ TEST_CASE("The reader hands back the identity the writer computed") {
 TEST_CASE("A summary section reads back the package's surface") {
   ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);
-  const std::vector<str::StringPoolId> string_fields{strings.intern("data"),
-                                                     strings.intern("len")};
+  const std::vector<SummaryField> string_fields{
+      SummaryField{strings.intern("data"), true},
+      SummaryField{strings.intern("len"), false}};
   const std::array<SummaryEntry, 3> summary{
       SummaryEntry{.function = FunctionIdx(0),
                    .name = strings.intern("main"),
@@ -367,8 +368,10 @@ TEST_CASE("A summary section reads back the package's surface") {
   // declaration order.
   CHECK(package.summary[2].fields.size() == 2);
   if (package.summary[2].fields.size() == 2) {
-    CHECK(package.strings->get(package.summary[2].fields[0]) == "data");
-    CHECK(package.strings->get(package.summary[2].fields[1]) == "len");
+    CHECK(package.strings->get(package.summary[2].fields[0].name) == "data");
+    CHECK(package.summary[2].fields[0].is_pub);
+    CHECK(package.strings->get(package.summary[2].fields[1].name) == "len");
+    CHECK_FALSE(package.summary[2].fields[1].is_pub);
   }
   // Every row without fields keeps the section free of runs.
   CHECK(package.summary[0].fields.empty());

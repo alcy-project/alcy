@@ -12,6 +12,13 @@
 
 namespace ir {
 
+// One field a nominal row's declaration carries: the name the source
+// gave it, and whether the declaration made it public.
+struct SummaryField {
+  str::StringPoolId name = str::INVALID_STRING_POOL_ID;
+  bool is_pub = false;
+};
+
 // What a summary row names. The first four are the symbol kinds a
 // function row carries, so a function row's byte is the `SymbolKind` it
 // is written as; a struct or enum row names a nominal, whose index stands
@@ -45,7 +52,7 @@ struct SummaryEntry {
   // rows, and every other row leaves this empty. The default keeps
   // every designated initializer of a row whole.
   // NOLINTNEXTLINE(readability-redundant-member-init)
-  std::span<const str::StringPoolId> fields = {};
+  std::span<const SummaryField> fields = {};
   SummaryKind kind = SummaryKind::Free;
   bool needs_body = false;
 };

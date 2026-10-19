@@ -326,9 +326,11 @@ row is written as, or the nominal a struct or enum row names; and `flags`
 bit 0 says the item needs its body to be used, as a generic declaration
 does. When a struct row is present the rows are followed by the field
 runs: `u32 group_count`, that many `{ row u32, first u32, count u32 }`,
-`u32 name_count`, and that many `u32` indices into `STRINGS`; a payload
-that ends after the rows is one from before the runs existed, and its
-struct rows carry no field names. The section is written for a library
+`u32 name_count`, and that many `{ name u32, flags u8, reserved u8[3] }`
+entries whose `name` indexes `STRINGS` and whose bit 0 says the
+declaration made the field public; a payload that ends after the rows is
+one from before the runs existed, and its struct rows carry no field
+names. The section is written for a library
 target and absent otherwise, and a reader answers empty for a file that
 carries none.
 

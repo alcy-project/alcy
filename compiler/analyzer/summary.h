@@ -43,11 +43,12 @@ struct SummarySurface {
 
 // Spells `summary`'s surface into `ast`, copying every name it spells
 // into `strings` so nothing borrows the artifact. Free functions whose
-// signatures the syntax can carry are spelled whole; a row over a
-// nominal, an associated function or method, and every generic
-// declaration is left out until the summary carries what they need. An
-// exhausted arena stops the walk, and the caller's `ast.exhausted()`
-// check answers for it.
+// signatures the syntax can carry are spelled whole; a struct or enum
+// row is spelled as its declaration, with the fields the row recorded
+// or the variants its table holds. An associated function or method,
+// and every declaration that needs its body, is left out until the
+// summary carries what they need. An exhausted arena stops the walk,
+// and the caller's `ast.exhausted()` check answers for it.
 [[nodiscard]] SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
                                                    std::string_view identity,
                                                    ast::AstArena& ast,

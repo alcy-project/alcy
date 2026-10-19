@@ -1660,7 +1660,7 @@ std::vector<ir::SummaryEntry> collect_summary(
     const ast::AstArena& ast,
     const std::vector<Lowerer::FnEntry>& fns,
     ir::SymbolTable& strings,
-    std::vector<std::vector<str::StringPoolId>>& summary_fields) {
+    std::vector<std::vector<ir::SummaryField>>& summary_fields) {
   std::vector<ir::SummaryEntry> summary;
   for (const Lowerer::FnEntry& entry : fns) {
     if (entry.closure.is_valid() || !entry.item.is_valid() ||
@@ -1700,17 +1700,18 @@ std::vector<ir::SummaryEntry> collect_summary(
                     : nominal_type_of(pkg, mod, item, is_struct);
         // A struct's field names ride with the row: without them a
         // dependent cannot spell the declaration's fields.
-        std::span<const str::StringPoolId> field_names;
+        std::span<const ir::SummaryField> field_names;
         if (is_struct) {
           const ast::ItemStruct& strukt = node.payload.get<ast::ItemStruct>();
-          std::vector<str::StringPoolId> names;
+          std::vector<ir::SummaryField> names;
           names.reserve(strukt.fields.size());
           for (const ast::ItemStructField& field : strukt.fields) {
-            names.push_back(strings.intern(field.name.name));
+            names.push_back(ir::SummaryField{strings.intern(field.name.name),
+                                             field.is_pub});
           }
           summary_fields.emplace_back(std::move(names));
           field_names =
-              std::span<const str::StringPoolId>(summary_fields.back());
+              std::span<const ir::SummaryField>(summary_fields.back());
         }
         summary.push_back(ir::SummaryEntry{
             .function = ir::FunctionIdx(type.idx),
@@ -1776,7 +1777,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   if (lowerer.failed) {
     return base::make_err(diag::Reported{});
   }
-  std::vector<std::vector<str::StringPoolId>> summary_fields;
+  std::vector<std::vector<ir::SummaryField>> summary_fields;
   std::vector<ir::SummaryEntry> summary =
       collect_summary(lowerer.pkg, ast, lowerer.fns, strings, summary_fields);
   // Side tables move out before the builder, which finish() consumes.

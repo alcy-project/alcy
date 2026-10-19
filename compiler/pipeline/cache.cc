@@ -15,6 +15,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/io/io_util.h"
 #include "ir/deserialize.h"
+#include "ir/summary.h"
 #include "ir/type.h"
 #include "ir/write_input.h"
 #include "lowering/lowering.h"
@@ -108,13 +109,19 @@ std::optional<lowering::LoweredPackage> cache_load(PipelineContext& ctx,
     addr_names.push_back(
         {name.reg, ctx.strings.get(*id), name.is_param, name.is_capture});
   }
-  return lowering::LoweredPackage{
-      std::move(entry.storage), std::move(entry.instr_spans),
-      std::move(addr_names), entry.prelude_functions, 0, 0,
-      std::move(entry.summary),
-      // One run per nominal row, exactly as the writer laid them out.
-      std::vector<std::vector<str::StringPoolId>>{
-          std::move(entry.summary_field_names)}};
+  // One run per nominal row, exactly as the writer laid them out. The
+  // run is moved in one at a time - braces would copy it through an
+  // initializer list - so it keeps the buffer the rows point into.
+  std::vector<std::vector<ir::SummaryField>> summary_fields;
+  summary_fields.push_back(std::move(entry.summary_fields));
+  return lowering::LoweredPackage{std::move(entry.storage),
+                                  std::move(entry.instr_spans),
+                                  std::move(addr_names),
+                                  entry.prelude_functions,
+                                  0,
+                                  0,
+                                  std::move(entry.summary),
+                                  std::move(summary_fields)};
 }
 
 bool cache_store(std::string_view dir,

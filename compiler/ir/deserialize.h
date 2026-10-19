@@ -78,9 +78,9 @@ struct LoadedIr {
   // The package's public surface, when the file carries a summary
   // (ADR-0078). Names resolve in `strings`.
   std::vector<SummaryEntry> summary;
-  // The field names the summary rows point into; held here because the
-  // rows borrow them.
-  std::vector<str::StringPoolId> summary_field_names;
+  // The fields the summary rows point into; held here because the rows
+  // borrow them.
+  std::vector<SummaryField> summary_fields;
   // The build identity the file recorded; empty when its writer knew
   // none, which is a file from before the section existed.
   base::Digest128 identity;

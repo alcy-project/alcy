@@ -157,7 +157,7 @@ struct Parsed {
   std::vector<base::Digest128> file_hashes;
   std::vector<LoadedIr::AddrNameEntry> addr_names;
   std::vector<SummaryEntry> summary;
-  std::vector<str::StringPoolId> summary_field_names;
+  std::vector<SummaryField> summary_fields;
   std::vector<diag::Span> spans;
   usize prelude_functions = 0;
   PointerWidth width = PointerWidth::W64;
@@ -995,27 +995,32 @@ bool read_summary(Parsed& parsed, std::span<const u8> payload) {
   if (!cursor.read_u32(name_count)) {
     return false;
   }
-  parsed.summary_field_names.reserve(name_count);
+  parsed.summary_fields.reserve(name_count);
   for (u32 i = 0; i < name_count; ++i) {
     u32 index = 0;
-    if (!cursor.read_u32(index)) {
+    u8 flags = 0;
+    u8 reserved = 0;
+    if (!cursor.read_u32(index) || !cursor.read_u8(flags) ||
+        !cursor.read_u8(reserved) || !cursor.read_u8(reserved) ||
+        !cursor.read_u8(reserved)) {
       return false;
     }
     if (index != NONE && index >= parsed.string_ids.size()) {
       return false;
     }
-    parsed.summary_field_names.push_back(string_id(parsed, index));
+    parsed.summary_fields.push_back(SummaryField{
+        .name = string_id(parsed, index), .is_pub = (flags & 0x01u) != 0});
   }
   if (cursor.at() != payload.size()) {
     return false;
   }
   for (const Run& run : runs) {
     if (static_cast<usize>(run.first) + run.count >
-        parsed.summary_field_names.size()) {
+        parsed.summary_fields.size()) {
       return false;
     }
-    parsed.summary[run.row].fields = std::span<const str::StringPoolId>(
-        parsed.summary_field_names.data() + run.first, run.count);
+    parsed.summary[run.row].fields = std::span<const SummaryField>(
+        parsed.summary_fields.data() + run.first, run.count);
   }
   return true;
 }
@@ -1228,7 +1233,7 @@ base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
   loaded.prelude_functions = parsed.prelude_functions;
   loaded.identity = parsed.identity;
   loaded.summary = std::move(parsed.summary);
-  loaded.summary_field_names = std::move(parsed.summary_field_names);
+  loaded.summary_fields = std::move(parsed.summary_fields);
   loaded.width = parsed.width;
   loaded.compiler_version = std::move(parsed.compiler_version);
   return base::make_ok(std::move(loaded));
