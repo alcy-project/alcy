@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. `bind_pattern` is called about seven hundred times at
+  both twenty and twenty-four levels - a flat count - yet disabling it
+  removes the doubling, so a single call must do work exponential in the
+  nesting. `unify` is already counted flat at five thousand calls, so it
+  cannot be the exponential part. What remains inside the tuple case is
+  `resolve_variant_path`, `generic_instance_for`, and the recursion's
+  own bookkeeping. Count those two per depth next; if both are flat, the
+  exponential is not a call at all but a loop whose trip count grows with
+  the nesting - the binding scope (`scopes`) or a payload list - and the
+  fix is to stop rebuilding it per level.
   costs milliseconds. `variant_payloads` is out, and the experiment also
   shows why a careless bisect misleads: with it returning an empty vector
   the counts rise to 4,568,739,870, 13,379,543,278, and 48,601,115,830 -
