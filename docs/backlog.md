@@ -923,7 +923,15 @@ replaced. The foundations are in `roadmap.md`.
   type, so the remaining explanation is that the walk is entered more
   often than the coarse buckets showed. Count it exactly and time it:
   print every tenth entry with a running total, and keep the largest
-  interval between entries with the pattern row that produced it.
+  interval between entries with the pattern row that produced it. Done,
+  and the answer is that the cover walk is not where the time is:
+  `patterns_cover` is entered only about seventy times on the
+  twenty-level nest and no interval between entries exceeds 481 us, so
+  the whole walk costs a few milliseconds against a 143 ms run. The
+  backlog title blames the cover walk and that is wrong. The rest of
+  the time is in the pattern work around it - typing or resolving the
+  deeply nested pattern before coverage is asked - so instrument the
+  passes that build and type a match arm's pattern, not the cover walk.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
