@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The cache was written and it changed nothing: with
+  the inference remembered per call expression and instantiation the
+  counts are 1,112,963,399, 4,108,665,978, and 16,078,486,237 against
+  1,113,192,992, 4,108,422,641, and 16,078,515,028 - a change of two
+  hundredths of a percent, so the second walk of the argument is not the
+  cost even though it is real. The change was reverted. The doubling is
+  therefore in one walk of the nested argument itself, and the next step
+  is to count what a single `check_expr` of the argument does per level
+  rather than how often it is called - the constructor branch's own body,
+  not its repetition.
   costs milliseconds. Confirmed at `types.cc:2335`: inside
   `infer_from_payload_args` the argument is typed with
   `check_expr(module, args[i], nullptr)` just to learn its type, and then
