@@ -1443,18 +1443,30 @@ replaced. The foundations are in `roadmap.md`.
   two objects in one image keep one copy. A package whose library has a
   summary resolves, links, and runs with the library's sources gone
   (`dependencies_test` builds both and runs the binary).
-- [ ] A summary carries no struct field names: a signature over a
-  nominal is left out of the surface a dependent spells, because a
-  literal or a field read would need names the `SUMMARY` section does
-  not carry. A names table beside the rows is what lets nominals cross
-  the boundary, and with them the associated functions and methods.
+- [x] A summary carries no struct field names: the section writes the
+  fields each struct row declares - name and visibility, in declaration
+  order - and the surface spells a nominal row into its declaration (a
+  struct from the runs, an enum from the variant names its table
+  holds), so a dependent names the type, constructs a literal, and
+  reads a field across the boundary. `dependencies_test` does all three
+  with the library's sources gone. A signature that *names* a nominal
+  is still left out, and the reason is the item below.
 - [ ] One nominal as several type nodes: the checker can intern a
   second type node over a declaration's own struct or enum shape (a
   `String` node beside the declaration's), and `types_equal` compares
   origins, so two nodes over one declaration read as different types
   while only the drop lookup was taught to see through them. What
   interns the second node - and whether the nodes should collapse to
-  one - wants finding.
+  one - wants finding. What is known: a library build mints one node
+  (an instrumented `intern_nominal` fires once for the declaration and
+  the generic instance path never runs for it), yet a dependent's view
+  of the same artifact holds two (`struct Pair(i32, i32)` at #19 and
+  #158 in a two-field dump), the summary row for the declaration names
+  one, and a function's parameter names the other - which is why a
+  nominal-typed signature cannot spell even though the declaration
+  spells. Both mint sites are instrumented and silent on the second, so
+  the path that builds it is still to find; the deserializer's view is
+  the next place to look.
 - [x] Manifest lint: a pre-1.0 version range warns (WH007), since a
   minor may break under 1.0. The rule reads the parsed requirement -
   one `Equal` bound is a pin and stays silent - so `0.5.x`,
