@@ -132,6 +132,20 @@ replaced. The foundations are in `roadmap.md`.
   reads a field across the boundary. `dependencies_test` does all three
   with the library's sources gone. A signature that *names* a nominal
   is still left out, and the reason is the item below.
+- [ ] A summary call passes what the callee takes: a call into a
+  summary is declared in the external table under the C calling
+  convention, and that convention passes an aggregate as a pointer of
+  its own shape where the library's own alcy function takes the shape
+  the caller has, so a nominal-typed parameter cannot be called yet (the
+  emitter's LLVM assertion catches it, and a field argument taught the
+  call to hand over the value rather than its place). Spelling a
+  signature through a copy is refused for the same reason: the row is
+  left out rather than passed a shape the other side does not take. A
+  declaration as a bodyless foreign function with the caller's own types
+  was tried: a direct call works, but the binary then lowers prelude
+  code the extern never reached, and `core/string.al`'s latent borrow
+  error (`ret s` from a local at `core/string.al:133`) fails the build,
+  so that route wants the prelude's reach answered first.
 - [ ] One nominal as several type nodes: the checker can intern a
   second type node over a declaration's own struct or enum shape (a
   `String` node beside the declaration's), and `types_equal` compares

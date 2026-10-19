@@ -45,7 +45,244 @@ struct SpellContext {
   ir::SymbolTable& strings;
   // Every nominal row's declaration, by the type the row names.
   const std::unordered_map<u32, NominalSite>& nominals;
+  // The same rows by the name their shape carries: a reference may name
+  // a copy of a declaration rather than the declaration itself.
+  const std::unordered_map<u32, std::vector<u32>>& nominals_by_name;
 };
+
+// How many pairs one shape walk may hold before it answers false: a
+// declaration that contains a reference to itself repeats a pair, and
+// the walk treats a repeated pair as still matching, so the bound only
+// guards against a table that keeps producing new ones.
+constexpr usize MAX_SHAPE_WALK = 4096;
+
+// The name a nominal node's shape carries, or nothing for a node that
+// is not a nominal.
+std::optional<u32> shape_name(const ir::Storage& storage, ir::TypeIdx type) {
+  if (!type.is_valid() || type.idx >= storage.types().size()) {
+    return std::nullopt;
+  }
+  const ir::TypeNode& node = storage.types()[type];
+  if (node.tag == ir::TypeTag::Struct) {
+    const ir::StructTypeIdx shape = node.as_struct();
+    if (shape.idx >= storage.struct_types().size()) {
+      return std::nullopt;
+    }
+    return storage.struct_types()[shape].name.offset;
+  }
+  if (node.tag == ir::TypeTag::Enum) {
+    const ir::EnumTypeIdx shape = node.as_enum();
+    if (shape.idx >= storage.enum_types().size()) {
+      return std::nullopt;
+    }
+    return storage.enum_types()[shape].name.offset;
+  }
+  return std::nullopt;
+}
+
+// Whether two type nodes describe the same shape, down to the names and
+// payloads a nominal's layout reads. A type table holds more than one
+// node over one declaration - a field or a parameter holds a copy of
+// the nominal it names - so a reference matches a row by the shape they
+// repeat. Identical shapes lay out alike, so a match is enough to spell
+// against; what the walk cannot be sure of answers false, which leaves
+// the row out instead of spelling a shape it does not know.
+bool shapes_match(const ir::Storage& storage,
+                  ir::TypeIdx left,
+                  ir::TypeIdx right,
+                  std::vector<std::pair<u32, u32>>& seen) {
+  if (left.idx == right.idx) {
+    return true;
+  }
+  for (const std::pair<u32, u32>& pair : seen) {
+    if (pair.first == left.idx && pair.second == right.idx) {
+      // The pair is already being walked: a reference back into it
+      // matches what it is being compared against.
+      return true;
+    }
+  }
+  if (!left.is_valid() || !right.is_valid() ||
+      left.idx >= storage.types().size() ||
+      right.idx >= storage.types().size() || seen.size() >= MAX_SHAPE_WALK) {
+    return false;
+  }
+  const usize mark = seen.size();
+  seen.emplace_back(left.idx, right.idx);
+  // A failure drops everything this frame added, so one failed branch
+  // leaves no pair behind for the next to read as matching.
+  const auto fail = [&] {
+    seen.resize(mark);
+    return false;
+  };
+  const auto match = [&](ir::TypeIdx a, ir::TypeIdx b) {
+    return shapes_match(storage, a, b, seen);
+  };
+  const ir::TypeNode& a = storage.types()[left];
+  const ir::TypeNode& b = storage.types()[right];
+  if (a.tag != b.tag) {
+    return fail();
+  }
+  switch (a.tag) {
+    case ir::TypeTag::Struct: {
+      if (a.as_struct().idx >= storage.struct_types().size() ||
+          b.as_struct().idx >= storage.struct_types().size()) {
+        return fail();
+      }
+      const ir::StructType& left_shape = storage.struct_types()[a.as_struct()];
+      const ir::StructType& right_shape = storage.struct_types()[b.as_struct()];
+      if (left_shape.name != right_shape.name ||
+          left_shape.fields.size() != right_shape.fields.size() ||
+          left_shape.params.size() != right_shape.params.size()) {
+        return fail();
+      }
+      for (usize i = 0; i < left_shape.fields.size(); ++i) {
+        if (!match(left_shape.fields[i], right_shape.fields[i])) {
+          return fail();
+        }
+      }
+      for (usize i = 0; i < left_shape.params.size(); ++i) {
+        if (!match(left_shape.params[i], right_shape.params[i])) {
+          return fail();
+        }
+      }
+      return true;
+    }
+    case ir::TypeTag::Enum: {
+      if (a.as_enum().idx >= storage.enum_types().size() ||
+          b.as_enum().idx >= storage.enum_types().size()) {
+        return fail();
+      }
+      const ir::EnumType& left_shape = storage.enum_types()[a.as_enum()];
+      const ir::EnumType& right_shape = storage.enum_types()[b.as_enum()];
+      if (left_shape.name != right_shape.name ||
+          left_shape.variants.size() != right_shape.variants.size() ||
+          left_shape.params.size() != right_shape.params.size()) {
+        return fail();
+      }
+      for (usize i = 0; i < left_shape.params.size(); ++i) {
+        if (!match(left_shape.params[i], right_shape.params[i])) {
+          return fail();
+        }
+      }
+      for (usize i = 0; i < left_shape.variants.size(); ++i) {
+        const ir::EnumVariantTypeIdx left_variant = left_shape.variants[i];
+        const ir::EnumVariantTypeIdx right_variant = right_shape.variants[i];
+        if (left_variant.idx >= storage.enum_variant_types().size() ||
+            right_variant.idx >= storage.enum_variant_types().size()) {
+          return fail();
+        }
+        const ir::EnumVariantType& left_payload =
+            storage.enum_variant_types()[left_variant];
+        const ir::EnumVariantType& right_payload =
+            storage.enum_variant_types()[right_variant];
+        if (left_payload.name != right_payload.name ||
+            left_payload.fields.size() != right_payload.fields.size()) {
+          return fail();
+        }
+        for (usize f = 0; f < left_payload.fields.size(); ++f) {
+          if (!match(left_payload.fields[f], right_payload.fields[f])) {
+            return fail();
+          }
+        }
+      }
+      return true;
+    }
+    case ir::TypeTag::Ref:
+    case ir::TypeTag::MutRef:
+    case ir::TypeTag::RawPtr:
+    case ir::TypeTag::RawMutPtr: {
+      const ir::RefTypeIdx left_shape = a.as_ref();
+      const ir::RefTypeIdx right_shape = b.as_ref();
+      if (left_shape.idx >= storage.ref_types().size() ||
+          right_shape.idx >= storage.ref_types().size()) {
+        return fail();
+      }
+      return match(storage.ref_types()[left_shape].pointee,
+                   storage.ref_types()[right_shape].pointee)
+                 ? true
+                 : fail();
+    }
+    case ir::TypeTag::Slice: {
+      const ir::SliceTypeIdx left_shape = a.as_slice();
+      const ir::SliceTypeIdx right_shape = b.as_slice();
+      if (left_shape.idx >= storage.slice_types().size() ||
+          right_shape.idx >= storage.slice_types().size()) {
+        return fail();
+      }
+      return match(storage.slice_types()[left_shape].element,
+                   storage.slice_types()[right_shape].element)
+                 ? true
+                 : fail();
+    }
+    case ir::TypeTag::Array: {
+      const ir::ArrayTypeIdx left_shape = a.as_array();
+      const ir::ArrayTypeIdx right_shape = b.as_array();
+      if (left_shape.idx >= storage.array_types().size() ||
+          right_shape.idx >= storage.array_types().size()) {
+        return fail();
+      }
+      const ir::ArrayType& left_array = storage.array_types()[left_shape];
+      const ir::ArrayType& right_array = storage.array_types()[right_shape];
+      if (left_array.count != right_array.count) {
+        return fail();
+      }
+      return match(left_array.element, right_array.element) ? true : fail();
+    }
+    case ir::TypeTag::Tuple: {
+      const ir::TupleTypeIdx left_shape = a.as_tuple();
+      const ir::TupleTypeIdx right_shape = b.as_tuple();
+      if (left_shape.idx >= storage.tuple_types().size() ||
+          right_shape.idx >= storage.tuple_types().size()) {
+        return fail();
+      }
+      const ir::TupleType& left_tuple = storage.tuple_types()[left_shape];
+      const ir::TupleType& right_tuple = storage.tuple_types()[right_shape];
+      if (left_tuple.elements.size() != right_tuple.elements.size()) {
+        return fail();
+      }
+      for (usize i = 0; i < left_tuple.elements.size(); ++i) {
+        if (!match(left_tuple.elements[i], right_tuple.elements[i])) {
+          return fail();
+        }
+      }
+      return true;
+    }
+    case ir::TypeTag::Function: {
+      const ir::FuncTypeIdx left_shape = a.as_func();
+      const ir::FuncTypeIdx right_shape = b.as_func();
+      if (left_shape.idx >= storage.func_types().size() ||
+          right_shape.idx >= storage.func_types().size()) {
+        return fail();
+      }
+      const ir::FuncType& left_func = storage.func_types()[left_shape];
+      const ir::FuncType& right_func = storage.func_types()[right_shape];
+      if (left_func.params.size() != right_func.params.size()) {
+        return fail();
+      }
+      for (usize i = 0; i < left_func.params.size(); ++i) {
+        if (!match(left_func.params[i], right_func.params[i])) {
+          return fail();
+        }
+      }
+      return match(left_func.ret, right_func.ret) ? true : fail();
+    }
+    case ir::TypeTag::Const:
+      // A value argument has no layout and takes no part in a field's
+      // shape; two entries are the same value or the walk does not say.
+      if (a.as_const().idx >= storage.const_types().size() ||
+          b.as_const().idx >= storage.const_types().size()) {
+        return fail();
+      }
+      return storage.const_types()[a.as_const()].value ==
+                     storage.const_types()[b.as_const()].value
+                 ? true
+                 : fail();
+    default:
+      // Every other tag carries no payload, so equal tags are the whole
+      // shape.
+      return true;
+  }
+}
 
 // The ident one path segment is spelled as.
 std::optional<ast::Ident> spell_segment(const SpellContext& ctx,
@@ -58,11 +295,50 @@ std::optional<ast::Ident> spell_segment(const SpellContext& ctx,
   return ast::Ident{ctx.strings.get(*copied), diag::Span{}};
 }
 
+// The type path a nominal's declaration is reachable by: `package::`
+// opens this package's root from any module in it, and the segments the
+// row recorded walk down to the declaration.
+std::optional<ast::TypeIdx> spell_nominal_path(const SpellContext& ctx,
+                                               const NominalSite& site) {
+  ast::AstArena& ast = ctx.ast;
+  std::vector<ast::Ident> segments;
+  const std::optional<ast::Ident> head = spell_segment(ctx, "package");
+  if (!head.has_value()) {
+    return std::nullopt;
+  }
+  segments.push_back(*head);
+  std::string_view rest = site.path;
+  while (!rest.empty()) {
+    const usize dot = rest.find('.');
+    const std::optional<ast::Ident> spelled =
+        spell_segment(ctx, rest.substr(0, dot));
+    if (!spelled.has_value()) {
+      return std::nullopt;
+    }
+    segments.push_back(*spelled);
+    rest = dot == std::string_view::npos ? std::string_view{}
+                                         : rest.substr(dot + 1);
+  }
+  const std::optional<ast::Ident> last = spell_segment(ctx, site.name);
+  if (!last.has_value()) {
+    return std::nullopt;
+  }
+  segments.push_back(*last);
+  ast::TypeNode made;
+  made.kind = ast::TypeKind::Path;
+  const ast::PathIdx path = ast.paths.push_back(
+      ast::Path{ast::copy_to_arena(ast.spans, segments), diag::Span{}});
+  made.payload.set(ast::TypePath{.path = path, .args = {}});
+  return ast.types.push_back(made);
+}
+
 // Spells one type of the summary's tables into the syntax arena; invalid
 // when the syntax cannot carry it. A nominal is spelled as the path its
 // declaration is reachable by - `package::` and the module it sits in -
 // and a raw pointer or constant has no spelling a dependent can use.
-ast::TypeIdx spell_type(const SpellContext& ctx, ir::TypeIdx type) {
+ast::TypeIdx spell_type(const SpellContext& ctx,
+                        ir::TypeIdx type,
+                        bool allow_copies) {
   const ir::Storage& storage = ctx.storage;
   ast::AstArena& ast = ctx.ast;
   if (!type.is_valid() || type.idx >= storage.types().size()) {
@@ -99,7 +375,7 @@ ast::TypeIdx spell_type(const SpellContext& ctx, ir::TypeIdx type) {
     case ir::TypeTag::Ref:
     case ir::TypeTag::MutRef: {
       const ir::RefType& shape = storage.ref_types()[node.as_ref()];
-      const ast::TypeIdx inner = spell_type(ctx, shape.pointee);
+      const ast::TypeIdx inner = spell_type(ctx, shape.pointee, allow_copies);
       if (!inner.is_valid()) {
         return ast::TypeIdx::invalid();
       }
@@ -110,7 +386,7 @@ ast::TypeIdx spell_type(const SpellContext& ctx, ir::TypeIdx type) {
     }
     case ir::TypeTag::Slice: {
       const ir::SliceType& shape = storage.slice_types()[node.as_slice()];
-      const ast::TypeIdx element = spell_type(ctx, shape.element);
+      const ast::TypeIdx element = spell_type(ctx, shape.element, allow_copies);
       if (!element.is_valid()) {
         return ast::TypeIdx::invalid();
       }
@@ -120,7 +396,7 @@ ast::TypeIdx spell_type(const SpellContext& ctx, ir::TypeIdx type) {
     }
     case ir::TypeTag::Array: {
       const ir::ArrayType& shape = storage.array_types()[node.as_array()];
-      const ast::TypeIdx element = spell_type(ctx, shape.element);
+      const ast::TypeIdx element = spell_type(ctx, shape.element, allow_copies);
       if (!element.is_valid()) {
         return ast::TypeIdx::invalid();
       }
@@ -135,7 +411,7 @@ ast::TypeIdx spell_type(const SpellContext& ctx, ir::TypeIdx type) {
       std::vector<ast::TypeIdx> elements;
       elements.reserve(shape.elements.size());
       for (ir::TypeIdx element : shape.elements) {
-        const ast::TypeIdx spelled = spell_type(ctx, element);
+        const ast::TypeIdx spelled = spell_type(ctx, element, allow_copies);
         if (!spelled.is_valid()) {
           return ast::TypeIdx::invalid();
         }
@@ -151,13 +427,13 @@ ast::TypeIdx spell_type(const SpellContext& ctx, ir::TypeIdx type) {
       std::vector<ast::TypeIdx> params;
       params.reserve(shape.params.size());
       for (ir::TypeIdx param : shape.params) {
-        const ast::TypeIdx spelled = spell_type(ctx, param);
+        const ast::TypeIdx spelled = spell_type(ctx, param, allow_copies);
         if (!spelled.is_valid()) {
           return ast::TypeIdx::invalid();
         }
         params.push_back(spelled);
       }
-      const ast::TypeIdx ret = spell_type(ctx, shape.ret);
+      const ast::TypeIdx ret = spell_type(ctx, shape.ret, allow_copies);
       if (!ret.is_valid()) {
         return ast::TypeIdx::invalid();
       }
@@ -169,40 +445,49 @@ ast::TypeIdx spell_type(const SpellContext& ctx, ir::TypeIdx type) {
     case ir::TypeTag::Struct:
     case ir::TypeTag::Enum: {
       const auto site = ctx.nominals.find(type.idx);
-      if (site == ctx.nominals.end()) {
+      if (site != ctx.nominals.end()) {
+        return spell_nominal_path(ctx, site->second)
+            .value_or(ast::TypeIdx::invalid());
+      }
+      // A declaration's shape may name a copy of another declaration
+      // rather than the declaration itself, as a field holds one; the
+      // row whose shape it repeats is the one to spell, and it has to be
+      // the only one, because two rows whose shapes both match leave the
+      // choice to the walk, which does not make it. A signature takes a
+      // value instead, and spelling it as another row's declaration
+      // would pass what the caller has where the callee takes something
+      // else, so only a declaration reads through a copy.
+      if (!allow_copies) {
         return ast::TypeIdx::invalid();
       }
-      // `package::` opens this package's root from any module in it,
-      // and the segments the row recorded walk down to the declaration.
-      std::vector<ast::Ident> segments;
-      const std::optional<ast::Ident> head = spell_segment(ctx, "package");
-      if (!head.has_value()) {
+      const std::optional<u32> name = shape_name(storage, type);
+      if (!name.has_value()) {
         return ast::TypeIdx::invalid();
       }
-      segments.push_back(*head);
-      std::string_view rest = site->second.path;
-      while (!rest.empty()) {
-        const usize dot = rest.find('.');
-        const std::optional<ast::Ident> spelled =
-            spell_segment(ctx, rest.substr(0, dot));
-        if (!spelled.has_value()) {
+      const auto candidates = ctx.nominals_by_name.find(*name);
+      if (candidates == ctx.nominals_by_name.end()) {
+        return ast::TypeIdx::invalid();
+      }
+      const NominalSite* matched = nullptr;
+      for (const u32 candidate : candidates->second) {
+        std::vector<std::pair<u32, u32>> seen;
+        if (!shapes_match(storage, type, ir::TypeIdx(candidate), seen)) {
+          continue;
+        }
+        const auto found = ctx.nominals.find(candidate);
+        if (found == ctx.nominals.end()) {
+          continue;
+        }
+        if (matched != nullptr) {
           return ast::TypeIdx::invalid();
         }
-        segments.push_back(*spelled);
-        rest = dot == std::string_view::npos ? std::string_view{}
-                                             : rest.substr(dot + 1);
+        matched = &found->second;
       }
-      const std::optional<ast::Ident> last =
-          spell_segment(ctx, site->second.name);
-      if (!last.has_value()) {
+      if (matched == nullptr) {
         return ast::TypeIdx::invalid();
       }
-      segments.push_back(*last);
-      const ast::PathIdx path = ast.paths.push_back(
-          ast::Path{ast::copy_to_arena(ast.spans, segments), diag::Span{}});
-      made.kind = ast::TypeKind::Path;
-      made.payload.set(ast::TypePath{.path = path, .args = {}});
-      return ast.types.push_back(made);
+      return spell_nominal_path(ctx, *matched)
+          .value_or(ast::TypeIdx::invalid());
     }
     default: return ast::TypeIdx::invalid();
   }
@@ -227,7 +512,7 @@ bool spell_function(const SpellContext& ctx,
   std::vector<ast::ItemFnParam> params;
   params.reserve(meta.param_types.size());
   for (ir::TypeIdx param : meta.param_types) {
-    const ast::TypeIdx spelled = spell_type(ctx, param);
+    const ast::TypeIdx spelled = spell_type(ctx, param, false);
     if (!spelled.is_valid()) {
       return false;
     }
@@ -237,7 +522,7 @@ bool spell_function(const SpellContext& ctx,
     params.push_back(
         ast::ItemFnParam{.pattern = pattern_index, .type = spelled});
   }
-  const ast::TypeIdx ret = spell_type(ctx, meta.return_type);
+  const ast::TypeIdx ret = spell_type(ctx, meta.return_type, false);
   if (!ret.is_valid()) {
     return false;
   }
@@ -281,7 +566,7 @@ bool spell_declaration(const SpellContext& ctx,
     std::vector<ast::ItemStructField> fields;
     fields.reserve(shape.fields.size());
     for (usize i = 0; i < shape.fields.size(); ++i) {
-      const ast::TypeIdx spelled = spell_type(ctx, shape.fields[i]);
+      const ast::TypeIdx spelled = spell_type(ctx, shape.fields[i], true);
       if (!spelled.is_valid()) {
         return false;
       }
@@ -320,7 +605,7 @@ bool spell_declaration(const SpellContext& ctx,
     std::vector<ast::TypeIdx> payload;
     payload.reserve(variant.fields.size());
     for (ir::TypeIdx field : variant.fields) {
-      const ast::TypeIdx spelled = spell_type(ctx, field);
+      const ast::TypeIdx spelled = spell_type(ctx, field, true);
       if (!spelled.is_valid()) {
         return false;
       }
@@ -383,6 +668,7 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
   // The nominals first: a signature may name one, so the map the
   // spelling reads is whole before any item is spelled.
   std::unordered_map<u32, NominalSite> nominals;
+  std::unordered_map<u32, std::vector<u32>> nominals_by_name;
   for (const ir::SummaryEntry& row : summary.summary) {
     if (row.kind != ir::SummaryKind::Struct &&
         row.kind != ir::SummaryKind::Enum) {
@@ -393,8 +679,14 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
     }
     nominals.emplace(row.function.idx,
                      NominalSite{named(row.path, ""), named(row.name, "")});
+    const std::optional<u32> name =
+        shape_name(storage, ir::TypeIdx(row.function.idx));
+    if (name.has_value()) {
+      nominals_by_name[*name].push_back(row.function.idx);
+    }
   }
-  const SpellContext context{storage, ast, *summary.strings, strings, nominals};
+  const SpellContext context{storage, ast,      *summary.strings,
+                             strings, nominals, nominals_by_name};
   std::unordered_map<std::string, std::vector<ast::ItemIdx>> items_by_module;
   std::unordered_map<std::string, std::vector<SummarySymbol>> symbols_by_module;
   std::vector<std::string> order;

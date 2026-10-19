@@ -1554,10 +1554,12 @@ Val Lowerer::lower_summary_call(ast::ExprIdx expr,
       callee, builder.primitive(ir::TypeTag::Function))));
   for (usize i = 0; i < call.args.size(); ++i) {
     Val arg = lower_moved(call.args[i], &sig.params[i]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
-    ops.push_back(arg.op);
+    // The argument crosses as the value the callee takes, the same way
+    // a C entry point's does.
+    ops.push_back(arg_for(arg, sig.params[i]));
   }
   const ir::RegisterIdx result = sig.ret == builder.primitive(ir::TypeTag::Void)
                                      ? ir::RegisterIdx(base::INVALID_IDX)
