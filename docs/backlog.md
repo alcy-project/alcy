@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The bisect ran: with `patterns_cover` returning
+  true at its first line the counts are 1,779,522,788, 6,768,480,108, and
+  26,716,066,218 against 1,861,195,838, 7,086,514,185, and 27,978,134,924
+  - a saving of four and a half percent with the doubling still in
+  place. The cover walk is four percent of the cost, not the bug, which
+  also explains why its seventy calls never added up. The growth is in
+  the other ninety-five percent, the pattern typing that runs before
+  coverage. Bisect that next the same way: make `bind_pattern` return
+  its refutability without walking, and then the scrutinee's typing, and
+  read the count after each.
   costs milliseconds. With the documented metric in hand the bisect is
   cheap: disable one suspected pass, rebuild, and read the instruction
   count. The first experiment is the cover walk - return true from
