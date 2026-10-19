@@ -834,7 +834,14 @@ replaced. The foundations are in `roadmap.md`.
   makes - the specialization probably asks the type layer a question
   (`types_equal`, `type_origin`, or a nominal lookup) that is not
   constant time on a deeply nested type, and that is where a nest turns
-  into seconds.
+  into seconds. The head of the body splits or-patterns into one row
+  per alternative (`types_expr.cc:3061`-`:3083`) and then scans every
+  cell with `pattern_is_wildcard(types[i], row[i])` (`:3093`) on each
+  call, which is the first per-cell type question; the specialization
+  that follows below `:3100` is the rest. Both are candidates. Time a
+  single `pattern_is_wildcard` on a nesting of four, eight, and
+  sixteen to see whether one cell costs depth-many steps, because that
+  would make the whole walk quadratic before any repeat.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
