@@ -492,7 +492,17 @@ replaced. The foundations are in `roadmap.md`.
   again. The counter in the earlier note says the predicate itself runs
   under a hundred times, so settle the flag first: print
   `verify_comp_known` at the wrapper's declaration and see whether this
-  path is even taken. The key must carry
+  path is even taken. It is not: at every declaration of the wrapper
+  `verify_comp_known` is zero and the declaration is not const, so the
+  twin walk never runs and the three comp-known sites are all gated
+  off. That also confirms the earlier sub-hundred count. So the loop
+  is not a comp-known twin either, and the arithmetic still does not
+  close: the chain is entered thousands of times while the statement
+  that owns it is under two hundred. That gap means the owning
+  statement is not a declaration - it has to be a container that is
+  itself checked repeatedly, a loop body or condition, or a comp
+  region. Print the statement kind (and its statement index) at
+  `check_stmt` when the initializer chain is present. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
