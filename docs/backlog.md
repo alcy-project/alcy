@@ -820,6 +820,14 @@ replaced. The foundations are in `roadmap.md`.
   at twenty levels takes 160 ms and a 769-byte one at twenty-four takes
   1,901 ms, so the factor per level is about 1.85 in a small input - the
   cost is the cover walk, not the parse. Start from the same shape.
+  A counter on `patterns_cover` (`types_expr.cc:3053`) shows the walk
+  itself is called fewer than ten thousand times at both depths, so the
+  hundred milliseconds to seconds are per call, not from call count:
+  the matrix is large and every call works over a copy of it. Its
+  signature takes both `types` and `rows` by value (the recursive calls
+  at `:3167`, `:3221`, `:3282` move what they can), so specialize the
+  matrix in place or share it, and measure the per-call work before
+  adding a cache.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
